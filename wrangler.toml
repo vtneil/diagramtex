@@ -1,0 +1,10 @@
+# Cloudflare Workers deployment for DiagramTeX: a static-assets-only Worker (no server code).
+# Everything in ./public is served as-is.
+# Deploy:  npx wrangler deploy        Local preview:  npx wrangler dev
+name = "diagramtex"
+compatibility_date = "2025-10-01"
+
+[assets]
+directory = "./public"
+html_handling = "auto-trailing-slash"
+not_found_handling = "404-page"

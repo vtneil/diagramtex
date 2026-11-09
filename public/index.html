@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DiagramTeX</title>
+  <script>
+    // Appearance: System follows the OS; Light / Dark override it. Runs before the stylesheet so there is no flash.
+    (function () {
+      var KEY = 'texdiagram.theme', pick = null, mq = matchMedia('(prefers-color-scheme: dark)');
+      try { pick = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ }
+      function apply() {
+        document.documentElement.dataset.theme = pick === 'light' || pick === 'dark' ? pick : mq.matches ? 'dark' : 'light';
+      }
+      apply();
+      mq.addEventListener('change', apply);
+      window.TDTheme = {
+        get: function () { return pick === 'light' || pick === 'dark' ? pick : 'system'; },
+        set: function (v) {
+          pick = v === 'light' || v === 'dark' ? v : null;
+          try { pick ? localStorage.setItem(KEY, pick) : localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+          apply();
+        },
+      };
+    })();
+  </script>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <script src="vendor/katex/katex.min.js"></script>
+  <link rel="stylesheet" href="vendor/temml/Temml-Latin-Modern.css">
+  <script src="vendor/temml/temml.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header id="topbar" role="toolbar" aria-label="Document">
+    <button id="btnSidebar" class="icon flat" title="Show / hide document list" aria-label="Toggle document list"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12"/><path d="M8 4v12"/></svg></button>
+    <div class="brand" title="DiagramTeX">Diagram<span class="tex">T<sub>e</sub>X</span></div>
+    <div class="group files-grp">
+      <button data-cmd="new" class="icon" title="New document"><svg viewBox="0 0 20 20"><path d="M5 2.5h7l3 3v12H5z"/><path d="M10 9v6M7 12h6"/></svg></button>
+      <button data-cmd="open" class="icon" title="Open a saved .json file (Page or Classic) or a .tex file (Ctrl+O)"><svg viewBox="0 0 20 20"><path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/></svg></button>
+      <button data-cmd="save" class="icon" title="Save to a file (.json) that you can open again (Ctrl+Shift+S)"><svg viewBox="0 0 20 20"><path d="M3.5 3.5h10l3 3v10h-13z"/><path d="M6.5 3.5v4h6v-4M6 16.5v-5h8v5"/></svg></button>
+      <button data-cmd="import" class="icon" title="Import LaTeX / TikZ code"><svg viewBox="0 0 20 20"><path d="M7.5 6V2.5h9v15h-9V14"/><path d="M2 10h8.5M7.5 7l3 3-3 3"/><path d="M12 7.5h2M12 12.5h2"/></svg></button>
+    </div>
+    <input id="docName" class="doc-name" spellcheck="false" title="Document name" aria-label="Document name">
+    <div class="spacer"></div>
+    <div class="seg" id="kindSeg" role="group" aria-label="File type">
+      <button data-mode="page" class="toggle" title="Page file — free-form page: place text, maths, shapes and plots anywhere on the paper"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6h3M7.5 8.5h5"/><path d="M8 15l2-3.5 2 2 1-1.5" /></svg>Page</button>
+      <button data-kind="classic" class="toggle" title="Classic file — diagrams, and a document that arranges them with text"><svg viewBox="0 0 20 20"><path d="M3 16L9 5l4 7 4-4"/><path d="M3 3.5h14"/></svg>Classic</button>
+    </div>
+    <div class="seg sub" id="classicSeg" role="group" aria-label="View">
+      <button data-mode="diagram" class="toggle on" title="Classic file — edit a diagram on the canvas"><svg viewBox="0 0 20 20"><path d="M3 16L9 5l4 7 4-4"/><circle cx="9" cy="5" r="1.4" class="f"/></svg>Diagram</button>
+      <button data-mode="document" class="toggle" title="Classic file — page with text and diagrams"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>Document</button>
+    </div>
+    <select id="blockSel" title="Diagram in this document" hidden></select>
+    <div class="group diag-only">
+      <button id="btnUndo" class="icon" title="Undo (Ctrl+Z)"><svg viewBox="0 0 20 20"><path d="M7 5L3 9l4 4M3 9h9a5 5 0 010 10h-2"/></svg></button>
+      <button id="btnRedo" class="icon" title="Redo (Ctrl+Shift+Z)"><svg viewBox="0 0 20 20"><path d="M13 5l4 4-4 4M17 9H8a5 5 0 000 10h2"/></svg></button>
+    </div>
+    <div class="group diag-only">
+      <button id="btnGrid" class="icon toggle on" title="Show grid (G)"><svg viewBox="0 0 20 20"><path d="M3 3h14v14H3zM3 7.7h14M3 12.3h14M7.7 3v14M12.3 3v14"/></svg></button>
+      <button id="btnSnap" class="icon toggle on" title="Snap to grid &amp; points (hold Alt to bypass)"><svg viewBox="0 0 20 20"><path d="M5 3v7a5 5 0 0010 0V3h-3.5v7a1.5 1.5 0 01-3 0V3z"/><path d="M5 6.5h3.5M11.5 6.5H15"/></svg></button>
+    </div>
+    <div class="group">
+      <button data-cmd="print" class="icon" title="Print / save as PDF (Ctrl+P)"><svg viewBox="0 0 20 20"><path d="M5.5 7.5V3h9v4.5M5.5 14.5h-3v-7h15v7h-3"/><path d="M5.5 11.5h9v6h-9z"/></svg></button>
+      <button data-cmd="html" class="icon" title="Download as a standalone web page (.html)"><svg viewBox="0 0 20 20"><path d="M7 6l-4 4 4 4M13 6l4 4-4 4M11 4.5l-2 11"/></svg></button>
+      <button data-cmd="export" id="btnExport" class="diag-only exp-btn" title="Export as PNG (choose DPI), SVG or PDF" aria-haspopup="dialog"><svg viewBox="0 0 20 20"><path d="M3 4h14v12H3z"/><path d="M3 13l4-4 3 3 2-2 5 5"/><circle cx="13" cy="7.5" r="1.3"/></svg>Export</button>
+      <button data-cmd="tikz" id="btnTikz" class="primary" title="TikZ code for this diagram (Ctrl+E)"><svg viewBox="0 0 20 20"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/></svg>TikZ</button>
+      <button data-cmd="latex" title="Download the whole document as .tex (Ctrl+Shift+E)"><svg viewBox="0 0 20 20"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/></svg>LaTeX</button>
+    </div>
+    <input id="fileInput" type="file" accept=".json,.tex,.tikz,.txt,application/json,text/x-tex" hidden>
+  </header>
+
+  <div id="main">
+    <aside id="files">
+      <div class="panel-head">
+        <span id="filesTitle">Documents</span>
+        <button id="btnNewDoc" class="icon" title="New document" aria-label="New document"><svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg></button>
+      </div>
+      <ul id="docList"></ul>
+      <section id="themeBox" aria-label="Appearance">
+        <div class="eng-head">Appearance</div>
+        <div class="seg" role="radiogroup" aria-label="Appearance">
+          <button type="button" role="radio" data-theme-pick="system" title="Follow the system setting">System</button>
+          <button type="button" role="radio" data-theme-pick="light" title="Always light">Light</button>
+          <button type="button" role="radio" data-theme-pick="dark" title="Always dark">Dark</button>
+        </div>
+      </section>
+      <section id="engineBox" aria-label="LaTeX engine"></section>
+      <div class="files-foot" id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</div>
+    </aside>
+
+    <nav id="tools" role="toolbar" aria-orientation="vertical" aria-label="Drawing tools">
+      <button data-tool="select" title="Select / move (V)"><svg viewBox="0 0 20 20"><path d="M5 3l10 7-5 1-2 5z" class="f"/></svg></button>
+      <div class="sep"></div>
+      <button data-tool="math" title="Math (M) — text box that starts in $…$"><svg viewBox="0 0 20 20"><path d="M9.5 4.5c-1.6-.8-3 0-3.3 1.8L4.6 16.2c-.3 1.6-1.6 2.2-2.6 1.5M3.5 9h5M10.5 9.5l5 6M15.5 9.5l-5 6"/></svg></button>
+      <button data-tool="text" title="Text (T): click for a line, drag for a paragraph box. Use $...$ for math"><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11M7.5 16h5"/></svg></button>
+      <div class="sep"></div>
+      <button data-fly="lines" title="Lines, curves, polygons, arcs, springs"><svg viewBox="0 0 20 20"><path d="M3 17L17 3"/></svg><i class="more"></i></button>
+      <button data-fly="shapes" title="Shapes and flowchart"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="9" height="9"/><circle cx="13" cy="11" r="4.5"/></svg><i class="more"></i></button>
+      <button data-fly="misc" title="Axis, wave, brace, ruler, grid, electrical"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M3 9h14M3 13h14M7 3v14M11 3v14M15 3v14" style="stroke-width:1.1"/></svg><i class="more"></i></button>
+      <button data-fly="arrows" title="Block arrows"><svg viewBox="0 0 20 20"><path d="M2.5 7.5h8.5V4l6.5 6-6.5 6v-3.5H2.5z"/></svg><i class="more"></i></button>
+      <button data-fly="insertPop" id="btnInsert" title="Plots, pie chart, commutative diagram"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
+      <div class="sep"></div>
+      <button data-tool="image" title="Image (I) — inserted with \includegraphics"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12"/><circle cx="7" cy="8" r="1.5"/><path d="M3 15l5-5 3.5 3.5 2-2L17 15"/></svg></button>
+      <button data-tool="pencil" title="Pencil (N) — freehand, smoothed"><svg viewBox="0 0 20 20"><path d="M4 16l1-4 8.5-8.5 3 3L8 15z M12 5l3 3"/></svg></button>
+    </nav>
+    <div id="fly-lines" class="popover flyout" hidden></div>
+    <div id="fly-shapes" class="popover flyout" hidden></div>
+    <div id="fly-misc" class="popover flyout" hidden></div>
+    <div id="fly-arrows" class="popover flyout" hidden></div>
+    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" hidden>
+    <div id="insertPop" class="popover flyout" hidden>
+      <div class="pop-title">2D plots</div>
+      <div class="pop-grid">
+        <button data-insert="plot:function"><svg viewBox="0 0 32 24"><path d="M2 12h28M16 2v20"/><path d="M3 12c3-9 7-9 10 0s7 9 10 0 5-6 6-5" class="c1"/></svg>Function</button>
+        <button data-insert="plot:line"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><path d="M5 18l6-6 6 2 6-8 5 1" class="c1"/></svg>Line</button>
+        <button data-insert="plot:scatter"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><g class="dots"><circle cx="8" cy="16" r="1.6"/><circle cx="12" cy="13" r="1.6"/><circle cx="16" cy="14" r="1.6"/><circle cx="20" cy="9" r="1.6"/><circle cx="25" cy="6" r="1.6"/></g></svg>Scatter</button>
+        <button data-insert="plot:area"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><path d="M4 21c5 0 6-14 12-14s7 14 12 14z" class="a1"/></svg>Area</button>
+        <button data-insert="plot:bar"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><g class="bars"><rect x="6" y="13" width="4" height="8"/><rect x="12" y="7" width="4" height="14"/><rect x="18" y="15" width="4" height="6"/><rect x="24" y="9" width="4" height="12"/></g></svg>Bar</button>
+        <button data-insert="pie"><svg viewBox="0 0 32 24"><circle cx="16" cy="12" r="9" class="a1"/><path d="M16 12V3M16 12l8 4M16 12l-6 7"/></svg>Pie</button>
+        <button data-insert="plot:contour"><svg viewBox="0 0 32 24"><ellipse cx="16" cy="12" rx="12" ry="9" class="c1"/><ellipse cx="16" cy="12" rx="8" ry="6" class="c2"/><ellipse cx="16" cy="12" rx="3.5" ry="2.5" class="c3"/></svg>Contour</button>
+        <button data-insert="plot:heatmap"><svg viewBox="0 0 32 24"><g class="heat"><rect x="4" y="3" width="8" height="6" fill="#f5c542"/><rect x="12" y="3" width="8" height="6" fill="#e2572b"/><rect x="20" y="3" width="8" height="6" fill="#f5c542"/><rect x="4" y="9" width="8" height="6" fill="#e2572b"/><rect x="12" y="9" width="8" height="6" fill="#b3122e"/><rect x="20" y="9" width="8" height="6" fill="#e2572b"/><rect x="4" y="15" width="8" height="6" fill="#f5c542"/><rect x="12" y="15" width="8" height="6" fill="#e2572b"/><rect x="20" y="15" width="8" height="6" fill="#f5c542"/></g></svg>Heatmap</button>
+      </div>
+      <div class="pop-title">3D plots</div>
+      <div class="pop-grid">
+        <button data-insert="plot:function3d"><svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><path d="M5 12c4-6 8 2 11-1s7-6 11 0" class="c1"/></svg>Function 3D</button>
+        <button data-insert="plot:surface3d"><svg viewBox="0 0 32 24"><path d="M4 14l12-6 12 6-12 6z" class="a1"/><path d="M10 11l12 6M16 8l-6 9M22 11l-6 9"/></svg>Surface</button>
+        <button data-insert="plot:mesh3d"><svg viewBox="0 0 32 24"><path d="M4 14l12-6 12 6-12 6zM10 11l12 6M10 17l12-6M16 8v12" class="c1"/></svg>Mesh</button>
+        <button data-insert="plot:scatter3d"><svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><g class="dots"><circle cx="9" cy="10" r="1.5"/><circle cx="14" cy="7" r="1.5"/><circle cx="20" cy="12" r="1.5"/><circle cx="24" cy="6" r="1.5"/><circle cx="12" cy="14" r="1.5"/></g></svg>Scatter 3D</button>
+      </div>
+      <div class="pop-title">Diagrams</div>
+      <div class="pop-grid">
+        <button data-insert="cd"><svg viewBox="0 0 32 24"><text x="3" y="8" font-size="7" font-style="italic">A</text><text x="24" y="8" font-size="7" font-style="italic">B</text><text x="3" y="22" font-size="7" font-style="italic">C</text><text x="24" y="22" font-size="7" font-style="italic">D</text><path d="M9 6h12M6 10v7M27 10v7M9 20h12"/></svg>XyMatrix</button>
+      </div>
+    </div>
+
+    <div id="stage">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="gridMinor" width="10" height="10" patternUnits="userSpaceOnUse">
+            <path d="M10 0H0V10" fill="none" class="grid-minor"/>
+          </pattern>
+          <pattern id="gridMajor" width="40" height="40" patternUnits="userSpaceOnUse">
+            <rect width="40" height="40" fill="url(#gridMinor)"/>
+            <path d="M40 0H0V40" fill="none" class="grid-major"/>
+          </pattern>
+        </defs>
+        <rect id="paper" fill="#fff"/>
+        <g id="pageLayer"></g>
+        <rect id="gridRect" fill="url(#gridMajor)"/>
+        <path id="origin" class="origin"/>
+        <g id="content"></g>
+        <path id="pageMask" fill-rule="evenodd"/>
+        <g id="pageLabels"></g>
+        <g id="overlay"></g>
+      </svg>
+      <textarea id="inlineEditor" spellcheck="false" placeholder="Text, $math$ — Enter to finish, Shift+Enter newline"></textarea>
+      <div class="ruler" id="rulerCorner" title="TikZ centimetres">cm</div>
+      <div class="ruler" id="rulerX"><svg></svg></div>
+      <div class="ruler" id="rulerY"><svg></svg></div>
+      <div id="status">
+        <span id="cursorPos">x 0.00 · y 0.00 cm</span>
+        <span id="selInfo"></span>
+        <span id="gridInfo"></span>
+        <span class="grow"></span>
+        <div class="zoom pagenav" id="pageNav" hidden>
+          <button id="pagePrev" title="Previous page (PgUp)">‹</button>
+          <span id="pageNavVal">Page 1 / 1</span>
+          <button id="pageNext" title="Next page (PgDn)">›</button>
+          <button id="pageAdd" title="Insert a blank page after this one">+ Page</button>
+        </div>
+        <div class="zoom">
+          <button id="zoomOut" title="Zoom out">−</button>
+          <input id="zoomVal" type="text" inputmode="decimal" value="100%" title="Zoom: type a percentage and press Enter" aria-label="Zoom percentage" autocomplete="off" spellcheck="false">
+          <button id="zoomIn" title="Zoom in">+</button>
+          <button id="zoomReset" title="Actual size (100%)">1:1</button>
+          <button id="zoomFit" title="Zoom to fit">Fit</button>
+        </div>
+      </div>
+      <div id="hint"></div>
+      <div id="emptyHint" hidden>
+        <div class="eh-diagram">
+          <div class="eh-title">Empty diagram</div>
+          <div>Pick a tool on the left, or press <kbd>L</kbd> line · <kbd>R</kbd> rectangle · <kbd>T</kbd> text (drag for a paragraph box).</div>
+          <div>Plots, charts and XyMatrix are under the <b>Plots</b> button. Right-click objects for more.</div>
+        </div>
+        <div class="eh-page">
+          <div class="eh-title">Empty page</div>
+          <div>Place anything straight onto the paper: <kbd>T</kbd> text · <kbd>M</kbd> maths · shapes, plots and images from the left.</div>
+          <div>The blue dashed margins are guides you can snap to. Export with <b>LaTeX</b>: everything keeps its exact position.</div>
+        </div>
+      </div>
+    </div>
+
+    <aside id="props"></aside>
+    <div id="docview"></div>
+  </div>
+
+  <div id="modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="tikzTitle">
+      <div class="modal-head">
+        <strong id="tikzTitle">TikZ Code</strong>
+        <label><input type="checkbox" id="tikzStandalone"> Standalone document</label>
+        <label id="tikzSelWrap"><input type="checkbox" id="tikzSelOnly"> Selection only</label>
+        <div class="spacer"></div>
+        <button id="tikzDownload">Download .tex</button>
+        <button id="tikzCopy" class="primary">Copy</button>
+        <button id="modalClose" class="icon flat" title="Close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button>
+      </div>
+      <textarea id="tikzOut" readonly spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <div id="importModal" class="modal" hidden>
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="impTitle">
+      <div class="modal-head">
+        <strong id="impTitle">Import LaTeX or TikZ</strong>
+        <div class="spacer"></div>
+        <button id="impFile">Choose File…</button>
+        <button id="impInsert" title="Add the shapes to the current diagram">Insert into Diagram</button>
+        <button id="impNew" class="primary" title="Create a new document from the code">Import as New Document</button>
+        <button id="impClose" class="icon flat" title="Close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button>
+      </div>
+      <textarea id="impText" spellcheck="false" placeholder="Paste a tikzpicture, a bare list of \draw / \node commands, or a whole LaTeX document.
+Supported: \draw \fill \filldraw \shade \node \coordinate \definecolor, -- / .. controls .. / rectangle / circle / ellipse / arc / cycle, arrows, colours, line widths, dashes, opacity, zigzag springs.
+A full document is split into text and diagram blocks."></textarea>
+      <div id="impMsg" class="modal-foot"></div>
+    </div>
+  </div>
+
+  <div id="measure" class="tx"></div>
+
+  <script src="js/mathengine.js"></script>
+  <script src="js/shapes.js"></script>
+  <script src="js/fills.js"></script>
+  <script src="js/colorpicker.js"></script>
+  <script src="js/plots.js"></script>
+  <script src="js/cd.js"></script>
+  <script src="js/symbols.js"></script>
+  <script src="js/boolean.js"></script>
+  <script src="js/rotate.js"></script>
+  <script src="js/tikzimport.js"></script>
+  <script src="js/selectmenu.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/docview.js"></script>
+  <script src="js/texcommands.js"></script>
+  <script src="js/texcomplete.js"></script>
+</body>
+</html>
