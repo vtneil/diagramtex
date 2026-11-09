@@ -68,6 +68,7 @@
   function begin() { if (pending === null) pending = snapshot(); }
   function commit() {
     if (pending === null) return;
+    syncLinks();
     const now = snapshot();
     if (now !== pending) {
       state.undo.push(pending);
@@ -185,9 +186,9 @@
     openDoc(id);
     return id;
   }
-  function deleteDoc(id) {
+  async function deleteDoc(id) {
     const it = index().find((d) => d.id === id);
-    if (!confirm(`Delete "${it ? it.name : ''}"? This cannot be undone.`)) return;
+    if (!(await TD.confirm(`Delete "${it ? it.name : 'this file'}"?`, 'It is removed from this browser and cannot be undone.', { ok: 'Delete', danger: true }))) return;
     store.del(LS_DOC + id);
     const idx = index().filter((d) => d.id !== id);
     store.set(LS_INDEX, idx);
@@ -359,6 +360,89 @@
     return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
   }
 
+
+  // ---------------- attached connectors ----------------
+  // A line, arrow, curve or spring whose end is dropped on another shape's outline (or on one of its snap
+  // points) stays attached, like connectors in PowerPoint or edges in Obsidian Canvas. The end is kept as a
+  // position in that shape's frame (link1 / link2 = { id, u, v }: u across, v down) and follows the shape
+  // when it moves, resizes or rotates. Moving the connector on its own, or dragging the end off the shape,
+  // detaches it; Alt places an end without attaching.
+  const CONNECT = new Set(['line', 'curve', 'spring']);
+  const END = { p1: ['link1', 'x1', 'y1', 'cx1', 'cy1'], p2: ['link2', 'x2', 'y2', 'cx2', 'cy2'] };
+  const ROUND = new Set(['ellipse', 'ball', 'dot', 'pie']);
+  let linkHint = null; // id of the shape an end would attach to (outlined while drawing)
+  function linkFrame(t) {
+    if (!t || CONNECT.has(t.type)) return null;
+    if (TD.ROT_TYPES.has(t.type) || t.type === 'sym') { const C = TD.rotFrame(t); if (C) return C; }
+    const b = TD.bbox(t);
+    return [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]];
+  }
+  const fromUV = (C, u, v) => ({ x: C[0][0] + u * (C[1][0] - C[0][0]) + v * (C[3][0] - C[0][0]), y: C[0][1] + u * (C[1][1] - C[0][1]) + v * (C[3][1] - C[0][1]) });
+  function toUV(C, p) {
+    const ax = C[1][0] - C[0][0], ay = C[1][1] - C[0][1], bx = C[3][0] - C[0][0], by = C[3][1] - C[0][1];
+    const det = ax * by - ay * bx;
+    if (Math.abs(det) < 1e-9) return null;
+    const px = p.x - C[0][0], py = p.y - C[0][1];
+    return { u: (px * by - py * bx) / det, v: (ax * py - ay * px) / det };
+  }
+  // the nearest point of the shape's outline, in frame terms, if p's (u, v) lies within tol of it
+  function outlineUV(t, C, { u, v }, tol) {
+    const w = Math.hypot(C[1][0] - C[0][0], C[1][1] - C[0][1]), h = Math.hypot(C[3][0] - C[0][0], C[3][1] - C[0][1]);
+    if (!w || !h) return null;
+    if (ROUND.has(t.type)) {
+      const x = (u - 0.5) * w, y = (v - 0.5) * h, r = Math.hypot(x / (w / 2), y / (h / 2));
+      if (Math.abs(r - 1) * Math.min(w, h) / 2 > tol) return null;
+      return r ? { u: 0.5 + x / r / w, v: 0.5 + y / r / h } : { u: 0.5, v: 0.5 };
+    }
+    const x = u * w, y = v * h, cx = Math.max(0, Math.min(w, x)), cy = Math.max(0, Math.min(h, y));
+    if (x !== cx || y !== cy) return Math.hypot(x - cx, y - cy) > tol ? null : { u: cx / w, v: cy / h };
+    const d = [x, w - x, y, h - y], m = Math.min(...d);
+    if (m > tol) return null;
+    return [{ u: 0, v }, { u: 1, v }, { u, v: 0 }, { u, v: 1 }][d.indexOf(m)];
+  }
+  // what an end at raw point p (snapped to q) attaches to: a snap point of a shape, else the outline near p
+  function linkAt(p, q, e, self) {
+    if (e && e.altKey) return null;
+    const tol = 6 / state.view.zoom, L = shapes();
+    for (let i = L.length - 1; i >= 0; i--) {
+      const t = L[i];
+      if (t.id === self) continue;
+      const C = linkFrame(t);
+      if (!C) continue;
+      if (q && q.anchor && TYPES[t.type].anchors(t).some((a) => dist(a, q) < 1e-6)) { const uv = toUV(C, q); if (uv) return { id: t.id, ...uv }; }
+      const uv = toUV(C, p), on = uv && outlineUV(t, C, uv, tol);
+      if (on) return { id: t.id, ...on };
+    }
+    return null;
+  }
+  const linkPoint = (k) => { const C = linkFrame(byId(k.id)); return C && fromUV(C, k.u, k.v); };
+  // put every attached end back on its shape (after anything moved); drops links to shapes that are gone
+  function syncLinks() {
+    for (const s of shapes()) {
+      if (!CONNECT.has(s.type) || !(s.link1 || s.link2)) continue;
+      for (const [L, X, Y, CX, CY] of Object.values(END)) {
+        if (!s[L]) continue;
+        const P = linkPoint(s[L]);
+        if (!P) { delete s[L]; continue; }
+        const dx = P.x - s[X], dy = P.y - s[Y];
+        if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) continue;
+        s[X] = P.x; s[Y] = P.y;
+        if (s.type === 'curve') { s[CX] += dx; s[CY] += dy; } // the curve keeps its shape near that end
+      }
+    }
+  }
+  // connectors moved by themselves let go of shapes that aren't moving with them
+  function detachFrom(list, moving) {
+    for (const s of list) if (CONNECT.has(s.type)) for (const L of ['link1', 'link2']) if (s[L] && !moving.has(s[L].id)) delete s[L];
+  }
+  // copies: links to shapes copied alongside point at the copies; links to anything else are dropped
+  function remapLinks(made, idmap) {
+    for (const s of made) for (const L of ['link1', 'link2']) {
+      if (!s[L]) continue;
+      if (idmap.has(s[L].id)) s[L].id = idmap.get(s[L].id); else delete s[L];
+    }
+  }
+
   // ---------------- page mode: sheets of paper on the desk ----------------
   const PAGE_GAP = PX; // 1 cm between stacked pages
   function pageGeom() {
@@ -417,11 +501,11 @@
     });
     goToPage(at);
   }
-  function deletePage(k) {
+  async function deletePage(k) {
     const G = pageGeom();
     if (G.n < 2) { showHint('A page file needs at least one page', 1400); return; }
     const lost = onPage(k, G).length;
-    if (lost && !confirm(`Delete page ${k + 1} and the ${lost} object${lost > 1 ? 's' : ''} on it?`)) return;
+    if (lost && !(await TD.confirm(`Delete page ${k + 1}?`, `The ${lost} object${lost > 1 ? 's' : ''} on it will be deleted too.`, { ok: 'Delete Page', danger: true }))) return;
     pageOp(() => {
       const keep = [];
       for (const s of shapes()) { const p = pageOf(s, G); if (p === k) continue; if (p > k) TD.translate(s, 0, -pageStep(G)); keep.push(s); }
@@ -435,13 +519,14 @@
       if (G.n >= 50) return false;
       const src = onPage(k, G);
       for (const s of shapes()) if (pageOf(s, G) > k) TD.translate(s, 0, pageStep(G));
-      const gmap = new Map();
+      const gmap = new Map(), idmap = new Map(), made = [];
       for (const s0 of src) {
-        const c = clone(s0); c.id = uid();
+        const c = clone(s0); c.id = uid(); idmap.set(s0.id, c.id); made.push(c);
         if (c.g) { if (!gmap.has(c.g)) gmap.set(c.g, uid()); c.g = gmap.get(c.g); }
         TD.translate(c, 0, pageStep(G));
         shapes().push(c);
       }
+      remapLinks(made, idmap);
       state.doc.sheet.pages = G.n + 1;
     });
     goToPage(k + 1);
@@ -478,6 +563,7 @@
 
   // ---------------- rendering ----------------
   function render() {
+    syncLinks();
     applyView();
     const ctx = { zoom: state.view.zoom, hit: 14 / state.view.zoom, scene: shapes() };
     TD.takeFillDefs();
@@ -516,13 +602,22 @@
         if (h.ctrl) out.push(`<circle class="handle ctrl" data-handle="${h.k}" data-hid="${s.id}" cx="${h.x}" cy="${h.y}" r="${4 / z}" style="cursor:${cur}"/>`);
         else {
           const q = 3.75 / z, on = s.type === 'poly' && state.vertex && state.vertex.id === s.id && 'v' + state.vertex.i === h.k;
-          out.push(`<rect class="handle${on ? ' on' : ''}" data-handle="${h.k}" data-hid="${s.id}" x="${h.x - q}" y="${h.y - q}" width="${2 * q}" height="${2 * q}" style="cursor:${cur}"/>`);
+          const lk = CONNECT.has(s.type) && END[h.k] && s[END[h.k][0]];
+          out.push(`<rect class="handle${on ? ' on' : ''}${lk ? ' linked' : ''}" data-handle="${h.k}" data-hid="${s.id}" x="${h.x - q}" y="${h.y - q}" width="${2 * q}" height="${2 * q}" style="cursor:${cur}"/>`);
         }
       }
     }
     if (marquee) {
       const x = Math.min(marquee.a.x, marquee.b.x), y = Math.min(marquee.a.y, marquee.b.y);
       out.push(`<rect class="marquee${marquee.text ? ' tf' : ''}" x="${x}" y="${y}" width="${Math.abs(marquee.b.x - marquee.a.x)}" height="${Math.abs(marquee.b.y - marquee.a.y)}"/>`);
+    }
+    if (linkHint) {
+      const t = byId(linkHint), C = linkFrame(t);
+      if (C) {
+        const P = ROUND.has(t.type) ? Array.from({ length: 48 }, (_, i) => fromUV(C, 0.5 + 0.5 * Math.cos((i * Math.PI) / 24), 0.5 + 0.5 * Math.sin((i * Math.PI) / 24)))
+          : C.map(([x, y]) => ({ x, y }));
+        out.push(`<polygon class="link-hint" points="${P.map((q) => `${r2(q.x)},${r2(q.y)}`).join(' ')}"/>`);
+      }
     }
     if (snapHint) {
       const r = (snapHint.anchor ? 6 : 3) / z;
@@ -716,7 +811,8 @@
     if (sel.length === 1 && (TD.ROT_TYPES.has(sel[0].type) || sel[0].type === 'sym')) C = TD.rotFrame(sel[0]);
     if (!C) { const b = unionBox(sel); C = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]; }
     const cx = (C[0][0] + C[2][0]) / 2, cy = (C[0][1] + C[2][1]) / 2;
-    return { C, cx, cy };
+    const H = sel.length === 1 ? TYPES[sel[0].type].handles(sel[0]) : []; // the resize handles actually drawn
+    return { C, cx, cy, H };
   }
   const insideQuad = (C, x, y) => {
     let sgn = 0;
@@ -728,27 +824,29 @@
     }
     return true;
   };
-  // Rotate zone: a band outside the selection's outline (ROT_IN to ROT_OUT screen px from its edges),
-  // kept clear of every resize handle (corners and edge midpoints) by HANDLE_CLEAR px, so aiming at a
-  // handle and missing slightly still resizes. Returns the point to aim the rotate cursor at, or null.
+  // Rotate zone: straight out from an edge, never around a corner. The pointer counts only when its foot
+  // on an edge lands within that edge and it sits ROT_IN to ROT_OUT screen px out along the edge's outward
+  // normal. Diagonal regions past a corner, anything within HANDLE_CLEAR px of a resize handle the shape
+  // really has, and anything over another (unselected) shape are never rotate. Returns the aim point, or null.
   const ROT_IN = 8, ROT_OUT = 30, HANDLE_CLEAR = 16;
-  const segDist = (px, py, [ax, ay], [bx, by]) => {
-    const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
-    const t = L ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L)) : 0;
-    return Math.hypot(px - ax - t * dx, py - ay - t * dy);
-  };
-  function rotZone(p, F = rotFrame()) {
+  function rotZone(p, F = rotFrame(), target = null) {
     if (!F || insideQuad(F.C, p.x, p.y)) return null;
+    const hit = target && target.closest && target.closest('[data-id]');
+    if (hit && !state.sel.has(hit.dataset.id)) return null; // a click on another shape selects it
     const z = state.view.zoom, C = F.C;
-    let edge = Infinity;
-    for (let i = 0; i < 4; i++) edge = Math.min(edge, segDist(p.x, p.y, C[i], C[(i + 1) % 4]) * z);
-    if (edge < ROT_IN || edge > ROT_OUT) return null;
+    if (F.H.some((h) => Math.hypot(p.x - h.x, p.y - h.y) * z < HANDLE_CLEAR)) return null;
     for (let i = 0; i < 4; i++) {
-      const a = C[i], b = C[(i + 1) % 4];
-      if (Math.hypot(p.x - a[0], p.y - a[1]) * z < HANDLE_CLEAR) return null;
-      if (Math.hypot(p.x - (a[0] + b[0]) / 2, p.y - (a[1] + b[1]) / 2) * z < HANDLE_CLEAR) return null;
+      const [ax, ay] = C[i], [bx, by] = C[(i + 1) % 4];
+      const L = Math.hypot(bx - ax, by - ay);
+      if (!L) continue;
+      const ux = (bx - ax) / L, uy = (by - ay) / L;
+      const t = (p.x - ax) * ux + (p.y - ay) * uy;             // along the edge (world)
+      let n = (p.x - ax) * -uy + (p.y - ay) * ux;              // across it (world)
+      if ((F.cx - ax) * -uy + (F.cy - ay) * ux > 0) n = -n;    // make outward positive
+      if (n * z < ROT_IN || n * z > ROT_OUT || t < 0 || t > L) continue;
+      return [p.x, p.y];
     }
-    return [p.x, p.y];
+    return null;
   }
   const ROT_CUR = {};
   function rotCursor(deg) {
@@ -828,8 +926,11 @@
     if (state.tool !== 'select') {
       const tool = state.tool, type = toolType(tool);
       begin();
-      const q = snapPoint(p, e);
+      let q = snapPoint(p, e);
+      const lk = CONNECT.has(type) && linkAt(p, q, e);
+      if (lk) q = linkPoint(lk);
       const s = addShape(TYPES[type].create(q, state.defaults, tool));
+      if (lk) s.link1 = lk;
       state.sel = new Set([s.id]);
       drag = { mode: 'create', id: s.id, a: q };
       render();
@@ -857,12 +958,14 @@
         renderOverlay(); renderProps();
       }
       begin();
-      drag = { mode: 'handle', id: h.dataset.hid, key: h.dataset.handle, orig: clone(byId(h.dataset.hid)) };
+      const hs0 = byId(h.dataset.hid);
+      if (CONNECT.has(hs0.type) && END[h.dataset.handle]) delete hs0[END[h.dataset.handle][0]]; // re-attached where it's dropped
+      drag = { mode: 'handle', id: h.dataset.hid, key: h.dataset.handle, orig: clone(hs0) };
       svg.style.setProperty('--drag-cur', h.style.cursor || 'move'); svg.classList.add('drag-cur'); // keep it while the pointer outruns the handle
       return;
     }
     {
-      const F = rotFrame(), zq = rotZone(p, F);
+      const F = rotFrame(), zq = rotZone(p, F, e.target);
       if (zq) {
         begin();
         drag = { mode: 'rotate', cx: F.cx, cy: F.cy, a0: Math.atan2(p.y - F.cy, p.x - F.cx), orig: new Map(selected().map((s) => [s.id, clone(s)])), F, zq };
@@ -906,8 +1009,14 @@
         render();
         return;
       }
-      if (state.tool !== 'select') { snapHint = snapPoint(p, e); renderOverlay(); }
-      else if (!(e.target.closest && e.target.closest('[data-handle],[data-addpt]'))) { const F = rotFrame(); setRotCursor(F, rotZone(p, F)); }
+      if (state.tool !== 'select') {
+        snapHint = snapPoint(p, e);
+        const lk = CONNECT.has(toolType(state.tool)) && linkAt(p, snapHint, e);
+        linkHint = lk ? lk.id : null;
+        if (lk) snapHint = { ...linkPoint(lk), anchor: true };
+        renderOverlay();
+      }
+      else if (!(e.target.closest && e.target.closest('[data-handle],[data-addpt]'))) { const F = rotFrame(); setRotCursor(F, rotZone(p, F, e.target)); }
       else setRotCursor(null, null);
       return;
     }
@@ -944,6 +1053,7 @@
           Object.assign(s, clone(o));
           TD.translate(s, dx, dy);
         }
+        if (dx || dy) detachFrom(selected(), state.sel);
         drag.moved = true;
         render();
         break;
@@ -959,6 +1069,7 @@
           Object.assign(s, clone(o));
           TD.rotateShape(s, drag.cx, drag.cy, deg);
         }
+        if (deg) detachFrom(selected(), state.sel);
         const [x, y] = drag.zq, a = Math.atan2(y - drag.cy, x - drag.cx) + (deg * Math.PI) / 180;
         svg.style.setProperty('--rot-cur', rotCursor((a * 180) / Math.PI + 90));
         const one = drag.orig.size === 1 ? byId([...drag.orig.keys()][0]) : null;
@@ -970,7 +1081,10 @@
       case 'handle': {
         const s = byId(drag.id);
         Object.assign(s, clone(drag.orig));
-        const q = snapPoint(p, e, new Set([drag.id]));
+        let q = snapPoint(p, e, new Set([drag.id]));
+        const lk = CONNECT.has(s.type) && END[drag.key] && !e.shiftKey && linkAt(p, q, e, s.id);
+        if (lk) q = { ...linkPoint(lk), anchor: true };
+        drag.lk = lk || null; linkHint = lk ? lk.id : null;
         snapHint = q.anchor ? q : null;
         TYPES[s.type].setHandle(s, drag.key, q, e, drag.orig);
         render(); renderGeom();
@@ -978,7 +1092,10 @@
       }
       case 'create': {
         const s = byId(drag.id);
-        const q = snapPoint(p, e, new Set([drag.id]));
+        let q = snapPoint(p, e, new Set([drag.id]));
+        const lk = CONNECT.has(s.type) && !e.shiftKey && linkAt(p, q, e, s.id);
+        if (lk) q = { ...linkPoint(lk), anchor: true };
+        drag.lk = lk || null; linkHint = lk ? lk.id : null;
         snapHint = q;
         TYPES[s.type].drag(s, drag.a, q, e);
         render();
@@ -1044,8 +1161,10 @@
       commit(); render(); renderProps();
       return;
     }
+    linkHint = null;
     if (d.mode === 'create') {
       const s = byId(d.id), t = TYPES[s.type];
+      if (d.lk && d.lk.id !== (s.link1 && s.link1.id)) s.link2 = d.lk;
       if (t.fix) t.fix(s);
       if (!t.valid(s)) removeShape(s.id);
       snapHint = null;
@@ -1054,7 +1173,11 @@
     } else if (d.mode === 'marquee') {
       marquee = null;
     } else {
-      if (d.mode === 'handle') { const s = byId(d.id); if (s && TYPES[s.type].endHandle) TYPES[s.type].endHandle(s); }
+      if (d.mode === 'handle') {
+        const s = byId(d.id);
+        if (s && d.lk && END[d.key]) s[END[d.key][0]] = d.lk;
+        if (s && TYPES[s.type].endHandle) TYPES[s.type].endHandle(s);
+      }
       snapHint = null;
       commit();
     }
@@ -1547,6 +1670,7 @@
       const s = selected()[0];
       begin();
       s[t.dataset.geom] = fromUnit(v, t.dataset.kind);
+      if (CONNECT.has(s.type)) { const g = t.dataset.geom; if (g === 'x1' || g === 'y1') delete s.link1; if (g === 'x2' || g === 'y2') delete s.link2; } // typed coordinates let go
       if (s.type === 'arc' && t.dataset.geom === 'a2' && s.a2 <= s.a1) s.a2 += 360;
       if (t.dataset.geom === 'tw' || t.dataset.geom === 'th') {
         s.tw = Math.max(0, s.tw || 0); s.th = Math.max(0, s.th || 0);
@@ -1664,13 +1788,14 @@
   function pasteShapes(list, offset) {
     begin();
     state.sel.clear();
-    const gmap = new Map();
+    const gmap = new Map(), idmap = new Map(), made = [];
     for (const o of list) {
-      const s = clone(o); s.id = uid();
+      const s = clone(o); s.id = uid(); idmap.set(o.id, s.id); made.push(s);
       if (s.g) { if (!gmap.has(s.g)) gmap.set(s.g, uid()); s.g = gmap.get(s.g); }
       TD.translate(s, offset, offset);
       addShape(s); state.sel.add(s.id);
     }
+    remapLinks(made, idmap);
     commit(); render(); renderProps();
   }
   function duplicate() { if (state.sel.size) pasteShapes(selected(), TD.GRID * 2); }
@@ -1891,6 +2016,11 @@
     tikz: '<path d="M7 5l-4 5 4 5M13 5l4 5-4 5"/>',
     all: '<path d="M3 3h14v14H3z" stroke-dasharray="2.5 2"/>',
     fit: '<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>',
+    open: '<path d="M2.5 5.5v11h13l2-7H5l-2.5 7"/><path d="M2.5 5.5V3.5h5l1.5 2h6v4"/>',
+    save: '<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>',
+    exp: '<path d="M10 12V3M6.5 6.5L10 3l3.5 3.5"/><path d="M3.5 10v6.5h13V10"/>',
+    rename: '<path d="M3 6h9M3 10h6M3 14h5"/><path d="M11 17l.6-2.6L16 10l2 2-4.4 4.4z"/>',
+    newdoc: '<path d="M5 2.5h6.5l3.5 3.5v11.5H5z"/><path d="M10 8.5v6M7 11.5h6"/>',
   };
   const icon = (n) => (n ? `<svg viewBox="0 0 20 20">${IC[n]}</svg>` : '<span class="ic"></span>');
   function item(label, act, { ic, key, dis, sub } = {}) {
@@ -1931,13 +2061,141 @@
         item(state.grid ? 'Hide Grid' : 'Show Grid', 'grid', { key: 'G' });
     }
     ctx.innerHTML = h;
+    ctx.dataset.doc = '';
+    placeCtx(x, y); // also opens submenus to the left when there is no room on the right
+  }
+  // ---------- document list: right-click menu ----------
+  // Rename, Duplicate, Save As, Copy, Paste and Delete work on the row's file without switching to it;
+  // Download, Export and Print act on the open file, so they open the row's file first.
+  let docClip = null; // last copied file (project JSON); the system clipboard gets the same text
+  const docData = (id) => { if (id === state.docId) saveNow(); return store.get(LS_DOC + id, null); };
+  const docEntry = (id) => index().find((d) => d.id === id);
+  // project-file JSON for a stored file (the same format Save writes)
+  function docJson(id) {
+    const d = docData(id);
+    if (!d) return null;
+    const isPage = d.kind === 'page';
+    return JSON.stringify({ app: 'texdiagram', version: 3, kind: isPage ? 'page' : 'classic', name: d.name, page: d.page,
+      ...(isPage ? { sheet: d.sheet } : { blocks: d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }] }) }, null, 1);
+  }
+  // store a copy of a file under a new name, listed right after `afterId`; returns the new id
+  function storeCopy(d, name, afterId) {
+    const id = uid(), kind = d.kind === 'page' ? 'page' : 'classic';
+    store.set(LS_DOC + id, { ...JSON.parse(JSON.stringify(d)), kind, name });
+    const idx = index(), at = idx.findIndex((x) => x.id === afterId), it = { id, name, kind, updated: Date.now() };
+    if (at >= 0) idx.splice(at + 1, 0, it); else idx.push(it);
+    store.set(LS_INDEX, idx);
+    return id;
+  }
+  const copyName = (n) => { const names = new Set(index().map((d) => d.name)); let k = 1, t = `${n} copy`; while (names.has(t)) t = `${n} copy ${++k}`; return t; };
+  // Open a project file's text (from a file or the clipboard) as a new file. Returns false if it isn't one.
+  function openProjectText(text, fallbackName, unique) {
+    let d; try { d = JSON.parse(text); } catch { return false; }
+    if (!d || typeof d !== 'object') return false;
+    let name = d.name || fallbackName || 'Untitled';
+    if (unique && index().some((x) => x.name === name)) name = copyName(name); // a pasted file never takes an existing name
+    if (d.kind === 'page') {
+      if (!d.sheet || !validShapes(d.sheet.shapes)) throw new Error('not a DiagramTeX page file');
+      newDoc(name, null, null, null, d.page, 'page', { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes });
+      return true;
+    }
+    const blocks = d.blocks || (Array.isArray(d.shapes) ? [{ type: 'diagram', shapes: d.shapes }] : null);
+    if (!blocks || blocks.some((b) => b.type === 'diagram' && !validShapes(b.shapes))) throw new Error('not a DiagramTeX file');
+    newDoc(name, null, null, blocks, d.page);
+    zoomFit();
+    return true;
+  }
+  async function pasteDoc() {
+    let text = null;
+    try { text = await navigator.clipboard.readText(); } catch { /* permission denied: use our own copy */ }
+    try {
+      if (text && /^\s*\{/.test(text) && openProjectText(text, null, true)) { showHint('Pasted as a new file', 1200); return; }
+      if (docClip && openProjectText(docClip, null, true)) { showHint('Pasted as a new file', 1200); return; }
+    } catch (err) { showHint('Could not paste: ' + err.message, 2000); return; }
+    showHint('Nothing to paste: copy a file first', 1600);
+  }
+  function placeCtx(x, y) {
     ctx.hidden = false;
     const r = ctx.getBoundingClientRect();
     ctx.style.left = Math.min(x, innerWidth - r.width - 6) + 'px';
     ctx.style.top = Math.min(y, innerHeight - r.height - 6) + 'px';
-    // open submenus to the left when there is no room on the right
     ctx.classList.toggle('flip', x + r.width * 2 > innerWidth);
   }
+  function openDocCtx(id, x, y) {
+    const it = id && docEntry(id), page = state.doc.kind === 'page', d = (k) => 'doc:' + k;
+    let h;
+    if (it) {
+      h = (id !== state.docId ? item('Open', d('open'), { ic: 'open' }) + hr : '') +
+        item('Rename…', d('rename'), { ic: 'rename' }) +
+        item('Duplicate', d('dup'), { ic: 'dup' }) +
+        item('Save As…', d('saveas'), { ic: 'dup' }) + hr +
+        item('Copy', d('copy'), { ic: 'copy' }) +
+        item('Paste', d('paste'), { ic: 'paste' }) + hr +
+        item('Download (.json)', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' }) +
+        item('Export', '', { ic: 'exp', sub:
+          item('LaTeX Document (.tex)', d('latex'), { key: id === state.docId ? 'Ctrl+Shift+E' : '' }) +
+          (page ? '' : item('TikZ Code…', d('tikz'), { key: id === state.docId ? 'Ctrl+E' : '' })) +
+          item('Web Page (.html)', d('html')) +
+          item('Image (PNG, SVG, PDF)…', d('image')) + hr +
+          item('Print or Save as PDF…', d('print'), { key: id === state.docId ? 'Ctrl+P' : '' }) }) + hr +
+        item('Delete', d('del'), { ic: 'del' });
+    } else {
+      h = item(page ? 'New Page' : 'New Document', d('new'), { ic: 'newdoc' }) +
+        item('Open File…', d('openfile'), { ic: 'open', key: 'Ctrl+O' }) + hr +
+        item('Paste', d('paste'), { ic: 'paste' });
+    }
+    ctx.innerHTML = h;
+    ctx.dataset.doc = id || '';
+    placeCtx(x, y);
+  }
+  function docAction(a, id) {
+    const it = id && docEntry(id);
+    const openFirst = () => { if (id && id !== state.docId) openDoc(id); };
+    switch (a) {
+      case 'open': openFirst(); break;
+      case 'new': newDoc(null, null, null, null, null, state.doc.kind); break;
+      case 'openfile': $('#fileInput').click(); break;
+      case 'rename': openFirst(); { const n = $('#docName'); n.focus(); n.select(); } break;
+      case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(`Duplicated as "${n}"`, 1200); } break; }
+      case 'saveas': {
+        const src = docData(id); if (!src) break;
+        TD.prompt('Save a Copy As', copyName(it.name), { ok: 'Save' }).then((name) => {
+          if (name != null && name.trim()) openDoc(storeCopy(src, name.trim(), id));
+        });
+        break;
+      }
+      case 'copy': {
+        docClip = docJson(id);
+        if (!docClip) break;
+        navigator.clipboard.writeText(docClip).then(() => showHint(`Copied "${it.name}"`, 1000), () => showHint(`Copied "${it.name}" (in this tab only)`, 1400));
+        break;
+      }
+      case 'paste': pasteDoc(); break;
+      case 'save': openFirst(); saveFile(); break;
+      case 'latex': case 'tikz': case 'html': case 'print': openFirst(); runCmd(a); break;
+      case 'image': {
+        openFirst();
+        if (state.mode === 'document') { showHint('Image export works on a diagram: switch to Diagram view first', 2000); break; }
+        requestAnimationFrame(() => openExport($('#btnExport')));
+        break;
+      }
+      case 'del': deleteDoc(id); break;
+    }
+  }
+  $('#docList').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (editing) finishEdit();
+    pop.hidden = true;
+    const li = e.target.closest('[data-doc]');
+    openDocCtx(li ? li.dataset.doc : null, e.clientX, e.clientY);
+  });
+  // the empty part of the sidebar's list area also offers New / Open / Paste
+  $('#files')?.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('#docList, input, textarea, button')) return;
+    e.preventDefault();
+    openDocCtx(null, e.clientX, e.clientY);
+  });
+
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (drag || polyDraft) return;
@@ -1958,6 +2216,7 @@
     if (!b || b.disabled) return;
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
+    if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
     if (a === 'edit') { const s = selected()[0]; startEdit(s.id, s.type === 'text' ? 'text' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
@@ -1989,6 +2248,7 @@
     if (!state.sel.size) return;
     begin();
     for (const s of selected()) TD.translate(s, dx, dy);
+    detachFrom(selected(), state.sel);
     commit(); render(); renderGeom();
   }
 
@@ -2142,19 +2402,8 @@
     const text = await file.text();
     if (!/\.json$/i.test(file.name) && !/^\s*\{/.test(text)) { openImport(text); return; }
     try {
-      const d = JSON.parse(text);
-      const name = d.name || file.name.replace(/(\.page)?\.json$/i, '');
-      if (d.kind === 'page') {
-        if (!d.sheet || !validShapes(d.sheet.shapes)) throw new Error('not a DiagramTeX page file');
-        newDoc(name, null, null, null, d.page, 'page', { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes });
-        showHint('Opened page file', 1200);
-        return;
-      }
-      const blocks = d.blocks || (Array.isArray(d.shapes) ? [{ type: 'diagram', shapes: d.shapes }] : null);
-      if (!blocks || blocks.some((b) => b.type === 'diagram' && !validShapes(b.shapes))) throw new Error('not a DiagramTeX file');
-      newDoc(name, null, null, blocks, d.page);
-      zoomFit();
-    } catch (err) { alert('Could not open file: ' + err.message); }
+      if (!openProjectText(text, file.name.replace(/(\.page)?\.json$/i, ''))) throw new Error('not valid JSON');
+    } catch (err) { TD.alert(`Couldn't open "${file.name}"`, `It isn't a DiagramTeX file (${err.message}).`); }
   };
 
   // Render shapes, then prepend the gradient/pattern <defs> they referenced.

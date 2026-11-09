@@ -291,7 +291,7 @@
       if (act === 'rev') { const a = s.arrows[i]; [a.r1, a.c1, a.r2, a.c2] = [a.r2, a.c2, a.r1, a.c1]; a.bend = -(a.bend || 0); }
       if (act === 'copycd') {
         const txt = TD.cdToTikzcd(s);
-        (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => window.prompt('tikz-cd code', txt));
+        (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt('tikz-cd Code', txt, { multiline: true, readonly: true, message: 'Copying failed: select the code and copy it yourself.', ok: 'Done', cancel: null }));
         return 'Copied tikz-cd code';
       }
     },

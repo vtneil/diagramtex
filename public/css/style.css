@@ -277,6 +277,9 @@ body.no-files #files { display: none; }
 /* the frame being dragged out with the Text tool: a paragraph box, drawn in the blue pen */
 .marquee.tf { fill: none; stroke: var(--bluepen); }
 .snap-ind { fill: none; stroke: var(--bluepen); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* attached connectors: the shape an end will stick to, and ends that are stuck (filled) */
+.link-hint { fill: none; stroke: var(--bluepen); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .55; }
+.handle.linked { fill: var(--bluepen); stroke: var(--bluepen); }
 
 #inlineEditor {
   position: absolute; display: none; min-width: 280px; max-width: calc(100% - 16px); min-height: 76px; padding: 8px 10px; resize: both; border-radius: var(--r);
@@ -414,9 +417,10 @@ body.no-files #files { display: none; }
 .ctx { position: fixed; z-index: 40; min-width: 240px; padding: 4px; font-size: 13px; }
 .ctx hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 8px; }
 .ctx-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: var(--r); background: none; text-align: left; cursor: default; position: relative; color: var(--ink); transition: none; }
-.ctx-item:hover:not([disabled]):not(.dis), .ctx-item:focus-visible { background: var(--ink); color: var(--sheet); outline: none; }
-.ctx-item:hover:not([disabled]):not(.dis) svg, .ctx-item:hover:not([disabled]):not(.dis) kbd, .ctx-item:hover:not([disabled]):not(.dis) .arr { color: inherit !important; }
-.ctx-item[data-ctx=del]:hover:not([disabled]) { background: var(--redpen); color: #fff; }
+/* Same highlight as the dropdown menus (.selmenu / .ddpop rows): the well tone, text and icons unchanged.
+   A row whose submenu is open stays highlighted. Destructive rows keep the tone and turn the red pen. */
+.ctx-item:hover:not([disabled]):not(.dis), .ctx-item:focus-visible { background: var(--well); color: var(--ink); outline: none; }
+.ctx-item[data-ctx$=del]:hover:not([disabled]), .ctx-item[data-ctx$=del]:hover:not([disabled]) svg { color: var(--redpen); }
 .ctx-item[disabled], .ctx-item.dis { color: var(--faint); }
 .ctx-item svg, .ctx-item .ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .ctx-item:not([disabled]):not(.dis) svg { color: var(--graphite); }
@@ -424,9 +428,31 @@ body.no-files #files { display: none; }
 .ctx-item .lb { flex: 1; }
 .ctx-item kbd { background: none; border: 0; color: var(--pencil); padding: 0 0 0 16px; font: 12px var(--font-ui); letter-spacing: .04em; }
 .ctx-item .arr { color: var(--pencil); font-size: 16px; line-height: 1; }
-.ctx .sub { display: none; position: absolute; left: calc(100% + 1px); top: -5px; min-width: 220px; animation: none; color: var(--ink); }
-.ctx.flip .sub { left: auto; right: 100%; }
+/* Submenu: clear of the parent menu (its 4px padding + 1px border + 4px gap), first row level with the
+   row that opened it (sub padding 4 + border 1). An invisible bridge spans the gap so the pointer can cross. */
+.ctx .sub { display: none; position: absolute; left: calc(100% + 9px); top: -5px; min-width: 180px; animation: none; color: var(--ink); }
+.ctx .sub::before { content: ''; position: absolute; top: 0; bottom: 0; left: -10px; width: 10px; }
+.ctx.flip .sub { left: auto; right: calc(100% + 9px); }
+.ctx.flip .sub::before { left: auto; right: -10px; }
+/* submenu rows carry no icons, so drop the empty icon column */
+.ctx .sub .ctx-item > .ic { display: none; }
 .ctx-item.has-sub:hover:not(.dis) > .sub { display: block; }
+
+/* In-app alert / confirm / prompt (js/dialog.js): a small sheet over the scrim, title + message,
+   buttons right-aligned with the default action last. Destructive actions use the red pen. */
+.td-dialog { position: fixed; inset: 0; z-index: 2000; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 16px; animation: tdd-fade .14s var(--ease); }
+.tdd-box { width: min(400px, 100%); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-xl); box-shadow: var(--shadow-modal); padding: 20px 20px 16px; animation: pop-in .16s var(--ease); }
+.tdd-box h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.tdd-box p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: var(--graphite); }
+.tdd-in { display: block; width: 100%; margin-top: 12px; height: var(--ctl); padding: 0 8px; background: var(--well); border: 1px solid var(--rule-strong); }
+textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); resize: vertical; }
+.tdd-in:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
+.tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.tdd-btns button { min-width: 80px; }
+.tdd-btns button.danger { background: var(--redpen); border-color: var(--redpen); color: #fff; font-weight: 500; }
+.tdd-btns button.danger:hover { filter: brightness(1.08); }
+@keyframes tdd-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .td-dialog, .tdd-box { animation: none; } }
 
 #modal, .modal { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; z-index: 10; }
 #modal[hidden], .modal[hidden] { display: none; }

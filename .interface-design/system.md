@@ -37,8 +37,9 @@
 - `prefers-contrast: more` strengthens rules and promotes `--pencil` to `--graphite`.
 
 ## Depth and shape
-Hairline rgba rules and rounded corners: `--r-sm` 4px, `--r` 6px (buttons, inputs, segmented tracks, menu rows), `--r-lg` 10px (popovers, menus, cards), `--r-xl` 12px (modals). Corners nest concentrically: a shape inset N px inside another takes the outer radius minus N. Segments are 4px inside a 6px track with 2px padding. Menus (context, dash/width, select, LaTeX autocomplete) have 4px padding and 6px rows inside a 10px shell. Selected rows are marked by fill, not an edge bar, because a bar does not sit well on a rounded row. Square corners were tried and rejected as less friendly; chamfered (diagonal-cut) corners were considered and not used.
+Hairline rgba rules and rounded corners: `--r-sm` 4px, `--r` 6px (buttons, inputs, segmented tracks, menu rows), `--r-lg` 10px (popovers, menus, cards), `--r-xl` 12px (modals). Corners nest concentrically: a shape inset N px inside another takes the outer radius minus N. Segments are 4px inside a 6px track with 2px padding. Menus (context, dash/width, select, LaTeX autocomplete) have 4px padding and 6px rows inside a 10px shell. Selected rows are marked by fill, not an edge bar, because a bar does not sit well on a rounded row. Every menu (context, select, dash/width) highlights the hovered row the same way: the `--well` tone, text and icons unchanged; destructive rows turn the red pen. Submenus sit 4px clear of their parent, first row level with the row that opened it, with no icon column. Square corners were tried and rejected as less friendly; chamfered (diagonal-cut) corners were considered and not used.
 - Shadows are used only where something floats above the sheet: popovers, menus, the colour picker, modals, the inline editor and the document page.
+- Menus open below their control (above when there is no room) and line up with the edge nearest the window side the control sits on: in the properties panel and the Export popover, the menu's right edge meets the control's right edge and the menu grows left; elsewhere the left edges meet.
 - Elevation goes paper → sheet → sheet-raised.
 
 ## Typography
@@ -92,7 +93,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 ## Cursors
 - Use the standard CSS cursor for what a drag will do. Never `pointer` (the hand) on canvas handles: the hand is for links and buttons.
 - Edge and corner handles resize: `ew-`, `ns-`, `nesw-` or `nwse-resize`, turned with the shape's rotation and snapped to the nearest of the four. Text wrap and circle radius handles count as edges.
-- Point handles (line ends, vertices, arc ends, arc centre) and shape bodies: `move`. Space held: `grab`; while panning: `grabbing`. Rotation zone: the custom rotate cursor. The zone is a band 8–30px outside the selection's edges, kept 16px clear of every resize handle (corners and edge midpoints), so a near miss on a handle still resizes.
+- Point handles (line ends, vertices, arc ends, arc centre) and shape bodies: `move`. Space held: `grab`; while panning: `grabbing`. Rotation zone: the custom rotate cursor. The zone runs straight out from each edge (8–30px along the edge's outward normal, within the edge's length), never diagonally past a corner. It stays 16px clear of the resize handles the shape actually has, so a near miss on a handle still resizes, and it never covers another shape: pressing on another shape selects it.
 - During a handle drag the canvas keeps the handle's cursor, so it doesn't flicker when the pointer outruns the handle.
 
 ## Installable app (PWA)
@@ -100,3 +101,20 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - `sw.js` precaches every same-origin file, so the app works offline from the first visit. Fetches go network first, falling back to the cache when offline or after 4s, so a deploy shows on the next load. Cross-origin requests pass through. Bump `CACHE` in `sw.js` when the file list changes.
 - Icon (`public/icons/`): engineering-paper grid, a ball-shaded charge and an ink arrow. `icon.svg` is the rounded tile (favicon and "any"); `icon-maskable.svg` is full-bleed with the art in the safe zone. PNGs are rendered from these at 32, 180, 192 and 512.
 - `theme-color` follows the appearance (#fffdf8 light, #242320 dark), so the installed window's title bar matches the top bar.
+
+## Files sidebar
+- Right-click a file: Open (if not the open one), Rename…, Duplicate, Save As…; Copy, Paste; Download (.json); Export ▸ LaTeX, TikZ (Classic), HTML, Image, Print; Delete. Rename/Duplicate/Save As/Copy/Paste/Delete work on that file in place; Download/Export/Print open it first, since they act on the open file.
+- Right-click the empty list area: New, Open File…, Paste.
+- Copy puts the project JSON (same as Download) on the system clipboard; Paste opens it as a new file and never reuses an existing name ("… copy", "… copy 2").
+
+## Dialogs (`js/dialog.js`)
+- Never use the browser's `alert` / `confirm` / `prompt`. Use `TD.confirm(title, message, opts)`, `TD.prompt(title, value, opts)`, `TD.alert(title, message)`; each returns a Promise.
+- The title asks the question ("Delete "Name"?"); the message says what happens. Buttons name the action ("Delete", "Save", "Add Link"), never "OK" when a verb fits.
+- Destructive actions pass `danger: true`: red button, focus starts on Cancel, so a stray Return can't delete.
+- Esc cancels, Enter takes the default, Tab stays inside, focus returns to where it was. One dialog at a time.
+
+## Attached connectors
+- Lines, arrows, curves and springs attach an end that is dropped on a shape's outline or one of its snap points. The end is stored as a position in the shape's frame (`link1` / `link2` = `{ id, u, v }`) and follows the shape when it moves, resizes or rotates.
+- While drawing or dragging an end, the shape it will attach to gets a soft blue outline and the end snaps onto the outline. Attached end handles are filled blue.
+- Moving, nudging or rotating the connector without its shapes detaches it, as does typing an end's coordinates or dragging the end off. Alt places an end without attaching.
+- Copies keep links only to shapes copied with them. TikZ export uses plain coordinates.

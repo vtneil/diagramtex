@@ -594,11 +594,13 @@
     else if (f === 'color') { fmtColor = val; wrapSel(ta, `\\textcolor[HTML]{${hexOf(val)}}{`, '}'); }
     else if (f === 'hl') { fmtHl = val; wrapSel(ta, `\\colorbox[HTML]{${hexOf(val)}}{`, '}'); }
     else if (f === 'link') {
-      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
-      const url = prompt('Link address', /^https?:\/\//.test(sel) ? sel : 'https://');
-      if (!url || url === 'https://') { ta.focus(); return; }
-      if (!sel || sel === url) wrapSel(ta, '\\url{', '}', url);
-      else wrapSel(ta, `\\href{${url}}{`, '}');
+      const s0 = ta.selectionStart, s1 = ta.selectionEnd, sel = ta.value.slice(s0, s1);
+      TD.prompt('Link Address', /^https?:\/\//.test(sel) ? sel : 'https://', { ok: 'Add Link' }).then((url) => {
+        ta.focus(); ta.setSelectionRange(s0, s1); // the dialog took the focus: put the selection back
+        if (!url || url === 'https://') return;
+        if (!sel || sel === url) wrapSel(ta, '\\url{', '}', url);
+        else wrapSel(ta, `\\href{${url}}{`, '}');
+      });
     } else if (f === 'ul' || f === 'ol' || f === 'chk') prefixLines(ta, f);
     else if (f === 'head') prefixLines(ta, val);
     else if (f.startsWith('al:')) {
@@ -653,9 +655,10 @@
       return;
     }
     if (e.target.closest('[data-rm]')) {
-      if (b.type === 'diagram' && b.shapes.length && !confirm('Delete this diagram? This cannot be undone.')) return;
-      keepActive((d) => d.blocks.splice(i, 1));
-      editingIdx = -1; changed(); render();
+      const remove = () => { keepActive((d) => d.blocks.splice(i, 1)); editingIdx = -1; changed(); render(); };
+      if (b.type === 'diagram' && b.shapes.length) {
+        TD.confirm('Delete this diagram?', `Its ${b.shapes.length} object${b.shapes.length > 1 ? 's' : ''} will be deleted too.`, { ok: 'Delete', danger: true }).then((yes) => { if (yes) remove(); });
+      } else remove();
       return;
     }
     if (e.target.closest('[data-edit]')) { openDiagram(i); return; }
@@ -735,7 +738,7 @@
   });
   document.addEventListener('pointerdown', (e) => {
     if (editingIdx < 0 || app.state.mode !== 'document') return;
-    if (e.target.closest('.blk.editing') || e.target.closest('.tc-pop, .texcomplete, .ddpop')) return;
+    if (e.target.closest('.blk.editing') || e.target.closest('.tc-pop, .texcomplete, .ddpop, .td-dialog')) return;
     if (!root.contains(e.target) && !e.target.closest('#docview')) return;
     setTimeout(() => leaveIfOutside(e.target.isConnected ? e.target : null), 0);
   }, true);

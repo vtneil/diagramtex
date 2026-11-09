@@ -55,9 +55,12 @@
     const up = menu.offsetHeight > below && above > below;
     menu.style.maxHeight = Math.max(120, up ? above : below) + 'px';
     const h = menu.offsetHeight;
-    menu.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    // Controls in the properties panel or the top-right Export popover grow their menu leftwards, lined
+    // up with the control's right edge, like the dash/width menus; elsewhere, the left edges line up.
+    const right = !!s.closest('#props, .exp-pop') || r.left + r.width / 2 > innerWidth * 0.6;
+    menu.style.left = Math.max(8, Math.min(right ? r.right - w : r.left, innerWidth - w - 8)) + 'px';
     menu.style.top = (up ? r.top - h - 4 : r.bottom + 4) + 'px';
-    menu.style.transformOrigin = up ? 'bottom left' : 'top left';
+    menu.style.transformOrigin = (up ? 'bottom ' : 'top ') + (right ? 'right' : 'left');
     s.setAttribute('aria-expanded', 'true');
     setHi(s.selectedIndex, true);
   }
