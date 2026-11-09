@@ -67,6 +67,8 @@ The UI uses only two families: sans and mono. The serif (`--font-tex`, KaTeX_Mai
 
 ## Status line (`#status`)
 - Zoom in the status bar: − [field] + 1:1 Fit. The percentage is a text field: click selects it, type a number (with or without %), Enter or leaving applies, Esc reverts; values clamp to 10–800%. 1:1 is the dedicated reset to 100%.
+- Grid spacing is the same kind of field (`grid [0.25] cm · snap on`): 0.05–5 cm, an app preference saved with snap. Minor lines follow it; major lines stay on whole centimetres when the spacing divides 1 cm, else every 4th line.
+- Groups (position · selection · grid/snap | pages | zoom) are separated by empty space in `--gutter`, a step deeper than the bar, so the groups read as separate pieces. The gap before zoom only shows with the page navigator.
 Shows the cursor as `x · y cm`, the selection as N selected with its width × height in cm, and the grid size and snap state. Zoom controls −, %, + and Fit sit on the right.
 
 ## Page mode
@@ -104,6 +106,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 
 ## Files sidebar
 - Right-click a file: Open (if not the open one), Rename…, Duplicate, Save As…; Copy, Paste; Download (.json); Export ▸ LaTeX, TikZ (Classic), HTML, Image, Print; Delete. Rename/Duplicate/Save As/Copy/Paste/Delete work on that file in place; Download/Export/Print open it first, since they act on the open file.
+- Rename… turns the row's name into a field in place (Enter or clicking away keeps it, Esc cancels); the file isn't opened, and the top-bar name follows when it is the open file. With the sidebar hidden it falls back to the top-bar name field.
 - Right-click the empty list area: New, Open File…, Paste.
 - Copy puts the project JSON (same as Download) on the system clipboard; Paste opens it as a new file and never reuses an existing name ("… copy", "… copy 2").
 
@@ -112,6 +115,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - The title asks the question ("Delete "Name"?"); the message says what happens. Buttons name the action ("Delete", "Save", "Add Link"), never "OK" when a verb fits.
 - Destructive actions pass `danger: true`: red button, focus starts on Cancel, so a stray Return can't delete.
 - Esc cancels, Enter takes the default, Tab stays inside, focus returns to where it was. One dialog at a time.
+- Buttons sit the same distance (`--tdd-inset`, 14px) from the right and bottom edges, and the sheet's corner is concentric with theirs: radius = button radius + inset (6 + 14 = 20px). Text keeps its 20px inset.
 
 ## Attached connectors
 - Lines, arrows, curves and springs attach an end that is dropped on a shape's outline or one of its snap points. The end is stored as a position in the shape's frame (`link1` / `link2` = `{ id, u, v }`) and follows the shape when it moves, resizes or rotates.
@@ -132,3 +136,6 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - Export opens a popover: PNG, SVG, PDF or Web page (the whole file as one self-contained .html). In Document view it offers only Web page. Code (`</>` icon) shows the TikZ, or the page's LaTeX, to copy; LaTeX downloads the whole file as a compilable .tex.
 - Export, Code and LaTeX share one outlined style (the default button). Solid black output buttons were tried and were the loudest thing on screen; a soft fill and a blue-pen tint were also considered.
 - Panel actions (Bring to Front, Duplicate, Delete …) use a soft `--wash-strong` fill with no border, so they never read as white fields. Delete turns the red pen on hover.
+- A maths-only command in prose (`\alpha`, `\frac{a}{b}`, `\degree`) won't compile, so it stays as typed with a red-pen dotted underline and a hint ("Maths command: put it in $…$", plus the text spelling where one exists, such as `\textdegree`). Commands that are fine in text (`\hspace`, `\small`, `\ref` …) and unknown commands are not flagged. The underline is app-only: never printed or exported.
+- LaTeX source fields (canvas editor, Text / Label in the panel, Document text blocks) colour maths (`$…$`, `$$…$$`, `\[…\]`) in `--mathpen` green, as a LaTeX editor does; an unclosed `$` colours to the end of the line while typing. Done by a copy of the text laid over the focused field (`js/texhighlight.js`); the field keeps caret, selection and spell-check.
+- Command suggestions follow the caret: inside maths, every command; in prose, only commands that work in text (`TD.prose.textOk`: the prose commands and symbols, `\text…`, sizes, spacing, refs).

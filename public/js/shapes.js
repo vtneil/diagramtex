@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.3.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.4.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -420,11 +420,35 @@
     }
     return group(false);
   }
+  // A command that only works in maths (\alpha, \frac{a}{b}) fails to compile in prose: it is shown as typed,
+  // with a red dotted underline and a hint. Commands that are fine in text too are never flagged.
+  const TEXT_OK = new Set(('hspace vspace newline linebreak pagebreak par noindent centering hfill vfill quad qquad tiny scriptsize footnotesize ' +
+    'small normalsize large Large LARGE huge Huge bfseries mdseries itshape upshape slshape scshape ttfamily rmfamily sffamily normalfont ' +
+    'color textcolor colorbox fbox mbox makebox raisebox href url ref eqref pageref label cite footnote today ensuremath phantom hphantom vphantom ' +
+    'smallskip medskip bigskip kern rule relax').split(' '));
+  const TEXT_FOR = { degree: '\\textdegree', circ: '\\textdegree', times: '\\texttimes', pm: '\\textpm' };
+  const mathOnlyCache = new Map();
+  function mathOnly(raw) {
+    const name = /^\\([A-Za-z]+)/.exec(raw)?.[1];
+    if (!name || TEXT_OK.has(name) || name.startsWith('text') || !window.katex) return false;
+    if (!mathOnlyCache.has(raw)) {
+      let ok = false;
+      try { window.katex.renderToString(raw, { throwOnError: true }); ok = true; } catch (e) { /* not maths either */ }
+      mathOnlyCache.set(raw, ok);
+    }
+    return mathOnlyCache.get(raw);
+  }
+  function rawHtml(raw) {
+    if (!mathOnly(raw)) return esc(raw);
+    const name = /^\\([A-Za-z]+)/.exec(raw)[1];
+    const tip = `Maths command: put it in $…$${TEXT_FOR[name] ? ` (or use ${TEXT_FOR[name]} in text)` : ''}`;
+    return `<span class="tx-warn" title="${esc(tip)}">${esc(raw)}</span>`;
+  }
   const ligatures = (h) => h.replace(/---/g, '—').replace(/--/g, '–').replace(/``/g, '“').replace(/''/g, '”');
   function proseHtml(nodes) {
     return nodes.map((n) => (typeof n === 'string' ? ligatures(esc(n))
       : n.sym ? PROSE_SYMS[n.sym]
-        : n.raw !== undefined ? esc(n.raw)
+        : n.raw !== undefined ? rawHtml(n.raw)
           : n.cmd && PROSE_CMDS[n.cmd] ? `<span style='${PROSE_CMDS[n.cmd]}'>${proseHtml(n.kids)}</span>` : proseHtml(n.kids))).join('');
   }
   // nodes → source, with `escStr` deciding how plain characters are written
@@ -434,7 +458,9 @@
         : n.raw !== undefined ? n.raw
           : `${n.cmd ? '\\' + n.cmd : ''}{${proseSource(n.kids, escStr)}}`)).join('');
   }
-  TD.prose = { parse: parseProse, html: proseHtml, source: proseSource, CMDS: PROSE_CMDS };
+  // Commands that work in prose (outside $…$): the ones the prose renderer knows, \text… and the usual text-mode commands.
+  const textOk = (name) => PROSE_CMDS[name] !== undefined || (PROSE_SYMS[name] !== undefined && name !== 'nbsp') || TEXT_OK.has(name) || name.startsWith('text');
+  TD.prose = { parse: parseProse, html: proseHtml, source: proseSource, CMDS: PROSE_CMDS, textOk };
 
   // TeX for one math segment
   const mathTex = (seg) => (seg.display ? `\\displaystyle ${seg.s.trim()}` : seg.s);

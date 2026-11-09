@@ -41,6 +41,7 @@
     tool: 'select',
     view: { x: -60, y: -60, zoom: 1 },
     grid: true,
+    gridCm: 0.25, // grid spacing (an app preference, like snap)
     snap: true,
     defaults: { stroke: '#000000', fill: null, width: 1, dash: 'solid', color: '#000000', size: 'normalsize', font: 'default', ballColor: '#a05a5a' },
     undo: [], redo: [],
@@ -120,7 +121,7 @@
     if (!ok && !was) showHint('Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.', 4000);
     renderDocList();
   }
-  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files') }); }
+  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files') }); }
 
   function openDoc(id) {
     finishEdit(); finishPoly(); commit();
@@ -310,7 +311,21 @@
     if (!el) return;
     if (!sel.length) el.textContent = '';
     else { const b = unionBox(sel); el.textContent = `${sel.length} selected · ${r2(b.w / PX)} × ${r2(b.h / PX)} cm`; }
-    $('#gridInfo').textContent = `grid ${TD.GRID / PX} cm · ${state.snap ? 'snap on' : 'snap off'}`;
+    const gv = $('#gridVal');
+    if (document.activeElement !== gv) gv.value = fmtGrid();
+    $('#snapInfo').textContent = state.snap ? 'snap on' : 'snap off';
+  }
+  // Grid spacing: TD.GRID (px) drives snapping, nudging and paste offsets; the canvas pattern follows.
+  // Major lines stay on whole centimetres when the spacing divides 1 cm, else every 4th line.
+  const fmtGrid = () => String(+state.gridCm.toFixed(3));
+  function applyGrid() {
+    const g = state.gridCm * PX, n = 1 / state.gridCm, major = state.gridCm >= 1 ? g : Math.abs(n - Math.round(n)) < 1e-6 ? PX : 4 * g;
+    TD.GRID = g;
+    const mi = $('#gridMinor'), ma = $('#gridMajor');
+    mi.setAttribute('width', g); mi.setAttribute('height', g); mi.querySelector('path').setAttribute('d', `M${g} 0H0V${g}`);
+    ma.setAttribute('width', major); ma.setAttribute('height', major);
+    const r = ma.querySelector('rect'); r.setAttribute('width', major); r.setAttribute('height', major);
+    ma.querySelector('path').setAttribute('d', `M${major} 0H0V${major}`);
   }
   // Standard cursors for handles: edge/corner handles resize along their axis (turned with the shape's
   // rotation, snapped to the four system resize cursors); point handles (ends, vertices, arc ends) move.
@@ -2183,6 +2198,41 @@
     ctx.dataset.doc = id || '';
     placeCtx(x, y);
   }
+  // Rename in place: the row's name becomes a field. Enter or leaving keeps it, Esc cancels; the file stays closed.
+  function renameDoc(id, name) {
+    if (id === state.docId) { state.doc.name = name; $('#docName').value = name; saveNow(); return; }
+    const d = store.get(LS_DOC + id, null);
+    if (d) store.set(LS_DOC + id, { ...d, name });
+    const idx = index(), it = idx.find((x) => x.id === id);
+    if (it) { it.name = name; store.set(LS_INDEX, idx); }
+  }
+  function renameInList(id) {
+    const li = id && $(`#docList li[data-doc="${id}"]`), nm = li && li.querySelector('.nm');
+    if (!nm || document.body.classList.contains('no-files')) { // sidebar hidden: rename the open file in the top bar
+      if (id !== state.docId) openDoc(id);
+      const n = $('#docName'); n.focus(); n.select(); return;
+    }
+    const old = docEntry(id)?.name || nm.textContent;
+    const inp = document.createElement('input');
+    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', 'File name'); inp.spellcheck = false;
+    nm.replaceWith(inp);
+    li.classList.add('renaming');
+    let done = false;
+    const finish = (keep) => {
+      if (done) return; done = true;
+      const v = inp.value.trim();
+      if (keep && v && v !== old) renameDoc(id, v);
+      renderDocList();
+    };
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    inp.addEventListener('blur', () => finish(true));
+    inp.addEventListener('click', (e) => e.stopPropagation());
+    inp.focus(); inp.select();
+  }
   function docAction(a, id) {
     const it = id && docEntry(id);
     const openFirst = () => { if (id && id !== state.docId) openDoc(id); };
@@ -2190,7 +2240,7 @@
       case 'open': openFirst(); break;
       case 'new': newDoc(null, null, null, null, null, state.doc.kind); break;
       case 'openfile': $('#fileInput').click(); break;
-      case 'rename': openFirst(); { const n = $('#docName'); n.focus(); n.select(); } break;
+      case 'rename': renameInList(id); break;
       case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(`Duplicated as "${n}"`, 1200); } break; }
       case 'saveas': {
         const src = docData(id); if (!src) break;
@@ -2407,6 +2457,20 @@
       zv.value = shown(); // also shows the clamped value (10–800%) or reverts junk
     });
     zv.addEventListener('blur', () => { zv.value = shown(); });
+  }
+  { // grid spacing: a field like the zoom percentage (Enter or leaving applies, Esc reverts)
+    const gv = $('#gridVal');
+    gv.addEventListener('focus', () => requestAnimationFrame(() => gv.select()));
+    gv.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); gv.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); gv.value = fmtGrid(); gv.blur(); }
+    });
+    gv.addEventListener('change', () => {
+      const n = parseFloat(gv.value.replace(/cm|\s/g, '').replace(',', '.'));
+      if (Number.isFinite(n) && n > 0) { state.gridCm = Math.min(5, Math.max(0.05, n)); applyGrid(); savePrefs(); render(); }
+      gv.value = fmtGrid();
+    });
+    gv.addEventListener('blur', () => { gv.value = fmtGrid(); });
   }
   $('#zoomFit').onclick = zoomFit;
   document.querySelectorAll('#tools button[data-tool]').forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
@@ -2833,10 +2897,12 @@
     const prefs = store.get(LS_PREFS, null);
     if (prefs) {
       state.grid = prefs.grid ?? true; state.snap = prefs.snap ?? true;
+      if (prefs.gridCm >= 0.05 && prefs.gridCm <= 5) state.gridCm = prefs.gridCm;
       Object.assign(state.defaults, prefs.defaults || {});
       if (prefs.sidebar === false) document.body.classList.add('no-files');
     }
     $('#btnSidebar').onclick = () => { document.body.classList.toggle('no-files'); savePrefs(); if (state.mode !== 'document') render(); else TD.docview.render(); };
+    applyGrid();
     migrateKinds();
     const idx = index();
     const last = store.get('texdiagram.last', null);

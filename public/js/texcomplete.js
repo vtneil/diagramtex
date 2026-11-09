@@ -90,7 +90,7 @@
     const ins = '\\' + n + (arity > 0 ? '{|}' + '{}'.repeat(arity - 1) : '');
     const sample = ['{x}', '{x}{y}', '{x}{y}{z}'][arity - 1] || '';
     const prev = tx ? `\\text{\\${n}${sample}}` : `\\${n}${sample}`;
-    generated.push({ name: n, ins, prev, group: guessGroup(n, tx), text: ins.replace('|', ''), after: arity > 0 ? ins.length - ins.indexOf('|') - 1 : 0 });
+    generated.push({ name: n, ins, prev, tx: !!tx, group: guessGroup(n, tx), text: ins.replace('|', ''), after: arity > 0 ? ins.length - ins.indexOf('|') - 1 : 0 });
   }
   // The list for the engine in use: hand-picked first, then the rest A–Z; unsupported ones dropped.
   const lists = {};
@@ -100,6 +100,13 @@
     const col = ENGINE_COL[e] || 1;
     const usable = (c) => { const r = support.get(baseName(c.name)); return !r || r[col] >= 0; };
     return (lists[e] = [...C.filter(usable), ...generated.filter(usable)]);
+  }
+  // Outside $…$ only text commands are offered: a maths command there would not compile.
+  const proseLists = {};
+  const isText = (c) => c.tx || TD.prose.textOk(baseName(c.name));
+  function proseList() {
+    const e = (TD.math && TD.math.engine) || 'katex';
+    return proseLists[e] || (proseLists[e] = list().filter(isText));
   }
 
   // ----- popup -----
@@ -133,8 +140,8 @@
     if (n % 2) return null;
     return { at, q: m[1] };
   }
-  function rank(q) {
-    const all = list();
+  function rank(q, prose) {
+    const all = prose ? proseList() : list();
     if (!q) return all.slice(0, 40);
     const ql = q.toLowerCase();
     const exact = [], pre = [], preCI = [], sub = [];
@@ -150,7 +157,7 @@
   function update(el) {
     const cur = current(el);
     if (!cur) return close();
-    items = rank(cur.q);
+    items = rank(cur.q, !TD.texMath.inMath(el.value, cur.at));
     if (!items.length) return close();
     field = el; start = cur.at; idx = 0;
     pop.innerHTML = '<ul>' + items.map((c, i) => `<li role="option" data-i="${i}"${i === 0 ? ' class="on" aria-selected="true"' : ''}>` +

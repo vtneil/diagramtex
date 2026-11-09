@@ -7,6 +7,7 @@
   --sheet: #fffdf8;          /* panels, drawing sheet */
   --sheet-raised: #ffffff;   /* popovers, menus, modals */
   --well: #f3f0e8;           /* inputs: inset, a shade darker than the sheet */
+  --gutter: #e9e6de;         /* empty space between status-bar groups */
   /* ink & pencil text */
   --ink: #1c1b19;
   --ink-hover: #3a3833;
@@ -27,6 +28,7 @@
   --redpen: #c8361d;
   --redpen-wash: rgba(200, 54, 29, .07);
   --bluepen: #2459a6;
+  --mathpen: #1f7a3a;        /* maths in LaTeX source fields: 5.4:1 on white */
   --canvas: #fffdf8;         /* the drawing sheet: content, stays light in both appearances */
   --handle: #ffffff;
   --scrim: rgba(28, 27, 25, .32);
@@ -61,6 +63,7 @@
     --sheet: #242320;
     --sheet-raised: #2e2d2a;
     --well: #1a1917;
+    --gutter: #171614;
     --ink: #ecebe6;
     --ink-hover: #d4d2cb;
     --graphite: #b4b1a9;
@@ -74,6 +77,7 @@
     --redpen: #e8674c;
     --redpen-wash: rgba(232, 103, 76, .12);
     --bluepen: #6c9de3;
+    --mathpen: #7cc58f;
     --canvas: #ebe9e2;
     --scrim: rgba(0, 0, 0, .5);
     --shadow-pop: 0 0 0 .5px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
@@ -193,6 +197,10 @@ body.no-files #files { display: none; }
 #docList li .del { visibility: hidden; border: 0; background: none; height: 20px; width: 20px; padding: 0; color: var(--pencil); border-radius: var(--r-sm); }
 #docList li:hover .del, #docList li .del:focus-visible { visibility: visible; }
 #docList li .del:hover { color: var(--redpen); }
+/* rename in place: the name turns into a field in the same spot */
+#docList li .nm-ed { flex: 1; min-width: 0; height: 22px; margin-left: -4px; padding: 0 4px; border: 0; border-radius: var(--r-sm); font: inherit; color: var(--ink);
+  background: var(--sheet-raised); box-shadow: inset 0 0 0 1px var(--bluepen); outline: none; }
+#docList li.renaming .del { visibility: hidden; }
 .files-foot { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
 .files-foot #saveState { flex: 1; min-width: 0; }
 .files-foot #saveState.err { color: var(--redpen); }
@@ -238,7 +246,15 @@ body.no-files #files { display: none; }
   font: 11px var(--font-mono); color: var(--graphite); font-variant-numeric: tabular-nums;
 }
 #status > span { padding: 0 10px; border-right: 1px solid var(--rule-soft); white-space: nowrap; line-height: var(--status); }
-#status .grow { flex: 1; border-right: 0; }
+/* the space between tool groups is the app base showing through, so the groups read as separate pieces */
+#status .grow { flex: 1; align-self: stretch; border-right: 0; background: var(--gutter); }
+#status .gap { align-self: stretch; width: 16px; padding: 0; background: var(--gutter); border-right: 0; }
+#status #pageNav[hidden] + .gap { display: none; }
+#status #gridInfo label { cursor: text; }
+#status #gridVal { width: 5ch; height: 18px; margin: 0 1px 0 4px; padding: 0 3px; border: 0; border-radius: var(--r-sm); background: transparent;
+  font: inherit; color: inherit; text-align: center; outline: none; cursor: text; vertical-align: 1px; }
+#status #gridVal:hover { background: var(--wash); color: var(--ink); }
+#status #gridVal:focus { background: var(--sheet-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
 #status #cursorPos { min-width: 150px; }
 #status #selInfo:empty { display: none; }
 #status .zoom { display: flex; height: 100%; }
@@ -460,13 +476,14 @@ body.no-files #files { display: none; }
 /* In-app alert / confirm / prompt (js/dialog.js): a small sheet over the scrim, title + message,
    buttons right-aligned with the default action last. Destructive actions use the red pen. */
 .td-dialog { position: fixed; inset: 0; z-index: 2000; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 16px; animation: tdd-fade .14s var(--ease); }
-.tdd-box { width: min(400px, 100%); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-xl); box-shadow: var(--shadow-modal); padding: 20px 20px 16px; animation: pop-in .16s var(--ease); }
+.tdd-box { --tdd-inset: 14px; /* buttons sit this far from the right and bottom edges; the corner is concentric with theirs */
+  width: min(400px, 100%); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: calc(var(--r) + var(--tdd-inset)); box-shadow: var(--shadow-modal); padding: 20px 20px var(--tdd-inset); animation: pop-in .16s var(--ease); }
 .tdd-box h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
 .tdd-box p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: var(--graphite); }
 .tdd-in { display: block; width: 100%; margin-top: 12px; height: var(--ctl); padding: 0 8px; background: var(--sheet-raised); border: 1px solid var(--rule-strong); }
 textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); resize: vertical; }
 .tdd-in:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
-.tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; margin-right: calc(var(--tdd-inset) - 20px); }
 .tdd-btns button { min-width: 80px; }
 .tdd-btns button.danger { background: var(--redpen); border-color: var(--redpen); color: #fff; font-weight: 500; }
 .tdd-btns button.danger:hover { filter: brightness(1.08); }
@@ -770,3 +787,15 @@ body.mode-page #emptyHint .eh-page { display: block; }
 /* fields are white like buttons: a tinted fill means the value can't be changed */
 input:disabled, input[readonly], select:disabled, textarea:disabled, textarea[readonly],
 #props input:disabled, #props input[readonly], #props select:disabled, #props textarea:disabled, #props textarea[readonly] { background: var(--well); color: var(--pencil); }
+
+/* prose that will not compile: a maths-only command outside $…$ (app only, never printed) */
+.tx-warn { text-decoration: underline dotted var(--redpen); text-decoration-thickness: 1.5px; text-underline-offset: 3px; cursor: help; }
+@media print { .tx-warn { text-decoration: none; } }
+
+/* maths in the LaTeX text fields, coloured as a LaTeX editor does (js/texhighlight.js): the field's own
+   text goes transparent and a copy laid over it carries the colour */
+.tx-hl-on { color: transparent !important; caret-color: var(--ink); }
+.tx-hl-on::selection { color: transparent; }
+.tx-hl { position: absolute; margin: 0; border-style: solid; border-color: transparent; background: transparent; color: var(--ink);
+  overflow: hidden; pointer-events: none; text-align: left; }
+.tx-hl .tx-m { color: var(--mathpen); }
