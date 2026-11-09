@@ -192,8 +192,10 @@ body.no-files #files { display: none; }
 #docList li .del { visibility: hidden; border: 0; background: none; height: 20px; width: 20px; padding: 0; color: var(--pencil); border-radius: var(--r-sm); }
 #docList li:hover .del, #docList li .del:focus-visible { visibility: visible; }
 #docList li .del:hover { color: var(--redpen); }
-.files-foot { padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
-.files-foot.err { color: var(--redpen); }
+.files-foot { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
+.files-foot #saveState { flex: 1; min-width: 0; }
+.files-foot #saveState.err { color: var(--redpen); }
+.files-foot .app-ver { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---------- tool rail ---------- */
 #tools { width: 48px; flex: none; background: var(--sheet); border-right: 1px solid var(--rule); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; }

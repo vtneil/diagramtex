@@ -4,13 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DiagramTeX</title>
+  <meta name="description" content="Draw physics and maths diagrams and export them as LaTeX/TikZ.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#fffdf8">
+  <meta name="apple-mobile-web-app-title" content="DiagramTeX">
+  <meta name="mobile-web-app-capable" content="yes">
   <script>
     // Appearance: System follows the OS; Light / Dark override it. Runs before the stylesheet so there is no flash.
     (function () {
       var KEY = 'texdiagram.theme', pick = null, mq = matchMedia('(prefers-color-scheme: dark)');
       try { pick = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ }
       function apply() {
-        document.documentElement.dataset.theme = pick === 'light' || pick === 'dark' ? pick : mq.matches ? 'dark' : 'light';
+        var t = pick === 'light' || pick === 'dark' ? pick : mq.matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = t;
+        // installed-app title bar follows the appearance (the top bar's --sheet colour)
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.content = t === 'dark' ? '#242320' : '#fffdf8';
       }
       apply();
       mq.addEventListener('change', apply);
@@ -85,7 +97,7 @@
         </div>
       </section>
       <section id="engineBox" aria-label="LaTeX engine"></section>
-      <div class="files-foot" id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</div>
+      <div class="files-foot"><span id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</span><span class="app-ver" id="appVer"></span></div>
     </aside>
 
     <nav id="tools" role="toolbar" aria-orientation="vertical" aria-label="Drawing tools">
@@ -244,5 +256,11 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/docview.js"></script>
   <script src="js/texcommands.js"></script>
   <script src="js/texcomplete.js"></script>
+  <script>
+    // Installable app + offline: register the service worker (needs http(s); skipped for file://).
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* offline support is optional */ }); });
+    }
+  </script>
 </body>
 </html>

@@ -81,6 +81,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 
 ## Status
 - Saving is continuous, so the top bar shows no save state. The sidebar footer says "Autosave enabled"; only a failure changes it (red text plus a one-off hint, since the sidebar can be hidden).
+- The app version sits at the right of the same footer (`v1.1.0`, mono, same muted colour). Its single source is `TD.VERSION` at the top of `js/shapes.js`: bump it with each release tag. The page-layout LaTeX export header also carries it.
 
 ## Text
 - Text tool: a click places a line of text; a drag (at least 12 screen px each way) draws a paragraph box. A box has a fixed frame (`tw` × `th`), text wraps at its width from the top, eight handles resize it, and overflow runs on below the frame instead of being hidden. In a box, Enter is a new line and ⌘↩ or Esc finishes.
@@ -93,3 +94,9 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - Edge and corner handles resize: `ew-`, `ns-`, `nesw-` or `nwse-resize`, turned with the shape's rotation and snapped to the nearest of the four. Text wrap and circle radius handles count as edges.
 - Point handles (line ends, vertices, arc ends, arc centre) and shape bodies: `move`. Space held: `grab`; while panning: `grabbing`. Rotation zone: the custom rotate cursor. The zone is a band 8–30px outside the selection's edges, kept 16px clear of every resize handle (corners and edge midpoints), so a near miss on a handle still resizes.
 - During a handle drag the canvas keeps the handle's cursor, so it doesn't flicker when the pointer outruns the handle.
+
+## Installable app (PWA)
+- `public/manifest.webmanifest` (standalone, cream background) and `public/sw.js` make the site installable: Chrome/Edge show an Install button in the address bar, Safari uses File › Add to Dock (iOS: Share › Add to Home Screen).
+- `sw.js` precaches every same-origin file, so the app works offline from the first visit. Fetches go network first, falling back to the cache when offline or after 4s, so a deploy shows on the next load. Cross-origin requests pass through. Bump `CACHE` in `sw.js` when the file list changes.
+- Icon (`public/icons/`): engineering-paper grid, a ball-shaded charge and an ink arrow. `icon.svg` is the rounded tile (favicon and "any"); `icon-maskable.svg` is full-bleed with the art in the safe zone. PNGs are rendered from these at 32, 180, 192 and 512.
+- `theme-color` follows the appearance (#fffdf8 light, #242320 dark), so the installed window's title bar matches the top bar.

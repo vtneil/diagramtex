@@ -308,7 +308,7 @@
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
     if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
     return [
-      `% ${doc.name || 'Untitled'}: free-form page from DiagramTeX.`,
+      `% ${doc.name || 'Untitled'}: free-form page from DiagramTeX ${TD.VERSION}.`,
       '% Coordinates are measured from the top-left corner of the paper (x right, y up, so y is negative on the page).',
       '% Compile twice: the pictures use "remember picture" to find the page corner.',
       '\\documentclass[10pt]{article}',

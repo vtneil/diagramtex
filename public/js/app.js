@@ -2,6 +2,7 @@
 (function () {
   const TD = window.TD;
   const { TYPES, util } = TD;
+  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; v.title = 'DiagramTeX ' + TD.VERSION; } }
   const { r2, esc, dist } = util;
   const $ = (s) => document.querySelector(s);
   const svg = $('#canvas'), content = $('#content'), overlay = $('#overlay');
