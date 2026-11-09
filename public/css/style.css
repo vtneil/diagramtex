@@ -20,6 +20,7 @@
   --rule-strong: rgba(28, 27, 25, .24);
   --wash: rgba(28, 27, 25, .045);
   --wash-strong: rgba(28, 27, 25, .085);
+  --wash-strong-solid: color-mix(in srgb, rgb(28, 27, 25) 8.5%, var(--sheet-raised)); /* --wash-strong over a raised sheet, opaque */
   /* engineering paper */
   --grid-minor: #e6ece2;
   --grid-major: #cad8c5;
@@ -28,6 +29,8 @@
   --redpen: #c8361d;
   --redpen-wash: rgba(200, 54, 29, .07);
   --bluepen: #2459a6;
+  --marker: #d29a0c;
+  --marker-wash: rgba(232, 180, 20, .10);
   --mathpen: #1f7a3a;        /* maths in LaTeX source fields: 5.4:1 on white */
   --canvas: #fffdf8;         /* the drawing sheet: content, stays light in both appearances */
   --handle: #ffffff;
@@ -74,9 +77,12 @@
     --rule-strong: rgba(236, 235, 230, .24);
     --wash: rgba(236, 235, 230, .06);
     --wash-strong: rgba(236, 235, 230, .11);
+    --wash-strong-solid: color-mix(in srgb, rgb(236, 235, 230) 11%, var(--sheet-raised));
     --redpen: #e8674c;
     --redpen-wash: rgba(232, 103, 76, .12);
     --bluepen: #6c9de3;
+    --marker: #f0c53c;
+    --marker-wash: rgba(240, 197, 60, .10);
     --mathpen: #7cc58f;
     --canvas: #ebe9e2;
     --scrim: rgba(0, 0, 0, .5);
@@ -91,8 +97,9 @@
     --sheet: #fffdf8; --sheet-raised: #ffffff; --well: #f3f0e8;
     --ink: #1c1b19; --ink-hover: #3a3833; --graphite: #5d5b55; --pencil: #6f6c64; --faint: #bab7ae;
     --rule: rgba(28, 27, 25, .12); --rule-soft: rgba(28, 27, 25, .07); --rule-strong: rgba(28, 27, 25, .24);
-    --wash: rgba(28, 27, 25, .045); --wash-strong: rgba(28, 27, 25, .085);
+    --wash: rgba(28, 27, 25, .045); --wash-strong: rgba(28, 27, 25, .085); --wash-strong-solid: color-mix(in srgb, rgb(28, 27, 25) 8.5%, var(--sheet-raised));
     --redpen: #c8361d; --redpen-wash: rgba(200, 54, 29, .07); --bluepen: #2459a6;
+    --marker: #d29a0c; --marker-wash: rgba(232, 180, 20, .10);
     --shadow-knob: 0 .5px 1px rgba(28,27,25,.18), 0 1px 3px rgba(28,27,25,.10);
 }
 /* Increase Contrast */
@@ -202,9 +209,13 @@ body.no-files #files { display: none; }
   background: var(--sheet-raised); box-shadow: inset 0 0 0 1px var(--bluepen); outline: none; }
 #docList li.renaming .del { visibility: hidden; }
 .files-foot { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
-.files-foot #saveState { flex: 1; min-width: 0; }
+.files-foot #saveState { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.files-foot .app-src { align-self: center; display: inline-flex; padding: 3px; margin: -3px -3px -3px 0; }
 .files-foot #saveState.err { color: var(--redpen); }
 .files-foot .app-ver { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.files-foot a { color: inherit; text-decoration: none; white-space: nowrap; border-radius: var(--r-sm); }
+.files-foot a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.files-foot a:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 /* ---------- tool rail ---------- */
 #tools { width: 48px; flex: none; background: var(--sheet); border-right: 1px solid var(--rule); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; }
@@ -291,6 +302,8 @@ body.no-files #files { display: none; }
 .addpt:hover circle { opacity: 1; fill: var(--redpen-wash); }
 .guide { stroke: var(--bluepen); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .7; }
 .marquee { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+/* dragged right-to-left: a crossing selection (anything the box touches), drawn in highlighter yellow */
+.marquee.cross { fill: var(--marker-wash); stroke: var(--marker); stroke-width: 1.5; }
 /* the frame being dragged out with the Text tool: a paragraph box, drawn in the blue pen */
 .marquee.tf { fill: none; stroke: var(--bluepen); }
 .snap-ind { fill: none; stroke: var(--bluepen); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
@@ -304,6 +317,8 @@ body.no-files #files { display: none; }
   box-shadow: var(--shadow-pop); background: var(--sheet-raised); z-index: 5; transform: translateX(-50%);
 }
 #inlineEditor.para { min-height: 120px; }
+/* quantikz code of a quantum circuit */
+#inlineEditor.code { min-height: 150px; font-size: 13px; tab-size: 2; }
 /* MathLive mode: the same floating box, one math-field per line, a key hint underneath */
 #mlEditor {
   position: absolute; display: none; min-width: 280px; max-width: calc(100% - 16px); padding: 6px 8px 6px; border-radius: var(--r);
@@ -343,6 +358,7 @@ body.no-files #files { display: none; }
   outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised);
 }
 #props textarea { height: auto; padding: 6px 8px; font-family: var(--font-mono); font-size: 12px; min-height: 54px; resize: vertical; line-height: 1.45; }
+#props textarea.code { min-height: 132px; tab-size: 2; }
 #props input[type=range] { width: 100%; accent-color: var(--ink); height: auto; }
 #props input[type=checkbox] { accent-color: var(--ink); }
 #props .val { width: 28px; flex: none; text-align: left; font: 11px var(--font-mono); color: var(--pencil); }
@@ -728,6 +744,8 @@ body.mode-page #emptyHint .eh-page { display: block; }
 #texComplete .tc-grp { grid-column: 1; font-size: 11px; color: var(--pencil); }
 #texComplete .tc-prev { grid-column: 2; grid-row: 1 / span 2; font-size: 14px; color: var(--ink); max-width: 130px; overflow: hidden; text-align: right; }
 #texComplete .tc-prev .katex { font-size: 1em; }
+#texComplete .tc-prev .qcmini { display: block; margin-left: auto; max-width: 130px; height: auto; }
+#texComplete li.on { --qc-paper: var(--wash-strong-solid); } /* gate fills match the highlighted row */
 #texComplete .tc-foot { padding: 6px 12px; border-top: 1px solid var(--rule-soft); color: var(--pencil); font-size: 11px; }
 #texComplete kbd { font: 10px var(--font-mono); padding: 0 3px; border: 1px solid var(--rule); background: var(--sheet); margin-right: 2px; }
 

@@ -2,7 +2,7 @@
 (function () {
   const TD = window.TD;
   const { TYPES, util } = TD;
-  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; v.title = 'DiagramTeX ' + TD.VERSION; } }
+  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; v.title = `DiagramTeX ${TD.VERSION}: this release on GitLab`; v.href = `https://gitlab.com/igniting-space/diagramtex/-/tags/v${TD.VERSION}`; } }
   const { r2, esc, dist } = util;
   const $ = (s) => document.querySelector(s);
   const svg = $('#canvas'), content = $('#content'), overlay = $('#overlay');
@@ -90,7 +90,7 @@
   function redo() { finishEdit(); commit(); if (!state.redo.length) return; state.undo.push(snapshot()); restore(state.redo.pop()); }
 
   // ---------------- storage ----------------
-  const LS_INDEX = 'texdiagram.index', LS_DOC = 'texdiagram.doc.', LS_PREFS = 'texdiagram.prefs';
+  const LS_INDEX = 'texdiagram.index', LS_DOC = 'texdiagram.doc.', LS_PREFS = 'texdiagram.prefs', LS_CLIP = 'texdiagram.clip';
   const store = {
     get(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
@@ -624,7 +624,7 @@
     }
     if (marquee) {
       const x = Math.min(marquee.a.x, marquee.b.x), y = Math.min(marquee.a.y, marquee.b.y);
-      out.push(`<rect class="marquee${marquee.text ? ' tf' : ''}" x="${x}" y="${y}" width="${Math.abs(marquee.b.x - marquee.a.x)}" height="${Math.abs(marquee.b.y - marquee.a.y)}"/>`);
+      out.push(`<rect class="marquee${marquee.text ? ' tf' : marquee.cross ? ' cross' : ''}" x="${x}" y="${y}" width="${Math.abs(marquee.b.x - marquee.a.x)}" height="${Math.abs(marquee.b.y - marquee.a.y)}"/>`);
     }
     if (linkHint) {
       const t = byId(linkHint), C = linkFrame(t);
@@ -658,7 +658,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|cd)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|cd|qc)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -681,7 +681,7 @@
   $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('')) + sec('Electrical', symBtns('elec'));
   $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
   function flyOf(t) {
-    if (/^(plot|pie|cd)/.test(t)) return 'insertPop';
+    if (/^(plot|pie|cd|qc)/.test(t)) return 'insertPop';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'misc' || c === 'elec' ? 'misc' : c === 'arrow' ? 'arrows' : 'shapes'; }
@@ -994,6 +994,7 @@
         const s = byId(hitId);
         if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) { startEdit(hitId, 'text'); return; }
         if (s.type === 'line' || s.type === 'curve') { startEdit(hitId, 'label'); return; }
+        if (s.type === 'qc') { state.sel = new Set([hitId]); startEdit(hitId, 'src'); return; }
       }
       const grp = groupIds(hitId);
       if (e.shiftKey) { if (state.sel.has(hitId)) grp.forEach((id) => state.sel.delete(id)); else grp.forEach((id) => state.sel.add(id)); }
@@ -1132,10 +1133,14 @@
       case 'marquee': {
         marquee.b = p;
         const x1 = Math.min(marquee.a.x, p.x), y1 = Math.min(marquee.a.y, p.y), x2 = Math.max(marquee.a.x, p.x), y2 = Math.max(marquee.a.y, p.y);
+        // left-to-right: window (shapes wholly inside); right-to-left: crossing (anything the box touches)
+        const cross = marquee.cross = p.x < marquee.a.x;
+        const R = { x1, y1, x2, y2 };
         state.sel = new Set(drag.base);
         for (const s of shapes()) {
           const b = TD.bbox(s);
           if (b.x >= x1 && b.y >= y1 && b.x + b.w <= x2 && b.y + b.h <= y2) state.sel.add(s.id);
+          else if (cross && b.x <= x2 && b.x + b.w >= x1 && b.y <= y2 && b.y + b.h >= y1 && touchesRect(s, R)) state.sel.add(s.id);
         }
         expandGroups();
         renderOverlay();
@@ -1143,6 +1148,36 @@
       }
     }
   });
+
+  // Does shape s actually touch the world-space rect R ({x1,y1,x2,y2})? Tested against what is drawn:
+  // its hit outline (sampled along its length) and, for filled areas, whether the box lies inside the fill.
+  function touchesRect(s, R) {
+    const g = content.querySelector(`[data-id="${s.id}"]`);
+    if (!g) return true; // nothing rendered to test: the bbox overlap stands
+    let els = [...g.querySelectorAll('.hit, .hitfill')];
+    if (!els.length) els = [...g.querySelectorAll('path, line, polyline, polygon, rect, circle, ellipse')];
+    if (!els.length) return true;
+    const toWorld = content.getCTM().inverse();
+    const step = 3 / state.view.zoom;
+    const inR = (q) => q.x >= R.x1 && q.x <= R.x2 && q.y >= R.y1 && q.y <= R.y2;
+    const cx = (R.x1 + R.x2) / 2, cy = (R.y1 + R.y2) / 2;
+    for (const el of els) {
+      if (!el.getTotalLength) continue;
+      const m = toWorld.multiply(el.getCTM()), inv = m.inverse();
+      const P = (x, y) => new DOMPoint(x, y).matrixTransform(m);
+      let len = 0;
+      try { len = el.getTotalLength(); } catch (e) { continue; }
+      // sampling step in local units ~ 3 screen px
+      const sc = Math.hypot(m.a, m.b) || 1, n = Math.min(4000, Math.max(8, Math.ceil(len * sc / step)));
+      for (let i = 0; i <= n; i++) { const q = el.getPointAtLength((len * i) / n); if (inR(P(q.x, q.y))) return true; }
+      // box sitting inside a filled area (or wholly inside a stroke's hit band)
+      if (el.isPointInFill && el.classList.contains('hitfill')) {
+        const c = new DOMPoint(cx, cy).matrixTransform(inv);
+        try { if (el.isPointInFill(c)) return true; } catch (e) { /* ignore */ }
+      }
+    }
+    return false;
+  }
 
   function endDrag() {
     if (!drag) return;
@@ -1221,6 +1256,7 @@
     const s = byId(editing.id);
     if (!s) return null;
     if (editing.field === 'text') { const b = TD.bbox(s); return { x: s.x, y: b.y + b.h }; }
+    if (editing.field === 'src') { const b = TD.bbox(s); return { x: b.x + b.w / 2, y: b.y + b.h }; }
     const L = TYPES[s.type].labelAt(s);
     return { x: L.P.x, y: L.P.y + 12 };
   }
@@ -1240,6 +1276,7 @@
     if (!s) return;
     let w = 360;
     if (editing.field === 'text' && TD.isParaText(s)) w = Math.max(w, Math.min(640, s.tw * state.view.zoom));
+    if (editing.field === 'src') w = 520;
     if (editing.ml) { mlBox.style.width = w + 'px'; return; }
     ed.style.width = w + 'px';
     ed.style.height = 'auto';
@@ -1248,21 +1285,23 @@
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
-    if (TD.input && TD.input.mode === 'mathlive') { startEditML(s, field, init); return; }
+    if (TD.input && TD.input.mode === 'mathlive' && field !== 'src') { startEditML(s, field, init); return; }
     begin();
     editing = { id, field };
     if (init != null && !s[field]) { s[field] = ''; ed.value = init; }
     else ed.value = s[field] || '';
     ed.style.display = 'block';
-    const para = field === 'text' && TD.isParaText(s);
+    const code = field === 'src', para = code || (field === 'text' && TD.isParaText(s));
     ed.classList.toggle('para', para);
+    ed.classList.toggle('code', code);
     ed.placeholder = field === 'label' ? 'Label, e.g. $r$ — Enter to finish'
+      : code ? `quantikz code — Enter for a new line, ${isMac ? '⌘' : 'Ctrl+'}Enter or Esc to finish`
       : para ? `Paragraph, $math$ — Enter for a new line, ${isMac ? '⌘' : 'Ctrl+'}Enter or Esc to finish` : 'Text, $math$ — Enter to finish, Shift+Enter newline';
     sizeEditor();
     positionEditor();
     // select the existing text for replacement, unless typing already started before this frame
     const v0 = ed.value;
-    requestAnimationFrame(() => { ed.focus(); if (ed.value !== v0) return; if (init != null && ed.value === init) ed.setSelectionRange(1, 1); else ed.select(); });
+    requestAnimationFrame(() => { ed.focus(); if (ed.value !== v0) return; if (code) { ed.setSelectionRange(ed.value.length, ed.value.length); ed.scrollTop = ed.scrollHeight; } else if (init != null && ed.value === init) ed.setSelectionRange(1, 1); else ed.select(); });
   }
   // MathLive mode: the same box, with one interactive maths field per line (see js/mathinput.js)
   async function startEditML(s, field, init) {
@@ -1310,7 +1349,7 @@
     if (!s) return;
     s[editing.field] = v;
     render(); sizeEditor(); positionEditor();
-    const ta = document.querySelector(`#props [data-key="${editing.field}"]`);
+    const ta = document.querySelector(`#props [data-key="${editing.field}"], #props [data-panel] [data-p="${editing.field}"]`);
     if (ta) ta.value = v;
   }
   ed.addEventListener('input', () => editInput(ed.value));
@@ -1407,6 +1446,7 @@
     plot: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     pie: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
     cd: [['x', 'x'], ['y', 'y']],
+    qc: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
   };
@@ -1835,22 +1875,45 @@
     state.doc.shapes = dir === 'front' ? rest.concat(sel) : sel.concat(rest);
     commit(); render();
   }
-  function pasteShapes(list, offset) {
+  function pasteShapes(list, dx, dy = dx) {
     begin();
     state.sel.clear();
     const gmap = new Map(), idmap = new Map(), made = [];
     for (const o of list) {
       const s = clone(o); s.id = uid(); idmap.set(o.id, s.id); made.push(s);
       if (s.g) { if (!gmap.has(s.g)) gmap.set(s.g, uid()); s.g = gmap.get(s.g); }
-      TD.translate(s, offset, offset);
+      TD.translate(s, dx, dy);
       addShape(s); state.sel.add(s.id);
     }
     remapLinks(made, idmap);
     commit(); render(); renderProps();
   }
   function duplicate() { if (state.sel.size) pasteShapes(selected(), TD.GRID * 2); }
-  function copySel() { if (state.sel.size) clipboard = { shapes: clone(selected()), n: 0 }; }
-  function paste() { if (!clipboard) return; clipboard.n++; pasteShapes(clipboard.shapes, TD.GRID * 2 * clipboard.n); }
+  // Copied shapes are also kept in local storage, so the app's other windows and tabs can paste them.
+  function copySel() {
+    if (!state.sel.size) return;
+    clipboard = { shapes: clone(selected()), n: 0, t: Date.now() };
+    store.set(LS_CLIP, { shapes: clipboard.shapes, t: clipboard.t });
+  }
+  // the latest copy made in any window
+  function clip() {
+    const c = store.get(LS_CLIP, null);
+    if (c && validShapes(c.shapes) && (!clipboard || c.t > clipboard.t)) clipboard = { shapes: c.shapes, n: 0, t: c.t };
+    return clipboard;
+  }
+  // Paste lands centred in the visible canvas, moved by whole grid steps so it stays on the grid.
+  // Pasting again without moving the view steps each copy down-right, so they don't stack.
+  function paste() {
+    const c = clip();
+    if (!c) return;
+    const r = stageSize(), v = state.view, G = TD.GRID;
+    const cx = v.x + r.w / 2 / v.zoom, cy = v.y + r.h / 2 / v.zoom;
+    const at = `${Math.round(cx / G)},${Math.round(cy / G)}`;
+    if (c.at !== at) { c.at = at; c.n = 0; }
+    const b = TD.bboxOf(c.shapes.flatMap((s) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }));
+    const step = G * 2 * c.n++;
+    pasteShapes(c.shapes, Math.round((cx - b.x - b.w / 2) / G) * G + step, Math.round((cy - b.y - b.h / 2) / G) * G + step);
+  }
   // ---------- combine (shape booleans) ----------
   const COMBINE = [['unite', 'Unite'], ['intersect', 'Intersect'], ['subtract', 'Subtract'], ['exclude', 'Exclude'], ['divide', 'Divide']];
   const COMBINE_IC = {
@@ -1963,7 +2026,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'cd'].includes(s.type)) {
+      if (['plot', 'cd', 'qc'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -2088,7 +2151,7 @@
         item('Copy TikZ Code', 'copytikz', { ic: 'tikz' }) +
         (sel.some((s) => (s.text || s.label || '').trim()) ? item('Copy Text', 'copytext', { ic: 'copy' }) : '') +
         item('Cut', 'cut', { ic: 'cut', key: 'Ctrl+X' }) +
-        item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clipboard }) +
+        item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
         item('Duplicate', 'dup', { ic: 'dup', key: 'Ctrl+D' }) +
         item('Delete', 'del', { ic: 'del', key: 'Del' }) + hr;
       if (canGroup()) h += item('Group', 'group', { ic: 'group', key: 'Ctrl+G' });
@@ -2105,7 +2168,7 @@
           item('Top', 'l:top') + item('Middle', 'l:middle') + item('Bottom', 'l:bottom') }) +
         item('Distribute', '', { ic: 'dist', dis: nu < 3, sub: item('Horizontally', 'd:h') + item('Vertically', 'd:v') });
     } else {
-      h += item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clipboard }) +
+      h += item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
         item('Select All', 'all', { ic: 'all', key: 'Ctrl+A', dis: !shapes().length }) + hr +
         item('Zoom to Fit', 'fit', { ic: 'fit' }) +
         item(state.grid ? 'Hide Grid' : 'Show Grid', 'grid', { key: 'G' });
@@ -2303,7 +2366,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; startEdit(s.id, s.type === 'text' ? 'text' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -2371,7 +2434,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') startEdit(s.id, 'src'); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');

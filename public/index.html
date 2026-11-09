@@ -96,7 +96,7 @@
       <ul id="docList"></ul>
       <section id="inputBox" aria-label="Text input"></section>
       <section id="engineBox" aria-label="LaTeX engine"></section>
-      <div class="files-foot"><span id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</span><span class="app-ver" id="appVer"></span></div>
+      <div class="files-foot"><span id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</span><a class="app-src" href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener" title="DiagramTeX on GitLab" aria-label="DiagramTeX on GitLab"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg></a><a class="app-ver" id="appVer" target="_blank" rel="noopener"></a></div>
     </aside>
 
     <nav id="tools" role="toolbar" aria-orientation="vertical" aria-label="Drawing tools">
@@ -109,7 +109,7 @@
       <button data-fly="shapes" title="Shapes and flowchart"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="9" height="9"/><circle cx="13" cy="11" r="4.5"/></svg><i class="more"></i></button>
       <button data-fly="misc" title="Axis, wave, brace, ruler, grid, electrical"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M3 9h14M3 13h14M7 3v14M11 3v14M15 3v14" style="stroke-width:1.1"/></svg><i class="more"></i></button>
       <button data-fly="arrows" title="Block arrows"><svg viewBox="0 0 20 20"><path d="M2.5 7.5h8.5V4l6.5 6-6.5 6v-3.5H2.5z"/></svg><i class="more"></i></button>
-      <button data-fly="insertPop" id="btnInsert" title="Plots, pie chart, commutative diagram"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
+      <button data-fly="insertPop" id="btnInsert" title="Plots, pie chart, commutative diagram, quantum circuit"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
       <div class="sep"></div>
       <button data-tool="image" title="Image (I) — inserted with \includegraphics"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12"/><circle cx="7" cy="8" r="1.5"/><path d="M3 15l5-5 3.5 3.5 2-2L17 15"/></svg></button>
       <button data-tool="pencil" title="Pencil (N) — freehand, smoothed"><svg viewBox="0 0 20 20"><path d="M4 16l1-4 8.5-8.5 3 3L8 15z M12 5l3 3"/></svg></button>
@@ -141,6 +141,7 @@
       <div class="pop-title">Diagrams</div>
       <div class="pop-grid">
         <button data-insert="cd"><svg viewBox="0 0 32 24"><text x="3" y="8" font-size="7" font-style="italic">A</text><text x="24" y="8" font-size="7" font-style="italic">B</text><text x="3" y="22" font-size="7" font-style="italic">C</text><text x="24" y="22" font-size="7" font-style="italic">D</text><path d="M9 6h12M6 10v7M27 10v7M9 20h12"/></svg>XyMatrix</button>
+        <button data-insert="qc" title="Quantum circuit, written in quantikz"><svg viewBox="0 0 32 24"><path d="M2 7h28M2 17h28M14 7v10"/><rect x="5" y="3" width="7" height="8" class="a1"/><circle cx="14" cy="7" r="1.6" style="fill:var(--graphite)"/><circle cx="14" cy="17" r="3.2" fill="none"/><path d="M14 14v6M11 17h6"/><rect x="21" y="13" width="8" height="8" class="a1"/><path d="M22.5 19.5a2.5 2.5 0 015 0M25 19.5l1.8-3"/></svg>Quantum</button>
       </div>
     </div>
 
@@ -248,6 +249,7 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/colorpicker.js"></script>
   <script src="js/plots.js"></script>
   <script src="js/cd.js"></script>
+  <script src="js/quantum.js"></script>
   <script src="js/symbols.js"></script>
   <script src="js/boolean.js"></script>
   <script src="js/rotate.js"></script>

@@ -560,6 +560,17 @@
         if (!node) continue;
         at = at || { x: 0, y: 0 };
         if (node.name) C.names[node.name] = { ...at };
+        if (!node.coordinate && /\\begin\{quantikz\}/.test(node.text) && TD.TYPES.qc) {
+          // a quantikz circuit in a node: one quantum circuit object, centred there
+          const q = TD.TYPES.qc.create(at, {});
+          q.src = (node.text.match(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}/) || [node.text.trim()])[0];
+          const ind = Math.min(...q.src.split('\n').slice(1).filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)[0].length));
+          if (ind > 0 && isFinite(ind)) q.src = q.src.split('\n').map((l, i) => (i ? l.slice(Math.min(ind, /^[ \t]*/.exec(l)[0].length)) : l)).join('\n');
+          const b = TD.qcLayout(q).bb;
+          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
+          shapes.push(q);
+          continue;
+        }
         if (!node.coordinate && node.text.trim()) {
           const no = parseOpts(node.opts), own = readXf(C, no), t = textShape(C, node.text, no, at);
           // a node's own rotate turns it about its own position
@@ -656,7 +667,9 @@
     // global colour definitions (preamble)
     const docM = src.match(/\\begin\{document\}([\s\S]*?)(\\end\{document\}|$)/);
     if (docM) { parseStatements(C, src.slice(0, docM.index).replace(/\\documentclass[^\n]*|\\usepackage[^\n]*|\\usetikzlibrary\{[^}]*\}|\\title\{[^}]*\}|\\author\{[^}]*\}|\\date\{[^}]*\}/g, '')); C.warnings = []; }
-    const body = docM ? docM[1] : src;
+    // a bare quantikz environment becomes a picture holding one quantum circuit
+    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\})/g,
+      (m, q) => (q ? `\\begin{tikzpicture}\\node at (0,0) {${q}};\\end{tikzpicture}` : m));
     const blocks = [];
     const re = /\\begin\{tikzpicture\}(\[[^\]]*(?:\[[^\]]*\][^\]]*)*\])?([\s\S]*?)\\end\{tikzpicture\}/g;
     let last = 0, m;

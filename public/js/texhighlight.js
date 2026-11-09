@@ -4,7 +4,7 @@
 // the field keeps the caret, selection and spell-check underlines.
 (function () {
   const TD = window.TD;
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed';
+  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"]';
 
   // Maths spans of one line as [start, end) offsets, delimiters included. Same rules as the renderer
   // (TD.textSegments), except an unclosed $ runs to the end of the line, so maths lights up as it is typed.
@@ -32,13 +32,79 @@
     return !!(sp.length && sp[sp.length - 1][2]);
   }
 
+  // Quantum circuit code (quantikz): what LaTeX sets as maths. quantikz cells are tikz-cd cells, so a
+  // gate's text, \push, the meter and phase labels and bare text in a cell are maths; stick, slice and
+  // group labels are text, where only $…$ is maths.
+  const QC_FIELDS = '#props textarea[data-p="src"]';
+  const isQc = (el) => el.matches(QC_FIELDS) || (el.id === 'inlineEditor' && el.classList.contains('code'));
+  const QC_MATH = new Set(['gate', 'phase', 'push', 'meter', 'meterD', 'measure', 'measuretab', 'qwbundle']);
+  const QC_TEXT = new Set(['lstick', 'rstick', 'midstick', 'slice', 'gategroup']);
+  // index just past the group opened at t[i] ({ or [), or the end of the text when it isn't closed
+  function past(t, i) {
+    const open = t[i], shut = open === '{' ? '}' : ']';
+    let d = 0;
+    for (let k = i; k < t.length; k++) {
+      const c = t[k];
+      if (c === '\\') { k++; continue; }
+      if (c === '%') { const n = t.indexOf('\n', k); if (n < 0) return t.length; k = n; continue; }
+      if (c === open) d++; else if (c === shut && --d === 0) return k + 1;
+    }
+    return t.length;
+  }
+  function qcSpans(t) {
+    const out = [];
+    const textArg = (s, e) => { // $…$ inside a text argument, line by line
+      let a = s;
+      for (const line of t.slice(s, e).split('\n')) { for (const [x, y] of spans(line)) out.push([a + x, a + y]); a += line.length + 1; }
+    };
+    for (let i = 0; i < t.length;) {
+      const c = t[i];
+      if (c === '%') { const n = t.indexOf('\n', i); i = n < 0 ? t.length : n + 1; continue; }
+      if (c === '\\') {
+        if (t[i + 1] === '\\') { // row break, and its [space]
+          i += 2;
+          let k = i; while (k < t.length && /[ \t]/.test(t[k])) k++;
+          if (t[k] === '[') i = past(t, k);
+          continue;
+        }
+        const m = /^\\([A-Za-z]+)\*?/.exec(t.slice(i));
+        if (!m) { i += 2; continue; }
+        i += m[0].length;
+        for (;;) { // [options] and {arguments}
+          let k = i;
+          while (k < t.length && /[ \t]/.test(t[k])) k++;
+          if (t[k] === '[') { i = past(t, k); continue; }
+          if (t[k] !== '{') break;
+          const e = past(t, k), inner = [k + 1, t[e - 1] === '}' ? e - 1 : e];
+          if (QC_MATH.has(m[1]) && inner[1] > inner[0]) out.push(inner);
+          else if (QC_TEXT.has(m[1])) textArg(...inner);
+          i = e;
+          if (QC_MATH.has(m[1]) || QC_TEXT.has(m[1])) break; // their last argument is the label
+        }
+        continue;
+      }
+      if (c === '{') { i = past(t, i); continue; }
+      if (/[\s&]/.test(c)) { i++; continue; }
+      // bare text in a cell is \push'd: maths
+      let j = i;
+      while (j < t.length && !/[\\{&%\n]/.test(t[j])) j++;
+      let e = j; while (e > i && /\s/.test(t[e - 1])) e--;
+      if (e > i) out.push([i, e]);
+      i = j;
+    }
+    return out;
+  }
+
   const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
-  function html(text) {
-    return text.split('\n').map((line) => {
-      let h = '', k = 0;
-      for (const [s, e] of spans(line)) { h += esc(line.slice(k, s)) + `<span class="tx-m">${esc(line.slice(s, e))}</span>`; k = e; }
-      return h + esc(line.slice(k));
-    }).join('\n') + '\n'; // a trailing newline still gets its line
+  function paint(text, sp) {
+    let h = '', k = 0;
+    for (const [s, e] of sp) { if (s < k) continue; h += esc(text.slice(k, s)) + `<span class="tx-m">${esc(text.slice(s, e))}</span>`; k = e; }
+    return h + esc(text.slice(k));
+  }
+  function html(text, qc) {
+    // a trailing newline still gets its line
+    if (qc) return paint(text, qcSpans(text)) + '\n';
+    return text.split('\n').map((line) => paint(line, spans(line))).join('\n') + '\n';
   }
 
   // ----- the overlay -----
@@ -82,7 +148,9 @@
     // a one-line input centres its text vertically
     if (input) st.lineHeight = parseFloat(cs.height) - bt - bb - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) + 'px';
     st.zIndex = /^\d+$/.test(cs.zIndex) ? +cs.zIndex + 1 : '';
-    if (ta.value !== last) { last = ta.value; ov.innerHTML = html(last); }
+    // the code editor's mode can be set after it takes focus, so a mode change repaints too
+    const key = (isQc(ta) ? 'q' : 't') + ta.value;
+    if (key !== last) { last = key; ov.innerHTML = html(ta.value, key[0] === 'q'); }
     // place it over the field, whatever transform or zoom the field has
     st.left = '0px'; st.top = '0px';
     const r = ta.getBoundingClientRect(), o = ov.getBoundingClientRect(), z = o.width / (parseFloat(cs.width) || 1) || 1;
@@ -93,5 +161,5 @@
   const isField = (t) => t && t.matches && t.matches(FIELDS);
   document.addEventListener('focusin', (e) => { if (isField(e.target)) attach(e.target); }, true);
 
-  TD.texMath = { spans, inMath };
+  TD.texMath = { spans, inMath, qcSpans };
 })();

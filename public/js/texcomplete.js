@@ -5,7 +5,10 @@
   const TD = window.TD;
 
   // Fields that get suggestions.
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed';
+  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"]';
+  // Quantum circuit code (the canvas code editor, or the panel's code field): quantikz commands at cell
+  // level, maths inside a command's {argument}, nothing inside [options].
+  const isQc = (el) => el.matches('#props textarea[data-p="src"]') || (el.id === 'inlineEditor' && el.classList.contains('code'));
 
   // Command list, roughly by how often it is used. Each entry: name, then optionally what to
   // insert ("|" marks where the caret goes) and the TeX to preview it with.
@@ -64,6 +67,75 @@
     if (!c.prev) c.prev = c.ins.replace('|', '').replace(/\{\}/g, '{\\square}');
     c.after = c.ins.indexOf('|') >= 0 ? c.ins.length - c.ins.indexOf('|') - 1 : 0; // chars after the caret
     c.text = c.ins.replace('|', '');
+  }
+
+  // quantikz2: what goes in a circuit cell. `ex` is a snippet drawn as the preview (cells joined by &, rows by \\).
+  const QC = [];
+  const qadd = (group, list) => { for (const [name, ins, ex, prev] of list) QC.push({ name, ins, ex, prev, group, qc: true }); };
+  qadd('Gate', [
+    ['gate', '\\gate{|}', '& \\gate{U} &'],
+    ['gate[wires]', '\\gate[|]{}', '& \\gate[2]{U} & \\\\ & &'],
+    ['phase', '\\phase{|}', '& \\phase{\\alpha} &'],
+    ['ghost', '\\ghost{|}', null],
+  ]);
+  qadd('Control', [
+    ['ctrl', '\\ctrl{|}', '& \\ctrl{1} & \\\\ & \\targ{} &'],
+    ['octrl', '\\octrl{|}', '& \\octrl{1} & \\\\ & \\targ{} &'],
+    ['control', '\\control{}', '& \\control{} &'],
+    ['ocontrol', '\\ocontrol{}', '& \\ocontrol{} &'],
+    ['targ', '\\targ{}', '& \\targ{} &'],
+    ['swap', '\\swap{|}', '& \\swap{1} & \\\\ & \\targX{} &'],
+    ['targX', '\\targX{}', '& \\targX{} &'],
+  ]);
+  qadd('Measure', [
+    ['meter', '\\meter{}', '& \\meter{} &'],
+    ['meterD', '\\meterD{|}', '& \\meterD{0} &'],
+    ['measuretab', '\\measuretab{|}', '& \\measuretab{Z} &'],
+    ['measure', '\\measure{|}', '& \\measure{Z} &'],
+  ]);
+  qadd('Wire', [
+    ['qw', '\\qw', '& \\qw &'],
+    ['cw', '\\cw', '& \\cw &'],
+    ['qwbundle', '\\qwbundle{|}', '& \\qwbundle{n} &'],
+    ['setwiretype', '\\setwiretype{|}', '& \\setwiretype{c} &'],
+    ['wireoverride', '\\wireoverride{|}', '& & \\wireoverride{n} & &'],
+    ['wire', '\\wire[|][1]{q}', '& \\wire[d][1]{c} & \\\\ & &'],
+    ['vqw', '\\vqw{|}', '& \\vqw{1} & \\\\ & &'],
+    ['vcw', '\\vcw{|}', '& \\vcw{1} & \\\\ & &'],
+    ['cwbend', '\\cwbend{|}', '& \\cwbend{1} & \\\\ & &'],
+    ['ground', '\\ground{}', '& \\ground{}'],
+  ]);
+  qadd('Label', [
+    ['lstick', '\\lstick{|}', '\\lstick{\\ket{0}} &'],
+    ['lstick[wires]', '\\lstick[|]{}', '\\lstick[2]{$\\psi$} & \\\\ &'],
+    ['rstick', '\\rstick{|}', '& \\rstick{\\ket{0}}'],
+    ['push', '\\push{|}', '& \\push{x} &'],
+    ['midstick', '\\midstick{|}', '& \\midstick{x} &'],
+    ['ket', '\\ket{|}', null, '\\ket{0}'],
+    ['bra', '\\bra{|}', null, '\\bra{0}'],
+  ]);
+  qadd('Group', [
+    ['slice', '\\slice{|}', '& \\slice{1} & &'],
+    ['gategroup', '\\gategroup[wires=|,steps=1]{}', '& \\gate{U} \\gategroup[wires=1,steps=1]{g} &'],
+  ]);
+  qadd('Environment', [['begin{quantikz}', '\\begin{quantikz}\n|\n\\end{quantikz}', '\\lstick{} & \\gate{} &']]);
+  for (const c of QC) {
+    c.after = c.ins.length - c.ins.indexOf('|') - 1;
+    c.text = c.ins.replace('|', '');
+  }
+  // Where the caret sits in quantikz code: 'cell', 'arg' (inside {…}) or 'opt' (inside […]).
+  function qcPlace(text, at) {
+    const st = [];
+    for (let i = 0; i < at; i++) {
+      const ch = text[i];
+      // a cell or row boundary: whatever was left open before it (a half-typed bracket) doesn't carry over
+      if (ch === '&' || (ch === '\\' && text[i + 1] === '\\')) { st.length = 0; if (ch === '\\') i++; continue; }
+      if (ch === '\\') { i++; continue; }
+      if (ch === '%') { const n = text.indexOf('\n', i); if (n < 0 || n >= at) return 'cell'; i = n; continue; } // a comment
+      if (ch === '{' || ch === '[') st.push(ch);
+      else if ((ch === '}' && st[st.length - 1] === '{') || (ch === ']' && st[st.length - 1] === '[')) st.pop();
+    }
+    return st.includes('{') ? 'arg' : st.length ? 'opt' : 'cell';
   }
 
   // Everything else the engines know (js/texcommands.js, generated from KaTeX and Temml):
@@ -126,6 +198,13 @@
     return h;
   }
 
+  // a quantikz snippet, drawn by the circuit renderer itself (cached; the drawing depends on the maths engine)
+  function qcPrev(src) {
+    const key = 'qc|' + TD.math.engine + '|' + src;
+    if (!preview.has(key)) { let h = ''; try { h = TD.qcMini ? TD.qcMini(src) : ''; } catch (e) { h = ''; } preview.set(key, h); }
+    return preview.get(key);
+  }
+
   // Command being typed just before the caret: "\" plus letters (or one symbol for \, \; \!).
   function current(el) {
     const pos = el.selectionStart;
@@ -140,8 +219,8 @@
     if (n % 2) return null;
     return { at, q: m[1] };
   }
-  function rank(q, prose) {
-    const all = prose ? proseList() : list();
+  function rank(q, prose, from) {
+    const all = from || (prose ? proseList() : list());
     if (!q) return all.slice(0, 40);
     const ql = q.toLowerCase();
     const exact = [], pre = [], preCI = [], sub = [];
@@ -157,11 +236,15 @@
   function update(el) {
     const cur = current(el);
     if (!cur) return close();
-    items = rank(cur.q, !TD.texMath.inMath(el.value, cur.at));
+    if (isQc(el)) {
+      const where = qcPlace(el.value, cur.at);
+      if (where === 'opt') return close();
+      items = where === 'arg' ? rank(cur.q, false) : rank(cur.q, false, QC);
+    } else items = rank(cur.q, !TD.texMath.inMath(el.value, cur.at));
     if (!items.length) return close();
     field = el; start = cur.at; idx = 0;
     pop.innerHTML = '<ul>' + items.map((c, i) => `<li role="option" data-i="${i}"${i === 0 ? ' class="on" aria-selected="true"' : ''}>` +
-      `<span class="tc-name">\\${esc(c.name)}</span><span class="tc-prev">${render1(c.prev)}</span><span class="tc-grp">${c.group}</span></li>`).join('') +
+      `<span class="tc-name">\\${esc(c.name)}</span><span class="tc-prev">${c.ex ? qcPrev(c.ex) : c.prev ? render1(c.prev) : ''}</span><span class="tc-grp">${c.group}</span></li>`).join('') +
       '</ul><div class="tc-foot"><kbd>↑</kbd><kbd>↓</kbd> choose · <kbd>Enter</kbd> / <kbd>Tab</kbd> insert · <kbd>Esc</kbd> close</div>';
     pop.hidden = false;
     place(el, cur.at);
