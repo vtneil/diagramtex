@@ -17,7 +17,7 @@
 | `--paper` | #f4f2ec | app base, canvas surround, document desk |
 | `--sheet` | #fffdf8 | panels, drawing sheet |
 | `--sheet-raised` | #ffffff | popovers, menus, modals, buttons |
-| `--well` | #f3f0e8 | inputs (inset, slightly darker than the sheet) |
+| `--well` | #f3f0e8 | read-only or disabled fields, hover on buttons and menu rows. Editable fields are white (`--sheet-raised`) like buttons: a tinted box means the value can't be changed |
 | `--ink` | #1c1b19 | text, primary buttons, active states |
 | `--graphite` | #5d5b55 | secondary text, icons |
 | `--pencil` | #6f6c64 | metadata, ruler labels (4.7:1 on paper; the old #8f8c84 was 3.0:1 and failed AA) |
@@ -29,15 +29,15 @@
 | `--bluepen` | #2459a6 | construction: control points, guides, snap, focus ring |
 | `--canvas` | #fffdf8 (dark: #ebe9e2) | the drawing sheet and typeset page: user content stays on a light surface in both appearances |
 
-**Colour restraint:** apart from user content, the only colour in the interface comes from the two pens. Active tools and menu highlights use ink, not an accent hue. Segmented controls are a recessed track with a raised selected segment; every track uses 2px padding and a 2px gap between segments (4px was tried and looked worse).
+**Colour restraint:** apart from user content, the only colour in the interface comes from the two pens. Active tools and menu highlights use ink, not an accent hue. Segmented controls are a recessed track with a raised selected segment; every track uses 3px padding and a 3px gap between segments (2px felt cramped, 4px looked worse).
 
 ## Appearance
-- Appearance is System / Light / Dark, chosen in the sidebar (a deliberate override of HIG dark-mode.md). The choice is stored in localStorage `texdiagram.theme`; an inline head script resolves it to `data-theme` on `<html>` before the CSS loads, and System follows `prefers-color-scheme`. Dark redefines the same tokens on `:root[data-theme=dark]`.
+- Appearance is System / Light / Dark (a deliberate override of HIG dark-mode.md), an icon-only segmented control (monitor, sun, crescent moon) at the right end of the top bar. At ≤1100px only the current icon shows and clicking it cycles System → Light → Dark. The choice is stored in localStorage `texdiagram.theme`; an inline head script resolves it to `data-theme` on `<html>` before the CSS loads, and System follows `prefers-color-scheme`. Dark redefines the same tokens on `:root[data-theme=dark]`.
 - The drawing sheet, page sheets and the typeset document page stay light (`--canvas`, softened in dark) so user colours read correctly; `.doc-page` re-declares the light tokens for everything drawn on it.
 - `prefers-contrast: more` strengthens rules and promotes `--pencil` to `--graphite`.
 
 ## Depth and shape
-Hairline rgba rules and rounded corners: `--r-sm` 4px, `--r` 6px (buttons, inputs, segmented tracks, menu rows), `--r-lg` 10px (popovers, menus, cards), `--r-xl` 12px (modals). Corners nest concentrically: a shape inset N px inside another takes the outer radius minus N. Segments are 4px inside a 6px track with 2px padding. Menus (context, dash/width, select, LaTeX autocomplete) have 4px padding and 6px rows inside a 10px shell. Selected rows are marked by fill, not an edge bar, because a bar does not sit well on a rounded row. Every menu (context, select, dash/width) highlights the hovered row the same way: the `--well` tone, text and icons unchanged; destructive rows turn the red pen. Submenus sit 4px clear of their parent, first row level with the row that opened it, with no icon column. Square corners were tried and rejected as less friendly; chamfered (diagonal-cut) corners were considered and not used.
+Hairline rgba rules and rounded corners: `--r-sm` 4px, `--r` 6px (buttons, inputs, segmented tracks, menu rows), `--r-lg` 10px (popovers, menus, cards), `--r-xl` 12px (modals). Corners nest concentrically: a shape inset N px inside another takes the outer radius minus N. Segments are 3px inside a 6px track with 3px padding (radius `calc(var(--r) - 3px)`). Menus (context, dash/width, select, LaTeX autocomplete) have 4px padding and 6px rows inside a 10px shell. Selected rows are marked by fill, not an edge bar, because a bar does not sit well on a rounded row. Every menu (context, select, dash/width) highlights the hovered row the same way: the `--well` tone, text and icons unchanged; destructive rows turn the red pen. Submenus sit 4px clear of their parent, first row level with the row that opened it, with no icon column. Square corners were tried and rejected as less friendly; chamfered (diagonal-cut) corners were considered and not used.
 - Shadows are used only where something floats above the sheet: popovers, menus, the colour picker, modals, the inline editor and the document page.
 - Menus open below their control (above when there is no room) and line up with the edge nearest the window side the control sits on: in the properties panel and the Export popover, the menu's right edge meets the control's right edge and the menu grows left; elsewhere the left edges meet.
 - Elevation goes paper → sheet → sheet-raised.
@@ -93,7 +93,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 ## Cursors
 - Use the standard CSS cursor for what a drag will do. Never `pointer` (the hand) on canvas handles: the hand is for links and buttons.
 - Edge and corner handles resize: `ew-`, `ns-`, `nesw-` or `nwse-resize`, turned with the shape's rotation and snapped to the nearest of the four. Text wrap and circle radius handles count as edges.
-- Point handles (line ends, vertices, arc ends, arc centre) and shape bodies: `move`. Space held: `grab`; while panning: `grabbing`. Rotation zone: the custom rotate cursor. The zone runs straight out from each edge (8–30px along the edge's outward normal, within the edge's length), never diagonally past a corner. It stays 16px clear of the resize handles the shape actually has, so a near miss on a handle still resizes, and it never covers another shape: pressing on another shape selects it.
+- Point handles (line ends, vertices, arc ends, arc centre) and shape bodies: `move`. Space held: `grab`; while panning: `grabbing`. Rotation zone: the custom rotate cursor. The zone is a small tab straight out from the middle of each edge (28px wide centred on the edge's midpoint, narrower on a short edge; 9–26px out along the outward normal). A strip along the whole edge was tried and felt too greedy, as was a radial zone around the corners. It stays 9px clear of the resize handles the shape actually has, so a near miss on a handle still resizes, and it never covers another shape: pressing on another shape selects it.
 - During a handle drag the canvas keeps the handle's cursor, so it doesn't flicker when the pointer outruns the handle.
 
 ## Installable app (PWA)
@@ -118,3 +118,17 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - While drawing or dragging an end, the shape it will attach to gets a soft blue outline and the end snaps onto the outline. Attached end handles are filled blue.
 - Moving, nudging or rotating the connector without its shapes detaches it, as does typing an end's coordinates or dragging the end off. Alt places an end without attaching.
 - Copies keep links only to shapes copied with them. TikZ export uses plain coordinates.
+
+## Text input modes (`js/mathinput.js`)
+- The sidebar's "Text input" control picks LaTeX (a plain textarea, maths as `$…$`) or MathLive (an interactive maths editor), stored in localStorage `texdiagram.input`. Both edit the same stored text; only the on-canvas editor changes. The props-panel textarea and Document-mode blocks stay LaTeX.
+- MathLive (vendor/mathlive, 0.111.1) loads on first use and reuses KaTeX's fonts. One `<math-field>` per line; prose is MathLive text mode, maths its maths mode, and `$` switches between them. A line converts as `Force $F = ma$ here ⇄ \text{Force }F = ma\text{ here}` and is rewritten only once edited. MathLive's spelled-out characters (`\textbraceleft` …) are stored as the usual escapes.
+- Keys: Enter done, Shift+Enter new line (paragraphs: Enter new line, ⌘/Ctrl+Enter done), Esc done, Backspace on an empty line removes it, ↑/↓ at a line edge moves between lines.
+
+## Prose text commands (`TD.prose` in `js/shapes.js`)
+- Prose outside `$…$` renders common text commands on canvas: `\textbf \textit \emph \textsl \underline \texttt \textsf \textrm \textsc \textup \textmd \textnormal`, symbols (`\ldots \S \textdegree \LaTeX` …), escapes (`\% \$ \_ \{ \}`), `~` as a no-break space, and `--`/`---`/``` `` ```/`''` ligatures. Unknown commands show as source. Export passes the source through unchanged.
+
+## Top bar
+- Order: sidebar toggle, file icons, Page/Classic switch, document name, … Diagram/Document, undo/redo, grid/snap, print, Export · Code · LaTeX, appearance icons. Groups are 16px apart.
+- Export opens a popover: PNG, SVG, PDF or Web page (the whole file as one self-contained .html). In Document view it offers only Web page. Code (`</>` icon) shows the TikZ, or the page's LaTeX, to copy; LaTeX downloads the whole file as a compilable .tex.
+- Export, Code and LaTeX share one outlined style (the default button). Solid black output buttons were tried and were the loudest thing on screen; a soft fill and a blue-pen tint were also considered.
+- Panel actions (Bring to Front, Duplicate, Delete …) use a soft `--wash-strong` fill with no border, so they never read as white fields. Delete turns the red pen on hover.

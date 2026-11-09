@@ -824,11 +824,12 @@
     }
     return true;
   };
-  // Rotate zone: straight out from an edge, never around a corner. The pointer counts only when its foot
-  // on an edge lands within that edge and it sits ROT_IN to ROT_OUT screen px out along the edge's outward
-  // normal. Diagonal regions past a corner, anything within HANDLE_CLEAR px of a resize handle the shape
-  // really has, and anything over another (unselected) shape are never rotate. Returns the aim point, or null.
-  const ROT_IN = 8, ROT_OUT = 30, HANDLE_CLEAR = 16;
+  // Rotate zone: a small tab straight out from the middle of each edge, never along the whole edge or around a
+  // corner. The pointer counts when its foot on an edge lies within ROT_HALF screen px of the edge's midpoint
+  // (less on a short edge) and it sits ROT_IN to ROT_OUT screen px out along the outward normal. Anything
+  // within HANDLE_CLEAR px of a resize handle the shape really has, and anything over another (unselected)
+  // shape, is never rotate. Returns the aim point, or null.
+  const ROT_IN = 9, ROT_OUT = 26, ROT_HALF = 14, HANDLE_CLEAR = 9;
   function rotZone(p, F = rotFrame(), target = null) {
     if (!F || insideQuad(F.C, p.x, p.y)) return null;
     const hit = target && target.closest && target.closest('[data-id]');
@@ -843,7 +844,7 @@
       const t = (p.x - ax) * ux + (p.y - ay) * uy;             // along the edge (world)
       let n = (p.x - ax) * -uy + (p.y - ay) * ux;              // across it (world)
       if ((F.cx - ax) * -uy + (F.cy - ay) * ux > 0) n = -n;    // make outward positive
-      if (n * z < ROT_IN || n * z > ROT_OUT || t < 0 || t > L) continue;
+      if (n * z < ROT_IN || n * z > ROT_OUT || Math.abs(t - L / 2) * z > Math.min(ROT_HALF, L * z / 2)) continue;
       return [p.x, p.y];
     }
     return null;
@@ -1198,7 +1199,9 @@
   window.addEventListener('resize', render);
 
   // ---------------- inline text editor ----------------
-  const ed = $('#inlineEditor');
+  const ed = $('#inlineEditor'), mlBox = $('#mlEditor');
+  let ml = null; // the MathLive editor while editing in MathLive mode (TD.input), else the textarea is used
+  const edBox = () => (editing && editing.ml ? mlBox : ed);
   function editAnchor() {
     const s = byId(editing.id);
     if (!s) return null;
@@ -1209,11 +1212,11 @@
   function positionEditor() {
     const a = editAnchor();
     if (!a) return;
-    const sp = toScreen(a), r = stageSize();
+    const sp = toScreen(a), r = stageSize(), box = edBox();
     // keep the whole box on the stage (it is centred on the anchor by translateX(-50%))
-    const w = ed.offsetWidth, h = ed.offsetHeight;
-    ed.style.left = Math.max(w / 2 + 8, Math.min(sp.x, r.w - w / 2 - 8)) + 'px';
-    ed.style.top = Math.max(8, Math.min(sp.y + 10, r.h - h - 8)) + 'px';
+    const w = box.offsetWidth, h = box.offsetHeight;
+    box.style.left = Math.max(w / 2 + 8, Math.min(sp.x, r.w - w / 2 - 8)) + 'px';
+    box.style.top = Math.max(8, Math.min(sp.y + 10, r.h - h - 8)) + 'px';
   }
   // Roomy by default: about 40 characters wide (or the paragraph frame's width, if wider), and
   // growing with the text up to ~12 lines before it scrolls.
@@ -1222,6 +1225,7 @@
     if (!s) return;
     let w = 360;
     if (editing.field === 'text' && TD.isParaText(s)) w = Math.max(w, Math.min(640, s.tw * state.view.zoom));
+    if (editing.ml) { mlBox.style.width = w + 'px'; return; }
     ed.style.width = w + 'px';
     ed.style.height = 'auto';
     ed.style.height = Math.min(Math.max(ed.scrollHeight + 2, ed.classList.contains('para') ? 120 : 76), 260) + 'px';
@@ -1229,6 +1233,7 @@
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
+    if (TD.input && TD.input.mode === 'mathlive') { startEditML(s, field, init); return; }
     begin();
     editing = { id, field };
     if (init != null && !s[field]) { s[field] = ''; ed.value = init; }
@@ -1244,10 +1249,39 @@
     const v0 = ed.value;
     requestAnimationFrame(() => { ed.focus(); if (ed.value !== v0) return; if (init != null && ed.value === init) ed.setSelectionRange(1, 1); else ed.select(); });
   }
+  // MathLive mode: the same box, with one interactive maths field per line (see js/mathinput.js)
+  async function startEditML(s, field, init) {
+    begin();
+    const me = (editing = { id: s.id, field, ml: true });
+    if (init != null && !s[field]) s[field] = '';
+    const para = field === 'text' && TD.isParaText(s);
+    mlBox.classList.toggle('para', para);
+    mlBox.innerHTML = '<div class="ml-load">Loading MathLive…</div>';
+    mlBox.style.display = 'block';
+    sizeEditor(); positionEditor();
+    try { await TD.input.load(); }
+    catch (err) { // offline before it was ever cached, say: fall back to the LaTeX field for this edit
+      if (editing !== me) return;
+      editing = null; mlBox.style.display = 'none';
+      showHint("MathLive couldn't load, so this edit uses LaTeX", 2500);
+      TD.input.set('latex'); startEdit(s.id, field, init);
+      return;
+    }
+    if (editing !== me) return; // finished while loading
+    const text = s[field] || '';
+    ml = TD.input.mount(mlBox, {
+      text, para, prose: field === 'text' && init == null,
+      start: text ? 'end' : init != null || field === 'label' ? 'math' : 'text',
+      onInput: editInput, onDone: finishEdit,
+    });
+    sizeEditor(); positionEditor();
+  }
   function finishEdit() {
     if (!editing) return;
     const { id } = editing;
     editing = null;
+    if (ml) { const m = ml; ml = null; m.destroy(); }
+    mlBox.style.display = 'none';
     ed.blur();
     ed.style.display = 'none';
     const s = byId(id);
@@ -1255,15 +1289,16 @@
     commit();
     render(); renderProps();
   }
-  ed.addEventListener('input', () => {
+  function editInput(v) {
     if (!editing) return;
     const s = byId(editing.id);
     if (!s) return;
-    s[editing.field] = ed.value;
+    s[editing.field] = v;
     render(); sizeEditor(); positionEditor();
     const ta = document.querySelector(`#props [data-key="${editing.field}"]`);
-    if (ta) ta.value = ed.value;
-  });
+    if (ta) ta.value = v;
+  }
+  ed.addEventListener('input', () => editInput(ed.value));
   ed.addEventListener('keydown', (e) => {
     e.stopPropagation();
     const para = ed.classList.contains('para');
@@ -2176,6 +2211,7 @@
       case 'image': {
         openFirst();
         if (state.mode === 'document') { showHint('Image export works on a diagram: switch to Diagram view first', 2000); break; }
+        if (expOpts.fmt === 'html') expOpts.fmt = 'png'; // "Image…" opens on a picture format
         requestAnimationFrame(() => openExport($('#btnExport')));
         break;
       }
@@ -2252,7 +2288,7 @@
     commit(); render(); renderGeom();
   }
 
-  const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'MATH-FIELD' || t.isContentEditable);
   document.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey;
     if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; }
@@ -2313,7 +2349,13 @@
   }
   $('#themeBox').addEventListener('click', (e) => {
     const b = e.target.closest('[data-theme-pick]');
-    if (b && window.TDTheme) { TDTheme.set(b.dataset.themePick); syncThemeBox(); }
+    if (!b || !window.TDTheme) return;
+    let pick = b.dataset.themePick;
+    if (matchMedia('(max-width: 1100px)').matches && pick === TDTheme.get()) { // compact: one icon that cycles
+      const order = ['system', 'light', 'dark'];
+      pick = order[(order.indexOf(pick) + 1) % order.length];
+    }
+    TDTheme.set(pick); syncThemeBox();
   });
   syncThemeBox();
 
@@ -2597,13 +2639,24 @@
   expPop.setAttribute('role', 'dialog'); expPop.setAttribute('aria-label', 'Export');
   document.body.appendChild(expPop);
   const DPIS = [72, 96, 150, 300, 600];
+  // Formats: pictures of the diagram or pages, plus the whole file as one web page (the only one in Document view).
+  const expFmts = () => (state.mode === 'document' ? [['html', 'Web page']] : [['png', 'PNG'], ['svg', 'SVG'], ['pdf', 'PDF'], ['html', 'Web page']]);
+  const expFmt = () => (expFmts().some(([k]) => k === expOpts.fmt) ? expOpts.fmt : expFmts()[0][0]);
   function renderExpPop() {
-    const srcs = exportSources(), sc = expScale(), o = expOpts;
+    const o = expOpts, fmt = expFmt();
+    if (fmt === 'html') {
+      expPop.innerHTML = `<div class="exp-h">Export ${state.doc.kind === 'page' ? 'file' : 'document'}</div>
+        <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${fmt === k}" data-efmt="${k}" class="${fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="exp-note">The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.</div>
+        <button type="button" class="primary exp-go" data-ego>Download web page</button>`;
+      return;
+    }
+    const srcs = exportSources(), sc = expScale();
     const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : 'empty';
     const cm = srcs.length ? `${r2(srcs[0].vb[2] / PX)} × ${r2(srcs[0].vb[3] / PX)} cm` : '';
     const raster = o.fmt !== 'svg';
     expPop.innerHTML = `<div class="exp-h">Export ${state.mode === 'page' ? 'page' + (srcs.length > 1 ? 's' : '') : 'diagram'}</div>
-      <div class="seg exp-fmt" role="radiogroup">${[['png', 'PNG'], ['svg', 'SVG'], ['pdf', 'PDF']].map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       ${raster ? `<div class="exp-row"><label for="expDpi">Resolution</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === o.dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(o.dpi) ? '' : `<option value="${o.dpi}" selected>${o.dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${o.dpi}" aria-label="DPI"></span></div>
       <div class="exp-meta">${dim}${srcs.length > 1 ? ` per page · ${srcs.length} ${o.fmt === 'pdf' ? 'pages' : 'files'}` : ''}<span>${cm}</span></div>` : `<div class="exp-meta">Vector, scales to any size<span>${cm}</span></div>`}
       ${o.fmt === 'png' && state.mode !== 'page' ? `<label class="exp-chk"><input type="checkbox" id="expTr"${o.transparent ? ' checked' : ''}> Transparent background</label>` : ''}
@@ -2621,7 +2674,7 @@
   expPop.addEventListener('click', (e) => {
     const f = e.target.closest('[data-efmt]');
     if (f) { expOpts.fmt = f.dataset.efmt; saveExpOpts(); renderExpPop(); return; }
-    if (e.target.closest('[data-ego]')) { expPop.hidden = true; runExport(); }
+    if (e.target.closest('[data-ego]')) { expPop.hidden = true; if (expFmt() === 'html') exportHtml(); else runExport(); }
   });
   expPop.addEventListener('change', (e) => {
     if (e.target.id === 'expDpiSel' || e.target.id === 'expDpi') { const v = Math.round(+e.target.value); if (v >= 24 && v <= 2400) expOpts.dpi = v; saveExpOpts(); renderExpPop(); }

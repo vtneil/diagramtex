@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.2.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.3.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -360,9 +360,86 @@
     else out.push({ math: false, s: buf });
     return out.filter((x) => x.s.length);
   }
+  // ---------- prose (text outside $…$) ----------
+  // The common LaTeX text commands work in prose as they do in LaTeX: \textbf{…}, \emph{…}, \texttt{…},
+  // escaped characters (\% \$ \_ …), ~, quotes and dashes, and a few symbols. Export passes the source
+  // through untouched; this parser drives the preview and the MathLive editor. Anything it doesn't know
+  // (\ref{x}, say) is kept, and shown, exactly as typed.
+  // nodes: 'text' | { cmd, kids } (cmd '' = a bare {group}) | { sym } | { raw }
+  const PROSE_CMDS = {
+    textbf: 'font-weight:bold', textit: 'font-style:italic', emph: 'font-style:italic', textsl: 'font-style:oblique',
+    underline: 'text-decoration:underline', texttt: 'font-family:"Courier New",Courier,monospace', textsf: 'font-family:Helvetica,Arial,sans-serif',
+    textrm: '', textsc: 'font-variant:small-caps', textup: 'font-style:normal', textmd: 'font-weight:normal', textnormal: 'font-weight:normal;font-style:normal',
+  };
+  const PROSE_SYMS = {
+    ldots: '…', dots: '…', textbackslash: '\\', textasciicircum: '^', textasciitilde: '~', textdegree: '°', S: '§', P: '¶', copyright: '©',
+    textendash: '–', textemdash: '—', textbullet: '•', textbraceleft: '{', textbraceright: '}', textunderscore: '_', textdollar: '$', textbar: '|', textless: '&lt;', textgreater: '&gt;', quad: ' ', qquad: '  ', nbsp: ' ',
+    LaTeX: 'L<span style="font-size:.75em;vertical-align:.25em;margin:0 -.15em 0 -.36em">A</span>T<span style="vertical-align:-.5ex;margin:0 -.125em 0 -.1667em">E</span>X',
+    TeX: 'T<span style="vertical-align:-.5ex;margin:0 -.125em 0 -.1667em">E</span>X',
+  };
+  function parseProse(src) {
+    let i = 0;
+    const braced = () => { // a balanced {…} at i, returned whole
+      let j = i + 1, d = 1;
+      for (; j < src.length && d; j++) { if (src[j] === '\\') j++; else if (src[j] === '{') d++; else if (src[j] === '}') d--; }
+      const g = src.slice(i, j); i = j; return g;
+    };
+    function group(inner) {
+      const out = [];
+      let buf = '';
+      const push = (n) => { if (buf) out.push(buf); buf = ''; if (n) out.push(n); };
+      while (i < src.length) {
+        const c = src[i];
+        if (c === '}' && inner) { i++; break; }
+        if (c === '{') { i++; push({ cmd: '', kids: group(true) }); continue; }
+        if (c === '~') { i++; push({ sym: 'nbsp' }); continue; }
+        if (c !== '\\') { buf += c; i++; continue; }
+        const m = /^\\([A-Za-z]+)|^\\(.?)/.exec(src.slice(i));
+        i += m[0].length;
+        if (m[1] === undefined) { // \% \$ \_ \{ \} \& \# → the character; \  \, \; \: → a space
+          if (m[2] && '%$_{}&#'.includes(m[2])) buf += m[2];
+          else if (m[2] && ' ,;:'.includes(m[2])) buf += ' ';
+          else push({ raw: m[0] });
+          continue;
+        }
+        const name = m[1];
+        if (PROSE_CMDS[name] !== undefined && /^\s*\{/.test(src.slice(i))) {
+          while (src[i] !== '{') i++;
+          i++; push({ cmd: name, kids: group(true) }); continue;
+        }
+        if (PROSE_SYMS[name] !== undefined && name !== 'nbsp') {
+          if (src.startsWith('{}', i)) i += 2; else while (src[i] === ' ') i++; // a control word eats the space after it
+          push({ sym: name }); continue;
+        }
+        let raw = m[0];
+        while (src[i] === '{') raw += braced(); // unknown: keep it and its arguments as typed
+        push({ raw });
+      }
+      push();
+      return out;
+    }
+    return group(false);
+  }
+  const ligatures = (h) => h.replace(/---/g, '—').replace(/--/g, '–').replace(/``/g, '“').replace(/''/g, '”');
+  function proseHtml(nodes) {
+    return nodes.map((n) => (typeof n === 'string' ? ligatures(esc(n))
+      : n.sym ? PROSE_SYMS[n.sym]
+        : n.raw !== undefined ? esc(n.raw)
+          : n.cmd && PROSE_CMDS[n.cmd] ? `<span style='${PROSE_CMDS[n.cmd]}'>${proseHtml(n.kids)}</span>` : proseHtml(n.kids))).join('');
+  }
+  // nodes → source, with `escStr` deciding how plain characters are written
+  function proseSource(nodes, escStr) {
+    return nodes.map((n) => (typeof n === 'string' ? escStr(n)
+      : n.sym ? (n.sym === 'nbsp' ? '~' : `\\${n.sym}{}`)
+        : n.raw !== undefined ? n.raw
+          : `${n.cmd ? '\\' + n.cmd : ''}{${proseSource(n.kids, escStr)}}`)).join('');
+  }
+  TD.prose = { parse: parseProse, html: proseHtml, source: proseSource, CMDS: PROSE_CMDS };
+
   // TeX for one math segment
   const mathTex = (seg) => (seg.display ? `\\displaystyle ${seg.s.trim()}` : seg.s);
   TD.mathTex = mathTex;
+  TD.textSegments = segments;
 
   function textHtml(text) {
     if (htmlCache.has(text)) return htmlCache.get(text);
@@ -370,7 +447,7 @@
       segments(line).map((seg) => {
         if (seg.math && TD.math) return TD.math.render(mathTex(seg));
         if (seg.math) return `<i>${esc(seg.s)}</i>`;
-        return esc(seg.s.replace(/\\([%&#$_{}])/g, '$1').replace(/~/g, ' '));
+        return proseHtml(parseProse(seg.s));
       }).join('') || '&#8203;'
     );
     const html = lines.map((l) => `<div>${l}</div>`).join('');

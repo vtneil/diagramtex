@@ -127,7 +127,7 @@ button svg .f { fill: currentColor; }
 :focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
 input, select, textarea { color: var(--ink); font: inherit; border-radius: var(--r); }
 input[type=checkbox], input[type=radio] { accent-color: var(--ink); width: 14px; height: 14px; margin: 0; }
-select { background: var(--well); border: 1px solid var(--rule-strong); height: var(--ctl); padding: 0 6px; }
+select { background: var(--sheet-raised); border: 1px solid var(--rule-strong); height: var(--ctl); padding: 0 6px; }
 kbd { font: 11px var(--font-mono); background: var(--well); border: 1px solid var(--rule); border-radius: var(--r-sm); padding: 0 4px; color: var(--graphite); }
 .sc { font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--pencil); }
 
@@ -156,18 +156,19 @@ body:not(.no-files) #btnSidebar { color: var(--ink); background: var(--wash); }
 
 /* Segmented controls (Page | Classic, Diagram | Document, export format, engine, orientation, gradient kind,
    fill tabs): a recessed track with a raised selected segment, 28px tall overall. */
-.seg, #props .seg-ctl, #engineBox .eng-seg, .fp-seg, .cp-tabs {
-  display: flex; gap: 2px; padding: 2px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r);
+.seg, #props .seg-ctl, #engineBox .eng-seg, #inputBox .eng-seg, .fp-seg, .cp-tabs {
+  display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r);
 }
-.seg button, #props .seg-ctl button, #engineBox .eng-seg button, .fp-seg button, .cp-tabs button {
+.seg button, #props .seg-ctl button, #engineBox .eng-seg button, #inputBox .eng-seg button, .fp-seg button, .cp-tabs button {
   flex: 1 1 auto; height: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px;
-  border: 0; border-radius: var(--r-sm); background: transparent; color: var(--graphite); font-size: 12px; font-weight: 500; margin: 0;
+  border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); font-size: 12px; font-weight: 500; margin: 0;
 }
-.seg button:hover, #props .seg-ctl button:hover, #engineBox .eng-seg button:hover, .fp-seg button:hover, .cp-tabs button:hover { background: var(--wash); color: var(--ink); }
-.seg button.on, #props .seg-ctl button.on, #engineBox .eng-seg button.on, .fp-seg button.on, .cp-tabs button.on {
+.seg button:hover, #props .seg-ctl button:hover, #engineBox .eng-seg button:hover, #inputBox .eng-seg button:hover, .fp-seg button:hover, .cp-tabs button:hover { background: var(--wash); color: var(--ink); }
+.seg button.on, #props .seg-ctl button.on, #engineBox .eng-seg button.on, #inputBox .eng-seg button.on, .fp-seg button.on, .cp-tabs button.on {
   background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob);
 }
 .seg.sub { margin-left: 4px; }
+#kindSeg { margin-left: 8px; flex: none; }
 body.mode-page .seg.sub { display: none; }
 .seg button svg { width: 16px; height: 16px; }
 #blockSel { font: inherit; height: var(--ctl); }
@@ -245,7 +246,7 @@ body.no-files #files { display: none; }
 #status .zoom button:hover { background: var(--wash); color: var(--ink); }
 #status .zoom #zoomVal { width: 56px; height: 100%; border: 0; border-left: 1px solid var(--rule-soft); border-radius: 0; background: transparent; font: inherit; color: var(--graphite); text-align: center; padding: 0 4px; outline: none; cursor: text; }
 #status .zoom #zoomVal:hover { background: var(--wash); color: var(--ink); }
-#status .zoom #zoomVal:focus { background: var(--well); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
+#status .zoom #zoomVal:focus { background: var(--sheet-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
 
 #hint { position: absolute; left: 50%; top: calc(var(--ruler) + 12px); transform: translateX(-50%); background: var(--ink); color: var(--sheet); padding: 4px 12px; border-radius: var(--r); font-size: 12px; line-height: 20px; pointer-events: none; display: none; z-index: 4; }
 #emptyHint { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); background: var(--sheet-raised); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-knob); padding: 16px 20px; color: var(--graphite); font-size: 13px; line-height: 1.7; text-align: center; pointer-events: none; max-width: 420px; text-wrap: pretty; }
@@ -287,6 +288,23 @@ body.no-files #files { display: none; }
   box-shadow: var(--shadow-pop); background: var(--sheet-raised); z-index: 5; transform: translateX(-50%);
 }
 #inlineEditor.para { min-height: 120px; }
+/* MathLive mode: the same floating box, one math-field per line, a key hint underneath */
+#mlEditor {
+  position: absolute; display: none; min-width: 280px; max-width: calc(100% - 16px); padding: 6px 8px 6px; border-radius: var(--r);
+  border: 1px solid var(--bluepen); color: var(--ink); box-shadow: var(--shadow-pop); background: var(--sheet-raised); z-index: 5; transform: translateX(-50%);
+}
+#mlEditor.para .ml-lines { min-height: 96px; }
+#mlEditor .ml-lines { display: flex; flex-direction: column; gap: 2px; }
+#mlEditor math-field {
+  display: block; width: 100%; font-size: 20px; padding: 4px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink); outline: none;
+  --caret-color: var(--bluepen); --selection-background-color: color-mix(in srgb, var(--bluepen) 22%, transparent); --primary: var(--bluepen);
+  --contains-highlight-background-color: var(--well); --placeholder-color: var(--pencil);
+  --text-highlight-background-color: color-mix(in srgb, var(--bluepen) 9%, transparent); /* marks prose (text mode) faintly */
+}
+#mlEditor math-field:focus-within { background: var(--well); }
+#mlEditor math-field::part(virtual-keyboard-toggle) { display: none; }
+#mlEditor .ml-hint { margin-top: 4px; padding: 0 6px; font-size: 11px; color: var(--pencil); }
+#mlEditor .ml-load { padding: 10px 6px; font-size: 12px; color: var(--pencil); }
 
 /* ---------- properties panel ---------- */
 #props { width: var(--props-w); flex: none; background: var(--sheet); border-left: 1px solid var(--rule); overflow: auto; overflow-x: hidden; order: 3; }
@@ -300,7 +318,7 @@ body.no-files #files { display: none; }
 #props .row > label { width: 84px; flex: none; color: var(--graphite); font-size: 12px; }
 #props .row > .ctl { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
 #props input[type=number], #props input[type=text], #props select, #props textarea {
-  width: 100%; font: inherit; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--well); min-width: 0;
+  width: 100%; font: inherit; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); min-width: 0;
 }
 #props input[type=number] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 #props input:hover, #props select:hover, #props textarea:hover { border-color: var(--rule-strong); }
@@ -316,8 +334,9 @@ body.no-files #files { display: none; }
 #props .swatches { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px 92px; }
 #props .sw { width: 16px; height: 16px; border: 1px solid var(--rule); border-radius: var(--r-sm); cursor: pointer; padding: 0; }
 #props .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-#props .btns button { font-size: 12px; }
-#props .btns button[data-act=del]:hover { color: var(--redpen); border-color: var(--redpen); background: var(--redpen-wash); }
+#props .btns button { font-size: 12px; font-weight: 500; background: var(--wash-strong); border-color: transparent; color: var(--ink); } /* actions: a soft fill, so they don't read as fields */
+#props .btns button:hover { background: color-mix(in srgb, var(--ink) 14%, transparent); border-color: transparent; }
+#props .btns button[data-act=del]:hover { color: var(--redpen); border-color: transparent; background: var(--redpen-wash); }
 #props .help { color: var(--graphite); font-size: 12px; line-height: 1.55; }
 #props .hint { font-size: 11px; color: var(--pencil); margin: -4px 0 8px 92px; }
 #props .hint-line, .hint-line { font-size: 11px; color: var(--pencil); margin-top: 8px; line-height: 1.45; text-wrap: pretty; }
@@ -382,7 +401,7 @@ body.no-files #files { display: none; }
 .cp-preview.none div { background: linear-gradient(to top right, transparent calc(50% - 1px), var(--redpen) 50%, transparent calc(50% + 1px)) !important; }
 .cp-inputs { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 4px; margin-top: 12px; }
 .cp-inputs label { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: var(--pencil); }
-.cp-inputs input { width: 100%; height: var(--ctl-sm); font: 11px var(--font-mono); padding: 0 2px; text-align: center; border: 1px solid var(--rule); background: var(--well); -moz-appearance: textfield; }
+.cp-inputs input { width: 100%; height: var(--ctl-sm); font: 11px var(--font-mono); padding: 0 2px; text-align: center; border: 1px solid var(--rule); background: var(--sheet-raised); -moz-appearance: textfield; }
 .cp-inputs input::-webkit-inner-spin-button { -webkit-appearance: none; }
 .cp-presets { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule-soft); }
 .cp-presets button { height: 20px; padding: 0; border: 1px solid var(--rule); border-radius: var(--r-sm); }
@@ -444,7 +463,7 @@ body.no-files #files { display: none; }
 .tdd-box { width: min(400px, 100%); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-xl); box-shadow: var(--shadow-modal); padding: 20px 20px 16px; animation: pop-in .16s var(--ease); }
 .tdd-box h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
 .tdd-box p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: var(--graphite); }
-.tdd-in { display: block; width: 100%; margin-top: 12px; height: var(--ctl); padding: 0 8px; background: var(--well); border: 1px solid var(--rule-strong); }
+.tdd-in { display: block; width: 100%; margin-top: 12px; height: var(--ctl); padding: 0 8px; background: var(--sheet-raised); border: 1px solid var(--rule-strong); }
 textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); resize: vertical; }
 .tdd-in:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
 .tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
@@ -512,7 +531,7 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .fmt-bar button.on { border-color: var(--rule-strong); color: var(--ink); background: var(--wash); }
 .fmt-bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .fmt-bar select, .fmt-bar input[type=text] { height: var(--ctl); font: inherit; }
-.fmt-bar input[type=text] { flex: 1; min-width: 120px; padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--well); }
+.fmt-bar input[type=text] { flex: 1; min-width: 120px; padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); }
 .fmt-bar .sep { width: 1px; height: 18px; background: var(--rule); margin: 0 4px; }
 .fmt-bar .fmt-col { position: relative; height: var(--ctl); min-width: var(--ctl); border-radius: var(--r); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .fmt-bar .fmt-col:hover { background: var(--wash); }
@@ -586,7 +605,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 16px); }
 .fp-fields label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--graphite); }
 .fp-fields label span { width: 64px; flex: none; }
 .fp-fields i, .fp-stop-ed i { font-style: normal; font: 11px var(--font-mono); color: var(--pencil); }
-.fp input { width: 52px; height: var(--ctl-sm); padding: 0 4px; font: 11px var(--font-mono); border: 1px solid var(--rule); background: var(--well); }
+.fp input { width: 52px; height: var(--ctl-sm); padding: 0 4px; font: 11px var(--font-mono); border: 1px solid var(--rule); background: var(--sheet-raised); }
 .fp input[data-phex], .fp input[data-sthex] { width: 70px; text-transform: uppercase; }
 .fp-stops { position: relative; height: 30px; margin: 10px 6px 0; cursor: copy; touch-action: none; }
 .fp-bar { position: absolute; left: 0; right: 0; top: 0; height: 14px; border: 1px solid var(--rule-strong); border-radius: var(--r-sm);
@@ -606,7 +625,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 16px); }
 .fp-pats svg { display: block; width: 100%; height: 100%; }
 
 /* ---------- line width / dash dropdowns ---------- */
-#props .ddbtn { width: 24px; height: var(--ctl); padding: 0; flex: none; margin-left: -9px; border-radius: 0 var(--r) var(--r) 0; background: var(--well); display: inline-flex; align-items: center; justify-content: center; }
+#props .ddbtn { width: 24px; height: var(--ctl); padding: 0; flex: none; margin-left: -9px; border-radius: 0 var(--r) var(--r) 0; display: inline-flex; align-items: center; justify-content: center; }
 #props .ctl > input:has(+ .ddbtn) { border-radius: var(--r) 0 0 var(--r); }
 .ddbtn svg, .ddsel .chev { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.3; }
 #props .ddsel { flex: 1; min-width: 0; height: var(--ctl); display: flex; align-items: center; gap: 8px; padding: 0 8px; text-align: left; }
@@ -638,7 +657,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 16px); }
 .ddpop > button span { flex: 1; font-size: 12px; }
 .ddpop > button i { font: 11px var(--font-mono); font-style: normal; color: var(--pencil); }
 .dd-custom { display: flex; align-items: center; gap: 8px; margin: 4px -4px 0; padding: 6px 12px 2px; border-top: 1px solid var(--rule-soft); font-size: 12px; color: var(--graphite); }
-.dd-custom input { flex: 1; min-width: 0; height: var(--ctl-sm); padding: 0 6px; font: 11px var(--font-mono); border: 1px solid var(--rule); background: var(--well); }
+.dd-custom input { flex: 1; min-width: 0; height: var(--ctl-sm); padding: 0 6px; font: 11px var(--font-mono); border: 1px solid var(--rule); background: var(--sheet-raised); }
 .dd-custom.on input { border-color: var(--ink); }
 .fp-pats svg, .fp-preview svg { stroke: none; fill: none; }
 
@@ -696,11 +715,10 @@ body.mode-page #emptyHint .eh-page { display: block; }
 #texComplete kbd { font: 10px var(--font-mono); padding: 0 3px; border: 1px solid var(--rule); background: var(--sheet); margin-right: 2px; }
 
 /* LaTeX engine picker (left sidebar, under the file list) */
-#engineBox, #themeBox { padding: 12px 16px 16px; border-top: 1px solid var(--rule-soft); }
-#themeBox .seg button { flex: 1 1 0; }
-#engineBox .eng-head, #themeBox .eng-head { font-size: 11px; font-weight: 600; color: var(--pencil); margin-bottom: 8px; }
-#engineBox .eng-seg button { flex: 1 1 0; }
-#engineBox .eng-note { margin-top: 8px; font-size: 11px; line-height: 1.4; color: var(--pencil); }
+#engineBox, #inputBox { padding: 12px 16px 16px; border-top: 1px solid var(--rule-soft); }
+#engineBox .eng-head, #inputBox .eng-head { font-size: 11px; font-weight: 600; color: var(--pencil); margin-bottom: 8px; }
+#engineBox .eng-seg button, #inputBox .eng-seg button { flex: 1 1 0; }
+#engineBox .eng-note, #inputBox .eng-note { margin-top: 8px; font-size: 11px; line-height: 1.4; color: var(--pencil); }
 
 /* arrow-tip picker: a grid of previews */
 .ddpop .tipgrid { padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
@@ -718,7 +736,7 @@ body.mode-page #emptyHint .eh-page { display: block; }
 .exp-fmt { margin-bottom: 12px; }
 .exp-fmt button { flex: 1 1 0; }
 .exp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.exp-pop input, .exp-pop select { height: var(--ctl); border: 1px solid var(--rule-strong); background: var(--well); padding: 0 8px; }
+.exp-pop input, .exp-pop select { height: var(--ctl); border: 1px solid var(--rule-strong); background: var(--sheet-raised); padding: 0 8px; }
 .exp-row label { color: var(--graphite); }
 .exp-dpi { display: inline-flex; gap: 4px; }
 .exp-dpi select { width: 92px; }
@@ -737,3 +755,18 @@ body.mode-page #emptyHint .eh-page { display: block; }
 @media (max-width: 1140px) { #topbar .group > button:not(.icon) { padding: 0 10px; } #topbar .group > button:not(.icon) svg { display: none; } }
 #props .row > label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #props .cval { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* appearance: icon-only, at the right end of the top bar */
+#topbar .theme-seg { margin-left: 8px; flex: none; }
+#topbar .theme-seg button { width: 28px; padding: 0; flex: none; }
+#topbar .theme-seg button svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 1100px) { /* only the current choice shows; clicking it moves to the next */
+  #topbar .theme-seg { padding: 0; background: transparent; margin-left: 4px; }
+  #topbar .theme-seg button:not(.on) { display: none; }
+  #topbar .theme-seg button.on { box-shadow: none; background: transparent; color: var(--graphite); }
+  #topbar .theme-seg button.on:hover { background: var(--wash); color: var(--ink); }
+}
+
+/* fields are white like buttons: a tinted fill means the value can't be changed */
+input:disabled, input[readonly], select:disabled, textarea:disabled, textarea[readonly],
+#props input:disabled, #props input[readonly], #props select:disabled, #props textarea:disabled, #props textarea[readonly] { background: var(--well); color: var(--pencil); }
