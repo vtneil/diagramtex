@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 256"><g>
+<g transform="translate(3 0)">
+<path d="M58 44C214 44 214 212 58 212Z" fill="none" stroke="#23205A" stroke-width="28" stroke-linejoin="round"/>
+<path d="M175 58V198" stroke="#23205A" stroke-width="9" stroke-linecap="round"/>
+<circle cx="175" cy="54" r="17" fill="#FF5A3C"/><circle cx="175" cy="202" r="17" fill="#2F7BFF"/>
+<rect x="157" y="110" width="36" height="36" rx="5" fill="#FFB020" stroke="#23205A" stroke-width="8"/>
+</g>
+</g><text x="300" y="170" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700" font-size="118" letter-spacing="-3" fill="#23205A">DiagramTeX</text></svg>

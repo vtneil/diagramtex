@@ -29,7 +29,12 @@
 | `--bluepen` | #2459a6 | construction: control points, guides, snap, focus ring |
 | `--canvas` | #fffdf8 (dark: #ebe9e2) | the drawing sheet and typeset page: user content stays on a light surface in both appearances |
 
-**Colour restraint:** apart from user content, the only colour in the interface comes from the two pens. Active tools and menu highlights use ink, not an accent hue. Segmented controls are a recessed track with a raised selected segment; every track uses 3px padding and a 3px gap between segments (2px felt cramped, 4px looked worse).
+**Logo:** "Node to Node", a coral round node and a blue square node joined by an indigo backslash edge (lavender `#F1EFFF` on dark). Kit, colours and rules live in `design/logo/` (`GUIDELINES.md`; early concepts in `concepts/`). In the app it appears in three places:
+- **Top bar:** the mark (20px) followed by the outlined Inter Display Bold wordmark; below 1361px only the mark shows.
+- **Loading screen:** an inline `#splash` in `index.html` paints the paper colour at once. The mark fades in only after 150ms, so fast loads never flash it; while it shows, the edge draws from the round node to the square, holds, then lifts off; it stays still under reduced motion. It's lifted on `load` plus fonts (at most 1.5s more), never later than 8s.
+- **Icons:** favicon (small cut, edge lightens in dark tab bars) and the app icon (indigo tile).
+
+**Colour restraint:** apart from user content and the logo, the only colour in the interface comes from the two pens. Active tools and menu highlights use ink, not an accent hue. Segmented controls are a recessed track with a raised selected segment; every track uses 3px padding and a 3px gap between segments (2px felt cramped, 4px looked worse).
 
 ## Appearance
 - Appearance is System / Light / Dark (a deliberate override of HIG dark-mode.md), an icon-only segmented control (monitor, sun, crescent moon) at the right end of the top bar. At ≤1100px only the current icon shows and clicking it cycles System → Light → Dark. The choice is stored in localStorage `texdiagram.theme`; an inline head script resolves it to `data-theme` on `<html>` before the CSS loads, and System follows `prefers-color-scheme`. Dark redefines the same tokens on `:root[data-theme=dark]`.

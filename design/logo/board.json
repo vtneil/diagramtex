@@ -1,0 +1,32 @@
+{
+  "brand": "DiagramTeX",
+  "tagline": "Draw it. Get TikZ.",
+  "brief": "A diagram editor for people writing LaTeX: students, lecturers and researchers who come from a .tex file and go back to one. It should feel exact and crafted, modern and a little playful, not like a SaaS dashboard.",
+  "adjectives": ["exact", "crafted", "modern", "playful"],
+  "criteria": "Success: recognisable at 16 px, works in one colour, says 'diagram' and 'TeX' without a compass, a pencil or Overleaf green.",
+  "industry": "software",
+  "mockups": ["app-icon", "favicon-tab", "readme", "website", "terminal", "sticker"],
+  "nav": ["Editor", "Examples", "GitLab"],
+  "brand_color": "#23205A",
+  "tile_color": "#23205A",
+  "greyscale": false,
+  "designer": "Claude for DiagramTeX",
+  "round": 2,
+  "concepts": [
+    {
+      "name": "Node to Node",
+      "symbol": "final/symbol.svg",
+      "lockup": "final/lockup-horizontal.svg",
+      "symbol_on_tile": "final/symbol-reversed.svg",
+      "lockup_on_dark": "final/lockup-horizontal-reversed.svg",
+      "idea": "A round node and a square node joined by a backslash, the character every TeX command starts with.",
+      "rationale": [
+        "Two node shapes, one edge: the smallest possible diagram",
+        "The edge is a \\, so the mark is also TeX",
+        "Coral and blue are the app's red and blue pens, brightened; indigo is its ink"
+      ]
+    }
+  ],
+  "recommendation": "Node to Node: simplest at 16 px, works in one colour, and the circle-versus-square contrast keeps the nodes apart even in greyscale.",
+  "next_steps": ["Trademark search before public use", "Optional: add the mark to the app's sidebar header", "Use the reversed lockup on dark backgrounds"]
+}

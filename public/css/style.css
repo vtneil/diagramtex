@@ -147,9 +147,12 @@ kbd { font: 11px var(--font-mono); background: var(--well); border: 1px solid va
   height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px;
   background: var(--sheet); border-bottom: 1px solid var(--rule);
 }
-.brand { font-weight: 600; font-size: 15px; line-height: var(--ctl); white-space: nowrap; margin: 0 4px; letter-spacing: -.01em; }
-.brand .tex { font-weight: 600; margin-left: 1px; letter-spacing: -.02em; }
-.brand .tex sub { font-size: 1em; vertical-align: -.24em; margin: 0 -.08em 0 -.06em; text-transform: uppercase; }
+/* the logo lockup: the mark always, the outlined wordmark when there is room */
+.brand { display: flex; align-items: center; gap: 7px; flex: none; margin: 0 4px; --brand-ink: #23205A; }
+[data-theme=dark] .brand { --brand-ink: #F1EFFF; }
+.brand svg { display: block; height: 20px; width: auto; }
+.brand .brand-word { height: 20px; }
+.brand-ink { fill: var(--brand-ink); }
 .doc-name { border: 1px solid transparent; height: var(--ctl); padding: 0 8px; font: inherit; font-weight: 600; width: 200px; min-width: 80px; background: transparent; color: var(--ink); margin-left: 4px; }
 .doc-name:hover { border-color: var(--rule); }
 .doc-name:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
@@ -785,7 +788,7 @@ body.mode-page #emptyHint .eh-page { display: block; }
 #canvas.rot-zone, #canvas.rot-zone * { cursor: var(--rot-cur) !important; }
 
 /* ---------- toolbar overflow: drop the least important items first as the window narrows ---------- */
-@media (max-width: 1360px) { .brand { display: none; } }
+@media (max-width: 1360px) { .brand .brand-word { display: none; } }
 @media (max-width: 1240px) { .seg button svg { display: none; } .doc-name { width: 160px; } }
 @media (max-width: 1140px) { #topbar .group > button:not(.icon) { padding: 0 10px; } #topbar .group > button:not(.icon) svg { display: none; } }
 #props .row > label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
