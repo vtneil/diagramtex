@@ -133,6 +133,7 @@ npx wrangler deploy
 - **Whiteboard** files: one endless canvas with no page and no edges. Draw anywhere; scroll (two fingers on a trackpad) to move around, pinch or Ctrl/⌘+scroll to zoom from 3% to 800%, and use the **Hand** tool (`H`) or Space-drag to grab the board. A dot grid replaces the lines and rulers and stays evenly spaced at any zoom. **Fit** brings everything into view. Export, TikZ code and import work as for a Classic diagram, sized to what you drew; files save as `.board.json`.
 - **Classic** files: diagrams, plus a document view that arranges them with text, as in Mathcha. While Classic is selected, a second switch, **Diagram | Document**, appears beside it.
 - Choosing Page, Classic or Whiteboard opens the last file of that kind, or starts a new one. The sidebar lists only files of the current kind, and **New** makes a file of that kind.
+- The properties panel floats over the top right of the canvas: click its heading to fold it up, and again to open it. The button at the left end of the top bar folds the file list away.
 - **Save** (Ctrl+Shift+S) downloads a `.json` file that records its kind (`"kind": "page"` or `"classic"`; Page files are named `*.page.json`). **Open** (Ctrl+O) loads it back into the right mode. Older `.json` files open as Classic.
 - Older browser-stored files that held both kinds of content are split into two files the first time the app loads.
 

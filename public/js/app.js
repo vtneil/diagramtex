@@ -222,7 +222,38 @@
     if (!ok && !was) showHint(full ? 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.'
       : 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.', 6000);
   }
-  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files') }); }
+  // The properties window folds up to its first heading and back down, its height eased between the two.
+  // Each time the panel is drawn, its first heading moves into the window's head, above the scrolling part,
+  // where a click anywhere on it folds or unfolds the window.
+  {
+    const props = $('#props'), head = $('#propsHead');
+    const lift = () => {
+      const f = props.firstElementChild;
+      if (!f || f.tagName !== 'H3') return;
+      const old = head.querySelector('h3');
+      if (old) old.replaceWith(f); else head.prepend(f);
+    };
+    new MutationObserver(lift).observe(props, { childList: true });
+    lift();
+  }
+  function setPropsOpen(open, animate) {
+    const win = $('#propsWin'), btn = $('#propsToggle'), from = win.offsetHeight;
+    win.classList.toggle('collapsed', !open);
+    btn.setAttribute('aria-expanded', String(open));
+    btn.title = open ? 'Collapse panel' : 'Expand panel';
+    if (!open) $('#props').scrollTop = 0;
+    win.style.transition = win.style.height = '';
+    if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const to = win.offsetHeight;
+    if (to === from) return;
+    win.style.height = from + 'px';
+    void win.offsetHeight;
+    win.style.transition = 'height .24s cubic-bezier(.3, .7, .2, 1)';
+    win.style.height = to + 'px';
+    const end = (e) => { if (e && e.target !== win) return; win.removeEventListener('transitionend', end); win.style.transition = win.style.height = ''; };
+    win.addEventListener('transitionend', end);
+  }
+  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed') }); }
 
   function openDoc(id) {
     finishEdit(); finishPoly(); commit();
@@ -2796,7 +2827,9 @@
   function updateTopbar() {
     const diagrams = state.doc.blocks.map((b, i) => [b, i]).filter(([b]) => b.type === 'diagram');
     const bs = $('#blockSel');
-    bs.hidden = state.mode !== 'diagram' || diagrams.length < 2;
+    // in a classic file the picker keeps its room in Document view too, so the view switch doesn't move
+    bs.hidden = (state.mode !== 'diagram' && state.mode !== 'document') || diagrams.length < 2;
+    bs.style.visibility = state.mode === 'document' ? 'hidden' : '';
     const what = state.mode === 'board' ? 'this whiteboard' : 'this diagram';
     $('#btnExport').title = state.mode === 'page' ? 'Export the page as PNG (choose DPI), SVG or PDF' : `Export ${what} as PNG (choose DPI), SVG or PDF`;
     $('#btnTikz').title = state.mode === 'page' ? 'LaTeX for this page (Ctrl+E)' : `TikZ code for ${what} (Ctrl+E)`;
@@ -3296,8 +3329,59 @@
       if (prefs.gridCm >= 0.05 && prefs.gridCm <= 5) state.gridCm = prefs.gridCm;
       Object.assign(state.defaults, prefs.defaults || {});
       if (prefs.sidebar === false) document.body.classList.add('no-files');
+      if (prefs.props === false) setPropsOpen(false);
     }
-    $('#btnSidebar').onclick = () => { document.body.classList.toggle('no-files'); savePrefs(); if (state.mode !== 'document') render(); else TD.docview.render(); };
+    // The document list folds open and shut (CSS). The drawing stays where it is on screen, at the same
+    // scale: as the canvas's left edge moves, the view moves the other way by as much, so the list just
+    // covers or uncovers the drawing's left side. It draws once at the new size when the fold ends.
+    let filesAnim = 0, canvasLeft = 0;
+    const holdView = () => {
+      if (state.mode === 'document') return;
+      const l = stageSize().left;
+      state.view.x -= (canvasLeft - l) / state.view.zoom;
+      canvasLeft = l;
+      applyView();
+      renderPageLayer(); // the dimming outside the paper covers the view, which grows each frame
+    };
+    // A top bar too narrow for its controls scrolls sideways; a plain mouse wheel scrolls it too, and the
+    // side with more to see fades (more-l / more-r).
+    {
+      const bar = $('#topbar');
+      const edges = () => {
+        const max = bar.scrollWidth - bar.clientWidth;
+        bar.classList.toggle('more-l', bar.scrollLeft > 1);
+        bar.classList.toggle('more-r', max - bar.scrollLeft > 1);
+      };
+      bar.addEventListener('scroll', edges, { passive: true });
+      const ro = new ResizeObserver(edges);
+      ro.observe(bar);
+      for (const c of bar.children) ro.observe(c); // the name field and hidden groups change the content's width
+      bar.addEventListener('wheel', (e) => {
+        if (bar.scrollWidth <= bar.clientWidth || Math.abs(e.deltaX) >= Math.abs(e.deltaY) || e.ctrlKey) return;
+        bar.scrollLeft += e.deltaY;
+        e.preventDefault();
+      }, { passive: false });
+      edges();
+    }
+    $('#propsHead').onclick = () => { setPropsOpen($('#propsWin').classList.contains('collapsed'), true); savePrefs(); };
+    $('#btnSidebar').onclick = () => {
+      const b = document.body, done = () => { if (state.mode !== 'document') render(); else TD.docview.render(); };
+      cancelAnimationFrame(filesAnim);
+      if (state.mode !== 'document') canvasLeft = stageSize().left;
+      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      b.classList.toggle('files-anim', !still);
+      b.classList.toggle('no-files');
+      savePrefs();
+      if (still) { holdView(); done(); return; }
+      const end = performance.now() + 280;
+      const step = () => {
+        holdView();
+        if (performance.now() < end) { filesAnim = requestAnimationFrame(step); return; }
+        b.classList.remove('files-anim');
+        done();
+      };
+      filesAnim = requestAnimationFrame(step);
+    };
     applyGrid();
     migrateKinds();
     const idx = index();

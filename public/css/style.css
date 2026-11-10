@@ -153,7 +153,16 @@ kbd { font: 11px var(--font-mono); background: var(--well); border: 1px solid va
 #topbar {
   height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px;
   background: var(--sheet); border-bottom: 1px solid var(--rule);
+  /* too narrow for everything: it scrolls sideways (trackpad, Shift+wheel or plain wheel) with no bar
+     showing; the side with more to see fades out */
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain;
 }
+#topbar::-webkit-scrollbar { display: none; }
+#topbar > * { flex-shrink: 0; }
+#topbar > .spacer { flex-shrink: 1; min-width: 0; }
+#topbar.more-l { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px); mask-image: linear-gradient(to right, transparent, #000 32px); }
+#topbar.more-r { -webkit-mask-image: linear-gradient(to left, transparent, #000 32px); mask-image: linear-gradient(to left, transparent, #000 32px); }
+#topbar.more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 /* the logo lockup: the mark always, the outlined wordmark when there is room */
 .brand { display: flex; align-items: center; gap: 7px; flex: none; margin: 0 4px; --brand-ink: #23205A; }
 [data-theme=dark] .brand { --brand-ink: #F1EFFF; }
@@ -222,11 +231,16 @@ body.mode-page .seg.sub { display: none; }
 @media (max-width: 1080px) { .doc-name { width: 130px; } }
 @media (max-width: 940px) { .seg button { padding: 0 7px; } .seg button svg { display: none; } #kindSeg button svg { display: block; } }
 
-#main { flex: 1; display: flex; min-height: 0; }
+#main { flex: 1; display: flex; min-height: 0; position: relative; }
 
 /* ---------- document list ---------- */
-#files { width: var(--files-w); flex: none; background: var(--sheet); border-right: 1px solid var(--rule); display: flex; flex-direction: column; }
-body.no-files #files { display: none; }
+#files { width: var(--files-w); flex: none; background: var(--sheet); border-right: 1px solid var(--rule); display: flex; flex-direction: column; overflow: hidden; }
+/* Closed, the list folds to nothing and leaves the tab order. Toggling it from the top bar folds and
+   unfolds the width (the contents keep their width and are clipped, so nothing rewraps on the way). */
+#files > * { min-width: calc(var(--files-w) - 1px); }
+body.no-files #files { width: 0; border-right-width: 0; visibility: hidden; }
+body.files-anim #files { transition: width .24s cubic-bezier(.3, .7, .2, 1), border-right-width .24s step-start, visibility 0s; }
+body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2, 1), border-right-width .24s step-end, visibility 0s .24s; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; height: 40px; padding: 0 8px 0 16px; }
 .panel-head span { font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--pencil); }
 .panel-head button.icon { border-color: transparent; background: transparent; color: var(--graphite); }
@@ -386,9 +400,30 @@ body.no-files #files { display: none; }
 .td-pop-ta, .td-pop-ml { display: block; } /* shown while they exist; the canvas's own boxes start hidden */
 
 /* ---------- properties panel ---------- */
-#props { width: var(--props-w); flex: none; background: var(--sheet); border-left: 1px solid var(--rule); overflow: auto; overflow-x: hidden; order: 3; }
-#props h3 { margin: 0; height: 40px; padding: 0 16px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-#props h3 small { color: var(--pencil); font-weight: 400; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Properties: a window floating over the top right of the canvas, below the ruler and above the status bar.
+   The chevron at its top right folds it up to its first heading (which still names what is selected) and
+   back down; the canvas runs the full width beneath it. */
+#propsWin {
+  position: absolute; z-index: 4; right: 8px; top: calc(var(--ruler) + 8px); width: var(--props-w);
+  max-height: calc(100% - var(--ruler) - var(--status) - 16px); display: flex; flex-direction: column;
+  background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); overflow: hidden;
+}
+body.mode-board #propsWin { top: 8px; max-height: calc(100% - var(--status) - 16px); }
+body.mode-doc #propsWin { top: 8px; max-height: calc(100% - 16px); }
+#propsWin.collapsed { height: 42px; }
+#propsWin.collapsed #props { overflow: hidden; }
+/* the panel's first heading is moved here, above the scrolling part: the scroll bar starts below it, and
+   the whole heading folds and unfolds the window */
+#propsHead { flex: none; position: relative; min-height: 40px; cursor: pointer; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+#propsWin.collapsed #propsHead h3 { border-bottom-color: transparent; }
+#propsToggle { position: absolute; z-index: 1; top: 6px; right: 6px; cursor: pointer; width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--graphite); }
+#propsToggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .24s cubic-bezier(.3, .7, .2, 1); }
+#propsWin.collapsed #propsToggle svg { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { #propsToggle svg { transition: none; } }
+#props { flex: 1 1 auto; min-height: 0; overflow: auto; overflow-x: hidden; }
+#propsWin #propsHead h3 { padding-right: 40px; user-select: none; -webkit-user-select: none; }
+#propsWin h3 { margin: 0; height: 40px; padding: 0 16px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#propsWin h3 small { color: var(--pencil); font-weight: 400; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #props .sec { padding: 12px 16px; border-bottom: 1px solid var(--rule-soft); }
 #props .sec-title { font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--pencil); margin: 0 0 8px; min-height: 20px; display: flex; align-items: center; justify-content: space-between; }
 #props .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; min-height: var(--ctl); }
@@ -430,6 +465,7 @@ body.no-files #files { display: none; }
 #props button.mini { height: 20px; padding: 0 6px; border-radius: var(--r-sm); font-size: 11px; border-color: transparent; background: none; color: var(--pencil); }
 #props button.mini:hover { color: var(--redpen); border-color: var(--rule); }
 #props button.wide { width: 100%; }
+#props button.wide + button.wide { margin-top: 8px; }
 #props .err { color: var(--redpen); font-size: 12px; margin: 0 0 4px; }
 #props code { font: 11px var(--font-mono); background: var(--well); padding: 0 4px; border-radius: var(--r-sm); }
 #props .ser { background: var(--wash); }
@@ -569,8 +605,9 @@ textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); r
 #docview { display: none; flex: 1; overflow: auto; scrollbar-gutter: stable; background: var(--paper); padding: 28px 16px 80px; position: relative; order: 2; }
 body.mode-doc #docview { display: block; }
 body.mode-doc #tools, body.mode-doc #stage { display: none; }
-body.mode-doc #props { display: block; }
-body.mode-doc .diag-only, body.mode-doc #topbar .group:has(#btnUndo) { display: none !important; }
+/* Document view has no undo, grid or snap: they are hidden but keep their room, so the Diagram | Document
+   switch stays put when it is flipped. */
+body.mode-doc .diag-only { visibility: hidden; }
 .doc-page { margin: 0 auto; background: var(--canvas); position: relative; font-family: var(--font-tex); line-height: calc(1.5 * var(--spread, 1)); color: #111;
   box-shadow: 0 0 0 1px rgba(28,27,25,.07), 0 1px 2px rgba(28,27,25,.06), 0 4px 14px rgba(28,27,25,.06); }
 .cm-probe { position: absolute; width: 1cm; height: 0; visibility: hidden; }
@@ -644,14 +681,14 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .pg-brk { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--faint); pointer-events: none; }
 .pg-brk span { position: absolute; right: 8px; top: 3px; font: 10px var(--font-mono); color: var(--pencil); }
 .doc-hud { position: fixed; right: 16px; bottom: 16px; display: flex; align-items: center; height: var(--ctl); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow-knob); font: 11px var(--font-mono); z-index: 3; font-variant-numeric: tabular-nums; }
-body.mode-doc .doc-hud { right: calc(var(--props-w) + 16px); }
+body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 .doc-hud .pg-info { padding: 0 10px; color: var(--graphite); }
 .doc-hud button { border: 0; border-radius: 0; border-left: 1px solid var(--rule); height: 100%; font: inherit; background: transparent; color: var(--graphite); }
 .doc-hud button.on { color: var(--sheet); background: var(--ink); }
 
 @media print {
   body { overflow: visible; display: block; background: #fff; }
-  #topbar, #files, #tools, #stage, #props, .modal, #modal, .cp, .popover, .ctx { display: none !important; }
+  #topbar, #files, #tools, #stage, #propsWin, .modal, #modal, .cp, .popover, .ctx { display: none !important; }
   #main { display: block; }
   #docview { display: block !important; background: #fff; padding: 0; overflow: visible; }
   .doc-page { box-shadow: none; max-width: none; padding: 0; }
