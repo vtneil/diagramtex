@@ -404,6 +404,147 @@
     return [flat(0, a, 0.5), sine(a, 0.5), flat(0.5, 0.5 + a, 0.5), sine(0.5 + a, 1)];
   }, { fire: 60 });
 
+  // ---------- physics: mechanics and optics ----------
+  // Drawn in px inside the box, so hatching, bobs, axles and angle marks keep their size when the object is
+  // resized; rotate, flip and Rotation turn them like any shape. Angle labels are maths (no $), empty to hide.
+  // params: hatched objects get a hatch spacing; every one is drawn in px (params present), so its menu icon too
+  const Ph = (k, n, cat, draw, o = {}) => {
+    S(k, n, cat, { size: o.size || [80, 60], fill: !!o.fill, text: !!o.text, draw, params: { ...(o.hatch ? { hatch: 7 } : {}), ...(o.params || {}) } });
+    if (o.text0) LIB[k].text0 = o.text0; // the text a new one starts with
+    if (o.icon) LIB[k].icon = o.icon; // a compact size to draw the menu icon at, so hatching and lens shapes stay readable
+  };
+  const P = (b, x, y) => [b.u(x), b.v(y)];
+  const line = (b, x0, y0, x1, y1) => b.pl(...P(b, x0, y0), ...P(b, x1, y1));
+  // 45° hatching filling the band [x0,x1]×[y0,y1] (lines x + y = c, `gap` px apart along the edge)
+  function hatchBand(b, x0, y0, x1, y1, gap) {
+    for (let c = x0 + y0 + gap / 2; c < x1 + y1; c += gap) {
+      const xa = Math.max(x0, c - y1), xb = Math.min(x1, c - y0);
+      if (xb - xa > 0.5) line(b, xa, c - xa, xb, c - xb);
+    }
+  }
+  // short slanted ticks behind a curve: pts are [x, y, nx, ny] with (nx, ny) the unit normal towards the back
+  function hatchCurve(b, pts, gap, len) {
+    let run = gap / 2;
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1, nx, ny] = pts[i], d = Math.hypot(x1 - x0, y1 - y0);
+      run -= d;
+      if (run > 0) continue;
+      run += gap;
+      const k = Math.SQRT1_2, tx = -ny, ty = nx; // along the curve, then lean the tick back 45°
+      line(b, x1, y1, x1 + len * k * (nx - tx), y1 + len * k * (ny - ty));
+    }
+  }
+  function dashed(b, x0, y0, x1, y1, on = 4, off = 3) {
+    const L = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / (L || 1), uy = (y1 - y0) / (L || 1);
+    for (let t = 0; t < L; t += on + off) { const e = Math.min(L, t + on); line(b, x0 + ux * t, y0 + uy * t, x0 + ux * e, y0 + uy * e); }
+  }
+  // a circular arc through (x0, y0) and (x0, y1) bulging `s` px towards +x (s < 0: towards −x): [cx, R, φ°]
+  const bow = (h, s) => { const R = (s * s + (h / 2) ** 2) / (2 * Math.abs(s)); return [R, (Math.asin(Math.min(1, h / 2 / R)) * 180) / Math.PI]; };
+  const arcPx = (b, cx, cy, R, a1, a2, cont) => b.arc(b.u(cx), b.v(cy), R / b.w, R / b.h, a1, a2, cont);
+  // an angle mark at (x, y) from a1 to a2 (degrees, y up), with its label outside it
+  function angleMark(b, s, x, y, r, a1, a2) {
+    if (s.mark === false) return;
+    arcPx(b, x, y, r, a1, a2);
+    const t = String(s.lbl ?? '').trim();
+    if (t) { const m = ((a1 + a2) / 2) * (Math.PI / 180), q = r + 9; b.lab(b.u(x + q * Math.cos(m)), b.v(y - q * Math.sin(m)), t); }
+  }
+  const gapOf = (s) => num(s.hatch, 7);
+
+  // mechanics
+  Ph('p-ground', 'Ground', 'mech', (b, s) => { line(b, 0, 0, b.w, 0); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [120, 9], icon: [56, 10] });
+  Ph('p-ceiling', 'Ceiling', 'mech', (b, s) => { line(b, 0, b.h, b.w, b.h); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [120, 9], icon: [56, 10] });
+  Ph('p-wall', 'Wall', 'mech', (b, s) => { line(b, b.w, 0, b.w, b.h); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [9, 100], icon: [10, 40] });
+  Ph('p-block', 'Block', 'mech', (b) => b.box(0, 0, 1, 1), { size: [50, 40], fill: true, text: true, text0: '$m$' });
+  Ph('p-incline', 'Incline', 'mech', (b, s) => {
+    b.pg(0, 1, 1, 1, 1, 0);
+    const r = Math.min(26, b.w * 0.3, b.h * 0.9), a = (Math.atan2(b.h, b.w) * 180) / Math.PI;
+    angleMark(b, s, 0, b.h, r, 0, a);
+    return b;
+  }, { size: [140, 70], icon: [70, 40], params: { mark: true, lbl: '\\theta' } });
+  Ph('p-cart', 'Cart', 'mech', (b) => {
+    const r = Math.max(3, Math.min(b.h * 0.2, b.w * 0.11)), y = b.h - 2 * r - 1;
+    b.box(0, 0, 1, b.v(y));
+    b.circ(b.u(b.w * 0.25), b.v(b.h - r), r); b.circ(b.u(b.w * 0.75), b.v(b.h - r), r);
+    return b;
+  }, { size: [80, 50], icon: [60, 40], fill: true, text: true });
+  Ph('p-pulley', 'Pulley', 'mech', (b, s) => {
+    const R = Math.max(4, Math.min(b.w / 2, (b.h - 12) / 2) - 0.5), cx = b.w / 2, cy = b.h - R - 0.5, top = s.mount === false ? 0 : 8;
+    b.circ(b.u(cx), b.v(cy), R);
+    if (s.mount !== false) { const m = Math.min(b.w / 2, 18); line(b, cx - m, top, cx + m, top); hatchBand(b, cx - m, 0, cx + m, top, gapOf(s)); }
+    line(b, cx, top, cx, cy);
+    b.circ(b.u(cx), b.v(cy), Math.min(2.5, R / 3)).solid();
+    return b;
+  }, { size: [44, 80], icon: [32, 54], fill: true, hatch: true, params: { mount: true } });
+  Ph('p-pendulum', 'Pendulum', 'mech', (b, s) => {
+    const top = s.mount === false ? 0 : 8, px = Math.min(b.w * 0.3, b.w - 20), r = Math.max(3, Math.min(8, b.w * 0.1));
+    const bx = b.w - r - 0.5, by = b.h - r - 0.5, L = Math.hypot(bx - px, by - top);
+    if (s.mount !== false) { const m = Math.min(px, 22); line(b, px - m, top, px + m, top); hatchBand(b, px - m, 0, px + m, top, gapOf(s)); }
+    line(b, px, top, bx - ((bx - px) / L) * r, by - ((by - top) / L) * r);
+    dashed(b, px, top, px, top + L);
+    b.circ(b.u(bx), b.v(by), r).solid();
+    angleMark(b, s, px, top, Math.min(28, L * 0.35), -90, (Math.atan2(-(by - top), bx - px) * 180) / Math.PI);
+    return b;
+  }, { size: [80, 120], icon: [44, 64], hatch: true, params: { mount: true, mark: true, lbl: '\\theta' } });
+
+  // optics (lenses and mirrors stand upright, light coming from the left)
+  Ph('p-convex', 'Convex lens', 'optics', (b) => {
+    const [R, f] = bow(b.h, b.w / 2), cy = b.h / 2;
+    b.M(0.5, 0); arcPx(b, b.w - R, cy, R, f, -f, true); arcPx(b, R, cy, R, 180 + f, 180 - f, true);
+    return b.Z();
+  }, { size: [24, 110], icon: [18, 50], fill: true });
+  Ph('p-concave', 'Concave lens', 'optics', (b) => {
+    const d = b.w * 0.32, [R, f] = bow(b.h, d), cy = b.h / 2;
+    b.M(0, 0).L(1, 0); arcPx(b, b.w - d + R, cy, R, 180 - f, 180 + f, true); b.L(0, 1); arcPx(b, d - R, cy, R, -f, f, true);
+    return b.Z();
+  }, { size: [30, 110], icon: [22, 50], fill: true });
+  Ph('p-thinconv', 'Converging lens (symbol)', 'optics', (b) => { b.pl(0.5, 0, 0.5, 1); b.head(0.5, 0, 0, -1); return b.head(0.5, 1, 0, 1); }, { size: [16, 110], icon: [14, 50] });
+  Ph('p-thindiv', 'Diverging lens (symbol)', 'optics', (b) => {
+    b.pl(0.5, 0, 0.5, 1); const a = Math.min(6, b.w / 2);
+    b.pl(...P(b, b.w / 2 - a, 0), 0.5, b.v(a * 1.1), ...P(b, b.w / 2 + a, 0)); b.pl(...P(b, b.w / 2 - a, b.h), 0.5, b.v(b.h - a * 1.1), ...P(b, b.w / 2 + a, b.h));
+    return b;
+  }, { size: [16, 110], icon: [14, 50] });
+  Ph('p-mirror', 'Plane mirror', 'optics', (b, s) => { line(b, 0, 0, 0, b.h); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [9, 110], icon: [10, 44] });
+  const curved = (concave) => (b, s) => {
+    const hl = 7, sag = Math.max(1, b.w - hl - 1), [R, f] = bow(b.h, sag), cy = b.h / 2;
+    // concave: the ends at the left, the middle `sag` px back; convex: the middle at the left
+    const cx = concave ? sag - R : R, a0 = concave ? f : 180 - f, a1 = concave ? -f : 180 + f;
+    arcPx(b, cx, cy, R, a0, a1);
+    const pts = [];
+    for (let i = 0; i <= 64; i++) {
+      const a = ((a0 + ((a1 - a0) * i) / 64) * Math.PI) / 180, x = cx + R * Math.cos(a), y = cy - R * Math.sin(a);
+      const nx = Math.cos(a), ny = -Math.sin(a); // away from the centre
+      pts.push(concave ? [x, y, nx, ny] : [x, y, -nx, -ny]);
+    }
+    hatchCurve(b, pts, gapOf(s), hl);
+    return b;
+  };
+  Ph('p-concmirror', 'Concave mirror', 'optics', curved(true), { size: [22, 110], icon: [16, 50] });
+  Ph('p-convmirror', 'Convex mirror', 'optics', curved(false), { size: [22, 110], icon: [16, 50] });
+  Ph('p-prism', 'Prism', 'optics', (b) => b.pg(0.5, 0, 1, 1, 0, 1), { size: [80, 70], fill: true });
+  Ph('p-screen', 'Screen', 'optics', (b, s) => { b.box(0, 0, 1, 1); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [10, 110], icon: [10, 44] });
+  Ph('p-slit', 'Slits', 'optics', (b, s) => {
+    const n = Math.max(1, Math.round(+s.slits || 2)), g = Math.min(b.h / (2 * n + 1), 10), mid = b.h / 2, span = (n - 1) * g * 2.2;
+    let y = 0;
+    for (let k = 0; k < n; k++) { const c = mid - span / 2 + k * g * 2.2; line(b, b.w / 2, y, b.w / 2, c - g / 2); y = c + g / 2; }
+    line(b, b.w / 2, y, b.w / 2, b.h);
+    return b;
+  }, { size: [10, 110], icon: [10, 50], params: { slits: 2 } });
+  Ph('p-ray', 'Ray', 'optics', (b) => { b.pl(0, 0.5, 1, 0.5); return b.head(0.55, 0.5, 1, 0); }, { size: [120, 10], icon: [60, 10] });
+  Ph('p-rays', 'Parallel rays', 'optics', (b) => {
+    for (const v of [0.08, 0.5, 0.92]) { b.pl(0, v, 1, v); b.head(0.55, v, 1, 0); }
+    return b;
+  }, { size: [120, 60], icon: [60, 36] });
+  Ph('p-source', 'Point source', 'optics', (b) => {
+    const cx = b.w / 2, cy = b.h / 2, R = Math.min(cx, cy);
+    b.circ(0.5, 0.5, Math.min(3, R / 3)).solid();
+    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; line(b, cx + R * 0.38 * Math.cos(a), cy + R * 0.38 * Math.sin(a), cx + R * Math.cos(a), cy + R * Math.sin(a)); }
+    return b;
+  }, { size: [36, 36] });
+  Ph('p-eye', 'Eye', 'optics', (b) => {
+    b.M(0, 0.5).C(0.3, 0.05, 0.75, 0.05, 1, 0.5).C(0.75, 0.95, 0.3, 0.95, 0, 0.5).Z();
+    return b.circ(0.55, 0.5, b.h * 0.22);
+  }, { size: [44, 26] });
+
   // ---------- geometry with rotation / flips ----------
   // rot: clockwise quarter turns (on screen). fx/fy: mirror in the shape's own frame (applied first).
   function geom(s) {
@@ -456,7 +597,7 @@
   // small icon for menus (fits a 34×24 viewBox)
   TD.symIcon = function (key) {
     const def = LIB[key];
-    const [w0, h0] = def.size, sc = Math.min(28 / w0, 18 / h0);
+    const [w0, h0] = def.icon || def.size, sc = Math.min(28 / w0, 18 / h0);
     const w = w0 * sc, h = h0 * sc;
     // px-parametric symbols are drawn at their natural size, then shrunk to the icon
     const big = !!def.params || def.cat === 'misc';
@@ -478,7 +619,7 @@
       if (def.fill) s.fill = d.fill || null;
       if (def.params) Object.assign(s, def.params);
       s.angle = 0; s.skew = 0;
-      if (def.text) Object.assign(s, { text: '', size: d.size || 'normalsize', font: d.font || 'default', bold: false, italic: false, color: d.color || '#000000' });
+      if (def.text) Object.assign(s, { text: def.text0 || '', size: d.size || 'normalsize', font: d.font || 'default', bold: false, italic: false, color: d.color || '#000000' });
       return s;
     },
     drag(s, a, q, e) { Object.assign(s, TD.box.drag(a, q, e)); },

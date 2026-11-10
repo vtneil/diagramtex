@@ -72,6 +72,7 @@ npx wrangler deploy
   - **Lines:** line, curve, arrow, curved arrow, polyline, smooth closed blob, arc (angle mark), spring
   - **Shapes:** rectangle variants (rounded, snipped), 33 basic shapes and 28 flowchart symbols
   - **Electrical:** Circuit… (the circuit editor, below), the common electrical symbols (resistor, capacitor, inductor, sources, diode, transistor, logic gates, ground…) and a Waveforms group (sine, square, pulse, negative pulse, triangle, sawtooth, trapezoid, rectified and half-wave rectified sine, chopped). Waveforms repeat as you widen them; set the wavelength, start position, duty cycle (square, pulses) or firing angle (chopped) in the panel
+  - **Physics:** Mechanics (ground, ceiling, wall, block, incline, cart, pulley, pendulum) and Optics (convex and concave lenses, converging and diverging lens symbols, plane, concave and convex mirrors, prism, screen, slits, ray, parallel rays, point source, eye). Hatching, axles, bobs and angle marks keep their size when resized; the panel sets **Hatch spacing**, **Mount** (pulley, pendulum), **Angle mark** and **Angle label** (incline, pendulum; maths without `$`), and the number of **Slits**. A block starts holding `$m$`
   - **Misc:** axes, wave, brace, ruler, grid and more, ball, dot
   - **Arrows:** 27 block arrows
   - **Plots** (the Insert menu), **Image** (`I`: PNG, JPEG, GIF, WebP or SVG; exported with `\includegraphics`), **Pencil** (`N`: freehand, smoothed and exported as Bézier curves)

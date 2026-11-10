@@ -13,5 +13,5 @@ exported unchanged, with a visual editor that writes the code both ways.
 - [ ] **Chemistry** (`chemfig`): structural formulas and reaction schemes.
 - [ ] **Feynman Diagram** (`tikz-feynman`): vertices, propagators (fermion, photon, gluon, scalar), momentum labels.
 - [x] **Bloch sphere** (`blochsphere`): a configurable Bloch sphere (state vectors, axes, labels, view angle).
-- [ ] **Physics library**: common mechanics and optics objects (blocks, inclines, pulleys, pendulums,
+- [x] **Physics library**: common mechanics and optics objects (blocks, inclines, pulleys, pendulums,
       lenses, mirrors, prisms, rays, screens) in the shape library.

@@ -1028,6 +1028,7 @@
   $('#fly-shapes').innerHTML = sec('Rectangles', symBtns('rect')) + sec('Basic shapes', symBtns('basic')) + sec('Flowchart', symBtns('flow'));
   $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('')) ;
   $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
+  $('#fly-phys').innerHTML = sec('Mechanics', symBtns('mech')) + sec('Optics', symBtns('optics'));
   // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
   $('#fly-elec').innerHTML = `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: about 250 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>Circuit…</button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`
     + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
@@ -1036,7 +1037,7 @@
     if (/^(cd|qc|cz|forest|zx|bloch)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
-    if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : 'shapes'; }
+    if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
     return null;
   }
   const flyEl = (name) => $(name === 'insertPop' ? '#insertPop' : '#fly-' + name);
@@ -1901,6 +1902,11 @@
     { key: 'cell', label: 'Cell size', type: 'number', min: 4, step: 1, unit: 'px' },
     { key: 'shift', label: 'Corner shift', type: 'number', step: 1, unit: 'px' },
     { key: 'frame', label: 'Border', type: 'checkbox' },
+    { key: 'hatch', label: 'Hatch spacing', type: 'number', min: 3, step: 1, unit: 'px' },
+    { key: 'mount', label: 'Mount', type: 'checkbox' },
+    { key: 'mark', label: 'Angle mark', type: 'checkbox' },
+    { key: 'lbl', label: 'Angle label', type: 'text', hint: 'Maths without $, e.g. \\theta or 30^\\circ; leave empty for none' },
+    { key: 'slits', label: 'Slits', type: 'number', min: 1, step: 1 },
     { key: 'angle', label: 'Rotation', type: 'number', step: 1, unit: '°' },
     { key: 'skew', label: 'Skew X', type: 'number', min: -75, step: 1, unit: '°' },
     { key: 'opacity', label: 'Opacity', type: 'range', min: 0.05, max: 1, step: 0.05 },
