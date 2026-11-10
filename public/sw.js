@@ -4,13 +4,12 @@
 // both maths engines and their fonts work offline from the first visit. Cross-origin requests (the CDN
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate.
-const CACHE = 'diagramtex-v12';
+const CACHE = 'diagramtex-v14';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
     'manifest.webmanifest',
     'css/style.css',
-    'fonts/InterDisplay-Regular.woff2',
     'fonts/InterDisplay-Medium.woff2',
     'fonts/InterDisplay-SemiBold.woff2',
     'fonts/InterDisplay-Bold.woff2',
@@ -23,6 +22,7 @@ const PRECACHE = [
     'icons/icon-maskable-512.png',
     'icons/icon-maskable.svg',
     'icons/icon.svg',
+    'js/storage.js',
     'js/app.js',
     'js/boolean.js',
     'js/cd.js',
@@ -47,6 +47,7 @@ const PRECACHE = [
     'js/rotate.js',
     'js/selectmenu.js',
     'js/tooltip.js',
+    'js/segthumb.js',
     'js/shapes.js',
     'js/symbols.js',
     'js/texcommands.js',

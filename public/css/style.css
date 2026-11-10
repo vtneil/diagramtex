@@ -3,8 +3,8 @@
    Design notes: .interface-design/system.md */
 
 /* UI type: Inter Display, served with the app (fonts/, OFL: fonts/Inter-LICENSE.txt) so it looks the same on every platform */
-@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/InterDisplay-Regular.woff2') format('woff2'); }
-@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 500; font-display: swap; src: url('../fonts/InterDisplay-Medium.woff2') format('woff2'); }
+/* The UI's normal weight is Inter Display Medium: text set at 400 and 500 both use it, SemiBold leads */
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 400 500; font-display: swap; src: url('../fonts/InterDisplay-Medium.woff2') format('woff2'); }
 @font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 600; font-display: swap; src: url('../fonts/InterDisplay-SemiBold.woff2') format('woff2'); }
 @font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 700; font-display: swap; src: url('../fonts/InterDisplay-Bold.woff2') format('woff2'); }
 @font-face { font-family: 'Inter Display'; font-style: italic; font-weight: 400; font-display: swap; src: url('../fonts/InterDisplay-Italic.woff2') format('woff2'); }
@@ -162,6 +162,8 @@ kbd { font: 11px var(--font-mono); background: var(--well); border: 1px solid va
 .brand-ink { fill: var(--brand-ink); }
 .doc-name { border: 1px solid transparent; height: var(--ctl); padding: 0 8px; font: inherit; font-weight: 600; width: 200px; min-width: 80px; background: transparent; color: var(--ink); margin-left: 4px; }
 .doc-name:hover { border-color: var(--rule); }
+/* the name field is as wide as the name, so the autosave label sits right after it */
+@supports (field-sizing: content) { .doc-name { field-sizing: content; width: auto; min-width: 80px; max-width: 260px; } }
 .doc-name:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
 .spacer { flex: 1; }
 .group { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
@@ -188,14 +190,37 @@ body:not(.no-files) #btnSidebar { color: var(--ink); background: var(--wash); }
 .seg button.on, #props .seg-ctl button.on, #engineBox .eng-seg button.on, #inputBox .eng-seg button.on, .fp-seg button.on, .cp-tabs button.on {
   background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob);
 }
+/* With js/segthumb.js one knob per switch slides to the chosen segment; the segments then draw none. */
+.has-thumb { position: relative; }
+.has-thumb > button { position: relative; z-index: 1; transition: color .18s ease; }
+.has-thumb > button.on, .has-thumb > button.on:hover { background: transparent !important; box-shadow: none !important; }
+.seg-thumb {
+  position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; pointer-events: none;
+  border-radius: calc(var(--r) - 3px); background: var(--sheet-raised); box-shadow: var(--shadow-knob);
+  transition: transform .22s cubic-bezier(.3, .7, .2, 1), width .22s cubic-bezier(.3, .7, .2, 1), height .22s cubic-bezier(.3, .7, .2, 1), opacity .12s ease;
+}
+@media (prefers-reduced-motion: reduce) { .seg-thumb, .has-thumb > button, #kindSeg button, #kindSeg .lbl { transition: none; } }
 .seg.sub { margin-left: 4px; }
 #kindSeg { margin-left: 8px; flex: none; }
+/* file type: only the selected one is named; the others are icons (named for screen readers and in their tip) */
+/* A name opens out (width and fade) when its segment is chosen, hovered or focused from the keyboard; a
+   closed one keeps its text, so screen readers still read it. */
+#kindSeg button { transition: color .18s ease, padding .22s ease; }
+#kindSeg .lbl { display: inline-block; overflow: hidden; white-space: nowrap; max-width: 7em; transition: max-width .22s ease, opacity .22s ease, margin .22s ease; }
+#kindSeg button:not(.on) { padding: 0 8px; }
+#kindSeg button:not(.on) .lbl { max-width: 0; opacity: 0; margin-left: -6px; }
+#kindSeg button:not(.on):focus-visible { padding: 0 10px; }
+#kindSeg button:not(.on):focus-visible .lbl { max-width: 7em; opacity: 1; margin-left: 0; }
+@media (hover: hover) {
+  #kindSeg button:not(.on):hover { padding: 0 10px; }
+  #kindSeg button:not(.on):hover .lbl { max-width: 7em; opacity: 1; margin-left: 0; }
+}
 body.mode-page .seg.sub { display: none; }
 .seg button svg { width: 16px; height: 16px; }
 #blockSel { font: inherit; height: var(--ctl); }
 #blockSel[hidden] { display: none; }
 @media (max-width: 1080px) { .doc-name { width: 130px; } }
-@media (max-width: 940px) { .seg button { padding: 0 7px; } .seg button svg { display: none; } }
+@media (max-width: 940px) { .seg button { padding: 0 7px; } .seg button svg { display: none; } #kindSeg button svg { display: block; } }
 
 #main { flex: 1; display: flex; min-height: 0; }
 
@@ -219,9 +244,17 @@ body.no-files #files { display: none; }
   background: var(--sheet-raised); box-shadow: inset 0 0 0 1px var(--bluepen); outline: none; }
 #docList li.renaming .del { visibility: hidden; }
 .files-foot { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
-.files-foot #saveState { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.files-foot .app-src { align-self: center; display: inline-flex; padding: 3px; margin: -3px -3px -3px 0; }
-.files-foot #saveState.err { color: var(--redpen); }
+.files-foot .app-src { align-self: center; display: inline-flex; padding: 3px; margin: -3px 0 -3px -3px; }
+.files-foot .app-ver { margin-left: auto; }
+/* autosave, beside the file name: quiet until a save fails */
+#saveState { flex: 0 0 auto; min-width: 0; margin-left: 2px; color: var(--pencil); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#saveState.err { color: var(--redpen); font-weight: 600; }
+/* below this the top bar has no room to spare: hidden while saving works, a short "Not saved" when it fails */
+@media (max-width: 1699px) {
+  #saveState:not(.err) { display: none; }
+  #saveState.err { font-size: 0; }
+  #saveState.err::after { content: "Not saved"; font-size: 11px; }
+}
 .files-foot .app-ver { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .files-foot a { color: inherit; text-decoration: none; white-space: nowrap; border-radius: var(--r-sm); }
 .files-foot a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
@@ -296,6 +329,7 @@ body.no-files #files { display: none; }
 #content .hitfill { fill: transparent; stroke: none; pointer-events: all; }
 #content path:not(.hit):not(.hitfill), #content circle:not(.hitfill), #content ellipse, #content rect:not(.hitfill), #content foreignObject { pointer-events: none; }
 #content [data-id] { cursor: move; }
+#content > g.mv { transform: translate(var(--mx, 0), var(--my, 0)); } /* a large selection while it is dragged (app.js fastMove) */
 .tx { font-family: var(--font-tex); line-height: 1.2; white-space: pre; text-align: center; display: inline-block; pointer-events: none; }
 .tx .katex { font-size: 1em; }
 #measure { position: absolute; left: -10000px; top: 0; visibility: hidden; }
@@ -812,7 +846,7 @@ body.mode-board #emptyHint .eh-board { display: block; }
 
 /* ---------- toolbar overflow: drop the least important items first as the window narrows ---------- */
 @media (max-width: 1360px) { .brand .brand-word { display: none; } }
-@media (max-width: 1240px) { .seg button svg { display: none; } .doc-name { width: 160px; } }
+@media (max-width: 1240px) { .seg button svg { display: none; } #kindSeg button svg { display: block; } .doc-name { width: 160px; } }
 @media (max-width: 1140px) { #topbar .group > button:not(.icon) { padding: 0 10px; } #topbar .group > button:not(.icon) svg { display: none; } }
 #props .row > label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #props .cval { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -823,7 +857,7 @@ body.mode-board #emptyHint .eh-board { display: block; }
 #topbar .theme-seg button svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 1100px) { /* only the current choice shows; clicking it moves to the next */
   #topbar .theme-seg { padding: 0; background: transparent; margin-left: 4px; }
-  #topbar .theme-seg button:not(.on) { display: none; }
+  #topbar .theme-seg button:not(.on), #topbar .theme-seg .seg-thumb { display: none; }
   #topbar .theme-seg button.on { box-shadow: none; background: transparent; color: var(--graphite); }
   #topbar .theme-seg button.on:hover { background: var(--wash); color: var(--ink); }
 }

@@ -75,7 +75,7 @@
   <script src="vendor/katex/katex.min.js"></script>
   <link rel="stylesheet" href="vendor/temml/Temml-Latin-Modern.css">
   <script src="vendor/temml/temml.min.js"></script>
-  <link rel="preload" href="fonts/InterDisplay-Regular.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/InterDisplay-Medium.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/InterDisplay-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -98,11 +98,12 @@
       <button data-cmd="import" class="icon" title="Import LaTeX / TikZ code"><svg viewBox="0 0 20 20"><path d="M7.5 6V2.5h9v15h-9V14"/><path d="M2 10h8.5M7.5 7l3 3-3 3"/><path d="M12 7.5h2M12 12.5h2"/></svg></button>
     </div>
     <div class="seg" id="kindSeg" role="group" aria-label="File type">
-      <button data-mode="page" class="toggle" title="Page file — free-form page: place text, maths, shapes and plots anywhere on the paper"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6h3M7.5 8.5h5"/><path d="M8 15l2-3.5 2 2 1-1.5" /></svg>Page</button>
-      <button data-kind="classic" class="toggle" title="Classic file — diagrams, and a document that arranges them with text"><svg viewBox="0 0 20 20"><path d="M3 16L9 5l4 7 4-4"/><path d="M3 3.5h14"/></svg>Classic</button>
-      <button data-mode="board" class="toggle" title="Whiteboard — an endless canvas: draw anywhere, scroll to pan, pinch or Ctrl+scroll to zoom"><svg viewBox="0 0 20 20"><path d="M2.5 4.5h15v10h-15z"/><path d="M5.5 11c1.6-3.4 3.2-3.4 4.5 0s2.9 3.4 4.5 0"/><path d="M7 17.5l3-3 3 3"/></svg>Whiteboard</button>
+      <button data-kind="classic" class="toggle" title="Classic file — diagrams, and a document that arranges them with text"><svg viewBox="0 0 20 20"><path d="M3 4h14M3 7.5h9"/><circle cx="5.5" cy="14" r="2.5"/><path d="M8 14h3.5"/><rect x="11.5" y="11" width="6" height="6" rx="1"/></svg><span class="lbl">Classic</span></button>
+      <button data-mode="page" class="toggle" title="Page file — free-form page: place text, maths, shapes and plots anywhere on the paper"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6h3M7.5 8.5h5"/><path d="M8 15l2-3.5 2 2 1-1.5" /></svg><span class="lbl">Page</span></button>
+      <button data-mode="board" class="toggle" title="Whiteboard — an endless canvas: draw anywhere, scroll to pan, pinch or Ctrl+scroll to zoom"><svg viewBox="0 0 20 20"><path d="M2.5 4.5h15v10h-15z"/><path d="M5.5 11c1.6-3.4 3.2-3.4 4.5 0s2.9 3.4 4.5 0"/><path d="M7 17.5l3-3 3 3"/></svg><span class="lbl">Whiteboard</span></button>
     </div>
     <input id="docName" class="doc-name" spellcheck="false" title="Document name" aria-label="Document name">
+    <span id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</span>
     <div class="spacer"></div>
     <div class="seg sub" id="classicSeg" role="group" aria-label="View">
       <button data-mode="diagram" class="toggle on" title="Classic file — edit a diagram on the canvas"><svg viewBox="0 0 20 20"><path d="M3 16L9 5l4 7 4-4"/><circle cx="9" cy="5" r="1.4" class="f"/></svg>Diagram</button>
@@ -142,7 +143,7 @@
       <ul id="docList"></ul>
       <section id="inputBox" aria-label="Text input"></section>
       <section id="engineBox" aria-label="LaTeX engine"></section>
-      <div class="files-foot"><span id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</span><a class="app-src" href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener" title="DiagramTeX on GitLab" aria-label="DiagramTeX on GitLab"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg></a><a class="app-ver" id="appVer" target="_blank" rel="noopener"></a></div>
+      <div class="files-foot"><a class="app-src" href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener" title="DiagramTeX on GitLab" aria-label="DiagramTeX on GitLab"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg></a><a class="app-ver" id="appVer" target="_blank" rel="noopener"></a></div>
     </aside>
 
     <nav id="tools" role="toolbar" aria-orientation="vertical" aria-label="Drawing tools">
@@ -321,16 +322,18 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/rotate.js"></script>
   <script src="js/tikzimport.js"></script>
   <script src="js/tooltip.js"></script>
+  <script src="js/segthumb.js"></script>
   <script src="js/selectmenu.js"></script>
   <script src="js/dialog.js"></script>
   <script src="js/mathinput.js"></script>
+  <script src="js/storage.js"></script>
   <script src="js/app.js"></script>
   <script src="js/docview.js"></script>
   <script src="js/texcommands.js"></script>
   <script src="js/texhighlight.js"></script>
   <script src="js/texcomplete.js"></script>
   <script>
-    // Lift the loading screen once the page has loaded and its fonts are in (at most 1.5s more for fonts,
+    // Lift the loading screen once the page has loaded, the files are open and the fonts are in (at most 1.5s more for fonts,
     // and never later than 8s, so a slow resource can't hold the app up).
     (function () {
       var s = document.getElementById('splash'), done = false;
@@ -343,7 +346,8 @@ A full document is split into text and diagram blocks."></textarea>
       }
       addEventListener('load', function () {
         var fonts = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
-        Promise.race([fonts, new Promise(function (r) { setTimeout(r, 1500); })]).then(function () {
+        // the files are open (read from IndexedDB) and the fonts are in, or 1.5s more for fonts
+        Promise.all([TD.ready, Promise.race([fonts, new Promise(function (r) { setTimeout(r, 1500); })])]).then(function () {
           requestAnimationFrame(function () { requestAnimationFrame(hide); });
         });
       });

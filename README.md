@@ -128,7 +128,7 @@ npx wrangler deploy
 - Maths inside gate arguments and `$…$` in labels is highlighted green, and typing `\` suggests quantikz commands as well as LaTeX ones.
 
 ### Three kinds of file
-- The top bar's main switch is **Page | Classic | Whiteboard**.
+- The top bar's main switch is **Classic | Page | Whiteboard**.
 - **Page** files: one free-form sheet, described below.
 - **Whiteboard** files: one endless canvas with no page and no edges. Draw anywhere; scroll (two fingers on a trackpad) to move around, pinch or Ctrl/⌘+scroll to zoom from 3% to 800%, and use the **Hand** tool (`H`) or Space-drag to grab the board. A dot grid replaces the lines and rulers and stays evenly spaced at any zoom. **Fit** brings everything into view. Export, TikZ code and import work as for a Classic diagram, sized to what you drew; files save as `.board.json`.
 - **Classic** files: diagrams, plus a document view that arranges them with text, as in Mathcha. While Classic is selected, a second switch, **Diagram | Document**, appears beside it.
@@ -153,7 +153,7 @@ npx wrangler deploy
   - Double-click a diagram block, or press **Edit**, to open it on the canvas. In diagram view, a selector picks between diagrams.
 - **Page setup** (right panel in document view): paper (A4, A5, B5, US Letter, US Legal, custom), orientation, margins, font size (10/11/12 pt) and whether to show a title. The page preview is true to scale and marks approximate page breaks; you can fit it to the width or view at 100%.
   - Diagrams wider than the text width are scaled down, both in the preview and in the export (`\resizebox{\linewidth}{!}{…}`).
-- Documents are autosaved in localStorage. The top bar has one-click buttons:
+- Documents are autosaved in the browser (IndexedDB). The top bar has one-click buttons:
   - new, open (Ctrl+O, `.json` / `.tex`), save file (Ctrl+Shift+S), import LaTeX/TikZ
   - print / PDF (Ctrl+P), **Export** (PNG / SVG / PDF), **TikZ** (Ctrl+E), **LaTeX** (Ctrl+Shift+E), HTML
 - The ◧ button at the far left hides the document list.
@@ -178,7 +178,7 @@ npx wrangler deploy
 
 DiagramTeX is privacy-focused by design:
 
-- **Your work never leaves your device.** Documents, settings and the clipboard live in your browser's local storage. There is no server-side storage, so there is nothing to upload, sync or leak.
+- **Your work never leaves your device.** Documents, settings and the clipboard live in your browser's storage. There is no server-side storage, so there is nothing to upload, sync or leak.
 - **No account.** No sign-up, login, email or payment, ever.
 - **No tracking.** No analytics, telemetry, cookies, ads or third-party scripts. The app, its maths engines (KaTeX, Temml, MathLive) and fonts are served from the same site, and after the first visit the app runs fully offline.
 - **Files stay yours.** Save, Open, Import and Export work on files on your own computer. One thing to know: a standalone SVG or HTML export links the maths fonts from the jsDelivr CDN so it displays correctly anywhere; the TikZ and LaTeX code you copy contains no links at all.
@@ -200,10 +200,10 @@ Yes. It is a progressive web app: after the first visit it works without a conne
 Tablets, yes, including a phone opened flat or turned sideways. A phone held upright shows a notice asking you to continue on a bigger screen: the editor needs the room.
 
 **How large can a drawing get?**
-Tens of thousands of objects. Only what is near the view is drawn, so panning, zooming and editing stay smooth at 20,000 objects; showing all of them at once when zoomed right out is slower. Very large files can outgrow browser storage, and autosave says so when it happens: use **Save** to keep them as files.
+Tens of thousands of objects. Only what is near the view is drawn, so panning, zooming and editing stay smooth at 20,000 objects; showing all of them at once when zoomed right out is slower. Dragging a large selection slides it as one piece and moves the objects once when you let go, and undo keeps only what each step changed. Files are kept in IndexedDB, which holds far more than the few megabytes of local storage; if the browser still runs out of room, autosave says so: use **Save** to keep the file.
 
 **Where are my diagrams stored?**
-In your browser's local storage. Nothing is sent to a server. Use **Save** to keep a `.json` copy as a file.
+In your browser: files in IndexedDB, settings in local storage. Files saved by older versions move to IndexedDB the first time the app opens. Nothing is sent to a server. Use **Save** to keep a `.json` copy as a file.
 
 **Can I use the output in Overleaf?**
 Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf project. The comment at the top lists the packages and TikZ libraries to load.
@@ -237,6 +237,7 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/plots.js`: expression parser, 2D/3D plot and pie rendering, pgfplots export
 - `public/js/cd.js`: XyMatrix / commutative diagrams, tikz-cd export
 - `public/js/tikzimport.js`: LaTeX/TikZ importer
+- `public/js/storage.js`: files and the file list in IndexedDB (read into memory at start, written in the background, shared between tabs)
 - `public/js/app.js`: editor state, interaction, history, properties panel, storage, menu, export
 - `public/js/docview.js`: document view and whole-document LaTeX export
 - `public/css/style.css`, `public/index.html`: UI

@@ -10,9 +10,26 @@
 
   let tip = null, cur = null, timer = 0, hidAt = 0, suppressed = null;
 
+  // ---------- shortcuts as the platform writes them ----------
+  // Titles say "Ctrl+Shift+Z"; on a Mac that is ⇧⌘Z (glyphs in the order ⌃⌥⇧⌘, Apple's keyboard
+  // guidelines), and "Ctrl+scroll" is ⌘-scroll. Shift on its own ("Shift+drag") stays in words.
+  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
+  const GLYPH = { Del: '⌫', Delete: '⌫', Backspace: '⌫', Enter: '↩', Return: '↩', Esc: '⎋', Tab: '⇥' };
+  const WORD = /^(scroll|wheel|drag|click)$/i;
+  function macKeys(text) {
+    if (!isMac || !text) return text;
+    return text.replace(/\b((?:(?:Ctrl|Cmd|Shift|Alt)\+)+)([^\s(),:;+]+)/g, (all, mods, key) => {
+      const m = mods.split('+');
+      if (!m.some((x) => x === 'Ctrl' || x === 'Cmd' || x === 'Alt')) return all;
+      const g = (m.includes('Alt') ? '⌥' : '') + (m.includes('Shift') ? '⇧' : '') + (m.includes('Ctrl') || m.includes('Cmd') ? '⌘' : '');
+      return WORD.test(key) ? `${g}-${key.toLowerCase() === 'wheel' ? 'scroll' : key}` : g + (GLYPH[key] || key);
+    });
+  }
+  TD.macKeys = macKeys;
+
   // ---------- title → data-tip ----------
   function adopt(el) {
-    const t = el.getAttribute('title');
+    const t = macKeys(el.getAttribute('title'));
     el.removeAttribute('title');
     if (!t) return;
     el.dataset.tip = t;

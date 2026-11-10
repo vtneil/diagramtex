@@ -76,47 +76,120 @@
   const selected = () => state.doc.shapes.filter((s) => state.sel.has(s.id));
 
   // ---------------- history ----------------
-  let pending = null;
-  // Page files also record the page count, so page insert/delete/reorder undo cleanly.
-  const snapshot = () => JSON.stringify(state.doc.kind === 'page' ? { pages: state.doc.sheet.pages, shapes: state.doc.shapes } : state.doc.shapes);
-  function begin() { if (pending === null) pending = snapshot(); }
+  // An undo step holds only what changed: the changed, added and removed shapes as JSON before and after
+  // (with their places in the list), the whole order only when shapes were reordered, and a Page file's
+  // page count. The drawing as of the last step is kept as JSON per shape (`base`), so starting an edit
+  // costs nothing and finishing one compares shape by shape.
+  let pending = false, base = null;
+  const owner = () => (state.doc.kind === 'page' ? state.doc.sheet : state.doc.blocks[state.doc.active]);
+  function capture() {
+    const L = shapes(), json = new Map();
+    for (const s of L) json.set(s.id, JSON.stringify(s));
+    return { owner: owner(), ids: L.map((s) => s.id), json, pages: state.doc.kind === 'page' ? state.doc.sheet.pages : undefined };
+  }
+  function begin() {
+    if (pending) return;
+    pending = true;
+    if (!base || base.owner !== owner()) base = capture();
+  }
+  // the shapes both lists hold, in the same order in each
+  function sameOrder(a, inA, b, inB) {
+    let i = 0, j = 0;
+    for (;;) {
+      while (i < a.length && !inB.has(a[i])) i++;
+      while (j < b.length && !inA.has(b[j])) j++;
+      if (i >= a.length || j >= b.length) return i >= a.length && j >= b.length;
+      if (a[i++] !== b[j++]) return false;
+    }
+  }
   function commit() {
-    if (pending === null) return;
+    if (!pending) return;
+    pending = false;
     syncLinks();
-    const now = snapshot();
-    if (now !== pending) {
-      state.undo.push(pending);
+    const now = capture(), before = [], after = [];
+    const posB = new Map(base.ids.map((id, i) => [id, i]));
+    now.ids.forEach((id, i) => {
+      const j = now.json.get(id), o = base.json.get(id);
+      if (o !== j) { after.push([id, j, i]); if (o !== undefined) before.push([id, o, posB.get(id)]); }
+    });
+    for (const [id, o] of base.json) if (!now.json.has(id)) before.push([id, o, posB.get(id)]);
+    const moved = !sameOrder(base.ids, base.json, now.ids, now.json);
+    if (before.length || after.length || moved || now.pages !== base.pages) {
+      const step = { before, after, size: 64 };
+      if (moved) { step.ib = base.ids; step.ia = now.ids; step.size += 12 * (base.ids.length + now.ids.length); }
+      if (now.pages !== base.pages) { step.pb = base.pages; step.pa = now.pages; }
+      for (const e of before) step.size += e[1].length;
+      for (const e of after) step.size += e[1].length;
+      state.undo.push(step);
       trimUndo();
       state.redo = [];
       scheduleSave();
     }
-    pending = null;
+    base = now;
     updateTopbar();
   }
-  // Each step is a whole copy of the drawing: keep 300 steps, or fewer when they would take more than
-  // ~80 MB (a 20,000-shape drawing is several MB a copy), but always the last 10.
+  // keep 300 steps, or fewer when they would hold more than ~40 MB of text, but always the last 5
   const UNDO_CHARS = 40e6;
   function trimUndo() {
     if (state.undo.length > 300) state.undo.shift();
     let total = 0;
-    for (const u of state.undo) total += u.length;
-    while (total > UNDO_CHARS && state.undo.length > 10) total -= state.undo.shift().length;
+    for (const u of state.undo) total += u.size;
+    while (total > UNDO_CHARS && state.undo.length > 5) total -= state.undo.shift().size;
   }
-  function restore(json) {
-    const v = JSON.parse(json);
-    if (Array.isArray(v)) state.doc.shapes = v; else { state.doc.sheet.pages = v.pages; state.doc.shapes = v.shapes; }
+  // put the drawing back to one side of a step (back: as it was before)
+  function applyStep(step, back) {
+    const to = back ? step.before : step.after, from = back ? step.after : step.before, order = back ? step.ib : step.ia;
+    const toMap = new Map(to.map((e) => [e[0], e[1]])), fromIds = new Set(from.map((e) => e[0]));
+    let list;
+    if (order) {
+      const cur = new Map(shapes().map((s) => [s.id, s]));
+      list = order.map((id) => (toMap.has(id) ? JSON.parse(toMap.get(id)) : cur.get(id))).filter(Boolean);
+    } else {
+      const kept = [];
+      for (const s of shapes()) {
+        if (toMap.has(s.id)) kept.push(JSON.parse(toMap.get(s.id)));
+        else if (!fromIds.has(s.id)) kept.push(s);
+      }
+      // shapes that come back go in at their old places
+      const ins = to.filter((e) => !fromIds.has(e[0])).sort((a, b) => a[2] - b[2]);
+      list = [];
+      let k = 0;
+      for (const s of kept) {
+        while (k < ins.length && ins[k][2] <= list.length) list.push(JSON.parse(ins[k++][1]));
+        list.push(s);
+      }
+      while (k < ins.length) list.push(JSON.parse(ins[k++][1]));
+    }
+    state.doc.shapes = list;
+    const pages = back ? step.pb : step.pa;
+    if (pages !== undefined) state.doc.sheet.pages = pages;
+    if (base && base.owner === owner()) {
+      for (const id of fromIds) if (!toMap.has(id)) base.json.delete(id);
+      for (const [id, j] of toMap) base.json.set(id, j);
+      base.ids = list.map((s) => s.id);
+      if (pages !== undefined) base.pages = pages;
+    } else base = null;
     for (const id of [...state.sel]) if (!byId(id)) state.sel.delete(id);
     render(); renderProps(); scheduleSave(); updateTopbar();
   }
-  function undo() { finishEdit(); finishPoly(); commit(); if (!state.undo.length) return; state.redo.push(snapshot()); restore(state.undo.pop()); }
-  function redo() { finishEdit(); commit(); if (!state.redo.length) return; state.undo.push(snapshot()); trimUndo(); restore(state.redo.pop()); }
+  function undo() { finishEdit(); finishPoly(); commit(); const st = state.undo.pop(); if (!st) return; applyStep(st, true); state.redo.push(st); }
+  function redo() { finishEdit(); commit(); const st = state.redo.pop(); if (!st) return; applyStep(st, false); state.undo.push(st); trimUndo(); }
 
   // ---------------- storage ----------------
   const LS_INDEX = 'diagramtex.index', LS_DOC = 'diagramtex.doc.', LS_PREFS = 'diagramtex.prefs', LS_CLIP = 'diagramtex.clip';
+  // Files and the file list go to IndexedDB when it is available (storage.js); everything else, and every
+  // key when it is not, to localStorage.
+  const DS = TD.docStore, inDb = (k) => DS && DS.active && DS.owns(k);
   const store = {
-    get(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); store.full = false; return true; } catch (e) { store.full = !!e && (e.name === 'QuotaExceededError' || e.code === 22); return false; } },
-    del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } },
+    get(k, fb) { try { const v = inDb(k) ? DS.get(k) : localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
+    set(k, v) {
+      try {
+        const t = JSON.stringify(v);
+        if (inDb(k)) DS.set(k, t); else { localStorage.setItem(k, t); store.full = false; }
+        return true;
+      } catch (e) { store.full = !!e && (e.name === 'QuotaExceededError' || e.code === 22); return false; }
+    },
+    del(k) { try { if (inDb(k)) DS.del(k); else localStorage.removeItem(k); } catch (e) { /* ignore */ } },
   };
   const index = () => store.get(LS_INDEX, []);
   let saveTimer = null;
@@ -134,16 +207,20 @@
     const it = idx.find((x) => x.id === state.docId);
     if (it) { it.name = d.name; it.kind = d.kind; it.updated = Date.now(); } else idx.push({ id: state.docId, name: d.name, kind: d.kind, updated: Date.now() });
     store.set(LS_INDEX, idx);
-    // Saving is continuous, so there is nothing to report while it works: the sidebar says autosave is on.
-    // A failure is the only news, shown there and once as a hint (the sidebar may be hidden).
+    // a write to IndexedDB reports itself when it lands (see init)
+    if (!ok || !inDb(LS_DOC + state.docId)) reportSave(ok, store.full);
+    renderDocList();
+  }
+  // Saving is continuous, so there is nothing to report while it works: the sidebar says autosave is on.
+  // A failure is the only news, shown there and once as a hint (the sidebar may be hidden).
+  function reportSave(ok, full) {
     const st = $('#saveState'), was = st.classList.contains('err');
     st.classList.toggle('err', !ok);
-    const full = !ok && store.full;
     const msg = ok ? 'Autosave enabled' : full ? 'Autosave failed: browser storage is full' : 'Autosave failed: browser storage unavailable';
     if (st.textContent !== msg) st.textContent = msg; // unchanged text is not re-announced
+    st.title = ok ? 'Every change is saved in this browser as you work' : msg; // the full message where only "Not saved" fits
     if (!ok && !was) showHint(full ? 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.'
       : 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.', 6000);
-    renderDocList();
   }
   function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files') }); }
 
@@ -157,7 +234,7 @@
     state.doc = makeDoc(d.name, d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }], d.active ?? 0, d.page, d.sheet, kind);
     const fit = !(d.view && d.view.zoom > 0);
     if (!fit) state.view = d.view;
-    state.sel.clear(); state.undo = []; state.redo = [];
+    state.sel.clear(); state.undo = []; state.redo = []; base = null;
     $('#docName').value = state.doc.name;
     store.set('diagramtex.last', id);
     store.set('diagramtex.last.' + kind, id);
@@ -169,7 +246,7 @@
     if (!state.doc.blocks[i] || state.doc.blocks[i].type !== 'diagram') return;
     finishEdit(); finishPoly(); commit();
     state.doc.active = i;
-    state.sel.clear(); state.undo = []; state.redo = [];
+    state.sel.clear(); state.undo = []; state.redo = []; base = null;
     render(); renderProps(); updateTopbar(); scheduleSave();
   }
   // Modes: 'page' (Page files), 'board' (Whiteboard files) or 'diagram' / 'document' (the two views of a
@@ -545,7 +622,7 @@
     finishEdit(); finishPoly(); commit();
     begin();
     const G = pageGeom();
-    if (fn(G) === false) { pending = null; return; }
+    if (fn(G) === false) { pending = false; return; }
     state.sel.clear();
     commit(); render(); renderProps(); scheduleSave();
   }
@@ -620,6 +697,7 @@
   // ---------------- rendering ----------------
   function render() {
     syncLinks();
+    if (drag && drag.fast) fastLinks(drag);
     applyView();
     // The drawing does not depend on the view (hit outlines take their width from --hitw), so a shape's
     // markup only changes when the shape does, and only changed shapes are put back into the canvas.
@@ -655,6 +733,7 @@
       if (!m || seen.has(id)) {
         const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         el.setAttribute('data-id', id);
+        if (drag && drag.fast && state.sel.has(id)) el.classList.add('mv');
         m = { html: null, el };
         if (!seen.has(id)) painted.set(id, m);
       }
@@ -710,8 +789,10 @@
       if (sel.length > 1 || ['text', 'ball', 'dot', 'poly', 'spring'].includes(s.type) || s.label)
         out.push(`<rect class="sel-box" x="${b.x - 3 / z}" y="${b.y - 3 / z}" width="${b.w + 6 / z}" height="${b.h + 6 / z}"/>`);
     }
-    for (const g of new Set(sel.map((s) => s.g).filter(Boolean))) {
-      const m = sel.filter((s) => s.g === g), b = unionBox(m);
+    const groups = new Map();
+    for (const s of sel) if (s.g) (groups.get(s.g) || groups.set(s.g, []).get(s.g)).push(s);
+    for (const m of groups.values()) {
+      const b = unionBox(m);
       out.push(`<rect class="grp-box" x="${b.x - 7 / z}" y="${b.y - 7 / z}" width="${b.w + 14 / z}" height="${b.h + 14 / z}"/>`);
     }
     if (sel.length === 1 && !polyDraft) {
@@ -754,6 +835,62 @@
     }
     overlay.innerHTML = out.join('');
     drawRulers(); updateStatus();
+  }
+
+  // ---------------- moving a large selection ----------------
+  // Dragging many shapes does not touch them until the drop: their painted elements slide together by a
+  // CSS translate, the selection outline slides with them, and only the connectors attached from outside
+  // are redrawn as they go. On release every shape moves once, for real.
+  const FAST_DRAG = 200;
+  function startFastMove(d) {
+    d.fast = true;
+    d.off = { dx: 0, dy: 0 };
+    for (const id of state.sel) { const m = painted.get(id); if (m) m.el.classList.add('mv'); }
+    // connectors outside the selection with an end on a moving shape, with where those ends are now
+    d.ext = [];
+    for (const s of shapes()) {
+      if (state.sel.has(s.id) || !CONNECT.has(s.type) || !(s.link1 || s.link2)) continue;
+      const ends = [];
+      for (const [L, X, Y, CX, CY] of Object.values(END)) if (s[L] && state.sel.has(s[L].id)) ends.push([X, Y, CX, CY, s[X], s[Y], s[CX], s[CY]]);
+      if (ends.length) d.ext.push({ s, ends });
+    }
+  }
+  function fastMove(d, dx, dy) {
+    if (dx === d.off.dx && dy === d.off.dy) return;
+    d.off = { dx, dy };
+    content.style.setProperty('--mx', dx + 'px');
+    content.style.setProperty('--my', dy + 'px');
+    overlay.setAttribute('transform', `translate(${dx} ${dy})`);
+    if (!d.ext.length) return;
+    fastLinks(d);
+    const all = shapes(), ctx = { zoom: 1, hit: 14, scene: all }, defs = new Set();
+    TD.measureBatch(() => {
+      for (const { s } of d.ext) {
+        const m = painted.get(s.id);
+        if (!m) continue;
+        const html = shapeSvg(s, ctx, defs);
+        if (m.html !== html) { m.el.innerHTML = html; m.html = html; }
+      }
+    });
+  }
+  // the outside connectors' ends follow the moving shapes (also after a redraw mid-drag, whose syncLinks
+  // put them back on the shapes, which have not moved yet)
+  function fastLinks(d) {
+    const { dx, dy } = d.off;
+    for (const { s, ends } of d.ext) for (const [X, Y, CX, CY, x, y, cx, cy] of ends) {
+      s[X] = x + dx; s[Y] = y + dy;
+      if (s.type === 'curve') { s[CX] = cx + dx; s[CY] = cy + dy; }
+    }
+  }
+  function endFastMove(d) {
+    const { dx, dy } = d.off;
+    if (dx || dy) {
+      for (const s of d.orig.values()) TD.translate(s, dx, dy);
+      detachFrom(selected(), state.sel);
+    }
+    for (const el of content.querySelectorAll('.mv')) el.classList.remove('mv');
+    content.style.removeProperty('--mx'); content.style.removeProperty('--my');
+    overlay.removeAttribute('transform');
   }
 
   // ---------------- tools ----------------
@@ -1120,7 +1257,9 @@
       else if (!state.sel.has(hitId)) state.sel = new Set(grp);
       if (state.sel.has(hitId)) {
         begin();
-        drag = { mode: 'move', a: p, orig: new Map(selected().map((s) => [s.id, clone(s)])), ref: TYPES[byId(hitId).type].anchors(byId(hitId))[0] };
+        const sel = selected(), fast = sel.length > FAST_DRAG;
+        drag = { mode: 'move', a: p, orig: new Map(sel.map((s) => [s.id, fast ? s : clone(s)])), ref: TYPES[byId(hitId).type].anchors(byId(hitId))[0] };
+        if (fast) startFastMove(drag);
       }
       renderOverlay(); renderProps();
       return;
@@ -1177,7 +1316,14 @@
               const k = Math.floor(t.x / thr) + ',' + Math.floor(t.y / thr);
               (cells.get(k) || cells.set(k, []).get(k)).push(t);
             }
-            drag.snapIdx = { thr, cells, mine: [...drag.orig.values()].flatMap((o) => TYPES[o.type].anchors(o)) };
+            // a large selection snaps by the corners, edge middles and centre of its bounding box
+            let mine;
+            if (drag.fast) {
+              const B = unionBox([...drag.orig.values()]);
+              mine = [];
+              for (const x of [B.x, B.x + B.w / 2, B.x + B.w]) for (const y of [B.y, B.y + B.h / 2, B.y + B.h]) mine.push({ x, y });
+            } else mine = [...drag.orig.values()].flatMap((o) => TYPES[o.type].anchors(o));
+            drag.snapIdx = { thr, cells, mine };
           }
           const { cells, mine } = drag.snapIdx;
           for (const a of mine) {
@@ -1194,13 +1340,14 @@
             snapHint = null;
           }
         }
+        drag.moved = true;
+        if (drag.fast) { fastMove(drag, dx, dy); break; }
         for (const [id, o] of drag.orig) {
           const s = byId(id);
           Object.assign(s, clone(o));
           TD.translate(s, dx, dy);
         }
         if (dx || dy) detachFrom(selected(), state.sel);
-        drag.moved = true;
         render();
         break;
       }
@@ -1355,6 +1502,7 @@
     } else if (d.mode === 'marquee') {
       marquee = null;
     } else {
+      if (d.fast) endFastMove(d);
       if (d.mode === 'handle') {
         const s = byId(d.id);
         if (s && d.lk && END[d.key]) s[END[d.key][0]] = d.lk;
@@ -2106,7 +2254,8 @@
     return s && s.g ? shapes().filter((q) => q.g === s.g).map((q) => q.id) : [id];
   }
   function expandGroups() {
-    for (const s of selected()) if (s.g) for (const q of shapes()) if (q.g === s.g) state.sel.add(q.id);
+    const gs = new Set(selected().map((s) => s.g).filter(Boolean));
+    if (gs.size) for (const q of shapes()) if (gs.has(q.g)) state.sel.add(q.id);
   }
   function unionBox(list) {
     return TD.bboxOf(list.flatMap((s) => { const b = TD.bbox(s); return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]; }), 0);
@@ -2119,8 +2268,10 @@
     const g = uid();
     for (const s of selected()) s.g = g;
     // keep members adjacent in z-order (at the topmost member's position)
-    const sel = selected(), all = shapes(), top = Math.max(...sel.map((s) => all.indexOf(s)));
-    const rest = all.filter((s) => !state.sel.has(s.id)), at = rest.filter((s) => all.indexOf(s) < top).length;
+    const sel = selected(), all = shapes();
+    let top = 0;
+    all.forEach((s, i) => { if (state.sel.has(s.id)) top = i; });
+    const rest = all.filter((s) => !state.sel.has(s.id)), at = all.slice(0, top).filter((s) => !state.sel.has(s.id)).length;
     state.doc.shapes = [...rest.slice(0, at), ...sel, ...rest.slice(at)];
     commit(); render(); renderProps(); showHint(`Grouped ${sel.length} objects`, 1000);
   }
@@ -3130,7 +3281,15 @@
   }
 
   // ---------------- init ----------------
-  function init() {
+  async function init() {
+    if (DS) {
+      await DS.ready;
+      DS.on({
+        write: (ok, e) => reportSave(ok, !ok && !!e && e.name === 'QuotaExceededError'),
+        // another tab changed the file list, or a file: keep the list current
+        remote: (k) => { if (k === LS_INDEX) renderDocList(); },
+      });
+    }
     const prefs = store.get(LS_PREFS, null);
     if (prefs) {
       state.grid = prefs.grid ?? true; state.snap = prefs.snap ?? true;
@@ -3154,6 +3313,8 @@
     }
   }
   window.addEventListener('beforeunload', () => { commit(); saveNow(); });
+  // a tab put away (or closed on a phone, where beforeunload may not come) saves what it has
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { commit(); if (state.docId) saveNow(); } });
   // Switching the maths engine re-measures every text box, so redraw whatever view is open.
   TD.math.onChange(() => {
     if (state.mode === 'document') { if (TD.docview) TD.docview.render(); }
@@ -3161,11 +3322,12 @@
     renderProps();
     showHint(`Maths now rendered with ${TD.math.ENGINES[TD.math.engine].name}`, 1400);
   });
-  init();
   TD.state = state; // for debugging
   TD.app = {
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
     newSample: () => { newDoc('Welcome to DiagramTeX', sample()); zoomFit(); },
     get slug() { return slug(); },
   };
+  // the files are read from IndexedDB first; the loading screen stays up until they are open
+  TD.ready = init().catch((e) => { console.error(e); });
 })();
