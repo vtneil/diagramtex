@@ -228,11 +228,19 @@
   };
 
   // ---------------------------------------------------------------- output
+  const ARROW_CUT = (4 - 0.325 * 4) / K; // tip to notch of the Stealth[length=4pt] head
   function arrowHead(a, b, w) {
     const d = { x: b.x - a.x, y: b.y - a.y }, L = Math.hypot(d.x, d.y) || 1, u = { x: d.x / L, y: d.y / L };
-    const len = 3.6 / K + w * 2, hw = len * 0.42;
+    // the export's Stealth[length=4pt]: 4pt long, 3pt wide, back notched in by 0.325 of the length
+    const len = 4 / K, hw = 1.5 / K, inset = 0.325 * len;
+    const base = { x: b.x - u.x * len, y: b.y - u.y * len }, notch = { x: base.x + u.x * inset, y: base.y + u.y * inset };
+    return `M${r2(b.x)},${r2(b.y)}L${r2(base.x - u.y * hw)},${r2(base.y + u.x * hw)}L${r2(notch.x)},${r2(notch.y)}L${r2(base.x + u.y * hw)},${r2(base.y - u.x * hw)}Z`;
+  }
+  function toHead(a, b, w) {
+    const d = { x: b.x - a.x, y: b.y - a.y }, L = Math.hypot(d.x, d.y) || 1, u = { x: d.x / L, y: d.y / L };
+    const len = 2.4 / K + w * 1.5, hw = len * 0.75;
     const base = { x: b.x - u.x * len, y: b.y - u.y * len };
-    return `M${r2(b.x)},${r2(b.y)}L${r2(base.x - u.y * hw)},${r2(base.y + u.x * hw)}L${r2(base.x + u.y * hw)},${r2(base.y - u.x * hw)}Z`;
+    return `M${r2(base.x - u.y * hw)},${r2(base.y + u.x * hw)}Q${r2(b.x - u.x * len * 0.25)},${r2(b.y - u.y * len * 0.25)} ${r2(b.x)},${r2(b.y)}Q${r2(b.x - u.x * len * 0.25)},${r2(b.y - u.y * len * 0.25)} ${r2(base.x + u.y * hw)},${r2(base.y - u.x * hw)}`;
   }
   // where a label goes: its centre, pushed away from a point along `push` (projected direction) by half its size
   function labelCentre(it, q) {
@@ -255,7 +263,7 @@
   V3.svg = function (items, fit, ctx) {
     const { px } = fit;
     const d = (pts, close) => pts.map((p, i) => { const q = px(p); return `${i ? 'L' : 'M'}${r2(q.x)},${r2(q.y)}`; }).join('') + (close ? 'Z' : '');
-    const dash = `stroke-dasharray="${r2(3 / K)} ${r2(2.2 / K)}"`;
+    const dash = `stroke-dasharray="${r2(3 / K)} ${r2(2.2 / K)}"`, dotted = `stroke-dasharray="0.01 ${r2(2 / K)}"`;
     const alphaOf = (it, c) => Math.min(it.opacity ?? 1, V3.alpha(c));
     const emit = (list) => { let out = '';
     for (const it of list) {
@@ -263,19 +271,36 @@
       if (it.k === 'poly') {
         const fa = alphaOf(it, it.fill), fill = V3.hex(it.fill), op = fa < 1 ? ` fill-opacity="${f(fa)}"` : '';
         const st = it.stroke ? ` stroke="${V3.hex(it.stroke)}" stroke-width="${r2(it.w ?? V3.LW)}" stroke-linejoin="round"` : it.seam && !op ? ` stroke="${fill}" stroke-width="0.5" stroke-linejoin="round"` : '';
-        out += `<path d="${d(it.pts, true)}" fill="${fill}"${op}${st}/>`;
+        // grad: TikZ's axis or radial shading across the path's bounding box, { k: 'h' | 'v' | 'r', a, b }
+        let paint = fill, defs = '';
+        if (it.grad) {
+          const id = 'v3g' + ++ballId + (ctx.export ? 'x' : ''), g = it.grad, stops = `<stop offset="0" stop-color="${TD.parseColor(g.a).hex}"/><stop offset="1" stop-color="${TD.parseColor(g.b).hex}"/>`;
+          defs = g.k === 'r' ? `<defs><radialGradient id="${id}">${stops}</radialGradient></defs>` : `<defs><linearGradient id="${id}" x1="0" y1="0" x2="${g.k === 'h' ? 1 : 0}" y2="${g.k === 'v' ? 1 : 0}">${stops}</linearGradient></defs>`;
+          paint = `url(#${id})`;
+        }
+        out += `${defs}<path d="${d(it.pts, true)}" fill="${paint}"${op}${it.grad ? '' : st}/>`;
       } else if (it.k === 'line') {
         const c = V3.hex(it.stroke), la = alphaOf(it, it.stroke);
-        let g = `<path d="${d(it.pts)}" fill="none" stroke="${c}" stroke-width="${r2(it.w)}" stroke-linejoin="round" stroke-linecap="round"${it.dash ? ' ' + dash : ''}/>`;
-        const n = it.pts.length;
-        if (it.arrow && n > 1) g += `<path d="${arrowHead(px(it.pts[n - 2]), px(it.pts[n - 1]), it.w)}" fill="${c}"/>`;
-        if (it.arrow0 && n > 1) g += `<path d="${arrowHead(px(it.pts[1]), px(it.pts[0]), it.w)}" fill="${c}"/>`;
+        const n = it.pts.length, q = it.pts.map(px), stealth = it.tip !== 'to';
+        // like TikZ, the shaft stops inside a stealth head (at its notch) instead of running to the tip
+        const cut = (i, j) => { const L = Math.hypot(q[i].x - q[j].x, q[i].y - q[j].y), t = Math.min(1, ARROW_CUT / (L || 1)); q[i] = { x: q[i].x + (q[j].x - q[i].x) * t, y: q[i].y + (q[j].y - q[i].y) * t }; };
+        if (stealth && n > 1 && it.arrow) cut(n - 1, n - 2);
+        if (stealth && n > 1 && it.arrow0) cut(0, 1);
+        const dq = q.map((p, i) => `${i ? 'L' : 'M'}${r2(p.x)},${r2(p.y)}`).join('');
+        let g = `<path d="${dq}" fill="none" stroke="${c}" stroke-width="${r2(it.w)}" stroke-linejoin="round" stroke-linecap="${stealth && (it.arrow || it.arrow0) ? 'butt' : it.cap || 'round'}"${it.dash ? ' ' + (it.dash === 'dot' ? dotted : dash) : ''}/>`;
+        // tip 'to': TikZ's default open barb (->); otherwise a filled stealth head
+        const head = (a, b) => (it.tip === 'to' ? `<path d="${toHead(a, b, it.w)}" fill="none" stroke="${c}" stroke-width="${r2(it.w)}" stroke-linecap="round" stroke-linejoin="round"/>` : `<path d="${arrowHead(a, b, it.w)}" fill="${c}"/>`);
+        if (it.arrow && n > 1) g += head(px(it.pts[n - 2]), px(it.pts[n - 1]));
+        if (it.arrow0 && n > 1) g += head(px(it.pts[1]), px(it.pts[0]));
         out += la < 1 ? `<g opacity="${f(la)}">${g}</g>` : g;
       } else if (it.k === 'ball') {
         const q = px(it.at), r = it.r * fit.k, id = 'v3b' + ++ballId + (ctx.export ? 'x' : '');
         const c = TD.parseColor(it.color).hex, ba = V3.alpha(it.color);
-        if (it.shaded) out += `<defs><radialGradient id="${id}" cx="0.42" cy="0.38" r="0.7" fx="0.3" fy="0.25"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="${V3.hex(V3.col(c, 80))}"/><stop offset="1" stop-color="${V3.hex(V3.col(c, 70, 'black'))}"/></radialGradient></defs>`;
-        out += `<circle cx="${r2(q.x)}" cy="${r2(q.y)}" r="${r2(r)}" fill="${it.shaded ? `url(#${id})` : 'none'}"${it.shaded && ba < 1 ? ` fill-opacity="${f(ba)}"` : ''}${it.stroke ? ` stroke="${V3.hex(it.stroke)}" stroke-width="${r2(it.w ?? V3.LW)}"` : ''}/>`;
+        // 3D figures export ball color=c!65!white, so they get the plain ball's stops (shapes.js) for that tint;
+        // a ball whose colour is given exactly (3D geometry's ball color=…) keeps that colour
+        const b = it.exact ? c : V3.hex(V3.col(c, 65)), mid = it.exact ? V3.hex(V3.col(c, 80)) : b, dark = it.exact ? V3.hex(V3.col(c, 70, 'black')) : V3.hex(V3.col(b, 35, 'black'));
+        if (it.shaded) out += `<defs><radialGradient id="${id}" cx="0.42" cy="0.38" r="0.7" fx="0.3" fy="0.25"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="${mid}"/><stop offset="1" stop-color="${dark}"/></radialGradient></defs>`;
+        out += `<circle cx="${r2(q.x)}" cy="${r2(q.y)}" r="${r2(r)}"${it.opacity != null && it.opacity < 1 ? ` opacity="${f(it.opacity)}"` : ''} fill="${it.shaded ? `url(#${id})` : 'none'}"${it.shaded && ba < 1 ? ` fill-opacity="${f(ba)}"` : ''}${it.stroke ? ` stroke="${V3.hex(it.stroke)}" stroke-width="${r2(it.w ?? V3.LW)}"` : ''}/>`;
       } else if (it.k === 'dot') {
         const q = px(it.at);
         const da = V3.alpha(it.color);

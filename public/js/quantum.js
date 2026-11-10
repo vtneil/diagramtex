@@ -441,7 +441,9 @@
     tikz(s, X) {
       X.libs.add('quantikz2');
       const b = layout(s).bb;
-      return `\\node at ${X.c(s.x + b.w / 2, s.y + b.h / 2)} {\\pgfinterruptpicture%\n${fullCode(s.src)}%\n\\endpgfinterruptpicture};`;
+      // the block's text size and font, as the canvas lays it out (a font switch the circuit's text inherits)
+      const fo = TD.textOpts({ size: s.size, font: s.font }, X);
+      return `\\node${fo.length ? `[${fo.join(', ')}]` : ''} at ${X.c(s.x + b.w / 2, s.y + b.h / 2)} {\\pgfinterruptpicture%\n${fullCode(s.src)}%\n\\endpgfinterruptpicture};`;
     },
   };
 

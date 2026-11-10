@@ -385,6 +385,7 @@
       if (!body.trim()) return '';
       const o = [`shift={${X.c(s.x, s.y)}}`];
       if (TD.css(s.color || '#000000') !== '#000000') o.push(`color=${X.col(s.color)}`);
+      o.push(...TD.textOpts({ size: s.size, font: s.font }, X)); // the labels' size, as on the canvas
       return `\\begin{scope}[${o.join(', ')}]\n${body.split('\n').map((l) => '  ' + l).join('\n')}\n\\end{scope}`;
     },
   };

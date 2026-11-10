@@ -4,12 +4,13 @@
 // both maths engines and their fonts work offline from the first visit. Cross-origin requests (the CDN
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate.
-const CACHE = 'diagramtex-v25';
+const CACHE = 'diagramtex-v26';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
     'manifest.webmanifest',
     'css/style.css',
+    'css/kmap.css',
     'fonts/InterDisplay-Medium.woff2',
     'fonts/InterDisplay-SemiBold.woff2',
     'fonts/InterDisplay-Bold.woff2',
@@ -33,6 +34,10 @@ const PRECACHE = [
     'js/forest.js',
     'js/zx.js',
     'js/feynman.js',
+    'js/timing.js',
+    'js/automata.js',
+    'js/kmap.js',
+    'js/chemfig.js',
     'js/czcore.js',
     'js/czparts-wires.js',
     'js/czparts-passive.js',
@@ -46,6 +51,10 @@ const PRECACHE = [
     'js/fteditor.js',
     'js/zxeditor.js',
     'js/fyeditor.js',
+    'js/tmeditor.js',
+    'js/fsmeditor.js',
+    'js/kmeditor.js',
+    'js/cfeditor.js',
     'js/cdeditor.js',
     'js/colorpicker.js',
     'js/dialog.js',
@@ -58,6 +67,8 @@ const PRECACHE = [
     'js/solid3d.js',
     'js/figures3d.js',
     'js/sketch3d.js',
+    'js/geo3d.js',
+    'js/g3editor.js',
     'js/rotate.js',
     'js/selectmenu.js',
     'js/tooltip.js',

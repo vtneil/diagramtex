@@ -582,6 +582,17 @@
           shapes.push(q);
           continue;
         }
+        if (!node.coordinate && /\\begin\{tikztimingtable\}/.test(node.text) && TD.TYPES.timing) {
+          // a tikz-timing table in a node: one timing object, centred there
+          const q = TD.TYPES.timing.create(at, {});
+          q.src = (node.text.match(/\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}/) || [node.text.trim()])[0];
+          const ind = Math.min(...q.src.split('\n').slice(1).filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)[0].length));
+          if (ind > 0 && isFinite(ind)) q.src = q.src.split('\n').map((l, i) => (i ? l.slice(Math.min(ind, /^[ \t]*/.exec(l)[0].length)) : l)).join('\n');
+          const b = TD.timing.layout(q).bb;
+          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
+          shapes.push(q);
+          continue;
+        }
         if (!node.coordinate && /\\begin\{forest\}/.test(node.text) && TD.TYPES.forest) {
           // a forest tree in a node: one Tree object, centred there
           const q = TD.TYPES.forest.create(at, {});
@@ -696,8 +707,8 @@
     // global colour definitions (preamble)
     const docM = src.match(/\\begin\{document\}([\s\S]*?)(\\end\{document\}|$)/);
     if (docM) { parseStatements(C, src.slice(0, docM.index).replace(/\\documentclass[^\n]*|\\usepackage[^\n]*|\\usetikzlibrary\{[^}]*\}|\\title\{[^}]*\}|\\author\{[^}]*\}|\\date\{[^}]*\}/g, '')); C.warnings = []; }
-    // a bare quantikz, forest or ZX environment becomes a picture holding one circuit, tree or ZX diagram
-    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\})/g,
+    // a bare quantikz, forest, ZX or tikz-timing environment becomes a picture holding one circuit, tree or ZX diagram
+    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\})/g,
       (m, q) => (q ? `\\begin{tikzpicture}\\node at (0,0) {${q}};\\end{tikzpicture}` : m));
     const blocks = [];
     const re = /\\begin\{tikzpicture\}(\[[^\]]*(?:\[[^\]]*\][^\]]*)*\])?([\s\S]*?)\\end\{tikzpicture\}/g;

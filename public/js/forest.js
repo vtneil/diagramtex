@@ -526,8 +526,8 @@
       const L = layout(s);
       X.pkgs.add('forest');
       for (const l of L.libs) if (l.startsWith('tikz:')) X.libs.add(l.slice(5)); else X.pkgs.add(`forest[${l}]`);
-      const b = L.bb;
-      return `\\node at ${X.c(s.x + b.w / 2, s.y + b.h / 2)} {\\pgfinterruptpicture%\n${fullCode(s.src)}%\n\\endpgfinterruptpicture};`;
+      const b = L.bb, fo = TD.textOpts({ size: s.size, font: s.font }, X); // the tree's text size, as on the canvas
+      return `\\node${fo.length ? `[${fo.join(', ')}]` : ''} at ${X.c(s.x + b.w / 2, s.y + b.h / 2)} {\\pgfinterruptpicture%\n${fullCode(s.src)}%\n\\endpgfinterruptpicture};`;
     },
   };
 

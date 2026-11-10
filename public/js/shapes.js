@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.18.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.19.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -57,7 +57,7 @@
     ['circle', 'Circle', 'Circle'], ['ocircle', 'Open circle', 'Circle[open]'],
     ['square', 'Square', 'Square'], ['osquare', 'Open square', 'Square[open]'],
     ['diamond', 'Diamond', 'Turned Square'], ['odiamond', 'Open diamond', 'Turned Square[open]'],
-    ['plus', 'Plus', 'Rays[n=4]'],
+    ['plus', 'Cross (rays)', 'Rays[n=4]'],
   ];
   TD.TIPS = TIP_DEFS.map(([k, n]) => [k, n]);
   const TIKZ_TIP = Object.fromEntries(TIP_DEFS.filter((d) => d[2]).map(([k, , t]) => [k, t]));
@@ -253,9 +253,10 @@
           : { svg: `<path d="${dd}" fill="${color}"/>`, back: a };
       }
       case 'plus': {
-        const R = (1.5 + 2.25 * lw) / K;
-        const e1 = at(0, 0), e2 = at(2 * R, 0), e3 = at(R, R), e4 = at(R, -R);
-        return { svg: `<path d="M${pt(e1)}L${pt(e2)}M${pt(e3)}L${pt(e4)}" stroke="${color}" stroke-width="${w}"/>`, back: R };
+        // TikZ's Rays[n=4] starts its rays half a step (45°) round, so it is a cross: ×
+        const R = (1.5 + 2.25 * lw) / K, h = R * Math.SQRT1_2;
+        const e1 = at(0, h), e2 = at(2 * h, -h), e3 = at(0, -h), e4 = at(2 * h, h);
+        return { svg: `<path d="M${pt(e1)}L${pt(e2)}M${pt(e3)}L${pt(e4)}" stroke="${color}" stroke-width="${w}"/>`, back: h };
       }
     }
     return { svg: '', back: 0 };
@@ -330,7 +331,7 @@
     if (ext(s, 'cross') === 'gap') o.push(`preaction={draw=white, line width=${X.pt(s.width + 6)}, -}`);
     if (shaft === 'double') o.push(`double, double distance=${X.pt(s.width)}`);
     if (shaft === 'wave') { o.push('decorate', 'decoration={snake, amplitude=2.5pt, segment length=10pt}'); X.libs.add('decorations.pathmorphing'); }
-    if (shaft === 'ticks') { o.push(`postaction={decorate, decoration={ticks, segment length=${s.tick > 0 ? X.pt(s.tick) : '6pt'}, amplitude=${s.ticksz > 0 ? X.pt(s.ticksz / 2) : '3pt'}}}`); X.libs.add('decorations.pathreplacing'); }
+    if (shaft === 'ticks') { o.push(`postaction={draw, -, solid, decorate, decoration={ticks, segment length=${s.tick > 0 ? X.pt(s.tick) : '6pt'}, amplitude=${s.ticksz > 0 ? X.pt(s.ticksz / 2) : '3pt'}}}`); X.libs.add('decorations.pathreplacing'); }
     const marks = [];
     const mt = ext(s, 'midTip');
     if (mt !== 'none') marks.push(`mark=at position 0.5 with {\\arrow{${TIKZ_TIP[mt]}}}`);
@@ -349,7 +350,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'pie', 'cd', 'qc', 'forest', 'zx', 'bloch', 'feynman'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -616,8 +617,11 @@
     if (s.labelSide === 'on') return { x: P.x, y: P.y, b };
     let n = { x: u.y, y: -u.x }; // left of direction (in TikZ y-up sense)
     if (s.labelSide === 'right') n = { x: -n.x, y: -n.y };
-    const off = Math.abs(n.x) * b.w / 2 + Math.abs(n.y) * b.h / 2 + 3;
-    return { x: P.x + n.x * off, y: P.y + n.y * off, b };
+    // TikZ's `auto` anchors the node by a side or a corner (\tikz@auto@anchor): a corner unless the
+    // tangent is within 0.05 of an axis, so the label's box sits diagonally off the point.
+    const ox = Math.abs(u.y) > 0.05 ? Math.sign(n.x) * (b.w / 2 + 3) : 0;
+    const oy = Math.abs(u.x) > 0.05 ? Math.sign(n.y) * (b.h / 2 + 3) : 0;
+    return { x: P.x + ox, y: P.y + oy, b };
   }
   function labelSvg(s, P, u, ctx) {
     if (!s.label) return '';
@@ -1330,9 +1334,42 @@
   };
 
   // Preamble lines needed for what a context X used.
+  // quantikz2 restyles every tikz-cd diagram in the document (its own spacing, cell style, layers and a frame
+  // round each row and column), which squeezes commutative diagrams and breaks ZX diagrams ('edgelayer' is not
+  // part of the layer list). These lines keep tikz-cd's own settings outside quantum circuits; the first block
+  // must come before quantikz2 is loaded.
+  const QK_CD = [
+    '\\usetikzlibrary{cd}',
+    '\\makeatletter % quantikz2 restyles every tikz-cd diagram: keep tikz-cd\'s own look outside quantum circuits',
+    '\\pgfkeysgetvalue{/tikz/commutative diagrams/every cell/.@cmd}\\dtx@cdcell',
+    '\\pgfkeysgetvalue{/tikz/commutative diagrams/arrows/.@cmd}\\dtx@cdarrows',
+    '\\pgfkeysgetvalue{/tikz/commutative diagrams/row sep/normal}\\dtx@cdrow',
+    '\\pgfkeysgetvalue{/tikz/commutative diagrams/column sep/normal}\\dtx@cdcol',
+    '\\newcommand\\dtx@cdplain{%',
+    '  \\pgfkeyslet{/tikz/commutative diagrams/every cell/.@cmd}\\dtx@cdcell',
+    '  \\pgfkeyslet{/tikz/commutative diagrams/arrows/.@cmd}\\dtx@cdarrows',
+    '  \\pgfkeyslet{/tikz/commutative diagrams/row sep/normal}\\dtx@cdrow',
+    '  \\pgfkeyslet{/tikz/commutative diagrams/column sep/normal}\\dtx@cdcol',
+    '  \\tikzset{nodes in empty cells=false}%',
+    '  \\let\\DivideRowsCols\\relax}',
+    '\\AddToHook{env/tikzcd/begin}{\\dtx@cdplain}',
+    '\\makeatother',
+  ];
+  const QK_ZX = [
+    '\\makeatletter % quantikz2 makes every tikz-cd diagram reset the layers to its own; give ZX diagrams theirs too',
+    '\\let\\dtx@setlayers\\pgfsetlayers',
+    '\\newcommand\\dtx@zxlayers[1]{\\dtx@setlayers{background,quantback,belownodelayer,edgelayer,nodelayer,main,abovenodelayer,box,labellayer,foreground}}',
+    '\\AddToHook{env/ZX/begin}{\\let\\pgfsetlayers\\dtx@zxlayers}',
+    '\\makeatother',
+  ];
+  TD.preambleCompat = (X) => {
+    const qk = X.libs.has('quantikz2'), zx = X.pkgs.has('zx-calculus');
+    return { before: qk && (zx || X.pkgs.has('tikz-cd')) ? QK_CD : [], after: qk && zx ? QK_ZX : [] };
+  };
   TD.preamble = function (X) {
     const pre = ['\\usepackage{tikz}'];
-    const libs = [...X.libs];
+    const libs = [...X.libs], compat = TD.preambleCompat(X);
+    pre.push(...compat.before);
     if (libs.length) pre.push(`\\usetikzlibrary{${libs.join(', ')}}`);
     if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
     // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
@@ -1342,6 +1379,7 @@
       const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
       pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);
     }
+    pre.push(...compat.after);
     return pre;
   };
   // Body lines (definecolors + shapes) for a list of shapes.
@@ -1362,9 +1400,16 @@
     const X = makeX();
     const pic = TD.tikzPicture(shapes, X);
     const pre = TD.preamble(X);
-    if (!standalone) return '% Requires: ' + pre.join(' ') + '\n' + pic + '\n';
+    if (!standalone) {
+      // a snippet: the packages on one comment line, and any compatibility lines (each its own line) to copy
+      const c = TD.preambleCompat(X), extra = [...c.before, ...c.after];
+      const head = '% Requires: ' + pre.filter((l) => !extra.includes(l)).join(' ');
+      const note = c.before.length ? ['% and, in the preamble, these lines (the first block before \\usetikzlibrary{quantikz2}):', ...extra.map((l) => '%   ' + l)] : [];
+      return [head, ...note, pic, ''].join('\n');
+    }
     return [
-      '\\documentclass[tikz, border=4pt]{standalone}',
+      // standalone's tikz option breaks zx-calculus (an error at \begin{document}); one picture needs no option
+      pre.some((l) => l.includes('{zx-calculus}')) ? '\\documentclass[border=4pt]{standalone}' : '\\documentclass[tikz, border=4pt]{standalone}',
       ...pre,
       '\\begin{document}',
       pic,

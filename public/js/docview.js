@@ -840,13 +840,10 @@
     for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
     return `data:${type};base64,${btoa(s)}`;
   };
-  // Where each maths stylesheet lives locally and on the CDN (same versions as vendor/), used when a
-  // local font cannot be read (server restarting, page opened from a file, flaky network).
+  // Where each maths stylesheet lives (vendor/). Fonts are only ever embedded from these local copies.
   const MATH_CSS = {
-    katex: { css: 'vendor/katex/katex.min.css', cdn: 'https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/' },
-    // temml's npm package has no latinmodernmath.woff2; the copy in Temml's repo is the one mathengine.js links.
-    temml: { css: 'vendor/temml/Temml-Latin-Modern.css', cdn: 'https://cdn.jsdelivr.net/npm/temml@0.14.0/dist/',
-      files: { 'latinmodernmath.woff2': 'https://cdn.jsdelivr.net/gh/ronkok/Temml@main/site/assets/latinmodernmath.woff2' } },
+    katex: { css: 'vendor/katex/katex.min.css' },
+    temml: { css: 'vendor/temml/Temml-Latin-Modern.css' },
   };
   const fetchOk = async (url) => {
     for (let k = 0; k < 2; k++) { // one retry: a dev server mid-restart usually answers the second time
@@ -866,19 +863,19 @@
       return '';
     }
   }
-  // Fonts that could not be embedded in the last export and were linked to the CDN instead.
+  // Fonts that could not be embedded in the last export (left out; nothing is fetched from another site).
   TD.mathFontsLinked = 0;
   async function inlineFonts(engine) {
-    const { css: cssUrl, cdn, files = {} } = MATH_CSS[engine];
+    const { css: cssUrl } = MATH_CSS[engine];
     let css = await mathCssText(cssUrl);
-    if (!css) { TD.mathFontsLinked = -1; return `@import url("${cdn}${cssUrl.split('/').pop()}");`; }
+    if (!css) { TD.mathFontsLinked = -1; return ''; }
     const base = cssUrl.slice(0, cssUrl.lastIndexOf('/') + 1);
     const urls = [...new Set([...css.matchAll(/url\(['"]?([^'")]+\.woff2)['"]?\)/g)].map((m) => m[1]))];
     let linked = 0;
     for (const u of urls) {
       const rel = u.replace(/^\.\//, '');
       let src;
-      try { src = await dataUrl(base + rel, 'font/woff2'); } catch (e) { src = files[rel] || cdn + rel; linked++; }
+      try { src = await dataUrl(base + rel, 'font/woff2'); } catch (e) { src = rel; linked++; }
       css = css.split(u).join(src);
     }
     TD.mathFontsLinked = linked;

@@ -889,7 +889,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 .selmenu-sw { margin-right: 8px; }
 .swsel { position: relative; }
 .swsel .sw { position: absolute; left: 9px; top: 50%; margin-top: -7px; pointer-events: none; z-index: 1; }
-#props .swsel select { padding-left: 30px; }
+#props .swsel select, .cz-props .swsel select { padding-left: 30px; }
 .selmenu-group { padding: 8px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pencil); }
 @media (prefers-reduced-motion: reduce) { .selmenu { animation: none; } }
 .ddpop { width: 200px; padding: 4px; }
@@ -1131,6 +1131,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-code-head button { height: 26px; padding: 0 10px; font-size: 12px; }
 .cz-code textarea { flex: 1; min-height: 0; border: 0; border-top: 1px solid var(--rule-soft); border-radius: 0; padding: 12px 16px; font: 12px/1.6 var(--font-mono); resize: none; outline: none; color: var(--ink); background: var(--sheet-raised); tab-size: 2; white-space: pre; overflow: auto; }
 .cz-code textarea:focus { background: var(--sheet-raised); box-shadow: inset 2px 0 0 var(--bluepen); }
+#cfModal .cz-code textarea { white-space: pre-wrap; overflow-wrap: anywhere; } /* chemfig lines run long */
 .cz-msg { padding: 8px 16px; color: var(--graphite); font-size: 12px; border-top: 1px solid var(--rule); }
 .cz-msg:empty { display: none; }
 .cz-entry { grid-template-columns: 1fr; }
@@ -1199,7 +1200,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .fe-sw i.none { background: linear-gradient(to top right, transparent calc(50% - .75px), var(--redpen) calc(50% - .75px), var(--redpen) calc(50% + .75px), transparent calc(50% + .75px)) !important; }
 
 /* ZX editor (js/zxeditor.js): the cell grid and props come from the quantum editor's qe-* rules */
-#zxModal .cz-box, #cdModal .cz-box, #fyModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+#zxModal .cz-box, #cdModal .cz-box, #fyModal .cz-box, #g3Modal .cz-box, #tmModal .cz-box, #cfModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
 .qe-item .zxmini { flex: none; max-width: 100%; color: var(--ink); }
 .ze-sel { fill: color-mix(in srgb, var(--redpen) 7%, transparent); }
 .ze-wsel { fill: none; stroke: color-mix(in srgb, var(--redpen) 30%, transparent); stroke-linecap: round; pointer-events: none; }
@@ -1213,7 +1214,39 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .fy-pt { fill: var(--ink); opacity: .35; pointer-events: none; }
 .fy-vhov { fill: none; stroke: var(--faint); stroke-width: 1.2; pointer-events: none; }
 .fy-vsel { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; fill-opacity: .5; }
+.cf-bhov { fill: none; stroke: color-mix(in srgb, var(--bluepen) 22%, transparent); stroke-linecap: round; pointer-events: none; }
 .fy-vtarget { fill: color-mix(in srgb, var(--bluepen) 12%, transparent); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
+/* 3D geometry editor: the xy-plane grid, points to drag, a moving point's drop to the floor, the axes gizmo */
+.g3-grid { stroke: var(--grid-major); stroke-width: 1; fill: none; pointer-events: none; }
+.g3-pt { fill: var(--sheet-raised); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
+.g3-lit { fill: var(--bluepen); opacity: .55; pointer-events: none; }
+.g3-pt.off, .g3-lit.off { stroke: var(--faint); fill: var(--faint); }
+.g3-drop { stroke: var(--bluepen); stroke-width: 1; stroke-dasharray: 3 3; fill: none; pointer-events: none; }
+.g3-shadow { fill: var(--bluepen); opacity: .5; pointer-events: none; }
+.g3-tsel { fill: color-mix(in srgb, var(--redpen) 10%, transparent); stroke: color-mix(in srgb, var(--redpen) 45%, transparent); stroke-width: 1; pointer-events: none; }
+.g3-gizmo { pointer-events: none; }
+.g3-gizmo path { stroke: var(--pencil); stroke-width: 1.4; fill: none; }
+.g3-gizmo text { fill: var(--pencil); font: 500 11px var(--font-ui, sans-serif); text-anchor: middle; }
+.g3-gizmo .g3-ang { text-anchor: start; font-family: var(--font-mono, monospace); font-size: 10.5px; }
+.g3-svg { cursor: grab; }
+.g3-pts { display: grid; gap: 4px; margin: 2px 0 8px; }
+.g3-pt-row { display: grid; grid-template-columns: 14px repeat(3, minmax(0, 1fr)); gap: 4px; align-items: center; }
+.g3-pt-row span { color: var(--pencil); font-size: 11px; text-align: right; }
+.g3-pt-row input.wide { grid-column: 2 / -1; }
+/* Timing editor: the selected segment or row, a paint stroke, the edge under the pointer, the time ruler */
+.tm-ssel { fill: var(--redpen-wash); fill-opacity: .6; stroke: var(--redpen); stroke-width: 1.2; pointer-events: none; }
+.tm-rsel { fill: color-mix(in srgb, var(--redpen) 6%, transparent); stroke: var(--redpen); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.tm-paint { fill: color-mix(in srgb, var(--bluepen) 14%, transparent); stroke: var(--bluepen); stroke-width: 1.2; pointer-events: none; }
+.tm-edge { stroke: var(--bluepen); stroke-width: 2; fill: none; pointer-events: none; }
+.tm-tick { fill: var(--pencil); font: 10px var(--font-mono); text-anchor: middle; pointer-events: none; user-select: none; }
+.tm-aend { cursor: grab; }
+/* the add-row buttons under the last row: on the drawing sheet, which stays light, so ink colours are fixed */
+.tm-add rect { fill: var(--canvas); stroke: rgba(28, 27, 25, .3); stroke-width: 1; stroke-dasharray: 3 3; }
+.tm-add path { stroke: #6f6c64; stroke-width: 1.5; stroke-linecap: round; fill: none; }
+.tm-add text { fill: #6f6c64; font: 500 12px var(--font-ui, sans-serif); user-select: none; }
+.tm-add.on rect { fill: rgba(28, 27, 25, .07); stroke: #1c1b19; stroke-dasharray: none; }
+.tm-add.on path { stroke: #1c1b19; }
+.tm-add.on text { fill: #1c1b19; }
 .ze-shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 2px; margin: 0 0 8px; }
 .ze-shape { height: 44px; padding: 2px; border: 1px solid transparent; background: transparent; display: flex; align-items: center; justify-content: center; color: var(--ink); }
 .ze-shape:hover { background: var(--wash); }

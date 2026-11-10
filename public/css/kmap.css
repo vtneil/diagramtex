@@ -1,0 +1,30 @@
+/* Karnaugh map editor (js/kmeditor.js): the frame, panel and palette pieces come from the cz-* and qe-* rules */
+#kmModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+/* palette: a cell with its value, and a group over two cells */
+.km-vmini rect { fill: var(--qe-paper); stroke: currentColor; stroke-width: 1; }
+.km-vmini text { fill: currentColor; font: 15px var(--font-tex); text-anchor: middle; dominant-baseline: middle; }
+.km-vmini .g { fill: var(--qe-paper); stroke: currentColor; stroke-width: 1; }
+.km-vmini .grp { fill: color-mix(in srgb, currentColor 14%, transparent); stroke: currentColor; stroke-width: 1.2; }
+/* palette: a size as its grids */
+.km-mmini path { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* canvas: the cell under the pointer, the selected group and its side handles, a group being drawn */
+.km-hov { fill: color-mix(in srgb, var(--bluepen) 9%, transparent); pointer-events: none; }
+.km-gsel { fill: none; stroke: color-mix(in srgb, var(--redpen) 45%, transparent); stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.km-handle { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.5; }
+.km-draft { fill: none; stroke: var(--bluepen); stroke-linejoin: round; pointer-events: none; }
+/* panel: a group's colour, its term, the check */
+.km-sw { flex: none; width: 12px; height: 12px; margin-right: 8px; border-radius: 3px; border: 1px solid var(--rule-strong); }
+.km-sw { background-clip: padding-box; opacity: .85; }
+.km-sw.bw { background: transparent; }
+.km-term { margin: 8px 0; padding: 0 2px; min-height: 22px; font-size: 15px; color: var(--ink); overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
+.km-status { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; font-size: 12px; line-height: 16px; color: var(--graphite); }
+.km-st { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.km-status.ok .km-st, .km-groups .km-st.ok { color: var(--ink); }
+.km-status.bad .km-st, .km-groups .km-st.bad { color: var(--redpen); }
+.km-groups { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; }
+.km-groups button { display: flex; align-items: center; gap: 0; height: 28px; padding: 0 8px; border: 1px solid transparent; background: transparent; text-align: left; font-size: 12px; color: var(--ink); }
+.km-groups button:hover { background: var(--wash); }
+.km-groups .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.km-groups .km-st { margin-left: 8px; }
+.cz-props .km-cmd { display: block; width: 100%; padding: 5px 8px; border-radius: var(--r); background: var(--well); white-space: nowrap; overflow-x: auto; }
+.cz-props .km-acts button { flex: 1; }

@@ -1006,7 +1006,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|solid|prim3d|revolve|sketch3d|cd|qc|cz|forest|zx|bloch|feynman)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|cd|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1035,7 +1035,7 @@
   function flyOf(t) {
     if (/^(solid|prim3d|revolve|sketch3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|qc|cz|forest|zx|bloch|feynman)$/.test(t)) return 'blocks';
+    if (/^(cd|qc|cz|forest|zx|bloch|feynman|geo3d|timing|automata|kmap|chemfig)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
@@ -1380,6 +1380,11 @@
         if (s.type === 'forest') { state.sel = new Set([hitId]); render(); renderProps(); openTree(hitId); return; }
         if (s.type === 'zx') { state.sel = new Set([hitId]); render(); renderProps(); openZX(hitId); return; }
         if (s.type === 'feynman') { state.sel = new Set([hitId]); render(); renderProps(); openFeyn(hitId); return; }
+        if (s.type === 'geo3d') { state.sel = new Set([hitId]); render(); renderProps(); openGeo3d(hitId); return; }
+        if (s.type === 'timing') { state.sel = new Set([hitId]); render(); renderProps(); openTiming(hitId); return; }
+        if (s.type === 'automata') { state.sel = new Set([hitId]); render(); renderProps(); openFSM(hitId); return; }
+        if (s.type === 'kmap') { state.sel = new Set([hitId]); render(); renderProps(); openKmap(hitId); return; }
+        if (s.type === 'chemfig') { state.sel = new Set([hitId]); render(); renderProps(); openChem(hitId); return; }
         if (s.type === 'cd') { state.sel = new Set([hitId]); render(); renderProps(); openCD(hitId); return; }
       }
       const grp = groupIds(hitId);
@@ -1759,6 +1764,92 @@
     });
   }
   TD.feynOpen = openFeyn;
+  // 3D geometry (g3editor.js): the same, for tikz-3dplot code; the drawing stays where it was
+  function openGeo3d(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.geo3dEditor) return;
+    TD.geo3dEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      const was = TD.geo3d.layout(t.src);
+      begin(); t.src = res.src;
+      const now = TD.geo3d.layout(t.src);
+      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
+      commit();
+      render(); renderProps();
+    });
+  }
+  TD.geo3dOpen = openGeo3d;
+  // timing diagrams (tmeditor.js): the same, for tikz-timing code
+  function openTiming(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.timingEditor) return;
+    TD.timingEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      const was = TD.timing.layout(t);
+      begin(); t.src = res.src;
+      const now = TD.timing.layout(t);
+      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
+      commit();
+      render(); renderProps();
+    });
+  }
+  TD.timingOpen = openTiming;
+  // state machines (fsmeditor.js): the same, for TikZ automata code
+  function openFSM(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.fsmEditor) return;
+    TD.fsmEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      const was = TD.fsm.layout(t);
+      begin(); t.src = res.src;
+      const now = TD.fsm.layout(t);
+      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
+      commit();
+      render(); renderProps();
+    });
+  }
+  TD.fsmOpen = openFSM;
+  // Karnaugh maps (kmeditor.js): the same, for karnaugh-map code
+  function openKmap(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.kmapEditor) return;
+    TD.kmapEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      // the map stays where it was: the block moves by as much as its bounds grew to the left or up
+      const was = TD.kmap.layout(t);
+      begin(); t.src = res.src;
+      const now = TD.kmap.layout(t);
+      t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y;
+      commit();
+      render(); renderProps();
+    });
+  }
+  TD.kmapOpen = openKmap;
+  // chemistry (cfeditor.js): the same, for chemfig code
+  function openChem(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.chemEditor) return;
+    TD.chemEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      const was = TD.chem.layout(t);
+      begin(); t.src = res.src;
+      const now = TD.chem.layout(t);
+      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
+      commit();
+      render(); renderProps();
+    });
+  }
+  TD.chemOpen = openChem;
   // commutative diagrams (cdeditor.js): the same, for tikz-cd code
   function openCD(id) {
     finishEdit();
@@ -1952,6 +2043,11 @@
     forest: [['x', 'x'], ['y', 'y']],
     zx: [['x', 'x'], ['y', 'y']],
     feynman: [['x', 'x'], ['y', 'y']],
+    geo3d: [['x', 'x'], ['y', 'y']],
+    timing: [['x', 'x'], ['y', 'y']],
+    automata: [['x', 'x'], ['y', 'y']],
+    kmap: [['x', 'x'], ['y', 'y']],
+    chemfig: [['x', 'x'], ['y', 'y']],
     bloch: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
@@ -2809,7 +2905,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman'].includes(s.type)) {
+      if (['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3197,7 +3293,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3273,7 +3369,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -3484,7 +3580,13 @@
       fillDefsAround(() => list.map((s) => TYPES[s.type].svg(s, ctx)).join(''));
     return new XMLSerializer().serializeToString(host);
   }
-  const exportSvg = () => { if (shapes().length) out(slug() + '.svg', shapesSvg(shapes()), 'image/svg+xml'); };
+  // a downloaded SVG carries the maths fonts embedded (from vendor/), so opening it requests nothing
+  async function svgWithFonts(svg) {
+    let fonts = '';
+    try { fonts = await TD.inlineMathCss(); } catch (e) { fonts = ''; }
+    return fonts ? svg.replace(/(<svg\b[^>]*>)/, (m) => m + xmlStyle(fonts)) : svg;
+  }
+  const exportSvg = async () => { if (shapes().length) out(slug() + '.svg', await svgWithFonts(shapesSvg(shapes())), 'image/svg+xml'); };
 
   // ---------------- top-bar commands & insert popover ----------------
   const pop = $('#insertPop');
@@ -3552,12 +3654,12 @@
     const G = pageGeom(), ctx = { zoom: 1, hit: 0, export: true, scene: shapes() };
     return fillDefsAround(() => '<!--body-->' + shapes().map((s) => TYPES[s.type].svg(s, ctx)).join('')).split('<!--body-->');
   }
-  function exportPageSvg() {
+  async function exportPageSvg() {
     const G = pageGeom(), b = sheetBox(), [defs, body] = pageSvgs();
     let bg = '';
     for (let k = 0; k < G.n; k++) bg += `<rect x="0" y="${r2(pageTop(k, G))}" width="${r2(G.w)}" height="${r2(G.h)}" fill="#fff"/>`;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r2(b.w)} ${r2(b.h)}" width="${G.W}cm" height="${r2(b.h / PX)}cm">${TD.math.exportStyle()}${defs}${bg}${body}</svg>`;
-    out(slug() + '.svg', svg, 'image/svg+xml');
+    out(slug() + '.svg', await svgWithFonts(svg), 'image/svg+xml');
   }
   // ---------------- Export menu: PNG (chosen DPI), SVG, PDF ----------------
   // PNG is rasterised in the browser from the same SVG as the SVG export, with the maths fonts embedded
@@ -3572,7 +3674,7 @@
     if (!rasterCss || rasterCss[0] !== eng) {
       let fonts = '';
       try { fonts = await TD.inlineMathCss(); } catch (e) { fonts = ''; }
-      const own = TD.math.exportStyle().replace(/^<style>|<\/style>$/g, '').replace(/@import[^;]*;/g, '').replace(/@font-face\{[^}]*\}/g, '');
+      const own = TD.math.exportStyle().replace(/^<style>|<\/style>$/g, '');
       // a stylesheet that couldn't be read is tried again next time, not kept for the session
       // (a font that had to be linked instead of embedded won't load inside a picture either)
       if (fonts && !fonts.startsWith('@import') && !TD.mathFontsLinked) rasterCss = [eng, fonts + own];
@@ -3828,23 +3930,63 @@
   const SAMPLE_INTRO = [
     'Draw figures for \\LaTeX\\ and export them as TikZ, SVG, PNG or PDF. Your work saves in this browser as you go.',
     '',
+    '# What you can draw',
+    '- \\textbf{Text and maths}: labels, formulae and paragraphs typed as \\LaTeX, or in a visual maths editor.',
+    '- \\textbf{Lines and arrows}: straight and curved lines, arrows with many heads, polylines, smooth closed curves, angle marks, springs, and wavy, double or ticked lines.',
+    '- \\textbf{Shapes}: rectangles with rounded or cut corners, circles, polygons, stars, clouds and more basic shapes, 28 flowchart symbols and 28 block arrows.',
+    '- \\textbf{Electrical}: a circuit editor with about 250 circuitikz parts, common symbols, logic gates and waveforms such as sine, square and sawtooth.',
+    '- \\textbf{Physics}: ground, walls and ceilings, blocks, inclines, carts, pulleys and pendulums; lenses, mirrors, prisms, screens, slits, rays and light sources.',
+    '- \\textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.',
+    '- \\textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.',
+    '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; 3D sketches with points, vectors and planes; and 3D geometry in tikz-3dplot, with rotated frames, projections and angles, edited by dragging.',
+    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), 3D geometry (tikz-3dplot), timing diagrams (tikz-timing), state machines (TikZ automata), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
+    '- \\textbf{Images} and \\textbf{freehand} pencil strokes.',
+    '',
     '# Four modes',
     '- \\textbf{Classic}: diagrams arranged with text, like this file. Familiar with Mathcha? Classic mode offers a similar editing workflow.',
     '- \\textbf{Page}: a free-form sheet. Place anything anywhere, for posters and handouts.',
     '- \\textbf{Whiteboard}: an endless canvas for sketching.',
     '- \\textbf{Quick}: one formula, copied as a PNG or SVG.',
   ].join('\n');
+  // A short manual, read top to bottom: draw, write maths, use the blocks, arrange, write the document,
+  // get the LaTeX out. Keys are spelled out (Cmd on a Mac, Ctrl elsewhere) so the text also compiles.
+  const MODK = /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd' : 'Ctrl';
+  const key = (k) => `\\texttt{${k.replace('Mod', MODK)}}`;
   const SAMPLE_OUTRO = [
     '# How to use',
-    '- Draw with the tools on the left; \\textbf{Plots} and \\textbf{Blocks} hold graphs, circuits and more.',
-    '- Double-click to edit, right-click for more. Maths goes between \\$ signs.',
-    '- In Classic, switch between \\textbf{Document} and \\textbf{Diagram} at the top, or double-click a diagram.',
-    '- \\textbf{Code} gives TikZ, \\textbf{LaTeX} the whole document, \\textbf{Export} a picture or PDF.',
+    '## Draw',
+    '1. Pick a tool from the rail on the left. A button with a small corner mark opens a menu when you rest on it: lines, shapes, electrical, physics, \\textbf{2D plots}, \\textbf{3D} and \\textbf{Blocks}.',
+    '2. Click on the canvas to place the object, or drag to set its size. Hold ' + key('Shift') + ' to keep angles and squares, ' + key('Alt') + ' to place it off the grid.',
+    '3. Choose the arrow tool (' + key('V') + ') to select. The panel on the right edits what is selected: colours, line style, arrow heads, text size and exact position.',
+    '- Shortcuts for the common tools: ' + key('L') + ' line, ' + key('A') + ' arrow, ' + key('C') + ' curve, ' + key('P') + ' polyline, ' + key('R') + ' rectangle, ' + key('E') + ' ellipse, ' + key('T') + ' text.',
+    '',
+    '## Text and maths',
+    '- Write maths between \\$ signs, as in \\LaTeX, for example $\\int_0^1 x^2\\,dx = \\tfrac13$. Use \\$\\$ for a displayed formula.',
+    '- Double-click any text or label to edit it in place. Under \\textbf{Text input} in the sidebar, choose \\LaTeX\\ source or the visual MathLive editor.',
+    '',
+    '## Blocks',
+    '- Circuits, quantum circuits, commutative diagrams, trees, ZX and Feynman diagrams, Bloch spheres, 3D geometry, timing diagrams, state machines, Karnaugh maps and chemistry are each drawn from their own \\LaTeX\\ package.',
+    '- Double-click a block, or select it and press ' + key('Enter') + ', to open its editor. The drawing and the code beside it stay in step, both ways.',
+    '',
+    '## Arrange',
+    '- Right-click an object for its actions. ' + key('Mod+D') + ' duplicates, ' + key('Mod+G') + ' groups, ' + key('Mod+R') + ' turns by 90 degrees, and the arrow keys nudge.',
+    '- Hold ' + key('Space') + ' and drag to pan, or ' + key('Mod') + ' and scroll to zoom. ' + key('G') + ' shows or hides the grid. ' + key('Mod+Z') + ' undoes.',
+    '',
+    '## Write the document',
+    '- In Classic, switch between \\textbf{Document} and \\textbf{Diagram} at the top, or double-click a diagram to draw in it.',
+    '- In a text block, start a line with \\texttt{\\#} for a section, \\texttt{-} for a bullet or \\texttt{1.} for a numbered list.',
+    '- Your work saves in this browser as you go. ' + key('Mod+S') + ' saves a \\texttt{.diagramtex} file to keep or share, and ' + key('Mod+O') + ' opens one. \\textbf{Import} reads TikZ or \\LaTeX\\ back in.',
+    '',
+    '## Get the LaTeX out',
+    '- In Diagram view, \\textbf{Code} (' + key('Mod+E') + ') shows the TikZ for the diagram, ready to paste into your paper. It lists the packages your preamble needs.',
+    '- \\textbf{LaTeX} (' + key('Mod+Shift+E') + ') downloads the whole document as a \\texttt{.tex} file.',
+    '- \\textbf{Export} saves a PNG, SVG or PDF. ' + key('Mod+P') + ' prints.',
   ].join('\n');
   function sampleBlocks() {
     return [
       { type: 'text', text: SAMPLE_INTRO },
       { type: 'diagram', shapes: sample() },
+      { type: 'diagram', shapes: sampleMore() },
       { type: 'text', text: SAMPLE_OUTRO },
     ];
   }
@@ -3882,6 +4024,58 @@
     head(770, 370, 'COMMUTATIVE DIAGRAMS');
     add('cd', 'cd', { x: 730, y: 410 });
     text(440, 620, 'On the canvas, double-click the circuit or the quantum circuit to open its editor.', { size: 'small', color: BLUE });
+    return s.filter(Boolean);
+  }
+  // A second diagram with the rest of the range: physics, optics, waveforms, 3D figures and the other
+  // blocks, laid out in the same three columns so the two read as one gallery.
+  function sampleMore() {
+    const s = [], D = { ...state.defaults, stroke: '#000000', color: '#000000', size: 'normalsize' };
+    const add = (type, tool, o) => {
+      const t = TD.TYPES[type]; if (!t) return null;
+      const it = { id: uid(), ...t.create({ x: 0, y: 0 }, D, tool || type), ...o };
+      if (type === 'sym' && !it.w && t.fix) { t.fix(it); it.x = o.x; it.y = o.y; } // fix centres it on a click; here x,y is the top-left // a library symbol takes its own default size, as when placed by a click
+      delete it._pw; delete it._ph; // box-shaped figures keep the size given here
+      s.push(it); return it;
+    };
+    const text = (x, y, t, o) => add('text', 'text', { x, y, text: t, ...o });
+    const GREY = '#6b6b6b', BLUE = '#1e63c4', RED = '#c0392b';
+    const head = (x, y, t) => text(x, y, t, { size: 'small', bold: true, color: GREY });
+    const line = (x1, y1, x2, y2, o) => add('line', 'line', { x1, y1, x2, y2, startTip: 'none', endTip: 'none', label: '', ...o });
+    const sym = (k, x, y, o) => add('sym', 'sym:' + k, { x, y, ...o });
+    // physics: a cart pushed along the ground, and a pendulum
+    head(170, 30, 'PHYSICS');
+    sym('p-ground', 40, 170, { w: 260, h: 10 });
+    sym('p-cart', 50, 119);
+    line(131, 144, 188, 144, { endTip: 'stealth', label: '$\\vec F$' });
+    sym('p-pendulum', 212, 46);
+    // optics: a point source imaged by a converging lens onto a screen
+    head(500, 30, 'OPTICS');
+    line(372, 110, 632, 110, { dash: 'dashed', stroke: GREY });
+    sym('p-source', 380, 92);
+    sym('p-convex', 490, 55);
+    sym('p-screen', 610, 55);
+    for (const yl of [64, 156]) { line(406, 110, 502, yl, { stroke: RED }); line(502, yl, 610, 110, { stroke: RED, endTip: 'stealth' }); }
+    // waveforms
+    head(790, 30, 'WAVEFORMS');
+    sym('e-sine', 722, 58);
+    sym('e-square', 722, 122);
+    // 3D: a surface, a solid of revolution cut open, and a see-through cone
+    head(170, 230, '3D PLOTS');
+    add('plot', 'plot:surface3d', { x: 66, y: 252, w: 230, h: 200 });
+    head(500, 230, 'SOLIDS OF REVOLUTION');
+    add('revolve', 'revolve:washer', { x: 362, y: 248, w: 276, h: 210 });
+    head(790, 230, '3D SOLIDS');
+    add('prim3d', 'prim3d:cone', { x: 720, y: 248, w: 150, h: 210, solidColor: '#2f7fc199' });
+    // more blocks, each drawn from its own package
+    head(150, 500, 'FEYNMAN DIAGRAMS');
+    add('feynman', 'feynman', { x: 52, y: 536 });
+    head(420, 500, 'TREES');
+    add('forest', 'forest', { x: 336, y: 532 });
+    head(620, 500, 'ZX-CALCULUS');
+    add('zx', 'zx', { x: 560, y: 572 });
+    head(800, 500, 'BLOCH SPHERE');
+    add('bloch', 'bloch', { x: 740, y: 524 });
+    text(470, 720, 'Double-click any block to open its editor. Select a 3D figure to turn it or change it in the panel.', { size: 'small', color: BLUE });
     return s.filter(Boolean);
   }
 

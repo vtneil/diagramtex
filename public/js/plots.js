@@ -486,13 +486,13 @@
   const MARKS = [['none', 'None'], ['*', '● filled'], ['o', '○ circle'], ['square*', '■ square'], ['square', '□ square'], ['triangle*', '▲ triangle'], ['x', '× cross'], ['+', '+ plus']];
   function markSvg(m, x, y, col, w) {
     const R = 2 / K; // 2pt
-    const c = TD.css(col);
+    const c = TD.css(col), fs = `stroke="${c}" stroke-width="${w}"`; // pgfplots fills and strokes the filled marks
     switch (m) {
-      case '*': return `<circle cx="${r2(x)}" cy="${r2(y)}" r="${r2(R)}" fill="${c}"/>`;
+      case '*': return `<circle cx="${r2(x)}" cy="${r2(y)}" r="${r2(R)}" fill="${c}" ${fs}/>`;
       case 'o': return `<circle cx="${r2(x)}" cy="${r2(y)}" r="${r2(R)}" fill="none" stroke="${c}" stroke-width="${w}"/>`;
-      case 'square*': return `<rect x="${r2(x - R)}" y="${r2(y - R)}" width="${r2(2 * R)}" height="${r2(2 * R)}" fill="${c}"/>`;
+      case 'square*': return `<rect x="${r2(x - R)}" y="${r2(y - R)}" width="${r2(2 * R)}" height="${r2(2 * R)}" fill="${c}" ${fs}/>`;
       case 'square': return `<rect x="${r2(x - R)}" y="${r2(y - R)}" width="${r2(2 * R)}" height="${r2(2 * R)}" fill="none" stroke="${c}" stroke-width="${w}"/>`;
-      case 'triangle*': return `<path d="M${r2(x)},${r2(y - R)}L${r2(x + R * 0.87)},${r2(y + R / 2)}L${r2(x - R * 0.87)},${r2(y + R / 2)}Z" fill="${c}"/>`;
+      case 'triangle*': return `<path d="M${r2(x)},${r2(y - R)}L${r2(x + R * 0.87)},${r2(y + R / 2)}L${r2(x - R * 0.87)},${r2(y + R / 2)}Z" fill="${c}" ${fs}/>`;
       case 'x': return `<path d="M${r2(x - R)},${r2(y - R)}L${r2(x + R)},${r2(y + R)}M${r2(x - R)},${r2(y + R)}L${r2(x + R)},${r2(y - R)}" stroke="${c}" stroke-width="${w}"/>`;
       case '+': return `<path d="M${r2(x - R)},${r2(y)}L${r2(x + R)},${r2(y)}M${r2(x)},${r2(y - R)}L${r2(x)},${r2(y + R)}" stroke="${c}" stroke-width="${w}"/>`;
     }
@@ -541,7 +541,7 @@
     return out;
   }
   function colorbarSvg(s, L, ctx) {
-    const x = s.x + s.w + 14, w = 12, n = 24;
+    const x = s.x + s.w + 14, w = 0.5 * PX, n = 24; // pgfplots' colorbar is 0.5cm wide
     let out = '';
     for (let i = 0; i < n; i++) {
       const y0 = s.y + s.h - ((i + 1) * s.h) / n;
@@ -573,7 +573,7 @@
     const my = (v) => s.y + s.h - ((v - L.ymin) / (L.ymax - L.ymin)) * s.h;
     const xt = ticks(L.xmin, L.xmax, Math.max(2, Math.round(s.w / 70))), yt = ticks(L.ymin, L.ymax, Math.max(2, Math.round(s.h / 50)));
     const cid = 'clip-' + s.id + (ctx.export ? 'x' : '');
-    let back = '', body = '', front = '';
+    let back = '', body = '', front = '', free = '';
     if (s.grid) {
       for (const v of xt) back += `<path d="M${r2(mx(v))},${s.y}v${s.h}" stroke="#bfbfbf" stroke-width="${r2(AXIS_W)}"/>`;
       for (const v of yt) back += `<path d="M${s.x},${r2(my(v))}h${s.w}" stroke="#bfbfbf" stroke-width="${r2(AXIS_W)}"/>`;
@@ -633,7 +633,12 @@
         }
         if (ser.kind !== 'scatter') g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" ${dashOf(ser.dash, w)}/>`;
         const mk = ser.kind === 'scatter' ? (ser.mark === 'none' ? '*' : ser.mark) : ser.mark;
-        if (mk && mk !== 'none') for (const p of good) g += markSvg(mk, mx(p[0]), my(p[1]), ser.color, w);
+        // pgfplots leaves markers unclipped (clip marker paths=false): one on the axis edge is drawn whole
+        const ex = (L.xmax - L.xmin) * 1e-6, ey = (L.ymax - L.ymin) * 1e-6;
+        const inside = (p) => p[0] >= L.xmin - ex && p[0] <= L.xmax + ex && p[1] >= L.ymin - ey && p[1] <= L.ymax + ey;
+        let fm = '';
+        if (mk && mk !== 'none') for (const p of good) { const m = markSvg(mk, mx(p[0]), my(p[1]), ser.color, w); if (inside(p)) fm += m; else g += m; }
+        if (fm) free += op < 1 ? `<g opacity="${op}">${fm}</g>` : fm;
       }
       body += op < 1 ? `<g opacity="${op}">${g}</g>` : g;
       if (ser.legend) entries.push({ text: ser.legend, color: ser.color, kind: ser.kind, width: w, dash: ser.dash, mark: ser.mark });
@@ -691,7 +696,7 @@
     const errs = L.ev.map((r, i) => (r.error ? `Series ${i + 1}: ${r.error}` : '')).filter(Boolean);
     if (errs.length && !ctx.export) front += `<text x="${s.x + 6}" y="${s.y + 16}" font-size="11" fill="#c62828" font-family="sans-serif">${esc(errs[0])}</text>`;
     return `<defs><clipPath id="${cid}"><rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/></clipPath></defs>` +
-      back + `<g clip-path="url(#${cid})">${body}</g>` + front;
+      back + `<g clip-path="url(#${cid})">${body}</g>` + free + front;
   }
 
   // =====================================================================
@@ -831,7 +836,8 @@
     X.pkgs.add('pgfplots');
     const L = limits(s);
     const o = [
-      `at={${X.c(s.x, s.y + s.h)}}`, 'anchor=south west', 'scale only axis',
+      // explicit cm: a bare (x,y) here is read in the axis' own units, not the picture's
+      `at={(${f(s.x / PX)}cm,${f(-(s.y + s.h) / PX)}cm)}`, 'anchor=south west', 'scale only axis',
       `width=${X.len(s.w)}cm`, `height=${X.len(s.h)}cm`,
       `xmin=${f4(L.xmin)}`, `xmax=${f4(L.xmax)}`, `ymin=${f4(L.ymin)}`, `ymax=${f4(L.ymax)}`,
     ];
@@ -1034,7 +1040,7 @@
     handles: (s) => TD.box.handles(s),
     setHandle(s, k, q, e, o) { const b = TD.box.resize(o, k, q, e); if (b.w >= 40 && b.h >= 40) Object.assign(s, b); },
     anchors: (s) => TD.box.handles(s).map((h) => ({ x: h.x, y: h.y })),
-    samples: (s) => [{ x: s.x - 50, y: s.y - (s.title ? 24 : 8) }, { x: s.x + s.w + (s.colorbar ? 50 : 8), y: s.y + s.h + 40 }],
+    samples: (s) => [{ x: s.x - 50, y: s.y - (s.title ? 24 : 8) }, { x: s.x + s.w + (s.colorbar ? 60 : 8), y: s.y + s.h + 40 }],
     svg(s, ctx) {
       const inner = s.dim === 3 ? render3d(s, ctx) : render2d(s, ctx);
       const hit = ctx.export ? '' : `<rect class="hitfill" x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/>`;
@@ -1066,6 +1072,16 @@
   }
   const pct = (fr) => +(fr * 100).toFixed(1);
   const pieLabel = (s, r) => (s.showPercent ? `${r.label}${r.label ? ' ' : ''}(${pct(r.frac)}\\%)` : r.label);
+  // An outside label's centre: TikZ puts the node's border point at angle mid+180 (anchor=<angle>) on
+  // the point just outside the rim, so the box (with its 0.3333em inner sep) sits along the ray.
+  function pieOutside(s, r, lab) {
+    const mid = (r.a1 + r.a2) / 2, b = TD.textBox(lab, { size: s.size });
+    const c = Math.cos((mid * Math.PI) / 180), sn = Math.sin((mid * Math.PI) / 180), pad = TD.sizePx(s.size) / 3;
+    const hw = b.w / 2 + pad, hh = b.h / 2 + pad;
+    const t = Math.min(Math.abs(c) > 1e-9 ? hw / Math.abs(c) : Infinity, Math.abs(sn) > 1e-9 ? hh / Math.abs(sn) : Infinity);
+    const R = s.r + 6;
+    return { x: s.cx + (R + t) * c, y: s.cy - (R + t) * sn, b };
+  }
   T.pie = {
     name: 'Pie chart',
     pts: [['cx', 'cy']],
@@ -1076,7 +1092,14 @@
     handles: (s) => [{ k: 'r', x: s.cx + s.r, y: s.cy }],
     setHandle(s, k, q) { s.r = Math.max(10, Math.hypot(q.x - s.cx, q.y - s.cy)); },
     anchors: (s) => [{ x: s.cx, y: s.cy }],
-    samples: (s) => { const m = s.labelPos === 'outside' ? 60 : 0; return [{ x: s.cx - s.r - m, y: s.cy - s.r - 16 }, { x: s.cx + s.r + m, y: s.cy + s.r + 16 }]; },
+    samples: (s) => {
+      const pts = [{ x: s.cx - s.r, y: s.cy - s.r }, { x: s.cx + s.r, y: s.cy + s.r }];
+      if (s.labelPos === 'outside') for (const r of pieSlices(s)) {
+        const lab = pieLabel(s, r);
+        if (lab) { const q = pieOutside(s, r, lab); pts.push({ x: q.x - q.b.w / 2, y: q.y - q.b.h / 2 }, { x: q.x + q.b.w / 2, y: q.y + q.b.h / 2 }); }
+      }
+      return pts;
+    },
     svg(s, ctx) {
       const rows = pieSlices(s);
       const P = (a, rr) => ({ x: s.cx + rr * Math.cos((a * Math.PI) / 180), y: s.cy - rr * Math.sin((a * Math.PI) / 180) });
@@ -1094,9 +1117,8 @@
         if (!lab) continue;
         const st = { size: s.size };
         if (s.labelPos === 'outside') {
-          const b = TD.textBox(lab, st), c = Math.cos((mid * Math.PI) / 180), sn = Math.sin((mid * Math.PI) / 180);
-          const p = P(mid, s.r + 6);
-          out += txt(lab, p.x + (c * b.w) / 2, p.y - (sn * b.h) / 2, ctx, st);
+          const q = pieOutside(s, r, lab);
+          out += txt(lab, q.x, q.y, ctx, st);
         } else { const p = P(mid, s.r * 0.62); out += txt(lab, p.x, p.y, ctx, st); }
       }
       if (!ctx.export) out += `<circle class="hitfill" cx="${s.cx}" cy="${s.cy}" r="${s.r}"/>`;

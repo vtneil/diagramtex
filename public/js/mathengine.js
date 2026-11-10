@@ -21,13 +21,11 @@
     try { return L.renderToString(tex, { displayMode: !!opts.display, throwOnError: !!opts.throwOnError }); }
     catch (e) { if (opts.throwOnError) throw e; return `<i>${esc(tex)}</i>`; }
   }
-  // Standalone SVG files carry their own stylesheet (fonts from a CDN, as they are not bundled).
+  // Standalone SVG files carry their own stylesheet. No fonts are linked from anywhere: the exports embed the
+  // local copies (TD.inlineMathCss in docview.js), so nothing is requested from another site.
   const CSS = {
-    katex: '@import url("https://cdn.jsdelivr.net/npm/katex@0.19.1/dist/katex.min.css");' +
-      '.tx{font-family:KaTeX_Main,"Times New Roman",serif;line-height:1.2;white-space:pre;text-align:center;display:inline-block}.tx .katex{font-size:1em}',
-    temml: '@import url("https://cdn.jsdelivr.net/npm/temml@0.14.0/dist/Temml-Latin-Modern.css");' +
-      '@font-face{font-family:"Latin Modern Math";src:url("https://cdn.jsdelivr.net/gh/ronkok/Temml@main/site/assets/latinmodernmath.woff2") format("woff2")}' +
-      '.tx{font-family:"Latin Modern Roman","Latin Modern Math","Times New Roman",serif;line-height:1.2;white-space:pre;text-align:center;display:inline-block}',
+    katex: '.tx{font-family:KaTeX_Main,"Times New Roman",serif;line-height:1.2;white-space:pre;text-align:center;display:inline-block}.tx .katex{font-size:1em}',
+    temml: '.tx{font-family:"Latin Modern Roman","Latin Modern Math","Times New Roman",serif;line-height:1.2;white-space:pre;text-align:center;display:inline-block}',
   };
   const exportStyle = () => `<style>${CSS[engine]}</style>`;
   // In a standalone SVG (XML), <math> needs its namespace to be rendered as MathML.
