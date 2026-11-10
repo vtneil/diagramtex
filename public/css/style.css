@@ -333,7 +333,7 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 #status .zoom #zoomVal:focus { background: var(--sheet-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
 
 #hint { position: absolute; left: 50%; top: calc(var(--ruler) + 12px); transform: translateX(-50%); background: var(--ink); color: var(--sheet); padding: 4px 12px; border-radius: var(--r); font-size: 12px; line-height: 20px; pointer-events: none; display: none; z-index: 4; }
-#emptyHint { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); background: var(--sheet-raised); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-knob); padding: 16px 20px; color: var(--graphite); font-size: 13px; line-height: 1.7; text-align: center; pointer-events: none; max-width: 420px; text-wrap: pretty; }
+#emptyHint { position: absolute; left: calc((100% - var(--props-w) - 16px) / 2); top: 42%; transform: translate(-50%, -50%); background: var(--sheet-raised); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-knob); padding: 16px 20px; color: var(--graphite); font-size: 13px; line-height: 1.7; text-align: center; pointer-events: none; width: max-content; max-width: min(420px, 100% - var(--props-w) - 48px); text-wrap: pretty; }
 #emptyHint[hidden] { display: none; }
 #emptyHint .eh-title { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
 #emptyHint kbd { color: var(--ink); }
@@ -403,15 +403,20 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 /* Properties: a window floating over the top right of the canvas, below the ruler and above the status bar.
    The chevron at its top right folds it up to its first heading (which still names what is selected) and
    back down; the canvas runs the full width beneath it. */
-#propsWin {
+/* The right column holds Properties above Layers; it lets clicks through between and below the two. */
+#rightCol {
   position: absolute; z-index: 4; right: 8px; top: calc(var(--ruler) + 8px); width: var(--props-w);
-  max-height: calc(100% - var(--ruler) - var(--status) - 16px); display: flex; flex-direction: column;
+  height: calc(100% - var(--ruler) - var(--status) - 16px); display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+body.mode-board #rightCol { top: 8px; height: calc(100% - var(--status) - 16px); }
+body.mode-doc #rightCol { top: 8px; height: calc(100% - 16px); }
+body.mode-doc #layersWin { display: none; }
+#propsWin, #layersWin {
+  pointer-events: auto; flex: 0 1 auto; min-height: 42px; display: flex; flex-direction: column;
   background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); overflow: hidden;
 }
-body.mode-board #propsWin { top: 8px; max-height: calc(100% - var(--status) - 16px); }
-body.mode-doc #propsWin { top: 8px; max-height: calc(100% - 16px); }
 #propsWin.collapsed { height: 42px; }
-#propsWin.collapsed #props { overflow: hidden; }
+#propsWin.collapsed:not(.folding) #props { overflow: hidden; }
 /* the panel's first heading is moved here, above the scrolling part: the scroll bar starts below it, and
    the whole heading folds and unfolds the window */
 #propsHead { flex: none; position: relative; min-height: 40px; cursor: pointer; border-radius: var(--r-lg) var(--r-lg) 0 0; }
@@ -421,6 +426,61 @@ body.mode-doc #propsWin { top: 8px; max-height: calc(100% - 16px); }
 #propsWin.collapsed #propsToggle svg { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { #propsToggle svg { transition: none; } }
 #props { flex: 1 1 auto; min-height: 0; overflow: auto; overflow-x: hidden; }
+
+/* ---------- layers ---------- */
+/* Shapes from the top of the stack down. A row: eye, thumbnail on the sheet colour, name, lock (shown when
+   locked or on hover). A group is a row with a fold chevron; its members sit indented below it. */
+#layersWin { flex: 0 0 auto; max-height: 30%; margin-top: auto; } /* keeps its height and sits at the bottom, so it stays put as Properties changes; Properties gives way */
+#rightCol:has(#propsWin.collapsed) #layersWin:not(.collapsed) { height: calc(100% - 50px); max-height: none; } /* Properties folded: layers fills the rest, list space left empty above the footer */
+#layersWin.collapsed { height: 42px; flex: none; }
+#layersHead { flex: none; position: relative; cursor: pointer; }
+#layersHead h3 { margin: 0; height: 40px; padding: 0 44px 0 16px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 8px; user-select: none; -webkit-user-select: none; }
+#layersHead h3 small { color: var(--pencil); font-weight: 400; font-size: 11px; }
+#layersWin.collapsed #layersHead h3 { border-bottom-color: transparent; }
+#layersToggle { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--graphite); }
+#layersToggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .24s cubic-bezier(.3, .7, .2, 1); }
+#layersWin.collapsed #layersToggle svg { transform: rotate(180deg); }
+#layersWin.collapsed:not(.folding) #layers, #layersWin.collapsed:not(.folding) #layersFoot { display: none; }
+#layersWin.fold-clip #layers, #propsWin.fold-clip #props { overflow: hidden; } /* fits before and after: no bar flickering in mid-fold */
+#rightCol #layersWin.folding { max-height: none; } /* the cap would cut the eased height short when Properties unfolds */
+#layers { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 4px; display: flex; flex-direction: column; gap: 4px; outline: none; }
+.ly-empty { padding: 12px; color: var(--pencil); font-size: 12px; text-align: center; text-wrap: pretty; }
+.ly-row { display: flex; align-items: center; gap: 4px; height: 32px; flex: none; padding: 0 4px; border-radius: var(--r); color: var(--ink); font-size: 12px; cursor: default; user-select: none; -webkit-user-select: none; position: relative; }
+.ly-row:hover { background: var(--well); }
+.ly-row.on { background: var(--wash-strong); }
+.ly-row.hid .ly-th, .ly-row.hid .ly-nm { opacity: .4; }
+.ly-row button { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--pencil); display: grid; place-items: center; }
+.ly-row button:hover { color: var(--ink); background: var(--wash); }
+.ly-row button svg, #layersFoot svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.ly-row .ly-lock { visibility: hidden; }
+.ly-row:hover .ly-lock, .ly-row.lk .ly-lock, .ly-row .ly-lock:focus-visible { visibility: visible; }
+.ly-row.lk .ly-lock { color: var(--graphite); }
+.ly-chev svg { transition: transform .16s var(--ease); }
+.ly-chev.open svg { transform: rotate(90deg); }
+.ly-row .ly-pad { flex: none; width: 24px; }
+.ly-row.ly-in .ly-pad { width: 40px; }
+.ly-th { flex: none; width: 28px; height: 22px; border-radius: var(--r-sm); background: var(--canvas); border: 1px solid var(--rule); display: grid; place-items: center; overflow: hidden; color: #1d1c1a; }
+.ly-th svg { width: 24px; height: 18px; }
+.ly-th svg * { vector-effect: non-scaling-stroke; }
+.ly-th.ly-ic { background: transparent; border-color: transparent; color: var(--graphite); }
+.ly-th.ly-ic svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.ly-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; }
+.ly-grp .ly-nm { font-weight: 600; }
+.ly-row small { color: var(--pencil); font-size: 11px; padding-right: 2px; }
+.ly-ed { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 1px solid var(--rule-strong); border-radius: var(--r-sm); background: var(--sheet-raised); font: inherit; color: var(--ink); }
+.ly-row.drag { opacity: .45; }
+.ly-row.drop-above::before, .ly-row.drop-below::after { content: ''; position: absolute; left: 4px; right: 4px; height: 2px; border-radius: 1px; background: var(--bluepen); pointer-events: none; }
+.ly-row.drop-above::before { top: -2px; }
+.ly-row.drop-below::after { bottom: -2px; }
+.ly-row.drop-into { box-shadow: inset 0 0 0 2px var(--bluepen); }
+#layersFoot { flex: none; display: flex; justify-content: flex-end; gap: 4px; padding: 4px; border-top: 1px solid var(--rule); }
+#layersFoot button { width: 28px; height: 28px; padding: 0; border-color: transparent; background: transparent; color: var(--graphite); }
+#layersFoot button:hover:not(:disabled) { background: var(--well); color: var(--ink); }
+#layersFoot button.danger:hover:not(:disabled) { color: var(--redpen); }
+#layersFoot button:disabled { color: var(--faint); }
+.layer-hover { fill: none; stroke: var(--bluepen); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+#content g.locked * { pointer-events: none !important; }
+@media (prefers-reduced-motion: reduce) { #layersToggle svg, .ly-chev svg { transition: none; } }
 #propsWin #propsHead h3 { padding-right: 40px; user-select: none; -webkit-user-select: none; }
 #propsWin h3 { margin: 0; height: 40px; padding: 0 16px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 #propsWin h3 small { color: var(--pencil); font-weight: 400; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -556,6 +616,8 @@ body.mode-doc #propsWin { top: 8px; max-height: calc(100% - 16px); }
    A row whose submenu is open stays highlighted. Destructive rows keep the tone and turn the red pen. */
 .ctx-item:hover:not([disabled]):not(.dis), .ctx-item:focus-visible { background: var(--well); color: var(--ink); outline: none; }
 .ctx-item[data-ctx$=del]:hover:not([disabled]), .ctx-item[data-ctx$=del]:hover:not([disabled]) svg { color: var(--redpen); }
+/* destructive rows and buttons in the block editors (delete, clear) turn the red pen too, as Delete does in the app's menus */
+.ctx-item.danger:hover:not([disabled]), .ctx-item.danger:hover:not([disabled]) svg, .ctx-item.danger:focus-visible, .ctx-item.danger:focus-visible svg { color: var(--redpen); }
 .ctx-item[disabled], .ctx-item.dis { color: var(--faint); }
 .ctx-item svg, .ctx-item .ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .ctx-item:not([disabled]):not(.dis) svg { color: var(--graphite); }
@@ -688,7 +750,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 
 @media print {
   body { overflow: visible; display: block; background: #fff; }
-  #topbar, #files, #tools, #stage, #propsWin, .modal, #modal, .cp, .popover, .ctx { display: none !important; }
+  #topbar, #files, #tools, #stage, #rightCol, .modal, #modal, .cp, .popover, .ctx { display: none !important; }
   #main { display: block; }
   #docview { display: block !important; background: #fff; padding: 0; overflow: visible; }
   .doc-page { box-shadow: none; max-width: none; padding: 0; }
@@ -700,12 +762,15 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 #tools button { position: relative; }
 #tools button .more { position: absolute; right: 3px; bottom: 3px; width: 0; height: 0; border-left: 4px solid transparent; border-bottom: 4px solid currentColor; opacity: .55; }
 #tools button.open { background: var(--wash-strong); color: var(--ink); }
-.popover.flyout { width: auto; max-width: 420px; padding: 4px 8px 8px; }
-#insertPop.flyout { width: 324px; padding: 4px 12px 12px; }
+/* Flyouts: 8px of padding on every side, and the shell's corner is concentric with the 6px buttons inside it
+   (6 + 8 = 14). Section titles are inset 4px so their text lines up with the drawings in the buttons. */
+.popover.flyout { width: auto; max-width: 420px; padding: 8px; border-radius: calc(var(--r) + 8px); }
+#insertPop.flyout, #fly-blocks.flyout { width: 324px; }
+.flyout .pop-title { margin: 12px 4px 6px; line-height: 16px; }
+.flyout .pop-title:first-child { margin-top: 2px; }
 .sym-grid { display: grid; grid-template-columns: repeat(10, 36px); gap: 2px; }
-#fly-lines .sym-grid { grid-template-columns: repeat(8, 36px); margin-top: 4px; }
-#fly-arrows .sym-grid { margin-top: 4px; }
-.sym-grid button { width: 36px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--graphite); }
+#fly-lines .sym-grid { grid-template-columns: repeat(8, 36px); }
+.sym-grid button { width: 36px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--r); background: transparent; color: var(--graphite); }
 .sym-grid button:hover { background: var(--wash-strong); color: var(--ink); }
 .sym-grid button svg { width: 34px; height: 24px; stroke-width: 1.2; }
 .sym-grid .ballic { fill: #a05a5a; stroke: none; }
@@ -757,6 +822,8 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
   box-shadow: var(--shadow-pop); animation: pop-in .14s var(--ease); font-size: 12px;
 }
 .selmenu[hidden] { display: none; }
+/* rows sit as far apart as the menu's own padding (4px), so the highlighted row and the current one never touch */
+.selmenu-item + .selmenu-item, .ddpop > button + button { margin-top: 4px; }
 .selmenu-item {
   display: flex; align-items: center; height: var(--ctl); padding: 0 8px; border-radius: var(--r);
   white-space: nowrap; color: var(--ink); cursor: default; user-select: none;
@@ -922,6 +989,7 @@ input:disabled, input[readonly], select:disabled, textarea:disabled, textarea[re
 .cz-tools { display: flex; align-items: center; gap: 4px; }
 .cz-tools button { width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r); background: transparent; color: var(--graphite); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .cz-tools button:hover:not(.on):not(:disabled) { background: var(--wash); color: var(--ink); }
+.cz-tools button.danger:hover:not(:disabled) { color: var(--redpen); }
 .cz-tools button:disabled { color: var(--faint); background: transparent; }
 .cz-tools button svg { width: 18px; height: 18px; }
 .cz-tools button.on, .cz-tools button.on:hover { background: var(--ink); color: var(--sheet); }
@@ -998,7 +1066,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-code textarea:focus { background: var(--sheet-raised); box-shadow: inset 2px 0 0 var(--bluepen); }
 .cz-msg { padding: 8px 16px; color: var(--graphite); font-size: 12px; border-top: 1px solid var(--rule); }
 .cz-msg:empty { display: none; }
-.cz-entry { grid-template-columns: 1fr; margin-top: 8px; }
+.cz-entry { grid-template-columns: 1fr; }
 .cz-entry button { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 8px 12px; font-size: 13px; color: var(--ink); }
 .cz-entry .help { color: var(--graphite); font-size: 12px; line-height: 1.45; }
 @media (max-width: 1100px) { .cz-body { grid-template-columns: 200px 1fr 300px; } }
@@ -1036,6 +1104,25 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 /* three-bar wire / step icons (qceditor.js QI): outlined bars stay, the filled bar is inserted or deleted */
 .qe-ic .qo { fill: none; stroke: currentColor; stroke-width: 1; }
 .qe-ic .qf { fill: currentColor; stroke: none; }
+/* Tree editor (fteditor.js): the Quantum editor's shell, with nodes in place of cells */
+#ftModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+.fe-svg { cursor: default; }
+.fe-phantom { fill: none; stroke: rgba(28, 27, 25, .3); stroke-width: 1; stroke-dasharray: 2 2; pointer-events: none; }
+.fe-moving { fill: rgba(28, 27, 25, .05); stroke: rgba(28, 27, 25, .35); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.fe-bar { stroke: var(--bluepen); stroke-width: 3; stroke-linecap: round; pointer-events: none; }
+.fe-add { cursor: pointer; }
+.fe-add circle { fill: #fffdf8; stroke: var(--bluepen); stroke-width: 1.5; }
+.fe-add path { stroke: var(--bluepen); stroke-width: 1.6; fill: none; }
+.fe-add:hover circle { fill: var(--bluepen); }
+.fe-add:hover path { stroke: #fffdf8; }
+.fe-start { cursor: pointer; }
+.fe-start rect { fill: #fffdf8; stroke: rgba(28, 27, 25, .35); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.fe-start path { stroke: rgba(28, 27, 25, .55); stroke-width: 1.6; fill: none; }
+.fe-start text { fill: #6b675d; font-size: 12px; text-anchor: middle; }
+.fe-start:hover rect { stroke: var(--bluepen); }
+.cz-props .fe-sw button { display: flex; align-items: center; justify-content: center; }
+.fe-sw i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--rule-strong); }
+.fe-sw i.none { background: linear-gradient(to top right, transparent calc(50% - .75px), var(--redpen) calc(50% - .75px), var(--redpen) calc(50% + .75px), transparent calc(50% + .75px)) !important; }
 
 /* ---------- tooltips (tooltip.js): the app's own, in place of the browser's title tooltips ---------- */
 .td-tip {

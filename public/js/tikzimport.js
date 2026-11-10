@@ -571,6 +571,15 @@
           shapes.push(q);
           continue;
         }
+        if (!node.coordinate && /\\begin\{forest\}/.test(node.text) && TD.TYPES.forest) {
+          // a forest tree in a node: one Tree object, centred there
+          const q = TD.TYPES.forest.create(at, {});
+          q.src = (node.text.match(/\\begin\{forest\}[\s\S]*?\\end\{forest\}/) || [node.text.trim()])[0];
+          const b = TD.ftLayout(q).bb;
+          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
+          shapes.push(q);
+          continue;
+        }
         if (!node.coordinate && node.text.trim()) {
           const no = parseOpts(node.opts), own = readXf(C, no), t = textShape(C, node.text, no, at);
           // a node's own rotate turns it about its own position
@@ -667,8 +676,8 @@
     // global colour definitions (preamble)
     const docM = src.match(/\\begin\{document\}([\s\S]*?)(\\end\{document\}|$)/);
     if (docM) { parseStatements(C, src.slice(0, docM.index).replace(/\\documentclass[^\n]*|\\usepackage[^\n]*|\\usetikzlibrary\{[^}]*\}|\\title\{[^}]*\}|\\author\{[^}]*\}|\\date\{[^}]*\}/g, '')); C.warnings = []; }
-    // a bare quantikz environment becomes a picture holding one quantum circuit
-    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\})/g,
+    // a bare quantikz or forest environment becomes a picture holding one quantum circuit or tree
+    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\})/g,
       (m, q) => (q ? `\\begin{tikzpicture}\\node at (0,0) {${q}};\\end{tikzpicture}` : m));
     const blocks = [];
     const re = /\\begin\{tikzpicture\}(\[[^\]]*(?:\[[^\]]*\][^\]]*)*\])?([\s\S]*?)\\end\{tikzpicture\}/g;
@@ -691,4 +700,7 @@
     return { blocks, warnings: [...new Set(C.warnings)], title, page };
   };
   TD.importInternals = { parseOpts, arrowSpec, len, tokenizePath };
+  // a TikZ colour (red, blue!20, red!30!black) → '#rrggbb', or null / undefined (none / unknown)
+  let colorCtx = null;
+  TD.tikzColor = (spec) => color(colorCtx || (colorCtx = makeCtx()), spec);
 })();

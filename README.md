@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd** and **quantikz** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams and quantum circuits with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz** and **forest** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits and trees with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -27,6 +27,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 - **Function plots and charts:** 2D and 3D pgfplots (functions, parametric, polar, implicit, inequalities, vector fields, contour, heatmap, bar, scatter) and pie charts.
 - **Commutative diagrams:** XyMatrix-style grids exported as `tikz-cd`.
 - **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
+- **Trees:** a `forest` editor for syntax trees, org charts, directory trees, decision and probability trees: add, move and restyle nodes by keyboard or drag, with templates and the code live beside it.
 - **Flowcharts and block diagrams:** 28 flowchart symbols, 33 basic shapes and 27 block arrows.
 - **Whole pages and documents:** lay out text, maths and figures on A4 or Letter pages and export a complete LaTeX `article`.
 
@@ -53,7 +54,7 @@ Then open http://localhost:5173.
 
 ### Self-host on Cloudflare Workers
 
-`wrangler.toml` publishes `public/` as a static-assets-only Worker (no server code, no build step):
+`wrangler.toml` publishes a static-assets-only Worker (no server code). Before each deploy, wrangler runs `scripts/build.js`, which copies `public/` to `dist/` with the JS and CSS minified by esbuild, and serves `dist/`:
 
 ```bash
 npx wrangler deploy
@@ -80,6 +81,7 @@ npx wrangler deploy
   - **2D plots (pgfplots):** function, line, scatter, area, bar, contour, heatmap.
   - **3D plots:** surface, mesh, scatter, and function `z = f(x, y)`. The view angles follow pgfplots `view={az}{el}`.
   - **Pie chart:** one `label value [#color]` per line.
+- **Blocks menu** (the cube button below Plots): XyMatrix, Quantum, Circuit and Tree, each with its own editor. A new block starts with `large` labels, whatever the default text size is.
   - **XyMatrix / commutative diagram:** cells use `&` and `\\`. To add an arrow, drag from the orange dot under one cell onto another cell. Each arrow has a label, side, style (→, ↠, ↪, ↦, dashed, =, ↔) and bend. **Copy as tikz-cd** is also available.
 - **Plots:** each plot can have several series, given as expressions (`sin(x)*exp(-x/4)`, `x^2+y^2`, …) or as data. You can set axis labels, ranges, grid, legend, colormaps (hot, viridis, jet, cool, gray) and a colour bar. Expression errors show in the panel and on the canvas.
   - **Function plot series types** (Mathcha's set): regular `y = f(x)`, **inequality** (`y < f(x)`, `≤`, `>`, `≥`; shaded, with a dashed edge when strict), **bounded region** between `f` and `g`, **x in terms of y**, **parametric** `(x(t), y(t))`, **polar** `r(θ)`, **implicit** `F(x, y) = 0`, **points**, **vectors** (`x y` or `x y u v`), **vector field** `(P, Q)` and **phase portrait** (trajectories with arrows).
@@ -109,18 +111,19 @@ npx wrangler deploy
   - Align: left, center, right, top, middle, bottom
   - Distribute: horizontally, vertically
 - **Groups** (Ctrl+G, Ctrl+Shift+G): clicking any member selects the whole group, and align/distribute move a group as one block. Plots and XyMatrix are moved by rotate/flip but not rotated themselves.
+- **Layers panel** (under the properties panel, top first): click a row to select it, Shift-click for a range, Ctrl/⌘-click to add or remove. Drag rows to restack them; drop onto an open group to put a shape in it, or out of it to take it out. Groups fold open and closed. Each row has an eye (hide: not drawn or exported) and a lock (shown on canvas but can't be picked). Double-click a name to rename it; renaming a group renames the whole group. Hovering a row outlines it on the canvas. The footer groups, ungroups and deletes; right-click a row for Rename, Hide/Show, Lock/Unlock and the usual menu. Click the header to fold the panel away.
 
 ### Electrical circuits (circuitikz)
-- **Electrical → Circuit…** (or **Insert → Circuit**) adds a circuit block and opens the circuit editor in an overlay, so the tool rail stays uncluttered.
+- **Electrical → Circuit…** (or **Blocks → Circuit**) adds a circuit block and opens the circuit editor in an overlay, so the tool rail stays uncluttered.
 - **Parts:** 266 `circuitikz` components in searchable categories. Click a part and click the grid (it lands where the blue preview shows it), or drag it in; drag from start to end to set a two-terminal part's length.
 - **Wires** (`W`) snap to part pins and stay attached when parts move. Nodes such as transistors, op-amps and ICs are auto-named (`Q1`, `U1`…), so wires export as `(Q1.B)`.
-- **Properties:** label, annotation, voltage and current arrows, open/closed ends (`*-o`), rotation, mirroring and extra options. Labels take maths: `$R_1$`, `$10\,\mathrm{k\Omega}$`. Double-click a part to edit its label (a node's text) in place, in LaTeX or MathLive as set under Text input. A part is picked by clicking anywhere on its body, not only on its lines.
+- **Properties:** label, annotation, voltage and current arrows, open/closed ends (`*-o`), rotation, mirroring (X left to right, Y top to bottom, from the right-click menu or the keys) and extra options. Labels take maths: `$R_1$`, `$10\,\mathrm{k\Omega}$`. Double-click a part to edit its label (a node's text) in place, in LaTeX or MathLive as set under Text input. A part is picked by clicking anywhere on its body, not only on its lines.
 - **Code, side by side:** the `circuitikz` source sits on the right of the editor and follows the drawing as you work. Type in it and the drawing follows after a short pause; lines the editor can't draw are kept and exported as written.
 - **Saving:** Done (⌘/Ctrl+Enter) writes the circuit back and closes; ⌘/Ctrl+S writes it back and keeps the editor open, so Esc afterwards closes without asking. This applies to the quantum editor too.
 - Export: the circuit goes into the picture as a `scope` and the preamble gets `\usepackage{circuitikz}`. **Copy circuitikz Code** in the panel gives a standalone `circuitikz` environment.
 
 ### Quantum circuits (quantikz)
-- **Insert → Quantum** adds a circuit and opens the quantum circuit editor. Double-click a circuit, press Enter or use **Edit Circuit…** in the panel to open it again.
+- **Blocks → Quantum** adds a circuit and opens the quantum circuit editor. Double-click a circuit, press Enter or use **Edit Circuit…** in the panel to open it again.
 - **Editor:** the circuit sits on a grid of cells (wires × steps). Drag an element from the palette onto a cell, or click it to place it in the selected cell. Keys place the common ones and step right: `H X Y Z S T U`, `C` control, `O` open control, `+` target, `M` meter. Drop on the dashed row or column to add a wire or a step. Right-click a cell (or a selected range) to insert wires above or below, insert steps before or after, delete wires or steps, or clear cells.
 - Controls link to the nearest gate or target in their step; drag the blue handle to link another wire. Drag a cell to move it (Alt copies), Shift-click or drag to select a range, ⌘C/⌘V copy and paste cells. The panel edits labels, spans, links, wire types, slices and groups; inserting or deleting wires and steps keeps links and spans pointing at the same wires. A selected gate has a handle on its corner: drag it, or type in **Min width** / **Min height**, to set the gate's minimum size (`\gate[][width][height]{…}`, which widens its column as in quantikz). Drag the handle back to the gate's own size, or up or left, and it goes back to auto. Drag the bar on a gate's top or bottom edge to stretch it up or down over neighbouring wires (`\gate[n]`); it stops at the first wire that already has something in that step. Double-click a gate (or any element with a label, such as a stick or a meter) to edit its label in place, in LaTeX or MathLive as set under Text input.
 - The `quantikz` code is live on the right, both ways. Cells you didn't touch keep the code you wrote, and commands the editor doesn't draw are kept as written. It is exported inside `\begin{quantikz}` with `\usetikzlibrary{quantikz2}`.
@@ -245,7 +248,8 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/fonts/`: Inter Display, the UI typeface (SIL Open Font License, `Inter-LICENSE.txt`)
 - `public/sw.js`, `public/manifest.webmanifest`: offline cache and install manifest
 - `design/logo/`: logo kit and usage guide
-- `wrangler.toml`: Cloudflare Workers deployment (serves `public/`)
+- `wrangler.toml`: Cloudflare Workers deployment (builds and serves `dist/`)
+- `scripts/build.js`: copies `public/` to `dist/`, minifying JS and CSS (run by wrangler before deploy)
 - `scripts/gen-texcommands.js`: regenerates `public/js/texcommands.js`
 - `scripts/cz-sheet.js`: draws every circuitikz part with its pins on one SVG sheet, for checking part drawings by eye
 - `.interface-design/system.md`: design direction, tokens and measurements for the UI ("drafting table")

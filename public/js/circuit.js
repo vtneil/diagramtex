@@ -21,11 +21,14 @@
     const a = ((it.rot || 0) * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a), fx = it.flip ? -1 : 1;
     return (x, y) => { x *= fx; return [it.p[0] + x * c - y * s, it.p[1] + x * s + y * c]; };
   }
-  // bipole frame: origin at the middle of a→b, x along the path, y to its left
-  function bipXf(it) {
+  // bipole frame: origin at the middle of a→b, x along the path, y to its left;
+  // circuitikz's `mirror` flips the part along the path (x), `invert` across it (y)
+  // (labels follow the path, not the flipped part: they use the plain frame)
+  function bipXf(it, plain) {
     const dx = it.b[0] - it.a[0], dy = it.b[1] - it.a[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
     const mx = (it.a[0] + it.b[0]) / 2, my = (it.a[1] + it.b[1]) / 2;
-    return (x, y) => [mx + x * ux - y * uy, my + x * uy + y * ux];
+    const o = plain ? [] : (it.opts || '').split(',').map((t) => t.trim()), fx = o.includes('mirror') ? -1 : 1, fy = o.includes('invert') ? -1 : 1;
+    return (x, y) => { x *= fx; y *= fy; return [mx + x * ux - y * uy, my + x * uy + y * ux]; };
   }
   const xfOf = (it) => (it.p ? nodeXf(it) : bipXf(it));
   const isWire = (it) => it.part === 'short';
@@ -76,7 +79,7 @@
     const def = CZ.parts[it.part], G = def && CZ.geom(it.part);
     const spots = [];
     if (it.p) { if (it.text) spots.push({ t: it.text, at: it.p, dir: [0, 0] }); return spots; }
-    const T = bipXf(it), hy = G ? Math.max(G.box.y2, -G.box.y1, 0.05) : 0.05;
+    const T = bipXf(it, true), hy = G ? Math.max(G.box.y2, -G.box.y1, 0.05) : 0.05;
     const dx = it.b[0] - it.a[0], dy = it.b[1] - it.a[1], L = Math.hypot(dx, dy) || 1, n = [-dy / L, dx / L];
     if (it.l) spots.push({ t: it.l, at: T(0, hy + 0.12), dir: n });
     if (it.ann) spots.push({ t: it.ann, at: T(0, -hy - 0.12), dir: [-n[0], -n[1]] });
@@ -339,6 +342,7 @@
     // in canvas px, relative to (s.x, s.y)
     const bb = b ? { x: b.x1 * PX, y: -b.y2 * PX, w: (b.x2 - b.x1) * PX, h: (b.y2 - b.y1) * PX } : { x: 0, y: 0, w: 4 * PX, h: 1.5 * PX };
     const L = { bb, empty: !b };
+    if (TD.measuring && TD.measuring()) return L; // text sizes may be placeholders in a measuring pass: don't keep them
     if (cache.size > 200) cache.clear();
     cache.set(key, L);
     return L;
@@ -364,7 +368,7 @@
     name: 'Circuit',
     pts: [['x', 'y']],
     create(p, d) {
-      const s = { type: 'cz', x: p.x, y: p.y, items: defaultItems(), raw: '', size: d.size || 'normalsize', font: 'default', color: '#000000' };
+      const s = { type: 'cz', x: p.x, y: p.y, items: defaultItems(), raw: '', size: TD.BLOCK_SIZE, font: 'default', color: '#000000' };
       const bb = layout(s).bb; s.x = p.x - bb.x; s.y = p.y - bb.y; // top-left at the click
       return s;
     },

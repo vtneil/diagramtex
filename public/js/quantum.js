@@ -158,6 +158,7 @@
     const hit = cache.get(key);
     if (hit) return hit;
     const L = build(s);
+    if (TD.measuring && TD.measuring()) return L; // text sizes may be placeholders in a measuring pass: don't keep them
     if (cache.size > 200) cache.clear();
     cache.set(key, L);
     return L;
@@ -427,7 +428,7 @@
   TD.TYPES.qc = {
     name: 'Quantum circuit',
     pts: [['x', 'y']],
-    create: (p, d) => ({ type: 'qc', x: p.x, y: p.y, src: TD.QC_DEFAULT, size: d.size || 'normalsize', font: 'default', color: '#000000' }),
+    create: (p, d) => ({ type: 'qc', x: p.x, y: p.y, src: TD.QC_DEFAULT, size: TD.BLOCK_SIZE, font: 'default', color: '#000000' }),
     drag(s, a, q) { s.x = q.x; s.y = q.y; },
     valid: () => true,
     handles: () => [],

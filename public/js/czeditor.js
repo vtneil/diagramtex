@@ -28,8 +28,9 @@
         <button class="icon flat" data-cz="wire" title="Wire (W): drag between points; ends snap to pins">${ic('<path d="M3 15h6V5h8"/><circle cx="3" cy="15" r="1.6" class="f"/><circle cx="17" cy="5" r="1.6" class="f"/>')}</button>
         <span class="cz-sep"></span>
         <button class="icon flat" data-cz="rotate" title="Rotate 90° (R)">${ic('<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>')}</button>
-        <button class="icon flat" data-cz="flip" title="Mirror (F)">${ic('<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>')}</button>
-        <button class="icon flat" data-cz="delete" title="Delete (⌫)">${ic('<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>')}</button>
+        <button class="icon flat" data-cz="mirrory" title="Mirror left to right (X)">${ic('<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>')}</button>
+        <button class="icon flat" data-cz="mirrorx" title="Mirror top to bottom (Y)">${ic('<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>')}</button>
+        <button class="icon flat danger" data-cz="delete" title="Delete (⌫)">${ic('<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>')}</button>
         <span class="cz-sep"></span>
         <button class="icon flat" data-cz="undo" title="Undo (${isMac ? '⌘' : 'Ctrl+'}Z)">${ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>')}</button>
         <button class="icon flat" data-cz="redo" title="Redo (${isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z'})">${ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>')}</button>
@@ -218,15 +219,30 @@
     }
     follow(att); commit(); draw(); renderProps();
   }
-  function flipSel() {
+  // Mirror the selection about its centre, about the given axis: 'x' mirrors top to bottom (about the X axis, key Y),
+  // 'y' left to right (about the Y axis, key X). A node keeps one flip (xscale=-1, before its rotation), so a
+  // mirror toggles it and turns the angle. A two-terminal part's ends are mirrored and then swapped, so its
+  // labels (placed to the left of a→b) land where the mirror puts them, and `mirror` is toggled so the
+  // drawing itself is reflected: reflect + reverse = flip along the path.
+  function mirrorSel(axis) {
     const s = sel();
     if (!s.length) return;
     begin();
-    const att = attachments(E.sel);
+    const att = attachments(E.sel), pts = s.flatMap((it) => (it.p ? [it.p] : [it.a, it.b]));
+    const c = axis === 'x' ? snapG((Math.min(...pts.map((q) => q[1])) + Math.max(...pts.map((q) => q[1]))) / 2) : snapG((Math.min(...pts.map((q) => q[0])) + Math.max(...pts.map((q) => q[0]))) / 2);
+    const M = (q) => (axis === 'x' ? [q[0], r3(2 * c - q[1])] : [r3(2 * c - q[0]), q[1]]);
     for (const it of s) {
-      if (it.p) it.flip = !it.flip;
-      else if (C.isWire(it)) [it.a, it.b] = [it.b, it.a];
-      else { const o = (it.opts || '').split(',').map((t) => t.trim()).filter(Boolean), i = o.indexOf('mirror'); if (i >= 0) o.splice(i, 1); else o.push('mirror'); it.opts = o.join(', '); }
+      if (it.p) {
+        it.p = M(it.p); it.flip = !it.flip;
+        const r = it.rot || 0;
+        it.rot = axis === 'x' ? (540 - r) % 360 : (360 - r) % 360;
+      } else {
+        if (C.isWire(it)) { it.a = M(it.a); it.b = M(it.b); continue; }
+        [it.a, it.b] = [M(it.b), M(it.a)];
+        const o = (it.opts || '').split(',').map((t) => t.trim()).filter(Boolean), i = o.indexOf('mirror');
+        if (i >= 0) o.splice(i, 1); else o.push('mirror');
+        it.opts = o.join(', ');
+      }
     }
     follow(att); commit(); draw(); renderProps();
   }
@@ -416,6 +432,53 @@
   }
   svg.addEventListener('wheel', () => pop && pop.place(), { passive: true }); // panning or zooming carries it along
 
+  // ---------------------------------------------------------------- right-click menu
+  // The same .ctx menu as the quantum and tree editors: it acts on the selection when the click is inside it,
+  // otherwise selects the item under the pointer first.
+  const menu = document.createElement('div');
+  menu.className = 'ctx qe-ctx'; menu.hidden = true;
+  root.appendChild(menu);
+  const MI = {
+    label: '<path d="M4 15l1-4 8-8 3 3-8 8z"/><path d="M11 5l3 3"/>',
+    rotate: '<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>',
+    mirrory: '<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>',
+    mirrorx: '<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>',
+    dup: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M4 13V4.5A1.5 1.5 0 015.5 3H13"/>',
+    del: '<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>',
+  };
+  const mItem = (act, label, icon, key, off, danger) => `<button class="ctx-item${danger ? ' danger' : ''}" data-cm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  function closeMenu() { menu.hidden = true; }
+  svg.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (!E) return;
+    const g = e.target.closest('[data-id]');
+    if (!g) { closeMenu(); return; }
+    if (pop) pop.close();
+    if (E.tool !== 'select') setTool('select');
+    if (!E.sel.has(g.dataset.id)) { E.sel = new Set([g.dataset.id]); draw(); renderProps(); }
+    const s = sel(), n = s.length, one = n === 1 ? s[0] : null, mod = isMac ? '⌘' : 'Ctrl+';
+    menu.innerHTML = mItem('label', 'Edit Label', 'label', '', !one || C.isWire(one)) + '<hr>' +
+      mItem('rotate', 'Rotate 90°', 'rotate', 'R') + mItem('mirrory', 'Mirror Left to Right', 'mirrory', 'X') + mItem('mirrorx', 'Mirror Top to Bottom', 'mirrorx', 'Y') + mItem('dup', 'Duplicate', 'dup', mod + 'D') + '<hr>' +
+      mItem('delete', n > 1 ? `Delete ${n} Items` : 'Delete', 'del', '⌫', false, true);
+    menu.hidden = false;
+    const r = menu.getBoundingClientRect();
+    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
+    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+  });
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cm]');
+    if (!b || b.disabled || !E) return;
+    closeMenu();
+    const a = b.dataset.cm;
+    if (a === 'label') editLabel(sel()[0].id);
+    else if (a === 'rotate') rotateSel();
+    else if (a === 'mirrorx' || a === 'mirrory') mirrorSel(a.slice(-1));
+    else if (a === 'dup') duplicateSel();
+    else if (a === 'delete') deleteSel();
+  });
+  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('.qe-ctx')) closeMenu(); }, true);
+  svg.addEventListener('wheel', closeMenu, { passive: true });
+
   // ---------------------------------------------------------------- properties
   const POLES = [['', 'None'], ['*', 'Dot ●'], ['o', 'Open ○']];
   function renderProps() {
@@ -429,7 +492,7 @@
     props.hidden = false;
     if (s.length > 1) {
       props.innerHTML = `<div class="sec"><div class="sec-title">${s.length} items</div>
-        <div class="row"><button data-cz="rotate">Rotate</button><button data-cz="flip">Mirror</button><button data-cz="delete">Delete</button></div></div>`;
+        <div class="help">Right-click for Rotate, Mirror (X, Y), Duplicate and Delete.</div></div>`;
       return;
     }
     const it = s[0], def = CZ.parts[it.part] || { name: it.part, tikz: it.part, pins: {} };
@@ -450,7 +513,7 @@
     h += txt('opts', 'Options', it.p ? 'e.g. fill=blue!10' : 'e.g. mirror, color=red', true);
     const pinNames = Object.keys(def.pins).filter((n) => n !== 'center');
     if (pinNames.length) h += `<div class="help">Pins: ${pinNames.map((n) => `<code>${esc(n)}</code>`).join(' ')}</div>`;
-    h += `</div><div class="sec"><div class="row"><button data-cz="rotate">Rotate</button><button data-cz="flip">Mirror</button><button data-cz="delete">Delete</button></div></div>`;
+    h += '</div>';
     props.innerHTML = h;
   }
   props.addEventListener('focusin', (e) => { if (e.target.matches('input, select')) begin(); });
@@ -488,7 +551,7 @@
     const a = b.dataset.cz;
     if (a === 'select' || a === 'wire') setTool(a);
     else if (a === 'rotate') rotateSel();
-    else if (a === 'flip') flipSel();
+    else if (a === 'mirrorx' || a === 'mirrory') mirrorSel(a.slice(-1));
     else if (a === 'delete') deleteSel();
     else if (a === 'undo') undo();
     else if (a === 'redo') redo();
@@ -534,6 +597,7 @@
     if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (!menu.hidden) { closeMenu(); return; }
       if (inField) { e.target.blur(); return; }
       if (E.tool !== 'select') { setTool('select'); setTip(''); return; }
       if (E.sel.size) { E.sel.clear(); draw(); renderProps(); return; }
@@ -551,7 +615,8 @@
     if (k === 'v') setTool('select');
     else if (k === 'w') setTool('wire');
     else if (k === 'r') rotateSel();
-    else if (k === 'f') flipSel();
+    else if (k === 'x' || k === 'f') mirrorSel('y'); // X: left to right (F: the old Mirror key)
+    else if (k === 'y') mirrorSel('x'); // Y: top to bottom
     else if (k === '0') fit();
     else if (k === '/') { e.preventDefault(); search.focus(); }
     else if (k === ' ') { e.preventDefault(); E.space = true; }
@@ -580,6 +645,7 @@
   let savedT = 0;
   function flashSaved() { setTip('Saved to the page'); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500); }
   async function finish(ok) {
+    closeMenu();
     if (!E) return;
     if (pop) pop.close();
     if (document.activeElement === codeTa) readCode();

@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.10.1'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.11.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -11,6 +11,7 @@
     ['tiny', 5], ['scriptsize', 7], ['footnotesize', 8], ['small', 9], ['normalsize', 10],
     ['large', 12], ['Large', 14.4], ['LARGE', 17.28], ['huge', 20.74], ['Huge', 24.88],
   ];
+  TD.BLOCK_SIZE = 'large'; // a new block's label size (XyMatrix, quantum, circuit, tree), whatever the text default is
   // size is a LaTeX size name or a number (px)
   TD.sizePx = (name) => (typeof name === 'number' ? name : (TD.SIZES.find((s) => s[0] === name) || TD.SIZES[4])[1] / K);
   TD.FONTS = [
@@ -295,7 +296,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'pie', 'cd', 'qc'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'pie', 'cd', 'qc', 'forest'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -1279,11 +1280,18 @@
     const libs = [...X.libs];
     if (libs.length) pre.push(`\\usetikzlibrary{${libs.join(', ')}}`);
     if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
-    for (const p of X.pkgs) if (p !== 'pgfplots') pre.push(`\\usepackage{${p}}`);
+    // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
+    const forest = [...X.pkgs].filter((p) => /^forest\b/.test(p));
+    for (const p of X.pkgs) if (p !== 'pgfplots' && !/^forest\b/.test(p)) pre.push(`\\usepackage{${p}}`);
+    if (forest.length) {
+      const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
+      pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);
+    }
     return pre;
   };
   // Body lines (definecolors + shapes) for a list of shapes.
   TD.tikzBody = function (shapes, X) {
+    shapes = shapes.filter((s) => !s.hidden); // a hidden layer is not exported
     X.scene = shapes;
     const body = shapes.map((s) => T[s.type].tikz(s, X)).filter(Boolean);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);

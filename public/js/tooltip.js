@@ -73,7 +73,7 @@
     const text = el.dataset.tip;
     if (!text || !el.isConnected) { hide(); return; }
     const go = () => {
-      if (cur !== el || !el.isConnected) return;
+      if (cur !== el || !el.isConnected || el.matches('.open, [aria-expanded=true]')) return; // its menu is showing
       const t = node();
       fill(t, text);
       t.hidden = false;

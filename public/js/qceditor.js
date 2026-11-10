@@ -194,7 +194,7 @@
       <div class="cz-tools">
         <button class="icon flat" data-qe="addrow" title="Add a wire at the bottom">${qic('below')}</button>
         <button class="icon flat" data-qe="addcol" title="Add a step at the end">${qic('after')}</button>
-        <button class="icon flat" data-qe="delete" title="Clear the selected cells (⌫)">${ic('<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>')}</button>
+        <button class="icon flat danger" data-qe="delete" title="Clear the selected cells (⌫)">${ic('<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>')}</button>
         <span class="cz-sep"></span>
         <button class="icon flat" data-qe="undo" title="Undo (${isMac ? '⌘' : 'Ctrl+'}Z)">${ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>')}</button>
         <button class="icon flat" data-qe="redo" title="Redo (${isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z'})">${ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>')}</button>
@@ -620,7 +620,7 @@
   const MI = {
     ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>',
   };
-  const mItem = (act, label, ic, key) => `<button class="ctx-item" data-qm="${act}"><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act, label, ic, key) => `<button class="ctx-item${/^(rowdel|coldel|delete)$/.test(act) ? ' danger' : ''}" data-qm="${act}"><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();

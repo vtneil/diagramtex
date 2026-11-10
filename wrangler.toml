@@ -1,10 +1,15 @@
 # Cloudflare Workers deployment for DiagramTeX: a static-assets-only Worker (no server code).
-# Everything in ./public is served as-is.
+# The build step copies ./public to ./dist with JS and CSS minified; ./dist is what gets served.
 # Deploy:  npx wrangler deploy        Local preview:  npx wrangler dev
 name = "diagramtex"
 compatibility_date = "2025-10-01"
 
+# Runs before every `wrangler deploy` and `wrangler dev` (and again on changes under ./public in dev).
+[build]
+command = "npm install --no-audit --no-fund --silent && node scripts/build.js"
+watch_dir = "./public"
+
 [assets]
-directory = "./public"
+directory = "./dist"
 html_handling = "auto-trailing-slash"
 not_found_handling = "404-page"

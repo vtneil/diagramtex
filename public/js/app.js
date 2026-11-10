@@ -237,23 +237,49 @@
     lift();
   }
   function setPropsOpen(open, animate) {
-    const win = $('#propsWin'), btn = $('#propsToggle'), from = win.offsetHeight;
+    foldWin($('#propsWin'), $('#propsToggle'), open, animate, () => { if (!open) $('#props').scrollTop = 0; }, [$('#layersWin')]);
+  }
+  // Folds or unfolds a side window, easing its height from where it was to where the class change puts it.
+  // `also` are windows whose height follows from this one (Layers, whose cap depends on Properties being
+  // folded); they ease along in step so nothing jumps. While moving, a window carries `.folding`, which keeps
+  // its contents shown so they slide away rather than vanish.
+  function foldWin(win, btn, open, animate, after, also = []) {
+    const els = [win, ...also].filter((el) => el.offsetParent);
+    if (!els.includes(win)) els.unshift(win);
+    for (const el of els) if (el._foldEnd) el._foldEnd();
+    const from = els.map((el) => el.offsetHeight);
+    // a list that scrolls before or after keeps its scroll bar the whole way; one that fits at both ends
+    // hides it, so no bar flickers in for the frames where the window is between sizes
+    const scroller = (el) => el.querySelector('#props, #layers');
+    const overflows = (el) => { const sc = scroller(el); return !!sc && !el.classList.contains('collapsed') && sc.scrollHeight > sc.clientHeight + 1; };
+    const scrolled = els.map(overflows);
     win.classList.toggle('collapsed', !open);
     btn.setAttribute('aria-expanded', String(open));
     btn.title = open ? 'Collapse panel' : 'Expand panel';
-    if (!open) $('#props').scrollTop = 0;
-    win.style.transition = win.style.height = '';
+    if (after) after();
     if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const to = win.offsetHeight;
-    if (to === from) return;
-    win.style.height = from + 'px';
+    const to = els.map((el) => el.offsetHeight), scrolls = els.map(overflows); // measured before `.folding` lifts the cap
+    els.forEach((el, i) => {
+      if (to[i] === from[i]) return;
+      el.classList.add('folding');
+      el.classList.toggle('fold-clip', !scrolled[i] && !scrolls[i]);
+      el.style.height = from[i] + 'px';
+    });
     void win.offsetHeight;
-    win.style.transition = 'height .24s cubic-bezier(.3, .7, .2, 1)';
-    win.style.height = to + 'px';
-    const end = (e) => { if (e && e.target !== win) return; win.removeEventListener('transitionend', end); win.style.transition = win.style.height = ''; };
-    win.addEventListener('transitionend', end);
+    els.forEach((el, i) => {
+      if (to[i] === from[i]) return;
+      el.style.transition = 'height .24s cubic-bezier(.3, .7, .2, 1)';
+      el.style.height = to[i] + 'px';
+      const end = (e) => {
+        if (e && e.target !== el) return;
+        el.removeEventListener('transitionend', end); el._foldEnd = null;
+        el.classList.remove('folding', 'fold-clip'); el.style.transition = el.style.height = '';
+      };
+      el._foldEnd = end;
+      el.addEventListener('transitionend', end);
+    });
   }
-  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed') }); }
+  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
 
   function openDoc(id) {
     finishEdit(); finishPoly(); commit();
@@ -770,6 +796,7 @@
       }
       seen.add(id);
       if (m.html !== strs[i]) { m.el.innerHTML = strs[i]; m.html = strs[i]; }
+      if (m.el.classList.contains('locked') !== !!list[i].locked) m.el.classList.toggle('locked', !!list[i].locked);
       if (m.el === cur) cur = cur.nextSibling;
       else content.insertBefore(m.el, cur);
     }
@@ -781,7 +808,7 @@
   const CULL = 400;
   let paintedBox = null;
   function paint() {
-    const all = shapes(), ctx = { zoom: 1, hit: 14, scene: all };
+    const all = shapes().filter((s) => !s.hidden), ctx = { zoom: 1, hit: 14, scene: all };
     let list, defs, box = null;
     if (all.length > CULL) {
       const r = stageSize(), v = state.view, w = r.w / v.zoom, h = r.h / v.zoom;
@@ -811,14 +838,14 @@
     renderOverlay();
   }
   function renderOverlay() {
+    pruneSel();
     const z = state.view.zoom, out = [];
     const sel = selected();
     const pb = paintedBox;
     for (const s of sel) {
       const b = TD.bbox(s);
       if (pb && (b.x > pb.x2 || b.x + b.w < pb.x1 || b.y > pb.y2 || b.y + b.h < pb.y1)) continue; // off screen
-      if (sel.length > 1 || ['text', 'ball', 'dot', 'poly', 'spring'].includes(s.type) || s.label)
-        out.push(`<rect class="sel-box" x="${b.x - 3 / z}" y="${b.y - 3 / z}" width="${b.w + 6 / z}" height="${b.h + 6 / z}"/>`);
+      out.push(`<rect class="sel-box" x="${b.x - 3 / z}" y="${b.y - 3 / z}" width="${b.w + 6 / z}" height="${b.h + 6 / z}"/>`);
     }
     const groups = new Map();
     for (const s of sel) if (s.g) (groups.get(s.g) || groups.set(s.g, []).get(s.g)).push(s);
@@ -864,8 +891,12 @@
       const r = (snapHint.anchor ? 6 : 3) / z;
       out.push(`<circle class="snap-ind" cx="${snapHint.x}" cy="${snapHint.y}" r="${r}"/>`);
     }
+    if (layerHover) {
+      const hs = layerHover.map(byId).filter((q) => q && !q.hidden);
+      if (hs.length) { const b = unionBox(hs); out.push(`<rect class="layer-hover" x="${b.x - 4 / z}" y="${b.y - 4 / z}" width="${b.w + 8 / z}" height="${b.h + 8 / z}"/>`); }
+    }
     overlay.innerHTML = out.join('');
-    drawRulers(); updateStatus();
+    drawRulers(); updateStatus(); scheduleLayers();
   }
 
   // ---------------- moving a large selection ----------------
@@ -941,7 +972,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|cd|qc|cz)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|cd|qc|cz|forest)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -967,7 +998,8 @@
   $('#fly-elec').innerHTML = `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: about 250 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>Circuit…</button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`
     + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
   function flyOf(t) {
-    if (/^(plot|pie|cd|qc|cz)/.test(t)) return 'insertPop';
+    if (/^(plot|pie)/.test(t)) return 'insertPop';
+    if (/^(cd|qc|cz|forest)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : 'shapes'; }
@@ -985,13 +1017,40 @@
     document.querySelectorAll('#tools [data-fly]').forEach((x) => x.classList.toggle('open', x.dataset.fly === name));
   }
   function hideFly() {
+    clearTimeout(flyTimer); flyPinned = false;
     if (!openFly) return;
     flyEl(openFly).hidden = true; openFly = null;
     document.querySelectorAll('#tools [data-fly]').forEach((x) => x.classList.remove('open'));
   }
+  // A mouse resting on a tool group opens its menu (after a moment, so sweeping down the rail doesn't flash
+  // every one); it closes once the mouse has been off both the button and the menu for a moment, which
+  // leaves time to cross the gap. A click opens it and keeps it open (pinned) until a choice, a click
+  // elsewhere, Escape or a second click; touch and pen open it by tapping, as before.
+  const HOVER_OPEN = 120, HOVER_CLOSE = 280;
+  let flyTimer = 0, flyPinned = false;
+  const flyHover = (fn, ms) => { clearTimeout(flyTimer); flyTimer = fn ? setTimeout(fn, ms) : 0; };
   document.querySelectorAll('#tools [data-fly]').forEach((b) => {
-    b.onclick = (e) => { e.stopPropagation(); if (openFly === b.dataset.fly) hideFly(); else showFly(b.dataset.fly); };
-    b.onpointerenter = () => { if (openFly && openFly !== b.dataset.fly) showFly(b.dataset.fly); };
+    const name = b.dataset.fly;
+    b.onclick = (e) => {
+      e.stopPropagation(); flyHover();
+      if (openFly === name && flyPinned) { hideFly(); return; }
+      showFly(name); flyPinned = true;
+    };
+    b.onpointerenter = (e) => {
+      if (e.pointerType !== 'mouse') { if (openFly && openFly !== name) showFly(name); return; }
+      if (openFly === name) { flyHover(); return; }
+      // moving from one open menu's button to the next switches at once
+      flyHover(() => { TD.tooltip && TD.tooltip.hide(); showFly(name); flyPinned = false; }, openFly ? 0 : HOVER_OPEN);
+    };
+    b.onpointerleave = (e) => {
+      if (e.pointerType !== 'mouse') return;
+      if (openFly !== name) { flyHover(); return; }
+      if (!flyPinned) flyHover(hideFly, HOVER_CLOSE);
+    };
+  });
+  document.querySelectorAll('#tools ~ .flyout').forEach((f) => {
+    f.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') flyHover(); });
+    f.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && openFly && !flyPinned) flyHover(hideFly, HOVER_CLOSE); });
   });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('.flyout [data-pick], .flyout [data-insert]');
@@ -1282,6 +1341,7 @@
         if (s.type === 'line' || s.type === 'curve') { startEdit(hitId, 'label'); return; }
         if (s.type === 'qc') { state.sel = new Set([hitId]); openQuantum(hitId); return; }
         if (s.type === 'cz') { state.sel = new Set([hitId]); render(); renderProps(); openCircuit(hitId); return; }
+        if (s.type === 'forest') { state.sel = new Set([hitId]); render(); renderProps(); openTree(hitId); return; }
       }
       const grp = groupIds(hitId);
       if (e.shiftKey) { if (state.sel.has(hitId)) grp.forEach((id) => state.sel.delete(id)); else grp.forEach((id) => state.sel.add(id)); }
@@ -1530,6 +1590,7 @@
       setTool('select');
       if (s.type === 'cz' && byId(s.id)) { render(); renderProps(); openCircuit(s.id); return; }
       if (s.type === 'qc' && byId(s.id)) { render(); renderProps(); openQuantum(s.id); return; }
+      if (s.type === 'forest' && byId(s.id)) { render(); renderProps(); openTree(s.id); return; }
     } else if (d.mode === 'marquee') {
       marquee = null;
     } else {
@@ -1618,6 +1679,19 @@
     });
   }
   TD.qcOpen = openQuantum;
+  // Tree blocks too (fteditor.js): Done writes the forest code back as one undo step
+  function openTree(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.ftEditor) return;
+    TD.ftEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      begin(); t.src = res.src; commit();
+      render(); renderProps();
+    });
+  }
+  TD.ftOpen = openTree;
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
@@ -1785,6 +1859,7 @@
     pie: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
     cd: [['x', 'x'], ['y', 'y']],
     qc: [['x', 'x'], ['y', 'y']],
+    forest: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
   };
@@ -2309,8 +2384,277 @@
   function ungroupSel() {
     if (!canUngroup()) return;
     begin();
-    for (const s of selected()) delete s.g;
+    for (const s of selected()) { delete s.g; delete s.gname; }
     commit(); render(); renderProps(); showHint('Ungrouped', 1000);
+  }
+
+  // ---------- layers ----------
+  // The Layers window lists the diagram's shapes from the top of the stack down, as an image editor lists its
+  // layers. A group is one row (folded at first) with its members indented below it. A row selects its shapes
+  // (Shift: a range, Ctrl/Cmd: add or remove), the eye hides them (not drawn, not exported), the lock keeps them
+  // from being picked or changed, a double-click renames, a drag restacks (into or out of a group), and a
+  // right-click opens the object menu with Rename, Hide and Lock on top. Hidden and locked shapes never stay
+  // selected. Names: `name` on a shape, `gname` on every member of a group.
+  const layersEl = $('#layers'), layersWin = $('#layersWin');
+  const openGroups = new Set();
+  let layersKey = '', layersRaf = 0, layerHover = null, layerAnchor = null, layerDrag = null, layerPressKey = null;
+  const pickable = (s) => s && !s.hidden && !s.locked;
+  function pruneSel() { for (const id of [...state.sel]) if (!pickable(byId(id))) state.sel.delete(id); }
+  function autoName(s) {
+    const t = ((s.type === 'text' ? s.text : s.label) || '').replace(/\s+/g, ' ').trim();
+    return t ? (t.length > 48 ? t.slice(0, 48) + '…' : t) : (TYPES[s.type] && TYPES[s.type].name) || s.type;
+  }
+  const layerName = (s) => s.name || autoName(s);
+  const groupName = (g) => (shapes().find((q) => q.g === g && q.gname) || {}).gname || 'Group';
+  // a small picture of the shape, drawn as it exports; remembered against the shape's data
+  const thumbs = new Map();
+  function thumb(s) {
+    const key = JSON.stringify(s), m = thumbs.get(s.id);
+    if (m && m.key === key) return m.html;
+    let html = '';
+    try {
+      const b = TD.bbox(s), pad = Math.max(b.w, b.h, 4) * 0.1;
+      TD.takeFillDefs();
+      const body = TYPES[s.type].svg(s, { zoom: 1, hit: 0, export: true, scene: [s] }), defs = TD.takeFillDefs() || '';
+      html = `<svg viewBox="${r2(b.x - pad)} ${r2(b.y - pad)} ${r2(b.w + 2 * pad)} ${r2(b.h + 2 * pad)}" aria-hidden="true">${defs}${body}</svg>`;
+    } catch (err) { html = ''; }
+    thumbs.set(s.id, { key, html });
+    return html;
+  }
+  const LIC = {
+    chev: '<path d="M8 6l4 4-4 4"/>',
+    folder: '<path d="M2.5 5.5v10h15v-8H9.5L8 5.5z"/>',
+    text: '<path d="M5 5h10M10 5v11"/>',
+  };
+  const lsvg = (d) => `<svg viewBox="0 0 20 20">${d}</svg>`;
+  // the rows, top of the stack first; a group at its topmost member
+  function layerRows() {
+    const all = shapes(), rows = [], seen = new Set();
+    for (let i = all.length - 1; i >= 0; i--) {
+      const s = all[i];
+      if (!s.g) { rows.push({ s }); continue; }
+      if (seen.has(s.g)) continue;
+      seen.add(s.g);
+      const m = all.filter((q) => q.g === s.g).reverse();
+      rows.push({ g: s.g, m });
+      if (openGroups.has(s.g)) for (const q of m) rows.push({ s: q, in: s.g });
+    }
+    return rows;
+  }
+  function rowHtml(r) {
+    const flags = (list) => ({ on: list.every((q) => state.sel.has(q.id)), hid: list.every((q) => q.hidden), lk: list.every((q) => q.locked) });
+    const cls = (f) => `${f.on ? ' on' : ''}${f.hid ? ' hid' : ''}${f.lk ? ' lk' : ''}`;
+    const eye = (f) => `<button class="ly-eye" data-la="eye" title="${f.hid ? 'Show' : 'Hide'}" aria-label="${f.hid ? 'Show' : 'Hide'}">${lsvg(IC[f.hid ? 'eyeoff' : 'eye'])}</button>`;
+    const lock = (f) => `<button class="ly-lock" data-la="lock" title="${f.lk ? 'Unlock' : 'Lock'}" aria-label="${f.lk ? 'Unlock' : 'Lock'}">${lsvg(IC[f.lk ? 'lock' : 'unlock'])}</button>`;
+    if (r.g) {
+      const f = flags(r.m), open = openGroups.has(r.g);
+      return `<div class="ly-row ly-grp${cls(f)}" data-g="${r.g}" role="option" aria-selected="${f.on}" aria-expanded="${open}">${eye(f)}` +
+        `<button class="ly-chev${open ? ' open' : ''}" data-la="fold" title="${open ? 'Fold' : 'Unfold'}" aria-label="${open ? 'Fold group' : 'Unfold group'}">${lsvg(LIC.chev)}</button>` +
+        `<span class="ly-th ly-ic">${lsvg(LIC.folder)}</span><span class="ly-nm">${esc(groupName(r.g))}</span><small>${r.m.length}</small>${lock(f)}</div>`;
+    }
+    const s = r.s, f = flags([s]);
+    return `<div class="ly-row${r.in ? ' ly-in' : ''}${cls(f)}" data-id="${s.id}" role="option" aria-selected="${f.on}">${eye(f)}<span class="ly-pad"></span>` +
+      `<span class="ly-th${s.type === 'text' ? ' ly-ic' : ''}">${s.type === 'text' ? lsvg(LIC.text) : thumb(s)}</span><span class="ly-nm">${esc(layerName(s))}</span>${lock(f)}</div>`;
+  }
+  function scheduleLayers() {
+    if (layersRaf) return;
+    layersRaf = requestAnimationFrame(() => { layersRaf = 0; renderLayers(); });
+  }
+  function renderLayers() {
+    if (!layersEl) return;
+    const n = state.mode === 'document' ? 0 : shapes().length;
+    $('#layersCount').textContent = n ? String(n) : '';
+    if (state.mode === 'document' || layersWin.classList.contains('collapsed')) { layersKey = ''; return; }
+    if (drag || layerDrag || layersEl.querySelector('.ly-ed')) return; // the call after the drag or rename catches up
+    const key = [state.docId, state.mode, [...openGroups].join(), [...state.sel].join(), ...shapes().map((s) => JSON.stringify(s))].join('\u0001');
+    if (key === layersKey) return;
+    layersKey = key;
+    const sc = layersEl.scrollTop;
+    layersEl.innerHTML = n ? layerRows().map(rowHtml).join('') : '<div class="ly-empty">Shapes you draw are listed here, the top one first.</div>';
+    layersEl.scrollTop = sc;
+    const sel = state.sel.size;
+    $('#layersFoot [data-la="newgroup"]').disabled = !canGroup();
+    $('#layersFoot [data-la="ungroup"]').disabled = !canUngroup();
+    $('#layersFoot [data-la="del"]').disabled = !sel;
+    if (thumbs.size > n + 200) { const ids = new Set(shapes().map((s) => s.id)); for (const id of [...thumbs.keys()]) if (!ids.has(id)) thumbs.delete(id); }
+  }
+  // the shapes a row stands for, bottom first
+  const rowIds = (row) => (row.dataset.g ? shapes().filter((q) => q.g === row.dataset.g).map((q) => q.id) : [row.dataset.id]);
+  const rowKey = (row) => (row.dataset.g ? 'g:' + row.dataset.g : row.dataset.id);
+  const rowByKey = (k) => (k ? layersEl.querySelector(k.startsWith('g:') ? `.ly-row[data-g="${k.slice(2)}"]` : `.ly-row[data-id="${k}"]`) : null);
+  const keyIds = (k) => (k.startsWith('g:') ? shapes().filter((q) => q.g === k.slice(2)).map((q) => q.id) : [k]);
+  function selectRow(row, e) {
+    const ids = rowIds(row);
+    if (!ids.some((id) => pickable(byId(id)))) { showHint(ids.every((id) => byId(id).hidden) ? 'Hidden: show it to select it' : 'Locked: unlock it to select it', 1400); return; }
+    const rows = [...layersEl.querySelectorAll('.ly-row')], a = rowByKey(layerAnchor);
+    if (e.shiftKey && a) {
+      const i = rows.indexOf(a), j = rows.indexOf(row);
+      state.sel = new Set();
+      for (const r of rows.slice(Math.min(i, j), Math.max(i, j) + 1)) for (const id of rowIds(r)) state.sel.add(id);
+    } else if (e.metaKey || e.ctrlKey) {
+      const all = ids.every((id) => state.sel.has(id));
+      for (const id of ids) all ? state.sel.delete(id) : state.sel.add(id);
+      layerAnchor = rowKey(row);
+    } else { state.sel = new Set(ids); layerAnchor = rowKey(row); }
+    renderOverlay(); renderProps();
+  }
+  function setLayerFlag(ids, key, on) {
+    begin();
+    for (const id of ids) { const s = byId(id); if (!s) continue; if (on) s[key] = true; else delete s[key]; }
+    commit(); render(); renderProps();
+  }
+  function deleteIds(ids) {
+    const set = new Set(ids);
+    begin();
+    state.doc.shapes = shapes().filter((s) => !set.has(s.id));
+    for (const id of ids) state.sel.delete(id);
+    commit(); render(); renderProps();
+  }
+  function layerAction(a, key) {
+    const ids = keyIds(key), ls = ids.map(byId).filter(Boolean);
+    if (a === 'rename') { const r = rowByKey(key); if (r) renameRow(r); }
+    if (a === 'hide' || a === 'show') setLayerFlag(ids, 'hidden', a === 'hide');
+    if (a === 'lock' || a === 'unlock') setLayerFlag(ids, 'locked', a === 'lock');
+    if (a === 'del' && ls.length) deleteIds(ids);
+  }
+  function renameRow(row) {
+    const nm = row.querySelector('.ly-nm');
+    if (!nm) return;
+    const g = row.dataset.g, s = g ? null : byId(row.dataset.id), cur = g ? groupName(g) : layerName(s);
+    const inp = document.createElement('input');
+    inp.className = 'ly-ed'; inp.value = cur; inp.spellcheck = false; inp.setAttribute('aria-label', 'Layer name');
+    nm.replaceWith(inp); inp.focus(); inp.select();
+    let done = false;
+    const end = (ok) => {
+      if (done) return;
+      done = true;
+      const v = inp.value.trim();
+      inp.replaceWith(nm);
+      if (ok && v !== cur) {
+        begin();
+        if (g) { for (const q of shapes()) if (q.g === g) { if (v && v !== 'Group') q.gname = v; else delete q.gname; } }
+        else if (s) { if (v && v !== autoName(s)) s.name = v; else delete s.name; }
+        commit();
+      }
+      layersKey = ''; render(); renderProps();
+    };
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); end(true); } if (e.key === 'Escape') { e.preventDefault(); end(false); } });
+    inp.addEventListener('blur', () => end(true));
+    inp.addEventListener('pointerdown', (e) => e.stopPropagation());
+  }
+  // drop the dragged shapes above or below a row; a member row of an open group (or the lower half of an open
+  // group's own row) takes them into that group, anywhere else takes them out. A dragged group stays whole.
+  function dropTarget(e) {
+    const row = document.elementFromPoint(e.clientX, e.clientY)?.closest('#layers .ly-row');
+    if (!row || row.classList.contains('drag')) return null;
+    const r = row.getBoundingClientRect(), upper = e.clientY < r.top + r.height / 2;
+    if (row.dataset.g && !upper && openGroups.has(row.dataset.g) && !layerDrag.group) return { row, mode: 'into' };
+    return { row, mode: upper ? 'above' : 'below' };
+  }
+  function dropLayers(t) {
+    const all = shapes(), moving = all.filter((s) => layerDrag.ids.has(s.id)), r = t.row;
+    let anchor, above, into = null;
+    if (r.dataset.g) {
+      const m = all.filter((q) => q.g === r.dataset.g);
+      if (t.mode === 'into') { anchor = m[m.length - 1]; above = true; into = r.dataset.g; }
+      else if (t.mode === 'above') { anchor = m[m.length - 1]; above = true; }
+      else { anchor = m[0]; above = false; }
+    } else {
+      anchor = byId(r.dataset.id); above = t.mode === 'above';
+      if (r.classList.contains('ly-in')) {
+        into = anchor.g;
+        if (layerDrag.group) { const m = all.filter((q) => q.g === into); anchor = above ? m[m.length - 1] : m[0]; into = null; }
+      }
+    }
+    if (!anchor || layerDrag.ids.has(anchor.id)) return;
+    const rest = all.filter((s) => !layerDrag.ids.has(s.id));
+    const i = rest.indexOf(anchor) + (above ? 1 : 0);
+    begin();
+    if (!layerDrag.group) for (const s of moving) {
+      if (into) { s.g = into; const gn = rest.find((q) => q.g === into && q.gname); if (gn) s.gname = gn.gname; else delete s.gname; }
+      else { delete s.g; delete s.gname; }
+    }
+    state.doc.shapes = [...rest.slice(0, i), ...moving, ...rest.slice(i)];
+    commit(); render(); renderProps();
+  }
+  function clearDropMarks() { for (const el of layersEl.querySelectorAll('.drop-above, .drop-below, .drop-into, .drag')) el.classList.remove('drop-above', 'drop-below', 'drop-into', 'drag'); }
+  if (layersEl) {
+    layersEl.addEventListener('pointerdown', (e) => {
+      const row = e.target.closest('.ly-row');
+      if (!row || e.button !== 0 || e.target.closest('button, input')) return;
+      layerPressKey = rowKey(row);
+      const ids = rowIds(row), already = ids.every((id) => state.sel.has(id));
+      // a click on a row of the selection keeps it until the pointer comes up, so the whole selection can be dragged
+      if (!already || e.shiftKey || e.metaKey || e.ctrlKey) selectRow(row, e);
+      const dragIds = ids.every((id) => state.sel.has(id)) ? new Set(state.sel) : new Set(ids);
+      layerDrag = { row, y: e.clientY, on: false, ids: dragIds, group: !!row.dataset.g, plain: already && !(e.shiftKey || e.metaKey || e.ctrlKey), e };
+      layersEl.setPointerCapture(e.pointerId);
+    });
+    layersEl.addEventListener('pointermove', (e) => {
+      if (!layerDrag) {
+        const row = e.target.closest('.ly-row'), ids = row ? rowIds(row) : null, k = ids ? ids.join() : '';
+        if (k !== (layerHover || []).join()) { layerHover = ids; renderOverlay(); }
+        return;
+      }
+      if (!layerDrag.on) {
+        if (Math.abs(e.clientY - layerDrag.y) < 4) return;
+        layerDrag.on = true;
+        for (const r of layersEl.querySelectorAll('.ly-row')) if (rowIds(r).every((id) => layerDrag.ids.has(id))) r.classList.add('drag');
+      }
+      for (const el of layersEl.querySelectorAll('.drop-above, .drop-below, .drop-into')) el.classList.remove('drop-above', 'drop-below', 'drop-into');
+      const t = dropTarget(e);
+      if (t) t.row.classList.add('drop-' + t.mode);
+      const r = layersEl.getBoundingClientRect(); // scroll near the ends
+      if (e.clientY < r.top + 16) layersEl.scrollTop -= 8; else if (e.clientY > r.bottom - 16) layersEl.scrollTop += 8;
+    });
+    const endDrag = (e, ok) => {
+      const d = layerDrag;
+      if (!d) return;
+      layerDrag = null;
+      if (d.on) { const t = ok ? dropTarget(Object.assign({}, { clientX: e.clientX, clientY: e.clientY })) : null; clearDropMarks(); layerDrag = d; if (t) dropLayers(t); layerDrag = null; layersKey = ''; renderLayers(); }
+      else if (ok && d.plain) selectRow(d.row, d.e);
+      scheduleLayers(); // the rebuild skipped while the button was down
+    };
+    layersEl.addEventListener('pointerup', (e) => endDrag(e, true));
+    layersEl.addEventListener('pointercancel', (e) => endDrag(e, false));
+    layersEl.addEventListener('pointerleave', () => { if (!layerDrag && layerHover) { layerHover = null; renderOverlay(); } });
+    layersEl.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-la]'), row = e.target.closest('.ly-row');
+      if (!b || !row) return;
+      const ids = rowIds(row), ls = ids.map(byId);
+      if (b.dataset.la === 'eye') setLayerFlag(ids, 'hidden', !ls.every((q) => q.hidden));
+      if (b.dataset.la === 'lock') setLayerFlag(ids, 'locked', !ls.every((q) => q.locked));
+      if (b.dataset.la === 'fold') { const g = row.dataset.g; if (openGroups.has(g)) openGroups.delete(g); else openGroups.add(g); renderLayers(); }
+    });
+    layersEl.addEventListener('dblclick', (e) => {
+      if (e.target.closest('button, input')) return;
+      // the first click may have rebuilt the rows, so find the row again by what it stands for
+      const hit = e.target.closest('.ly-row'), row = rowByKey(hit && hit.isConnected ? rowKey(hit) : layerPressKey);
+      if (!row) return;
+      renderLayers();
+      const live = rowByKey(rowKey(row));
+      if (live) renameRow(live);
+    });
+    layersEl.addEventListener('contextmenu', (e) => {
+      const row = e.target.closest('.ly-row');
+      e.preventDefault();
+      if (!row) { openCtx(e.clientX, e.clientY); return; }
+      const ids = rowIds(row);
+      if (ids.some((id) => pickable(byId(id))) && !ids.every((id) => state.sel.has(id))) selectRow(row, { shiftKey: false, metaKey: false, ctrlKey: false });
+      openCtx(e.clientX, e.clientY, { key: rowKey(row), ids });
+    });
+    $('#layersFoot').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-la]');
+      if (!b) return;
+      if (b.dataset.la === 'newgroup') groupSel();
+      if (b.dataset.la === 'ungroup') ungroupSel();
+      if (b.dataset.la === 'del') deleteSel();
+    });
+    $('#layersHead').addEventListener('click', () => {
+      const open = layersWin.classList.contains('collapsed');
+      foldWin(layersWin, $('#layersToggle'), open, true, () => { if (open) { layersKey = ''; renderLayers(); } }, [$('#propsWin')]);
+      savePrefs();
+    });
   }
 
   // ---------- arrange ----------
@@ -2367,7 +2711,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'cd', 'qc', 'cz'].includes(s.type)) {
+      if (['plot', 'cd', 'qc', 'cz', 'forest'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -2475,6 +2819,10 @@
     exp: '<path d="M10 12V3M6.5 6.5L10 3l3.5 3.5"/><path d="M3.5 10v6.5h13V10"/>',
     rename: '<path d="M3 6h9M3 10h6M3 14h5"/><path d="M11 17l.6-2.6L16 10l2 2-4.4 4.4z"/>',
     newdoc: '<path d="M5 2.5h6.5l3.5 3.5v11.5H5z"/><path d="M10 8.5v6M7 11.5h6"/>',
+    eye: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/>',
+    eyeoff: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><path d="M3.5 16.5l13-13"/>',
+    lock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 016 0V9"/>',
+    unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 015.8-1.1"/>',
   };
   const icon = (n) => (n ? `<svg viewBox="0 0 20 20">${IC[n]}</svg>` : '<span class="ic"></span>');
   function item(label, act, { ic, key, dis, sub } = {}) {
@@ -2482,9 +2830,22 @@
     return `<button class="ctx-item" data-ctx="${act}"${dis ? ' disabled' : ''}>${icon(ic)}<span class="lb">${label}</span>${key ? `<kbd>${kb(key)}</kbd>` : ''}</button>`;
   }
   const hr = '<hr>';
-  function openCtx(x, y) {
+  // layer: { key, ids } when opened on a row of the Layers window; its Rename / Hide / Lock come first, and a
+  // hidden or locked row (which can't be selected) gets only those and Delete
+  function openCtx(x, y, layer) {
     const sel = selected(), n = sel.length, nu = n ? units().length : 0;
     let h = '';
+    if (layer) {
+      const ls = layer.ids.map(byId).filter(Boolean), hid = ls.every((q) => q.hidden), lk = ls.every((q) => q.locked);
+      h += item('Rename', 'layer:rename', { ic: 'rename' }) +
+        item(hid ? 'Show' : 'Hide', 'layer:' + (hid ? 'show' : 'hide'), { ic: hid ? 'eye' : 'eyeoff' }) +
+        item(lk ? 'Unlock' : 'Lock', 'layer:' + (lk ? 'unlock' : 'lock'), { ic: lk ? 'unlock' : 'lock' }) + hr;
+      if (ls.some((q) => q.hidden || q.locked)) {
+        ctx.innerHTML = h + item('Delete', 'layer:del', { ic: 'del', key: 'Del' });
+        ctx.dataset.doc = ''; ctx.dataset.layer = layer.key;
+        placeCtx(x, y); return;
+      }
+    }
     if (n) {
       const one = n === 1 ? sel[0] : null;
       if (one && (one.type === 'text' || one.label !== undefined)) h += item(one.type === 'text' ? 'Edit Text' : 'Edit Label', 'edit', { ic: 'edit', key: 'Enter' }) + hr;
@@ -2515,7 +2876,7 @@
         item(state.grid ? 'Hide Grid' : 'Show Grid', 'grid', { key: 'G' });
     }
     ctx.innerHTML = h;
-    ctx.dataset.doc = '';
+    ctx.dataset.doc = ''; ctx.dataset.layer = layer ? layer.key : '';
     placeCtx(x, y); // also opens submenus to the left when there is no room on the right
   }
   // ---------- document list: right-click menu ----------
@@ -2707,7 +3068,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -2726,6 +3087,7 @@
     if (a === 'l') alignSel(arg);
     if (a === 'd') distributeSel(arg);
     if (a === 'all') { state.sel = new Set(shapes().map((s) => s.id)); renderOverlay(); renderProps(); }
+    if (a === 'layer') layerAction(arg, ctx.dataset.layer || '');
     if (a === 'fit') zoomFit();
     if (a === 'grid') toggleGrid();
   });
@@ -2775,7 +3137,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -2923,6 +3285,7 @@
   function fillDefsAround(fn) { TD.takeFillDefs(); const body = fn(); return TD.takeFillDefs() + body; }
   // SVG string for a list of shapes (used for SVG export and the document view)
   function shapesSvg(list, pad = 8, standalone = true) {
+    list = list.filter((s) => !s.hidden); // a hidden layer is not exported
     if (!list.length) return '';
     const ctx = { zoom: 1, hit: 0, export: true, scene: list };
     const b = TD.bboxOf(list.flatMap((s) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }), pad);
@@ -3330,6 +3693,7 @@
       Object.assign(state.defaults, prefs.defaults || {});
       if (prefs.sidebar === false) document.body.classList.add('no-files');
       if (prefs.props === false) setPropsOpen(false);
+      if (prefs.layers === false) { $('#layersWin').classList.add('collapsed'); $('#layersToggle').setAttribute('aria-expanded', 'false'); $('#layersToggle').title = 'Expand panel'; }
     }
     // The document list folds open and shut (CSS). The drawing stays where it is on screen, at the same
     // scale: as the canvas's left edge moves, the view moves the other way by as much, so the list just

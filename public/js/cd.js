@@ -105,7 +105,7 @@
     name: 'Commutative diagram',
     pts: [['x', 'y']],
     create: (p, d) => ({
-      type: 'cd', x: p.x, y: p.y, src: '$A$ & $B$ \\\\ $C$ & $D$', colSep: 80, rowSep: 60, size: d.size || 'normalsize', labelSize: 'small',
+      type: 'cd', x: p.x, y: p.y, src: '$A$ & $B$ \\\\ $C$ & $D$', colSep: 80, rowSep: 60, size: TD.BLOCK_SIZE, labelSize: 'small',
       font: 'default', color: '#000000', width: 0.6 / TD.PT_PER_PX,
       arrows: [
         { r1: 0, c1: 0, r2: 0, c2: 1, label: '$f$', side: 'left', style: '->', bend: 0 },
