@@ -1006,7 +1006,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|cd|qc|cz|forest|zx|bloch|feynman)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|solid|prim3d|revolve|sketch3d|cd|qc|cz|forest|zx|bloch|feynman)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1033,6 +1033,7 @@
   $('#fly-elec').innerHTML = `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: about 250 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>Circuit…</button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`
     + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
   function flyOf(t) {
+    if (/^(solid|prim3d|revolve|sketch3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
     if (/^(cd|qc|cz|forest|zx|bloch|feynman)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
@@ -1941,6 +1942,10 @@
     arc: [['cx', 'x'], ['cy', 'y'], ['r', 'len'], ['a1', 'deg'], ['a2', 'deg']],
     text: [['x', 'x'], ['y', 'y'], ['tw', 'len'], ['th', 'len']],
     plot: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
+    solid: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
+    prim3d: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
+    revolve: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
+    sketch3d: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     pie: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
     cd: [['x', 'x'], ['y', 'y']],
     qc: [['x', 'x'], ['y', 'y']],
@@ -2090,6 +2095,7 @@
     const first = (k) => keyVal(sel.find((s) => hasKey(s, k)), k);
     const isText = types.includes('text');
     let html = `<h3>${esc(title)}</h3><div class="sec" data-target="sel">`;
+    const open = html.length;
     for (const p of PROPS) {
       if (p.key === 'mathStyle') { const ms = mathStyleOf(sel); if (ms) html += fieldHtml(p, ms, p.label); continue; }
       if (!has(p.key)) continue;
@@ -2108,7 +2114,8 @@
       else if (p.type === 'align') html += fieldHtml({ ...p, wraps: sel.some((s) => s.tw > 0) }, first('align'));
       else html += fieldHtml(p, first(p.key), lbl);
     }
-    html += `</div>`;
+    // blocks with no shared style fields (the 3D figures, ZX, Feynman…) get no empty section
+    if (html.length === open) html = html.slice(0, open - '<div class="sec" data-target="sel">'.length); else html += `</div>`;
     if (sel.length === 1 && sel[0].type === 'poly') {
       const s = sel[0], vi = state.vertex && state.vertex.id === s.id ? state.vertex.i : -1;
       html += `<div class="sec"><div class="sec-title">Points <small>${s.pts.length}</small></div><div class="btns">
@@ -2802,7 +2809,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman'].includes(s.type)) {
+      if (['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3812,21 +3819,42 @@
   };
   $('#tikzDownload').onclick = () => out(slug() + '.tex', $('#tikzOut').value, 'text/x-tex');
 
-  // ---------------- sample diagram ----------------
-  // The first file a new user sees: what the app does, in a few lines, and one of each kind of object
-  // (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram), built from
-  // each type's own defaults so it stays in step with the library.
+  // ---------------- sample document ----------------
+  // The first file a new user sees, a Classic file that opens in Document view: what the app is, its
+  // modes and what each is for, then a diagram with one of each kind of object (text, formulae, shapes,
+  // a circuit, a quantum circuit, a plot, a commutative diagram), built from each type's own defaults so
+  // it stays in step with the library. Text blocks use the Document view's syntax (# heading, - item).
+  // Short intro and the modes on top, where people read first; the how-to goes below the diagram.
+  const SAMPLE_INTRO = [
+    'Draw figures for \\LaTeX\\ and export them as TikZ, SVG, PNG or PDF. Your work saves in this browser as you go.',
+    '',
+    '# Four modes',
+    '- \\textbf{Classic}: diagrams arranged with text, like this file. Familiar with Mathcha? Classic mode offers a similar editing workflow.',
+    '- \\textbf{Page}: a free-form sheet. Place anything anywhere, for posters and handouts.',
+    '- \\textbf{Whiteboard}: an endless canvas for sketching.',
+    '- \\textbf{Quick}: one formula, copied as a PNG or SVG.',
+  ].join('\n');
+  const SAMPLE_OUTRO = [
+    '# How to use',
+    '- Draw with the tools on the left; \\textbf{Plots} and \\textbf{Blocks} hold graphs, circuits and more.',
+    '- Double-click to edit, right-click for more. Maths goes between \\$ signs.',
+    '- In Classic, switch between \\textbf{Document} and \\textbf{Diagram} at the top, or double-click a diagram.',
+    '- \\textbf{Code} gives TikZ, \\textbf{LaTeX} the whole document, \\textbf{Export} a picture or PDF.',
+  ].join('\n');
+  function sampleBlocks() {
+    return [
+      { type: 'text', text: SAMPLE_INTRO },
+      { type: 'diagram', shapes: sample() },
+      { type: 'text', text: SAMPLE_OUTRO },
+    ];
+  }
   function sample() {
     const s = [], D = { ...state.defaults, stroke: '#000000', color: '#000000', size: 'normalsize' };
     const add = (type, tool, o) => { const t = TD.TYPES[type]; if (!t) return null; const it = { id: uid(), ...t.create({ x: 0, y: 0 }, D, tool || type), ...o }; s.push(it); return it; };
     const text = (x, y, t, o) => add('text', 'text', { x, y, text: t, ...o });
     const GREY = '#6b6b6b', BLUE = '#1e63c4';
     const head = (x, y, t) => text(x, y, t, { size: 'small', bold: true, color: GREY });
-    // title and what to do
-    text(440, 0, 'Welcome to DiagramTeX', { size: 'LARGE', bold: true });
-    text(440, 40, 'Draw with the tools on the left, or drag anything in from the Library.', { color: GREY });
-    text(440, 66, 'Double-click an object to edit it. Maths goes between \\textdollar\\ signs, as in \\LaTeX.', { color: GREY });
-    text(440, 92, 'Export turns the drawing into TikZ code for your paper, or an SVG / PNG.', { color: GREY });
+    // (the welcome and how-to lines are text blocks around this diagram: see SAMPLE_INTRO)
     // text and formulae
     head(130, 150, 'TEXT AND FORMULAE');
     text(130, 196, '$\\vec F = q\\left(\\vec E + \\vec v \\times \\vec B\\right)$', { size: 'large' });
@@ -3853,7 +3881,7 @@
     // commutative diagram
     head(770, 370, 'COMMUTATIVE DIAGRAMS');
     add('cd', 'cd', { x: 730, y: 410 });
-    text(440, 620, 'Double-click the circuit or the quantum circuit to open its editor. Delete this sample whenever you like.', { size: 'small', color: BLUE });
+    text(440, 620, 'On the canvas, double-click the circuit or the quantum circuit to open its editor.', { size: 'small', color: BLUE });
     return s.filter(Boolean);
   }
 
@@ -3960,7 +3988,7 @@
     const idx = index();
     const last = store.get('diagramtex.last', null);
     if (idx.length) openDoc(idx.find((d) => d.id === last) ? last : idx[idx.length - 1].id);
-    else { newDoc('Welcome to DiagramTeX', sample()); zoomFit(); }
+    else { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); }
     setTool('select');
     updateTopbar();
     // KaTeX fonts change metrics once loaded: re-measure.
@@ -3982,7 +4010,7 @@
   TD.state = state; // for debugging
   TD.app = {
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
-    newSample: () => { newDoc('Welcome to DiagramTeX', sample()); zoomFit(); },
+    newSample: () => { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); },
     get slug() { return slug(); },
     // pictures of shapes that are not on the canvas (Quick): a standalone SVG, or a PNG at `dpi`
     svgOf: (list) => shapesSvg(list, 4),

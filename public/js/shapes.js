@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.17.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.18.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -349,7 +349,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'pie', 'cd', 'qc', 'forest', 'zx', 'bloch', 'feynman'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'pie', 'cd', 'qc', 'forest', 'zx', 'bloch', 'feynman'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];

@@ -196,11 +196,14 @@
     field: { expr: '-y', expr2: 'x', domain: ['-3', '3'], ydomain: ['-3', '3'], samples: 11 },
     phase: { expr: 'y', expr2: '-sin(x) - 0.3*y', domain: ['-4', '4'], ydomain: ['-3', '3'], samples: 7 },
     vectors: { data: '2 1\n-1 2\n1 -2 1.5 0.5' },
+    param3d: { expr: '(2 + cos(v))*cos(u)', expr2: '(2 + cos(v))*sin(u)', expr3: 'sin(v)', domain: ['0', '2*pi'], ydomain: ['0', '2*pi'], samples: 25 },
+    curve3d: { expr: 'cos(t)', expr2: 'sin(t)', expr3: 't/(2*pi)', domain: ['0', '4*pi'], samples: 200 },
   };
   TD.PLOT_KIND_DEF = KIND_DEF;
-  const KINDS3 = [['surface', 'Surface'], ['mesh', 'Mesh'], ['scatter3d', 'Scatter 3D']];
+  const KINDS3 = [['surface', 'Surface'], ['mesh', 'Mesh'], ['param3d', 'Parametric surface'], ['curve3d', 'Space curve'], ['scatter3d', 'Scatter 3D']];
+  const PARAM3 = ['param3d', 'curve3d'];
   const GRID_KINDS = ['contour', 'heatmap', 'surface', 'mesh'];
-  const usesExprOnly = (k) => GRID_KINDS.includes(k) || CURVE_KINDS.includes(k) || BOX_KINDS.includes(k);
+  const usesExprOnly = (k) => GRID_KINDS.includes(k) || CURVE_KINDS.includes(k) || BOX_KINDS.includes(k) || PARAM3.includes(k);
   const usesDataOnly = (k) => k === 'scatter3d' || k === 'vectors';
   // plot variables ("a = 2, b = 0.5") are substituted into every expression and domain
   function withVars(ser, vars) {
@@ -217,7 +220,7 @@
       for (const [k, v] of list) if (isFinite(v)) out = out.replace(new RegExp(`(?<![A-Za-z_0-9])${k}(?![A-Za-z_0-9(])`, 'g'), `(${v})`);
       return out;
     }
-    return { ...ser, expr: sub(ser.expr, vals), expr2: sub(ser.expr2, vals), domain: (ser.domain || []).map((d) => sub(d, vals)), ydomain: (ser.ydomain || []).map((d) => sub(d, vals)) };
+    return { ...ser, expr: sub(ser.expr, vals), expr2: sub(ser.expr2, vals), expr3: sub(ser.expr3, vals), domain: (ser.domain || []).map((d) => sub(d, vals)), ydomain: (ser.ydomain || []).map((d) => sub(d, vals)) };
   }
   TD.plotWithVars = withVars;
   const SERIES_COLORS = ['#1e5bd6', '#d62728', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b', '#e377c2'];
@@ -225,7 +228,7 @@
   // Evaluate a series to concrete geometry (memoised).
   const serCache = new Map();
   function evalSeries(ser) {
-    const key = JSON.stringify([ser.kind, ser.source, ser.expr, ser.expr2, ser.data, ser.domain, ser.ydomain, ser.samples, ser.levels]);
+    const key = JSON.stringify([ser.kind, ser.source, ser.expr, ser.expr2, ser.expr3, ser.data, ser.domain, ser.ydomain, ser.samples, ser.levels]);
     if (serCache.has(key)) return serCache.get(key);
     if (serCache.size > 200) serCache.clear();
     let r;
@@ -254,6 +257,26 @@
     }
     // rename a parameter (t, θ, y) to x so one-variable expressions compile as f(x)
     const rn = (src, from) => (from ? String(src || '').replace(new RegExp(`(?<![A-Za-z_0-9])(${from})(?![A-Za-z_0-9])`, 'g'), 'x') : String(src || ''));
+    if (PARAM3.includes(k)) { // (x, y, z) of t, or of u and v (compiled with u, v renamed to x, y)
+      const ren = (src) => (k === 'curve3d' ? rn(src, 't') : String(src || '').replace(/(?<![A-Za-z_0-9])([uv])(?![A-Za-z_0-9])/g, (m, c) => (c === 'u' ? 'x' : 'y')));
+      const vars = k === 'curve3d' ? ['x'] : ['x', 'y'];
+      const E = [ser.expr, ser.expr2, ser.expr3].map((src) => getExpr(ren(src), vars));
+      const bad = E.findIndex((e) => e.error);
+      if (bad >= 0) return { error: `${'xyz'[bad]}: ${E[bad].error}` };
+      const [a, b] = domainOf(ser, 'domain');
+      const pgf = E.map((e) => e.pgf);
+      if (k === 'curve3d') {
+        const n = Math.max(2, Math.min(800, Math.round(ser.samples || 200)));
+        const curve3 = [];
+        for (let i = 0; i < n; i++) { const t = a + ((b - a) * i) / (n - 1); curve3.push(E.map((e) => e.fn(t, 0))); }
+        return { curve3, domain: [a, b], pgf3: pgf };
+      }
+      const [c, d] = domainOf(ser, 'ydomain');
+      const n = Math.max(2, Math.min(80, Math.round(ser.samples || 25)));
+      const grid3 = [];
+      for (let j = 0; j < n; j++) { const v = c + ((d - c) * j) / (n - 1); const row = []; for (let i = 0; i < n; i++) { const u = a + ((b - a) * i) / (n - 1); row.push(E.map((e) => e.fn(u, v))); } grid3.push(row); }
+      return { grid3, domain: [a, b], ydomain: [c, d], pgf3: pgf, samples: n };
+    }
     if (CURVE_KINDS.includes(k)) {
       const [a, b] = domainOf(ser, 'domain');
       const v1 = k === 'param' || k === 'polar' ? 'theta|θ|t' : k === 'xofy' ? 'y' : null;
@@ -432,6 +455,7 @@
         }
       }
       if (r.pts3) for (const p of r.pts3) { grow(x, p[0]); grow(y, p[1]); grow(z, p[2]); }
+      for (const p of r.curve3 || (r.grid3 ? r.grid3.flat() : [])) { grow(x, p[0]); grow(y, p[1]); grow(z, p[2]); }
       if (r.pts2) for (const p of r.pts2) { grow(x, p[0]); grow(y, p[1]); }
       if (r.vecs && !r.box) for (const v of r.vecs) { grow(x, v[0]); grow(x, v[0] + v[2]); grow(y, v[1]); grow(y, v[1] + v[3]); }
       if (r.box) { grow(x, r.box[0]); grow(x, r.box[1]); grow(y, r.box[2]); grow(y, r.box[3]); }
@@ -735,6 +759,24 @@
             });
           }
         }
+      } else if (r.grid3) {
+        const G = r.grid3;
+        for (let j = 0; j < G.length - 1; j++) {
+          for (let k = 0; k < G[j].length - 1; k++) {
+            const q = [G[j][k], G[j][k + 1], G[j + 1][k + 1], G[j + 1][k]];
+            if (!q.every((p) => p.every(isFinite))) continue;
+            const c = q.map((p) => P(p[0], p[1], p[2]));
+            const col = cmap(s.colormap, ((q[0][2] + q[1][2] + q[2][2] + q[3][2]) / 4 - L.mmin) / (L.mmax - L.mmin));
+            items.push({ d: (c[0].d + c[1].d + c[2].d + c[3].d) / 4, svg: `<path d="${'M' + c.map((p) => r2(p.x) + ',' + r2(p.y)).join('L') + 'Z'}" fill="${col}" stroke="#000" stroke-opacity="0.6" stroke-width="${aw}" stroke-linejoin="round"/>` });
+          }
+        }
+      } else if (r.curve3) {
+        const C = r.curve3, sc = TD.css(ser.color), dash = ser.dash === 'dashed' ? ` stroke-dasharray="${r2(3 / K)} ${r2(2.2 / K)}"` : ser.dash === 'dotted' ? ` stroke-dasharray="0.01 ${r2(2 / K)}"` : '';
+        for (let i = 0; i < C.length - 1; i++) {
+          if (!C[i].every(isFinite) || !C[i + 1].every(isFinite)) continue;
+          const a = P(...C[i]), b = P(...C[i + 1]);
+          items.push({ d: (a.d + b.d) / 2 + 1e-6, svg: `<path d="M${r2(a.x)},${r2(a.y)}L${r2(b.x)},${r2(b.y)}" stroke="${sc}" stroke-width="${r2(ser.width ?? 1)}" stroke-linecap="round" fill="none"${dash}/>` });
+        }
       } else if (r.pts3) {
         for (const p of r.pts3) {
           const q = P(p[0], p[1], p[2]);
@@ -876,6 +918,18 @@
           cmd = `\\addplot[matrix plot*, mesh/cols=${r.xs.length}, point meta=explicit${legend ? '' : ', forget plot'}] table[meta=z] {\n    x y z\n${rows.join('\n')}\n  };`;
           break;
         }
+        case 'param3d': {
+          po.push('surf', 'shader=faceted', 'z buffer=sort', `domain=${f4(r.domain[0])}:${f4(r.domain[1])}`, `y domain=${f4(r.ydomain[0])}:${f4(r.ydomain[1])}`, `samples=${r.samples}`);
+          if (!legend) po.push('forget plot');
+          cmd = `\\addplot3[${po.join(', ')}] ({${r.pgf3[0]}}, {${r.pgf3[1]}}, {${r.pgf3[2]}});`;
+          break;
+        }
+        case 'curve3d': {
+          style(); po.push('no marks', `domain=${f4(r.domain[0])}:${f4(r.domain[1])}`, `samples=${r.curve3.length}`, 'samples y=0');
+          if (!legend) po.push('forget plot');
+          cmd = `\\addplot3[${po.join(', ')}] ({${r.pgf3[0]}}, {${r.pgf3[1]}}, {${r.pgf3[2]}});`;
+          break;
+        }
         case 'surface': case 'mesh': {
           po.push(ser.kind === 'surface' ? 'surf' : 'mesh', ser.kind === 'surface' ? 'shader=faceted' : `line width=${X.pt(w)}`,
             `domain=${f4(r.domain[0])}:${f4(r.domain[1])}`, `y domain=${f4(r.ydomain[0])}:${f4(r.ydomain[1])}`, `samples=${r.xs.length}`);
@@ -948,6 +1002,8 @@
     bar: { w: 280, h: 200, ylabel: 'count', series: [newSeries({ kind: 'bar', source: 'data', data: '1 3\n2 5\n3 2\n4 6\n5 4', barWidth: 16, color: SERIES_COLORS[0] })] },
     contour: { w: 240, h: 240, colorbar: true, colormap: 'viridis', xlabel: '$x$', ylabel: '$y$', series: [newSeries({ kind: 'contour', expr: 'sin(x)*cos(y)', domain: ['-3', '3'], ydomain: ['-3', '3'], samples: 50, levels: 10 })] },
     heatmap: { w: 240, h: 240, colorbar: true, colormap: 'hot', xlabel: '$x$', ylabel: '$y$', series: [newSeries({ kind: 'heatmap', expr: 'exp(-(x^2+y^2)/2)', domain: ['-3', '3'], ydomain: ['-3', '3'], samples: 24 })] },
+    param3d: { dim: 3, w: 280, h: 220, grid: true, xlabel: '$x$', ylabel: '$y$', zlabel: '$z$', view: [30, 35], series: [newSeries({ kind: 'param3d', ...KIND_DEF.param3d })] },
+    curve3d: { dim: 3, w: 280, h: 220, grid: true, xlabel: '$x$', ylabel: '$y$', zlabel: '$z$', series: [newSeries({ kind: 'curve3d', ...KIND_DEF.curve3d, width: 1.2 })] },
     function3d: { dim: 3, w: 280, h: 220, grid: true, xlabel: '$x$', ylabel: '$y$', zlabel: '$z$', series: [newSeries({ kind: 'surface', expr: 'sin(x)*cos(y)', domain: ['-3', '3'], ydomain: ['-3', '3'], samples: 25 })] },
     surface3d: { dim: 3, w: 280, h: 220, grid: true, colormap: 'viridis', xlabel: '$x$', ylabel: '$y$', zlabel: '$z$', series: [newSeries({ kind: 'surface', expr: 'exp(-(x^2+y^2))', domain: ['-2', '2'], ydomain: ['-2', '2'], samples: 25 })] },
     mesh3d: { dim: 3, w: 280, h: 220, grid: true, xlabel: '$x$', ylabel: '$y$', zlabel: '$z$', series: [newSeries({ kind: 'mesh', expr: 'x^2-y^2', domain: ['-2', '2'], ydomain: ['-2', '2'], samples: 20 })] },
@@ -1106,13 +1162,15 @@
           ineq: ['f(x)', null, 'x domain'], between: ['f(x) (lower)', 'g(x) (upper)', 'x domain'], xofy: ['x = f(y)', null, 'y domain'],
           param: ['x(t)', 'y(t)', 't range'], polar: ['r(θ)  (use t)', null, 'θ range'], implicit: ['F(x, y) = 0', null, 'x domain', 1],
           field: ['dx = P(x, y)', 'dy = Q(x, y)', 'x domain', 1], phase: ["x' = P(x, y)", "y' = Q(x, y)", 'x domain', 1],
+          param3d: ['x(u, v)', 'y(u, v)', 'u range', 'v range', 'z(u, v)'], curve3d: ['x(t)', 'y(t)', 't range', 0, 'z(t)'],
         }[ser.kind];
         if (NK) {
           if (ser.kind === 'ineq') h += row('Relation', sel('', [['<', 'y < f(x)'], ['<=', 'y ≤ f(x)'], ['>', 'y > f(x)'], ['>=', 'y ≥ f(x)']], ser.rel || '<', `data-i="${i}" data-sk="rel"`));
           h += row(NK[0], inp(`data-i="${i}" data-sk="expr" spellcheck="false"`, ser.expr));
           if (NK[1]) h += row(NK[1], inp(`data-i="${i}" data-sk="expr2" spellcheck="false"`, ser.expr2 || ''));
+          if (NK[4]) h += row(NK[4], inp(`data-i="${i}" data-sk="expr3" spellcheck="false"`, ser.expr3 || ''));
           h += row(NK[2], inp(`data-i="${i}" data-sk="domain0"`, ser.domain[0]) + inp(`data-i="${i}" data-sk="domain1"`, ser.domain[1]));
-          if (NK[3]) h += row('y domain', inp(`data-i="${i}" data-sk="ydomain0"`, ser.ydomain[0]) + inp(`data-i="${i}" data-sk="ydomain1"`, ser.ydomain[1]));
+          if (NK[3]) h += row(typeof NK[3] === 'string' ? NK[3] : 'y domain', inp(`data-i="${i}" data-sk="ydomain0"`, ser.ydomain[0]) + inp(`data-i="${i}" data-sk="ydomain1"`, ser.ydomain[1]));
           h += row(ser.kind === 'field' || ser.kind === 'phase' ? 'Grid (per side)' : 'Samples', inp(`data-i="${i}" data-sk="samples" min="2"`, ser.samples, 'number'));
           if (ser.kind === 'ineq' || ser.kind === 'between') h += row('Fill opacity', inp(`data-i="${i}" data-sk="fillOpacity" min="0" max="1" step="0.05"`, ser.fillOpacity ?? 0.25, 'number'));
         } else if (ser.kind === 'vectors') {
@@ -1127,11 +1185,11 @@
         }
         if (r.error) h += `<div class="err">${esc(r.error)}</div>`;
         if (ser.kind === 'contour') h += row('Levels', inp(`data-i="${i}" data-sk="levels" min="1"`, ser.levels, 'number'));
-        if (!['heatmap', 'contour', 'surface'].includes(ser.kind) || ser.kind === 'contour') {
+        if (!['heatmap', 'contour', 'surface', 'param3d'].includes(ser.kind) || ser.kind === 'contour') {
           if (!['contour', 'surface', 'heatmap', 'mesh'].includes(ser.kind)) h += row('Color', colorBtn(`data-sercolor="${i}"`, ser.color));
           h += row('Line width', inp(`data-i="${i}" data-sk="width" min="0.25" step="0.25"`, ser.width, 'number'));
         }
-        if (['line', 'area', 'ineq', 'between', 'xofy', 'param', 'polar', 'implicit', 'phase'].includes(ser.kind)) h += row('Dash', sel('', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']], ser.dash, `data-i="${i}" data-sk="dash"`));
+        if (['line', 'area', 'ineq', 'between', 'xofy', 'param', 'polar', 'implicit', 'phase', 'curve3d'].includes(ser.kind)) h += row('Dash', sel('', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']], ser.dash, `data-i="${i}" data-sk="dash"`));
         if (['line', 'scatter', 'scatter3d'].includes(ser.kind)) h += row('Marker', sel('', MARKS, ser.mark, `data-i="${i}" data-sk="mark"`));
         if (ser.kind === 'bar') h += row('Bar width', inp(`data-i="${i}" data-sk="barWidth" min="1"`, ser.barWidth, 'number') + '<span class="val">px</span>');
         h += row('Legend', inp(`data-i="${i}" data-sk="legend" placeholder="(none)"`, ser.legend));

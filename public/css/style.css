@@ -810,7 +810,14 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 /* Flyouts: 8px of padding on every side, and the shell's corner is concentric with the 6px buttons inside it
    (6 + 8 = 14). Section titles are inset 4px so their text lines up with the drawings in the buttons. */
 .popover.flyout { width: auto; max-width: 420px; padding: 8px; border-radius: calc(var(--r) + 8px); }
-#insertPop.flyout, #fly-blocks.flyout { width: 324px; }
+#insertPop.flyout, #fly-plots3d.flyout, #fly-blocks.flyout { width: 324px; }
+/* a long menu scrolls inside the window; the track stops short of the rounded corners */
+.popover.flyout { max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.popover.flyout::-webkit-scrollbar { width: 10px; }
+.popover.flyout::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+.popover.flyout::-webkit-scrollbar-thumb { background: var(--rule-strong); border: 3px solid transparent; border-radius: 6px; background-clip: padding-box; }
+.popover.flyout::-webkit-scrollbar-thumb:hover { background-color: var(--pencil); }
+@supports not selector(::-webkit-scrollbar) { .popover.flyout { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; } }
 .flyout .pop-title { margin: 12px 4px 6px; line-height: 16px; }
 .flyout .pop-title:first-child { margin-top: 2px; }
 .sym-grid { display: grid; grid-template-columns: repeat(10, 36px); gap: 2px; }

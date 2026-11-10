@@ -25,6 +25,11 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 - **Physics diagrams:** springs, waves, balls, axes, rulers, vectors, fields and force diagrams.
 - **Circuit diagrams:** a drag-and-drop circuit editor with 266 `circuitikz` components (resistors, capacitors, inductors, sources, meters, diodes, transistors, op-amps, switches, logic gates, flip-flops, ICs, block-diagram parts) that exports `circuitikz` code, plus 35 quick electrical symbols and waveforms.
 - **Function plots and charts:** 2D and 3D pgfplots (functions, parametric, polar, implicit, inequalities, vector fields, contour, heatmap, bar, scatter) and pie charts.
+- **3D figures for calculus, in plain TikZ:** all shaded or drawn as lines, with hidden edges dashed, turned with the view angles, and exported as plain TikZ with no extra package. Lower a solid colour's alpha in the colour picker to make the solid see-through.
+  - **Solid regions** for multiple integrals: a solid E over a base D between z = u₁(x, y) and z = u₂(x, y), or along the x- or y-axis instead. The base is an ellipse, rectangle, polar curve or annular sector (a cylindrical wedge), with drop lines and labelled callouts. Riemann columns show the boxes over a grid on D.
+  - **Solids of revolution:** the region between y = g(x) and y = f(x) turned about the x-axis (disks, washers) or the y-axis (shells). Sweep less than 360° to cut it open and show the region, or highlight one slice of width Δx.
+  - **Basic solids:** box, cylinder, cone, frustum, sphere, prism, pyramid and spherical wedge, with dimension labels.
+  - **3D sketch:** points, vectors, segments, planes, angle arcs, circles and space curves typed by their coordinates, one per line, with guides down to the axes. Presets draw cylindrical and spherical coordinates and a plane with its normal.
 - **Commutative diagrams:** a `tikz-cd` editor: type or drop objects on a grid, drag arrows from cell to cell, and pick each arrow's style, label, bend and shift, with the code live beside it.
 - **Bloch spheres:** a `blochsphere` block drawn with the package's own geometry; set the radius, view angles, ball style and states in the panel.
 - **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
@@ -41,7 +46,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 3. Press **Ctrl/⌘+E** to open the TikZ code and copy it, or **Ctrl/⌘+Shift+E** to download the whole document as `.tex`.
 4. Paste the code into your LaTeX document and compile.
 
-A new browser opens with a short welcome file: a few lines on how the app works and one example of each kind of object (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram).
+A new browser opens with a short welcome file, a Classic document: what the app does and its four modes (Classic, Page, Whiteboard and Quick) on top, then a diagram with one example of each kind of object (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram), then a few lines on how to use it.
 
 To use it offline, install it from your browser (the install icon in the address bar, or **Add to Home Screen** on a phone).
 
@@ -76,16 +81,17 @@ npx wrangler deploy
   - **Physics:** Mechanics (ground, ceiling, wall, block, incline, cart, pulley, pendulum) and Optics (convex and concave lenses, converging and diverging lens symbols, plane, concave and convex mirrors, prism, screen, slits, ray, parallel rays, point source, eye). Hatching, axles, bobs and angle marks keep their size when resized; the panel sets **Hatch spacing**, **Mount** (pulley, pendulum), **Angle mark** and **Angle label** (incline, pendulum; maths without `$`), and the number of **Slits**. A block starts holding `$m$`
   - **Misc:** axes, wave, brace, ruler, grid and more, ball, dot
   - **Arrows:** 27 block arrows
-  - **Plots** (the Insert menu), **Image** (`I`: PNG, JPEG, GIF, WebP or SVG; exported with `\includegraphics`), **Pencil** (`N`: freehand, smoothed and exported as Bézier curves)
+  - **2D plots** and **3D**, **Image** (`I`: PNG, JPEG, GIF, WebP or SVG; exported with `\includegraphics`), **Pencil** (`N`: freehand, smoothed and exported as Bézier curves)
   - Library symbols export as exact TikZ paths, can hold centred text, and can be rotated and flipped.
   - **Misc shapes keep their detail size when resized**, as in Mathcha: stretching a wave adds periods instead of widening them, a coil adds loops, a brace keeps its curls, and a ruler or grid adds ticks or cells. Their detail sizes are in the panel: wave **Period width** and **Start position**, coil **Loop pitch** / **Loop size**, axis **Tick spacing** and **Show numbers**, ruler **Tick spacing** / **Tick size**, grid **Cell size** / **Corner shift** / **Border**. Symbols also have **Rotation** and **Skew X**.
   - **Spring** has a **Loop pitch**, so a longer spring gets more coils. A **ticked** line shaft has tick spacing and size.
   - **Polyline points:** click a point to choose it, drag a **+** to add one, double-click to remove one (or use **Add point** / **Remove point** in the panel).
-- **Insert menu** (the Plots button): you can click to place an item or drag out a box.
+- **2D plots menu** (the plot button): you can click to place an item or drag out a box.
   - **2D plots (pgfplots):** function, line, scatter, area, bar, contour, heatmap.
-  - **3D plots:** surface, mesh, scatter, and function `z = f(x, y)`. The view angles follow pgfplots `view={az}{el}`.
   - **Pie chart:** one `label value [#color]` per line.
-- **Blocks menu** (the cube button below Plots): CD, Bloch, Quantum, Circuit, Tree, ZX and Feynman. A new block starts with `large` labels, whatever the default text size is.
+- **3D menu** (the button with three axes, below 2D plots): 3D plots, 3D figures and 3D solids. A menu taller than the window scrolls.
+  - **3D plots:** surface, mesh, scatter, function `z = f(x, y)`, parametric surfaces (x(u, v), y(u, v), z(u, v)) and space curves (x(t), y(t), z(t)). The view angles follow pgfplots `view={az}{el}`.
+- **Blocks menu** (the cube button below 3D): CD, Bloch, Quantum, Circuit, Tree, ZX and Feynman. A new block starts with `large` labels, whatever the default text size is.
 - **Grid editors** (Quantum, ZX, CD): point just left of a row or just above a column and a bin appears; click it to delete that row or column. Every field in an editor's panel updates the others as you type (a label and its code, an option and its buttons).
 - **Plots:** each plot can have several series, given as expressions (`sin(x)*exp(-x/4)`, `x^2+y^2`, …) or as data. You can set axis labels, ranges, grid, legend, colormaps (hot, viridis, jet, cool, gray) and a colour bar. Expression errors show in the panel and on the canvas.
   - **Function plot series types** (Mathcha's set): regular `y = f(x)`, **inequality** (`y < f(x)`, `≤`, `>`, `≥`; shaded, with a dashed edge when strict), **bounded region** between `f` and `g`, **x in terms of y**, **parametric** `(x(t), y(t))`, **polar** `r(θ)`, **implicit** `F(x, y) = 0`, **points**, **vectors** (`x y` or `x y u v`), **vector field** `(P, Q)` and **phase portrait** (trajectories with arrows).
@@ -278,6 +284,8 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/texcommands.js`: every command KaTeX and Temml support, with its number of arguments. It is generated, so do not edit it; rebuild with `node scripts/gen-texcommands.js` after updating either engine.
 - `public/js/mathengine.js`: the maths renderer (`TD.math.render`), switching between KaTeX and Temml
 - `public/js/plots.js`: expression parser, 2D/3D plot and pie rendering, pgfplots export
+- `public/js/view3d.js`: the shared 3D engine: projection, shaded meshes with hidden edges, fitting into the box, SVG and plain TikZ output
+- `public/js/solid3d.js`, `public/js/figures3d.js`, `public/js/sketch3d.js`: solid regions, basic solids and solids of revolution, and the 3D sketch
 - `public/js/cd.js`: commutative diagrams: tikz-cd parser, layout, canvas drawing and export
 - `public/js/cdeditor.js`: the overlay CD editor (palette, cell grid, arrows, live tikz-cd code)
 - `public/js/bloch.js`: Bloch spheres: blochsphere parser, canvas drawing, panel and export
