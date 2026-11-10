@@ -264,8 +264,13 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 #saveState { flex: 0 0 auto; min-width: 0; margin-left: 2px; color: var(--pencil); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #saveState.err { color: var(--redpen); font-weight: 600; }
 /* below this the top bar has no room to spare: hidden while saving works, a short "Not saved" when it fails */
+/* linked to a file on disk: that file's name, with a dot while there are changes not yet saved to it */
+#saveState.linked { max-width: 180px; color: var(--graphite); }
+#saveState.linked::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; background: var(--rule-strong); }
+#saveState.linked.dirty::before { background: var(--marker); }
 @media (max-width: 1699px) {
-  #saveState:not(.err) { display: none; }
+  #saveState.linked { max-width: 120px; }
+  #saveState:not(.err):not(.linked) { display: none; }
   #saveState.err { font-size: 0; }
   #saveState.err::after { content: "Not saved"; font-size: 11px; }
 }
@@ -964,6 +969,11 @@ body.mode-board #emptyHint .eh-board { display: block; }
 .exp-chk { display: flex; align-items: center; gap: 6px; color: var(--graphite); margin-bottom: 8px; }
 .exp-note { color: var(--pencil); line-height: 1.4; margin-bottom: 8px; }
 .exp-go { width: 100%; height: var(--ctl); }
+.exp-dirv { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.exp-dirb { display: inline-flex; align-items: center; gap: 6px; max-width: 168px; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); }
+.exp-dirb svg { flex: none; width: 14px; height: 14px; }
+.exp-dirb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp-dirx svg { width: 12px; height: 12px; }
 
 /* rotate zone just outside a selection corner */
 #canvas.rot-zone, #canvas.rot-zone * { cursor: var(--rot-cur) !important; }
@@ -1201,9 +1211,12 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
     font-family: var(--font-ui); overflow: auto;
   }
   #phoneWall img { width: 72px; height: 72px; margin-bottom: 8px; }
-  #phoneWall h1 { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; max-width: 320px; text-wrap: balance; }
-  #phoneWall p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--graphite); max-width: 320px; text-wrap: pretty; }
-  #phoneWall strong { color: var(--ink); font-weight: 600; word-break: break-word; }
+  #phoneWall h1 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
+  #phoneWall p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--graphite); max-width: 340px; text-wrap: pretty; }
+  #phoneWall b, #phoneWall strong { color: var(--ink); font-weight: 600; }
+  #phoneWall strong { word-break: break-word; }
+  /* the notice: set apart from the description, as the one thing to act on */
+  #phoneWall .pw-notice { display: flex; flex-direction: column; gap: 8px; max-width: 340px; margin-top: 12px; padding: 16px; border: 1px solid var(--rule); border-radius: var(--r-lg); background: var(--sheet); }
   #phoneWall .pw-note { font-size: 13px; color: var(--pencil); }
   body > :not(#phoneWall) { visibility: hidden !important; } /* nothing behind it is reachable, by pointer or screen reader */
 }

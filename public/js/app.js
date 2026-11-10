@@ -211,18 +211,34 @@
     store.set(LS_INDEX, idx);
     // a write to IndexedDB reports itself when it lands (see init)
     if (!ok || !inDb(LS_DOC + state.docId)) reportSave(ok, store.full);
+    else showSaveState();
     renderDocList();
   }
   // Saving is continuous, so there is nothing to report while it works: the sidebar says autosave is on.
   // A failure is the only news, shown there and once as a hint (the sidebar may be hidden).
+  let saveOk = true, saveFull = false;
   function reportSave(ok, full) {
-    const st = $('#saveState'), was = st.classList.contains('err');
-    st.classList.toggle('err', !ok);
-    const msg = ok ? 'Autosave enabled' : full ? 'Autosave failed: browser storage is full' : 'Autosave failed: browser storage unavailable';
-    if (st.textContent !== msg) st.textContent = msg; // unchanged text is not re-announced
-    st.title = ok ? 'Every change is saved in this browser as you work' : msg; // the full message where only "Not saved" fits
+    const was = !saveOk;
+    saveOk = ok; saveFull = full;
+    showSaveState();
     if (!ok && !was) showHint(full ? 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.'
       : 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.', 6000);
+  }
+  // Beside the file name: autosave, or, for a file linked to one on disk, that file's name, marked while the
+  // document has changes not yet saved to it.
+  function showSaveState() {
+    const st = $('#saveState'), f = TD.files.fileOf(state.docId);
+    const dirty = !!f && saveOk && !TD.files.isSaved(state.docId, projectJson(state.doc));
+    const msg = !saveOk ? (saveFull ? 'Autosave failed: browser storage is full' : 'Autosave failed: browser storage unavailable') : f ? f.name : 'Autosave enabled';
+    st.classList.toggle('err', !saveOk);
+    st.classList.toggle('linked', saveOk && !!f);
+    st.classList.toggle('dirty', dirty);
+    if (st.textContent !== msg) st.textContent = msg; // unchanged text is not re-announced
+    st.title = !saveOk ? msg // the full message where only "Not saved" fits
+      : f ? (dirty ? `Changes not yet saved to ${f.name}. Ctrl+S saves them.` : `Saved to ${f.name}. Ctrl+S saves changes to it.`)
+      : 'Every change is saved in this browser as you work';
+    const b = $('#topbar [data-cmd="save"]');
+    if (b) b.title = f ? `Save to ${f.name} (Ctrl+S)` : TD.files.can ? 'Save to a .diagramtex file on your computer; later saves go to the same file (Ctrl+Shift+S)' : 'Save to a .diagramtex file that you can open again (Ctrl+Shift+S)';
   }
   // The properties window folds up to its first heading and back down, its height eased between the two.
   // Each time the panel is drawn, its first heading moves into the window's head, above the scrolling part,
@@ -298,7 +314,7 @@
     store.set('diagramtex.last', id);
     store.set('diagramtex.last.' + kind, id);
     applyMode(kind === 'page' || kind === 'board' ? kind : (d.mode === 'document' ? 'document' : 'diagram'), fit);
-    render(); renderProps(); renderDocList(); updateTopbar();
+    render(); renderProps(); renderDocList(); updateTopbar(); showSaveState();
   }
   // Switch the canvas to another diagram block of the current document.
   function setActiveBlock(i) {
@@ -356,6 +372,7 @@
     const it = index().find((d) => d.id === id);
     if (!(await TD.confirm(`Delete "${it ? it.name : 'this file'}"?`, 'It is removed from this browser and cannot be undone.', { ok: 'Delete', danger: true }))) return;
     store.del(LS_DOC + id);
+    TD.files.forget(id);
     const idx = index().filter((d) => d.id !== id);
     store.set(LS_INDEX, idx);
     if (id === state.docId) {
@@ -2849,6 +2866,8 @@
     fit: '<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>',
     open: '<path d="M2.5 5.5v11h13l2-7H5l-2.5 7"/><path d="M2.5 5.5V3.5h5l1.5 2h6v4"/>',
     save: '<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>',
+    saveas: '<path d="M8 3v8M5 8l3 3 3-3"/><path d="M3.5 12v4.5h9"/><path d="M15 11v6M12 14h6"/>',
+    unlink: '<path d="M8.5 11.5l-2 2a2.5 2.5 0 01-3.5-3.5l2-2M11.5 8.5l2-2a2.5 2.5 0 00-3.5-3.5l-2 2"/><path d="M13 13l3.5 3.5M3.5 3.5L7 7"/>',
     exp: '<path d="M10 12V3M6.5 6.5L10 3l3.5 3.5"/><path d="M3.5 10v6.5h13V10"/>',
     rename: '<path d="M3 6h9M3 10h6M3 14h5"/><path d="M11 17l.6-2.6L16 10l2 2-4.4 4.4z"/>',
     newdoc: '<path d="M5 2.5h6.5l3.5 3.5v11.5H5z"/><path d="M10 8.5v6M7 11.5h6"/>',
@@ -2919,12 +2938,14 @@
   const docData = (id) => { if (id === state.docId) saveNow(); return store.get(LS_DOC + id, null); };
   const docEntry = (id) => index().find((d) => d.id === id);
   // project-file JSON for a stored file (the same format Save writes)
+  // Project file: { app, version: 3, kind: 'page' | 'classic' | 'board', name, page, sheet | blocks }.
+  function projectJson(d) {
+    return JSON.stringify({ app: 'diagramtex', version: 3, kind: normKind(d.kind), name: d.name, page: d.page,
+      ...(d.kind === 'page' ? { sheet: d.sheet } : { blocks: d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }] }) }, null, 1);
+  }
   function docJson(id) {
     const d = docData(id);
-    if (!d) return null;
-    const isPage = d.kind === 'page';
-    return JSON.stringify({ app: 'diagramtex', version: 3, kind: normKind(d.kind), name: d.name, page: d.page,
-      ...(isPage ? { sheet: d.sheet } : { blocks: d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }] }) }, null, 1);
+    return d ? projectJson(d) : null;
   }
   // store a copy of a file under a new name, listed right after `afterId`; returns the new id
   function storeCopy(d, name, afterId) {
@@ -2936,22 +2957,43 @@
     return id;
   }
   const copyName = (n) => { const names = new Set(index().map((d) => d.name)); let k = 1, t = `${n} copy`; while (names.has(t)) t = `${n} copy ${++k}`; return t; };
-  // Open a project file's text (from a file or the clipboard) as a new file. Returns false if it isn't one.
-  function openProjectText(text, fallbackName, unique) {
+  // A project file's contents: { kind, name, page, sheet } or { kind, name, page, blocks }; false if the text
+  // isn't JSON, and an error if it is JSON but not a DiagramTeX file.
+  function parseProject(text, fallbackName) {
     let d; try { d = JSON.parse(text); } catch { return false; }
     if (!d || typeof d !== 'object') return false;
-    let name = d.name || fallbackName || 'Untitled';
-    if (unique && index().some((x) => x.name === name)) name = copyName(name); // a pasted file never takes an existing name
+    const name = d.name || fallbackName || 'Untitled';
     if (d.kind === 'page') {
       if (!d.sheet || !validShapes(d.sheet.shapes)) throw new Error('not a DiagramTeX page file');
-      newDoc(name, null, null, null, d.page, 'page', { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes });
-      return true;
+      return { kind: 'page', name, page: d.page, sheet: { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes } };
     }
-    const blocks = d.blocks || (Array.isArray(d.shapes) ? [{ type: 'diagram', shapes: d.shapes }] : null);
+    let blocks = d.blocks || (Array.isArray(d.shapes) ? [{ type: 'diagram', shapes: d.shapes }] : null);
     if (!blocks || blocks.some((b) => b.type === 'diagram' && !validShapes(b.shapes))) throw new Error('not a DiagramTeX file');
-    newDoc(name, null, null, blocks, d.page, d.kind === 'board' ? 'board' : 'classic');
-    zoomFit();
+    const kind = d.kind === 'board' ? 'board' : 'classic';
+    // a whiteboard holds one diagram: imported blocks are merged onto it
+    if (kind === 'board') blocks = [{ type: 'diagram', shapes: blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes || []) }];
+    return { kind, name, page: d.page, blocks };
+  }
+  // Open a project file's text (from a file or the clipboard) as a new file. Returns false if it isn't one.
+  function openProjectText(text, fallbackName, unique) {
+    const p = parseProject(text, fallbackName);
+    if (!p) return false;
+    let name = p.name;
+    if (unique && index().some((x) => x.name === name)) name = copyName(name); // a pasted file never takes an existing name
+    if (p.kind === 'page') newDoc(name, null, null, null, p.page, 'page', p.sheet);
+    else { newDoc(name, null, null, p.blocks, p.page, p.kind); zoomFit(); }
     return true;
+  }
+  // Put a project file's contents into an existing file of the app (reopening it from disk).
+  function replaceDoc(id, p) {
+    const old = store.get(LS_DOC + id, null) || {};
+    store.set(LS_DOC + id, p.kind === 'page'
+      ? { kind: 'page', name: p.name, page: p.page, sheet: p.sheet, view: old.view, mode: 'page' }
+      : { kind: p.kind, name: p.name, blocks: p.blocks, active: 0, page: p.page, view: old.view, mode: p.kind === 'board' ? 'board' : (old.mode === 'document' ? 'document' : 'diagram') });
+    const idx = index(), it = idx.find((x) => x.id === id);
+    if (it) { it.name = p.name; it.kind = p.kind; it.updated = Date.now(); store.set(LS_INDEX, idx); }
+    if (state.docId === id) state.docId = null; // reopen without saving the old contents over the new
+    openDoc(id);
   }
   async function pasteDoc() {
     let text = null;
@@ -2970,16 +3012,20 @@
     ctx.classList.toggle('flip', x + r.width * 2 > innerWidth);
   }
   function openDocCtx(id, x, y) {
-    const it = id && docEntry(id), page = state.doc.kind === 'page', d = (k) => 'doc:' + k;
+    const it = id && docEntry(id), page = state.doc.kind === 'page', d = (k) => 'doc:' + k, lf = id && TD.files.fileOf(id);
     let h;
     if (it) {
       h = (id !== state.docId ? item('Open', d('open'), { ic: 'open' }) + hr : '') +
         item('Rename…', d('rename'), { ic: 'rename' }) +
         item('Duplicate', d('dup'), { ic: 'dup' }) +
-        item('Save As…', d('saveas'), { ic: 'dup' }) + hr +
+        item('Save a Copy…', d('saveas'), { ic: 'dup' }) + hr +
         item('Copy', d('copy'), { ic: 'copy' }) +
         item('Paste', d('paste'), { ic: 'paste' }) + hr +
-        item('Download (.json)', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' }) +
+        (!TD.files.can ? item('Download (.diagramtex)', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })
+          : (lf ? item(`Save to ${lf.name}`, d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+S' : '' })
+            : item('Save to File…', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })) +
+            item(lf ? 'Save to Another File…' : 'Save to New File…', d('savenew'), { ic: 'saveas' }) +
+            (lf ? item(`Unlink ${lf.name}`, d('unlink'), { ic: 'unlink' }) : '')) +
         item('Export', '', { ic: 'exp', sub:
           item('LaTeX Document (.tex)', d('latex'), { key: id === state.docId ? 'Ctrl+Shift+E' : '' }) +
           (page ? '' : item('TikZ Code…', d('tikz'), { key: id === state.docId ? 'Ctrl+E' : '' })) +
@@ -3037,7 +3083,7 @@
     switch (a) {
       case 'open': openFirst(); break;
       case 'new': newDoc(null, null, null, null, null, state.doc.kind); break;
-      case 'openfile': $('#fileInput').click(); break;
+      case 'openfile': openFile(); break;
       case 'rename': renameInList(id); break;
       case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(`Duplicated as "${n}"`, 1200); } break; }
       case 'saveas': {
@@ -3055,6 +3101,8 @@
       }
       case 'paste': pasteDoc(); break;
       case 'save': openFirst(); saveFile(); break;
+      case 'savenew': openFirst(); saveFile(true); break;
+      case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { if (id === state.docId) showSaveState(); if (f) showHint(`No longer linked to ${f.name}`, 1400); }); break; }
       case 'latex': case 'tikz': case 'html': case 'print': openFirst(); runCmd(a); break;
       case 'image': {
         openFirst();
@@ -3146,7 +3194,12 @@
     if (mod && !e.altKey) {
       const k0 = e.key.toLowerCase();
       if (k0 === 'e') { e.preventDefault(); runCmd(e.shiftKey ? 'latex' : (state.mode === 'document' ? 'latex' : 'tikz')); return; }
-      if (k0 === 's') { e.preventDefault(); if (e.shiftKey) runCmd('save'); else { saveNow(); showHint('Saved in this browser — Ctrl+Shift+S saves a file', 1500); } return; }
+      if (k0 === 's') {
+        e.preventDefault();
+        if (e.shiftKey || TD.files.fileOf(state.docId)) runCmd('save'); // a file linked to one on disk saves to it
+        else { saveNow(); showHint('Saved in this browser — Ctrl+Shift+S saves to a file', 1500); }
+        return;
+      }
       if (k0 === 'o') { e.preventDefault(); runCmd('open'); return; }
       if (k0 === 'p') { e.preventDefault(); runCmd('print'); return; }
     }
@@ -3295,24 +3348,74 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
-  // Project file: { app, version: 3, kind: 'page' | 'classic' | 'board', name, page, sheet | blocks }.
-  const saveFile = () => {
+  // Project files are .diagramtex (JSON inside; the kind is recorded in the file). Older versions saved
+  // .json, .page.json and .board.json, which still open.
+  const FILE_EXT = '.diagramtex', FILE_TYPE = 'application/vnd.diagramtex+json';
+  const fileName = () => slug() + FILE_EXT;
+  // Save to a file on disk. Where the browser allows it, the file is picked once and later saves write to
+  // it directly (`pick` picks a new one); elsewhere each save downloads a copy.
+  async function saveFile(pick) {
     finishEdit(); finishPoly(); commit();
-    const d = state.doc, isPage = d.kind === 'page';
-    const out = { app: 'diagramtex', version: 3, kind: d.kind, name: d.name, page: d.page, ...(isPage ? { sheet: d.sheet } : { blocks: d.blocks }) };
-    download(slug() + (isPage ? '.page.json' : d.kind === 'board' ? '.board.json' : '.json'), JSON.stringify(out, null, 1), 'application/json');
-  };
+    if (state.docId) saveNow();
+    const id = state.docId, text = projectJson(state.doc);
+    if (!TD.files.can) { download(fileName(), text, FILE_TYPE); return; }
+    try {
+      const name = await TD.files.saveDoc(id, text, fileName(), pick);
+      if (name) showHint(`Saved to ${name}`, 1200);
+    } catch (e) {
+      showHint(`Couldn't save the file (${e.message}). Downloaded a copy instead.`, 3500);
+      download(fileName(), text, FILE_TYPE);
+    }
+    if (id === state.docId) showSaveState();
+  }
   const validShapes = (a) => Array.isArray(a) && a.every((s) => s && TYPES[s.type]);
+  const baseName = (n) => n.replace(/(\.diagramtex|(\.page|\.board)?\.json)$/i, '');
+  // Open a file from disk: a project file opens as a file of the app (linked to the file on disk when the
+  // browser hands over a handle), anything else goes to the LaTeX import.
+  async function openText(text, name, handle) {
+    if (!/\.(diagramtex|json)$/i.test(name) && !/^\s*\{/.test(text)) { openImport(text); return; }
+    try {
+      const known = handle && (await TD.files.docFor(handle, index().map((x) => x.id)));
+      if (known) { await reopenLinked(known, text, name); return; }
+      if (!openProjectText(text, baseName(name))) throw new Error('not valid JSON');
+      // an older .json file is not linked: its first save makes a .diagramtex beside it
+      if (handle && name.toLowerCase().endsWith(FILE_EXT)) { await TD.files.link(state.docId, handle, projectJson(state.doc), text); showSaveState(); }
+    } catch (err) { TD.alert(`Couldn't open "${name}"`, `It isn't a DiagramTeX file (${err.message}).`); }
+  }
+  // A file already linked to one of the app's files: open that one, and take the file's contents if it
+  // changed on disk since it was last saved or opened.
+  async function reopenLinked(id, text, name) {
+    const fresh = !TD.files.isOnDisk(id, text);
+    if (id !== state.docId) openDoc(id);
+    if (!fresh) { showHint(`"${name}" is open`, 1200); return; }
+    const p = parseProject(text, baseName(name));
+    if (!p) throw new Error('not valid JSON');
+    if (!TD.files.isSaved(id, projectJson(state.doc)) &&
+      !(await TD.confirm(`"${name}" changed on disk`, 'This file also has changes that are not saved to it. Replace them with the version on disk?', { ok: 'Use the Version on Disk' }))) return;
+    replaceDoc(id, p);
+    await TD.files.link(id, TD.files.fileOf(id).handle, projectJson(state.doc), text);
+    showSaveState();
+    showHint(`Reloaded "${name}" from disk`, 1400);
+  }
+  async function openFile() {
+    if (!TD.files.can) { $('#fileInput').click(); return; }
+    try {
+      const f = await TD.files.pickOpen();
+      if (f) await openText(await f.file.text(), f.file.name, f.handle);
+    } catch (e) { showHint(`Couldn't open the file (${e.message})`, 2500); }
+  }
   $('#fileInput').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
-    if (!file) return;
-    const text = await file.text();
-    if (!/\.json$/i.test(file.name) && !/^\s*\{/.test(text)) { openImport(text); return; }
-    try {
-      if (!openProjectText(text, file.name.replace(/(\.page|\.board)?\.json$/i, ''))) throw new Error('not valid JSON');
-    } catch (err) { TD.alert(`Couldn't open "${file.name}"`, `It isn't a DiagramTeX file (${err.message}).`); }
+    if (file) openText(await file.text(), file.name, null);
   };
+  // Files opened with the installed app (double-click, or Open With in the system's file manager).
+  if ('launchQueue' in window) {
+    window.launchQueue.setConsumer(async (p) => {
+      await TD.ready; await TD.files.ready;
+      for (const h of p.files || []) if (h.kind === 'file') { const f = await h.getFile(); await openText(await f.text(), f.name, h); }
+    });
+  }
 
   // Render shapes, then prepend the gradient/pattern <defs> they referenced.
   function fillDefsAround(fn) { TD.takeFillDefs(); const body = fn(); return TD.takeFillDefs() + body; }
@@ -3330,7 +3433,7 @@
       fillDefsAround(() => list.map((s) => TYPES[s.type].svg(s, ctx)).join(''));
     return new XMLSerializer().serializeToString(host);
   }
-  const exportSvg = () => { if (shapes().length) download(slug() + '.svg', shapesSvg(shapes()), 'image/svg+xml'); };
+  const exportSvg = () => { if (shapes().length) out(slug() + '.svg', shapesSvg(shapes()), 'image/svg+xml'); };
 
   // ---------------- top-bar commands & insert popover ----------------
   const pop = $('#insertPop');
@@ -3340,10 +3443,11 @@
   });
   function runCmd(c) {
     if (c === 'new') newDoc(null, null, null, null, null, state.doc.kind);
-    if (c === 'open') $('#fileInput').click();
+    if (c === 'open') openFile();
     if (c === 'save') saveFile();
+    if (c === 'saveas') saveFile(true);
     if (c === 'tikz') openTikz();
-    if (c === 'latex') download(slug() + '.tex', state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc), 'text/x-tex');
+    if (c === 'latex') out(slug() + '.tex', state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc), 'text/x-tex');
     if (c === 'svg') { if (state.mode === 'page') exportPageSvg(); else if (shapes().length) exportSvg(); else showHint('This diagram is empty', 1200); }
     if (c === 'import') openImport('');
     if (c === 'print') printDoc();
@@ -3359,9 +3463,10 @@
       body = `<div class="sheet-pages">${Array.from({ length: G.n }, (_, k) =>
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${r2(pageTop(k, G))} ${r2(G.w)} ${r2(G.h)}" style="width:${G.W}cm;max-width:100%;height:auto;display:block;margin:0 auto 24px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08),0 6px 20px rgba(0,0,0,.06)">${defs}${sh}</svg>`).join('')}</div>`;
     }
+    await askDir();
     showHint('Building HTML…', 800);
     try {
-      download(slug() + '.html', await TD.docToHtml(body), 'text/html');
+      await out(slug() + '.html', await TD.docToHtml(body), 'text/html');
       if (TD.mathFontsLinked) showHint('Saved. Maths fonts could not be embedded, so the file loads them online.', 3200);
     }
     catch (e) { showHint('Could not build the HTML file: ' + e.message, 2500); }
@@ -3380,8 +3485,8 @@
     const G = pageGeom(), b = sheetBox(), [defs, body] = pageSvgs();
     let bg = '';
     for (let k = 0; k < G.n; k++) bg += `<rect x="0" y="${r2(pageTop(k, G))}" width="${r2(G.w)}" height="${r2(G.h)}" fill="#fff"/>`;
-    const out = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r2(b.w)} ${r2(b.h)}" width="${G.W}cm" height="${r2(b.h / PX)}cm">${TD.math.exportStyle()}${defs}${bg}${body}</svg>`;
-    download(slug() + '.svg', out, 'image/svg+xml');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r2(b.w)} ${r2(b.h)}" width="${G.W}cm" height="${r2(b.h / PX)}cm">${TD.math.exportStyle()}${defs}${bg}${body}</svg>`;
+    out(slug() + '.svg', svg, 'image/svg+xml');
   }
   // ---------------- Export menu: PNG (chosen DPI), SVG, PDF ----------------
   // PNG is rasterised in the browser from the same SVG as the SVG export, with the maths fonts embedded
@@ -3449,6 +3554,19 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
+  // An export: into the file's export folder when it has one (replacing the copy of the same name),
+  // otherwise downloaded.
+  async function out(name, data, type) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type });
+    const dir = TD.files.dirOf(state.docId) && (await TD.files.exportDir(state.docId));
+    if (dir) {
+      try { await TD.files.writeIn(dir, name, blob); showHint(`Saved ${name} to ${dir.name}`, 1600); return; }
+      catch (e) { showHint(`Couldn't save to ${dir.name} (${e.message}). Downloaded instead.`, 3000); }
+    } else if (TD.files.dirOf(state.docId)) showHint(`No access to ${TD.files.dirOf(state.docId).name}. Downloaded instead.`, 2500);
+    downloadBlob(name, blob);
+  }
+  // Ask for the export folder's access while the click is fresh, before slow work.
+  const askDir = () => (TD.files.dirOf(state.docId) ? TD.files.exportDir(state.docId) : null);
   async function runExport() {
     finishEdit(); finishPoly();
     const fmt = expOpts.fmt;
@@ -3456,11 +3574,12 @@
     const srcs = exportSources();
     if (!srcs.length) { showHint('This diagram is empty', 1200); return; }
     if (fmt === 'pdf') { printVector(srcs); return; }
+    await askDir();
     showHint(`Exporting ${fmt.toUpperCase()} at ${expOpts.dpi} DPI…`, 1500);
     try {
       for (let k = 0; k < srcs.length; k++) {
         const c = await rasterise(srcs[k], expOpts.transparent && !srcs[k].page);
-        downloadBlob(slug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
+        await out(slug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
       }
     } catch (e) { showHint('Export failed: ' + (e.message || e), 3000); }
   }
@@ -3478,7 +3597,7 @@
       expPop.innerHTML = `<div class="exp-h">Export ${state.doc.kind === 'classic' ? 'document' : 'file'}</div>
         <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${fmt === k}" data-efmt="${k}" class="${fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
         <div class="exp-note">The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.</div>
-        <button type="button" class="primary exp-go" data-ego>Download web page</button>`;
+        ${dirRow()}<button type="button" class="primary exp-go" data-ego>${TD.files.dirOf(state.docId) ? 'Save' : 'Download'} web page</button>`;
       return;
     }
     const srcs = exportSources(), sc = expScale();
@@ -3491,7 +3610,14 @@
       <div class="exp-meta">${dim}${srcs.length > 1 ? ` per page · ${srcs.length} ${o.fmt === 'pdf' ? 'pages' : 'files'}` : ''}<span>${cm}</span></div>` : `<div class="exp-meta">Vector, scales to any size<span>${cm}</span></div>`}
       ${o.fmt === 'png' && state.mode !== 'page' ? `<label class="exp-chk"><input type="checkbox" id="expTr"${o.transparent ? ' checked' : ''}> Transparent background</label>` : ''}
       ${o.fmt === 'pdf' ? `<div class="exp-note">Vector PDF with selectable text${srcs.length > 1 ? `, ${srcs.length} pages` : ''}. In the print window, choose <b>Save as PDF</b> as the destination.</div>` : ''}
-      <button type="button" class="primary exp-go" data-ego>${o.fmt === 'pdf' ? 'Save PDF…' : 'Download ' + o.fmt.toUpperCase()}</button>`;
+      ${o.fmt === 'pdf' ? '' : dirRow()}<button type="button" class="primary exp-go" data-ego>${o.fmt === 'pdf' ? 'Save PDF…' : (TD.files.dirOf(state.docId) ? 'Save ' : 'Download ') + o.fmt.toUpperCase()}</button>`;
+  }
+  // Where exports go: Downloads, or a folder picked once for this file (where the browser allows it).
+  function dirRow() {
+    if (!TD.files.can) return '';
+    const f = TD.files.dirOf(state.docId);
+    return `<div class="exp-row exp-dir"><label>Save to</label><span class="exp-dirv">
+      <button type="button" class="exp-dirb" data-edir title="${f ? `Exports of this file go to the folder ${esc(f.name)}, replacing files of the same name. Click to pick another folder.` : 'Exports are downloaded. Click to pick a folder for this file’s exports instead.'}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5.5v10h15v-8H9L7.5 5.5z"/></svg><span>${f ? esc(f.name) : 'Downloads'}</span></button>${f ? `<button type="button" class="icon flat exp-dirx" data-edirx title="Download exports instead" aria-label="Download exports instead"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>` : ''}</span></div>`;
   }
   function openExport(btn) {
     if (!expPop.hidden) { expPop.hidden = true; return; }
@@ -3504,6 +3630,8 @@
   expPop.addEventListener('click', (e) => {
     const f = e.target.closest('[data-efmt]');
     if (f) { expOpts.fmt = f.dataset.efmt; saveExpOpts(); renderExpPop(); return; }
+    if (e.target.closest('[data-edir]')) { TD.files.pickDir(state.docId).then(() => { if (!expPop.hidden) renderExpPop(); }, (err) => showHint(`Couldn't use that folder (${err.message})`, 2500)); return; }
+    if (e.target.closest('[data-edirx]')) { TD.files.clearDir(state.docId).then(() => { if (!expPop.hidden) renderExpPop(); }); return; }
     if (e.target.closest('[data-ego]')) { expPop.hidden = true; if (expFmt() === 'html') exportHtml(); else runExport(); }
   });
   expPop.addEventListener('change', (e) => {
@@ -3608,7 +3736,7 @@
     $('#tikzCopy').textContent = 'Copied';
     setTimeout(() => ($('#tikzCopy').textContent = 'Copy'), 1200);
   };
-  $('#tikzDownload').onclick = () => download(slug() + '.tex', $('#tikzOut').value, 'text/x-tex');
+  $('#tikzDownload').onclick = () => out(slug() + '.tex', $('#tikzOut').value, 'text/x-tex');
 
   // ---------------- sample diagram ----------------
   // The first file a new user sees: what the app does, in a few lines, and one of each kind of object
@@ -3684,6 +3812,7 @@
 
   // ---------------- init ----------------
   async function init() {
+    await TD.files.ready; // which files are linked to files on disk
     if (DS) {
       await DS.ready;
       DS.on({

@@ -153,11 +153,13 @@ npx wrangler deploy
 ### Three kinds of file
 - The top bar's main switch is **Classic | Page | Whiteboard**.
 - **Page** files: one free-form sheet, described below.
-- **Whiteboard** files: one endless canvas with no page and no edges. Draw anywhere; scroll (two fingers on a trackpad) to move around, pinch or Ctrl/⌘+scroll to zoom from 3% to 800%, and use the **Hand** tool (`H`) or Space-drag to grab the board. A dot grid replaces the lines and rulers and stays evenly spaced at any zoom. **Fit** brings everything into view. Export, TikZ code and import work as for a Classic diagram, sized to what you drew; files save as `.board.json`.
+- **Whiteboard** files: one endless canvas with no page and no edges. Draw anywhere; scroll (two fingers on a trackpad) to move around, pinch or Ctrl/⌘+scroll to zoom from 3% to 800%, and use the **Hand** tool (`H`) or Space-drag to grab the board. A dot grid replaces the lines and rulers and stays evenly spaced at any zoom. **Fit** brings everything into view. Export, TikZ code and import work as for a Classic diagram, sized to what you drew; files save as `.diagramtex`, like the other kinds.
 - **Classic** files: diagrams, plus a document view that arranges them with text, as in Mathcha. While Classic is selected, a second switch, **Diagram | Document**, appears beside it.
 - Choosing Page, Classic or Whiteboard opens the last file of that kind, or starts a new one. The sidebar lists only files of the current kind, and **New** makes a file of that kind.
 - The properties panel floats over the top right of the canvas: click its heading to fold it up, and again to open it. The button at the left end of the top bar folds the file list away.
-- **Save** (Ctrl+Shift+S) downloads a `.json` file that records its kind (`"kind": "page"` or `"classic"`; Page files are named `*.page.json`). **Open** (Ctrl+O) loads it back into the right mode. Older `.json` files open as Classic.
+- **Save** (Ctrl+Shift+S) saves a `.diagramtex` file: JSON inside, recording its kind (`"kind": "page"`, `"classic"` or `"board"`). **Open** (Ctrl+O) loads it back into the right mode. Files saved by older versions (`.json`, `.page.json`, `.board.json`) still open; a `.json` with no kind opens as Classic.
+- **Saving to the same file** (Chrome, Edge and other Chromium browsers): the first **Save** asks where to put the file. After that the document is *linked* to it: Ctrl+S and **Save** write straight to it, with no dialog. The top bar shows the file's name, with an amber dot while there are changes not yet saved to it. A file opened with **Open** is linked the same way. Opening a linked file again switches to its document, and picks up the file if it changed on disk. After a reload the browser asks once to allow editing the file again; choose **Allow on every visit** to stop the question. The file list's right-click menu has **Save to Another File…** and **Unlink**. Safari and Firefox lack this feature, so there each Save downloads a copy, as before.
+- **Opening files from the system** (installed app, Chromium): `.diagramtex`, `.json`, `.tex` and `.tikz` files can be opened with DiagramTeX from Finder or Explorer (Open With). They open in the window that is already running.
 - Older browser-stored files that held both kinds of content are split into two files the first time the app loads.
 
 ### Page mode
@@ -178,7 +180,7 @@ npx wrangler deploy
 - **Page setup** (right panel in document view): paper (A4, A5, B5, US Letter, US Legal, custom), orientation, margins, font size (10/11/12 pt) and whether to show a title. The page preview is true to scale and marks approximate page breaks; you can fit it to the width or view at 100%.
   - Diagrams wider than the text width are scaled down, both in the preview and in the export (`\resizebox{\linewidth}{!}{…}`).
 - Documents are autosaved in the browser (IndexedDB). The top bar has one-click buttons:
-  - new, open (Ctrl+O, `.json` / `.tex`), save file (Ctrl+Shift+S), import LaTeX/TikZ
+  - new, open (Ctrl+O, `.diagramtex` / `.tex`), save file (Ctrl+Shift+S), import LaTeX/TikZ
   - print / PDF (Ctrl+P), **Export** (PNG / SVG / PDF), **TikZ** (Ctrl+E), **LaTeX** (Ctrl+Shift+E), HTML
 - The ◧ button at the far left hides the document list.
 
@@ -186,6 +188,7 @@ npx wrangler deploy
 - **Export** button (top bar, Page and Classic diagram views) opens a small menu:
   - **PNG** at a chosen DPI (72, 96, 150, 300, 600 or any value from 24 to 2400). The DPI is written into the file, so it opens at true size. A transparent background is available for Classic diagrams.
   - **SVG**: vector, with the maths stylesheet included.
+  - **Save to** (Chromium browsers): pick a folder for this file's exports once. PNG, SVG, web page and `.tex` exports then go straight into it, replacing the previous copy of the same name, which suits a paper's `figures/` folder. The × goes back to downloading.
   - **PDF**: one page per Page-mode sheet (true paper size), or the diagram's size in Classic. The pages are pictures at the chosen DPI; for a vector PDF, use Print → Save as PDF, or compile the LaTeX.
   - The menu shows the output size in px and cm, and remembers your choices.
 - **Export TikZ** (Ctrl/⌘+E): a `tikzpicture` snippet or a `standalone` document, for everything or only the selection. The header comment lists the needed packages and libraries (`pgfplots`, `arrows.meta`, …).
@@ -227,7 +230,7 @@ Tablets, yes, including a phone opened flat or turned sideways. A phone held upr
 Tens of thousands of objects. Only what is near the view is drawn, so panning, zooming and editing stay smooth at 20,000 objects; showing all of them at once when zoomed right out is slower. Dragging a large selection slides it as one piece and moves the objects once when you let go, and undo keeps only what each step changed. Files are kept in IndexedDB, which holds far more than the few megabytes of local storage; if the browser still runs out of room, autosave says so: use **Save** to keep the file.
 
 **Where are my diagrams stored?**
-In your browser: files in IndexedDB, settings in local storage. Files saved by older versions move to IndexedDB the first time the app opens. Nothing is sent to a server. Use **Save** to keep a `.json` copy as a file.
+In your browser: files in IndexedDB, settings in local storage. Files saved by older versions move to IndexedDB the first time the app opens. Nothing is sent to a server. Use **Save** to keep a `.diagramtex` copy as a file.
 
 **Can I use the output in Overleaf?**
 Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf project. The comment at the top lists the packages and TikZ libraries to load.

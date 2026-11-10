@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Source of public/icons/og-image.png (link previews). Render at 1200×630:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars --allow-file-access-from-files --window-size=1200,630 --screenshot=public/icons/og-image.png "file://$PWD/design/og-image.html" -->
+<html><head><meta charset="utf-8"><style>
+@font-face { font-family: ID; src: url("../public/fonts/InterDisplay-Bold.woff2"); font-weight: 700; }
+@font-face { font-family: ID; src: url("../public/fonts/InterDisplay-SemiBold.woff2"); font-weight: 600; }
+@font-face { font-family: ID; src: url("../public/fonts/InterDisplay-Medium.woff2"); font-weight: 500; }
+html, body { margin: 0; }
+body { width: 1200px; height: 630px; overflow: hidden; background: #23205A; color: #F1EFFF; font-family: ID, sans-serif; display: flex; align-items: center; gap: 72px; padding: 0 88px; box-sizing: border-box; position: relative; }
+/* faint drawing grid, the editor's canvas */
+body::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(241,239,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(241,239,255,.06) 1px, transparent 1px); background-size: 40px 40px; background-position: -1px -1px; }
+.mark { position: relative; flex: none; width: 300px; height: 300px; }
+.txt { position: relative; }
+h1 { margin: 0; font-size: 104px; line-height: 1; font-weight: 700; letter-spacing: -0.035em; }
+.tag { margin: 22px 0 0; font-size: 42px; line-height: 1.2; font-weight: 600; letter-spacing: -0.015em; color: #F1EFFF; }
+.tag span { color: #FF8A6E; }
+.kinds { margin: 34px 0 0; font-size: 24px; line-height: 1.45; font-weight: 500; color: rgba(241,239,255,.66); max-width: 640px; }
+.url { position: absolute; right: 88px; bottom: 44px; font-size: 22px; font-weight: 500; color: rgba(241,239,255,.5); }
+</style></head><body>
+<svg class="mark" viewBox="30 30 196 196"><path d="M85.19 66.81L191.19 172.81L172.81 191.19L66.81 85.19Z" fill="#F1EFFF"/><circle cx="76" cy="76" r="46" fill="#FF5A3C"/><rect x="138" y="138" width="88" height="88" rx="14" fill="#2F7BFF"/></svg>
+<div class="txt"><h1>DiagramTeX</h1><p class="tag">Draw diagrams. Export <span>LaTeX/TikZ</span>.</p>
+<p class="kinds">Circuits · quantum&nbsp;circuits · commutative&nbsp;diagrams · Bloch&nbsp;spheres · trees · plots</p></div>
+<div class="url">diagramtex.igniting.space</div>
+</body></html>
