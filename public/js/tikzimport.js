@@ -580,6 +580,15 @@
           shapes.push(q);
           continue;
         }
+        if (!node.coordinate && /\\begin\{ZX\}/.test(node.text) && TD.TYPES.zx) {
+          // a ZX diagram in a node: one ZX object, centred there
+          const q = TD.TYPES.zx.create(at, {});
+          q.src = (node.text.match(/\\begin\{ZX\}[\s\S]*?\\end\{ZX\}/) || [node.text.trim()])[0];
+          const b = TD.zxLayout(q).bb;
+          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
+          shapes.push(q);
+          continue;
+        }
         if (!node.coordinate && node.text.trim()) {
           const no = parseOpts(node.opts), own = readXf(C, no), t = textShape(C, node.text, no, at);
           // a node's own rotate turns it about its own position
@@ -676,8 +685,8 @@
     // global colour definitions (preamble)
     const docM = src.match(/\\begin\{document\}([\s\S]*?)(\\end\{document\}|$)/);
     if (docM) { parseStatements(C, src.slice(0, docM.index).replace(/\\documentclass[^\n]*|\\usepackage[^\n]*|\\usetikzlibrary\{[^}]*\}|\\title\{[^}]*\}|\\author\{[^}]*\}|\\date\{[^}]*\}/g, '')); C.warnings = []; }
-    // a bare quantikz or forest environment becomes a picture holding one quantum circuit or tree
-    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\})/g,
+    // a bare quantikz, forest or ZX environment becomes a picture holding one circuit, tree or ZX diagram
+    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\})/g,
       (m, q) => (q ? `\\begin{tikzpicture}\\node at (0,0) {${q}};\\end{tikzpicture}` : m));
     const blocks = [];
     const re = /\\begin\{tikzpicture\}(\[[^\]]*(?:\[[^\]]*\][^\]]*)*\])?([\s\S]*?)\\end\{tikzpicture\}/g;

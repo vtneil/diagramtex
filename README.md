@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz** and **forest** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits and trees with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz**, **forest** and **zx-calculus** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees and ZX diagrams with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -28,6 +28,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 - **Commutative diagrams:** XyMatrix-style grids exported as `tikz-cd`.
 - **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
 - **Trees:** a `forest` editor for syntax trees, org charts, directory trees, decision and probability trees: add, move and restyle nodes by keyboard or drag, with templates and the code live beside it.
+- **ZX diagrams:** a `zx-calculus` editor: drop Z and X spiders, Hadamard boxes and points on a grid, drag a node's handle to wire it to another, and pick each wire's shape from pictures.
 - **Flowcharts and block diagrams:** 28 flowchart symbols, 33 basic shapes and 27 block arrows.
 - **Whole pages and documents:** lay out text, maths and figures on A4 or Letter pages and export a complete LaTeX `article`.
 
@@ -81,7 +82,7 @@ npx wrangler deploy
   - **2D plots (pgfplots):** function, line, scatter, area, bar, contour, heatmap.
   - **3D plots:** surface, mesh, scatter, and function `z = f(x, y)`. The view angles follow pgfplots `view={az}{el}`.
   - **Pie chart:** one `label value [#color]` per line.
-- **Blocks menu** (the cube button below Plots): XyMatrix, Quantum, Circuit and Tree, each with its own editor. A new block starts with `large` labels, whatever the default text size is.
+- **Blocks menu** (the cube button below Plots): XyMatrix, Quantum, Circuit, Tree and ZX, each with its own editor. A new block starts with `large` labels, whatever the default text size is.
   - **XyMatrix / commutative diagram:** cells use `&` and `\\`. To add an arrow, drag from the orange dot under one cell onto another cell. Each arrow has a label, side, style (→, ↠, ↪, ↦, dashed, =, ↔) and bend. **Copy as tikz-cd** is also available.
 - **Plots:** each plot can have several series, given as expressions (`sin(x)*exp(-x/4)`, `x^2+y^2`, …) or as data. You can set axis labels, ranges, grid, legend, colormaps (hot, viridis, jet, cool, gray) and a colour bar. Expression errors show in the panel and on the canvas.
   - **Function plot series types** (Mathcha's set): regular `y = f(x)`, **inequality** (`y < f(x)`, `≤`, `>`, `≥`; shaded, with a dashed edge when strict), **bounded region** between `f` and `g`, **x in terms of y**, **parametric** `(x(t), y(t))`, **polar** `r(θ)`, **implicit** `F(x, y) = 0`, **points**, **vectors** (`x y` or `x y u v`), **vector field** `(P, Q)` and **phase portrait** (trajectories with arrows).
@@ -114,7 +115,7 @@ npx wrangler deploy
 - **Layers panel** (under the properties panel, top first): click a row to select it, Shift-click for a range, Ctrl/⌘-click to add or remove. Drag rows to restack them; drop onto an open group to put a shape in it, or out of it to take it out. Groups fold open and closed. Each row has an eye (hide: not drawn or exported) and a lock (shown on canvas but can't be picked). Double-click a name to rename it; renaming a group renames the whole group. Hovering a row outlines it on the canvas. The footer groups, ungroups and deletes; right-click a row for Rename, Hide/Show, Lock/Unlock and the usual menu. Click the header to fold the panel away.
 
 ### Electrical circuits (circuitikz)
-- **Electrical → Circuit…** (or **Blocks → Circuit**) adds a circuit block and opens the circuit editor in an overlay, so the tool rail stays uncluttered.
+- **Electrical → Circuit…** (or **Blocks → Circuit**) adds a circuit block; double-click it (or press Enter) to open the circuit editor in an overlay, so the tool rail stays uncluttered.
 - **Parts:** 266 `circuitikz` components in searchable categories. Click a part and click the grid (it lands where the blue preview shows it), or drag it in; drag from start to end to set a two-terminal part's length.
 - **Wires** (`W`) snap to part pins and stay attached when parts move. Nodes such as transistors, op-amps and ICs are auto-named (`Q1`, `U1`…), so wires export as `(Q1.B)`.
 - **Properties:** label, annotation, voltage and current arrows, open/closed ends (`*-o`), rotation, mirroring (X left to right, Y top to bottom, from the right-click menu or the keys) and extra options. Labels take maths: `$R_1$`, `$10\,\mathrm{k\Omega}$`. Double-click a part to edit its label (a node's text) in place, in LaTeX or MathLive as set under Text input. A part is picked by clicking anywhere on its body, not only on its lines.
@@ -123,12 +124,19 @@ npx wrangler deploy
 - Export: the circuit goes into the picture as a `scope` and the preamble gets `\usepackage{circuitikz}`. **Copy circuitikz Code** in the panel gives a standalone `circuitikz` environment.
 
 ### Quantum circuits (quantikz)
-- **Blocks → Quantum** adds a circuit and opens the quantum circuit editor. Double-click a circuit, press Enter or use **Edit Circuit…** in the panel to open it again.
+- **Blocks → Quantum** adds a circuit. Double-click it, press Enter or use **Edit Circuit…** in the panel to open the quantum circuit editor.
 - **Editor:** the circuit sits on a grid of cells (wires × steps). Drag an element from the palette onto a cell, or click it to place it in the selected cell. Keys place the common ones and step right: `H X Y Z S T U`, `C` control, `O` open control, `+` target, `M` meter. Drop on the dashed row or column to add a wire or a step. Right-click a cell (or a selected range) to insert wires above or below, insert steps before or after, delete wires or steps, or clear cells.
 - Controls link to the nearest gate or target in their step; drag the blue handle to link another wire. Drag a cell to move it (Alt copies), Shift-click or drag to select a range, ⌘C/⌘V copy and paste cells. The panel edits labels, spans, links, wire types, slices and groups; inserting or deleting wires and steps keeps links and spans pointing at the same wires. A selected gate has a handle on its corner: drag it, or type in **Min width** / **Min height**, to set the gate's minimum size (`\gate[][width][height]{…}`, which widens its column as in quantikz). Drag the handle back to the gate's own size, or up or left, and it goes back to auto. Drag the bar on a gate's top or bottom edge to stretch it up or down over neighbouring wires (`\gate[n]`); it stops at the first wire that already has something in that step. Double-click a gate (or any element with a label, such as a stick or a meter) to edit its label in place, in LaTeX or MathLive as set under Text input.
 - The `quantikz` code is live on the right, both ways. Cells you didn't touch keep the code you wrote, and commands the editor doesn't draw are kept as written. It is exported inside `\begin{quantikz}` with `\usetikzlibrary{quantikz2}`.
 - The canvas draws an approximation of quantikz's layout: gates, controls and targets, swaps, meters, wire labels (`\lstick`, `\rstick`), slices, gate groups, bundles and classical wires.
 - Maths inside gate arguments and `$…$` in labels is highlighted green, and typing `\` suggests quantikz commands as well as LaTeX ones.
+
+### ZX diagrams (zx-calculus)
+- **Blocks → ZX** adds a diagram. Double-click it, press Enter or use **Edit ZX…** in the panel to open the ZX editor.
+- **Editor:** the diagram sits on a grid of cells. Drag a spider, Hadamard box, point, loop or text from the palette onto a cell, or select a cell and type `Z`, `X`, `H`, `N` (point) or `L` (loop). Drop on the dashed row or column to grow the diagram. Right-click a cell to insert or delete rows and columns, add a loop or clear it; right-click a wire to delete it.
+- **Wires:** hover or select a node and drag the blue handle on its right to another cell (an empty end gets a `\zxN{}` point). Click a wire to choose its shape from pictures (straight, the package's `o` / `s` / `C` curves and more), put an H, Z or X marker on it, or make it classical, bold or dashed.
+- **Nodes:** the panel sets a spider's colour, phase (plain or a fraction, with its sign), where the phase goes (in the node or in a label beside it), the gap before its column, and lists the wires leaving it. Double-click a spider or press Enter to type its phase.
+- The `zx-calculus` code is live on the right, both ways; cells you didn't touch keep the code you wrote. It is exported inside `\begin{ZX}` with `\usepackage{zx-calculus}`, and **Import LaTeX/TikZ** turns a `ZX` environment back into a diagram.
 
 ### Three kinds of file
 - The top bar's main switch is **Classic | Page | Whiteboard**.
@@ -216,7 +224,7 @@ Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf pr
 Yes, for most `\draw`, `\fill`, `\node` and `\coordinate` paths: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Files exported by DiagramTeX re-import exactly, plots included.
 
 **Which LaTeX packages does the output need?**
-TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams and the `quantikz2` TikZ library for quantum circuits. The export lists what each figure needs.
+TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees and `zx-calculus` for ZX diagrams. The export lists what each figure needs.
 
 ## Project structure
 
@@ -230,6 +238,8 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/circuit.js`: the circuit block (`cz` type): item model, canvas drawing, circuitikz export and parser
 - `public/js/czeditor.js`: the overlay circuit editor (palette, drag-and-drop stage, properties and live code)
 - `public/js/qceditor.js`: the overlay quantum circuit editor (palette, cell grid, properties and live quantikz code)
+- `public/js/zx.js`: ZX diagrams: zx-calculus parser, layout, canvas drawing and export
+- `public/js/zxeditor.js`: the overlay ZX editor (palette, cell grid, wire handles and shapes, live zx-calculus code)
 - `public/js/tooltip.js`: the app's own tooltips (every `title` becomes a styled `data-tip`)
 - `public/js/czcore.js`: circuitikz part registry and drawing API; parts live in `czparts-wires.js`, `czparts-passive.js`, `czparts-semi.js`, `czparts-sources.js`, `czparts-switch.js` and `czparts-blocks.js`
 - `public/js/texhighlight.js`: maths highlighting in the LaTeX text fields

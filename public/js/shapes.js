@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.11.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.12.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -296,7 +296,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'pie', 'cd', 'qc', 'forest'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'pie', 'cd', 'qc', 'forest', 'zx'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -537,12 +537,14 @@
     return fn();
   };
 
+  // font-size:0 on the foreignObject: its line box would otherwise get the page font's strut, which
+  // pushes text smaller than that font down inside its box
   function textSvg(text, st, color, cx, cy, ctx, extra = '') {
     const b = textBox(text, st);
     const x = r2(cx - b.w / 2), y = r2(cy - b.h / 2);
     const ns = ctx.export ? ' xmlns="http://www.w3.org/1999/xhtml"' : '';
     const html = ctx.export ? TD.math.forXml(b.html) : b.html;
-    return `<foreignObject x="${x}" y="${y}" width="${b.w}" height="${b.h}" style="overflow:visible"${extra}><div${ns} class="tx" style="${b.css}color:${css(color)}">${html}</div></foreignObject>` +
+    return `<foreignObject x="${x}" y="${y}" width="${b.w}" height="${b.h}" style="overflow:visible;font-size:0;text-align:center"${extra}><div${ns} class="tx" style="${b.css}color:${css(color)}">${html}</div></foreignObject>` +
       (ctx.export ? '' : `<rect class="hitfill" x="${x}" y="${y}" width="${b.w}" height="${b.h}"/>`);
   }
 

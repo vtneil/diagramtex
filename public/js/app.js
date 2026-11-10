@@ -972,7 +972,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|cd|qc|cz|forest)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|cd|qc|cz|forest|zx)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -999,7 +999,7 @@
     + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
   function flyOf(t) {
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|qc|cz|forest)$/.test(t)) return 'blocks';
+    if (/^(cd|qc|cz|forest|zx)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : 'shapes'; }
@@ -1342,6 +1342,7 @@
         if (s.type === 'qc') { state.sel = new Set([hitId]); openQuantum(hitId); return; }
         if (s.type === 'cz') { state.sel = new Set([hitId]); render(); renderProps(); openCircuit(hitId); return; }
         if (s.type === 'forest') { state.sel = new Set([hitId]); render(); renderProps(); openTree(hitId); return; }
+        if (s.type === 'zx') { state.sel = new Set([hitId]); render(); renderProps(); openZX(hitId); return; }
       }
       const grp = groupIds(hitId);
       if (e.shiftKey) { if (state.sel.has(hitId)) grp.forEach((id) => state.sel.delete(id)); else grp.forEach((id) => state.sel.add(id)); }
@@ -1588,9 +1589,6 @@
       snapHint = null;
       commit();
       setTool('select');
-      if (s.type === 'cz' && byId(s.id)) { render(); renderProps(); openCircuit(s.id); return; }
-      if (s.type === 'qc' && byId(s.id)) { render(); renderProps(); openQuantum(s.id); return; }
-      if (s.type === 'forest' && byId(s.id)) { render(); renderProps(); openTree(s.id); return; }
     } else if (d.mode === 'marquee') {
       marquee = null;
     } else {
@@ -1692,6 +1690,19 @@
     });
   }
   TD.ftOpen = openTree;
+  // ZX diagrams (zxeditor.js): Done writes the ZX code back as one undo step
+  function openZX(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.zxEditor) return;
+    TD.zxEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      begin(); t.src = res.src; commit();
+      render(); renderProps();
+    });
+  }
+  TD.zxOpen = openZX;
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
@@ -1860,6 +1871,7 @@
     cd: [['x', 'x'], ['y', 'y']],
     qc: [['x', 'x'], ['y', 'y']],
     forest: [['x', 'x'], ['y', 'y']],
+    zx: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
   };
@@ -2711,7 +2723,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'cd', 'qc', 'cz', 'forest'].includes(s.type)) {
+      if (['plot', 'cd', 'qc', 'cz', 'forest', 'zx'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3068,7 +3080,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3137,7 +3149,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
