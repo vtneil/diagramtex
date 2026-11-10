@@ -151,12 +151,14 @@ npx wrangler deploy
 - Exported with `\usepackage{blochsphere}`.
 
 ### Three kinds of file
-- The top bar's main switch is **Classic | Page | Whiteboard**.
+- The top bar's main switch is **Classic | Page | Whiteboard | Quick**. Hover it to see every name.
 - **Page** files: one free-form sheet, described below.
 - **Whiteboard** files: one endless canvas with no page and no edges. Draw anywhere; scroll (two fingers on a trackpad) to move around, pinch or Ctrl/⌘+scroll to zoom from 3% to 800%, and use the **Hand** tool (`H`) or Space-drag to grab the board. A dot grid replaces the lines and rulers and stays evenly spaced at any zoom. **Fit** brings everything into view. Export, TikZ code and import work as for a Classic diagram, sized to what you drew; files save as `.diagramtex`, like the other kinds.
-- **Classic** files: diagrams, plus a document view that arranges them with text, as in Mathcha. While Classic is selected, a second switch, **Diagram | Document**, appears beside it.
+- **Quick** is not a kind of file: it is one formula, turned into a picture. Type LaTeX (or edit it in MathLive) and the preview updates as you type; parse errors show beneath it. **Copy PNG** (Ctrl/⌘+Enter) puts a PNG on the clipboard, ready to paste into slides, documents or chats; **Copy SVG** copies the SVG source; the **PNG** and **SVG** buttons download `formula.png` / `formula.svg`. Choose the size (Normal, Large, Huge), how sharp the PNG is (4×, 8×, 16× or 32× the formula's pixels; 8× by default, which stays crisp when pasted into chats or slides, while documents such as Word still place it at the formula's true size) and a transparent background. The PNG embeds the maths fonts; the SVG keeps the maths as text, loading its fonts from the web. The formula and options are remembered in the browser, and the file you had open stays open: choose Classic, Page or Whiteboard to return to it.
+- **Classic** files: diagrams, plus a document view that arranges them with text, as in Mathcha. While Classic is selected, a second switch, **Document | Diagram**, appears beside it; files open in Document view unless they were left in Diagram view.
 - Choosing Page, Classic or Whiteboard opens the last file of that kind, or starts a new one. The sidebar lists only files of the current kind, and **New** makes a file of that kind.
 - The properties panel floats over the top right of the canvas: click its heading to fold it up, and again to open it. The button at the left end of the top bar folds the file list away.
+- **Fit** (status bar, or right-click the empty canvas) zooms the whole page or drawing into view; **Fit Width** fits its width and shows it from the top. In Page mode and the Classic diagram, both use the space left of the properties panel, so nothing ends up underneath it.
 - **Save** (Ctrl+Shift+S) saves a `.diagramtex` file: JSON inside, recording its kind (`"kind": "page"`, `"classic"` or `"board"`). **Open** (Ctrl+O) loads it back into the right mode. Files saved by older versions (`.json`, `.page.json`, `.board.json`) still open; a `.json` with no kind opens as Classic.
 - **Saving to the same file** (Chrome, Edge and other Chromium browsers): the first **Save** asks where to put the file. After that the document is *linked* to it: Ctrl+S and **Save** write straight to it, with no dialog. The top bar shows the file's name, with an amber dot while there are changes not yet saved to it. A file opened with **Open** is linked the same way. Opening a linked file again switches to its document, and picks up the file if it changed on disk. After a reload the browser asks once to allow editing the file again; choose **Allow on every visit** to stop the question. The file list's right-click menu has **Save to Another File…** and **Unlink**. Safari and Firefox lack this feature, so there each Save downloads a copy, as before.
 - **Opening files from the system** (installed app, Chromium): `.diagramtex`, `.json`, `.tex` and `.tikz` files can be opened with DiagramTeX from Finder or Explorer (Open With). They open in the window that is already running.
@@ -177,7 +179,7 @@ npx wrangler deploy
 - Each file is a **document** made of text blocks and diagram blocks. Use **Diagram / Document** in the top bar to switch views.
   - Text blocks support `# Heading`, `$inline$` and `$$display$$` math, `\textbf{}` and `\emph{}`.
   - Double-click a diagram block, or press **Edit**, to open it on the canvas. In diagram view, a selector picks between diagrams.
-- **Page setup** (right panel in document view): paper (A4, A5, B5, US Letter, US Legal, custom), orientation, margins, font size (10/11/12 pt) and whether to show a title. The page preview is true to scale and marks approximate page breaks; you can fit it to the width or view at 100%.
+- **Page setup** (right panel in document view): paper (A4, A5, B5, US Letter, US Legal, custom), orientation, margins, font size (10/11/12 pt) and whether to show a title. The page preview is true to scale and marks approximate page breaks; it centres beside the side panel. **Fit Width** fits it to that space and **100%** shows it at true size; zoom from 25% to 400% with pinch, Ctrl/⌘+scroll, Ctrl/⌘ + and −, or the − and + buttons (Ctrl/⌘ 0 returns to 100%), and scroll to move around.
   - Diagrams wider than the text width are scaled down, both in the preview and in the export (`\resizebox{\linewidth}{!}{…}`).
 - Documents are autosaved in the browser (IndexedDB). The top bar has one-click buttons:
   - new, open (Ctrl+O, `.diagramtex` / `.tex`), save file (Ctrl+Shift+S), import LaTeX/TikZ
@@ -261,6 +263,7 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/mathinput.js`: the canvas text editor's LaTeX and MathLive input modes
 - `public/js/dialog.js`, `public/js/selectmenu.js`: in-app dialogs and dropdown menus
 - `public/js/texcomplete.js`: LaTeX command suggestions while typing
+- `public/js/quick.js`: Quick mode: one formula, copied or downloaded as PNG or SVG
 - `public/js/texcommands.js`: every command KaTeX and Temml support, with its number of arguments. It is generated, so do not edit it; rebuild with `node scripts/gen-texcommands.js` after updating either engine.
 - `public/js/mathengine.js`: the maths renderer (`TD.math.render`), switching between KaTeX and Temml
 - `public/js/plots.js`: expression parser, 2D/3D plot and pie rendering, pgfplots export

@@ -140,14 +140,15 @@
       <button data-kind="classic" class="toggle" title="Classic file — diagrams, and a document that arranges them with text"><svg viewBox="0 0 20 20"><path d="M3 4h14M3 7.5h9"/><circle cx="5.5" cy="14" r="2.5"/><path d="M8 14h3.5"/><rect x="11.5" y="11" width="6" height="6" rx="1"/></svg><span class="lbl">Classic</span></button>
       <button data-mode="page" class="toggle" title="Page file — free-form page: place text, maths, shapes and plots anywhere on the paper"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6h3M7.5 8.5h5"/><path d="M8 15l2-3.5 2 2 1-1.5" /></svg><span class="lbl">Page</span></button>
       <button data-mode="board" class="toggle" title="Whiteboard — an endless canvas: draw anywhere, scroll to pan, pinch or Ctrl+scroll to zoom"><svg viewBox="0 0 20 20"><path d="M2.5 4.5h15v10h-15z"/><path d="M5.5 11c1.6-3.4 3.2-3.4 4.5 0s2.9 3.4 4.5 0"/><path d="M7 17.5l3-3 3 3"/></svg><span class="lbl">Whiteboard</span></button>
+      <button data-quick class="toggle" title="Quick — type one formula and copy it as a picture (PNG or SVG)"><svg viewBox="0 0 20 20"><path d="M2.5 11h2.5l2.5 5.5 4-13h6"/><path d="M12.5 9l4 5M16.5 9l-4 5"/></svg><span class="lbl">Quick</span></button>
     </div>
     <input id="docName" class="doc-name" spellcheck="false" title="Document name" aria-label="Document name">
     <span id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</span>
     <div class="spacer"></div>
     <select id="blockSel" title="Diagram in this document" hidden></select>
     <div class="seg sub" id="classicSeg" role="group" aria-label="View">
-      <button data-mode="diagram" class="toggle on" title="Classic file — edit a diagram on the canvas"><svg viewBox="0 0 20 20"><path d="M3 16L9 5l4 7 4-4"/><circle cx="9" cy="5" r="1.4" class="f"/></svg>Diagram</button>
-      <button data-mode="document" class="toggle" title="Classic file — page with text and diagrams"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>Document</button>
+      <button data-mode="document" class="toggle on" title="Classic file — page with text and diagrams"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>Document</button>
+      <button data-mode="diagram" class="toggle" title="Classic file — edit a diagram on the canvas"><svg viewBox="0 0 20 20"><path d="M3 16L9 5l4 7 4-4"/><circle cx="9" cy="5" r="1.4" class="f"/></svg>Diagram</button>
     </div>
     <div class="group diag-only">
       <button id="btnUndo" class="icon" title="Undo (Ctrl+Z)"><svg viewBox="0 0 20 20"><path d="M7 5L3 9l4 4M3 9h9a5 5 0 010 10h-2"/></svg></button>
@@ -284,7 +285,8 @@
           <input id="zoomVal" type="text" inputmode="decimal" value="100%" title="Zoom: type a percentage and press Enter" aria-label="Zoom percentage" autocomplete="off" spellcheck="false">
           <button id="zoomIn" title="Zoom in">+</button>
           <button id="zoomReset" title="Actual size (100%)">1:1</button>
-          <button id="zoomFit" title="Zoom to fit">Fit</button>
+          <button id="zoomFit" title="Zoom to fit the whole drawing">Fit</button>
+          <button id="zoomFitW" title="Zoom to fit the width, from the top">Fit Width</button>
         </div>
       </div>
       <div id="hint"></div>
@@ -323,6 +325,7 @@
     </section>
     </div>
     <div id="docview"></div>
+    <section id="quick" aria-label="Quick formula" hidden></section>
   </div>
 
   <div id="modal" hidden>
@@ -398,6 +401,7 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/texcommands.js"></script>
   <script src="js/texhighlight.js"></script>
   <script src="js/texcomplete.js"></script>
+  <script src="js/quick.js"></script>
   <script>
     // Lift the loading screen once the page has loaded, the files are open and the fonts are in (at most 1.5s more for fonts,
     // and never later than 8s, so a slow resource can't hold the app up).

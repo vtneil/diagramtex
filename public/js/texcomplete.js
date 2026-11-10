@@ -5,7 +5,7 @@
   const TD = window.TD;
 
   // Fields that get suggestions.
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], .td-pop-ta';
+  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], .td-pop-ta, #quickTex';
   // Quantum circuit code (the canvas code editor, or the panel's code field): quantikz commands at cell
   // level, maths inside a command's {argument}, nothing inside [options].
   const isQc = (el) => el.matches('#props textarea[data-p="src"]') || (el.id === 'inlineEditor' && el.classList.contains('code'));

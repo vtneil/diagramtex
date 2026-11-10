@@ -332,6 +332,7 @@
   const diagramCount = () => doc().blocks.filter((b) => b.type === 'diagram').length;
   const SIZE_EM = { tiny: 0.5, scriptsize: 0.7, footnotesize: 0.8, small: 0.9, normalsize: 1, large: 1.2, Large: 1.44, LARGE: 1.728, huge: 2.074, Huge: 2.488 };
   const ic = (d, extra = '') => `<svg viewBox="0 0 20 20"${extra}><path d="${d}"/></svg>`;
+  const TRASH = 'M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12'; // the app's one trash icon
   const I = {
     left: 'M3 5h14M3 8.5h9M3 12h14M3 15.5h9', center: 'M3 5h14M5.5 8.5h9M3 12h14M5.5 15.5h9', right: 'M3 5h14M8 8.5h9M3 12h14M8 15.5h9', justify: 'M3 5h14M3 8.5h14M3 12h14M3 15.5h14',
     ul: 'M8 5.5h9M8 10h9M8 14.5h9M4 5.5h.01M4 10h.01M4 14.5h.01', ol: 'M8 5.5h9M8 10h9M8 14.5h9M3.5 4l1-.5v4M3.2 12.2c.4-.6 1.8-.6 1.8.3 0 .7-1.8 1.4-1.8 2.2H5',
@@ -342,10 +343,13 @@
     return `<div class="ins" data-at="${i}"><button data-add="text">+ Text</button><button data-add="diagram">+ Diagram</button><button data-add="table">+ Table</button><button data-add="image">+ Image</button></div>`;
   }
   // Formatting bar over the text block being edited (the source stays LaTeX-flavoured text).
+  // LaTeX's size commands, named for the menu (the command itself is in the menu's tip)
+  const SIZE_NAME = { tiny: 'Tiny', scriptsize: 'Script', footnotesize: 'Footnote', small: 'Small', normalsize: 'Normal', large: 'Large', Large: 'Larger', LARGE: 'Largest', huge: 'Huge', Huge: 'Huger' };
   function textBar(b) {
     const al = b.align || 'justify', sz = b.size || 'normalsize';
     return `<div class="fmt-bar" role="toolbar" aria-label="Text formatting">
       <select data-fmt="head" title="Paragraph style"><option value="">Paragraph</option><option value="#">Section</option><option value="##">Subsection</option><option value="###">Subsubsection</option></select>
+      <select data-fmt="size" title="Font size of this block (\\${esc(sz)})">${TD.SIZES.map(([k]) => `<option value="${k}"${k === sz ? ' selected' : ''}>${SIZE_NAME[k] || k}</option>`).join('')}</select>
       <span class="sep"></span>
       <button data-fmt="b" title="Bold (⌘B) — \\textbf"><b>B</b></button><button data-fmt="i" title="Italic (⌘I) — \\textit"><i>I</i></button>
       <button data-fmt="u" title="Underline (⌘U) — \\underline"><u>U</u></button><button data-fmt="s" title="Strikethrough — \\sout"><s>S</s></button>
@@ -356,17 +360,19 @@
       <button data-fmt="ul" title="Bulleted list (- item)">${ic(I.ul)}</button><button data-fmt="ol" title="Numbered list (1. item)">${ic(I.ol)}</button><button data-fmt="chk" title="Checklist (- [ ] item)">${ic(I.chk)}</button>
       <span class="sep"></span>
       ${['justify', 'left', 'center', 'right'].map((a) => `<button data-fmt="al:${a}" class="${a === al ? 'on' : ''}" title="${a === 'justify' ? 'Justified (LaTeX default)' : 'Align ' + a}">${ic(I[a])}</button>`).join('')}
-      <select data-fmt="size" title="Font size of this block">${TD.SIZES.map(([k]) => `<option value="${k}"${k === sz ? ' selected' : ''}>${k}</option>`).join('')}</select>
     </div>`;
   }
   function tableBar(b) {
+    const R = b.rows || [[]], nr = R.length, nc = Math.max(1, ...R.map((r) => r.length)), al = b.colAlign || 'c', hdr = b.header !== false;
+    const step = (k, n, name) => `<span class="fmt-lbl">${name}</span><span class="fmt-step" role="group" aria-label="${name}">
+        <button data-tb="${k}-" title="Remove the last ${name.toLowerCase().slice(0, -1)}" aria-label="Fewer ${name.toLowerCase()}"${n < 2 ? ' disabled' : ''}>${ic('M5 10h10')}</button><output>${n}</output><button data-tb="${k}+" title="Add a ${name.toLowerCase().slice(0, -1)}" aria-label="More ${name.toLowerCase()}">${ic('M10 5v10M5 10h10')}</button></span>`;
     return `<div class="fmt-bar" role="toolbar" aria-label="Table">
-      <button data-tb="row+" title="Add row">+ Row</button><button data-tb="row-" title="Remove last row"${(b.rows || []).length < 2 ? ' disabled' : ''}>− Row</button>
-      <button data-tb="col+" title="Add column">+ Column</button><button data-tb="col-" title="Remove last column"${(b.rows[0] || []).length < 2 ? ' disabled' : ''}>− Column</button>
+      ${step('row', nr, 'Rows')}${step('col', nc, 'Columns')}
       <span class="sep"></span>
-      <label class="chk"><input type="checkbox" data-tb="header"${b.header !== false ? ' checked' : ''}> Header row</label>
+      <button data-tb="hdr" class="txt${hdr ? ' on' : ''}" aria-pressed="${hdr}" title="Set the first row as a header (bold, with a rule under it)">Header row</button>
+      <span class="sep"></span>
+      ${[['l', 'left'], ['c', 'center'], ['r', 'right']].map(([k, n]) => `<button data-tb="al:${k}" class="${k === al ? 'on' : ''}" aria-pressed="${k === al}" title="Align columns ${n}">${ic(I[n])}</button>`).join('')}
       <select data-tb="borders" title="Rules"><option value="all"${b.borders === 'all' ? ' selected' : ''}>All borders</option><option value="header"${b.borders === 'header' ? ' selected' : ''}>Top, header, bottom</option><option value="none"${b.borders === 'none' ? ' selected' : ''}>No borders</option></select>
-      <select data-tb="colAlign" title="Column alignment"><option value="l"${b.colAlign === 'l' ? ' selected' : ''}>Left</option><option value="c"${(b.colAlign || 'c') === 'c' ? ' selected' : ''}>Centre</option><option value="r"${b.colAlign === 'r' ? ' selected' : ''}>Right</option></select>
     </div>`;
   }
   function imageBar(b) {
@@ -374,7 +380,7 @@
       <label class="rng" title="Width as a share of the text width">Width <input type="range" data-im="width" min="0.1" max="1" step="0.05" value="${b.width || 0.6}"><output>${Math.round((b.width || 0.6) * 100)}%</output></label>
       <span class="sep"></span>
       <input type="text" data-im="caption" placeholder="Caption (optional)" value="${esc(b.caption || '')}">
-      <button data-im="replace">Replace…</button><button data-im="download" title="Save the picture next to your .tex, under this name">Save ${esc(imageName(b, doc().blocks.indexOf(b)))}</button>
+      <button data-im="replace" class="txt">Replace…</button><button data-im="download" class="txt" title="Save the picture next to your .tex, under this name">Save ${esc(imageName(b, doc().blocks.indexOf(b)))}</button>
     </div>`;
   }
   const tableHtml = (b, editing) => {
@@ -387,7 +393,9 @@
     }).join('')}</tr>`).join('')}</table>`;
   };
   let fmtColor = '#c0392b', fmtHl = '#fff3a3';
-  let zoomMode = 'fit'; // 'fit' | 1
+  let zoomMode = 'fit'; // 'fit', or a zoom factor (1 = 100%)
+  let curZoom = 1; // the zoom last applied
+  const ZMIN = 0.25, ZMAX = 4;
   function pageStyle(P) {
     return `width:${P.W}cm;min-height:${P.H}cm;padding:${P.mt}cm ${P.mr}cm ${P.mb}cm ${P.ml}cm;font-size:${P.font}pt;--spread:${+P.spread || 1}`;
   }
@@ -402,10 +410,10 @@
       if (!forPrint) h += insertBar(i);
       const ed = i === editingIdx && !forPrint;
       const tools = forPrint ? '' : `<div class="blk-tools">
-        <button data-mv="-1" title="Move up"${i === 0 ? ' disabled' : ''}>↑</button>
-        <button data-mv="1" title="Move down"${i === d.blocks.length - 1 ? ' disabled' : ''}>↓</button>
+        <button data-mv="-1" title="Move up" aria-label="Move up"${i === 0 ? ' disabled' : ''}>${ic('M5.5 12.5L10 8l4.5 4.5')}</button>
+        <button data-mv="1" title="Move down" aria-label="Move down"${i === d.blocks.length - 1 ? ' disabled' : ''}>${ic('M5.5 8l4.5 4.5L14.5 8')}</button>
         ${b.type === 'diagram' ? '<button data-edit title="Edit on canvas">Edit</button>' : ''}
-        <button data-rm title="Delete block"${b.type === 'diagram' && diagramCount() < 2 ? ' disabled' : ''}>✕</button></div>`;
+        <button data-rm title="Delete block" aria-label="Delete block"${b.type === 'diagram' && diagramCount() < 2 ? ' disabled' : ''}>${ic(TRASH)}</button></div>`;
       const edc = ed ? ' editing' : '';
       if (b.type === 'text') {
         const st = `text-align:${b.align || 'justify'}${b.size && b.size !== 'normalsize' ? `;font-size:${SIZE_EM[b.size]}em` : ''}`;
@@ -430,14 +438,29 @@
   function render(forPrint) {
     const { h: page, P } = pageHtml(forPrint);
     let h = page;
-    if (!forPrint) h += `<div class="doc-hud"><span class="pg-info"></span><button data-zoom="fit"${zoomMode === 'fit' ? ' class="on"' : ''}>Fit Width</button><button data-zoom="1"${zoomMode === 1 ? ' class="on"' : ''}>100%</button></div>`;
+    if (!forPrint) h += `<div class="doc-hud"><span class="pg-info"></span><button data-zoom="out" title="Zoom out (Ctrl/⌘ −)" aria-label="Zoom out">−</button><button data-zoom="in" title="Zoom in (Ctrl/⌘ +)" aria-label="Zoom in">+</button><button data-zoom="fit"${zoomMode === 'fit' ? ' class="on"' : ''} title="Fit the page's width to the view">Fit Width</button><button data-zoom="1"${zoomMode === 1 ? ' class="on"' : ''} title="Actual size (Ctrl/⌘ 0)">100%</button></div>`;
     root.innerHTML = h;
     sizeDiagrams(root);
     printStyle(P);
     layoutPage(P, forPrint);
     if (!forPrint) requestAnimationFrame(() => layoutPage(P)); // after the side panel has laid out
     const ta = root.querySelector('.blk-ed');
-    if (ta) { autosize(ta); ta.focus(); }
+    if (ta) { autosize(ta); ta.focus({ preventScroll: true }); }
+  }
+  // Re-render after a block opens or closes for editing, keeping the block that was clicked (or, from the
+  // keyboard, the one that was being edited) where it was on screen, so the page doesn't jump.
+  let lastPt = null;
+  root.addEventListener('pointerdown', (e) => { lastPt = { x: e.clientX, y: e.clientY }; }, true);
+  function renderKeep(prev, fromKey) {
+    const el = !fromKey && lastPt && document.elementFromPoint(lastPt.x, lastPt.y);
+    const hit = el && el.closest && el.closest('#docview .blk');
+    const i = hit ? +hit.dataset.i : prev;
+    const at = () => (i >= 0 ? root.querySelector(`.blk[data-i="${i}"]`) : null);
+    const before = at()?.getBoundingClientRect().top, st = root.scrollTop;
+    render();
+    root.scrollTop = st;
+    const after = at()?.getBoundingClientRect().top;
+    if (before != null && after != null) root.scrollTop += after - before;
   }
   // diagrams at true scale (40 canvas px = 1 cm), shrunk to the text width like \resizebox
   function sizeDiagrams(el) {
@@ -453,12 +476,16 @@
   function layoutPage(P, forPrint) {
     const page = root.querySelector('.doc-page');
     if (!page || forPrint) return;
+    const st = root.scrollTop, sl = root.scrollLeft; // measuring at zoom 1 shortens the page, which would clamp the scroll
     page.style.zoom = 1;
     page.style.minHeight = '0';
     page.querySelectorAll('.pg-brk').forEach((e) => e.remove());
     const cmPx = page.querySelector('.cm-probe').offsetWidth || 37.8;
-    const avail = root.clientWidth - 40;
-    const z = zoomMode === 'fit' ? Math.min(1.5, avail / (P.W * cmPx)) : 1;
+    // the width beside the side panel (the view's padding keeps clear of it), less a margin
+    const cs = getComputedStyle(root);
+    const avail = root.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 24;
+    const z = zoomMode === 'fit' ? Math.min(1.5, avail / (P.W * cmPx)) : zoomMode;
+    curZoom = z;
     // height of the real content (ignoring the trailing "+ Text / + Diagram" bar), in cm
     const blks = page.querySelectorAll('.blk, .doc-title');
     const top = page.getBoundingClientRect().top;
@@ -476,10 +503,45 @@
     page.style.zoom = z;
     // the editing tools stay at screen size whatever the page zoom
     page.style.setProperty('--unzoom', String(1 / z));
+    root.scrollTop = st; root.scrollLeft = sl;
     const info = root.querySelector('.pg-info');
     if (info) info.textContent = `${TD.PAPERS[P.paper]?.name || 'Custom'} · ${n} page${n > 1 ? 's' : ''} (approx.) · ${Math.round(z * 100)}%`;
   }
   window.addEventListener('resize', () => { if (app.state.mode === 'document' && zoomMode === 'fit') layoutPage(TD.pageSize(doc().page)); });
+  // Zoom to z, keeping the point under (cx, cy) (view coordinates; the view's centre by default) in place.
+  function zoomTo(z, cx, cy) {
+    z = Math.min(ZMAX, Math.max(ZMIN, z));
+    const page = root.querySelector('.doc-page');
+    if (!page) return;
+    if (cx == null) { cx = root.clientWidth / 2; cy = root.clientHeight / 2; }
+    const ox = page.offsetLeft, oy = page.offsetTop, k = z / curZoom;
+    const px = root.scrollLeft + cx - ox, py = root.scrollTop + cy - oy; // the point, on the page
+    zoomMode = Math.abs(z - 1) < 1e-3 ? 1 : z;
+    layoutPage(TD.pageSize(doc().page));
+    root.querySelectorAll('.doc-hud [data-zoom]').forEach((b) => b.classList.toggle('on', b.dataset.zoom === String(zoomMode)));
+    root.scrollLeft = page.offsetLeft + px * k - cx;
+    root.scrollTop = page.offsetTop + py * k - cy;
+  }
+  const STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
+  const stepZoom = (dir) => zoomTo(dir > 0 ? (STEPS.find((v) => v > curZoom + 0.005) ?? ZMAX) : ([...STEPS].reverse().find((v) => v < curZoom - 0.005) ?? ZMIN));
+  // pinch on a trackpad (Chromium and Firefox send it as Ctrl+wheel), or Ctrl/⌘ + scroll wheel
+  root.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const r = root.getBoundingClientRect();
+    zoomTo(curZoom * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  // pinch in Safari
+  let gz = 1;
+  root.addEventListener('gesturestart', (e) => { e.preventDefault(); gz = curZoom; });
+  root.addEventListener('gesturechange', (e) => { e.preventDefault(); const r = root.getBoundingClientRect(); zoomTo(gz * e.scale, e.clientX - r.left, e.clientY - r.top); });
+  // Ctrl/⌘ + / − / 0, as in the browser
+  document.addEventListener('keydown', (e) => {
+    if (app.state.mode !== 'document' || !(e.ctrlKey || e.metaKey) || e.altKey || document.body.classList.contains('mode-quick')) return;
+    if (e.key === '=' || e.key === '+') { e.preventDefault(); stepZoom(1); }
+    else if (e.key === '-' || e.key === '_') { e.preventDefault(); stepZoom(-1); }
+    else if (e.key === '0') { e.preventDefault(); zoomTo(1); }
+  });
 
   // ---------- page settings panel (right side in document mode) ----------
   const num = (k, v, step = 0.1) => `<input type="number" data-pg="${k}" value="${+(+v).toFixed(2)}" step="${step}" min="0">`;
@@ -633,7 +695,13 @@
   });
   root.addEventListener('click', (e) => {
     const zb = e.target.closest('[data-zoom]');
-    if (zb) { zoomMode = zb.dataset.zoom === 'fit' ? 'fit' : 1; render(); return; }
+    if (zb) {
+      const z = zb.dataset.zoom;
+      if (z === 'in' || z === 'out') stepZoom(z === 'in' ? 1 : -1);
+      else if (z === '1') zoomTo(1);
+      else { zoomMode = 'fit'; render(); }
+      return;
+    }
     const add = e.target.closest('[data-add]');
     if (add) {
       const at = +add.closest('[data-at]').dataset.at, kind = add.dataset.add;
@@ -680,6 +748,8 @@
       if (tb.dataset.tb === 'row-' && R.length > 1) R.pop();
       if (tb.dataset.tb === 'col+') R.forEach((r) => { while (r.length < nc) r.push(''); r.push(''); });
       if (tb.dataset.tb === 'col-' && nc > 1) R.forEach((r) => { r.length = Math.min(r.length, nc - 1); });
+      if (tb.dataset.tb === 'hdr') b.header = b.header === false;
+      if (tb.dataset.tb.startsWith('al:')) b.colAlign = tb.dataset.tb.slice(3);
       changed(); render();
       return;
     }
@@ -689,7 +759,7 @@
       if (im.dataset.im === 'download') { const a = document.createElement('a'); a.href = b.src; a.download = imageName(b, i); a.click(); }
       return;
     }
-    if (['text', 'table', 'image'].includes(b.type) && editingIdx !== i) { editingIdx = i; render(); }
+    if (['text', 'table', 'image'].includes(b.type) && editingIdx !== i) { const was = editingIdx; editingIdx = i; renderKeep(was); }
   });
   root.addEventListener('change', (e) => {
     const t = e.target, blk = t.closest('.blk');
@@ -729,8 +799,9 @@
     if (cur && el && cur.contains(el)) return;
     // pressing on another text / table / image block opens that one straight away
     const nb = el && el.closest && !el.closest('.blk-tools, .cbx, a[href]') && el.closest('.blk-text, .blk-table, .blk-image');
+    const was = editingIdx;
     editingIdx = nb ? +nb.dataset.i : -1;
-    render();
+    renderKeep(was);
   }
   root.addEventListener('focusout', (e) => {
     if (!e.target.closest('.blk.editing')) return;
@@ -745,12 +816,12 @@
   root.addEventListener('keydown', (e) => {
     const t = e.target;
     if (t.classList.contains('blk-ed')) {
-      if (e.key === 'Escape') { editingIdx = -1; render(); return; }
+      if (e.key === 'Escape') { const was = editingIdx; editingIdx = -1; renderKeep(was, true); return; }
       const k = (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase();
       if (k === 'b' || k === 'i' || k === 'u') { e.preventDefault(); fmtAction(t, k); }
     }
     if (t.classList.contains('cell')) {
-      if (e.key === 'Escape') { editingIdx = -1; render(); return; }
+      if (e.key === 'Escape') { const was = editingIdx; editingIdx = -1; renderKeep(was, true); return; }
       if (e.key === 'Enter') {
         e.preventDefault();
         const b = doc().blocks[editingIdx], r = +t.dataset.r, c = +t.dataset.c;
@@ -781,13 +852,16 @@
     for (let k = 0; k < 2; k++) { // one retry: a dev server mid-restart usually answers the second time
       try { const r = await fetch(url); if (r.ok) return r; } catch (e) { /* retry */ }
     }
+    // the copy the service worker keeps for offline use (every vendor file is precached)
+    try { const c = self.caches && (await caches.match(new URL(url, location.href).href, { ignoreSearch: true })); if (c) return c; } catch (e) { /* no cache */ }
     throw new Error('could not load ' + url);
   };
   // The stylesheet text: from the network, else from the copy this page already loaded.
   async function mathCssText(cssUrl) {
     try { return await (await fetchOk(cssUrl)).text(); } catch (e) {
-      const abs = new URL(cssUrl, location.href).href;
-      const ss = [...document.styleSheets].find((s) => s.href === abs);
+      // the copy this page loaded: matched by its path, so a query string or another origin doesn't hide it
+      const file = cssUrl.split('/').pop();
+      const ss = [...document.styleSheets].find((s) => s.href && new URL(s.href).pathname.endsWith('/' + file));
       try { if (ss) return [...ss.cssRules].map((r) => r.cssText).join('\n'); } catch (e2) { /* unreadable (file://) */ }
       return '';
     }

@@ -3,6 +3,8 @@
 # Deploy:  npx wrangler deploy        Local preview:  npx wrangler dev
 name = "diagramtex"
 compatibility_date = "2025-10-01"
+workers_dev = false
+preview_urls = false
 
 # Runs before every `wrangler deploy` and `wrangler dev` (and again on changes under ./public in dev).
 [build]

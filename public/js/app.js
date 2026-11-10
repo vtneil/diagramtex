@@ -313,7 +313,7 @@
     $('#docName').value = state.doc.name;
     store.set('diagramtex.last', id);
     store.set('diagramtex.last.' + kind, id);
-    applyMode(kind === 'page' || kind === 'board' ? kind : (d.mode === 'document' ? 'document' : 'diagram'), fit);
+    applyMode(kind === 'page' || kind === 'board' ? kind : (d.mode === 'diagram' ? 'diagram' : 'document'), fit);
     render(); renderProps(); renderDocList(); updateTopbar(); showSaveState();
   }
   // Switch the canvas to another diagram block of the current document.
@@ -350,8 +350,8 @@
     if (m !== 'board' && state.tool === 'hand') setTool('select'); // the hand tool is a whiteboard's
     document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
     document.querySelectorAll('[data-kind]').forEach((b) => b.classList.toggle('on', b.dataset.kind === kindOf(m)));
-    if (m === 'document') { if (TD.docview) TD.docview.render(); }
-    else requestAnimationFrame(() => (fit ? zoomFit() : render()));
+    if (m === 'document') { if (fit) fitLater = true; if (TD.docview) TD.docview.render(); }
+    else requestAnimationFrame(() => { const f = fit || fitLater; fitLater = false; if (f) zoomFit(); else render(); });
     renderProps();
     updateTopbar();
   }
@@ -363,7 +363,7 @@
     if (kind === 'board' && blocks) { shapesArr = blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes || []); blocks = null; }
     store.set(LS_DOC + id, kind === 'page'
       ? { kind, name, page, sheet: sheet || { pages: 1, shapes: [] }, view, mode: 'page' }
-      : { kind, name, blocks: blocks || [{ type: 'diagram', shapes: shapesArr || [] }], active: 0, page, view: view || { x: -60, y: -60, zoom: 1 }, mode: kind === 'board' ? 'board' : 'diagram' });
+      : { kind, name, blocks: blocks || [{ type: 'diagram', shapes: shapesArr || [] }], active: 0, page, view: view || { x: -60, y: -60, zoom: 1 }, mode: kind === 'board' ? 'board' : 'document' }); // a Classic file opens on its page
     const idx = index(); idx.push({ id, name, kind, updated: Date.now() }); store.set(LS_INDEX, idx);
     openDoc(id);
     return id;
@@ -537,19 +537,34 @@
     v.zoom = nz; v.x = wx - sx / nz; v.y = wy - sy / nz;
     renderView();
   }
-  function zoomFit() {
-    const r = stageSize();
+  // The canvas is hidden in Document view: a fit asked for there waits until the canvas shows.
+  let fitLater = false;
+  // The part of the stage not covered by the panel column on the right: fits centre in it, so the drawing or
+  // page sits in the clear space rather than half under Properties.
+  function fitArea() {
+    const r = stageSize(), rc = $('#rightCol');
+    let w = r.w;
+    if (rc && rc.offsetWidth) { const q = rc.getBoundingClientRect(); if (q.left > r.left && q.left < r.left + r.w) w = q.left - r.left; }
+    return { w: Math.max(120, w), h: r.h };
+  }
+  // Fit the whole page or drawing; with `width`, fit only its width and show it from the top.
+  function zoomFit(width) {
+    width = width === true;
+    if (state.mode === 'document') { fitLater = true; return; }
+    const r = fitArea();
     if (state.mode === 'page') {
-      const b = sheetBox(), z = Math.max(0.1, Math.min(3, (r.w - 60) / b.w, (r.h - 60) / Math.min(b.h, pageGeom().h)));
-      state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: Math.min(b.h, pageGeom().h) / 2 - r.h / 2 / z };
+      const b = sheetBox(), ph = Math.min(b.h, pageGeom().h);
+      const z = Math.max(0.1, Math.min(width ? 8 : 3, (r.w - 60) / b.w, width ? Infinity : (r.h - 60) / ph));
+      state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: width ? -30 / z : ph / 2 - r.h / 2 / z };
       render(); return;
     }
     if (!shapes().length) { state.view = { x: -60, y: -60, zoom: 1 }; render(); return; }
     const b = TD.bboxOf(shapes().flatMap((s) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }));
-    const z = Math.max(0.1, Math.min(3, (r.w - 80) / Math.max(b.w, 1), (r.h - 80) / Math.max(b.h, 1)));
-    state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: b.y + b.h / 2 - r.h / 2 / z };
+    const z = Math.max(0.1, Math.min(width ? 8 : 3, (r.w - 80) / Math.max(b.w, 1), width ? Infinity : (r.h - 80) / Math.max(b.h, 1)));
+    state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: width ? b.y - 40 / z : b.y + b.h / 2 - r.h / 2 / z };
     render();
   }
+  const zoomFitWidth = () => zoomFit(true);
 
   // ---------------- snapping ----------------
   function snapPoint(p, e, exclude) {
@@ -2924,7 +2939,7 @@
     } else {
       h += item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
         item('Select All', 'all', { ic: 'all', key: 'Ctrl+A', dis: !shapes().length }) + hr +
-        item('Zoom to Fit', 'fit', { ic: 'fit' }) +
+        item('Zoom to Fit', 'fit', { ic: 'fit' }) + item('Zoom to Fit Width', 'fitw') +
         item(state.grid ? 'Hide Grid' : 'Show Grid', 'grid', { key: 'G' });
     }
     ctx.innerHTML = h;
@@ -2989,7 +3004,7 @@
     const old = store.get(LS_DOC + id, null) || {};
     store.set(LS_DOC + id, p.kind === 'page'
       ? { kind: 'page', name: p.name, page: p.page, sheet: p.sheet, view: old.view, mode: 'page' }
-      : { kind: p.kind, name: p.name, blocks: p.blocks, active: 0, page: p.page, view: old.view, mode: p.kind === 'board' ? 'board' : (old.mode === 'document' ? 'document' : 'diagram') });
+      : { kind: p.kind, name: p.name, blocks: p.blocks, active: 0, page: p.page, view: old.view, mode: p.kind === 'board' ? 'board' : (old.mode === 'diagram' ? 'diagram' : 'document') });
     const idx = index(), it = idx.find((x) => x.id === id);
     if (it) { it.name = p.name; it.kind = p.kind; it.updated = Date.now(); store.set(LS_INDEX, idx); }
     if (state.docId === id) state.docId = null; // reopen without saving the old contents over the new
@@ -3170,6 +3185,7 @@
     if (a === 'all') { state.sel = new Set(shapes().map((s) => s.id)); renderOverlay(); renderProps(); }
     if (a === 'layer') layerAction(arg, ctx.dataset.layer || '');
     if (a === 'fit') zoomFit();
+    if (a === 'fitw') zoomFitWidth();
     if (a === 'grid') toggleGrid();
   });
   ctx.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -3187,6 +3203,7 @@
 
   const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'MATH-FIELD' || t.isContentEditable);
   document.addEventListener('keydown', (e) => {
+    if (inQuick()) return; // Quick handles its own keys
     const mod = e.metaKey || e.ctrlKey;
     if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; }
     if (!imp.hidden) { if (e.key === 'Escape') closeImport(); return; }
@@ -3327,7 +3344,8 @@
     });
     gv.addEventListener('blur', () => { gv.value = fmtGrid(); });
   }
-  $('#zoomFit').onclick = zoomFit;
+  $('#zoomFit').onclick = () => zoomFit();
+  $('#zoomFitW').onclick = zoomFitWidth;
   document.querySelectorAll('#tools button[data-tool]').forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
 
   $('#docName').addEventListener('input', (e) => { state.doc.name = e.target.value || 'Untitled'; scheduleSave(); });
@@ -3471,9 +3489,29 @@
     }
     catch (e) { showHint('Could not build the HTML file: ' + e.message, 2500); }
   }
-  document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+  // Quick: a formula box on its own, over whatever file is open. Picking a file kind leaves it.
+  const QUICK_KEY = 'diagramtex.quick';
+  const inQuick = () => document.body.classList.contains('mode-quick');
+  function setQuick(on) {
+    if (on === inQuick()) return;
+    if (on) { finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); }
+    document.body.classList.toggle('mode-quick', on);
+    try { on ? localStorage.setItem(QUICK_KEY, '1') : localStorage.removeItem(QUICK_KEY); } catch (e) { /* storage blocked */ }
+    if (on) {
+      hideFly(); closeCtx(); expPop.hidden = true;
+      document.querySelectorAll('#kindSeg [data-mode], #kindSeg [data-kind]').forEach((b) => b.classList.remove('on'));
+      $('#kindSeg [data-quick]').classList.add('on');
+      TD.quick.show();
+    } else {
+      $('#kindSeg [data-quick]').classList.remove('on');
+      TD.quick.hide();
+      applyMode(state.mode, false); // the canvas was hidden: lay it out and draw it again
+    }
+  }
+  $('#kindSeg [data-quick]').onclick = () => setQuick(true);
+  document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { setQuick(false); setMode(b.dataset.mode); }));
   // Classic reopens the last Classic file in the view it was left in (Diagram or Document).
-  document.querySelectorAll('[data-kind]').forEach((b) => (b.onclick = () => { if (state.doc.kind !== b.dataset.kind) { finishEdit(); finishPoly(); commit(); switchKind(b.dataset.kind); } }));
+  document.querySelectorAll('[data-kind]').forEach((b) => (b.onclick = () => { setQuick(false); if (state.doc.kind !== b.dataset.kind) { finishEdit(); finishPoly(); commit(); switchKind(b.dataset.kind); } }));
   $('#blockSel').onchange = (e) => setActiveBlock(+e.target.value);
 
   // Page mode: the sheet as SVG, one <svg> per page (for print) or one tall SVG (for download).
@@ -3502,10 +3540,20 @@
       let fonts = '';
       try { fonts = await TD.inlineMathCss(); } catch (e) { fonts = ''; }
       const own = TD.math.exportStyle().replace(/^<style>|<\/style>$/g, '').replace(/@import[^;]*;/g, '').replace(/@font-face\{[^}]*\}/g, '');
-      rasterCss = [eng, fonts + own];
+      // a stylesheet that couldn't be read is tried again next time, not kept for the session
+      // (a font that had to be linked instead of embedded won't load inside a picture either)
+      if (fonts && !fonts.startsWith('@import') && !TD.mathFontsLinked) rasterCss = [eng, fonts + own];
+      else return xmlStyle(fonts + own);
     }
-    return `<style>${rasterCss[1].replace(/<\/style/gi, '')}</style>`;
+    return xmlStyle(rasterCss[1]);
   }
+  // The picture is XML, where a raw < or & in a stylesheet (Temml's CSS has inline SVG images) breaks
+  // it: the CSS goes in a CDATA section, with any "]]>" in it split across two sections.
+  const xmlStyle = (css) => `<style><![CDATA[${css.replace(/\]\]>/g, ']]]]><![CDATA[>')}]]></style>`;
+  // KaTeX writes each formula twice: the visible HTML, and MathML for screen readers, which its stylesheet
+  // hides. A picture has no screen reader, and without the stylesheet the MathML would show as a second
+  // copy of the formula, so it is left out.
+  const noMathml = (svg) => svg.replace(/<span class="katex-mathml">[\s\S]*?<\/math><\/span>/g, '');
   // what to export: one entry per output page, each { vb: [x,y,w,h] in canvas px, inner: svg markup, bg }
   function exportSources() {
     if (state.mode === 'page') {
@@ -3518,12 +3566,12 @@
     const svg = shapesSvg(list, 8, false);
     return [{ vb: [b.x, b.y, b.w, b.h], inner: svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '') }];
   }
-  const expScale = () => expOpts.dpi / 2.54 / PX; // canvas px → image px
-  async function rasterise(src, transparent) {
-    const sc = expScale(), [x, y, w, h] = src.vb;
+  const expScale = (dpi = expOpts.dpi) => dpi / 2.54 / PX; // canvas px → image px
+  async function rasterise(src, transparent, dpi) {
+    const sc = expScale(dpi), [x, y, w, h] = src.vb;
     const W = Math.max(1, Math.round(w * sc)), H = Math.max(1, Math.round(h * sc));
     if (W * H > 16e7 / 4) throw new Error(`${W} × ${H} px is too large; lower the DPI`);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}" width="${W}" height="${H}">${await rasterStyle()}${src.inner}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}" width="${W}" height="${H}">${await rasterStyle()}${noMathml(src.inner)}</svg>`;
     const img = new Image();
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     await img.decode();
@@ -3910,7 +3958,19 @@
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
     newSample: () => { newDoc('Welcome to DiagramTeX', sample()); zoomFit(); },
     get slug() { return slug(); },
+    // pictures of shapes that are not on the canvas (Quick): a standalone SVG, or a PNG at `dpi`
+    svgOf: (list) => shapesSvg(list, 4),
+    async pngOf(list, dpi, transparent) {
+      const b = TD.bboxOf(list.flatMap((s) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }), 4);
+      const inner = shapesSvg(list, 4, false).replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+      return pngWithDpi(await rasterise({ vb: [b.x, b.y, b.w, b.h], inner }, transparent, dpi), dpi);
+    },
+    downloadBlob: (name, blob) => downloadBlob(name, blob),
   };
   // the files are read from IndexedDB first; the loading screen stays up until they are open
-  TD.ready = init().catch((e) => { console.error(e); });
+  TD.ready = init().catch((e) => { console.error(e); }).then(() => {
+    let q = null; try { q = localStorage.getItem(QUICK_KEY); } catch (e) { /* storage blocked */ }
+    // quick.js may still be loading: the page's scripts can still be parsing when the files are read
+    if (q) { if (TD.quick) setQuick(true); else document.addEventListener('DOMContentLoaded', () => setQuick(true), { once: true }); }
+  });
 })();
