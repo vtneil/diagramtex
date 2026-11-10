@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz**, **forest**, **zx-calculus** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams, Feynman diagrams and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -30,6 +30,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 - **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
 - **Trees:** a `forest` editor for syntax trees, org charts, directory trees, decision and probability trees: add, move and restyle nodes by keyboard or drag, with templates and the code live beside it.
 - **ZX diagrams:** a `zx-calculus` editor: drop Z and X spiders, Hadamard boxes and points on a grid, drag a node's handle to wire it to another, and pick each wire's shape from pictures.
+- **Feynman diagrams:** a `tikz-feynman` editor: place vertices (dots, blobs, crossed dots, particles) on a centimetre grid, drag from one vertex to another to draw fermions, photons, gluons, scalars, ghosts and more, and set labels, momentum arrows, bends and insertions.
 - **Flowcharts and block diagrams:** 28 flowchart symbols, 33 basic shapes and 27 block arrows.
 - **Whole pages and documents:** lay out text, maths and figures on A4 or Letter pages and export a complete LaTeX `article`.
 
@@ -84,7 +85,7 @@ npx wrangler deploy
   - **2D plots (pgfplots):** function, line, scatter, area, bar, contour, heatmap.
   - **3D plots:** surface, mesh, scatter, and function `z = f(x, y)`. The view angles follow pgfplots `view={az}{el}`.
   - **Pie chart:** one `label value [#color]` per line.
-- **Blocks menu** (the cube button below Plots): CD, Bloch, Quantum, Circuit, Tree and ZX. A new block starts with `large` labels, whatever the default text size is.
+- **Blocks menu** (the cube button below Plots): CD, Bloch, Quantum, Circuit, Tree, ZX and Feynman. A new block starts with `large` labels, whatever the default text size is.
 - **Grid editors** (Quantum, ZX, CD): point just left of a row or just above a column and a bin appears; click it to delete that row or column. Every field in an editor's panel updates the others as you type (a label and its code, an option and its buttons).
 - **Plots:** each plot can have several series, given as expressions (`sin(x)*exp(-x/4)`, `x^2+y^2`, …) or as data. You can set axis labels, ranges, grid, legend, colormaps (hot, viridis, jet, cool, gray) and a colour bar. Expression errors show in the panel and on the canvas.
   - **Function plot series types** (Mathcha's set): regular `y = f(x)`, **inequality** (`y < f(x)`, `≤`, `>`, `≥`; shaded, with a dashed edge when strict), **bounded region** between `f` and `g`, **x in terms of y**, **parametric** `(x(t), y(t))`, **polar** `r(θ)`, **implicit** `F(x, y) = 0`, **points**, **vectors** (`x y` or `x y u v`), **vector field** `(P, Q)` and **phase portrait** (trajectories with arrows).
@@ -139,6 +140,13 @@ npx wrangler deploy
 - **Wires:** hover or select a node and drag the blue handle on its right to another cell (an empty end gets a `\zxN{}` point). Click a wire to choose its shape from pictures (straight, the package's `o` / `s` / `C` curves and more), put an H, Z or X marker on it, or make it classical, bold or dashed.
 - **Nodes:** the panel sets a spider's colour, phase (plain or a fraction, with its sign), where the phase goes (in the node or in a label beside it), the gap before its column, and lists the wires leaving it. Double-click a spider or press Enter to type its phase.
 - The `zx-calculus` code is live on the right, both ways; cells you didn't touch keep the code you wrote. It is exported inside `\begin{ZX}` with `\usepackage{zx-calculus}`, and **Import LaTeX/TikZ** turns a `ZX` environment back into a diagram.
+
+### Feynman diagrams (tikz-feynman)
+- **Blocks → Feynman** adds a diagram (e⁻e⁺ → μ⁻μ⁺ to start from). Double-click it, press Enter or use **Edit Feynman…** in the panel to open the Feynman editor.
+- **Vertices:** click a vertex kind in the palette and click the grid to place it (snaps to 0.25 cm; ⌥ places freely), or drag it onto the grid. Drag a vertex to move it; arrow keys nudge it. With a vertex selected, a palette kind restyles it. Keys `V D T` place a vertex, dot or particle.
+- **Lines:** select a vertex and drag the blue handle beside it to another vertex, or to an empty spot for a new vertex. The line takes the propagator picked in the palette (fermion, antifermion, photon, gluon, scalar, charged scalar, ghost, Majorana, boson, charged boson, plain; keys `F P G S M B L`); with a line selected, a palette kind changes it.
+- **Panel:** a line has its type, label and side, momentum (side, along or against), bend (left/right with an angle, or a half circle), an insertion cross and any other options; a vertex has its name, shape, label and position. Right-click for Edit Label, Reverse Direction, Bend and Delete. Double-click a vertex or line to type its label.
+- The `tikz-feynman` code is live on the right, both ways; a diagram you didn't touch keeps the code you wrote. Vertices placed with `above right=of …` are drawn where TikZ puts them and get coordinates only when moved. It is exported in a `feynman` environment with `\usepackage[compat=1.1.0]{tikz-feynman}` and builds with pdfLaTeX (vertices need positions; `\feynmandiagram`'s automatic layout needs LuaLaTeX and is not drawn). **Import LaTeX/TikZ** turns a `feynman` environment back into a diagram.
 
 ### Commutative diagrams (tikz-cd)
 - **Blocks → CD** adds a diagram. Double-click it, press Enter or use **Edit Diagram…** in the panel to open the CD editor. Older XyMatrix shapes open as CD blocks.
@@ -242,7 +250,7 @@ Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf pr
 Yes, for most `\draw`, `\fill`, `\node` and `\coordinate` paths: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Files exported by DiagramTeX re-import exactly, plots included.
 
 **Which LaTeX packages does the output need?**
-TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams and `blochsphere` for Bloch spheres. The export lists what each figure needs.
+TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams, `tikz-feynman` for Feynman diagrams and `blochsphere` for Bloch spheres. The export lists what each figure needs.
 
 ## Project structure
 
@@ -258,6 +266,8 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/qceditor.js`: the overlay quantum circuit editor (palette, cell grid, properties and live quantikz code)
 - `public/js/zx.js`: ZX diagrams: zx-calculus parser, layout, canvas drawing and export
 - `public/js/zxeditor.js`: the overlay ZX editor (palette, cell grid, wire handles and shapes, live zx-calculus code)
+- `public/js/feynman.js`: Feynman diagrams: tikz-feynman parser and writer, layout, canvas drawing and export
+- `public/js/fyeditor.js`: the overlay Feynman editor (palette, centimetre grid, vertex handles, properties and live code)
 - `public/js/tooltip.js`: the app's own tooltips (every `title` becomes a styled `data-tip`)
 - `public/js/czcore.js`: circuitikz part registry and drawing API; parts live in `czparts-wires.js`, `czparts-passive.js`, `czparts-semi.js`, `czparts-sources.js`, `czparts-switch.js` and `czparts-blocks.js`
 - `public/js/texhighlight.js`: maths highlighting in the LaTeX text fields

@@ -1006,7 +1006,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|cd|qc|cz|forest|zx|bloch)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|cd|qc|cz|forest|zx|bloch|feynman)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1034,7 +1034,7 @@
     + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
   function flyOf(t) {
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|qc|cz|forest|zx|bloch)$/.test(t)) return 'blocks';
+    if (/^(cd|qc|cz|forest|zx|bloch|feynman)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
@@ -1378,6 +1378,7 @@
         if (s.type === 'cz') { state.sel = new Set([hitId]); render(); renderProps(); openCircuit(hitId); return; }
         if (s.type === 'forest') { state.sel = new Set([hitId]); render(); renderProps(); openTree(hitId); return; }
         if (s.type === 'zx') { state.sel = new Set([hitId]); render(); renderProps(); openZX(hitId); return; }
+        if (s.type === 'feynman') { state.sel = new Set([hitId]); render(); renderProps(); openFeyn(hitId); return; }
         if (s.type === 'cd') { state.sel = new Set([hitId]); render(); renderProps(); openCD(hitId); return; }
       }
       const grp = groupIds(hitId);
@@ -1739,6 +1740,24 @@
     });
   }
   TD.zxOpen = openZX;
+  // Feynman diagrams (fyeditor.js): the same, for tikz-feynman code
+  function openFeyn(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.feynEditor) return;
+    TD.feynEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      // the drawing stays where it was: the block moves by as much as its bounds grew to the left or up
+      const was = TD.feyn.layout(t);
+      begin(); t.src = res.src;
+      const now = TD.feyn.layout(t);
+      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
+      commit();
+      render(); renderProps();
+    });
+  }
+  TD.feynOpen = openFeyn;
   // commutative diagrams (cdeditor.js): the same, for tikz-cd code
   function openCD(id) {
     finishEdit();
@@ -1927,6 +1946,7 @@
     qc: [['x', 'x'], ['y', 'y']],
     forest: [['x', 'x'], ['y', 'y']],
     zx: [['x', 'x'], ['y', 'y']],
+    feynman: [['x', 'x'], ['y', 'y']],
     bloch: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
@@ -2782,7 +2802,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch'].includes(s.type)) {
+      if (['plot', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3170,7 +3190,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3246,7 +3266,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');

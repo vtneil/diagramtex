@@ -603,7 +603,7 @@
   }
 
   // right-click: rows and columns around the cell (or range) under the pointer; on a wire, the wire
-  const MI = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', loop: '<path class="qo" d="M8 14a4 4 0 1 1 4 0"/><circle class="qf" cx="10" cy="15" r="2.5"/>' };
+  const MI = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>', loop: '<path class="qo" d="M8 14a4 4 0 1 1 4 0"/><circle class="qf" cx="10" cy="15" r="2.5"/>' };
   const mItem = (act, label, icon, key) => `<button class="ctx-item${/^(rowdel|coldel|delete|wiredel)$/.test(act) ? ' danger' : ''}" data-zm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e) => {
@@ -612,7 +612,7 @@
     const n = nodeAt(e), w = !n && wireAt(e);
     if (w) {
       selectWire(w); draw(); renderProps();
-      menu.innerHTML = mItem('wiredel', 'Delete Wire', 'clear', '⌫');
+      menu.innerHTML = mItem('wiredel', 'Delete Wire', 'del', '⌫');
     } else {
       const h = cellAt(e);
       if (!h || h.r >= nR(E.M) || h.c >= nC(E.M)) { closeMenu(); return; }

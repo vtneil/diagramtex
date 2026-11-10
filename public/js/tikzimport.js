@@ -506,6 +506,17 @@
           C.warnings.push(`\\begin{${env}} … \\end{${env}} is not imported`);
           i = endIdx < 0 ? s.length : endIdx + env.length + 6; continue;
         }
+        if (name === 'begin' && env === 'feynman' && TD.TYPES.feynman) {
+          // a tikz-feynman diagram: one Feynman object, its origin where the picture's is
+          const endIdx = s.indexOf('\\end{feynman}', e);
+          const stop = endIdx < 0 ? s.length : endIdx + 13;
+          const q = TD.TYPES.feynman.create({ x: 0, y: 0 }, {});
+          q.src = s.slice(bs, stop).trim();
+          const b = TD.feyn.layout(q).bb;
+          q.x = b.x; q.y = b.y;
+          shapes.push(...applyXf([q], C.scopes || []));
+          i = stop; continue;
+        }
         if (name === 'begin' && env === 'scope') {
           i = e + 1; while (/\s/.test(s[i])) i++;
           let L = { xf: [], shape: false };

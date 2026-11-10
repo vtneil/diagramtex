@@ -11,7 +11,7 @@ exported unchanged, with a visual editor that writes the code both ways.
       with a visual editor (cells, arrows, labels, styles, bends) that writes the code both ways. Existing
       XyMatrix shapes open as CD blocks.
 - [ ] **Chemistry** (`chemfig`): structural formulas and reaction schemes.
-- [ ] **Feynman Diagram** (`tikz-feynman`): vertices, propagators (fermion, photon, gluon, scalar), momentum labels.
+- [x] **Feynman Diagram** (`tikz-feynman`): vertices, propagators (fermion, photon, gluon, scalar), momentum labels.
 - [x] **Bloch sphere** (`blochsphere`): a configurable Bloch sphere (state vectors, axes, labels, view angle).
 - [x] **Physics library**: common mechanics and optics objects (blocks, inclines, pulleys, pendulums,
       lenses, mirrors, prisms, rays, screens) in the shape library.

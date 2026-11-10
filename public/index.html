@@ -27,7 +27,7 @@
         "@type": "WebApplication",
         "name": "DiagramTeX",
         "url": "https://diagramtex.igniting.space/",
-        "description": "Diagram editor for physics and maths that exports LaTeX/TikZ: circuits, quantum circuits, commutative diagrams, Bloch spheres, trees, ZX diagrams and plots, with maths typeset as you type.",
+        "description": "Diagram editor for physics and maths that exports LaTeX/TikZ: circuits, quantum circuits, commutative diagrams, Bloch spheres, trees, ZX diagrams, Feynman diagrams and plots, with maths typeset as you type.",
         "applicationCategory": "DesignApplication",
         "operatingSystem": "Any (runs in a web browser)",
         "browserRequirements": "Requires JavaScript. Works offline once installed.",
@@ -200,7 +200,7 @@
       <button data-fly="misc" title="Axis, wave, brace, ruler, grid"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M3 9h14M3 13h14M7 3v14M11 3v14M15 3v14" style="stroke-width:1.1"/></svg><i class="more"></i></button>
       <button data-fly="arrows" title="Block arrows"><svg viewBox="0 0 20 20"><path d="M2.5 7.5h8.5V4l6.5 6-6.5 6v-3.5H2.5z"/></svg><i class="more"></i></button>
       <button data-fly="insertPop" id="btnInsert" title="Plots and charts: 2D, 3D, pie"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
-      <button data-fly="blocks" id="btnBlocks" title="Blocks: commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX"><svg viewBox="0 0 20 20"><path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5z"/><path d="M3.5 6.25L10 10l6.5-3.75M10 10v7.5"/></svg><i class="more"></i></button>
+      <button data-fly="blocks" id="btnBlocks" title="Blocks: commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman"><svg viewBox="0 0 20 20"><path d="M10 2.5l6.5 3.75v7.5L10 17.5l-6.5-3.75v-7.5z"/><path d="M3.5 6.25L10 10l6.5-3.75M10 10v7.5"/></svg><i class="more"></i></button>
       <div class="sep"></div>
       <button data-tool="image" title="Image (I) — inserted with \includegraphics"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12"/><circle cx="7" cy="8" r="1.5"/><path d="M3 15l5-5 3.5 3.5 2-2L17 15"/></svg></button>
       <button data-tool="pencil" title="Pencil (N) — freehand, smoothed"><svg viewBox="0 0 20 20"><path d="M4 16l1-4 8.5-8.5 3 3L8 15z M12 5l3 3"/></svg></button>
@@ -241,6 +241,7 @@
         <button data-insert="cz" title="Circuit, drawn with circuitikz parts"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>Circuit</button>
         <button data-insert="forest" title="Tree or hierarchy, written for forest"><svg viewBox="0 0 32 24"><rect x="12" y="2" width="8" height="6" class="a1"/><path d="M16 8v3M7 11h18M7 11v3M25 11v3M16 11v3"/><rect x="4" y="14" width="6" height="6"/><rect x="13" y="14" width="6" height="6"/><rect x="22" y="14" width="6" height="6"/></svg>Tree</button>
         <button data-insert="zx" title="ZX-calculus diagram, written for zx-calculus"><svg viewBox="0 0 32 24"><path d="M2 12h3.5M14.5 12h3M26.5 12h3.5M10 7.5C10 3 22 3 22 7.5"/><circle cx="10" cy="12" r="4.5" class="a1"/><circle cx="22" cy="12" r="4.5"/><rect x="14" y="1.5" width="4" height="4" class="a1"/></svg>ZX</button>
+        <button data-insert="feynman" title="Feynman diagram, written for tikz-feynman"><svg viewBox="0 0 32 24"><path d="M3 3l7 9-7 9M29 3l-7 9 7 9"/><path d="M10 12c1-2.5 2-2.5 3 0s2 2.5 3 0 2-2.5 3 0 2 2.5 3 0" class="a1"/><path d="M5.6 6.4l2.2.2-.3-2.2M7.5 19.6l-2.2.2.3-2.2" /></svg>Feynman</button>
       </div>
     </div>
 
@@ -296,7 +297,7 @@
         <div class="eh-diagram">
           <div class="eh-title">Empty diagram</div>
           <div>Pick a tool on the left, or press <kbd>L</kbd> line · <kbd>R</kbd> rectangle · <kbd>T</kbd> text (drag for a paragraph box).</div>
-          <div>Plots and charts are under the <b>Plots</b> button; commutative diagrams, Bloch spheres, quantum circuits, circuits, trees and ZX diagrams under <b>Blocks</b>. Right-click objects for more.</div>
+          <div>Plots and charts are under the <b>Plots</b> button; commutative diagrams, Bloch spheres, quantum circuits, circuits, trees, ZX and Feynman diagrams under <b>Blocks</b>. Right-click objects for more.</div>
         </div>
         <div class="eh-board">
           <div class="eh-title">Empty whiteboard</div>
@@ -372,6 +373,7 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/quantum.js"></script>
   <script src="js/forest.js"></script>
   <script src="js/zx.js"></script>
+  <script src="js/feynman.js"></script>
   <script src="js/cd.js"></script>
   <script src="js/bloch.js"></script>
   <script src="js/czcore.js"></script>
@@ -386,6 +388,7 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/qceditor.js"></script>
   <script src="js/fteditor.js"></script>
   <script src="js/zxeditor.js"></script>
+  <script src="js/fyeditor.js"></script>
   <script src="js/cdeditor.js"></script>
   <script src="js/symbols.js"></script>
   <script src="js/boolean.js"></script>

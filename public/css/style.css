@@ -1105,6 +1105,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-props input[type=number] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 .cz-props .ctl.unit span { color: var(--pencil); font-size: 12px; }
 .cz-props input.mono { font-family: var(--font-mono); font-size: 12px; }
+.cz-props input[type]:disabled, .cz-props select:disabled { background: var(--well); color: var(--pencil); cursor: default; }
 .cz-props input:focus, .cz-props select:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
 .cz-props .ctl.seg-ctl { display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r); }
 .cz-props .seg-ctl button { flex: 1; height: 100%; padding: 0; border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -1191,7 +1192,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .fe-sw i.none { background: linear-gradient(to top right, transparent calc(50% - .75px), var(--redpen) calc(50% - .75px), var(--redpen) calc(50% + .75px), transparent calc(50% + .75px)) !important; }
 
 /* ZX editor (js/zxeditor.js): the cell grid and props come from the quantum editor's qe-* rules */
-#zxModal .cz-box, #cdModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+#zxModal .cz-box, #cdModal .cz-box, #fyModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
 .qe-item .zxmini { flex: none; max-width: 100%; color: var(--ink); }
 .ze-sel { fill: color-mix(in srgb, var(--redpen) 7%, transparent); }
 .ze-wsel { fill: none; stroke: color-mix(in srgb, var(--redpen) 30%, transparent); stroke-linecap: round; pointer-events: none; }
@@ -1201,6 +1202,11 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .ze-knob path { stroke: var(--bluepen); stroke-width: 1.6; fill: none; }
 .ze-knob:hover circle { fill: var(--bluepen); }
 .ze-knob:hover path { stroke: #fffdf8; }
+/* Feynman editor: a vertex's grab point, hover, selection and drop target */
+.fy-pt { fill: var(--ink); opacity: .35; pointer-events: none; }
+.fy-vhov { fill: none; stroke: var(--faint); stroke-width: 1.2; pointer-events: none; }
+.fy-vsel { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; fill-opacity: .5; }
+.fy-vtarget { fill: color-mix(in srgb, var(--bluepen) 12%, transparent); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
 .ze-shapes { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 2px; margin: 0 0 8px; }
 .ze-shape { height: 44px; padding: 2px; border: 1px solid transparent; background: transparent; display: flex; align-items: center; justify-content: center; color: var(--ink); }
 .ze-shape:hover { background: var(--wash); }

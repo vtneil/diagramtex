@@ -603,7 +603,7 @@
   }
 
   // right-click: rows and columns around the cell (or range) under the pointer; on an arrow, the arrow
-  const MI = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', rev: '<path d="M3 7h13l-3-3M17 13H4l3 3"/>', edit: '<path d="M4 16l1-4 8-8 3 3-8 8z"/>' };
+  const MI = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>', rev: '<path d="M3 7h13l-3-3M17 13H4l3 3"/>', edit: '<path d="M4 16l1-4 8-8 3 3-8 8z"/>' };
   const mItem = (act, label, icon, key) => `<button class="ctx-item${/^(rowdel|coldel|delete|arrowdel)$/.test(act) ? ' danger' : ''}" data-cm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e) => {
@@ -612,7 +612,7 @@
     const n = nodeAt(e), w = !n && arrowAt(e);
     if (w) {
       selectArrow(w); draw(); renderProps(); buildPalette();
-      menu.innerHTML = mItem('label', 'Edit Label', 'edit', 'Enter') + mItem('reverse', 'Reverse Arrow', 'rev') + '<hr>' + mItem('arrowdel', 'Delete Arrow', 'clear', '⌫');
+      menu.innerHTML = mItem('label', 'Edit Label', 'edit', 'Enter') + mItem('reverse', 'Reverse Arrow', 'rev') + '<hr>' + mItem('arrowdel', 'Delete Arrow', 'del', '⌫');
     } else {
       const h = cellAt(e);
       if (!h || h.r >= nR(E.M) || h.c >= nC(E.M)) { closeMenu(); return; }
