@@ -68,7 +68,7 @@ The UI uses only two families: sans and mono. The serif (`--font-tex`, KaTeX_Mai
 - **Selection box:** red pencil, 1px, dashed 4/3.
 - **Group box:** red, dotted 1/3.
 - **Main handles:** 7.5px squares with a white fill and red stroke.
-- **Control points** (curves, plots, XyMatrix arrows): blue circles.
+- **Control points** (curves, plots, CD arrows): blue circles.
 - **Marquee:** red wash with a dashed edge.
 
 ## Status line (`#status`)
@@ -224,6 +224,25 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - Right-click on a cell: Insert Row Above/Below, Insert Column Before/After, Add Loop (on a node), Delete Row(s), Delete Column(s), Clear Cell(s); on a wire: Delete Wire.
 - Side pane: a wire shows its shape as picture buttons (`.ze-shape`, each a small drawing of that shape between its two ends, `.on` for the current one) plus a More shapes select, Marker (None/H/Z/X), Line toggles (Classical/Bold/Dashed), Options and Delete. A spider shows Colour, Phase (Plain/Fraction), Phase or Numerator/Denominator, Sign, Phase at, Change to, Gap before and Wires from here; a point shows Size; every cell has its Code field.
 - Model: rows of cells, each keeping its own text until changed (`dirty`); unknown commands make a cell opaque and are kept. A new wire without styles is written with the shortcut commands (`\rar`, `\dar`…). The code is written with the `&` signs lined up.
+
+## Commutative diagrams (`js/cd.js`)
+- Blocks → CD. The object *is* its `tikz-cd` source, drawn as vectors and edited in the CD editor (`js/cdeditor.js`). Older XyMatrix shapes are brought up to a CD block on load. Placing it only selects it; double-click, Enter, Edit or the panel's Edit Diagram… open it; Done is one undo step.
+- Sizing follows pdflatex, measured against compiled output: labels at 0.68 of the text height, each cell's height its content's minus the slack of an `A` plus 1.7ex, row centres shifted by tikz-cd's −0.92pt cell offset (carried on each node as `oy`). A test diagram comes out 56.3pt tall against LaTeX's 55.5pt.
+- Export: `\usepackage{tikz-cd}`, plus `decorations.pathmorphing` when an arrow is squiggly; the code unchanged in a `\node` inside `\pgfinterruptpicture`.
+
+## CD editor (`js/cdeditor.js`)
+- The ZX editor's frame: palette of objects and arrow styles on the left, the grid in the middle, properties and the live code on the right. Typing on a selected cell edits it; dragging from cell to cell draws an arrow in the palette's style; Alt-drag copies a cell.
+- Only cells that change are rewritten, so hand-written code keeps its form.
+- Arrow panel: an arrow's style is two independent choices, its head (the pictures, `TD.CD_HEADS` names) and its line (Solid / Dashed / Dotted / Squiggly, one switch); picking one never clears the other. Crossing is its own switch (None / Gap). Side and At are disabled until the label has text, and emptying the label drops it from the code. Rows of independent toggles (`.ze-flags`, as in ZX's Line row) get no sliding knob: each button draws its own, since several can be on.
+
+## Grid editors, shared (Quantum, ZX, CD)
+- **One bin.** Every delete icon (toolbars, layers, menus, editor gutters, table rows) is the same drawing, `M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12` in a 20-unit box at stroke 1.5; smaller placements (the 12px gutter bin) thicken the stroke so it lands near 1.2px. Red pen only where the click deletes right away (gutter bin armed, a table row's bin).
+- **Delete gutters** (`TD.gridDel` in qceditor.js): a 22px band left of the rows and above the columns. Pointing into it draws faint bins for the hovered cell's row and column; pointing at one marks the whole line in a dashed red-pen wash and turns its bin red; a click deletes it as one undo step. No gutter while dragging or placing.
+- **Live panels:** panels re-render through `TD.morph` (shapes.js), which patches the DOM in place, so the field being typed in keeps focus, caret and value while every other field takes its new value. Focus handlers ignore the moves (`TD.morph.busy`). Nodes added by other scripts (a switch's `.seg-thumb`, the `has-thumb` class) are left alone, so switches still slide.
+
+## Bloch spheres (`js/bloch.js`)
+- Blocks → Bloch. The object *is* its `blochsphere` source, drawn with the package's projection, circle planes split into back and front halves, shaded ball and dotted state vectors. There is no overlay editor: the panel is the editor.
+- Panel: Radius (cm); Tilt (−90…90) and Rotation (−180…180) as sliders whose degree value is an inline field (borderless until hover, blue focus ring, like the document name); Ball as a text switch (Shaded / Outline / None) whose segments share the row. **States** is a grid table (label, θ, φ, a red-pen bin): a label writes or removes the state's `\node … {$…$}`, θ/φ rewrite it as `\drawStatePolar`, the bin removes the state and its label. Then the editable code.
 
 ## Electrical circuits (`js/circuit.js`, `js/czeditor.js`)
 - The rail's Electrical flyout holds Circuit… (a `pop-grid cz-entry` row), then two `pop-title` sections, Symbols and Waveforms; Misc no longer carries electrical symbols. Waveforms (`cat: 'wave'`, 135×40) are periodic like the Misc wave: one period is a list of pieces (flat, ramp, sine; curved pieces are cubic Hermite at ⅛-period steps), widening adds periods, and the panel has Wave length, Start position, and Duty cycle (square, pulses; 5–95%) or Firing angle (chopped; 0–175°). A file from before has no wavelength, so one period fills the width as it used to. Insert → Circuit does the same.

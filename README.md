@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz**, **forest** and **zx-calculus** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees and ZX diagrams with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz**, **forest**, **zx-calculus** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -25,7 +25,8 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 - **Physics diagrams:** springs, waves, balls, axes, rulers, vectors, fields and force diagrams.
 - **Circuit diagrams:** a drag-and-drop circuit editor with 266 `circuitikz` components (resistors, capacitors, inductors, sources, meters, diodes, transistors, op-amps, switches, logic gates, flip-flops, ICs, block-diagram parts) that exports `circuitikz` code, plus 35 quick electrical symbols and waveforms.
 - **Function plots and charts:** 2D and 3D pgfplots (functions, parametric, polar, implicit, inequalities, vector fields, contour, heatmap, bar, scatter) and pie charts.
-- **Commutative diagrams:** XyMatrix-style grids exported as `tikz-cd`.
+- **Commutative diagrams:** a `tikz-cd` editor: type or drop objects on a grid, drag arrows from cell to cell, and pick each arrow's style, label, bend and shift, with the code live beside it.
+- **Bloch spheres:** a `blochsphere` block drawn with the package's own geometry; set the radius, view angles, ball style and states in the panel.
 - **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
 - **Trees:** a `forest` editor for syntax trees, org charts, directory trees, decision and probability trees: add, move and restyle nodes by keyboard or drag, with templates and the code live beside it.
 - **ZX diagrams:** a `zx-calculus` editor: drop Z and X spiders, Hadamard boxes and points on a grid, drag a node's handle to wire it to another, and pick each wire's shape from pictures.
@@ -82,8 +83,8 @@ npx wrangler deploy
   - **2D plots (pgfplots):** function, line, scatter, area, bar, contour, heatmap.
   - **3D plots:** surface, mesh, scatter, and function `z = f(x, y)`. The view angles follow pgfplots `view={az}{el}`.
   - **Pie chart:** one `label value [#color]` per line.
-- **Blocks menu** (the cube button below Plots): XyMatrix, Quantum, Circuit, Tree and ZX, each with its own editor. A new block starts with `large` labels, whatever the default text size is.
-  - **XyMatrix / commutative diagram:** cells use `&` and `\\`. To add an arrow, drag from the orange dot under one cell onto another cell. Each arrow has a label, side, style (→, ↠, ↪, ↦, dashed, =, ↔) and bend. **Copy as tikz-cd** is also available.
+- **Blocks menu** (the cube button below Plots): CD, Bloch, Quantum, Circuit, Tree and ZX. A new block starts with `large` labels, whatever the default text size is.
+- **Grid editors** (Quantum, ZX, CD): point just left of a row or just above a column and a bin appears; click it to delete that row or column. Every field in an editor's panel updates the others as you type (a label and its code, an option and its buttons).
 - **Plots:** each plot can have several series, given as expressions (`sin(x)*exp(-x/4)`, `x^2+y^2`, …) or as data. You can set axis labels, ranges, grid, legend, colormaps (hot, viridis, jet, cool, gray) and a colour bar. Expression errors show in the panel and on the canvas.
   - **Function plot series types** (Mathcha's set): regular `y = f(x)`, **inequality** (`y < f(x)`, `≤`, `>`, `≥`; shaded, with a dashed edge when strict), **bounded region** between `f` and `g`, **x in terms of y**, **parametric** `(x(t), y(t))`, **polar** `r(θ)`, **implicit** `F(x, y) = 0`, **points**, **vectors** (`x y` or `x y u v`), **vector field** `(P, Q)` and **phase portrait** (trajectories with arrows).
   - **Variables:** one line such as `a = 2, b = 0.5` per plot; every series can use them.
@@ -111,7 +112,7 @@ npx wrangler deploy
   - Rotate: 90° either way, flip horizontally/vertically
   - Align: left, center, right, top, middle, bottom
   - Distribute: horizontally, vertically
-- **Groups** (Ctrl+G, Ctrl+Shift+G): clicking any member selects the whole group, and align/distribute move a group as one block. Plots and XyMatrix are moved by rotate/flip but not rotated themselves.
+- **Groups** (Ctrl+G, Ctrl+Shift+G): clicking any member selects the whole group, and align/distribute move a group as one block. Plots and blocks are moved by rotate/flip but not rotated themselves.
 - **Layers panel** (under the properties panel, top first): click a row to select it, Shift-click for a range, Ctrl/⌘-click to add or remove. Drag rows to restack them; drop onto an open group to put a shape in it, or out of it to take it out. Groups fold open and closed. Each row has an eye (hide: not drawn or exported) and a lock (shown on canvas but can't be picked). Double-click a name to rename it; renaming a group renames the whole group. Hovering a row outlines it on the canvas. The footer groups, ungroups and deletes; right-click a row for Rename, Hide/Show, Lock/Unlock and the usual menu. Click the header to fold the panel away.
 
 ### Electrical circuits (circuitikz)
@@ -137,6 +138,17 @@ npx wrangler deploy
 - **Wires:** hover or select a node and drag the blue handle on its right to another cell (an empty end gets a `\zxN{}` point). Click a wire to choose its shape from pictures (straight, the package's `o` / `s` / `C` curves and more), put an H, Z or X marker on it, or make it classical, bold or dashed.
 - **Nodes:** the panel sets a spider's colour, phase (plain or a fraction, with its sign), where the phase goes (in the node or in a label beside it), the gap before its column, and lists the wires leaving it. Double-click a spider or press Enter to type its phase.
 - The `zx-calculus` code is live on the right, both ways; cells you didn't touch keep the code you wrote. It is exported inside `\begin{ZX}` with `\usepackage{zx-calculus}`, and **Import LaTeX/TikZ** turns a `ZX` environment back into a diagram.
+
+### Commutative diagrams (tikz-cd)
+- **Blocks → CD** adds a diagram. Double-click it, press Enter or use **Edit Diagram…** in the panel to open the CD editor. Older XyMatrix shapes open as CD blocks.
+- **Editor:** the diagram sits on a grid of cells. Select a cell and type to write its object, or drop one from the palette (A, 0, ℤ, A ⊕ B, Hom(A, B), …). Drag from one cell to another to draw an arrow in the style picked in the palette (arrow, maps to, inclusion, onto, into, dashed, implies, equal, both ways, line, harpoon, squiggly). Drag a cell to move it (Alt copies); right-click for rows and columns.
+- **Arrows:** the panel sets the label (Side and At apply once it has one), the head (pictures), the line (solid, dashed, dotted, squiggly), a crossing gap, bend and shift, each on its own so none undoes another, and shows the arrow's options as written; **Reverse** swaps its ends. Picking Dashed or Squiggly in the palette changes only the line.
+- The `tikz-cd` code is live on the right, both ways; cells you didn't touch keep the code you wrote. The canvas sizes cells as tikz-cd does. It is exported inside `\begin{tikzcd}` with `\usepackage{tikz-cd}` (and `decorations.pathmorphing` for squiggly arrows).
+
+### Bloch spheres (blochsphere)
+- **Blocks → Bloch** adds a sphere. Its `blochsphere` code is the object: the canvas draws it with the package's projection, circles, shaded ball and state vectors.
+- **Panel:** radius; **Tilt** and **Rotation** sliders (click the degree value to type one); the ball as Shaded, Outline or None; **Colours** for the ball, lines (grid and axes), states and labels, written as the package's own `color`, `style`, `statecolor` and each label's `\node` colour (named xcolor colours, since the package does not take hex); and a **States** table with each state's label (maths), θ and φ, a bin to delete it and **Add State**. The code below is editable too; commands the panel doesn't cover are kept as written.
+- Exported with `\usepackage{blochsphere}`.
 
 ### Three kinds of file
 - The top bar's main switch is **Classic | Page | Whiteboard**.
@@ -224,7 +236,7 @@ Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf pr
 Yes, for most `\draw`, `\fill`, `\node` and `\coordinate` paths: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Files exported by DiagramTeX re-import exactly, plots included.
 
 **Which LaTeX packages does the output need?**
-TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees and `zx-calculus` for ZX diagrams. The export lists what each figure needs.
+TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams and `blochsphere` for Bloch spheres. The export lists what each figure needs.
 
 ## Project structure
 
@@ -249,7 +261,10 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/texcommands.js`: every command KaTeX and Temml support, with its number of arguments. It is generated, so do not edit it; rebuild with `node scripts/gen-texcommands.js` after updating either engine.
 - `public/js/mathengine.js`: the maths renderer (`TD.math.render`), switching between KaTeX and Temml
 - `public/js/plots.js`: expression parser, 2D/3D plot and pie rendering, pgfplots export
-- `public/js/cd.js`: XyMatrix / commutative diagrams, tikz-cd export
+- `public/js/cd.js`: commutative diagrams: tikz-cd parser, layout, canvas drawing and export
+- `public/js/cdeditor.js`: the overlay CD editor (palette, cell grid, arrows, live tikz-cd code)
+- `public/js/bloch.js`: Bloch spheres: blochsphere parser, canvas drawing, panel and export
+- `public/js/segthumb.js`: the sliding knob of segmented switches
 - `public/js/tikzimport.js`: LaTeX/TikZ importer
 - `public/js/storage.js`: files and the file list in IndexedDB (read into memory at start, written in the background, shared between tabs)
 - `public/js/app.js`: editor state, interaction, history, properties panel, storage, menu, export

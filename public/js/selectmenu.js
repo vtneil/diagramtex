@@ -43,6 +43,8 @@
       el.setAttribute('role', 'option');
       el.setAttribute('aria-selected', i === s.selectedIndex);
       el.textContent = o.textContent;
+      // an option with data-swatch shows that colour before its name
+      if (o.dataset.swatch) { const sw = document.createElement('span'); sw.className = 'selmenu-sw'; sw.style.background = o.dataset.swatch; el.prepend(sw); }
       menu.appendChild(el);
     });
     menu.hidden = false;

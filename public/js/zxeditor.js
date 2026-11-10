@@ -162,7 +162,7 @@
       <div class="cz-tools">
         <button class="icon flat" data-ze="addrow" title="Add a row at the bottom">${qic('below')}</button>
         <button class="icon flat" data-ze="addcol" title="Add a column at the end">${qic('after')}</button>
-        <button class="icon flat danger" data-ze="delete" title="Delete the selection (⌫)">${ic('<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>')}</button>
+        <button class="icon flat danger" data-ze="delete" title="Delete the selection (⌫)">${ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>')}</button>
         <span class="cz-sep"></span>
         <button class="icon flat" data-ze="undo" title="Undo (${isMac ? '⌘' : 'Ctrl+'}Z)">${ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>')}</button>
         <button class="icon flat" data-ze="redo" title="Redo (${isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z'})">${ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>')}</button>
@@ -503,6 +503,9 @@
         out += `<g class="ze-knob" data-r="${knobCell.r}" data-c="${knobCell.c}"><title>Drag to another cell to draw a wire</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
       }
     }
+    // the delete gutters left of the rows and above the columns
+    E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : h, ['row', 'column']);
     // what is being dragged, under the pointer
     const mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if ((E.ghost && E.ghost.k) || mv) {
@@ -518,10 +521,15 @@
   // ---------------------------------------------------------------- pointer
   svg.addEventListener('pointerdown', (e) => {
     if (!E || (e.button !== 0 && e.button !== 1)) return;
+    // the stage takes no focus itself, so a field still focused would swallow the keys meant for the diagram
+    const fe = document.activeElement;
+    if (fe && fe !== document.body && root.contains(fe) && fe.matches('input, textarea, select')) fe.blur();
     // a double-click is detected here: redraws between the clicks swap the target, so no native dblclick arrives
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const [sx, sy] = pos(e);
+    const dz = e.button === 0 && !E.space && TD.gridDel.at(E.gut, sx, sy);
+    if (dz) { delLine(dz); return; }
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     const kb = e.target.closest('.ze-knob');
@@ -544,11 +552,11 @@
     if (!E) return;
     const d = E.drag, [sx, sy] = pos(e);
     if (!d) {
-      const h = cellAt(e), n = nodeAt(e, 14);
+      const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : cellAt(e), n = dz ? null : nodeAt(e, 14);
       const kn = n && at(n.r, n.c) && at(n.r, n.c).node ? n : e.target.closest('.ze-knob') ? E.knobAt : null;
-      const ch = JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
-      E.hover = h; E.knobAt = kn;
-      svg.style.cursor = !n && wireAt(e) ? 'pointer' : '';
+      const ch = JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
+      E.hover = h; E.knobAt = kn; E.del = dz;
+      svg.style.cursor = dz || (!n && wireAt(e)) ? 'pointer' : '';
       if (ch) draw();
       return;
     }
@@ -587,7 +595,12 @@
     }
     draw();
   });
-  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt)) { E.hover = null; E.knobAt = null; draw(); } });
+  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.del)) { E.hover = null; E.knobAt = null; E.del = null; draw(); } });
+  // a click on a delete gutter: that row or column goes, as one undo step
+  function delLine(dz) {
+    closeLabel(); E.del = null; E.hover = null; E.knobAt = null; E.sel = null; E.wire = null; svg.style.cursor = '';
+    edit(() => (dz.kind === 'row' ? deleteRows(E.M, dz.i, dz.i) : deleteCols(E.M, dz.i, dz.i)));
+  }
 
   // right-click: rows and columns around the cell (or range) under the pointer; on a wire, the wire
   const MI = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', loop: '<path class="qo" d="M8 14a4 4 0 1 1 4 0"/><circle class="qf" cx="10" cy="15" r="2.5"/>' };
@@ -639,7 +652,7 @@
     me.pop = TD.input.popup(stage, {
       text: n[f] || '', math: true, bare: true,
       at: () => labelAt(r, c),
-      onInput: (v) => { n[f] = v; touch(cell); draw(); const el = $(`[data-f="${f}"]`, props); if (el) el.value = v; },
+      onInput: (v) => { n[f] = v; touch(cell); draw(); renderProps(); },
       onDone: () => { if (Lb === me) Lb = null; commit(); draw(); renderProps(); },
     });
     return true;
@@ -698,36 +711,36 @@
       const cell = at(E.wire[0], E.wire[1]), e = wireOf(E.wire);
       if (!e) { E.wire = null; renderProps(); return; }
       if (e.loop) {
-        props.innerHTML = `<div class="sec"><div class="sec-title">Loop <small>row ${E.wire[0] + 1} · column ${E.wire[1] + 1}</small></div>
+        TD.morph(props, `<div class="sec"><div class="sec-title">Loop <small>row ${E.wire[0] + 1} · column ${E.wire[1] + 1}</small></div>
           ${row('Side', seg('loopdir', e.dir, LOOP_DIRS))}
           ${row('Opening', `<div class="ctl unit"><input type="number" data-f="open" value="${e.open}" min="0" max="80" step="5"><span>°</span></div>`)}
           ${field('Options', 'wstyles', e.styles.join(', '), ' class="mono"')}
-          <div class="row"><button class="danger" data-ze="wiredel">Delete Loop</button></div></div>`;
+          <div class="row"><button class="danger" data-ze="wiredel">Delete Loop</button></div></div>`);
         return;
       }
       const [dr, dc] = delta(e.dirs), shape = shapeOfWire(e), mark = markOf(e).trim();
       const pics = SHAPES.map(([v, n]) => `<button class="ze-shape${shape === v ? ' on' : ''}" data-zs="shape" data-v="${esc(v)}" title="${esc(n)}${v ? ` (${v})` : ''}">${shapeMini(dr, dc, v)}</button>`).join('');
       const more = TD.ZX_WIRES.filter((n) => !SHAPES.some(([v]) => v === n));
-      props.innerHTML = `<div class="sec"><div class="sec-title">Wire <small>row ${E.wire[0] + 1}, col ${E.wire[1] + 1} → row ${E.wire[0] + dr + 1}, col ${E.wire[1] + dc + 1}</small></div>
+      TD.morph(props, `<div class="sec"><div class="sec-title">Wire <small>row ${E.wire[0] + 1}, col ${E.wire[1] + 1} → row ${E.wire[0] + dr + 1}, col ${E.wire[1] + dc + 1}</small></div>
         <div class="ze-shapes">${pics}</div>
         ${row('More shapes', `<div class="ctl"><select data-f="shape"><option value="">—</option>${more.map((n) => `<option${n === shape ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>`)}
         ${row('Marker', seg('mark', mark, [['', 'None'], ['H', 'H box'], ['Z', 'Z'], ['X', 'X']]))}
         ${row('Line', `<div class="ctl seg-ctl ze-flags">${toggle('cl', has(e, /^(cl|classical)$/), 'Classical', 'Doubled line (cl)')}${toggle('B', has(e, /^(B|bold)$/), 'Bold', 'Thick line (B)')}${toggle('dash', has(e, /^dashed$/), 'Dashed', 'dashed')}</div>`)}
         ${field('Options', 'wstyles', e.styles.join(', '), ' class="mono"')}
-        <div class="row"><button class="danger" data-ze="wiredel">Delete Wire</button></div></div>`;
+        <div class="row"><button class="danger" data-ze="wiredel">Delete Wire</button></div></div>`);
       sizeMinis(props, 48, 30, 2);
       return;
     }
     const b = selBox();
     if (!b) {
-      props.innerHTML = `<div class="sec"><div class="sec-title">Diagram <small>${nR(M)} × ${nC(M)}</small></div>
+      TD.morph(props, `<div class="sec"><div class="sec-title">Diagram <small>${nR(M)} × ${nC(M)}</small></div>
         ${field('Options', 'env', M.env, ' class="mono" placeholder="e.g. row sep=3mm"')}
-        <div class="help">Drop spiders from the left into cells. Select a node and drag its blue handle to another cell to draw a wire; click a wire to shape it. Type <kbd>Z</kbd> <kbd>X</kbd> <kbd>H</kbd> <kbd>N</kbd> on a cell; <kbd>Enter</kbd> edits a phase.</div></div>`;
+        <div class="help">Drop spiders from the left into cells. Select a node and drag its blue handle to another cell to draw a wire; click a wire to shape it. Type <kbd>Z</kbd> <kbd>X</kbd> <kbd>H</kbd> <kbd>N</kbd> on a cell; <kbd>Enter</kbd> edits a phase.</div></div>`);
       return;
     }
     if (!single()) {
       const n = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1);
-      props.innerHTML = `<div class="sec"><div class="sec-title">${n} cells</div><div class="help">Rows ${b.r1 + 1}–${b.r2 + 1}, columns ${b.c1 + 1}–${b.c2 + 1}. Right-click for rows and columns.</div></div>`;
+      TD.morph(props, `<div class="sec"><div class="sec-title">${n} cells</div><div class="help">Rows ${b.r1 + 1}–${b.r2 + 1}, columns ${b.c1 + 1}–${b.c2 + 1}. Right-click for rows and columns.</div></div>`);
       return;
     }
     const cell = at(b.r1, b.c1), n = !cell.opaque && cell.node;
@@ -755,10 +768,10 @@
       }).join('')}</div></div>`;
     }
     h += `<div class="sec">${field('Code', 'code', cellText(cell), ' class="mono"')}${cell.opaque ? '<div class="help">This cell has commands the editor doesn’t draw; they are kept as written.</div>' : ''}</div>`;
-    props.innerHTML = h;
+    TD.morph(props, h);
   }
-  props.addEventListener('focusin', (e) => { if (e.target.matches('input, select')) begin(); });
-  props.addEventListener('focusout', (e) => { if (e.target.matches('input, select')) { commit(); renderProps(); } });
+  props.addEventListener('focusin', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) begin(); });
+  props.addEventListener('focusout', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) { commit(); renderProps(); } });
   props.addEventListener('input', (e) => {
     const t = e.target, f = t.dataset.f;
     if (!f) return;
@@ -782,6 +795,8 @@
     draw();
     if (f === 'gap') { commit(); begin(); }
   });
+  // the panel follows each keystroke: the other fields show what this one changed (TD.morph keeps this one as typed)
+  props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });
   props.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) e.target.blur(); });
   props.addEventListener('click', (e) => {
     const bt = e.target.closest('[data-zs]');

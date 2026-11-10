@@ -18,14 +18,16 @@
   // Three kinds of file: 'classic' (diagram blocks + document view), 'page' (one free-form sheet) and
   // 'board' (a whiteboard: one diagram on an endless canvas, stored like a Classic file with one block).
   const normKind = (k) => (k === 'page' || k === 'board' ? k : 'classic');
+  // ids for shapes that have none; older shapes brought up to date (XyMatrix → tikz-cd)
+  function fixShape(sh) { if (!sh.id) sh.id = uid(); const t = TD.TYPES[sh.type]; if (t && t.upgrade) t.upgrade(sh); }
   function makeDoc(name, blocks, active, page, sheet, kind) {
     if (!blocks || !blocks.length) blocks = [{ type: 'diagram', shapes: [] }];
     if (!blocks.some((b) => b.type === 'diagram')) blocks.push({ type: 'diagram', shapes: [] });
-    for (const b of blocks) if (b.type === 'diagram') { b.shapes = b.shapes || []; for (const sh of b.shapes) if (!sh.id) sh.id = uid(); }
+    for (const b of blocks) if (b.type === 'diagram') { b.shapes = b.shapes || []; for (const sh of b.shapes) fixShape(sh); }
     if (!(blocks[active] && blocks[active].type === 'diagram')) active = blocks.findIndex((b) => b.type === 'diagram');
     // Page mode: one free-form sheet (one or more pages stacked vertically) placed directly on paper.
     sheet = { pages: 1, shapes: [], ...(sheet || {}) };
-    for (const sh of sheet.shapes) if (!sh.id) sh.id = uid();
+    for (const sh of sheet.shapes) fixShape(sh);
     const doc = { kind: normKind(kind), name: name || 'Untitled', blocks, active, page: { ...TD.PAGE_DEFAULT, ...(page || {}) }, sheet };
     Object.defineProperty(doc, 'shapes', {
       get() { return doc.kind === 'page' ? doc.sheet.shapes : doc.blocks[doc.active].shapes; },
@@ -972,7 +974,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|cd|qc|cz|forest|zx)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|cd|qc|cz|forest|zx|bloch)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -999,7 +1001,7 @@
     + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
   function flyOf(t) {
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|qc|cz|forest|zx)$/.test(t)) return 'blocks';
+    if (/^(cd|qc|cz|forest|zx|bloch)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : 'shapes'; }
@@ -1343,6 +1345,7 @@
         if (s.type === 'cz') { state.sel = new Set([hitId]); render(); renderProps(); openCircuit(hitId); return; }
         if (s.type === 'forest') { state.sel = new Set([hitId]); render(); renderProps(); openTree(hitId); return; }
         if (s.type === 'zx') { state.sel = new Set([hitId]); render(); renderProps(); openZX(hitId); return; }
+        if (s.type === 'cd') { state.sel = new Set([hitId]); render(); renderProps(); openCD(hitId); return; }
       }
       const grp = groupIds(hitId);
       if (e.shiftKey) { if (state.sel.has(hitId)) grp.forEach((id) => state.sel.delete(id)); else grp.forEach((id) => state.sel.add(id)); }
@@ -1703,6 +1706,20 @@
     });
   }
   TD.zxOpen = openZX;
+  // commutative diagrams (cdeditor.js): the same, for tikz-cd code
+  function openCD(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.cdEditor) return;
+    if (s.arrows && TD.TYPES.cd.upgrade) TD.TYPES.cd.upgrade(s);
+    TD.cdEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      begin(); t.src = res.src; commit();
+      render(); renderProps();
+    });
+  }
+  TD.cdOpen = openCD;
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
@@ -1872,6 +1889,7 @@
     qc: [['x', 'x'], ['y', 'y']],
     forest: [['x', 'x'], ['y', 'y']],
     zx: [['x', 'x'], ['y', 'y']],
+    bloch: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
   };
@@ -2017,6 +2035,8 @@
     for (const p of PROPS) {
       if (p.key === 'mathStyle') { const ms = mathStyleOf(sel); if (ms) html += fieldHtml(p, ms, p.label); continue; }
       if (!has(p.key)) continue;
+      // a Bloch sphere's colours live in its code (the Colours section), not in the shape
+      if (p.key === 'color' && types.every((t) => t === 'bloch')) continue;
       if (p.needs && !sel.some((s) => s[p.needs])) continue;
       if (p.key === 'startTip' || p.key === 'endTip') { if (sel.every((s) => s.type === 'poly' && s.closed)) continue; }
       if (p.key === 'cross' && !sel.some((s) => s.type === 'line' || (s.type === 'poly' && !s.smooth))) continue;
@@ -2074,7 +2094,7 @@
   function pageList(G) {
     const cur = currentPage(), ic = {
       up: '<path d="M10 15V5M6 9l4-4 4 4"/>', down: '<path d="M10 5v10M6 11l4 4 4-4"/>',
-      dup: '<path d="M7 7h9v9H7z"/><path d="M4 13V4h9"/>', ins: '<path d="M10 5v10M5 10h10"/>', del: '<path d="M5 6h10M8 6V4h4v2M6.5 6l.8 10h5.4l.8-10"/>',
+      dup: '<path d="M7 7h9v9H7z"/><path d="M4 13V4h9"/>', ins: '<path d="M10 5v10M5 10h10"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
     };
     const b = (act, k, title, dis) => `<button class="icon" data-pg="${act}" data-k="${k}" title="${title}"${dis ? ' disabled' : ''}><svg viewBox="0 0 20 20">${ic[act]}</svg></button>`;
     let h = '';
@@ -2164,7 +2184,8 @@
   propsEl.addEventListener('input', (e) => {
     const t = e.target;
     const pn = panelOf(t);
-    if (pn) { begin(); pn.panel.apply(pn.s, t); render(); return; }
+    // the panel follows each keystroke: other fields show what this one changed (TD.morph keeps this one as typed)
+    if (pn) { begin(); pn.panel.apply(pn.s, t); render(); renderPanel(); return; }
     if (t.dataset.geom || t.dataset.sizepx) return;
     const r = readField(t);
     if (r) applyProp(r.key, r.v, false);
@@ -2208,7 +2229,7 @@
     const s = selected()[0];
     if (!el || !s) return;
     const sc = propsEl.scrollTop;
-    el.innerHTML = TD.panels[s.type].html(s);
+    TD.morph(el, TD.panels[s.type].html(s));
     propsEl.scrollTop = sc;
   }
   function refreshPanelErrors() {
@@ -2723,7 +2744,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'cd', 'qc', 'cz', 'forest', 'zx'].includes(s.type)) {
+      if (['plot', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3080,7 +3101,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3149,7 +3170,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -3363,8 +3384,9 @@
     download(slug() + '.svg', out, 'image/svg+xml');
   }
   // ---------------- Export menu: PNG (chosen DPI), SVG, PDF ----------------
-  // PNG and PDF are rasterised in the browser from the same SVG as the SVG export, with the maths
-  // fonts embedded so they render inside the image. The PDF holds one lossless image per page.
+  // PNG is rasterised in the browser from the same SVG as the SVG export, with the maths fonts embedded
+  // so they render inside the image. PDF goes through the browser's own PDF engine (print → Save as PDF)
+  // on pages sized exactly to the diagram or the page, so shapes stay vector and text stays real text.
   const EXP_KEY = 'diagramtex.export';
   const expOpts = (() => { try { return { fmt: 'png', dpi: 300, transparent: false, ...JSON.parse(localStorage.getItem(EXP_KEY) || '{}') }; } catch (e) { return { fmt: 'png', dpi: 300, transparent: false }; } })();
   const saveExpOpts = () => { try { localStorage.setItem(EXP_KEY, JSON.stringify(expOpts)); } catch (e) { /* storage blocked */ } };
@@ -3421,38 +3443,6 @@
     out.set(buf.subarray(0, at)); out.set(chunk, at); out.set(buf.subarray(at), at + 21);
     return new Blob([out], { type: 'image/png' });
   }
-  const deflate = async (u8) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
-  async function pdfOf(canvases, ptW, ptH) {
-    const enc = new TextEncoder(), parts = [], offs = [];
-    let len = 0;
-    const put = (x) => { const u = typeof x === 'string' ? enc.encode(x) : x; parts.push(u); len += u.length; };
-    const obj = (n, body, stream) => {
-      offs[n] = len;
-      put(`${n} 0 obj\n${body}\n`);
-      if (stream) { put('stream\n'); put(stream); put('\nendstream\n'); }
-      put('endobj\n');
-    };
-    put('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
-    const n = canvases.length, kids = canvases.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
-    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
-    obj(2, `<< /Type /Pages /Kids [${kids}] /Count ${n} >>`);
-    for (let i = 0; i < n; i++) {
-      const c = canvases[i], W = c.width, H = c.height, d = c.getContext('2d').getImageData(0, 0, W, H).data;
-      const rgb = new Uint8Array(W * H * 3);
-      for (let p = 0, q = 0; p < d.length; p += 4, q += 3) { rgb[q] = d[p]; rgb[q + 1] = d[p + 1]; rgb[q + 2] = d[p + 2]; }
-      const img = await deflate(rgb), pw = r2(ptW[i]), ph = r2(ptH[i]);
-      const content = enc.encode(`q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`);
-      const P = 3 + i * 3;
-      obj(P, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${P + 2} 0 R >> >> /Contents ${P + 1} 0 R >>`);
-      obj(P + 1, `<< /Length ${content.length} >>`, content);
-      obj(P + 2, `<< /Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${img.length} >>`, img);
-    }
-    const xref = len, total = 3 + n * 3;
-    put(`xref\n0 ${total}\n0000000000 65535 f \n`);
-    for (let k = 1; k < total; k++) put(String(offs[k]).padStart(10, '0') + ' 00000 n \n');
-    put(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
-    return new Blob(parts, { type: 'application/pdf' });
-  }
   function downloadBlob(name, blob) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name;
@@ -3465,18 +3455,12 @@
     if (fmt === 'svg') { runCmd('svg'); return; }
     const srcs = exportSources();
     if (!srcs.length) { showHint('This diagram is empty', 1200); return; }
+    if (fmt === 'pdf') { printVector(srcs); return; }
     showHint(`Exporting ${fmt.toUpperCase()} at ${expOpts.dpi} DPI…`, 1500);
     try {
-      if (fmt === 'png') {
-        for (let k = 0; k < srcs.length; k++) {
-          const c = await rasterise(srcs[k], expOpts.transparent && !srcs[k].page);
-          downloadBlob(slug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
-        }
-      } else {
-        const cs = [];
-        for (const s of srcs) cs.push(await rasterise(s, false));
-        const pt = (v) => (v / PX / 2.54) * 72;
-        downloadBlob(slug() + '.pdf', await pdfOf(cs, srcs.map((s) => pt(s.vb[2])), srcs.map((s) => pt(s.vb[3]))));
+      for (let k = 0; k < srcs.length; k++) {
+        const c = await rasterise(srcs[k], expOpts.transparent && !srcs[k].page);
+        downloadBlob(slug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
       }
     } catch (e) { showHint('Export failed: ' + (e.message || e), 3000); }
   }
@@ -3500,14 +3484,14 @@
     const srcs = exportSources(), sc = expScale();
     const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : 'empty';
     const cm = srcs.length ? `${r2(srcs[0].vb[2] / PX)} × ${r2(srcs[0].vb[3] / PX)} cm` : '';
-    const raster = o.fmt !== 'svg';
+    const raster = o.fmt === 'png';
     expPop.innerHTML = `<div class="exp-h">Export ${state.mode === 'page' ? 'page' + (srcs.length > 1 ? 's' : '') : state.mode === 'board' ? 'whiteboard' : 'diagram'}</div>
       <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       ${raster ? `<div class="exp-row"><label for="expDpi">Resolution</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === o.dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(o.dpi) ? '' : `<option value="${o.dpi}" selected>${o.dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${o.dpi}" aria-label="DPI"></span></div>
       <div class="exp-meta">${dim}${srcs.length > 1 ? ` per page · ${srcs.length} ${o.fmt === 'pdf' ? 'pages' : 'files'}` : ''}<span>${cm}</span></div>` : `<div class="exp-meta">Vector, scales to any size<span>${cm}</span></div>`}
       ${o.fmt === 'png' && state.mode !== 'page' ? `<label class="exp-chk"><input type="checkbox" id="expTr"${o.transparent ? ' checked' : ''}> Transparent background</label>` : ''}
-      ${o.fmt === 'pdf' ? '<div class="exp-note">Pictures at the chosen DPI. For a vector PDF, use Print → Save as PDF, or compile the LaTeX.</div>' : ''}
-      <button type="button" class="primary exp-go" data-ego>Download ${o.fmt.toUpperCase()}</button>`;
+      ${o.fmt === 'pdf' ? `<div class="exp-note">Vector PDF with selectable text${srcs.length > 1 ? `, ${srcs.length} pages` : ''}. In the print window, choose <b>Save as PDF</b> as the destination.</div>` : ''}
+      <button type="button" class="primary exp-go" data-ego>${o.fmt === 'pdf' ? 'Save PDF…' : 'Download ' + o.fmt.toUpperCase()}</button>`;
   }
   function openExport(btn) {
     if (!expPop.hidden) { expPop.hidden = true; return; }
@@ -3528,18 +3512,28 @@
   });
   expPop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { expPop.hidden = true; $('#btnExport')?.focus(); } if (e.key === 'Enter' && e.target.id === 'expDpi') e.target.blur(); });
   document.addEventListener('pointerdown', (e) => { if (!expPop.hidden && !expPop.contains(e.target) && !e.target.closest('#btnExport')) expPop.hidden = true; });
-  function printPage() {
-    const G = pageGeom(), [defs, body] = pageSvgs();
+  // Print one sheet per export source, each sized exactly to it: the browser's PDF output is vector,
+  // with the fonts embedded, so "Save as PDF" here is the vector PDF export.
+  function printVector(srcs) {
     let host = $('#pagePrint');
     if (!host) { host = document.createElement('div'); host.id = 'pagePrint'; document.body.appendChild(host); }
-    host.innerHTML = Array.from({ length: G.n }, (_, k) =>
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${r2(pageTop(k, G))} ${r2(G.w)} ${r2(G.h)}" style="width:${G.W}cm;height:${G.H}cm">${defs}${body}</svg>`).join('');
+    const cm = (v) => r2(v / PX);
+    // the live canvas (hidden while printing) holds the same gradient / clip / marker ids, and url(#id)
+    // would resolve to those hidden copies, so the printed copy gets ids of its own
+    const own = (m, k) => m.replace(/\bid="([^"]+)"/g, `id="pp${k}-$1"`).replace(/url\(#([^)]+)\)/g, `url(#pp${k}-$1)`).replace(/href="#([^"]+)"/g, `href="#pp${k}-$1"`);
+    // one @page size per sheet (named pages), so whiteboard diagrams and pages both print edge to edge
+    host.innerHTML = srcs.map((s, k) => { const [x, y, w, h] = s.vb;
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}" style="width:${cm(w)}cm;height:${cm(h)}cm;page:p${k}">${s.page ? `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="#fff"/>` : ''}${own(s.inner, k)}</svg>`; }).join('');
     let st = $('#pageStyle');
     if (!st) { st = document.createElement('style'); st.id = 'pageStyle'; document.head.appendChild(st); }
-    st.textContent = `@page { size: ${G.W}cm ${G.H}cm; margin: 0; }`;
+    st.textContent = srcs.map((s, k) => `@page p${k} { size: ${cm(s.vb[2])}cm ${cm(s.vb[3])}cm; margin: 0; }`).join('\n') +
+      `\n@page { size: ${cm(srcs[0].vb[2])}cm ${cm(srcs[0].vb[3])}cm; margin: 0; }`;
+    const title = document.title;
+    document.title = slug(); // the default file name in "Save as PDF"
     document.body.classList.add('printing-page');
-    setTimeout(() => { window.print(); document.body.classList.remove('printing-page'); host.innerHTML = ''; }, 300);
+    setTimeout(() => { window.print(); document.body.classList.remove('printing-page'); host.innerHTML = ''; document.title = title; }, 300);
   }
+  const printPage = () => printVector(exportSources());
   function printDoc() {
     finishEdit(); finishPoly(); commit();
     if (state.mode === 'page') { printPage(); return; }

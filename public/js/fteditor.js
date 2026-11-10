@@ -94,7 +94,7 @@
     earlier: '<path class="qo" d="M8 6l-4 4 4 4M4 10h12"/>',
     later: '<path class="qo" d="M12 6l4 4-4 4M16 10H4"/>',
     lift: '<rect class="qo" x="6.5" y="1.5" width="7" height="5"/><path class="qo" d="M3 18.5h14M10 6.5v6"/>',
-    del: '<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>',
+    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
     copy: '<rect class="qo" x="6.5" y="6.5" width="10" height="11"/><path class="qo" d="M3.5 13.5v-10h10"/>',
     paste: '<rect class="qo" x="4.5" y="3.5" width="11" height="14"/><path class="qo" d="M7.5 3.5v-1h5v1M7.5 9.5h5M7.5 12.5h5"/>',
   };
@@ -566,7 +566,7 @@
     me.pop = TD.input.popup(stage, {
       text: typed != null ? typed : n.c, math: false, bare: true,
       at: () => labelAt(n),
-      onInput: (v) => { n.c = v; draw(); const f = $('[data-f="label"]', props); if (f) f.value = v; },
+      onInput: (v) => { n.c = v; draw(); renderProps(); },
       onDone: () => { if (Lb === me) Lb = null; commit(); draw(); keepInView(); renderProps(); },
     });
     if (typed != null) {
@@ -605,30 +605,30 @@
       const toMm = (px) => (isFinite(px) ? Math.round((px / TD.PX_PER_CM) * 100) / 10 : '');
       const shapes = L.nodes.map(shapeOf), edges = L.nodes.slice(1).map(edgeOf);
       const forked = E.T.pre.some((x) => keyOf(x) === 'forked edges');
-      props.innerHTML = `<div class="sec"><div class="sec-title">Tree <small>${L.n} node${L.n === 1 ? '' : 's'} · ${L.levels} level${L.levels === 1 ? '' : 's'}</small></div>
+      TD.morph(props, `<div class="sec"><div class="sec-title">Tree <small>${L.n} node${L.n === 1 ? '' : 's'} · ${L.levels} level${L.levels === 1 ? '' : 's'}</small></div>
         ${row('Grows', seg('dir', dir, [['down', 'Down'], ['right', 'Right'], ['up', 'Up'], ['left', 'Left']]))}
         ${row('Edges', seg('treeedge', forked ? 'fork' : 'straight', [['straight', 'Straight'], ['fork', 'Forked', 'Org-chart elbows (edges library)']]))}
         ${mm('Level step', 'l', toMm(get('l')))}${mm('Sibling gap', 'ssep', toMm(get('s sep')))}</div>
         <div class="sec"><div class="sec-title">Every node</div>
         ${row('Shape', seg('shape', same(shapes), SHAPE_SEG))}${row('Edge', edgeSeg(same(edges), forked))}${row('Fill', swatches(same(L.nodes.map(fillOf))))}
         ${field('Options', 'pre', E.T.pre.join(', '), ' class="mono"')}
-        <div class="help">Click a node to select it. <kbd>Tab</kbd> adds a child, <kbd>Enter</kbd> a sibling; type to rename.</div></div>`;
+        <div class="help">Click a node to select it. <kbd>Tab</kbd> adds a child, <kbd>Enter</kbd> a sibling; type to rename.</div></div>`);
       return;
     }
     const gs = E.sel.map(geoOf).filter(Boolean);
     const sty = `${row('Shape', seg('shape', same(gs.map(shapeOf)), SHAPE_SEG))}${row('Edge', edgeSeg(same(gs.map(edgeOf)), gs.length > 0 && gs.every((g) => g.st.fork)))}${row('Fill', swatches(same(gs.map(fillOf))))}`;
     if (E.sel.length > 1) {
-      props.innerHTML = `<div class="sec"><div class="sec-title">${E.sel.length} nodes</div>${sty}<div class="help">Drag a node to move it; ⌥-drag copies.</div></div>`;
+      TD.morph(props, `<div class="sec"><div class="sec-title">${E.sel.length} nodes</div>${sty}<div class="help">Drag a node to move it; ⌥-drag copies.</div></div>`);
       return;
     }
     const n = E.sel[0], g = gs[0], p = parentOf(E.T, n);
     const where = !p ? 'root' : `level ${g ? g.depth + 1 : ''}`;
-    props.innerHTML = `<div class="sec"><div class="sec-title">Node <small>${where}${n.k.length ? ` · ${n.k.length} child${n.k.length === 1 ? '' : 'ren'}` : ''}</small></div>
+    TD.morph(props, `<div class="sec"><div class="sec-title">Node <small>${where}${n.k.length ? ` · ${n.k.length} child${n.k.length === 1 ? '' : 'ren'}` : ''}</small></div>
       ${field('Label', 'label', n.c, ' data-tx="text"')}${sty}
-      ${field('Options', 'opts', n.o.join(', '), ' class="mono"')}</div>`;
+      ${field('Options', 'opts', n.o.join(', '), ' class="mono"')}</div>`);
   }
-  props.addEventListener('focusin', (e) => { if (e.target.matches('input, select')) begin(); });
-  props.addEventListener('focusout', (e) => { if (e.target.matches('input, select')) { commit(); renderProps(); } });
+  props.addEventListener('focusin', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) begin(); });
+  props.addEventListener('focusout', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) { commit(); renderProps(); } });
   props.addEventListener('input', (e) => {
     const t = e.target, f = t.dataset.f;
     if (!f) return;
@@ -644,6 +644,8 @@
     }
     draw();
   });
+  // the panel follows each keystroke: the other fields show what this one changed (TD.morph keeps this one as typed)
+  props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });
   props.addEventListener('click', (e) => {
     const b = e.target.closest('[data-fs]');
     if (!b || !E) return;

@@ -30,7 +30,7 @@
         <button class="icon flat" data-cz="rotate" title="Rotate 90° (R)">${ic('<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>')}</button>
         <button class="icon flat" data-cz="mirrory" title="Mirror left to right (X)">${ic('<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>')}</button>
         <button class="icon flat" data-cz="mirrorx" title="Mirror top to bottom (Y)">${ic('<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>')}</button>
-        <button class="icon flat danger" data-cz="delete" title="Delete (⌫)">${ic('<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>')}</button>
+        <button class="icon flat danger" data-cz="delete" title="Delete (⌫)">${ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>')}</button>
         <span class="cz-sep"></span>
         <button class="icon flat" data-cz="undo" title="Undo (${isMac ? '⌘' : 'Ctrl+'}Z)">${ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>')}</button>
         <button class="icon flat" data-cz="redo" title="Redo (${isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z'})">${ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>')}</button>
@@ -418,7 +418,7 @@
     const me = (pop = TD.input.popup(stage, {
       text: it[f] || '',
       at: () => labelAt(it),
-      onInput: (v) => { it[f] = v; draw(); const t = $(`[data-f="${f}"]`, props); if (t) t.value = v; },
+      onInput: (v) => { it[f] = v; draw(); renderProps(); },
       onDone: () => { if (pop === me) pop = null; commit(); draw(); renderProps(); },
     }));
     return true;
@@ -444,7 +444,7 @@
     mirrory: '<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>',
     mirrorx: '<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>',
     dup: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M4 13V4.5A1.5 1.5 0 015.5 3H13"/>',
-    del: '<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>',
+    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
   };
   const mItem = (act, label, icon, key, off, danger) => `<button class="ctx-item${danger ? ' danger' : ''}" data-cm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
@@ -485,14 +485,14 @@
     if (!E) return;
     const s = sel();
     if (!s.length) {
-      props.innerHTML = '';
+      TD.morph(props, '');
       props.hidden = true;
       return;
     }
     props.hidden = false;
     if (s.length > 1) {
-      props.innerHTML = `<div class="sec"><div class="sec-title">${s.length} items</div>
-        <div class="help">Right-click for Rotate, Mirror (X, Y), Duplicate and Delete.</div></div>`;
+      TD.morph(props, `<div class="sec"><div class="sec-title">${s.length} items</div>
+        <div class="help">Right-click for Rotate, Mirror (X, Y), Duplicate and Delete.</div></div>`);
       return;
     }
     const it = s[0], def = CZ.parts[it.part] || { name: it.part, tikz: it.part, pins: {} };
@@ -514,10 +514,10 @@
     const pinNames = Object.keys(def.pins).filter((n) => n !== 'center');
     if (pinNames.length) h += `<div class="help">Pins: ${pinNames.map((n) => `<code>${esc(n)}</code>`).join(' ')}</div>`;
     h += '</div>';
-    props.innerHTML = h;
+    TD.morph(props, h);
   }
-  props.addEventListener('focusin', (e) => { if (e.target.matches('input, select')) begin(); });
-  props.addEventListener('focusout', (e) => { if (e.target.matches('input, select')) commit(); });
+  props.addEventListener('focusin', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) begin(); });
+  props.addEventListener('focusout', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) commit(); });
   props.addEventListener('input', (e) => {
     const it = sel()[0], t = e.target;
     if (!it) return;
@@ -529,6 +529,8 @@
     draw();
     if (t.type === 'checkbox' || t.tagName === 'SELECT') commit();
   });
+  // the panel follows each keystroke: the other fields show what this one changed (TD.morph keeps this one as typed)
+  props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });
   props.addEventListener('click', (e) => {
     const b = e.target.closest('[data-rot]');
     if (!b) return;

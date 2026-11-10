@@ -10,6 +10,35 @@
   const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const PAPER = '#fffdf8', INK = '#1c1b19';
 
+  // Delete gutters, shared by the grid editors (Quantum, ZX, CD): a strip left of the rows and one above the
+  // columns. Pointing at a row (column) there shows its bin and marks the whole line; a click deletes it.
+  // While a cell is hovered, its row's and column's bins show faintly so the gutters can be found.
+  // g: { sx, sy, R, C, left, top } in stage px — sx / sy are the cell edges, left / top the paper's edges.
+  const GUT = 22;
+  TD.gridDel = {
+    at(g, x, y) {
+      if (!g || !g.R || !g.C) return null;
+      const find = (a, n, v) => { for (let i = 0; i < n; i++) if (v >= a[i] && v < a[i + 1]) return i; return -1; };
+      if (x >= g.left - GUT - 4 && x < g.left) { const i = find(g.sy, g.R, y); if (i >= 0) return { kind: 'row', i }; }
+      if (y >= g.top - GUT - 4 && y < g.top) { const i = find(g.sx, g.C, x); if (i >= 0) return { kind: 'col', i }; }
+      return null;
+    },
+    svg(g, del, hover, names) {
+      if (!g || !g.R || !g.C) return '';
+      const { sx, sy, R, C } = g, rx = r2(g.left - GUT / 2 - 2), cy = r2(g.top - GUT / 2 - 2);
+      const bin = (x, y, on, title) => `<g class="qe-del${on ? ' on' : ''}" transform="translate(${x},${y})"><title>${title}</title><circle r="9"/><svg x="-6" y="-6" width="12" height="12" viewBox="0 0 20 20"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/></svg></g>`;
+      const row = (i, on) => bin(rx, r2((sy[i] + sy[i + 1]) / 2), on, `Delete ${names[0]} ${i + 1}`);
+      const col = (i, on) => bin(r2((sx[i] + sx[i + 1]) / 2), cy, on, `Delete ${names[1]} ${i + 1}`);
+      if (del) {
+        const band = del.kind === 'row'
+          ? `<rect class="qe-delband" x="${r2(sx[0])}" y="${r2(sy[del.i])}" width="${r2(sx[C] - sx[0])}" height="${r2(sy[del.i + 1] - sy[del.i])}"/>`
+          : `<rect class="qe-delband" x="${r2(sx[del.i])}" y="${r2(sy[0])}" width="${r2(sx[del.i + 1] - sx[del.i])}" height="${r2(sy[R] - sy[0])}"/>`;
+        return band + (del.kind === 'row' ? row(del.i, true) : col(del.i, true));
+      }
+      return hover && hover.r < R && hover.c < C ? row(hover.r, false) + col(hover.c, false) : '';
+    },
+  };
+
   // ---------------------------------------------------------------- elements
   // main: one per cell (dropping another replaces it); extras (slices, groups, wire types) stack on it.
   const MAIN = new Set(['gate', 'meter', 'meterD', 'measuretab', 'measure', 'ctrl', 'octrl', 'control', 'ocontrol', 'targ', 'targX', 'swap', 'phase', 'push', 'midstick', 'lstick', 'rstick', 'ground', 'qwbundle']);
@@ -194,7 +223,7 @@
       <div class="cz-tools">
         <button class="icon flat" data-qe="addrow" title="Add a wire at the bottom">${qic('below')}</button>
         <button class="icon flat" data-qe="addcol" title="Add a step at the end">${qic('after')}</button>
-        <button class="icon flat danger" data-qe="delete" title="Clear the selected cells (⌫)">${ic('<path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10"/>')}</button>
+        <button class="icon flat danger" data-qe="delete" title="Clear the selected cells (⌫)">${ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>')}</button>
         <span class="cz-sep"></span>
         <button class="icon flat" data-qe="undo" title="Undo (${isMac ? '⌘' : 'Ctrl+'}Z)">${ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>')}</button>
         <button class="icon flat" data-qe="redo" title="Redo (${isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z'})">${ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>')}</button>
@@ -429,7 +458,8 @@
   }
   function fit() {
     const G = geom(), r = rect();
-    const x1 = Math.min(G.xs[0], G.L.bb.x) - 10, x2 = Math.max(G.xs[G.xs.length - 1], G.L.bb.x + G.L.bb.w) + 10;
+    // the paper's edges, with room past them for the delete gutters
+    const x1 = Math.min(G.xs[0], G.L.bb.x) - 16, x2 = Math.max(G.xs[G.xs.length - 1], G.L.bb.x + G.L.bb.w) + 10;
     const y1 = Math.min(G.ys[0], G.L.bb.y) - 24, y2 = Math.max(G.ys[G.ys.length - 1], G.L.bb.y + G.L.bb.h) + 10;
     const k = Math.max(0.6, Math.min(3, Math.min((r.width - 80) / (x2 - x1), (r.height - 80) / (y2 - y1))));
     E.view = { k, ox: r.width / 2 - ((x1 + x2) / 2) * k, oy: r.height / 2 - ((y1 + y2) / 2) * k };
@@ -495,6 +525,9 @@
       out += `<rect class="qe-span" data-e="t" x="${bx}" y="${r2(y1 - 3)}" width="16" height="6" rx="2"/><rect class="qe-span" data-e="b" x="${bx}" y="${r2(y2 - 3)}" width="16" height="6" rx="2"/>`;
       out += `<rect class="qe-size" x="${r2(x2 - 4)}" y="${r2(y2 - 4)}" width="8" height="8"/>`;
     }
+    // the delete gutters left of the wires and above the steps
+    E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : h, ['wire', 'step']);
     // what is being dragged, under the pointer
     const dragKey = E.ghost && E.ghost.k, mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if (dragKey || mv) {
@@ -523,8 +556,10 @@
     // a double-click is detected here: redraws between the clicks swap the target, so no native dblclick arrives
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
-    if (dbl && !e.target.closest('.qe-size, .qe-knob, .qe-span') && onDouble(e)) return;
     const [sx, sy] = pos(e);
+    const dz = e.button === 0 && !E.space && TD.gridDel.at(E.gut, sx, sy);
+    if (dz) { delLine(dz); return; }
+    if (dbl && !e.target.closest('.qe-size, .qe-knob, .qe-span') && onDouble(e)) return;
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     if (e.target.closest('.qe-size')) {
@@ -552,7 +587,12 @@
   svg.addEventListener('pointermove', (e) => {
     if (!E) return;
     const d = E.drag, [sx, sy] = pos(e);
-    if (!d) { const h = cellAt(e); if (JSON.stringify(h) !== JSON.stringify(E.hover)) { E.hover = h; draw(); } return; }
+    if (!d) {
+      const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : cellAt(e);
+      svg.style.cursor = dz ? 'pointer' : '';
+      if (JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(dz) !== JSON.stringify(E.del)) { E.hover = h; E.del = dz; draw(); }
+      return;
+    }
     if (d.mode === 'pan') { E.view.ox = d.ox + sx - d.sx; E.view.oy = d.oy + sy - d.sy; draw(); return; }
     if (d.mode === 'size') {
       const [x, y] = toL(e), PX = TD.PX_PER_CM, snap = (v) => Math.round(v * 20) / 20;
@@ -575,7 +615,8 @@
       const [, y] = toL(e), G = E.G, R = nR(E.M), c = d.c;
       let wire = 0, dist = Infinity;
       for (let i = 0; i < G.R; i++) { const dd = Math.abs(G.cy(i) - y); if (dd < dist) { dist = dd; wire = i; } }
-      const free = (r) => { const x = at(r, c); return !x || (!x.text.trim() && !x.items.length); };
+      // a cell with nothing but its wire (\qw, \cw) is free: the gate is drawn over it
+      const free = (r) => { const x = at(r, c); return !x || (!x.opaque && x.items.every((it) => it.name === 'qw' || it.name === 'cw') && (x.items.length > 0 || !x.text.trim())); };
       if (d.edge === 'b') {
         let lim = d.top; while (lim + 1 < R && (lim + 1 <= d.bot || free(lim + 1))) lim++;
         d.bot = Math.max(d.top, Math.min(wire, lim));
@@ -648,7 +689,12 @@
   });
   root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('.qe-ctx')) closeMenu(); }, true);
   svg.addEventListener('wheel', closeMenu, { passive: true });
-  svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
+  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.del)) { E.hover = null; E.del = null; draw(); } });
+  // a click on a delete gutter: that wire or step goes, as one undo step
+  function delLine(dz) {
+    closeLabel(); E.del = null; E.hover = null; E.sel = null; svg.style.cursor = '';
+    edit(() => (dz.kind === 'row' ? deleteRows(E.M, dz.i, dz.i) : deleteCols(E.M, dz.i, dz.i)));
+  }
   // double-click: a sized gate goes back to its fitted size; anything else opens its first field
   // double-click on a gate or another element with a label: edit the label in place
   // elements with a typeable label, and the name of its field in the panel
@@ -673,7 +719,7 @@
     me.pop = TD.input.popup(stage, {
       text: m.a[0] || '', math: MATH_LABEL.has(m.name), bare: true,
       at: () => labelAt(r, c),
-      onInput: (v) => { m.a[0] = v; cell.dirty = true; draw(); const f = $('[data-f="arg"]', props); if (f) f.value = v; },
+      onInput: (v) => { m.a[0] = v; cell.dirty = true; draw(); renderProps(); },
       onDone: () => { if (L === me) L = null; commit(); draw(); renderProps(); },
     });
     return true;
@@ -695,11 +741,11 @@
   function renderProps() {
     if (!E) return;
     const b = selBox();
-    if (!b) { props.hidden = true; props.innerHTML = ''; return; }
+    if (!b) { props.hidden = true; TD.morph(props, ''); return; }
     props.hidden = false;
     if (!single()) {
       const n = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1);
-      props.innerHTML = `<div class="sec"><div class="sec-title">${n} cells</div><div class="help">Wires ${b.r1 + 1}–${b.r2 + 1}, steps ${b.c1 + 1}–${b.c2 + 1}.</div><div class="help">Right-click for wires and steps.</div></div>`;
+      TD.morph(props, `<div class="sec"><div class="sec-title">${n} cells</div><div class="help">Wires ${b.r1 + 1}–${b.r2 + 1}, steps ${b.c1 + 1}–${b.c2 + 1}.</div><div class="help">Right-click for wires and steps.</div></div>`);
       return;
     }
     const cell = at(b.r1, b.c1), m = !cell.opaque && mainOf(cell);
@@ -725,10 +771,10 @@
       }
     });
     h += `<div class="sec">${field('Code', 'code', cellText(cell), ' class="mono"')}${cell.opaque ? '<div class="help">This cell has commands the editor doesn’t draw; they are kept as written.</div>' : ''}</div>`;
-    props.innerHTML = h;
+    TD.morph(props, h);
   }
-  props.addEventListener('focusin', (e) => { if (e.target.matches('input, select')) begin(); });
-  props.addEventListener('focusout', (e) => { if (e.target.matches('input, select')) { commit(); renderProps(); } });
+  props.addEventListener('focusin', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) begin(); });
+  props.addEventListener('focusout', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) { commit(); renderProps(); } });
   props.addEventListener('input', (e) => {
     const t = e.target, f = t.dataset.f, s = single();
     if (!f || !s) return;
@@ -746,6 +792,8 @@
     draw();
     if (f === 'link') { commit(); begin(); }
   });
+  // the panel follows each keystroke: the other fields show what this one changed (TD.morph keeps this one as typed)
+  props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });
 
   // ---------------------------------------------------------------- toolbar, code, keys
   function updateTools() {

@@ -504,6 +504,13 @@ body.mode-doc #layersWin { display: none; }
 #props textarea.code { min-height: 132px; tab-size: 2; }
 #props input[type=range] { width: 100%; accent-color: var(--ink); height: auto; }
 #props input[type=checkbox] { accent-color: var(--ink); }
+/* Bloch sphere states (bloch.js): label, θ, φ and a remove button per row */
+#props .bloch-st { display: grid; grid-template-columns: minmax(0, 1fr) 52px 52px 22px; gap: 4px 6px; align-items: center; margin-bottom: 8px; }
+#props .bloch-st > span { font-size: 11px; color: var(--graphite); }
+#props .bloch-st input { width: 100%; min-width: 0; }
+#props .bloch-st .st-del { justify-self: center; width: 22px; height: 22px; padding: 0; display: grid; place-items: center; color: var(--redpen); border-radius: 6px; }
+#props .bloch-st .st-del svg { width: 16px; height: 16px; stroke-width: 1.5; }
+#props .bloch-st .st-del:hover { background: var(--redpen-wash); }
 #props .val { width: 28px; flex: none; text-align: left; font: 11px var(--font-mono); color: var(--pencil); }
 #props .none-lbl { font-size: 11px; color: var(--pencil); display: flex; align-items: center; gap: 3px; }
 #props .swatches { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px 92px; }
@@ -538,6 +545,13 @@ body.mode-doc #layersWin { display: none; }
 #props .seg-ctl svg { width: 16px; height: 16px; }
 #props .seg-ctl[aria-label="Align"] button { width: 30px; }
 #props .seg-ctl[aria-label="Align"] svg { stroke-width: 2; stroke-linecap: butt; }
+#props .ang { flex: none; display: inline-flex; align-items: center; font: 11px var(--font-mono); color: var(--pencil); cursor: text; }
+#props .ang input { width: 4.5ch; padding: 0 2px; height: 22px; border: 1px solid transparent; background: transparent; font: inherit; color: inherit; text-align: right; font-variant-numeric: tabular-nums; field-sizing: content; min-width: 2ch; -moz-appearance: textfield; }
+#props .ang input::-webkit-inner-spin-button, #props .ang input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#props .ang input:hover { border-color: var(--rule); }
+#props .ang input:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); color: var(--ink); }
+#props .row > .ctl.seg-ctl.txt { flex: 1 1 auto; min-width: 0; }
+#props .seg-ctl.txt button { flex: 1 1 0; width: auto; min-width: 0; padding: 0 4px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #props .seg-ctl button:disabled { opacity: .35; cursor: default; background: transparent; }
 #props .ro { font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
 #props .x { color: var(--pencil); }
@@ -832,6 +846,12 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 .selmenu-item.hi { background: var(--well); }
 .selmenu-item.on { background: var(--wash-strong); }
 .selmenu-item.dis { color: var(--faint); }
+/* a colour option's swatch (data-swatch), and the same swatch inside its closed select (.swsel) */
+.selmenu-sw, .swsel .sw { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent); vertical-align: -2px; }
+.selmenu-sw { margin-right: 8px; }
+.swsel { position: relative; }
+.swsel .sw { position: absolute; left: 9px; top: 50%; margin-top: -7px; pointer-events: none; z-index: 1; }
+#props .swsel select { padding-left: 30px; }
 .selmenu-group { padding: 8px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pencil); }
 @media (prefers-reduced-motion: reduce) { .selmenu { animation: none; } }
 .ddpop { width: 200px; padding: 4px; }
@@ -859,7 +879,7 @@ body.mode-page #gridRect { opacity: .55; }
 @media print {
   body.printing-page > *:not(#pagePrint) { display: none !important; }
   body.printing-page #pagePrint { display: block; }
-  #pagePrint svg { display: block; break-after: page; }
+  #pagePrint svg { display: block; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #pagePrint svg:last-child { break-after: auto; }
 }
 #emptyHint .eh-page, body.mode-page #emptyHint .eh-diagram { display: none; }
@@ -1055,6 +1075,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-props .seg-ctl button.on { background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob); }
 /* hover like the main page's segmented controls */
 .cz-props .seg-ctl button:hover:not(.on) { background: var(--wash); color: var(--ink); }
+.cz-props .seg-ctl button:disabled, .cz-props .seg-ctl button:disabled:hover { opacity: .35; cursor: default; background: transparent; color: var(--graphite); }
 .cz-props .help { color: var(--graphite); font-size: 12px; line-height: 1.55; margin: 0 0 8px; }
 .cz-props .help:last-child { margin-bottom: 0; }
 .cz-props code, .cz-tikz code { font-family: var(--font-mono); font-size: 11px; color: var(--graphite); }
@@ -1103,6 +1124,13 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .qe-size { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: nwse-resize; }
 .qe-span { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: ns-resize; }
 .qe-ctx { z-index: 1500; }
+/* row / column delete gutters (TD.gridDel in qceditor.js): faint bins beside the hovered cell, red on the line being pointed at */
+.qe-del { color: var(--pencil); opacity: .5; pointer-events: none; }
+.qe-del circle { fill: #fffdf8; stroke: currentColor; stroke-width: 1; }
+.qe-del path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.qe-del.on { color: var(--redpen); opacity: 1; }
+.qe-del.on circle { fill: var(--redpen-wash); }
+.qe-delband { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
 /* three-bar wire / step icons (qceditor.js QI): outlined bars stay, the filled bar is inserted or deleted */
 .qe-ic .qo { fill: none; stroke: currentColor; stroke-width: 1; }
 .qe-ic .qf { fill: currentColor; stroke: none; }
@@ -1127,7 +1155,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .fe-sw i.none { background: linear-gradient(to top right, transparent calc(50% - .75px), var(--redpen) calc(50% - .75px), var(--redpen) calc(50% + .75px), transparent calc(50% + .75px)) !important; }
 
 /* ZX editor (js/zxeditor.js): the cell grid and props come from the quantum editor's qe-* rules */
-#zxModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+#zxModal .cz-box, #cdModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
 .qe-item .zxmini { flex: none; max-width: 100%; color: var(--ink); }
 .ze-sel { fill: color-mix(in srgb, var(--redpen) 7%, transparent); }
 .ze-wsel { fill: none; stroke: color-mix(in srgb, var(--redpen) 30%, transparent); stroke-linecap: round; pointer-events: none; }

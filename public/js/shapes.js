@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.12.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.13.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -80,6 +80,59 @@
   const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
   const pt = (q) => `${r2(q.x)},${r2(q.y)}`;
   TD.util = { r2, esc, dist, norm, sub };
+
+  // Patch el's content to html in place, for property panels that re-render while a field is being typed in:
+  // nodes that keep their place and tag are kept, so the focused field keeps its focus, caret and text while
+  // every other field takes its new value. TD.morph.busy is set while nodes move, for focusout handlers.
+  function morph(el, html) {
+    const act = document.activeElement;
+    if (!act || act === el || !el.contains(act)) { el.innerHTML = html; return; }
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    const val = act.value, key = Object.entries(act.dataset || {}).map(([k, v]) => `[data-${k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())}="${CSS.escape(v)}"]`).join('');
+    let sel = null;
+    try { sel = act.selectionStart == null ? null : [act.selectionStart, act.selectionEnd]; } catch (_) { /* number fields have no caret */ }
+    morph.busy = true;
+    try {
+      kids(el, tpl.content, act);
+      // the field's place changed: focus its counterpart and carry the typing over
+      if (!act.isConnected && key) {
+        const n = el.querySelector(act.tagName.toLowerCase() + key);
+        if (n) { n.value = val; n.focus(); if (sel) try { n.setSelectionRange(sel[0], sel[1]); } catch (_) { /* no caret */ } }
+      }
+    } finally { morph.busy = false; }
+  }
+  // Nodes another script adds to the panel (a switch's sliding knob, see segthumb.js) are not in the new HTML: leave them be.
+  const foreign = (n) => n.nodeType === 1 && n.classList.contains('seg-thumb');
+  const KEEP = ['has-thumb'];
+  function kids(a, b, act) {
+    const an = [...a.childNodes].filter((n) => !foreign(n)), bn = [...b.childNodes];
+    bn.forEach((n, i) => {
+      const o = an[i];
+      if (!o) a.appendChild(n);
+      else if (o.nodeType !== n.nodeType || o.nodeName !== n.nodeName) a.replaceChild(n, o);
+      else if (o.nodeType === 1) patch(o, n, act);
+      else if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue;
+    });
+    for (let i = bn.length; i < an.length; i++) an[i].remove();
+  }
+  function patch(o, n, act) {
+    const keep = KEEP.filter((c) => o.classList.contains(c));
+    if (keep.length) n.classList.add(...keep);
+    for (const at of [...o.attributes]) if (!n.hasAttribute(at.name)) o.removeAttribute(at.name);
+    for (const at of [...n.attributes]) if (o.getAttribute(at.name) !== at.value) o.setAttribute(at.name, at.value);
+    const live = o !== act;
+    if (o.tagName === 'INPUT') {
+      if (live) { if (o.type === 'checkbox' || o.type === 'radio') o.checked = n.hasAttribute('checked'); else o.value = n.getAttribute('value') ?? ''; }
+    } else if (o.tagName === 'TEXTAREA') {
+      if (live) o.value = n.textContent;
+    } else if (o.tagName === 'SELECT') {
+      const si = [...n.querySelectorAll('option')].findIndex((x) => x.hasAttribute('selected'));
+      kids(o, n, act);
+      if (live) o.selectedIndex = Math.max(0, si);
+    } else kids(o, n, act);
+  }
+  TD.morph = morph;
 
   // Constrain q to 15-degree steps around a.
   function constrain(a, q) {
@@ -296,7 +349,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'pie', 'cd', 'qc', 'forest', 'zx'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'pie', 'cd', 'qc', 'forest', 'zx', 'bloch'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];

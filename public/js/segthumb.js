@@ -75,7 +75,8 @@
   function scan() {
     queued = false;
     for (const c of live.keys()) if (!c.isConnected) { live.delete(c); ro.unobserve(c); }
-    document.querySelectorAll(SEL).forEach((c) => place(c));
+    // a row of independent toggles (.ze-flags) can have several on: no single knob, each draws its own
+    document.querySelectorAll(SEL).forEach((c) => { if (!c.classList.contains('ze-flags')) place(c); });
   }
   function schedule() { if (!queued) { queued = true; requestAnimationFrame(scan); } }
 
