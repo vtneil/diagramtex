@@ -1,10 +1,49 @@
-# DiagramTeX
+<p align="center">
+  <a href="https://diagramtex.vt.in.th/"><img src="design/logo/final/lockup-horizontal.svg" alt="DiagramTeX logo" height="64"></a>
+</p>
 
-A browser-based diagram and document editor in the spirit of Mathcha. You draw with the mouse, type labels with `$…$` LaTeX math, and export clean **TikZ / pgfplots / LaTeX**. It is plain HTML/CSS/JS with no build step.
+# DiagramTeX: free online TikZ and LaTeX diagram editor
 
-## Run
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd** and **quantikz** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams and quantum circuits with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
-The site lives in `public/`; serve that folder. Everything is local: KaTeX 0.19.1 lives in `public/vendor/katex` and Temml 0.14.0 in `public/vendor/temml`, so no CDN is needed and it works offline. Opening `public/index.html` directly also works in most browsers.
+It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
+
+**[Open DiagramTeX: diagramtex.vt.in.th](https://diagramtex.vt.in.th/)**
+
+## Why DiagramTeX
+
+- **Visual TikZ editor:** draw instead of guessing coordinates, and get readable `tikzpicture` code with the packages and libraries listed for you.
+- **LaTeX maths everywhere:** labels render with KaTeX or Temml as you type, with LaTeX command suggestions and maths highlighting.
+- **Import existing TikZ:** open a `.tex` file or paste TikZ code to keep editing figures you already have.
+- **Offline and private:** an installable web app (PWA). After the first visit it runs without an internet connection, and documents are saved in your browser.
+- **Privacy-focused:** no account, no analytics, no cookies, no ads. See [Privacy](#privacy).
+- **No account, no cost:** open the page and start drawing.
+- **No build step:** plain HTML, CSS and JavaScript, easy to self-host.
+
+## What you can draw
+
+- **Physics diagrams:** springs, waves, balls, axes, rulers, vectors, fields and force diagrams.
+- **Circuit diagrams:** a drag-and-drop circuit editor with 266 `circuitikz` components (resistors, capacitors, inductors, sources, meters, diodes, transistors, op-amps, switches, logic gates, flip-flops, ICs, block-diagram parts) that exports `circuitikz` code, plus 35 quick electrical symbols and waveforms.
+- **Function plots and charts:** 2D and 3D pgfplots (functions, parametric, polar, implicit, inequalities, vector fields, contour, heatmap, bar, scatter) and pie charts.
+- **Commutative diagrams:** XyMatrix-style grids exported as `tikz-cd`.
+- **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
+- **Flowcharts and block diagrams:** 28 flowchart symbols, 33 basic shapes and 27 block arrows.
+- **Whole pages and documents:** lay out text, maths and figures on A4 or Letter pages and export a complete LaTeX `article`.
+
+## Quick start
+
+1. Open **[diagramtex.vt.in.th](https://diagramtex.vt.in.th/)**.
+2. Pick a tool from the left rail and draw. Type `$…$` in a label for maths.
+3. Press **Ctrl/⌘+E** to open the TikZ code and copy it, or **Ctrl/⌘+Shift+E** to download the whole document as `.tex`.
+4. Paste the code into your LaTeX document and compile.
+
+A new browser opens with a short welcome file: a few lines on how the app works and one example of each kind of object (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram).
+
+To use it offline, install it from your browser (the install icon in the address bar, or **Add to Home Screen** on a phone).
+
+### Run it locally
+
+The site lives in `public/`; serve that folder. KaTeX 0.19.1, Temml 0.14.0 and MathLive are in `public/vendor`, so no CDN is needed. Opening `public/index.html` directly also works in most browsers.
 
 ```bash
 python3 -m http.server 5173 --directory public
@@ -12,7 +51,7 @@ python3 -m http.server 5173 --directory public
 
 Then open http://localhost:5173.
 
-## Deploy (Cloudflare Workers)
+### Self-host on Cloudflare Workers
 
 `wrangler.toml` publishes `public/` as a static-assets-only Worker (no server code, no build step):
 
@@ -22,14 +61,15 @@ npx wrangler deploy
 
 `npx wrangler dev` previews it locally first.
 
-## Features
+## Feature reference
 
 ### Drawing
 - **Tool rail** (Mathcha-style; buttons with a small corner triangle open a flyout):
   - select, maths (`M`, a text object that starts in `$…$`), text (`T`)
   - **Lines:** line, curve, arrow, curved arrow, polyline, smooth closed blob, arc (angle mark), spring
   - **Shapes:** rectangle variants (rounded, snipped), 33 basic shapes and 28 flowchart symbols
-  - **Misc:** axes, wave, brace, ruler, grid and more, ball, dot, plus 35 electrical symbols (resistor, capacitor, inductor, sources, diode, transistor, logic gates, ground…)
+  - **Electrical:** Circuit… (the circuit editor, below), the common electrical symbols (resistor, capacitor, inductor, sources, diode, transistor, logic gates, ground…) and a Waveforms group (sine, square, pulse, negative pulse, triangle, sawtooth, trapezoid, rectified and half-wave rectified sine, chopped). Waveforms repeat as you widen them; set the wavelength, start position, duty cycle (square, pulses) or firing angle (chopped) in the panel
+  - **Misc:** axes, wave, brace, ruler, grid and more, ball, dot
   - **Arrows:** 27 block arrows
   - **Plots** (the Insert menu), **Image** (`I`: PNG, JPEG, GIF, WebP or SVG; exported with `\includegraphics`), **Pencil** (`N`: freehand, smoothed and exported as Bézier curves)
   - Library symbols export as exact TikZ paths, can hold centred text, and can be rotated and flipped.
@@ -69,6 +109,23 @@ npx wrangler deploy
   - Align: left, center, right, top, middle, bottom
   - Distribute: horizontally, vertically
 - **Groups** (Ctrl+G, Ctrl+Shift+G): clicking any member selects the whole group, and align/distribute move a group as one block. Plots and XyMatrix are moved by rotate/flip but not rotated themselves.
+
+### Electrical circuits (circuitikz)
+- **Electrical → Circuit…** (or **Insert → Circuit**) adds a circuit block and opens the circuit editor in an overlay, so the tool rail stays uncluttered.
+- **Parts:** 266 `circuitikz` components in searchable categories. Click a part and click the grid (it lands where the blue preview shows it), or drag it in; drag from start to end to set a two-terminal part's length.
+- **Wires** (`W`) snap to part pins and stay attached when parts move. Nodes such as transistors, op-amps and ICs are auto-named (`Q1`, `U1`…), so wires export as `(Q1.B)`.
+- **Properties:** label, annotation, voltage and current arrows, open/closed ends (`*-o`), rotation, mirroring and extra options. Labels take maths: `$R_1$`, `$10\,\mathrm{k\Omega}$`. Double-click a part to edit its label (a node's text) in place, in LaTeX or MathLive as set under Text input. A part is picked by clicking anywhere on its body, not only on its lines.
+- **Code, side by side:** the `circuitikz` source sits on the right of the editor and follows the drawing as you work. Type in it and the drawing follows after a short pause; lines the editor can't draw are kept and exported as written.
+- **Saving:** Done (⌘/Ctrl+Enter) writes the circuit back and closes; ⌘/Ctrl+S writes it back and keeps the editor open, so Esc afterwards closes without asking. This applies to the quantum editor too.
+- Export: the circuit goes into the picture as a `scope` and the preamble gets `\usepackage{circuitikz}`. **Copy circuitikz Code** in the panel gives a standalone `circuitikz` environment.
+
+### Quantum circuits (quantikz)
+- **Insert → Quantum** adds a circuit and opens the quantum circuit editor. Double-click a circuit, press Enter or use **Edit Circuit…** in the panel to open it again.
+- **Editor:** the circuit sits on a grid of cells (wires × steps). Drag an element from the palette onto a cell, or click it to place it in the selected cell. Keys place the common ones and step right: `H X Y Z S T U`, `C` control, `O` open control, `+` target, `M` meter. Drop on the dashed row or column to add a wire or a step. Right-click a cell (or a selected range) to insert wires above or below, insert steps before or after, delete wires or steps, or clear cells.
+- Controls link to the nearest gate or target in their step; drag the blue handle to link another wire. Drag a cell to move it (Alt copies), Shift-click or drag to select a range, ⌘C/⌘V copy and paste cells. The panel edits labels, spans, links, wire types, slices and groups; inserting or deleting wires and steps keeps links and spans pointing at the same wires. A selected gate has a handle on its corner: drag it, or type in **Min width** / **Min height**, to set the gate's minimum size (`\gate[][width][height]{…}`, which widens its column as in quantikz). Drag the handle back to the gate's own size, or up or left, and it goes back to auto. Drag the bar on a gate's top or bottom edge to stretch it up or down over neighbouring wires (`\gate[n]`); it stops at the first wire that already has something in that step. Double-click a gate (or any element with a label, such as a stick or a meter) to edit its label in place, in LaTeX or MathLive as set under Text input.
+- The `quantikz` code is live on the right, both ways. Cells you didn't touch keep the code you wrote, and commands the editor doesn't draw are kept as written. It is exported inside `\begin{quantikz}` with `\usetikzlibrary{quantikz2}`.
+- The canvas draws an approximation of quantikz's layout: gates, controls and targets, swaps, meters, wire labels (`\lstick`, `\rstick`), slices, gate groups, bundles and classical wires.
+- Maths inside gate arguments and `$…$` in labels is highlighted green, and typing `\` suggests quantikz commands as well as LaTeX ones.
 
 ### Two kinds of file
 - The top bar's main switch is **Page | Classic**.
@@ -116,11 +173,41 @@ npx wrangler deploy
   - Document text becomes text blocks, and `\documentclass` / `geometry` options become the page setup.
   - Hand-written `axis` and `tikzcd` environments are skipped, with a warning.
 
+## Privacy
+
+DiagramTeX is privacy-focused by design:
+
+- **Your work never leaves your device.** Documents, settings and the clipboard live in your browser's local storage. There is no server-side storage, so there is nothing to upload, sync or leak.
+- **No account.** No sign-up, login, email or payment, ever.
+- **No tracking.** No analytics, telemetry, cookies, ads or third-party scripts. The app, its maths engines (KaTeX, Temml, MathLive) and fonts are served from the same site, and after the first visit the app runs fully offline.
+- **Files stay yours.** Save, Open, Import and Export work on files on your own computer. One thing to know: a standalone SVG or HTML export links the maths fonts from the jsDelivr CDN so it displays correctly anywhere; the TikZ and LaTeX code you copy contains no links at all.
+- **Open source.** Every line is in this repository ([MIT License](LICENSE)), and you can self-host it as plain static files.
+
 ## Coordinates
 
 1 cm in TikZ is 40 px on the canvas. The y axis is flipped: canvas y points down, TikZ y points up. The faint cross on the canvas marks the TikZ origin.
 
-## Files
+## FAQ
+
+**Is DiagramTeX free?**
+Yes. It is free and open source, with no paid tier, account or login.
+
+**Does it work offline?**
+Yes. It is a progressive web app: after the first visit it works without a connection, and you can install it like a desktop or mobile app.
+
+**Where are my diagrams stored?**
+In your browser's local storage. Nothing is sent to a server. Use **Save** to keep a `.json` copy as a file.
+
+**Can I use the output in Overleaf?**
+Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf project. The comment at the top lists the packages and TikZ libraries to load.
+
+**Can I edit TikZ code I already have?**
+Yes, for most `\draw`, `\fill`, `\node` and `\coordinate` paths: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Files exported by DiagramTeX re-import exactly, plots included.
+
+**Which LaTeX packages does the output need?**
+TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams and the `quantikz2` TikZ library for quantum circuits. The export lists what each figure needs.
+
+## Project structure
 
 - `public/js/shapes.js`: basic shape types (geometry, handles, SVG, TikZ), colours, fonts, preamble
 - `public/js/fills.js`: gradient and pattern fills (SVG defs, TikZ shadings and patterns, picker tabs), dash and width presets
@@ -128,6 +215,15 @@ npx wrangler deploy
 - `public/js/symbols.js`: symbol library (141 shapes as one box-based `sym` type), image objects
 - `public/js/boolean.js`: Combine (shape booleans): outlines, edge splitting and the region builder
 - `public/js/rotate.js`: free rotation (the `angle` property, rotated handles, `TD.rotateShape`)
+- `public/js/quantum.js`: quantum circuits: quantikz parser, canvas drawing and export
+- `public/js/circuit.js`: the circuit block (`cz` type): item model, canvas drawing, circuitikz export and parser
+- `public/js/czeditor.js`: the overlay circuit editor (palette, drag-and-drop stage, properties and live code)
+- `public/js/qceditor.js`: the overlay quantum circuit editor (palette, cell grid, properties and live quantikz code)
+- `public/js/tooltip.js`: the app's own tooltips (every `title` becomes a styled `data-tip`)
+- `public/js/czcore.js`: circuitikz part registry and drawing API; parts live in `czparts-wires.js`, `czparts-passive.js`, `czparts-semi.js`, `czparts-sources.js`, `czparts-switch.js` and `czparts-blocks.js`
+- `public/js/texhighlight.js`: maths highlighting in the LaTeX text fields
+- `public/js/mathinput.js`: the canvas text editor's LaTeX and MathLive input modes
+- `public/js/dialog.js`, `public/js/selectmenu.js`: in-app dialogs and dropdown menus
 - `public/js/texcomplete.js`: LaTeX command suggestions while typing
 - `public/js/texcommands.js`: every command KaTeX and Temml support, with its number of arguments. It is generated, so do not edit it; rebuild with `node scripts/gen-texcommands.js` after updating either engine.
 - `public/js/mathengine.js`: the maths renderer (`TD.math.render`), switching between KaTeX and Temml
@@ -137,10 +233,23 @@ npx wrangler deploy
 - `public/js/app.js`: editor state, interaction, history, properties panel, storage, menu, export
 - `public/js/docview.js`: document view and whole-document LaTeX export
 - `public/css/style.css`, `public/index.html`: UI
+- `public/sw.js`, `public/manifest.webmanifest`: offline cache and install manifest
+- `design/logo/`: logo kit and usage guide
 - `wrangler.toml`: Cloudflare Workers deployment (serves `public/`)
 - `scripts/gen-texcommands.js`: regenerates `public/js/texcommands.js`
+- `scripts/cz-sheet.js`: draws every circuitikz part with its pins on one SVG sheet, for checking part drawings by eye
 - `.interface-design/system.md`: design direction, tokens and measurements for the UI ("drafting table")
 - `public/vendor/katex/`: KaTeX 0.19.1 (MIT license, `.woff2` fonts only)
+- `public/vendor/mathlive/`: MathLive, for the canvas editor's interactive maths input mode
 - `public/vendor/temml/`: Temml 0.14.0 (MIT license): `temml.min.js`, `Temml-Latin-Modern.css`, `Temml.woff2`, and `latinmodernmath.woff2` (Latin Modern Math, GUST font license; taken from the Temml repository because the npm package does not include it)
 
-The LaTeX output has not been compiled here, because no TeX installation was available. If `pdflatex` reports a problem, please file it.
+## Contributing
+
+Bug reports and ideas are welcome in the [issue tracker](https://gitlab.com/igniting-space/diagramtex/-/issues). If `pdflatex` reports a problem with exported code, please include the code and the error.
+
+## License
+
+DiagramTeX is released under the [MIT License](LICENSE). © 2026 Vivatsathorn Thitasirivit.
+
+It bundles KaTeX (MIT), Temml (MIT), MathLive (MIT) and the Latin Modern Math font (GUST Font License); see their licence files in `public/vendor/`.
+

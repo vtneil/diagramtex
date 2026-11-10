@@ -4,7 +4,9 @@
 // the field keeps the caret, selection and spell-check underlines.
 (function () {
   const TD = window.TD;
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"]';
+  // the circuit and quantum editors: their label popups and the label fields in their side panels
+  const SUB = '.td-pop-ta, .cz-props input[data-f="l"], .cz-props input[data-f="ann"], .cz-props input[data-f="v"], .cz-props input[data-f="i"], .cz-props input[data-f="text"], .cz-props input[data-tx]';
+  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], ' + SUB;
 
   // Maths spans of one line as [start, end) offsets, delimiters included. Same rules as the renderer
   // (TD.textSegments), except an unclosed $ runs to the end of the line, so maths lights up as it is typed.
@@ -101,8 +103,10 @@
     for (const [s, e] of sp) { if (s < k) continue; h += esc(text.slice(k, s)) + `<span class="tx-m">${esc(text.slice(s, e))}</span>`; k = e; }
     return h + esc(text.slice(k));
   }
+  // qc: true for quantikz code, 'all' for a field whose whole text is maths (data-tx="math": a quantikz gate label)
   function html(text, qc) {
     // a trailing newline still gets its line
+    if (qc === 'all') return text.split('\n').map((line) => paint(line, line ? [[0, line.length]] : [])).join('\n') + '\n';
     if (qc) return paint(text, qcSpans(text)) + '\n';
     return text.split('\n').map((line) => paint(line, spans(line))).join('\n') + '\n';
   }
@@ -149,8 +153,8 @@
     if (input) st.lineHeight = parseFloat(cs.height) - bt - bb - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) + 'px';
     st.zIndex = /^\d+$/.test(cs.zIndex) ? +cs.zIndex + 1 : '';
     // the code editor's mode can be set after it takes focus, so a mode change repaints too
-    const key = (isQc(ta) ? 'q' : 't') + ta.value;
-    if (key !== last) { last = key; ov.innerHTML = html(ta.value, key[0] === 'q'); }
+    const mode = isQc(ta) ? 'q' : ta.dataset.tx === 'math' ? 'm' : 't', key = mode + ta.value;
+    if (key !== last) { last = key; ov.innerHTML = html(ta.value, mode === 'q' ? true : mode === 'm' ? 'all' : false); }
     // place it over the field, whatever transform or zoom the field has
     st.left = '0px'; st.top = '0px';
     const r = ta.getBoundingClientRect(), o = ov.getBoundingClientRect(), z = o.width / (parseFloat(cs.width) || 1) || 1;

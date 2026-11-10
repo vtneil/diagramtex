@@ -314,31 +314,35 @@ body.no-files #files { display: none; }
 .link-hint { fill: none; stroke: var(--bluepen); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .55; }
 .handle.linked { fill: var(--bluepen); stroke: var(--bluepen); }
 
-#inlineEditor {
+#inlineEditor, .td-pop-ta {
   position: absolute; display: none; min-width: 280px; max-width: calc(100% - 16px); min-height: 76px; padding: 8px 10px; resize: both; border-radius: var(--r);
   font: 14px/1.5 var(--font-mono); border: 1px solid var(--bluepen); color: var(--ink);
   box-shadow: var(--shadow-pop); background: var(--sheet-raised); z-index: 5; transform: translateX(-50%);
 }
 #inlineEditor.para { min-height: 120px; }
+/* label popups in the circuit and quantum editors (TD.input.popup): one line that grows */
+.td-pop-ta { min-height: 40px; width: 300px; resize: none; z-index: 20; }
+.td-pop-ml { width: 320px; z-index: 20; }
 /* quantikz code of a quantum circuit */
 #inlineEditor.code { min-height: 150px; font-size: 13px; tab-size: 2; }
 /* MathLive mode: the same floating box, one math-field per line, a key hint underneath */
-#mlEditor {
+#mlEditor, .td-pop-ml {
   position: absolute; display: none; min-width: 280px; max-width: calc(100% - 16px); padding: 6px 8px 6px; border-radius: var(--r);
   border: 1px solid var(--bluepen); color: var(--ink); box-shadow: var(--shadow-pop); background: var(--sheet-raised); z-index: 5; transform: translateX(-50%);
 }
 #mlEditor.para .ml-lines { min-height: 96px; }
-#mlEditor .ml-lines { display: flex; flex-direction: column; gap: 2px; }
-#mlEditor math-field {
+#mlEditor .ml-lines, .td-pop-ml .ml-lines { display: flex; flex-direction: column; gap: 2px; }
+#mlEditor math-field, .td-pop-ml math-field {
   display: block; width: 100%; font-size: 20px; padding: 4px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink); outline: none;
   --caret-color: var(--bluepen); --selection-background-color: color-mix(in srgb, var(--bluepen) 22%, transparent); --primary: var(--bluepen);
   --contains-highlight-background-color: var(--well); --placeholder-color: var(--pencil);
   --text-highlight-background-color: color-mix(in srgb, var(--bluepen) 9%, transparent); /* marks prose (text mode) faintly */
 }
-#mlEditor math-field:focus-within { background: var(--well); }
-#mlEditor math-field::part(virtual-keyboard-toggle) { display: none; }
-#mlEditor .ml-hint { margin-top: 4px; padding: 0 6px; font-size: 11px; color: var(--pencil); }
-#mlEditor .ml-load { padding: 10px 6px; font-size: 12px; color: var(--pencil); }
+#mlEditor math-field:focus-within, .td-pop-ml math-field:focus-within { background: var(--well); }
+#mlEditor math-field::part(virtual-keyboard-toggle), .td-pop-ml math-field::part(virtual-keyboard-toggle) { display: none; }
+#mlEditor .ml-hint, .td-pop-ml .ml-hint { margin-top: 4px; padding: 0 6px; font-size: 11px; color: var(--pencil); }
+#mlEditor .ml-load, .td-pop-ml .ml-load { padding: 10px 6px; font-size: 12px; color: var(--pencil); }
+.td-pop-ta, .td-pop-ml { display: block; } /* shown while they exist; the canvas's own boxes start hidden */
 
 /* ---------- properties panel ---------- */
 #props { width: var(--props-w); flex: none; background: var(--sheet); border-left: 1px solid var(--rule); overflow: auto; overflow-x: hidden; order: 3; }
@@ -820,3 +824,136 @@ input:disabled, input[readonly], select:disabled, textarea:disabled, textarea[re
 .tx-hl { position: absolute; margin: 0; border-style: solid; border-color: transparent; background: transparent; color: var(--ink);
   overflow: hidden; pointer-events: none; text-align: left; }
 .tx-hl .tx-m { color: var(--mathpen); }
+
+/* ---------- circuit editor (czeditor.js): palette | drafting grid | properties, one large modal ---------- */
+#czModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+/* the editors' tool row follows the main tool rail (#tools): 32px buttons 4px apart, 18px icons,
+   graphite at rest, wash on hover, ink when active, separators with 6px of air on each side */
+.cz-tools { display: flex; align-items: center; gap: 4px; }
+.cz-tools button { width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r); background: transparent; color: var(--graphite); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.cz-tools button:hover:not(.on):not(:disabled) { background: var(--wash); color: var(--ink); }
+.cz-tools button:disabled { color: var(--faint); background: transparent; }
+.cz-tools button svg { width: 18px; height: 18px; }
+.cz-tools button.on, .cz-tools button.on:hover { background: var(--ink); color: var(--sheet); }
+.cz-sep { width: 1px; height: 20px; background: var(--rule); margin: 0 2px; flex: none; }
+.cz-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 240px 1fr 400px; position: relative; }
+.cz-pal { border-right: 1px solid var(--rule); display: flex; flex-direction: column; min-height: 0; background: var(--sheet); }
+.cz-search { padding: 12px 12px 8px; }
+.cz-search input { width: 100%; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--well); }
+.cz-search input:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
+.cz-list { flex: 1; overflow-y: auto; padding: 0 8px 16px; overscroll-behavior: contain; }
+.cz-cat { margin: 0 0 4px; }
+.cz-cat-t { font-size: 11px; font-weight: 600; color: var(--pencil); padding: 8px 4px 4px; cursor: default; list-style: none; display: flex; align-items: center; gap: 6px; user-select: none; }
+summary.cz-cat-t { cursor: pointer; }
+summary.cz-cat-t::-webkit-details-marker { display: none; }
+summary.cz-cat-t::before { content: ''; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent; transition: transform .12s var(--ease); }
+details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
+.cz-cat-t small { font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }
+.cz-part { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 6px; border: 1px solid transparent; background: transparent; color: var(--ink); text-align: left; font-size: 12px; touch-action: none; }
+.cz-part:hover { background: var(--wash); border-color: transparent; }
+.cz-part.on { background: var(--marker-wash); border-color: var(--marker); }
+.cz-part svg { width: 44px; height: 26px; flex: none; color: var(--ink); --cz-paper: var(--sheet); stroke-width: initial; }
+.cz-part:hover svg, .cz-part.on svg { --cz-paper: var(--sheet-raised); }
+.cz-part span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cz-empty { color: var(--pencil); font-size: 12px; padding: 16px 4px; }
+.cz-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--canvas); }
+.cz-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; }
+.cz-svg.placing { cursor: crosshair; }
+.cz-bg { fill: var(--canvas); }
+.cz-gmin { stroke: var(--grid-minor); stroke-width: 1; fill: none; }
+.cz-gmaj { stroke: var(--grid-major); stroke-width: 1; fill: none; }
+.cz-origin { stroke: var(--origin); stroke-width: 1; fill: none; }
+.cz-hit { fill: transparent; stroke: none; cursor: move; }
+.cz-hitline { stroke: transparent; stroke-width: 12; fill: none; }
+.cz-svg.placing .cz-hit { pointer-events: none; }
+.cz-pin { fill: var(--canvas); stroke: var(--bluepen); stroke-width: 1.2; pointer-events: none; }
+.cz-h { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: grab; }
+.cz-ghost { opacity: .7; pointer-events: none; }
+.cz-snap { fill: none; stroke: var(--faint); stroke-width: 1.2; pointer-events: none; }
+.cz-snap.on { stroke: var(--bluepen); stroke-width: 2; }
+.cz-mq { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1; stroke-dasharray: 3 2; }
+.cz-tip { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 4px 10px; border-radius: var(--r); background: var(--ink); color: var(--sheet); font-size: 12px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cz-tip[hidden], .cz-tip:empty { display: none; }
+.cz-side { border-left: 1px solid var(--rule); background: var(--sheet); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.cz-props { flex: none; max-height: 55%; overflow-y: auto; border-bottom: 1px solid var(--rule); }
+.cz-props[hidden] { display: none; }
+.cz-props .sec { padding: 12px 16px; border-bottom: 1px solid var(--rule-soft); }
+/* the first section's title names the item (as the panel's h3 does); later ones are subsections, as in #props */
+.cz-props .sec-title { font-size: 13px; font-weight: 600; color: var(--ink); margin: 0 0 8px; min-height: 20px; display: flex; align-items: center; }
+.cz-props .sec + .sec .sec-title { font-size: 11px; color: var(--pencil); justify-content: space-between; }
+.cz-props .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; min-height: var(--ctl); }
+.cz-props .row > label { width: 84px; flex: none; color: var(--graphite); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cz-props .sec > .row:first-child, .cz-props .sec-title + .row, .cz-props .cz-tikz + .row { margin-top: 0; }
+.cz-props .sec > .row:last-child { margin-bottom: 0; }
+.cz-props .row > .ctl { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cz-props .row > button { flex: 1; padding: 0 6px; }
+.cz-props input[type=text], .cz-props input[type=number], .cz-props select { width: 100%; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); min-width: 0; font: inherit; }
+.cz-props input[type=number] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.cz-props .ctl.unit span { color: var(--pencil); font-size: 12px; }
+.cz-props input.mono { font-family: var(--font-mono); font-size: 12px; }
+.cz-props input:focus, .cz-props select:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
+.cz-props .ctl.seg-ctl { display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r); }
+.cz-props .seg-ctl button { flex: 1; height: 100%; padding: 0; border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cz-props .seg-ctl button.on { background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob); }
+.cz-props .help { color: var(--graphite); font-size: 12px; line-height: 1.55; margin: 0 0 8px; }
+.cz-props .help:last-child { margin-bottom: 0; }
+.cz-props code, .cz-tikz code { font-family: var(--font-mono); font-size: 11px; color: var(--graphite); }
+.cz-props kbd { font-family: var(--font-mono); font-size: 11px; padding: 0 4px; border: 1px solid var(--rule-strong); border-radius: var(--r-sm); }
+.cz-tikz { word-break: break-word; }
+.cz-code { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cz-code-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 16px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.cz-code-head small { flex: 1; font-size: 11px; font-weight: 400; color: var(--pencil); font-variant-numeric: tabular-nums; }
+.cz-code-head button { height: 26px; padding: 0 10px; font-size: 12px; }
+.cz-code textarea { flex: 1; min-height: 0; border: 0; border-top: 1px solid var(--rule-soft); border-radius: 0; padding: 12px 16px; font: 12px/1.6 var(--font-mono); resize: none; outline: none; color: var(--ink); background: var(--sheet-raised); tab-size: 2; white-space: pre; overflow: auto; }
+.cz-code textarea:focus { background: var(--sheet-raised); box-shadow: inset 2px 0 0 var(--bluepen); }
+.cz-msg { padding: 8px 16px; color: var(--graphite); font-size: 12px; border-top: 1px solid var(--rule); }
+.cz-msg:empty { display: none; }
+.cz-entry { grid-template-columns: 1fr; margin-top: 8px; }
+.cz-entry button { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 8px 12px; font-size: 13px; color: var(--ink); }
+.cz-entry .help { color: var(--graphite); font-size: 12px; line-height: 1.45; }
+@media (max-width: 1100px) { .cz-body { grid-template-columns: 200px 1fr 300px; } }
+@media (max-width: 800px) { .cz-body { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } .cz-pal { display: none; } .cz-side { border-left: 0; border-top: 1px solid var(--rule); } }
+.cz-svg .hitfill { fill: transparent; pointer-events: none; }
+/* quantum circuit editor: same shell as the circuit editor, a cell grid on paper */
+#qcModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+.qe-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
+.qe-item { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 72px; padding: 6px 4px; border: 1px solid transparent; background: transparent; color: var(--ink); font-size: 11px; line-height: 1.2; touch-action: none; --qe-paper: var(--sheet); }
+.qe-item:hover { background: var(--wash); --qe-paper: var(--sheet-raised); }
+.qe-item.on { background: var(--marker-wash); border-color: var(--marker); --qe-paper: var(--sheet-raised); }
+.qe-item .qcmini { flex: none; max-width: 100%; color: var(--ink); stroke-width: initial; }
+.qe-item .qe-fig { height: 44px; display: flex; align-items: center; justify-content: center; max-width: 100%; }
+.qe-item > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--graphite); }
+.qe-paper { fill: #fffdf8; stroke: var(--rule); stroke-width: 1; }
+.qe-rule { stroke: rgba(28, 27, 25, .08); stroke-width: 1; fill: none; pointer-events: none; }
+.qe-grow { fill: none; stroke: rgba(28, 27, 25, .22); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.qe-plus { stroke: rgba(28, 27, 25, .35); stroke-width: 1.4; fill: none; pointer-events: none; }
+.qe-empty { fill: #8a8578; font-size: 12px; text-anchor: middle; pointer-events: none; }
+.qe-hover { fill: rgba(28, 27, 25, .04); stroke: none; pointer-events: none; }
+.qe-target { fill: color-mix(in srgb, var(--bluepen) 12%, transparent); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
+.qe-sel { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; }
+.qe-link { stroke: var(--bluepen); stroke-width: 1.5; stroke-dasharray: 3 2; fill: none; pointer-events: none; }
+.qe-knob { fill: #fffdf8; stroke: var(--bluepen); stroke-width: 1.5; cursor: ns-resize; }
+.qe-ghost { opacity: .75; pointer-events: none; color: #1c1b19; }
+.cz-props .qe-ops { gap: 4px; }
+.cz-props .qe-ops > span { width: 40px; flex: none; color: var(--graphite); font-size: 12px; }
+.cz-props .qe-ops > button { flex: 1; height: 28px; padding: 0 4px; font-size: 12px; }
+.cz-props .sec-title small { font-weight: 400; color: var(--pencil); margin-left: 6px; }
+.qe-x { float: right; height: 20px; width: 22px; padding: 0; font-size: 14px; line-height: 1; color: var(--pencil); }
+.qe-gbox { fill: none; stroke: var(--redpen); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.qe-size { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: nwse-resize; }
+.qe-span { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: ns-resize; }
+.qe-ctx { z-index: 1500; }
+/* three-bar wire / step icons (qceditor.js QI): outlined bars stay, the filled bar is inserted or deleted */
+.qe-ic .qo { fill: none; stroke: currentColor; stroke-width: 1; }
+.qe-ic .qf { fill: currentColor; stroke: none; }
+
+/* ---------- tooltips (tooltip.js): the app's own, in place of the browser's title tooltips ---------- */
+.td-tip {
+  position: fixed; z-index: 3000; max-width: 280px; padding: 4px 8px; border-radius: var(--r-sm); pointer-events: none;
+  background: var(--ink); color: var(--sheet); font: 500 12px/1.35 var(--font-ui); box-shadow: var(--shadow-pop);
+  opacity: 0; transition: opacity .08s ease;
+}
+.td-tip.on { opacity: 1; }
+.td-tip-sub { margin-top: 1px; font-weight: 400; opacity: .72; }
+.td-tip kbd { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; opacity: .62; font: 12px var(--font-ui); letter-spacing: .04em; }
+@media (prefers-reduced-motion: reduce) { .td-tip { transition: none; } }

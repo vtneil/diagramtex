@@ -326,11 +326,6 @@
   E('e-source', 'Source / meter', (b) => { lead(b, 0.32, 0.68); return b.circ(0.5, 0.5, 14); });
   E('e-antenna', 'Antenna', (b) => b.pl(0, 0, 0.5, 0.45, 1, 0).M(0.5, 0.45).L(0.5, 1), { size: [40, 40] });
   E('e-ground', 'Ground', (b) => { b.pl(0.5, 0, 0.5, 0.35); return b.pg(0, 0.35, 1, 0.35, 0.5, 1); }, { size: [40, 30] });
-  E('e-pulse', 'Pulse', (b) => b.pl(0, 0.9, 0.3, 0.9, 0.3, 0.1, 0.7, 0.1, 0.7, 0.9, 1, 0.9), { size: [50, 40] });
-  E('e-npulse', 'Negative pulse', (b) => b.pl(0, 0.1, 0.3, 0.1, 0.3, 0.9, 0.7, 0.9, 0.7, 0.1, 1, 0.1), { size: [50, 40] });
-  E('e-saw', 'Sawtooth', (b) => b.pl(0, 0.9, 0.33, 0.1, 0.33, 0.9, 0.66, 0.1, 0.66, 0.9, 1, 0.1, 1, 0.9), { size: [50, 40] });
-  E('e-sine', 'Sine', (b) => b.fn((t) => 0.5 - 0.4 * Math.sin(t * 2 * Math.PI), 0, 1), { size: [50, 40] });
-  E('e-square', 'Square wave', (b) => b.pl(0, 0.9, 0, 0.1, 0.5, 0.1, 0.5, 0.9, 1, 0.9, 1, 0.1), { size: [50, 40] });
   E('e-memristor', 'Memristor', (b) => {
     lead(b, 0.2, 0.8); b.box(0.2, 0.22, 0.8, 0.78);
     b.pl(0.2, 0.5, 0.28, 0.5, 0.28, 0.35, 0.38, 0.35, 0.38, 0.65, 0.48, 0.65, 0.48, 0.35, 0.58, 0.35, 0.58, 0.65, 0.66, 0.65, 0.66, 0.5, 0.72, 0.5);
@@ -360,18 +355,54 @@
   E('e-contact', 'Contact (normally open)', (b) => { lead(b, 0.42, 0.58); b.pl(0.42, 0.2, 0.42, 0.8); return b.pl(0.58, 0.2, 0.58, 0.8); });
   E('e-ncontact', 'Contact (normally closed)', (b) => { LIB['e-contact'].draw(b); return b.pl(0.32, 0.9, 0.68, 0.1); });
   E('e-output', 'Output terminal', (b) => { b.pl(0, 0.5, 0.4, 0.5); return b.pg(0.4, 0.2, 0.8, 0.2, 1, 0.5, 0.8, 0.8, 0.4, 0.8); }, { size: [70, 30] });
-  E('e-chopped', 'Chopped wave', (b) => {
-    // phase-cut sine: each half cycle starts at a firing angle of 60°
-    const y = (t) => { const ph = (t * 2) % 1; return ph < 1 / 3 ? 0.5 : 0.5 - 0.42 * Math.sin(t * 2 * Math.PI); };
-    let prev = null;
-    for (let i = 0; i <= 96; i++) {
-      const t = i / 96, q = y(t);
-      if (!i) b.M(0, q); else { if (prev === 0.5 && q !== 0.5) b.L(t, 0.5); b.L(t, q); }
-      prev = q;
+
+  // waveforms: periodic like the Wave, so resizing adds periods. One period is a list of pieces on
+  // t ∈ [a, b] (y: 0 trough, 1 crest); a piece with a slope d is curved (cubic Hermite), else straight.
+  // A file from before wavelengths had none: then one period fills the width, as it used to.
+  const periodic = (B, s, pieces) => {
+    const W = B.w, wl = num(s.wl, W), ph = ((((+s.phase || 0) / 100) % 1) + 1) % 1;
+    const X = (k, t) => (k + t - ph) * wl;
+    let last = null;
+    const pt = (x, y) => {
+      if (!last) B.M(x / W, 1 - y);
+      else if (Math.abs(last[0] - x) > 1e-6 || Math.abs(last[1] - y) > 1e-6) B.L(x / W, 1 - y);
+      last = [x, y];
+    };
+    for (let k = -1; X(k, 0) < W - 1e-9; k++) for (const p of pieces) {
+      const x0 = X(k, p.a), x1 = X(k, p.b);
+      if (x1 <= 1e-9 || x0 >= W - 1e-9) continue;
+      const ta = x0 < 0 ? p.a - x0 / wl : p.a, tb = x1 > W ? p.b - (x1 - W) / wl : p.b;
+      pt(X(k, ta), p.f(ta));
+      if (!p.d) { pt(X(k, tb), p.f(tb)); continue; }
+      const n = Math.max(1, Math.ceil((tb - ta) / 0.125 - 1e-9)), h = (tb - ta) / n;
+      for (let i = 1; i <= n; i++) {
+        const t0 = ta + (i - 1) * h, t1 = ta + i * h, y0 = p.f(t0), y1 = p.f(t1), xa = X(k, t0), xb = X(k, t1);
+        B.C((xa + (wl * h) / 3) / W, 1 - (y0 + (p.d(t0) * h) / 3), (xb - (wl * h) / 3) / W, 1 - (y1 - (p.d(t1) * h) / 3), xb / W, 1 - y1);
+        last = [xb, y1];
+      }
     }
-    return b;
-  }, { size: [50, 40] });
-  E('e-trap', 'Trapezoid wave', (b) => b.pl(0, 0.1, 0.25, 0.1, 0.4, 0.9, 0.6, 0.9, 0.75, 0.1, 1, 0.1), { size: [50, 40] });
+    return B;
+  };
+  const PI2 = 2 * Math.PI;
+  const flat = (a, b, y) => ({ a, b, f: () => y });
+  const ramp = (a, b, y0, y1) => ({ a, b, f: (t) => y0 + ((y1 - y0) * (t - a)) / (b - a) });
+  const sine = (a, b) => ({ a, b, f: (t) => 0.5 + 0.5 * Math.sin(PI2 * t), d: (t) => Math.PI * Math.cos(PI2 * t) });
+  const duty = (s, d) => Math.min(0.95, Math.max(0.05, (Number.isFinite(+s.duty) ? +s.duty : d) / 100));
+  const Wv = (k, n, pieces, params = {}) => S(k, n, 'wave', { size: [135, 40], fill: false, text: false, params: { wl: 45, phase: 0, ...params }, draw: (b, s) => periodic(b, s, pieces(s)) });
+  Wv('e-sine', 'Sine', () => [sine(0, 1)]);
+  Wv('e-square', 'Square wave', (s) => { const d = duty(s, 50); return [flat(0, d, 1), flat(d, 1, 0)]; }, { duty: 50 });
+  Wv('e-pulse', 'Pulse', (s) => { const d = duty(s, 30), a = (1 - d) / 2; return [flat(0, a, 0), flat(a, a + d, 1), flat(a + d, 1, 0)]; }, { duty: 30 });
+  Wv('e-npulse', 'Negative pulse', (s) => { const d = duty(s, 30), a = (1 - d) / 2; return [flat(0, a, 1), flat(a, a + d, 0), flat(a + d, 1, 1)]; }, { duty: 30 });
+  Wv('e-tri', 'Triangle wave', () => [ramp(0, 0.5, 0, 1), ramp(0.5, 1, 1, 0)]);
+  Wv('e-saw', 'Sawtooth', () => [ramp(0, 1, 0, 1)]);
+  Wv('e-trap', 'Trapezoid wave', () => [flat(0, 0.25, 0), ramp(0.25, 0.4, 0, 1), flat(0.4, 0.6, 1), ramp(0.6, 0.75, 1, 0), flat(0.75, 1, 0)]);
+  Wv('e-rect', 'Rectified sine', () => [{ a: 0, b: 1, f: (t) => Math.sin(Math.PI * t), d: (t) => Math.PI * Math.cos(Math.PI * t) }]);
+  Wv('e-halfrect', 'Half-wave rectified', () => [{ a: 0, b: 0.5, f: (t) => Math.sin(PI2 * t), d: (t) => PI2 * Math.cos(PI2 * t) }, flat(0.5, 1, 0)]);
+  // phase-cut sine: each half cycle switches on at the firing angle
+  Wv('e-chopped', 'Chopped wave', (s) => {
+    const a = Math.min(175, Math.max(0, Number.isFinite(+s.fire) ? +s.fire : 60)) / 360;
+    return [flat(0, a, 0.5), sine(a, 0.5), flat(0.5, 0.5 + a, 0.5), sine(0.5 + a, 1)];
+  }, { fire: 60 });
 
   // ---------- geometry with rotation / flips ----------
   // rot: clockwise quarter turns (on screen). fx/fy: mirror in the shape's own frame (applied first).

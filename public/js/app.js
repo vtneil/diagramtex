@@ -658,7 +658,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|cd|qc)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|cd|qc|cz)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -678,13 +678,16 @@
   const sec = (title, inner) => (title ? `<div class="pop-title">${title}</div>` : '') + `<div class="sym-grid">${inner}</div>`;
   $('#fly-lines').innerHTML = sec('', LINE_TOOLS.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join(''));
   $('#fly-shapes').innerHTML = sec('Rectangles', symBtns('rect')) + sec('Basic shapes', symBtns('basic')) + sec('Flowchart', symBtns('flow'));
-  $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('')) + sec('Electrical', symBtns('elec'));
+  $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('')) ;
   $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
+  // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
+  $('#fly-elec').innerHTML = `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: about 250 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>Circuit…</button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`
+    + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
   function flyOf(t) {
-    if (/^(plot|pie|cd|qc)/.test(t)) return 'insertPop';
+    if (/^(plot|pie|cd|qc|cz)/.test(t)) return 'insertPop';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
-    if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'misc' || c === 'elec' ? 'misc' : c === 'arrow' ? 'arrows' : 'shapes'; }
+    if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : 'shapes'; }
     return null;
   }
   const flyEl = (name) => $(name === 'insertPop' ? '#insertPop' : '#fly-' + name);
@@ -994,7 +997,8 @@
         const s = byId(hitId);
         if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) { startEdit(hitId, 'text'); return; }
         if (s.type === 'line' || s.type === 'curve') { startEdit(hitId, 'label'); return; }
-        if (s.type === 'qc') { state.sel = new Set([hitId]); startEdit(hitId, 'src'); return; }
+        if (s.type === 'qc') { state.sel = new Set([hitId]); openQuantum(hitId); return; }
+        if (s.type === 'cz') { state.sel = new Set([hitId]); render(); renderProps(); openCircuit(hitId); return; }
       }
       const grp = groupIds(hitId);
       if (e.shiftKey) { if (state.sel.has(hitId)) grp.forEach((id) => state.sel.delete(id)); else grp.forEach((id) => state.sel.add(id)); }
@@ -1221,6 +1225,8 @@
       snapHint = null;
       commit();
       setTool('select');
+      if (s.type === 'cz' && byId(s.id)) { render(); renderProps(); openCircuit(s.id); return; }
+      if (s.type === 'qc' && byId(s.id)) { render(); renderProps(); openQuantum(s.id); return; }
     } else if (d.mode === 'marquee') {
       marquee = null;
     } else {
@@ -1282,6 +1288,32 @@
     ed.style.height = 'auto';
     ed.style.height = Math.min(Math.max(ed.scrollHeight + 2, ed.classList.contains('para') ? 120 : 76), 260) + 'px';
   }
+  // Circuit blocks open their own editor (czeditor.js); Done writes the circuit back as one undo step
+  function openCircuit(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.czEditor) return;
+    TD.czEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      begin(); t.items = res.items; t.raw = res.raw; commit();
+      render(); renderProps();
+    });
+  }
+  TD.czOpen = openCircuit;
+  // Quantum blocks too (qceditor.js): Done writes the quantikz code back as one undo step
+  function openQuantum(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.qcEditor) return;
+    TD.qcEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      begin(); t.src = res.src; commit();
+      render(); renderProps();
+    });
+  }
+  TD.qcOpen = openQuantum;
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
@@ -1423,6 +1455,8 @@
     { key: 'loop', label: 'Loop size', type: 'number', min: 0, step: 1, unit: 'px' },
     { key: 'wl', label: 'Wave length', type: 'number', min: 4, step: 1, unit: 'px' },
     { key: 'phase', label: 'Start position', type: 'range', min: 0, max: 100, step: 1 },
+    { key: 'duty', label: 'Duty cycle', type: 'range', min: 5, max: 95, step: 1 },
+    { key: 'fire', label: 'Firing angle', type: 'range', min: 0, max: 175, step: 5 },
     { key: 'tick', label: 'Tick spacing', type: 'number', min: 0, step: 1, unit: 'px' },
     { key: 'ticksz', label: 'Tick size', type: 'number', min: 1, step: 1, unit: 'px' },
     { key: 'nums', label: 'Show numbers', type: 'checkbox' },
@@ -2026,7 +2060,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'cd', 'qc'].includes(s.type)) {
+      if (['plot', 'cd', 'qc', 'cz'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -2366,7 +2400,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -2434,7 +2468,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') startEdit(s.id, 'src'); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -2897,35 +2931,48 @@
   $('#tikzDownload').onclick = () => download(slug() + '.tex', $('#tikzOut').value, 'text/x-tex');
 
   // ---------------- sample diagram ----------------
+  // The first file a new user sees: what the app does, in a few lines, and one of each kind of object
+  // (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram), built from
+  // each type's own defaults so it stays in step with the library.
   function sample() {
-    const L = { stroke: '#000000', width: 1, dash: 'solid', opacity: 1, size: 'normalsize', color: '#000000', labelPos: 0.5, labelSide: 'left', label: '' };
-    const s = [];
-    const add = (o) => s.push({ id: uid(), ...o });
-    // Coulomb's law: two charges
-    add({ type: 'line', x1: 40, y1: 200, x2: 240, y2: 80, ...L, dash: 'dashed', startTip: 'none', endTip: 'none' });
-    add({ type: 'line', x1: 20, y1: 170, x2: 220, y2: 50, ...L, startTip: 'stealth', endTip: 'stealth', label: '$r$' });
-    add({ type: 'line', x1: 40, y1: 200, x2: 25, y2: 175, ...L, width: 0.75, startTip: 'none', endTip: 'none' });
-    add({ type: 'line', x1: 240, y1: 80, x2: 225, y2: 55, ...L, width: 0.75, startTip: 'none', endTip: 'none' });
-    add({ type: 'line', x1: 40, y1: 200, x2: 80, y2: 176, ...L, width: 2, startTip: 'none', endTip: 'stealth', label: '$\\hat{r}$', labelSide: 'right' });
-    add({ type: 'ball', cx: 40, cy: 200, r: 18, ballColor: '#a05a5a', opacity: 1 });
-    add({ type: 'ball', cx: 240, cy: 80, r: 18, ballColor: '#a05a5a', opacity: 1 });
-    add({ type: 'text', x: 40, y: 236, text: '$q_1$', size: 'normalsize', color: '#000000', opacity: 1 });
-    add({ type: 'text', x: 270, y: 100, text: '$q_2$', size: 'normalsize', color: '#000000', opacity: 1 });
-    add({ type: 'text', x: 160, y: 250, text: '$\\vec F = k\\dfrac{q_1 q_2}{r^2}\\,\\hat r$', size: 'large', color: '#000000', opacity: 1 });
-    // Field of a mass
-    const cx = 480, cy = 150;
-    for (const r of [60, 100]) add({ type: 'ellipse', cx, cy, rx: r, ry: r, stroke: '#e53935', width: 0.75, dash: 'solid', fill: null, opacity: 1 });
-    for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4, c = Math.cos(a), d = Math.sin(a);
-      add({ type: 'line', x1: cx + c * 130, y1: cy + d * 130, x2: cx + c * 50, y2: cy + d * 50, ...L, startTip: 'none', endTip: 'stealth' });
-    }
-    add({ type: 'ball', cx, cy, r: 40, ballColor: '#7e57c2', opacity: 1 });
-    add({ type: 'text', x: cx, y: cy + 10, text: '$M$', size: 'Large', color: '#ffffff', opacity: 1 });
-    add({ type: 'text', x: cx + 90, y: 20, text: 'Gravity field $\\vec g$', size: 'large', color: '#e53935', opacity: 1 });
-    add({ type: 'arc', cx: 40, cy: 200, r: 50, a1: 0, a2: 31, ...L, startTip: 'none', endTip: 'none' });
-    add({ type: 'line', x1: 40, y1: 200, x2: 110, y2: 200, ...L, width: 0.75, dash: 'dotted', startTip: 'none', endTip: 'none' });
-    add({ type: 'text', x: 102, y: 186, text: '$\\theta$', size: 'normalsize', color: '#000000', opacity: 1 });
-    return s;
+    const s = [], D = { ...state.defaults, stroke: '#000000', color: '#000000', size: 'normalsize' };
+    const add = (type, tool, o) => { const t = TD.TYPES[type]; if (!t) return null; const it = { id: uid(), ...t.create({ x: 0, y: 0 }, D, tool || type), ...o }; s.push(it); return it; };
+    const text = (x, y, t, o) => add('text', 'text', { x, y, text: t, ...o });
+    const GREY = '#6b6b6b', BLUE = '#1e63c4';
+    const head = (x, y, t) => text(x, y, t, { size: 'small', bold: true, color: GREY });
+    // title and what to do
+    text(440, 0, 'Welcome to DiagramTeX', { size: 'LARGE', bold: true });
+    text(440, 40, 'Draw with the tools on the left, or drag anything in from the Library.', { color: GREY });
+    text(440, 66, 'Double-click an object to edit it. Maths goes between \\textdollar\\ signs, as in \\LaTeX.', { color: GREY });
+    text(440, 92, 'Export turns the drawing into TikZ code for your paper, or an SVG / PNG.', { color: GREY });
+    // text and formulae
+    head(130, 150, 'TEXT AND FORMULAE');
+    text(130, 196, '$\\vec F = q\\left(\\vec E + \\vec v \\times \\vec B\\right)$', { size: 'large' });
+    text(130, 252, '$\\displaystyle\\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2}$');
+    text(130, 304, 'Plain text in \\textbf{bold}, \\textit{italic} or \\texttt{typewriter}', { size: 'small' });
+    // shapes and arrows
+    head(440, 150, 'SHAPES AND ARROWS');
+    add('sym', 'sym:rrect', { x: 350, y: 178, w: 76, h: 40, text: 'Idea', fill: '#e8f0fb' });
+    add('line', 'line', { x1: 426, y1: 198, x2: 462, y2: 198, startTip: 'none', endTip: 'stealth', label: '' });
+    add('sym', 'sym:diamond', { x: 462, y: 172, w: 60, h: 52, text: '$?$' });
+    add('line', 'line', { x1: 492, y1: 224, x2: 492, y2: 262, startTip: 'none', endTip: 'stealth', label: '' });
+    add('sym', 'sym:rrect', { x: 454, y: 262, w: 76, h: 40, text: 'Done', fill: '#e6f4ea' });
+    add('ball', 'ball', { cx: 372, cy: 282, r: 16 });
+    add('spring', 'spring', { x1: 388, y1: 282, x2: 446, y2: 282 });
+    // circuit
+    head(750, 150, 'CIRCUITS');
+    add('cz', 'cz', { x: 690, y: 290 }); // y is the circuit's bottom edge
+    // plot
+    head(170, 370, 'PLOTS');
+    add('plot', 'plot:function', { x: 40, y: 396, w: 260, h: 170 });
+    // quantum circuit
+    head(500, 370, 'QUANTUM CIRCUITS');
+    add('qc', 'qc', { x: 428, y: 410 });
+    // commutative diagram
+    head(770, 370, 'COMMUTATIVE DIAGRAMS');
+    add('cd', 'cd', { x: 730, y: 410 });
+    text(440, 620, 'Double-click the circuit or the quantum circuit to open its editor. Delete this sample whenever you like.', { size: 'small', color: BLUE });
+    return s.filter(Boolean);
   }
 
   // Older files held both diagram blocks and a page sheet. Give each file one kind; a file that
@@ -2970,7 +3017,7 @@
     const idx = index();
     const last = store.get('texdiagram.last', null);
     if (idx.length) openDoc(idx.find((d) => d.id === last) ? last : idx[idx.length - 1].id);
-    else { newDoc('Electrostatics (sample)', sample()); zoomFit(); }
+    else { newDoc('Welcome to DiagramTeX', sample()); zoomFit(); }
     setTool('select');
     updateTopbar();
     // KaTeX fonts change metrics once loaded: re-measure.
@@ -2991,6 +3038,7 @@
   TD.state = state; // for debugging
   TD.app = {
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
+    newSample: () => { newDoc('Welcome to DiagramTeX', sample()); zoomFit(); },
     get slug() { return slug(); },
   };
 })();

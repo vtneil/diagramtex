@@ -5,7 +5,7 @@
   const TD = window.TD;
 
   // Fields that get suggestions.
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"]';
+  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], .td-pop-ta';
   // Quantum circuit code (the canvas code editor, or the panel's code field): quantikz commands at cell
   // level, maths inside a command's {argument}, nothing inside [options].
   const isQc = (el) => el.matches('#props textarea[data-p="src"]') || (el.id === 'inlineEditor' && el.classList.contains('code'));
@@ -240,7 +240,7 @@
       const where = qcPlace(el.value, cur.at);
       if (where === 'opt') return close();
       items = where === 'arg' ? rank(cur.q, false) : rank(cur.q, false, QC);
-    } else items = rank(cur.q, !TD.texMath.inMath(el.value, cur.at));
+    } else items = rank(cur.q, !(el.dataset.tx === 'math' || TD.texMath.inMath(el.value, cur.at))); // data-tx="math": the whole field is maths (a gate label)
     if (!items.length) return close();
     field = el; start = cur.at; idx = 0;
     pop.innerHTML = '<ul>' + items.map((c, i) => `<li role="option" data-i="${i}"${i === 0 ? ' class="on" aria-selected="true"' : ''}>` +

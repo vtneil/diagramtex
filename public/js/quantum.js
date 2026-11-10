@@ -70,6 +70,7 @@
   // rows (split at \\) of cells (split at &), groups and escapes kept whole
   function grid(inner) {
     const rows = [[]];
+    rows.seps = [];
     let buf = '';
     for (let i = 0; i < inner.length; i++) {
       const c = inner[i];
@@ -78,7 +79,7 @@
         if (inner[i + 1] === '\\') { // row break, with an optional [length]
           rows[rows.length - 1].push(buf); buf = ''; rows.push([]);
           let k = skipWs(inner, i + 2);
-          if (inner[k] === '[') { const j = close(inner, k); if (j > 0) { i = j; continue; } }
+          if (inner[k] === '[') { const j = close(inner, k); if (j > 0) { rows.seps[rows.length - 2] = inner.slice(k, j + 1); i = j; continue; } }
           i++; continue;
         }
         buf += c + (inner[i + 1] || ''); i++; continue;
@@ -88,7 +89,7 @@
     }
     rows[rows.length - 1].push(buf);
     // a trailing \\ leaves an empty last row
-    while (rows.length && rows[rows.length - 1].every((t) => !t.trim())) rows.pop();
+    while (rows.length && rows[rows.length - 1].length === 1 && !rows[rows.length - 1][0].trim()) rows.pop();
     return rows;
   }
   function cell(text, warn) {
@@ -113,7 +114,7 @@
       let j = i;
       while (j < text.length && text[j] !== '\\' && text[j] !== '{') j++;
       const t = text.slice(i, j).trim();
-      if (t) items.push({ name: 'push', o: [], a: [t] });
+      if (t) items.push({ name: 'push', o: [], a: [t], plain: true });
       i = j;
     }
     return items;
@@ -296,7 +297,7 @@
         if (m.sh > y2 - y1) { const ym = (y1 + y2) / 2; y1 = ym - m.sh / 2; y2 = ym + m.sh / 2; }
         if (/\$/.test(it.a[0] || '')) warn('\\gate{…} is already maths in quantikz: drop its $ signs, or LaTeX stops with "Missing $ inserted"');
         if (m.sw > Math.max(gw(b), m.w)) warn('style={minimum width=…} widens the gate box but not its column, so it covers its neighbours in LaTeX too; \\gate[…][width]{…} widens the column');
-        ops.push({ k: 'rect', x: X - w / 2, y: y1, w, h: y2 - y1, fill: true });
+        ops.push({ k: 'rect', x: X - w / 2, y: y1, w, h: y2 - y1, fill: true, gate: [r, c], fit: [gw(b), gh(b)] });
         if (t) ops.push({ k: 'text', t, x: X, y: (y1 + y2) / 2, b });
       } else if (k === 'meter') {
         const w = 2 * E, h = G, x1 = X - w / 2, x2 = X + w / 2, u = 0.1 * PX;
@@ -372,7 +373,10 @@
       else if (o.k === 'path') ext(...o.bb);
       else if (o.k === 'dot' || o.k === 'targ') ext(o.x - o.r, o.y - o.r, o.x + o.r, o.y + o.r);
     }
-    return { ops, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, warnings, R, C };
+    // nothing drawn (every wire switched off): the grid's own extent
+    if (!(x2 > x1)) { x1 = colL[0]; x2 = colL[C - 1] + colW[C - 1]; }
+    if (!(y2 > y1)) { y1 = rowT[0]; y2 = rowT[R - 1] + rowH[R - 1]; }
+    return { ops, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, warnings, R, C, geo: { colL, colW, cx, rowT, rowH, cy, cs: cs.px, rs: rs.px } };
   }
 
   // ---------------------------------------------------------------- drawing
@@ -448,11 +452,12 @@
       return `<div class="sec"><div class="sec-title">quantikz <small>${L.R} × ${L.C}</small></div>
         <div class="row col"><textarea class="code" data-p="src" spellcheck="false" rows="7">${esc(s.src)}</textarea></div>
         ${L.warnings.map((w) => `<div class="err">${esc(w)}</div>`).join('')}
-        <div class="help">Double-click the circuit to edit the code there. Exported with <code>\\usetikzlibrary{quantikz2}</code>.</div></div>
-        <div class="sec"><button class="wide" data-act="copyqc">Copy quantikz Code</button></div>`;
+        <div class="help">Double-click the circuit to edit it visually. Exported with <code>\\usetikzlibrary{quantikz2}</code>.</div></div>
+        <div class="sec"><button class="wide primary" data-act="editqc">Edit Circuit…</button><button class="wide" data-act="copyqc">Copy quantikz Code</button></div>`;
     },
     apply(s, t) { if (t.dataset.p === 'src') s.src = t.value; return false; },
     action(s, act) {
+      if (act === 'editqc') { if (TD.qcOpen) TD.qcOpen(s.id); return; }
       if (act !== 'copyqc') return;
       const txt = fullCode(s.src) + '\n';
       (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt('quantikz Code', txt, { multiline: true, readonly: true, message: 'Copying failed: select the code and copy it yourself.', ok: 'Done', cancel: null }));
@@ -460,4 +465,6 @@
     },
   };
   TD.qcLayout = layout;
+  // for the visual editor (js/qceditor.js)
+  TD.qc = { ARGS, IGNORED, unwrap, grid, cell, opts, close, draw, layout, fullCode };
 })();

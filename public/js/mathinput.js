@@ -189,6 +189,58 @@
     return { destroy() { done = true; off.abort(); host.innerHTML = ''; } };
   }
 
+  // ---------- label popup (the circuit and quantum editors) ----------
+  // A floating box in `host` (a positioned element), like the canvas's inline editor: a LaTeX text field
+  // or MathLive, whichever the Text input setting picks. Enter, Esc or clicking away finishes.
+  // opts: { text, math: the content is maths without $ (a quantikz gate), bare: a lone command such as
+  //   \ket{0} is maths, at(): [x, y] in host pixels for the box's top centre, onInput(text), onDone() }
+  // Returns { place() } to follow the anchor (after a pan or zoom) and close().
+  function popup(host, opts) {
+    const v0 = String(opts.text || '');
+    let box = null, ml = null, closed = false;
+    const place = () => {
+      if (closed || !box) return;
+      const [X, Y] = opts.at(), w = box.offsetWidth, h = box.offsetHeight, W = host.clientWidth, H = host.clientHeight;
+      box.style.left = Math.max(w / 2 + 8, Math.min(X, W - w / 2 - 8)) + 'px';
+      box.style.top = Math.max(8, Math.min(Y, H - h - 8)) + 'px';
+    };
+    const close = () => { if (closed) return; closed = true; if (ml) ml.destroy(); if (box) box.remove(); opts.onDone(); };
+    function plain() {
+      const ta = (box = document.createElement('textarea'));
+      ta.className = 'td-pop-ta'; ta.spellcheck = false; ta.rows = 1; ta.value = v0;
+      if (opts.math) ta.dataset.tx = 'math'; // highlighted all through as maths (texhighlight.js)
+      ta.placeholder = opts.math ? 'Maths, without $ — Enter to finish' : 'Text, $math$ — Enter to finish';
+      const size = () => { ta.style.height = 'auto'; ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 40), 160) + 'px'; };
+      ta.addEventListener('input', () => { opts.onInput(ta.value); size(); place(); });
+      ta.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); close(); }
+      });
+      ta.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== ta) close(); }, 0));
+      host.appendChild(ta); size(); place();
+      requestAnimationFrame(() => { if (!closed) { ta.focus(); ta.select(); } });
+    }
+    if (mode !== 'mathlive') plain();
+    else {
+      box = document.createElement('div');
+      box.className = 'td-pop-ml';
+      box.innerHTML = '<div class="ml-load">Loading MathLive…</div>';
+      host.appendChild(box); place();
+      load().then(() => {
+        if (closed) return;
+        const wrap = opts.math ? !!v0 : !!opts.bare && /^\s*\\[A-Za-z]/.test(v0) && !v0.includes('$');
+        ml = mount(box, {
+          text: wrap ? `$${v0}$` : v0, prose: !opts.math, start: v0 ? 'end' : opts.math ? 'math' : 'text',
+          // a line that is all maths goes back without its $ where the content is maths already
+          onInput: (v) => { const u = /^\$([^$]*)\$$/.exec(v); opts.onInput(wrap && u ? u[1] : v); place(); },
+          onDone: close,
+        });
+        place();
+      }, () => { if (closed) return; box.remove(); set('latex'); plain(); }); // offline before it was cached
+    }
+    return { place, close };
+  }
+
   // ---------- setting (left sidebar, above the LaTeX engine) ----------
   const listeners = [];
   function set(m) {
@@ -213,7 +265,7 @@
   if (mode === 'mathlive') window.addEventListener('load', () => setTimeout(() => load().catch(() => {}), 300));
 
   TD.input = {
-    MODES, set, load, mount, toMath, fromMath,
+    MODES, set, load, mount, popup, toMath, fromMath,
     get mode() { return mode; },
     onChange(fn) { listeners.push(fn); },
   };
