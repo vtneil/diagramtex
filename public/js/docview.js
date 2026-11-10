@@ -250,7 +250,7 @@
       const wide = diagramWidthCm(b.shapes) > P.textW + 0.01;
       if (wide) needGraphicx = true;
       body.push('\\begin{center}', ...(wide ? ['\\resizebox{\\linewidth}{!}{%'] : []),
-        '\\begin{tikzpicture}[x=1cm, y=1cm]', `  % texdiagram-data: ${data}`, ...lines.map((l) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}',
+        '\\begin{tikzpicture}[x=1cm, y=1cm]', `  % diagramtex-data: ${data}`, ...lines.map((l) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}',
         ...(wide ? ['}'] : []), '\\end{center}', '');
     });
     const pre = TD.preamble(X);

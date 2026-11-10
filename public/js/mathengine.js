@@ -3,7 +3,7 @@
 // Everything that draws maths calls TD.math.render(); the choice is a per-browser preference.
 (function () {
   const TD = (window.TD = window.TD || {});
-  const KEY = 'texdiagram.engine';
+  const KEY = 'diagramtex.engine';
   const ENGINES = {
     katex: { name: 'KaTeX', note: 'Same look in every browser' },
     temml: { name: 'Temml', note: 'MathML: more LaTeX, closer to TeX output' },

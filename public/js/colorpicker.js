@@ -2,7 +2,7 @@
 // optional "No Color", and editable preset swatches (saved in localStorage).
 (function () {
   const TD = (window.TD = window.TD || {});
-  const LS = 'texdiagram.presets';
+  const LS = 'diagramtex.presets';
   const DEFAULT_PRESETS = ['#c62828', '#e8a33d', '#f5e44c', '#7e5530', '#8fd14f', '#4a7a1e', '#b02ad6', '#8a2be2',
     '#5b8ede', '#7adfc5', '#c5e897', '#000000', '#4a4a4a', '#9e9e9e', '#808080', '#ffffff'];
   let presets;

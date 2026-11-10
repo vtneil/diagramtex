@@ -1,6 +1,13 @@
 /* DiagramTeX — drafting-table direction, tuned to Apple's HIG: 28px controls on a 4px grid, square corners,
    hairline rules, ink actions, red-pencil selection, light and dark appearances.
    Design notes: .interface-design/system.md */
+
+/* UI type: Inter Display, served with the app (fonts/, OFL: fonts/Inter-LICENSE.txt) so it looks the same on every platform */
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/InterDisplay-Regular.woff2') format('woff2'); }
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 500; font-display: swap; src: url('../fonts/InterDisplay-Medium.woff2') format('woff2'); }
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 600; font-display: swap; src: url('../fonts/InterDisplay-SemiBold.woff2') format('woff2'); }
+@font-face { font-family: 'Inter Display'; font-style: normal; font-weight: 700; font-display: swap; src: url('../fonts/InterDisplay-Bold.woff2') format('woff2'); }
+@font-face { font-family: 'Inter Display'; font-style: italic; font-weight: 400; font-display: swap; src: url('../fonts/InterDisplay-Italic.woff2') format('woff2'); }
 :root {
   /* surfaces: one warm hue, lightness steps only */
   --paper: #f4f2ec;          /* app base, canvas surround */
@@ -49,7 +56,7 @@
   --r-xl: 12px;              /* modals */
   --files-w: 200px;
   --props-w: 280px;
-  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: "Inter Display", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-tex: KaTeX_Main, "Latin Modern Roman", "Times New Roman", serif; /* drawing & page content only, never UI chrome */
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
@@ -285,7 +292,7 @@ body.no-files #files { display: none; }
 #emptyHint kbd { color: var(--ink); }
 
 /* drawing content */
-#content .hit { stroke: transparent; fill: none; pointer-events: stroke; }
+#content .hit { stroke: transparent; fill: none; pointer-events: stroke; stroke-width: var(--hitw, 14px); } /* 14 screen px at any zoom (set in applyView) */
 #content .hitfill { fill: transparent; stroke: none; pointer-events: all; }
 #content path:not(.hit):not(.hitfill), #content circle:not(.hitfill), #content ellipse, #content rect:not(.hitfill), #content foreignObject { pointer-events: none; }
 #content [data-id] { cursor: move; }
@@ -720,6 +727,18 @@ body.mode-page #gridRect { opacity: .55; }
 #emptyHint .eh-page, body.mode-page #emptyHint .eh-diagram { display: none; }
 body.mode-page #emptyHint .eh-page { display: block; }
 
+/* Whiteboard: an endless canvas. No rulers, no origin axes, a dot grid instead of lines, a hand tool. */
+.board-only { display: none !important; }
+body.mode-board #tools .board-only { display: inline-flex !important; }
+body.mode-board .seg.sub, body.mode-board .ruler, body.mode-board #rulerCorner, body.mode-board #origin { display: none; }
+body.mode-board #gridRect { fill: url(#gridDots); }
+.grid-dot { fill: var(--faint); }
+body.mode-board #hint { top: 12px; }
+#emptyHint .eh-board, body.mode-board #emptyHint .eh-diagram { display: none; }
+body.mode-board #emptyHint .eh-board { display: block; }
+#canvas.tool-hand, #canvas.tool-hand * { cursor: grab !important; }
+#canvas.tool-hand.panning, #canvas.tool-hand.panning * { cursor: grabbing !important; }
+
 /* Page file: page navigator (status bar) and page list (right panel) */
 #status .pagenav[hidden] { display: none; }
 #status .pagenav { border-left: 1px solid var(--rule-soft); }
@@ -957,3 +976,21 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .td-tip-sub { margin-top: 1px; font-weight: 400; opacity: .72; }
 .td-tip kbd { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; opacity: .62; font: 12px var(--font-ui); letter-spacing: .04em; }
 @media (prefers-reduced-motion: reduce) { .td-tip { transition: none; } }
+
+/* ---------- phone wall ----------
+   A phone held upright (narrow and portrait) gets a full-screen notice instead of the editor. Tablets, and
+   wide or landscape screens (iPad, iPhone Duo opened flat), are left alone. It has no close control. */
+#phoneWall { display: none; }
+@media (max-width: 599px) and (orientation: portrait) {
+  #phoneWall {
+    display: flex; position: fixed; inset: 0; z-index: 2147483647; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 32px 24px calc(32px + env(safe-area-inset-bottom)); background: var(--paper); color: var(--ink); text-align: center;
+    font-family: var(--font-ui); overflow: auto;
+  }
+  #phoneWall img { width: 72px; height: 72px; margin-bottom: 8px; }
+  #phoneWall h1 { margin: 0; font-size: 22px; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; max-width: 320px; text-wrap: balance; }
+  #phoneWall p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--graphite); max-width: 320px; text-wrap: pretty; }
+  #phoneWall strong { color: var(--ink); font-weight: 600; word-break: break-word; }
+  #phoneWall .pw-note { font-size: 13px; color: var(--pencil); }
+  body > :not(#phoneWall) { visibility: hidden !important; } /* nothing behind it is reachable, by pointer or screen reader */
+}

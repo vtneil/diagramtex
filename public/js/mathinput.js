@@ -10,7 +10,7 @@
 (function () {
   'use strict';
   const TD = (window.TD = window.TD || {});
-  const KEY = 'texdiagram.input';
+  const KEY = 'diagramtex.input';
   const MODES = {
     latex: { name: 'LaTeX', note: 'Type text and $maths$ as LaTeX source.' },
     mathlive: { name: 'MathLive', note: 'Edit maths visually. $ switches between text and maths.' },

@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://diagramtex.vt.in.th/"><img src="design/logo/final/lockup-horizontal.svg" alt="DiagramTeX logo" height="64"></a>
+  <a href="https://diagramtex.igniting.space/"><img src="design/logo/final/lockup-horizontal.svg" alt="DiagramTeX logo" height="64"></a>
 </p>
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
@@ -8,7 +8,7 @@
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
-**[Open DiagramTeX: diagramtex.vt.in.th](https://diagramtex.vt.in.th/)**
+**[Open DiagramTeX: diagramtex.igniting.space](https://diagramtex.igniting.space/)**
 
 ## Why DiagramTeX
 
@@ -32,7 +32,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 
 ## Quick start
 
-1. Open **[diagramtex.vt.in.th](https://diagramtex.vt.in.th/)**.
+1. Open **[diagramtex.igniting.space](https://diagramtex.igniting.space/)**.
 2. Pick a tool from the left rail and draw. Type `$…$` in a label for maths.
 3. Press **Ctrl/⌘+E** to open the TikZ code and copy it, or **Ctrl/⌘+Shift+E** to download the whole document as `.tex`.
 4. Paste the code into your LaTeX document and compile.
@@ -127,11 +127,12 @@ npx wrangler deploy
 - The canvas draws an approximation of quantikz's layout: gates, controls and targets, swaps, meters, wire labels (`\lstick`, `\rstick`), slices, gate groups, bundles and classical wires.
 - Maths inside gate arguments and `$…$` in labels is highlighted green, and typing `\` suggests quantikz commands as well as LaTeX ones.
 
-### Two kinds of file
-- The top bar's main switch is **Page | Classic**.
+### Three kinds of file
+- The top bar's main switch is **Page | Classic | Whiteboard**.
 - **Page** files: one free-form sheet, described below.
+- **Whiteboard** files: one endless canvas with no page and no edges. Draw anywhere; scroll (two fingers on a trackpad) to move around, pinch or Ctrl/⌘+scroll to zoom from 3% to 800%, and use the **Hand** tool (`H`) or Space-drag to grab the board. A dot grid replaces the lines and rulers and stays evenly spaced at any zoom. **Fit** brings everything into view. Export, TikZ code and import work as for a Classic diagram, sized to what you drew; files save as `.board.json`.
 - **Classic** files: diagrams, plus a document view that arranges them with text, as in Mathcha. While Classic is selected, a second switch, **Diagram | Document**, appears beside it.
-- Choosing Page or Classic opens the last file of that kind, or starts a new one. The sidebar lists only files of the current kind, and **New** makes a file of that kind.
+- Choosing Page, Classic or Whiteboard opens the last file of that kind, or starts a new one. The sidebar lists only files of the current kind, and **New** makes a file of that kind.
 - **Save** (Ctrl+Shift+S) downloads a `.json` file that records its kind (`"kind": "page"` or `"classic"`; Page files are named `*.page.json`). **Open** (Ctrl+O) loads it back into the right mode. Older `.json` files open as Classic.
 - Older browser-stored files that held both kinds of content are split into two files the first time the app loads.
 
@@ -164,7 +165,7 @@ npx wrangler deploy
   - **PDF**: one page per Page-mode sheet (true paper size), or the diagram's size in Classic. The pages are pictures at the chosen DPI; for a vector PDF, use Print → Save as PDF, or compile the LaTeX.
   - The menu shows the output size in px and cm, and remembers your choices.
 - **Export TikZ** (Ctrl/⌘+E): a `tikzpicture` snippet or a `standalone` document, for everything or only the selection. The header comment lists the needed packages and libraries (`pgfplots`, `arrows.meta`, …).
-- **Export LaTeX:** writes the whole document as an `article` with `geometry` page settings, and each diagram in a `tikzpicture`. Each picture carries a `% texdiagram-data:` comment, so files this app exports re-import exactly, plots included.
+- **Export LaTeX:** writes the whole document as an `article` with `geometry` page settings, and each diagram in a `tikzpicture`. Each picture carries a `% diagramtex-data:` comment, so files this app exports re-import exactly, plots included.
 - **Import LaTeX/TikZ:** paste code or open a `.tex` file.
   - Transforms: `rotate`, `rotate around`, `shift`, `xshift`, `yshift` on paths, nodes and (nested) scopes; `transform shape` decides whether text in a rotated scope turns too. `even odd rule` paths with several parts become a Region with holes.
   - Supported: `\draw`, `\fill`, `\filldraw`, `\node`, `\coordinate`.
@@ -193,7 +194,13 @@ DiagramTeX is privacy-focused by design:
 Yes. It is free and open source, with no paid tier, account or login.
 
 **Does it work offline?**
-Yes. It is a progressive web app: after the first visit it works without a connection, and you can install it like a desktop or mobile app.
+Yes. It is a progressive web app: after the first visit it works without a connection, and you can install it like a desktop app.
+
+**Does it work on phones and tablets?**
+Tablets, yes, including a phone opened flat or turned sideways. A phone held upright shows a notice asking you to continue on a bigger screen: the editor needs the room.
+
+**How large can a drawing get?**
+Tens of thousands of objects. Only what is near the view is drawn, so panning, zooming and editing stay smooth at 20,000 objects; showing all of them at once when zoomed right out is slower. Very large files can outgrow browser storage, and autosave says so when it happens: use **Save** to keep them as files.
 
 **Where are my diagrams stored?**
 In your browser's local storage. Nothing is sent to a server. Use **Save** to keep a `.json` copy as a file.
@@ -233,6 +240,7 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/app.js`: editor state, interaction, history, properties panel, storage, menu, export
 - `public/js/docview.js`: document view and whole-document LaTeX export
 - `public/css/style.css`, `public/index.html`: UI
+- `public/fonts/`: Inter Display, the UI typeface (SIL Open Font License, `Inter-LICENSE.txt`)
 - `public/sw.js`, `public/manifest.webmanifest`: offline cache and install manifest
 - `design/logo/`: logo kit and usage guide
 - `wrangler.toml`: Cloudflare Workers deployment (serves `public/`)
@@ -251,5 +259,5 @@ Bug reports and ideas are welcome in the [issue tracker](https://gitlab.com/igni
 
 DiagramTeX is released under the [MIT License](LICENSE). © 2026 Vivatsathorn Thitasirivit.
 
-It bundles KaTeX (MIT), Temml (MIT), MathLive (MIT) and the Latin Modern Math font (GUST Font License); see their licence files in `public/vendor/`.
+It bundles KaTeX (MIT), Temml (MIT), MathLive (MIT), the Latin Modern Math font (GUST Font License) and Inter Display (SIL Open Font License); see their licence files in `public/vendor/` and `public/fonts/`.
 

@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.7.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.8.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -499,7 +499,8 @@
     else if (st.align && st.align !== 'center') ts.css += `text-align:${st.align};`; // lines of a multi-line label
     const key = ts.css + '|' + text;
     let box = sizeCache.get(key);
-    if (!box) {
+    if (!box && batch) { batch.set(key, { css: ts.css, text }); box = { w: 10, h: 10 }; } // measured with the rest, then drawn again
+    else if (!box) {
       const m = document.getElementById('measure');
       m.setAttribute('style', ts.css);
       m.innerHTML = textHtml(text);
@@ -509,6 +510,31 @@
     return { ...box, px, css: ts.css, html: textHtml(text) };
   }
   TD.textBox = textBox;
+
+  // Measuring a text forces the page's layout, and with thousands of labels on the canvas each one costs
+  // milliseconds. measureBatch(fn) runs fn noting every text it has no size for, measures them all in one
+  // layout pass, then runs fn again with the real sizes.
+  let batch = null;
+  TD.measuring = () => !!batch; // true while sizes may still be placeholders
+  TD.measureBatch = (fn) => {
+    if (batch) return fn();
+    batch = new Map();
+    let r, miss;
+    try { r = fn(); } finally { miss = batch; batch = null; }
+    if (!miss.size) return r;
+    const m = document.getElementById('measure'), host = m.parentNode, frag = document.createDocumentFragment(), els = [];
+    for (const [key, it] of miss) {
+      const d = document.createElement('div');
+      d.className = m.className;
+      d.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;' + it.css;
+      d.innerHTML = textHtml(it.text);
+      frag.appendChild(d); els.push([key, d]);
+    }
+    host.appendChild(frag);
+    for (const [key, d] of els) sizeCache.set(key, { w: Math.ceil(d.offsetWidth) + 2, h: Math.ceil(d.offsetHeight) });
+    for (const [, d] of els) d.remove();
+    return fn();
+  };
 
   function textSvg(text, st, color, cx, cy, ctx, extra = '') {
     const b = textBox(text, st);
@@ -1002,7 +1028,7 @@
     samples: (s) => [{ x: s.cx - s.r, y: s.cy - s.r }, { x: s.cx + s.r, y: s.cy + s.r }],
     svg(s, ctx) {
       return wrap(s, `<circle cx="${r2(s.cx)}" cy="${r2(s.cy)}" r="${r2(s.r)}" fill="${css(s.color)}"/>`) +
-        (ctx.export ? '' : `<circle class="hitfill" cx="${r2(s.cx)}" cy="${r2(s.cy)}" r="${r2(Math.max(s.r, ctx.hit / 2))}"/>`);
+        (ctx.export ? '' : `<circle class="hitfill" cx="${r2(s.cx)}" cy="${r2(s.cy)}" r="${r2(s.r)}"/><circle class="hit" cx="${r2(s.cx)}" cy="${r2(s.cy)}" r="${r2(s.r)}"/>`);
     },
     tikz(s, X) {
       const o = X.col(s.color) !== 'black' ? [X.col(s.color)] : [];

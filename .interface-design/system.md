@@ -37,7 +37,7 @@
 **Colour restraint:** apart from user content and the logo, the only colour in the interface comes from the two pens. Active tools and menu highlights use ink, not an accent hue. Segmented controls are a recessed track with a raised selected segment; every track uses 3px padding and a 3px gap between segments (2px felt cramped, 4px looked worse).
 
 ## Appearance
-- Appearance is System / Light / Dark (a deliberate override of HIG dark-mode.md), an icon-only segmented control (monitor, sun, crescent moon) at the right end of the top bar. At ≤1100px only the current icon shows and clicking it cycles System → Light → Dark. The choice is stored in localStorage `texdiagram.theme`; an inline head script resolves it to `data-theme` on `<html>` before the CSS loads, and System follows `prefers-color-scheme`. Dark redefines the same tokens on `:root[data-theme=dark]`.
+- Appearance is System / Light / Dark (a deliberate override of HIG dark-mode.md), an icon-only segmented control (monitor, sun, crescent moon) at the right end of the top bar. At ≤1100px only the current icon shows and clicking it cycles System → Light → Dark. The choice is stored in localStorage `diagramtex.theme`; an inline head script resolves it to `data-theme` on `<html>` before the CSS loads, and System follows `prefers-color-scheme`. Dark redefines the same tokens on `:root[data-theme=dark]`.
 - The drawing sheet, page sheets and the typeset document page stay light (`--canvas`, softened in dark) so user colours read correctly; `.doc-page` re-declares the light tokens for everything drawn on it.
 - `prefers-contrast: more` strengthens rules and promotes `--pencil` to `--graphite`.
 
@@ -49,7 +49,7 @@ Hairline rgba rules and rounded corners: `--r-sm` 4px, `--r` 6px (buttons, input
 
 ## Typography
 The UI uses only two families: sans and mono. The serif (`--font-tex`, KaTeX_Main) is kept for content: text on the canvas (`.tx`) and the typeset document page (`.doc-page`). Never use it for UI chrome.
-- **UI:** system-ui at 13px. Labels are 12px in graphite.
+- **UI:** Inter Display at 13px, served from `public/fonts/` (400, 500, 600, 700 and italic woff2; Regular and SemiBold preloaded; all precached by `sw.js`) so the chrome looks the same on every platform; system-ui is only the fallback while it loads. Labels are 12px in graphite.
 - **Section titles** (`.sec-title`, `.pop-title`, `.panel-head span`, `.sc`): 11px, weight 600, sentence case, in pencil.
 - **Type scale:** 10 (rulers, captions) · 11 · 12 · 13 (body) · 15 (titles). Nothing below 10px (HIG macOS minimum).
 - **Labels:** buttons, menu items and dialog titles use title-style capitalisation; checkbox labels and hints use sentence case. On macOS, shortcuts show as glyphs in the order ⌥⇧⌘.
@@ -83,6 +83,13 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - Content outside the paper is covered by a desk-coloured mask at 72%, so it reads as "off the page" without disappearing.
 - Page numbers sit outside the top-right corner in mono, in pencil.
 
+## Whiteboard mode (`kind: 'board'`, `body.mode-board`)
+- One diagram on an endless canvas, stored like a Classic file with a single block, so drawing, undo, TikZ, export and import are the Classic diagram's. No Diagram/Document switch, no block selector.
+- Quieter chrome for an infinite surface: no rulers or ruler corner, no origin axes, and a dot grid (`#gridDots`, `--faint` dots 1.2px on screen) in place of the line grid. Dots sit on major grid lines (≈1 cm) and double their spacing until they are at least 18px apart, so zooming out never turns the board grey. Snapping still follows the grid setting.
+- Zoom reaches down to 3% (other modes stop at 10%). Wheel / two-finger scroll pans, pinch or Ctrl+wheel zooms, as elsewhere.
+- A Hand tool (`H`, `.board-only`, grab / grabbing cursors) sits under Select in the tool rail; it shows only on whiteboards and falls back to Select when leaving.
+- The empty hint, sidebar title ("Whiteboards"), New tooltip, export heading and Export/TikZ button tips say "whiteboard".
+
 ## Fill picker
 - The colour picker gains Basic / Gradient / Pattern tabs only for fills. The active tab is ink text with a 2px ink underline (no accent colour).
 - Gradient stops are small pentagon markers under the bar; the selected one is red pencil.
@@ -110,6 +117,17 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - Icon (`public/icons/`): engineering-paper grid, a ball-shaded charge and an ink arrow. `icon.svg` is the rounded tile (favicon and "any"); `icon-maskable.svg` is full-bleed with the art in the safe zone. PNGs are rendered from these at 32, 180, 192 and 512.
 - `theme-color` follows the appearance (#fffdf8 light, #242320 dark), so the installed window's title bar matches the top bar.
 
+## Phones (`#phoneWall`)
+- A narrow upright screen (`max-width: 599px` and portrait) gets a full-screen notice instead of the editor: the app icon, "DiagramTeX needs a bigger screen" (22px/600, balanced), a line pointing to a computer or tablet with the URL in ink, and a muted note that files stay in that browser. `--paper` ground, everything else hidden. It has no close control. Landscape phones, iPhone Duo opened flat and tablets are not affected.
+
+## Rendering at scale (`render()` in app.js)
+- A shape's markup does not depend on the view: hit outlines take their width from `--hitw` (14 screen px, set in `applyView`). Pan and zoom call `renderView()`, which only moves the view.
+- Markup is remembered per shape against its JSON (`drawn`); only shapes whose markup changed are put back into `#content` (`paintContent`). Lines that hop over others are always redrawn. Fill defs live in `#contentDefs`.
+- Over 400 shapes, only those within one view's width and height of the view are in the canvas (`paint`); leaving that margin, or zooming in 3×, paints again. Selection outlines off screen are skipped too.
+- Text sizes are measured in one layout pass per render (`TD.measureBatch`): measuring one at a time forced a layout of the whole canvas each time.
+- `byId` keeps an id index; snapping while dragging uses a grid of the other shapes' anchors. Undo keeps 300 steps or about 80 MB of copies, whichever is less (at least 10).
+- Browser storage keys and the file signature are `diagramtex` (`app: 'diagramtex'`, `% diagramtex-data:`). An inline script in `index.html` moves `texdiagram.*` keys to `diagramtex.*` once; the importer reads both comment names.
+
 ## Files sidebar
 - Right-click a file: Open (if not the open one), Rename…, Duplicate, Save As…; Copy, Paste; Download (.json); Export ▸ LaTeX, TikZ (Classic), HTML, Image, Print; Delete. Rename/Duplicate/Save As/Copy/Paste/Delete work on that file in place; Download/Export/Print open it first, since they act on the open file.
 - Rename… turns the row's name into a field in place (Enter or clicking away keeps it, Esc cancels); the file isn't opened, and the top-bar name follows when it is the open file. With the sidebar hidden it falls back to the top-bar name field.
@@ -130,7 +148,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - Copies keep links only to shapes copied with them. TikZ export uses plain coordinates.
 
 ## Text input modes (`js/mathinput.js`)
-- The sidebar's "Text input" control picks LaTeX (a plain textarea, maths as `$…$`) or MathLive (an interactive maths editor), stored in localStorage `texdiagram.input`. Both edit the same stored text; only the on-canvas editor changes. The props-panel textarea and Document-mode blocks stay LaTeX.
+- The sidebar's "Text input" control picks LaTeX (a plain textarea, maths as `$…$`) or MathLive (an interactive maths editor), stored in localStorage `diagramtex.input`. Both edit the same stored text; only the on-canvas editor changes. The props-panel textarea and Document-mode blocks stay LaTeX.
 - MathLive (vendor/mathlive, 0.111.1) loads on first use and reuses KaTeX's fonts. One `<math-field>` per line; prose is MathLive text mode, maths its maths mode, and `$` switches between them. A line converts as `Force $F = ma$ here ⇄ \text{Force }F = ma\text{ here}` and is rewritten only once edited. MathLive's spelled-out characters (`\textbraceleft` …) are stored as the usual escapes.
 - Keys: Enter done, Shift+Enter new line (paragraphs: Enter new line, ⌘/Ctrl+Enter done), Esc done, Backspace on an empty line removes it, ↑/↓ at a line edge moves between lines.
 
@@ -144,7 +162,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 - Panel actions (Bring to Front, Duplicate, Delete …) use a soft `--wash-strong` fill with no border, so they never read as white fields. Delete turns the red pen on hover.
 - A maths-only command in prose (`\alpha`, `\frac{a}{b}`, `\degree`) won't compile, so it stays as typed with a red-pen dotted underline and a hint ("Maths command: put it in $…$", plus the text spelling where one exists, such as `\textdegree`). Commands that are fine in text (`\hspace`, `\small`, `\ref` …) and unknown commands are not flagged. The underline is app-only: never printed or exported.
 - LaTeX source fields (canvas editor, Text / Label in the panel, Document text blocks) colour maths (`$…$`, `$$…$$`, `\[…\]`) in `--mathpen` green, as a LaTeX editor does; an unclosed `$` colours to the end of the line while typing. Done by a copy of the text laid over the focused field (`js/texhighlight.js`); the field keeps caret, selection and spell-check. In quantikz code the green follows what LaTeX sets as maths: cells are tikz-cd cells, so `\gate`, `\phase`, `\push`, `\meter`, `\meterD`, `\measure`, `\measuretab`, `\qwbundle` labels and bare cell text are green whole; `\lstick`, `\rstick`, `\midstick`, `\slice`, `\gategroup` labels are text, green only inside `$…$`; options, wire numbers and comments stay plain.
-- Copied shapes (Copy, Cut, Copy as TikZ) are also kept in local storage (`texdiagram.clip`), so Paste works in the app's other windows and tabs; the newest copy from any window wins. Paste lands centred in the visible canvas (moved by whole grid steps, so it stays on the grid); pasting again without moving the view steps each copy 2 grid squares down-right. Duplicate still offsets from the original.
+- Copied shapes (Copy, Cut, Copy as TikZ) are also kept in local storage (`diagramtex.clip`), so Paste works in the app's other windows and tabs; the newest copy from any window wins. Paste lands centred in the visible canvas (moved by whole grid steps, so it stays on the grid); pasting again without moving the view steps each copy 2 grid squares down-right. Duplicate still offsets from the original.
 - Command suggestions follow the caret: inside maths, every command; in prose, only commands that work in text (`TD.prose.textOk`: the prose commands and symbols, `\text…`, sizes, spacing, refs).
 - In quantikz code (the canvas code editor and the panel's code field) suggestions follow the circuit: at cell level the quantikz commands (Gate, Control, Measure, Wire, Label, Group), each previewed as a small drawing by the circuit renderer itself in the UI's ink (`TD.qcMini`; gate fills use `--qc-paper`, the row's own opaque colour, `--wash-strong-solid` when highlighted); inside a command's `{…}` every maths command; inside `[…]` none. `&` and `\\` reset the context, so a half-typed bracket doesn't leak into the next cell.
 

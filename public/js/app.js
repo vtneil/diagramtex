@@ -9,13 +9,15 @@
   const PX = TD.PX_PER_CM;
   const fx = (n) => (Math.abs(n) < 0.005 ? 0 : n).toFixed(2).replace('-', '−');
 
-  const isDrawTool = (t) => !['select', 'text', 'math', 'image'].includes(t);
+  const isDrawTool = (t) => !['select', 'hand', 'text', 'math', 'image'].includes(t);
   const toolType = (t) => ({ arrow: 'line', curvearrow: 'curve', blob: 'poly', pencil: 'poly', math: 'text' })[t] || t.split(':')[0];
-  const TOOL_KEYS = { v: 'select', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
+  const TOOL_KEYS = { v: 'select', h: 'hand', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
 
   // A document is a list of blocks (text paragraphs and diagrams). The canvas edits one diagram
   // block at a time; state.doc.shapes always points at that block's shapes.
-  // Two kinds of file: 'classic' (diagram blocks + document view) and 'page' (one free-form sheet).
+  // Three kinds of file: 'classic' (diagram blocks + document view), 'page' (one free-form sheet) and
+  // 'board' (a whiteboard: one diagram on an endless canvas, stored like a Classic file with one block).
+  const normKind = (k) => (k === 'page' || k === 'board' ? k : 'classic');
   function makeDoc(name, blocks, active, page, sheet, kind) {
     if (!blocks || !blocks.length) blocks = [{ type: 'diagram', shapes: [] }];
     if (!blocks.some((b) => b.type === 'diagram')) blocks.push({ type: 'diagram', shapes: [] });
@@ -24,7 +26,7 @@
     // Page mode: one free-form sheet (one or more pages stacked vertically) placed directly on paper.
     sheet = { pages: 1, shapes: [], ...(sheet || {}) };
     for (const sh of sheet.shapes) if (!sh.id) sh.id = uid();
-    const doc = { kind: kind === 'page' ? 'page' : 'classic', name: name || 'Untitled', blocks, active, page: { ...TD.PAGE_DEFAULT, ...(page || {}) }, sheet };
+    const doc = { kind: normKind(kind), name: name || 'Untitled', blocks, active, page: { ...TD.PAGE_DEFAULT, ...(page || {}) }, sheet };
     Object.defineProperty(doc, 'shapes', {
       get() { return doc.kind === 'page' ? doc.sheet.shapes : doc.blocks[doc.active].shapes; },
       set(v) { if (doc.kind === 'page') doc.sheet.shapes = v; else doc.blocks[doc.active].shapes = v; },
@@ -59,7 +61,18 @@
   function uid() { return Math.random().toString(36).slice(2, 10); }
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const shapes = () => state.doc.shapes;
-  const byId = (id) => state.doc.shapes.find((s) => s.id === id);
+  // shape by id: an index into the shape list, rebuilt when it no longer matches (loops over a large
+  // selection call this once per shape, so a scan each time would be quadratic)
+  let idList = null, idPos = new Map();
+  function byId(id) {
+    const L = state.doc.shapes;
+    let i = L === idList ? idPos.get(id) : undefined;
+    if (i !== undefined && L[i] && L[i].id === id) return L[i];
+    idList = L; idPos = new Map();
+    for (let k = 0; k < L.length; k++) idPos.set(L[k].id, k);
+    i = idPos.get(id);
+    return i === undefined ? undefined : L[i];
+  }
   const selected = () => state.doc.shapes.filter((s) => state.sel.has(s.id));
 
   // ---------------- history ----------------
@@ -73,12 +86,21 @@
     const now = snapshot();
     if (now !== pending) {
       state.undo.push(pending);
-      if (state.undo.length > 300) state.undo.shift();
+      trimUndo();
       state.redo = [];
       scheduleSave();
     }
     pending = null;
     updateTopbar();
+  }
+  // Each step is a whole copy of the drawing: keep 300 steps, or fewer when they would take more than
+  // ~80 MB (a 20,000-shape drawing is several MB a copy), but always the last 10.
+  const UNDO_CHARS = 40e6;
+  function trimUndo() {
+    if (state.undo.length > 300) state.undo.shift();
+    let total = 0;
+    for (const u of state.undo) total += u.length;
+    while (total > UNDO_CHARS && state.undo.length > 10) total -= state.undo.shift().length;
   }
   function restore(json) {
     const v = JSON.parse(json);
@@ -87,13 +109,13 @@
     render(); renderProps(); scheduleSave(); updateTopbar();
   }
   function undo() { finishEdit(); finishPoly(); commit(); if (!state.undo.length) return; state.redo.push(snapshot()); restore(state.undo.pop()); }
-  function redo() { finishEdit(); commit(); if (!state.redo.length) return; state.undo.push(snapshot()); restore(state.redo.pop()); }
+  function redo() { finishEdit(); commit(); if (!state.redo.length) return; state.undo.push(snapshot()); trimUndo(); restore(state.redo.pop()); }
 
   // ---------------- storage ----------------
-  const LS_INDEX = 'texdiagram.index', LS_DOC = 'texdiagram.doc.', LS_PREFS = 'texdiagram.prefs', LS_CLIP = 'texdiagram.clip';
+  const LS_INDEX = 'diagramtex.index', LS_DOC = 'diagramtex.doc.', LS_PREFS = 'diagramtex.prefs', LS_CLIP = 'diagramtex.clip';
   const store = {
     get(k, fb) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); store.full = false; return true; } catch (e) { store.full = !!e && (e.name === 'QuotaExceededError' || e.code === 22); return false; } },
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } },
   };
   const index = () => store.get(LS_INDEX, []);
@@ -116,9 +138,11 @@
     // A failure is the only news, shown there and once as a hint (the sidebar may be hidden).
     const st = $('#saveState'), was = st.classList.contains('err');
     st.classList.toggle('err', !ok);
-    const msg = ok ? 'Autosave enabled' : 'Autosave failed: browser storage unavailable';
+    const full = !ok && store.full;
+    const msg = ok ? 'Autosave enabled' : full ? 'Autosave failed: browser storage is full' : 'Autosave failed: browser storage unavailable';
     if (st.textContent !== msg) st.textContent = msg; // unchanged text is not re-announced
-    if (!ok && !was) showHint('Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.', 4000);
+    if (!ok && !was) showHint(full ? 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.'
+      : 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.', 6000);
     renderDocList();
   }
   function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files') }); }
@@ -129,15 +153,15 @@
     const d = store.get(LS_DOC + id, null);
     if (!d) return;
     state.docId = id;
-    const kind = d.kind === 'page' ? 'page' : 'classic';
+    const kind = normKind(d.kind);
     state.doc = makeDoc(d.name, d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }], d.active ?? 0, d.page, d.sheet, kind);
     const fit = !(d.view && d.view.zoom > 0);
     if (!fit) state.view = d.view;
     state.sel.clear(); state.undo = []; state.redo = [];
     $('#docName').value = state.doc.name;
-    store.set('texdiagram.last', id);
-    store.set('texdiagram.last.' + kind, id);
-    applyMode(kind === 'page' ? 'page' : (d.mode === 'document' ? 'document' : 'diagram'), fit);
+    store.set('diagramtex.last', id);
+    store.set('diagramtex.last.' + kind, id);
+    applyMode(kind === 'page' || kind === 'board' ? kind : (d.mode === 'document' ? 'document' : 'diagram'), fit);
     render(); renderProps(); renderDocList(); updateTopbar();
   }
   // Switch the canvas to another diagram block of the current document.
@@ -148,9 +172,10 @@
     state.sel.clear(); state.undo = []; state.redo = [];
     render(); renderProps(); updateTopbar(); scheduleSave();
   }
-  // Modes: 'page' (Page files) or 'diagram' / 'document' (the two views of a Classic file).
-  // Picking a mode of the other kind switches to the last file of that kind (or starts one).
-  const kindOf = (m) => (m === 'page' ? 'page' : 'classic');
+  // Modes: 'page' (Page files), 'board' (Whiteboard files) or 'diagram' / 'document' (the two views of a
+  // Classic file). Picking a mode of another kind switches to the last file of that kind (or starts one).
+  const kindOf = (m) => (m === 'page' || m === 'board' ? m : 'classic');
+  const NEW_NAME = { page: 'Untitled page', board: 'Untitled board', classic: 'Untitled' };
   function setMode(m, quiet) {
     finishEdit(); finishPoly(); commit();
     if (kindOf(m) !== state.doc.kind) { switchKind(kindOf(m), m); return; }
@@ -160,15 +185,17 @@
   }
   function switchKind(kind, m) {
     const idx = index().filter((x) => (x.kind || 'classic') === kind);
-    const last = store.get('texdiagram.last.' + kind, null);
+    const last = store.get('diagramtex.last.' + kind, null);
     const id = idx.find((x) => x.id === last) ? last : idx.length ? idx[idx.length - 1].id : null;
-    if (id) openDoc(id); else newDoc(kind === 'page' ? 'Untitled page' : 'Untitled', null, null, null, null, kind);
+    if (id) openDoc(id); else newDoc(NEW_NAME[kind], null, null, null, null, kind);
     if (kind === 'classic' && m && m !== state.mode) { applyMode(m, false); scheduleSave(); }
   }
   function applyMode(m, fit) {
     state.mode = m;
     document.body.classList.toggle('mode-doc', m === 'document');
     document.body.classList.toggle('mode-page', m === 'page');
+    document.body.classList.toggle('mode-board', m === 'board');
+    if (m !== 'board' && state.tool === 'hand') setTool('select'); // the hand tool is a whiteboard's
     document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
     document.querySelectorAll('[data-kind]').forEach((b) => b.classList.toggle('on', b.dataset.kind === kindOf(m)));
     if (m === 'document') { if (TD.docview) TD.docview.render(); }
@@ -178,11 +205,13 @@
   }
   function newDoc(name, shapesArr, view, blocks, page, kind, sheet) {
     const id = uid();
-    kind = kind === 'page' ? 'page' : 'classic';
-    name = name || (kind === 'page' ? 'Untitled page' : 'Untitled');
+    kind = normKind(kind);
+    name = name || NEW_NAME[kind];
+    // a whiteboard holds one diagram: imported blocks are merged onto it
+    if (kind === 'board' && blocks) { shapesArr = blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes || []); blocks = null; }
     store.set(LS_DOC + id, kind === 'page'
       ? { kind, name, page, sheet: sheet || { pages: 1, shapes: [] }, view, mode: 'page' }
-      : { kind, name, blocks: blocks || [{ type: 'diagram', shapes: shapesArr || [] }], active: 0, page, view: view || { x: -60, y: -60, zoom: 1 }, mode: 'diagram' });
+      : { kind, name, blocks: blocks || [{ type: 'diagram', shapes: shapesArr || [] }], active: 0, page, view: view || { x: -60, y: -60, zoom: 1 }, mode: kind === 'board' ? 'board' : 'diagram' });
     const idx = index(); idx.push({ id, name, kind, updated: Date.now() }); store.set(LS_INDEX, idx);
     openDoc(id);
     return id;
@@ -204,10 +233,11 @@
   // The sidebar lists only files of the current kind.
   function renderDocList() {
     const ul = $('#docList'), kind = state.doc.kind;
-    $('#filesTitle').textContent = kind === 'page' ? 'Pages' : 'Classic documents';
-    $('#btnNewDoc').title = kind === 'page' ? 'New page' : 'New classic document';
+    $('#filesTitle').textContent = { page: 'Pages', board: 'Whiteboards', classic: 'Classic documents' }[kind];
+    $('#btnNewDoc').title = { page: 'New page', board: 'New whiteboard', classic: 'New classic document' }[kind];
     ul.innerHTML = index().filter((d) => (d.kind || 'classic') === kind).map((d) => `<li data-doc="${d.id}" class="${d.id === state.docId ? 'active' : ''}">
       ${kind === 'page' ? '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5h9v13h-9z" fill="none" stroke="currentColor"/><path d="M6 5h4M6 7.5h2.5" fill="none" stroke="currentColor"/></svg>'
+        : kind === 'board' ? '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor"/><path d="M4 9.5c1.5-3 3-3 4 0s2.5 3 4 0" fill="none" stroke="currentColor"/></svg>'
         : '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 1.5h5l3 3v10H4z" fill="none" stroke="currentColor"/></svg>'}
       <span class="nm">${esc(d.name)}</span><button class="del" data-del="${d.id}" title="Delete">×</button></li>`).join('');
   }
@@ -223,17 +253,28 @@
     const r = stageSize(), v = state.view;
     const w = r.w / v.zoom, h = r.h / v.zoom;
     svg.setAttribute('viewBox', `${v.x} ${v.y} ${w} ${h}`);
+    svg.style.setProperty('--hitw', 14 / v.zoom + 'px');
     for (const id of ['#paper', '#gridRect']) {
       const el = $(id);
       el.setAttribute('x', v.x); el.setAttribute('y', v.y); el.setAttribute('width', w); el.setAttribute('height', h);
     }
     $('#origin').setAttribute('d', `M${v.x},0H${v.x + w}M0,${v.y}V${v.y + h}`);
+    if (state.mode === 'board') dotGrid();
     { const zv = $('#zoomVal'); if (document.activeElement !== zv) zv.value = Math.round(v.zoom * 100) + '%'; }
     updatePageNav();
     drawRulers();
     if (editing) positionEditor();
   }
 
+  // Whiteboard grid: a dot at every major grid line, kept 1.2px on screen; when zoomed out the dots
+  // thin out (every 2nd, 4th… line) so they never turn into a grey wash. Snapping is unaffected.
+  function dotGrid() {
+    const z = state.view.zoom, pat = $('#gridDots');
+    let step = TD.GRID * Math.max(1, Math.round(PX / TD.GRID)); // ≈ 1 cm, a whole number of grid steps
+    while (step * z < 18) step *= 2;
+    for (const [k, v] of [['width', step], ['height', step], ['x', -step / 2], ['y', -step / 2]]) pat.setAttribute(k, v);
+    const c = pat.querySelector('circle'); c.setAttribute('cx', step / 2); c.setAttribute('cy', step / 2); c.setAttribute('r', 1.2 / z);
+  }
   let navPage = -1;
   function updatePageNav() {
     const nav = $('#pageNav');
@@ -259,7 +300,7 @@
   function fmtCm(c) { return String(+c.toFixed(2)).replace('-', '−'); }
   function drawRulers() {
     const rx = $('#rulerX svg'), ry = $('#rulerY svg');
-    if (!rx || state.mode === 'document') return;
+    if (!rx || state.mode === 'document' || state.mode === 'board') return;
     const pageY = state.mode === 'page'; // page mode: y measured downwards from the top of the sheet
     const v = state.view, z = v.zoom, ppc = PX * z, r = stageSize();
     if (r.w <= RULER || r.h <= RULER + 24 || !(z > 0)) return;
@@ -338,10 +379,10 @@
   }
   function zoomAt(factor, sx, sy) {
     const v = state.view;
-    const nz = Math.min(8, Math.max(0.1, v.zoom * factor));
+    const nz = Math.min(8, Math.max(state.mode === 'board' ? 0.03 : 0.1, v.zoom * factor));
     const wx = sx / v.zoom + v.x, wy = sy / v.zoom + v.y;
     v.zoom = nz; v.x = wx - sx / nz; v.y = wy - sy / nz;
-    render();
+    renderView();
   }
   function zoomFit() {
     const r = stageSize();
@@ -580,19 +621,92 @@
   function render() {
     syncLinks();
     applyView();
-    const ctx = { zoom: state.view.zoom, hit: 14 / state.view.zoom, scene: shapes() };
-    TD.takeFillDefs();
-    const body = shapes().map((s) => `<g data-id="${s.id}">${TYPES[s.type].svg(s, ctx)}</g>`).join('');
-    content.innerHTML = TD.takeFillDefs() + body;
+    // The drawing does not depend on the view (hit outlines take their width from --hitw), so a shape's
+    // markup only changes when the shape does, and only changed shapes are put back into the canvas.
+    paint();
     renderPageLayer();
     $('#emptyHint').hidden = shapes().length > 0 || state.tool !== 'select';
+    renderOverlay();
+  }
+  // A shape's markup, remembered against its data: unchanged shapes are not drawn again. Lines that hop
+  // over others depend on the rest of the scene, and markup made with placeholder text sizes is not kept.
+  const drawn = new Map(); // shape id → { key, html, defs }
+  { const clear = TD.clearTextCache; TD.clearTextCache = () => { drawn.clear(); clear(); }; }
+  function shapeSvg(s, ctx, defs) {
+    const key = JSON.stringify(s), m = drawn.get(s.id);
+    if (m && m.key === key) { if (m.defs) defs.add(m.defs); return m.html; }
+    TD.takeFillDefs();
+    const html = `${TYPES[s.type].svg(s, ctx)}`, d = TD.takeFillDefs();
+    if (d) defs.add(d);
+    if (!TD.measuring() && (s.cross ?? TD.LINE_EXTRA.cross) !== 'hop') drawn.set(s.id, { key, html, defs: d });
+    else drawn.delete(s.id);
+    return html;
+  }
+  const painted = new Map(); // shape id → { html, el } as last put in the canvas
+  let defsEl = null, defsHtml = '';
+  function paintContent(list, strs, defs) {
+    if (!defsEl) { defsEl = document.createElementNS('http://www.w3.org/2000/svg', 'g'); defsEl.id = 'contentDefs'; content.parentNode.insertBefore(defsEl, content); }
+    if (defs !== defsHtml) { defsEl.innerHTML = defs; defsHtml = defs; }
+    let cur = content.firstChild;
+    const seen = new Set();
+    for (let i = 0; i < list.length; i++) {
+      const id = list[i].id;
+      let m = painted.get(id);
+      if (!m || seen.has(id)) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        el.setAttribute('data-id', id);
+        m = { html: null, el };
+        if (!seen.has(id)) painted.set(id, m);
+      }
+      seen.add(id);
+      if (m.html !== strs[i]) { m.el.innerHTML = strs[i]; m.html = strs[i]; }
+      if (m.el === cur) cur = cur.nextSibling;
+      else content.insertBefore(m.el, cur);
+    }
+    while (cur) { const n = cur.nextSibling; cur.remove(); cur = n; }
+    if (painted.size > seen.size) for (const id of [...painted.keys()]) if (!seen.has(id)) painted.delete(id);
+  }
+  // On a large drawing only the shapes in and around the view are in the canvas (the browser repaints every
+  // node it holds, on screen or not); a view that leaves that margin paints again.
+  const CULL = 400;
+  let paintedBox = null;
+  function paint() {
+    const all = shapes(), ctx = { zoom: 1, hit: 14, scene: all };
+    let list, defs, box = null;
+    if (all.length > CULL) {
+      const r = stageSize(), v = state.view, w = r.w / v.zoom, h = r.h / v.zoom;
+      box = { x1: v.x - w, y1: v.y - h, x2: v.x + 2 * w, y2: v.y + 2 * h, z: v.zoom };
+    }
+    const strs = TD.measureBatch(() => {
+      defs = new Set();
+      list = box ? all.filter((s) => { const b = TD.bbox(s); return b.x <= box.x2 && b.x + b.w >= box.x1 && b.y <= box.y2 && b.y + b.h >= box.y1; }) : all;
+      return list.map((s) => shapeSvg(s, ctx, defs));
+    });
+    paintContent(list, strs, [...defs].join(''));
+    paintedBox = box;
+    if (drawn.size > all.length + 200) { const ids = new Set(all.map((s) => s.id)); for (const id of [...drawn.keys()]) if (!ids.has(id)) drawn.delete(id); }
+  }
+  // the view still lies inside what was painted
+  function viewPainted() {
+    const b = paintedBox;
+    if (!b) return shapes().length <= CULL;
+    const r = stageSize(), v = state.view;
+    return v.x >= b.x1 && v.y >= b.y1 && v.x + r.w / v.zoom <= b.x2 && v.y + r.h / v.zoom <= b.y2 && v.zoom <= b.z * 3; // zoomed far in: paint fewer
+  }
+  // Only the view moved (pan, zoom): the drawing stays as it is.
+  function renderView() {
+    applyView();
+    if (!viewPainted()) paint();
+    renderPageLayer();
     renderOverlay();
   }
   function renderOverlay() {
     const z = state.view.zoom, out = [];
     const sel = selected();
+    const pb = paintedBox;
     for (const s of sel) {
       const b = TD.bbox(s);
+      if (pb && (b.x > pb.x2 || b.x + b.w < pb.x1 || b.y > pb.y2 || b.y + b.h < pb.y1)) continue; // off screen
       if (sel.length > 1 || ['text', 'ball', 'dot', 'poly', 'spring'].includes(s.type) || s.label)
         out.push(`<rect class="sel-box" x="${b.x - 3 / z}" y="${b.y - 3 / z}" width="${b.w + 6 / z}" height="${b.h + 6 / z}"/>`);
     }
@@ -651,6 +765,7 @@
     document.querySelectorAll('#tools button[data-fly]').forEach((b) => b.classList.toggle('active', flyOf(t) === b.dataset.fly));
     svg.classList.toggle('tool-draw', isDrawTool(t));
     svg.classList.toggle('tool-text', t === 'text' || t === 'math');
+    svg.classList.toggle('tool-hand', t === 'hand');
     $('#emptyHint').hidden = shapes().length > 0 || t !== 'select';
     snapHint = null;
     const sym = t.startsWith('sym:') && TD.SYMS[t.slice(4)];
@@ -888,7 +1003,7 @@
   svg.addEventListener('pointerdown', (e) => {
     if (editing) finishEdit();
     const p = toWorld(e);
-    if (e.button === 1 || (e.button === 0 && spaceDown)) {
+    if (e.button === 1 || (e.button === 0 && (spaceDown || state.tool === 'hand'))) {
       e.preventDefault();
       drag = { mode: 'pan', sx: e.clientX, sy: e.clientY, v: { ...state.view } };
       svg.classList.add('panning');
@@ -1045,7 +1160,7 @@
       case 'pan': {
         state.view.x = drag.v.x - (e.clientX - drag.sx) / state.view.zoom;
         state.view.y = drag.v.y - (e.clientY - drag.sy) / state.view.zoom;
-        render();
+        renderView();
         break;
       }
       case 'move': {
@@ -1055,11 +1170,21 @@
           // try snapping any selected anchor to another shape's anchor, else snap reference to grid
           const thr = 8 / state.view.zoom;
           let best = null, bd = thr;
-          const others = shapes().filter((s) => !state.sel.has(s.id)).flatMap((s) => TYPES[s.type].anchors(s));
-          for (const o of drag.orig.values()) {
-            for (const a of TYPES[o.type].anchors(o)) {
-              const m = { x: a.x + dx, y: a.y + dy };
-              for (const t of others) { const d = dist(m, t); if (d < bd) { bd = d; best = { dx: t.x - a.x, dy: t.y - a.y, pt: t }; } }
+          // other shapes' anchors in a grid of thr-sized cells, made once per drag (and again after a zoom)
+          if (!drag.snapIdx || drag.snapIdx.thr !== thr) {
+            const cells = new Map();
+            for (const sh of shapes()) if (!state.sel.has(sh.id)) for (const t of TYPES[sh.type].anchors(sh)) {
+              const k = Math.floor(t.x / thr) + ',' + Math.floor(t.y / thr);
+              (cells.get(k) || cells.set(k, []).get(k)).push(t);
+            }
+            drag.snapIdx = { thr, cells, mine: [...drag.orig.values()].flatMap((o) => TYPES[o.type].anchors(o)) };
+          }
+          const { cells, mine } = drag.snapIdx;
+          for (const a of mine) {
+            const m = { x: a.x + dx, y: a.y + dy }, cx = Math.floor(m.x / thr), cy = Math.floor(m.y / thr);
+            for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+              const near = cells.get((cx + i) + ',' + (cy + j));
+              if (near) for (const t of near) { const d = dist(m, t); if (d < bd) { bd = d; best = { dx: t.x - a.x, dy: t.y - a.y, pt: t }; } }
             }
           }
           if (best) { dx = best.dx; dy = best.dy; snapHint = { ...best.pt, anchor: true }; }
@@ -1249,7 +1374,7 @@
     e.preventDefault();
     const r = stageSize();
     if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
-    else { state.view.x += e.deltaX / state.view.zoom; state.view.y += e.deltaY / state.view.zoom; render(); }
+    else { state.view.x += e.deltaX / state.view.zoom; state.view.y += e.deltaY / state.view.zoom; renderView(); }
   }, { passive: false });
 
   window.addEventListener('resize', render);
@@ -1611,7 +1736,7 @@
         PROPS.filter((p) => keys.includes(p.key)).map((p) => fieldHtml(p, d[p.key])).join('') + `</div>` +
         `<div class="sec"><div class="sec-title">Shortcuts</div><table class="keys">${[
           ['V L A C P', 'select · line · arrow · curve · polyline'], ['O S R E', 'arc · spring · rect · ellipse'], ['B D T', 'ball · dot · text'],
-          ['Shift', 'constrain angle / square'], ['Alt', 'drag without snapping'], ['Space+drag', 'pan (or middle mouse)'], ['Ctrl+wheel', 'zoom'],
+          ['Shift', 'constrain angle / square'], ['Alt', 'drag without snapping'], ...(state.mode === 'board' ? [['H', 'hand: drag the board'], ['wheel', 'move around']] : []), ['Space+drag', 'pan (or middle mouse)'], ['Ctrl+wheel', 'zoom'],
           ['Ctrl+G', 'group (Shift: ungroup)'], ['Ctrl+R', 'rotate 90°'], ['Ctrl+] / [', 'forward / backward'], ['Ctrl+D', 'duplicate'],
           ['Ctrl+E', 'TikZ code'], ['Ctrl+O', 'open file'], ['Right-click', 'object menu'],
         ].map(([k, d]) => `<tr><td>${k.split(' ').map((x) => `<kbd>${kb(x)}</kbd>`).join('')}</td><td>${d}</td></tr>`).join('')}</table></div>`;
@@ -2222,12 +2347,12 @@
     const d = docData(id);
     if (!d) return null;
     const isPage = d.kind === 'page';
-    return JSON.stringify({ app: 'texdiagram', version: 3, kind: isPage ? 'page' : 'classic', name: d.name, page: d.page,
+    return JSON.stringify({ app: 'diagramtex', version: 3, kind: normKind(d.kind), name: d.name, page: d.page,
       ...(isPage ? { sheet: d.sheet } : { blocks: d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }] }) }, null, 1);
   }
   // store a copy of a file under a new name, listed right after `afterId`; returns the new id
   function storeCopy(d, name, afterId) {
-    const id = uid(), kind = d.kind === 'page' ? 'page' : 'classic';
+    const id = uid(), kind = normKind(d.kind);
     store.set(LS_DOC + id, { ...JSON.parse(JSON.stringify(d)), kind, name });
     const idx = index(), at = idx.findIndex((x) => x.id === afterId), it = { id, name, kind, updated: Date.now() };
     if (at >= 0) idx.splice(at + 1, 0, it); else idx.push(it);
@@ -2248,7 +2373,7 @@
     }
     const blocks = d.blocks || (Array.isArray(d.shapes) ? [{ type: 'diagram', shapes: d.shapes }] : null);
     if (!blocks || blocks.some((b) => b.type === 'diagram' && !validShapes(b.shapes))) throw new Error('not a DiagramTeX file');
-    newDoc(name, null, null, blocks, d.page);
+    newDoc(name, null, null, blocks, d.page, d.kind === 'board' ? 'board' : 'classic');
     zoomFit();
     return true;
   }
@@ -2481,7 +2606,7 @@
     if (e.key === 'ArrowUp') { e.preventDefault(); nudge(0, -step); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); nudge(0, step); return; }
     if (k === 'g') { toggleGrid(); return; }
-    if (TOOL_KEYS[k]) setTool(TOOL_KEYS[k]);
+    if (TOOL_KEYS[k] && (k !== 'h' || state.mode === 'board')) setTool(TOOL_KEYS[k]);
   });
   document.addEventListener('keyup', (e) => { if (e.key === ' ') { spaceDown = false; svg.classList.remove('pan-ready'); } });
   window.addEventListener('blur', () => { spaceDown = false; svg.classList.remove('pan-ready'); });
@@ -2521,8 +2646,9 @@
     const diagrams = state.doc.blocks.map((b, i) => [b, i]).filter(([b]) => b.type === 'diagram');
     const bs = $('#blockSel');
     bs.hidden = state.mode !== 'diagram' || diagrams.length < 2;
-    $('#btnExport').title = state.mode === 'page' ? 'Export the page as PNG (choose DPI), SVG or PDF' : 'Export this diagram as PNG (choose DPI), SVG or PDF';
-    $('#btnTikz').title = state.mode === 'page' ? 'LaTeX for this page (Ctrl+E)' : 'TikZ code for this diagram (Ctrl+E)';
+    const what = state.mode === 'board' ? 'this whiteboard' : 'this diagram';
+    $('#btnExport').title = state.mode === 'page' ? 'Export the page as PNG (choose DPI), SVG or PDF' : `Export ${what} as PNG (choose DPI), SVG or PDF`;
+    $('#btnTikz').title = state.mode === 'page' ? 'LaTeX for this page (Ctrl+E)' : `TikZ code for ${what} (Ctrl+E)`;
     bs.innerHTML = diagrams.map(([b, i], n) => `<option value="${i}"${i === state.doc.active ? ' selected' : ''}>Diagram ${n + 1} of ${diagrams.length}</option>`).join('');
     $('#btnUndo').disabled = !state.undo.length;
     $('#btnRedo').disabled = !state.redo.length;
@@ -2590,12 +2716,12 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
-  // Project file: { app, version: 3, kind: 'page' | 'classic', name, page, sheet | blocks }.
+  // Project file: { app, version: 3, kind: 'page' | 'classic' | 'board', name, page, sheet | blocks }.
   const saveFile = () => {
     finishEdit(); finishPoly(); commit();
     const d = state.doc, isPage = d.kind === 'page';
-    const out = { app: 'texdiagram', version: 3, kind: d.kind, name: d.name, page: d.page, ...(isPage ? { sheet: d.sheet } : { blocks: d.blocks }) };
-    download(slug() + (isPage ? '.page.json' : '.json'), JSON.stringify(out, null, 1), 'application/json');
+    const out = { app: 'diagramtex', version: 3, kind: d.kind, name: d.name, page: d.page, ...(isPage ? { sheet: d.sheet } : { blocks: d.blocks }) };
+    download(slug() + (isPage ? '.page.json' : d.kind === 'board' ? '.board.json' : '.json'), JSON.stringify(out, null, 1), 'application/json');
   };
   const validShapes = (a) => Array.isArray(a) && a.every((s) => s && TYPES[s.type]);
   $('#fileInput').onchange = async (e) => {
@@ -2605,7 +2731,7 @@
     const text = await file.text();
     if (!/\.json$/i.test(file.name) && !/^\s*\{/.test(text)) { openImport(text); return; }
     try {
-      if (!openProjectText(text, file.name.replace(/(\.page)?\.json$/i, ''))) throw new Error('not valid JSON');
+      if (!openProjectText(text, file.name.replace(/(\.page|\.board)?\.json$/i, ''))) throw new Error('not valid JSON');
     } catch (err) { TD.alert(`Couldn't open "${file.name}"`, `It isn't a DiagramTeX file (${err.message}).`); }
   };
 
@@ -2680,7 +2806,7 @@
   // ---------------- Export menu: PNG (chosen DPI), SVG, PDF ----------------
   // PNG and PDF are rasterised in the browser from the same SVG as the SVG export, with the maths
   // fonts embedded so they render inside the image. The PDF holds one lossless image per page.
-  const EXP_KEY = 'texdiagram.export';
+  const EXP_KEY = 'diagramtex.export';
   const expOpts = (() => { try { return { fmt: 'png', dpi: 300, transparent: false, ...JSON.parse(localStorage.getItem(EXP_KEY) || '{}') }; } catch (e) { return { fmt: 'png', dpi: 300, transparent: false }; } })();
   const saveExpOpts = () => { try { localStorage.setItem(EXP_KEY, JSON.stringify(expOpts)); } catch (e) { /* storage blocked */ } };
   let rasterCss = null;
@@ -2806,7 +2932,7 @@
   function renderExpPop() {
     const o = expOpts, fmt = expFmt();
     if (fmt === 'html') {
-      expPop.innerHTML = `<div class="exp-h">Export ${state.doc.kind === 'page' ? 'file' : 'document'}</div>
+      expPop.innerHTML = `<div class="exp-h">Export ${state.doc.kind === 'classic' ? 'document' : 'file'}</div>
         <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${fmt === k}" data-efmt="${k}" class="${fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
         <div class="exp-note">The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.</div>
         <button type="button" class="primary exp-go" data-ego>Download web page</button>`;
@@ -2816,7 +2942,7 @@
     const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : 'empty';
     const cm = srcs.length ? `${r2(srcs[0].vb[2] / PX)} × ${r2(srcs[0].vb[3] / PX)} cm` : '';
     const raster = o.fmt !== 'svg';
-    expPop.innerHTML = `<div class="exp-h">Export ${state.mode === 'page' ? 'page' + (srcs.length > 1 ? 's' : '') : 'diagram'}</div>
+    expPop.innerHTML = `<div class="exp-h">Export ${state.mode === 'page' ? 'page' + (srcs.length > 1 ? 's' : '') : state.mode === 'board' ? 'whiteboard' : 'diagram'}</div>
       <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
       ${raster ? `<div class="exp-row"><label for="expDpi">Resolution</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === o.dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(o.dpi) ? '' : `<option value="${o.dpi}" selected>${o.dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${o.dpi}" aria-label="DPI"></span></div>
       <div class="exp-meta">${dim}${srcs.length > 1 ? ` per page · ${srcs.length} ${o.fmt === 'pdf' ? 'pages' : 'files'}` : ''}<span>${cm}</span></div>` : `<div class="exp-meta">Vector, scales to any size<span>${cm}</span></div>`}
@@ -2879,7 +3005,8 @@
     try { res = TD.importLatex(src); } catch (err) { $('#impMsg').textContent = 'Could not parse: ' + err.message; return; }
     const nShapes = res.blocks.reduce((a, b) => a + (b.shapes ? b.shapes.length : 0), 0);
     if (!nShapes && !res.blocks.some((b) => b.type === 'text')) { $('#impMsg').textContent = 'Nothing recognised in this code.' + (res.warnings.length ? ' ' + res.warnings.join(' ') : ''); return; }
-    if (asNew) {
+    if (asNew && state.doc.kind === 'board') { newDoc(res.title || 'Imported', null, null, res.blocks, res.page, 'board'); zoomFit(); }
+    else if (asNew) {
       newDoc(res.title || 'Imported', null, null, res.blocks, res.page);
       if (res.blocks.filter((b) => b.type === 'diagram').length > 1 || res.blocks.some((b) => b.type === 'text')) setMode('document');
       else zoomFit();
@@ -3015,7 +3142,7 @@
     applyGrid();
     migrateKinds();
     const idx = index();
-    const last = store.get('texdiagram.last', null);
+    const last = store.get('diagramtex.last', null);
     if (idx.length) openDoc(idx.find((d) => d.id === last) ? last : idx[idx.length - 1].id);
     else { newDoc('Welcome to DiagramTeX', sample()); zoomFit(); }
     setTool('select');

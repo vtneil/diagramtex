@@ -656,7 +656,7 @@
   TD.importLatex = function (src) {
     const C = makeCtx();
     // DiagramTeX's own exports carry the exact shapes in a comment: keep it through comment stripping
-    src = src.replace(/%\s*texdiagram-data:\s*([A-Za-z0-9+/=]+)/g, '\\tddata{$1}');
+    src = src.replace(/%\s*(?:diagramtex|texdiagram)-data:\s*([A-Za-z0-9+/=]+)/g, '\\tddata{$1}');
     src = stripComments(src);
     let title = null;
     const tm = src.match(/\\title\{([^}]*)\}/);

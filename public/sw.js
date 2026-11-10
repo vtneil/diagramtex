@@ -4,12 +4,17 @@
 // both maths engines and their fonts work offline from the first visit. Cross-origin requests (the CDN
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate.
-const CACHE = 'diagramtex-v11';
+const CACHE = 'diagramtex-v12';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
     'manifest.webmanifest',
     'css/style.css',
+    'fonts/InterDisplay-Regular.woff2',
+    'fonts/InterDisplay-Medium.woff2',
+    'fonts/InterDisplay-SemiBold.woff2',
+    'fonts/InterDisplay-Bold.woff2',
+    'fonts/InterDisplay-Italic.woff2',
     'icons/apple-touch-icon.png',
     'icons/favicon-32.png',
     'icons/favicon.svg',
