@@ -305,6 +305,8 @@
         <h2>Plots and 3D</h2>
         <h3>2D plots (pgfplots)</h3>
         <p>Click the plot button to place one, or drag out a box. Each plot holds several series, written as expressions such as <code>sin(x)*exp(-x/4)</code> or as data. Kinds: function, line, scatter, area, bar, contour, heatmap, and pie chart (one <code>label value [#color]</code> per line). A function series can also be an inequality (shaded, dashed edge when strict), a region between two curves, <i>x</i> in terms of <i>y</i>, parametric, polar, implicit <code>F(x, y) = 0</code>, points, vectors, a vector field or a phase portrait. Define variables once (<code>a = 2, b = 0.5</code>) and use them in every series. Axis labels, ranges, grid, legend, colour maps and a colour bar are in the panel; expression errors show both there and on the canvas.</p>
+        <h3>2D geometry</h3>
+        <p>The last tool in the 2D plots menu, <b>2D Geometry</b>, is a plain TikZ figure for vectors and coordinate geometry: drag points, add vectors, projections such as <code>(Q |- P)</code>, angle marks and plots, and measures that print their value and update when a point moves. See <a href="#blocks">Blocks</a>.</p>
         <h3>3D</h3>
         <p>The 3D menu has eight tools; each one's variants are chosen in its panel.</p>
         <ul>
@@ -386,6 +388,19 @@
           </ul>
         </div></details>
 
+        <details class="block"><summary>2D geometry <code>TikZ</code></summary><div>
+          <ul>
+            <li>The 3D geometry editor seen straight on: drag empty space or use the arrow keys to move the view, drag a point to move it (<kbd class="alt">Alt</kbd> places it off the 0.05 grid). A point at (angle:radius) keeps that form.</li>
+            <li>Drag a circle by its rim or its centre to move it. Hovering the rim shows a small square at its top right: drag that to change the radius (<kbd class="alt">Alt</kbd> sizes it freely). A number, a length in cm or mm, or the value the radius names is rewritten; a radius worked out in the code has no square.</li>
+            <li>Drag a line, an edge or the inside of a shape to move the whole object: a polygon, a segment, a vector (a circle moves by its rim, not its inside). Every point it uses moves by the same step (snapped to 0.05; <kbd class="alt">Alt</kbd> moves it freely), so a named point such as <code>(P)</code> moves where it is defined and anything else built on it follows. A path through computed points (a projection, a calc expression, a loop or a plot) and the grid stay put.</li>
+            <li>Hold <kbd class="shift">Shift</kbd> while dragging a point to snap it to whichever is nearer: a whole-number point, or (for the end of a line) a multiple of 15° from the point it joins. <kbd class="alt">Alt</kbd> with <kbd class="shift">Shift</kbd> keeps only the angle.</li>
+            <li>Press <kbd class="mod">Ctrl</kbd><kbd>A</kbd> to select everything. Drag any of it to move it all together, the grid included; <kbd>⌫</kbd> deletes it all and <kbd>Esc</kbd> or a click on empty space clears the selection.</li>
+            <li>Add axes, a grid, points by (x, y) or (r, θ), labels, segments, vectors, projections, polygons, circles, angle and right-angle marks, and plots y = f(x), polar and parametric (keys <kbd>A</kbd> <kbd>G</kbd> <kbd>P</kbd> <kbd>T</kbd> <kbd>S</kbd> <kbd>V</kbd> <kbd>C</kbd> <kbd>M</kbd> <kbd>F</kbd>).</li>
+            <li>Measures (Δx, Δy, length, angle): select a segment between two points, then pick one. The value is computed in the code and printed with <code>\pgfmathprintnumber</code>, so it follows the points.</li>
+            <li>The panel gives each value set to a number a slider. Exported as written, with the <code>angles</code> and <code>quotes</code> libraries when it uses angle marks.</li>
+          </ul>
+        </div></details>
+
         <details class="block"><summary>3D geometry <code>tikz-3dplot</code></summary><div>
           <ul>
             <li>Drag empty space to turn the view; arrow keys turn it by 5° (<kbd class="shift">Shift</kbd> 15°). Drag a point to move it level; hold <kbd class="shift">Shift</kbd> to move it up and down.</li>
@@ -414,6 +429,15 @@
           <ul>
             <li>Click a cell to step it through 0, 1 and don't care, or paint with <kbd>1</kbd> <kbd>0</kbd> <kbd>D</kbd> <kbd>E</kbd>. Rows and columns are in Gray code.</li>
             <li>Drag across cells to group them; past an edge, a group wraps round. The panel checks each group, writes out the simplified function, and <b>Find Groups</b> finds a smallest cover.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Bit field <code>bytefield</code><span class="muted">packet and register layouts</span></summary><div>
+          <ul>
+            <li>Starts from an IPv4-style header. The palette adds a Bit box (<kbd>B</kbd>), Word box (<kbd>W</kbd>), single Bits (<kbd>I</kbd>), Skipped words (<kbd>K</kbd>) and a bit Header (<kbd>H</kbd>).</li>
+            <li>Drag a field's right edge to move the line between it and the next (it snaps to bits); drag a word box's bottom to change its height. <kbd>S</kbd> splits a field, <kbd>M</kbd> and <kbd class="shift">Shift</kbd><kbd>M</kbd> merge it with the next or previous one, and double-click or <kbd>Enter</kbd> edits its label.</li>
+            <li><b>Selecting rows:</b> drag across them, <kbd class="shift">Shift</kbd>-click a second row, or <kbd class="mod">Ctrl</kbd><kbd>A</kbd> for every row. Then <kbd>R</kbd> or <kbd>L</kbd> puts a labelled brace round them, and <kbd>Delete</kbd> removes them in one undo step. Drag a brace's end handle to change which rows it covers.</li>
+            <li>The panel sets a field's borders, fill colour (<code>bgcolor</code>) and formatting, and the whole field's width, bit size and endianness. The canvas follows the package's own measurements, and code you didn't touch is kept as written.</li>
           </ul>
         </div></details>
 
@@ -475,7 +499,7 @@
   \draw[line width=0.71pt, -{Stealth}] (0,0) -- (3,0) node[midway, above] {$\vec v$};
   \draw[line width=0.71pt] (4,0) circle (0.5);
 \end{tikzpicture}</code></pre>
-        <p><b>Packages by block:</b> TikZ always; <code>circuitikz</code>, <code>pgfplots</code>, <code>tikz-cd</code>, <code>xy</code>, the <code>quantikz2</code> library, <code>forest</code>, <code>zx-calculus</code>, <code>tikz-feynman</code>, <code>tikz-3dplot</code>, <code>tikz-timing</code>, the <code>automata</code> library, <code>karnaugh-map</code>, <code>chemfig</code> and <code>blochsphere</code> as used. All of them are in TeX Live and on Overleaf.</p>
+        <p><b>Packages by block:</b> TikZ always; <code>circuitikz</code>, <code>pgfplots</code>, <code>tikz-cd</code>, <code>xy</code>, the <code>quantikz2</code> library, <code>forest</code>, <code>zx-calculus</code>, <code>tikz-feynman</code>, <code>tikz-3dplot</code>, <code>tikz-timing</code>, the <code>automata</code> library, <code>karnaugh-map</code>, <code>bytefield</code>, <code>chemfig</code> and <code>blochsphere</code> as used. All of them are in TeX Live and on Overleaf.</p>
         <p class="note warn">quantikz2 restyles every <code>tikz-cd</code> diagram in the same document. When a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own.</p>
       </section>
 
@@ -486,7 +510,7 @@
           <li>Commands: <code>\draw</code>, <code>\fill</code>, <code>\filldraw</code>, <code>\node</code>, <code>\coordinate</code>.</li>
           <li>Paths: <code>--</code>, <code>..controls..</code>, <code>|-</code>, <code>rectangle</code>, <code>circle</code>, <code>ellipse</code>, <code>arc</code>, <code>to[bend]</code>, <code>grid</code> and inline nodes.</li>
           <li>Options: colours (including <code>red!50</code>), widths, dashes, arrows, <code>scale</code>, polar and relative coordinates; <code>rotate</code>, <code>shift</code>, <code>xshift</code>, <code>yshift</code> on paths, nodes and nested scopes.</li>
-          <li><code>ZX</code>, <code>feynman</code> and <code>tikztimingtable</code> environments come back as blocks you can edit. Document text becomes text blocks, and <code>\documentclass</code> and <code>geometry</code> options become the page setup.</li>
+          <li><code>ZX</code>, <code>feynman</code>, <code>tikztimingtable</code> and <code>bytefield</code> environments come back as blocks you can edit. Document text becomes text blocks, and <code>\documentclass</code> and <code>geometry</code> options become the page setup.</li>
           <li>Hand-written <code>axis</code> and <code>tikzcd</code> environments are skipped, with a warning. Files DiagramTeX exported re-import exactly, plots included.</li>
         </ul>
       </section>
@@ -551,6 +575,7 @@
           <li><b>Your work never leaves your device.</b> Files and settings live in your browser; there is no server-side storage.</li>
           <li><b>No account, no tracking:</b> no sign-up, analytics, cookies, ads or third-party scripts.</li>
           <li><b>Offline:</b> after the first visit, the app, both maths engines, MathLive and every font are stored by the browser, so everything works without a connection.</li>
+          <li><b>Updates:</b> when a newer release is on the same site, an amber dot appears before the version number at the bottom of the file list; click it to reload into it. The app checks once per load and asks no other site.</li>
           <li><b>No requests to other sites,</b> even from your exports: SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them.</li>
           <li><b>Open source</b> under the MIT License; you can host it yourself as plain static files.</li>
         </ul>

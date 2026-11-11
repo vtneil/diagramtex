@@ -194,8 +194,8 @@
     for (const id of [...state.sel]) if (!byId(id)) state.sel.delete(id);
     render(); renderProps(); scheduleSave(); updateTopbar();
   }
-  function undo() { finishEdit(); finishPoly(); commit(); const st = state.undo.pop(); if (!st) return; applyStep(st, true); state.redo.push(st); }
-  function redo() { finishEdit(); commit(); const st = state.redo.pop(); if (!st) return; applyStep(st, false); state.undo.push(st); trimUndo(); }
+  function undo() { finishEdit(); finishPoly(); commit(); const st = state.undo.pop(); if (!st) return; state.redo.push(st); applyStep(st, true); }
+  function redo() { finishEdit(); commit(); const st = state.redo.pop(); if (!st) return; state.undo.push(st); trimUndo(); applyStep(st, false); }
 
   // ---------------- storage ----------------
   const LS_INDEX = 'diagramtex.index', LS_DOC = 'diagramtex.doc.', LS_PREFS = 'diagramtex.prefs', LS_CLIP = 'diagramtex.clip';
@@ -1034,12 +1034,17 @@
   }
 
   // ---------------- tools ----------------
+  // the toolbar shows the tool in use: Hand while Space is held on a page or whiteboard (Space-drag pans there)
+  function markTools() {
+    const t = spaceDown && hasHand(state.mode) ? 'hand' : state.tool;
+    document.querySelectorAll('#tools button[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
+    document.querySelectorAll('#tools button[data-fly]').forEach((b) => b.classList.toggle('active', flyOf(t) === b.dataset.fly));
+  }
   function setTool(t) {
     finishPoly();
     if (t === 'image') { $('#imageInput').value = ''; $('#imageInput').click(); t = 'select'; }
     state.tool = t;
-    document.querySelectorAll('#tools button[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
-    document.querySelectorAll('#tools button[data-fly]').forEach((b) => b.classList.toggle('active', flyOf(t) === b.dataset.fly));
+    markTools();
     svg.classList.toggle('tool-draw', isDrawTool(t));
     svg.classList.toggle('tool-text', t === 'text' || t === 'math');
     svg.classList.toggle('tool-hand', t === 'hand');
@@ -1050,7 +1055,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|geo2d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1078,7 +1083,7 @@
     + `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: 415 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>Advanced Circuit Block (<code>circuitikz</code>)</span></button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`;
   function flyOf(t) {
     if (/^(solid|prim3d|revolve|sketch3d|geo3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
-    if (/^(plot|pie)/.test(t)) return 'insertPop';
+    if (/^(plot|pie|geo2d)/.test(t)) return 'insertPop';
     if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
@@ -1245,7 +1250,7 @@
   // ---------------- rotate by dragging just outside a corner (like Photoshop) ----------------
   // the frame is the shape's own (rotated) box for one shape, else the selection's bounding box
   // blocks whose content never turns: rotating one alone does nothing, so it gets no rotate zone, hint or menu item
-  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz']);
+  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'geo2d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz']);
   const rotatable = (sel = selected()) => sel.length > 1 || (sel.length === 1 && !FIXED.has(sel[0].type));
   function rotFrame() {
     const sel = selected();
@@ -1429,6 +1434,7 @@
         if (s.type === 'zx') { state.sel = new Set([hitId]); render(); renderProps(); openZX(hitId); return; }
         if (s.type === 'feynman') { state.sel = new Set([hitId]); render(); renderProps(); openFeyn(hitId); return; }
         if (s.type === 'geo3d') { state.sel = new Set([hitId]); render(); renderProps(); openGeo3d(hitId); return; }
+        if (s.type === 'geo2d') { state.sel = new Set([hitId]); render(); renderProps(); openGeo2d(hitId); return; }
         if (s.type === 'timing') { state.sel = new Set([hitId]); render(); renderProps(); openTiming(hitId); return; }
         if (s.type === 'automata') { state.sel = new Set([hitId]); render(); renderProps(); openFSM(hitId); return; }
         if (s.type === 'kmap') { state.sel = new Set([hitId]); render(); renderProps(); openKmap(hitId); return; }
@@ -1831,6 +1837,23 @@
     });
   }
   TD.geo3dOpen = openGeo3d;
+  // 2D geometry: the same editor, flat; the drawing stays where it was
+  function openGeo2d(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.geo3dEditor) return;
+    TD.geo3dEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      const was = TD.geo3d.layout(t.src, true);
+      begin(); t.src = res.src;
+      const now = TD.geo3d.layout(t.src, true);
+      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
+      commit();
+      render(); renderProps();
+    }, { flat: true });
+  }
+  TD.geo2dOpen = openGeo2d;
   // timing diagrams (tmeditor.js): the same, for tikz-timing code
   function openTiming(id) {
     finishEdit();
@@ -2126,6 +2149,7 @@
     zx: [['x', 'x'], ['y', 'y']],
     feynman: [['x', 'x'], ['y', 'y']],
     geo3d: [['x', 'x'], ['y', 'y']],
+    geo2d: [['x', 'x'], ['y', 'y']],
     timing: [['x', 'x'], ['y', 'y']],
     automata: [['x', 'x'], ['y', 'y']],
     kmap: [['x', 'x'], ['y', 'y']],
@@ -3602,7 +3626,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'bytefield') { openBytefield(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } if (s.type === 'xy') { openXY(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'geo2d') { openGeo2d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'bytefield') { openBytefield(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } if (s.type === 'xy') { openXY(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3683,10 +3707,10 @@
       else if (k === 'a') { e.preventDefault(); state.sel = new Set(shapes().map((s) => s.id)); renderOverlay(); renderProps(); }
       return;
     }
-    if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
+    if (e.key === ' ') { if (!spaceDown) { spaceDown = true; markTools(); } svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'bytefield') openBytefield(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'geo2d') openGeo2d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'bytefield') openBytefield(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -3701,8 +3725,9 @@
     if (k === 'g') { toggleGrid(); return; }
     if (TOOL_KEYS[k] && (k !== 'h' || hasHand(state.mode))) setTool(TOOL_KEYS[k]);
   });
-  document.addEventListener('keyup', (e) => { if (e.key === ' ') { spaceDown = false; svg.classList.remove('pan-ready'); } });
-  window.addEventListener('blur', () => { spaceDown = false; svg.classList.remove('pan-ready'); });
+  const spaceUp = () => { if (spaceDown) { spaceDown = false; markTools(); } svg.classList.remove('pan-ready'); };
+  document.addEventListener('keyup', (e) => { if (e.key === ' ') spaceUp(); });
+  window.addEventListener('blur', spaceUp);
 
   // ---------------- appearance (sidebar) ----------------
   function syncThemeBox() {

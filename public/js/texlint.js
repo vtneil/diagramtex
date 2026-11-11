@@ -164,6 +164,11 @@
     const b = blank(String(code || '')), libs = [], pkgs = [];
     for (const [l, re] of LIBS) if (!libs.includes(l) && (typeof re === 'function' ? re(b, b) : (re.lastIndex = 0, re.exec(b) || { index: -1 }).index) >= 0) libs.push(l);
     for (const [p, re] of PKGS) if (re.exec(b)) pkgs.push(p);
+    // xcolor's svgnames (DarkBlue…): defined in the preamble, so the code compiles without the source's options
+    if (TD.svgColor) for (const m of b.matchAll(/(?<![\\A-Za-z@])([A-Z][a-z]+(?:[A-Z][a-z]+)*)(?![A-Za-z@])/g)) {
+      const k = 'svgcolor:' + m[1];
+      if (!pkgs.includes(k) && TD.svgColor(m[1])) pkgs.push(k);
+    }
     return { libs, pkgs };
   };
   TD.lint = lint;

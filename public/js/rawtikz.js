@@ -81,7 +81,7 @@
   // the preview of edited code: parsed again where it was (its scopes and the names it uses)
   function refresh(s) {
     if (!TD.importInternals || !TD.importInternals.preview) return;
-    const r = TD.importInternals.preview(s.code, s.ctx, s.names);
+    const r = TD.importInternals.preview(s.code, s.ctx, s.names, s.macros);
     s.prev = r.shapes;
     s.issues = r.issues;
   }

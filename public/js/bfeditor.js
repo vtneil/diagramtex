@@ -548,6 +548,17 @@
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     const h = hit(e);
+    // a second press on the same field or brace, soon and close: edit its label. Each press redraws the stage,
+    // which replaces the element under the pointer, so the browser never sends click or dblclick here.
+    const key = e.button === 0 && !e.shiftKey && h && !h.edge ? (h.t === 'box' ? `b${h.b.ii}:${h.b.sub}` : `g${h.g.beg}`) : null;
+    const now = performance.now(), lp = E.lastPress;
+    E.lastPress = key ? { key, t: now, x: sx, y: sy } : null;
+    if (key && lp && lp.key === key && now - lp.t < 450 && Math.hypot(sx - lp.x, sy - lp.y) < 5) {
+      E.lastPress = null; E.drag = null;
+      E.sel = h.t === 'box' ? { t: 'box', ii: h.b.ii, sub: h.b.sub } : { t: 'group', beg: h.g.beg };
+      draw(); renderProps(); editLabel();
+      return;
+    }
     if (h && h.t === 'box') {
       const b = h.b, it = E.M.items[b.ii];
       // ⇧-click: a range of rows, for grouping
@@ -659,14 +670,6 @@
     draw();
   });
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; E.hoverKey = ''; setTip(''); draw(); } });
-  svg.addEventListener('dblclick', (e) => {
-    if (!E) return;
-    const h = hit(e);
-    if (!h) return;
-    if (h.t === 'box') E.sel = { t: 'box', ii: h.b.ii, sub: h.b.sub };
-    else E.sel = { t: 'group', beg: h.g.beg };
-    draw(); renderProps(); editLabel();
-  });
 
   // ---------------------------------------------------------------- label editor
   // A floating box under the field (TD.input.popup); Enter, Esc or clicking away finishes, as one undo step.

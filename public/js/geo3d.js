@@ -70,7 +70,7 @@
     }
   }
 
-  const PATHS = new Set(['draw', 'fill', 'filldraw', 'path', 'shade', 'shadedraw', 'clip', 'node', 'coordinate', 'pattern']);
+  const PATHS = new Set(['draw', 'fill', 'filldraw', 'path', 'shade', 'shadedraw', 'clip', 'node', 'coordinate', 'pattern', 'pic']);
   // the statements of the code, each with its span and what it says, spans being offsets into src
   function parse(src, from = 0, to = null, max = Infinity) {
     src = String(src || '');
@@ -182,6 +182,13 @@
     let k = skipWs(src, j);
     if (src[k] === '[') { const q = close(src, k); if (q > 0) { st.o = { s: k + 1, e: q - 1 }; k = q; } }
     const end = e - 1; // the ;
+    // \pic[options] {angle = A--B--C}: the angles library's marks
+    if (cmd === 'pic') {
+      st.k = 'pic';
+      k = skipWs(src, k);
+      if (src[k] === '{') { const q = close(src, k); if (q > 0) st.body = { s: k + 1, e: q - 1 }; }
+      return st;
+    }
     if (cmd === 'node' || cmd === 'coordinate') {
       st.k = cmd;
       for (;;) {
@@ -243,6 +250,11 @@
         el.e = q; els.push(el); k = q; continue;
       }
       if (w === 'rectangle') { els.push({ t: 'rect', s: k, e: q }); k = q; continue; }
+      if (w === 'grid') {
+        const el = { t: 'grid', s: k, e: q }, p = skipWs(src, q);
+        if (src[p] === '[') { const r = close(src, p); if (r < 0) break; el.o = { s: p + 1, e: r - 1 }; el.e = r; }
+        els.push(el); k = el.e; continue;
+      }
       if (w === 'plot') {
         const el = { t: 'plot', s: k, e: q };
         let p = skipWs(src, q);
@@ -443,21 +455,29 @@
 
   // ================================================================ layout
   const cache = new Map();
-  function layout(src) {
+  // flat: a plain 2D TikZ picture (the 2D geometry block): seen straight on, points (x, y) and (angle:radius) dragged
+  function layout(src, flat) {
     src = String(src || '');
-    let L = cache.get(src);
+    const key = (flat ? '2|' : '3|') + src;
+    let L = cache.get(key);
     if (!L) {
-      L = run(src);
+      L = run(src, !!flat);
       if (cache.size > 60) cache.delete(cache.keys().next().value);
-      cache.set(src, L);
+      cache.set(key, L);
     }
     bounds(L);
     return L;
   }
-  function run(src) {
+  function run(src, flat) {
     const S = parse(src);
-    const items = [], handles = [], warnings = [], names = new Map(), env = new Map(), macros = new Map();
-    let vw = viewOf(70, 110), scale = 1, rot = { R: I3, o: [0, 0, 0] };
+    // what moves a drawn path as a whole, by statement: its literal points (handles) and the named points it uses
+    const movers = new Map();
+    const moverOf = (si) => { if (!movers.has(si)) movers.set(si, { ok: true, hs: [], names: new Set() }); return movers.get(si); };
+    const items = [], handles = [], rings = [], links = [], warnings = [], names = new Map(), env = new Map(), macros = new Map();
+    const trimSpan = (sp) => { let a = sp.s, b = sp.e; while (a < b && /[\s{]/.test(src[a])) a++; while (b > a && /[\s}]/.test(src[b - 1])) b--; return { s: a, e: b }; };
+    // a radius is dragged when it is a number, a number in cm or mm, or a macro holding a number
+    const radiusWritable = (sp) => /^(\d+\.?\d*|\.\d+)\s*(cm|mm)$/.test(src.slice(sp.s, sp.e).trim()) || writable(sp);
+    let vw = flat ? viewOf(0, 0) : viewOf(70, 110), scale = 1, rot = { R: I3, o: [0, 0, 0] };
     let main = null, begin = null, end = null;
     const txt = (sp) => src.slice(sp.s, sp.e);
     const num = (sp, what) => {
@@ -475,6 +495,13 @@
     function point(sp, F, vars) {
       const t = src.slice(sp.s, sp.e).trim();
       if (t[0] === '$' && t[t.length - 1] === '$') return calc(t.slice(1, -1), F);
+      // (A |- B): A's x and B's y; (A -| B): B's x and A's y
+      const pp = /^(.+?)\s*(\|-|-\|)\s*(.+)$/.exec(t);
+      if (pp && !/^\s*-?[\d.]+\s*$/.test(pp[1])) {
+        const at = (q) => withSrc(q, () => point({ s: 0, e: q.length }, F, vars));
+        const [a, b] = pp[2] === '|-' ? [at(pp[1]), at(pp[3])] : [at(pp[3]), at(pp[1])];
+        return { m: a.m && b.m ? [a.m[0], b.m[1], 0] : null, s: [a.s[0], b.s[1]] };
+      }
       const comps = splitTop(src, sp.s, sp.e);
       if (comps.length >= 2) {
         const r = comps.map((c) => { try { return evalExpr(c.t, env, vars); } catch (e) { throw new Error(`(${t}): ${e.message}`); } });
@@ -583,7 +610,7 @@
           const sty = styleOf(src, st.o, base), F = frameOf(sty.frame);
           const p = point({ s: st.atPt.is, e: st.atPt.ie }, F);
           names.set(st.name, p);
-          if (p.m && F.kind !== 'screen' && !inLoop) handles.push(handleFor(si, 'coord', p, F, { s: st.atPt.is, e: st.atPt.ie }));
+          if (p.m && F.kind !== 'screen' && !inLoop) handles.push({ ...handleFor(si, 'coord', p, F, { s: st.atPt.is, e: st.atPt.ie }), name: st.name });
           continue;
         }
         if (st.k === 'setcoord') {
@@ -602,8 +629,8 @@
           const sty = styleOf(src, st.o, base), F = frameOf(sty.frame);
           const p = st.atPt ? point({ s: st.atPt.is, e: st.atPt.ie }, F) : { m: [0, 0, 0], s: [0, 0] };
           if (st.name) names.set(st.name, p);
-          if (st.text) items.push({ k: 'text', at: p.s, text: txt(st.text), anchor: sty.anchor && sty.anchor !== 'center' ? sty.anchor : undefined, color: sty.text || sty.color ? V3.col(sty.text || sty.color) : undefined, si });
-          if (st.atPt && p.m && F.kind !== 'screen' && !p.polar && !inLoop) {
+          if (st.text) items.push({ k: 'text', at: p.s, text: nums(txt(st.text)), anchor: sty.anchor && sty.anchor !== 'center' ? sty.anchor : undefined, color: sty.text || sty.color ? V3.col(sty.text || sty.color) : undefined, si });
+          if (st.atPt && p.m && F.kind !== 'screen' && (!p.polar || flat) && !inLoop) {
             const h = handleFor(si, 'lit', p, F, { s: st.atPt.is, e: st.atPt.ie });
             if (h.writable) handles.push(h);
           }
@@ -617,11 +644,12 @@
           const pts = Array.from({ length: n + 1 }, (_, i) => { const a = (a0 + ((a1 - a0) * i) / n) * D2R; return plus(c, F.vec([r * Math.cos(a), r * Math.sin(a), 0])).s; });
           items.push({ k: 'line', pts, stroke: ink(sty.draw || sty.color), w: sty.w / K, dash: sty.dash ? (/dot/.test(sty.dash) ? 'dot' : true) : false, arrow: !!sty.arrow, arrow0: !!sty.arrow0, tip: sty.tip, opacity: sty.dop ?? sty.op, si });
           const mid = ((a0 + a1) / 2) * D2R, lo = styleOf(src, st.lo);
-          const tx = txt(st.text).trim();
+          const tx = nums(txt(st.text).trim());
           if (tx) items.push({ k: 'text', at: plus(c, F.vec([r * Math.cos(mid), r * Math.sin(mid), 0])).s, text: tx, anchor: lo.anchor && lo.anchor !== 'center' ? lo.anchor : undefined, color: lo.text || lo.color ? V3.col(lo.text || lo.color) : undefined, si });
           continue;
         }
         if (st.k === 'path') { drawPath(st, si, base, inLoop); continue; }
+        if (st.k === 'pic') { drawPic(st, si, base); continue; }
         if (st.k === 'cmd' && !/^(tikzset|usetikzlibrary|tdplotsetpolarplotrange|tdplotresetpolarplotrange|pgfmathsetmacro|centering|small|footnotesize)$/.test(st.name)) warnings.push(`\\${st.name} is kept in the code but not drawn here`);
         if (st.bad) warnings.push(st.bad);
       } catch (e) {
@@ -639,9 +667,70 @@
       return !!(m && macros.has(m[1]) && macros.get(m[1]).literal);
     }
     function handleFor(si, kind, p, F, inner) {
+      // (angle:radius) in a flat picture: dragging writes the angle and the radius
+      if (p.polar) {
+        const comps = flat && /:/.test(src.slice(inner.s, inner.e)) ? splitTop(src, inner.s, inner.e, ':') : [];
+        return { si, kind, at: p, F, comps, polar: true, writable: comps.length === 2 && comps.every((c) => writable(c)) };
+      }
       const comps = splitTop(src, inner.s, inner.e);
-      const ok = comps.length === 3 && comps.every((c) => writable(c));
+      const ok = (comps.length === 3 || (flat && comps.length === 2)) && comps.every((c) => writable(c));
       return { si, kind, at: p, F, comps, writable: ok };
+    }
+    // \pgfmathprintnumber[fixed, precision=2]{value} in a label: the number as LaTeX prints it
+    function nums(t) {
+      if (!/\\pgfmathprintnumber/.test(t)) return t;
+      const re = /\\pgfmathprintnumber\s*(\[[^\]]*\])?\s*(?=\{)/g;
+      let out = '', i = 0, m;
+      while ((m = re.exec(t))) {
+        const b = m.index + m[0].length, q = close(t, b);
+        if (q < 0) break;
+        let v = NaN;
+        try { v = evalExpr(t.slice(b + 1, q - 1), env).v; } catch (e) { /* shown as ? */ }
+        const o = m[1] || '', pm = /precision\s*=\s*(\d+)/.exec(o), d = pm ? +pm[1] : 2;
+        const s2 = !isFinite(v) ? '?' : /zerofill/.test(o) ? v.toFixed(d) : String(+v.toFixed(d));
+        out += t.slice(i, m.index) + (s2 === '-0' ? '0' : s2);
+        i = q; re.lastIndex = q;
+      }
+      return out + t.slice(i);
+    }
+    // \pic{angle = A--B--C} / {right angle = A--B--C}: from BA round to BC, counterclockwise
+    function drawPic(st, si, inh) {
+      if (!st.body) return;
+      const m = /^\s*(right angle|angle)\s*=\s*([^-]+?)\s*--\s*([^-]+?)\s*--\s*([^-]+?)\s*$/.exec(txt(st.body));
+      if (!m) { warnings.push(`\\pic{${txt(st.body).trim()}} is not drawn here`); return; }
+      const sty = styleOf(src, st.o, inh), O = st.o ? splitTop(src, st.o.s, st.o.e) : [];
+      const P = (n) => { if (!names.has(n)) throw new Error(`no point named (${n})`); return names.get(n).s; };
+      const A = P(m[2]), B = P(m[3]), C = P(m[4]);
+      const g = (k) => { const o = O.map((x) => x.t).find((x) => new RegExp(`^${k}\\s*=`).test(x)); return o ? o.slice(o.indexOf('=') + 1).trim() : null; };
+      let r = 0.5, ecc = 0.6;
+      const rr = g('angle radius');
+      if (rr) { const v = evalExpr(rr, env); r = v.unit ? v.v : v.v * UNIT.pt; }
+      const ee = g('angle eccentricity');
+      if (ee) ecc = evalExpr(ee, env).v;
+      const a0 = Math.atan2(A[1] - B[1], A[0] - B[0]) / D2R;
+      let a1 = Math.atan2(C[1] - B[1], C[0] - B[0]) / D2R;
+      while (a1 < a0) a1 += 360;
+      const at = (a, d) => [B[0] + d * Math.cos(a * D2R), B[1] + d * Math.sin(a * D2R)];
+      let edge, area;
+      if (m[1] === 'right angle') {
+        const u = at(a0, r), w = [u[0] + r * Math.cos(a1 * D2R), u[1] + r * Math.sin(a1 * D2R)], v = at(a1, r);
+        edge = [u, w, v]; area = [B, u, w, v];
+      } else {
+        const n = Math.max(6, Math.ceil((a1 - a0) / 4));
+        edge = Array.from({ length: n + 1 }, (_, i) => at(a0 + ((a1 - a0) * i) / n, r));
+        area = [B, ...edge];
+      }
+      const dash = sty.dash ? (/dot/.test(sty.dash) ? 'dot' : true) : false;
+      if (sty.fillOn) items.push({ k: 'poly', pts: area, fill: V3.col(sty.fill || sty.color || '#000000'), opacity: sty.fop ?? sty.op, si });
+      if (sty.drawOn) items.push({ k: 'line', pts: edge, stroke: ink(sty.draw || sty.color), w: sty.w / K, dash, arrow: !!sty.arrow, arrow0: !!sty.arrow0, tip: sty.tip, opacity: sty.dop ?? sty.op, si });
+      // the label: "text" among the options, or pic text=…
+      const q = O.find((x) => x.t[0] === '"');
+      let lt = q ? q.t.slice(1, q.t.indexOf('"', 1) > 0 ? q.t.indexOf('"', 1) : undefined) : g('pic text');
+      if (lt) {
+        lt = unbrace(lt);
+        const d = ecc * r * (m[1] === 'right angle' ? Math.SQRT2 : 1);
+        items.push({ k: 'text', at: at((a0 + a1) / 2, d), text: nums(lt), color: sty.text || sty.color ? V3.col(sty.text || sty.color) : undefined, si });
+      }
     }
 
     function drawPath(st, si, inh, inLoop) {
@@ -651,11 +740,13 @@
       let cur = null, base = null, line = null, pendingOp = false, pendingNodes = [];
       const vars = {};
       const startSub = (p) => { line = { pts: [p], closed: false }; subs.push(line); };
+      const mv = moverOf(si);
+      if (inLoop || F.kind === 'screen') mv.ok = false;
       const placeNode = (el, at) => {
         const ns = styleOf(src, el.o);
         if (el.name) names.set(el.name, at);
         if (!el.text) return;
-        texts.push({ k: 'text', at: at.s, text: src.slice(el.text.s, el.text.e), anchor: ns.anchor && ns.anchor !== 'center' ? ns.anchor : undefined, color: ns.text || ns.color || sty.text || sty.color ? V3.col(ns.text || ns.color || sty.text || sty.color) : undefined, si, node: el });
+        texts.push({ k: 'text', at: at.s, text: nums(src.slice(el.text.s, el.text.e)), anchor: ns.anchor && ns.anchor !== 'center' ? ns.anchor : undefined, color: ns.text || ns.color || sty.text || sty.color ? V3.col(ns.text || ns.color || sty.text || sty.color) : undefined, si, node: el });
       };
       for (let ei = 0; ei < st.els.length; ei++) {
         const el = st.els[ei];
@@ -667,16 +758,27 @@
           if (pendingOp && line) {
             for (const nd of pendingNodes) placeNode(nd, lerp(cur, p, styleOf(src, nd.o).pos ?? 0.5));
             line.pts.push(p);
+            // the straight segments, so a dragged end can keep a 15° angle to the other end
+            if (pendingOp === '--' && cur && cur.m && p.m) links.push([cur.m, p.m]);
           } else startSub(p);
           pendingNodes = []; pendingOp = false; cur = p;
-          if (!el.rel && !inLoop && p.m && F.kind !== 'screen' && !p.polar && splitTop(src, el.is, el.ie).length >= 2) {
+          let lit = null;
+          if (!el.rel && !inLoop && p.m && F.kind !== 'screen' && (p.polar ? flat : splitTop(src, el.is, el.ie).length >= 2)) {
             const h = handleFor(si, 'lit', p, F, { s: el.is, e: el.ie });
-            if (h.writable) handles.push(h);
+            if (h.writable) { handles.push(h); lit = h; }
+          }
+          // moving the whole path: a literal point moves by its handle, a named one by its \coordinate;
+          // relative points follow; anything computed ($…$, |-, a point without a handle) keeps it still
+          if (!el.rel) {
+            const t = src.slice(el.is, el.ie).trim();
+            if (lit) mv.hs.push(lit);
+            else if (/^\$|\|-|-\||[:,]/.test(t) || !p.m) mv.ok = false;
+            else mv.names.add(t.replace(/\.[A-Za-z ]+$/, '').trim());
           }
           continue;
         }
-        if (el.t === 'op') { pendingOp = true; continue; }
-        if (el.t === 'cycle') { if (line) { line.closed = true; if (pendingOp) for (const nd of pendingNodes) placeNode(nd, lerp(cur, line.pts[0], 0.5)); } pendingOp = false; pendingNodes = []; continue; }
+        if (el.t === 'op') { pendingOp = el.v; continue; }
+        if (el.t === 'cycle') { if (line) { line.closed = true; if (pendingOp === '--' && cur && cur.m && line.pts[0].m) links.push([cur.m, line.pts[0].m]); if (pendingOp) for (const nd of pendingNodes) placeNode(nd, lerp(cur, line.pts[0], 0.5)); } pendingOp = false; pendingNodes = []; continue; }
         if (el.t === 'node') {
           if (pendingOp) { pendingNodes.push(el); continue; }
           const ns = styleOf(src, el.o);
@@ -699,6 +801,14 @@
             const R = get('radius'), X = get('x radius') || R, Y = get('y radius') || R;
             if (!X) throw new Error('circle needs a radius');
             rx = X.v; ry = (Y || X).v; unit = X.unit;
+          }
+          // a circle's radius, so the editor can drag its rim: circle (r) or circle[radius=r]
+          if (!inLoop && cur.m && F.kind === 'main' && rx === ry) {
+            let sp = null;
+            if (el.a && !/\band\b/.test(src.slice(el.a.s, el.a.e))) sp = trimSpan(el.a);
+            else if (!el.a) { const o = os.find((x) => x.k === 'radius'); if (o) { const q = splitTop(src, o.s, o.e, '='); if (q[1]) sp = trimSpan({ s: q[1].s, e: o.e }); } }
+            // a radius in pt is a point's dot, not a circle to size
+            if (sp && !/pt\s*$/.test(src.slice(sp.s, sp.e))) rings.push({ si, c: cur, r: rx, abs: unit, span: sp, writable: radiusWritable(sp) });
           }
           const pts = Array.from({ length: 73 }, (_, i) => { const a = (i / 72) * 2 * Math.PI; const v = [rx * Math.cos(a), ry * Math.sin(a), 0]; return plus(cur, unit ? { m: null, s: [v[0], v[1]] } : F.vec(v)); });
           subs.push({ pts, closed: true, circle: { c: cur, r: rx, screen: unit || F.kind === 'screen' } });
@@ -735,7 +845,25 @@
           cur = q; line = null; ei++;
           continue;
         }
+        if (el.t === 'grid') {
+          mv.ok = false; // a grid is the backdrop: missing empty space by a hair would carry it off
+          const nx = st.els[ei + 1];
+          if (!nx || nx.t !== 'pt' || !cur) continue;
+          const q = point({ s: nx.is, e: nx.ie }, F);
+          // the far corner drags like the near one
+          if (!inLoop && q.m && F.kind !== 'screen' && splitTop(src, nx.is, nx.ie).length >= 2) { const h = handleFor(si, 'lit', q, F, { s: nx.is, e: nx.ie }); if (h.writable) handles.push(h); }
+          const os = (st.o ? optList(src, st.o.s, st.o.e) : []).concat(el.o ? optList(src, el.o.s, el.o.e) : []);
+          const g = (k) => { const o = [...os].reverse().find((x) => x.k === k); return o && o.v != null ? evalExpr(o.v, env).v : null; };
+          const st0 = g('step') || 1, sx = g('xstep') || st0, sy = g('ystep') || st0;
+          const [x0, x1] = [Math.min(cur.s[0], q.s[0]), Math.max(cur.s[0], q.s[0])], [y0, y1] = [Math.min(cur.s[1], q.s[1]), Math.max(cur.s[1], q.s[1])];
+          const S2 = (x, y) => ({ m: null, s: [x, y] });
+          if (sx > 0 && (x1 - x0) / sx < 400) for (let x = Math.ceil(x0 / sx - 1e-9) * sx; x <= x1 + 1e-9; x += sx) subs.push({ pts: [S2(x, y0), S2(x, y1)], closed: false });
+          if (sy > 0 && (y1 - y0) / sy < 400) for (let y = Math.ceil(y0 / sy - 1e-9) * sy; y <= y1 + 1e-9; y += sy) subs.push({ pts: [S2(x0, y), S2(x1, y)], closed: false });
+          cur = q; line = null; ei++;
+          continue;
+        }
         if (el.t === 'plot') {
+          mv.ok = false;
           const os = el.o ? optList(src, el.o.s, el.o.e).concat(st.o ? optList(src, st.o.s, st.o.e) : []) : st.o ? optList(src, st.o.s, st.o.e) : [];
           const g = (k) => { const o = os.find((x) => x.k === k); return o ? o.v : null; };
           const dom = (g('domain') || '-5:5').split(':'), lo = evalExpr(dom[0], env).v, hi = evalExpr(dom[1], env).v;
@@ -747,6 +875,7 @@
           cur = pts[pts.length - 1]; pendingOp = false;
           continue;
         }
+        if (el.t === 'plot' || el.t === 'bad') mv.ok = false;
         if (el.t === 'bad') warnings.push(`${el.v} in a path is not drawn here`);
       }
       // a lone move-to point (as before a circle) draws nothing
@@ -784,7 +913,14 @@
       items.push(...texts);
     }
 
-    return { src, S, items, handles, warnings, names, macros, env, view: vw, scale, k: PX * scale, main, begin, end };
+    // named points resolve to their \coordinate handles; a path with nothing to move stays still
+    const moves = new Map();
+    for (const [si, mv] of movers) {
+      const hs = [...mv.hs];
+      for (const nm of mv.names) { const h = handles.find((x) => x.kind === 'coord' && x.name === nm); if (h && h.writable) hs.push(h); else mv.ok = false; }
+      if (mv.ok && hs.length) moves.set(si, hs);
+    }
+    return { src, S, items, handles, rings, links, moves, warnings, names, macros, env, view: vw, scale, k: PX * scale, main, begin, end };
   }
   // bounds in px at the picture's scale, origin at the projected (0, 0)
   function bounds(L) {
@@ -840,8 +976,35 @@
     if (m && L.macros.has(m[1]) && L.macros.get(m[1]).literal) return { ...L.macros.get(m[1]).span, t: fmt(v, d) };
     return { s: sp.s, e: sp.e, t: fmt(v, d) };
   }
+  // the edits that move statement si's drawing by d (main frame): each point it uses moves once, and a value
+  // shared by two of its points is written once
+  // si: one command (its points, as listed in moves), or several (also every writable point they hold)
+  function shiftEdits(L, si, d) {
+    let hs = L.moves && !Array.isArray(si) ? L.moves.get(si) : null;
+    if (Array.isArray(si)) {
+      const set = new Set(si);
+      hs = [...new Set([...si.flatMap((i) => (L.moves && L.moves.get(i)) || []), ...L.handles.filter((h) => set.has(h.si) && h.writable)])];
+    }
+    if (!hs || !hs.length) return null;
+    const out = [], seen = new Set();
+    for (const h of hs) {
+      const m = h.at.m;
+      for (const x of moveHandle(L, h, [m[0] + d[0], m[1] + d[1], m[2] + (d[2] || 0)])) {
+        const k = `${x.s}:${x.e}`;
+        if (!seen.has(k)) { seen.add(k); out.push(x); }
+      }
+    }
+    return out;
+  }
+  // the edit that sets a circle's radius (a ring from layout) to r cm, keeping a written unit
+  function setRadius(L, ring, r) {
+    const t = L.src.slice(ring.span.s, ring.span.e).trim(), u = /(cm|mm|pt)$/.exec(t);
+    if (u) return { s: ring.span.s, e: ring.span.e, t: fmt(r / UNIT[u[1]], u[1] === 'cm' ? 2 : 1) + u[1] };
+    return setNum(L, ring.span, r, 2);
+  }
   // the edits that move a handle's point to main-frame position m
-  function moveHandle(L, h, m) {
+  // dp: decimals written (3 when the drag keeps an angle, so the 15° steps survive rounding)
+  function moveHandle(L, h, m, dp = 2) {
     const st = L.S[h.si];
     if (h.kind === 'setcoord') {
       const r = Math.hypot(...m), th = r ? Math.acos(Math.max(-1, Math.min(1, m[2] / r))) / D2R : 0;
@@ -850,8 +1013,13 @@
       ph += 360 * Math.round((ph0 - ph) / 360); // stay on the same turn as before
       return [setNum(L, st.r, r, 2), setNum(L, st.th, th, 0), setNum(L, st.ph, ph, 0)];
     }
+    if (h.polar) {
+      let a = Math.atan2(m[1], m[0]) / D2R;
+      try { const a0 = evalExpr(L.src.slice(h.comps[0].s, h.comps[0].e), L.env).v; a += 360 * Math.round((a0 - a) / 360); } catch (e) { /* as is */ }
+      return [setNum(L, h.comps[0], a, dp), setNum(L, h.comps[1], Math.hypot(m[0], m[1]), dp)];
+    }
     const v = h.F.kind === 'rotated' ? appT(h.F.R, sub(m, h.F.o)) : m;
-    return h.comps.map((c, i) => setNum(L, c, v[i], 2));
+    return h.comps.map((c, i) => setNum(L, c, v[i], dp));
   }
   // set (or with v null remove) an option in a statement's [options]; `match` picks the items it replaces
   function setOpt(L, st, match, text, at) {
@@ -876,10 +1044,10 @@
   }
 
   // ================================================================ export
-  function partsOf(src) {
-    const L = layout(src);
+  function partsOf(src, flat) {
+    const L = layout(src, flat);
     const b = L.begin != null ? L.S[L.begin] : null, e = L.end != null ? L.S[L.end] : null;
-    if (!b || !e) return { pre: '', opts: 'tdplot_main_coords', body: src.trim(), post: '' };
+    if (!b || !e) return { pre: '', opts: flat ? '' : 'tdplot_main_coords', body: src.trim(), post: '' };
     return { pre: src.slice(0, b.s).trim(), opts: b.o ? src.slice(b.o.s, b.o.e).trim() : '', body: src.slice(b.e, e.s).replace(/^\s*\n/, '').replace(/\s+$/, ''), post: src.slice(e.e).trim() };
   }
   const DEFAULT = `\\tdplotsetmaincoords{60}{110}
@@ -930,8 +1098,8 @@
     if (!st) return `\\tdplotsetmaincoords{${fmt(th, 0)}}{${fmt(ph, 0)}}\n` + src;
     return edits(src, [setNum(L, st.th, th, 0), setNum(L, st.ph, ph, 0)]);
   }
-  function setScale(src, v) {
-    const L = layout(src), st = L.begin != null ? L.S[L.begin] : null;
+  function setScale(src, v, flat) {
+    const L = layout(src, flat), st = L.begin != null ? L.S[L.begin] : null;
     if (!st) return src;
     return edits(src, setOpt(L, st, (o) => o.k === 'scale', `scale=${fmt(v, 2)}`, st.at));
   }
@@ -971,5 +1139,5 @@
     },
   };
 
-  TD.geo3d = { parse, layout, draw, fitAt, labelAt, edits, setNum, setOpt, moveHandle, setView, setScale, optList, styleOf, splitTop, evalExpr, viewOf, euler, fmt, partsOf, POS, WIDTHS, DEFAULT };
+  TD.geo3d = { parse, layout, draw, fitAt, bounds, labelAt, edits, setNum, setRadius, shiftEdits, setOpt, moveHandle, setView, setScale, optList, styleOf, splitTop, evalExpr, viewOf, euler, fmt, partsOf, POS, WIDTHS, DEFAULT };
 })();

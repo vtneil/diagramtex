@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata**, **karnaugh-map**, **bytefield**, **chemfig** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams, Feynman diagrams, 3D geometry, timing diagrams, state machines, Karnaugh maps, bit fields, chemical structures and reaction schemes, and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata**, **karnaugh-map**, **bytefield**, **chemfig** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams, Feynman diagrams, 2D and 3D geometry, timing diagrams, state machines, Karnaugh maps, bit fields, chemical structures and reaction schemes, and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -32,6 +32,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
   - **Solids of revolution:** the region between y = g(x) and y = f(x) turned about the x-axis (disks, washers) or the y-axis (shells). Sweep less than 360° to cut it open and show the region, or highlight one slice of width Δx.
   - **Basic solids:** box, cylinder, cone, frustum, sphere, prism, pyramid and spherical wedge, with dimension labels.
   - **3D geometry** (in the 3D menu): a `tikz-3dplot` picture edited visually: turn the view by dragging, drag points (level, or up and down with Shift), and add axes, rotated frames, points by (x, y, z) or (r, θ, φ), vectors, segments, projections, planes (any plane a x + b y + c z = d), surfaces z = f(x, y) and (u, v), triangles, circles, spheres, boxes, space curves and angle arcs. The code is the figure and is exported as written.
+- **2D geometry** (in the 2D plots menu): a plain TikZ picture edited visually, for vectors and coordinate geometry: drag points given by (x, y) or (angle:radius) (Shift snaps to whole numbers or 15° along a line), drag a line, shape or circle's rim to move it whole, size a circle with the square at the top right of its rim, select everything with ⌘A (Ctrl+A) and drag any of it to move it all, and add axes, a grid, points, labels, segments, vectors, projections such as `(Q |- P)`, polygons, circles, angle and right-angle marks (the `angles` library), function, polar and parametric plots, and measures (Δx, Δy, length, angle) that print their value with `\pgfmathprintnumber`, so they update when a point moves. Values set to a number get a slider in the panel. The code is the figure and is exported as written.
 - **Commutative diagrams:** a `tikz-cd` editor: type or drop objects on a grid, drag arrows from cell to cell, and pick each arrow's style, label, bend and shift, with the code live beside it. The same editor writes `xymatrix` code (the `xy` package) for the XyMatrix block.
 - **Bloch spheres:** a `blochsphere` block drawn with the package's own geometry; set the radius, view angles, ball style and states in the panel.
 - **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
@@ -86,7 +87,7 @@ Then open http://localhost:5173.
 
 ### Self-host on Cloudflare Workers
 
-`wrangler.toml` publishes a static-assets-only Worker (no server code). Before each deploy, wrangler runs `scripts/build.js`, which copies `public/` to `dist/` with the JS and CSS minified by esbuild, and serves `dist/`. To keep the number of requests low, the build also joins the app's scripts into `js/bundle.js` and its stylesheets into `css/app.css` (in the order `index.html` loads them), and writes the service worker's precache list from the files in `dist/`. `public/` is never changed, so local development still serves one file per script:
+`wrangler.toml` publishes a static-assets-only Worker (no server code). Before each deploy, wrangler runs `scripts/build.js`, which copies `public/` to `dist/` with the JS and CSS minified by esbuild, and serves `dist/`. To keep the number of requests low, the build also joins the app's scripts into `js/bundle.js` and its stylesheets into `css/app.css` (in the order `index.html` loads them), and writes the service worker's precache list from the files in `dist/`. It also writes `version.json` with `TD.VERSION`, left out of the precache, which the app fetches once per load to spot a newer deploy. `public/` is never changed, so local development still serves one file per script:
 
 ```bash
 npx wrangler deploy
@@ -121,6 +122,7 @@ npx wrangler preview
 - **2D plots menu** (the plot button): you can click to place an item or drag out a box.
   - **2D plots (pgfplots):** function, line, scatter, area, bar, contour, heatmap.
   - **Pie chart:** one `label value [#color]` per line.
+  - **2D Geometry:** a plain TikZ figure with points, vectors, angle marks and measures (see 2D geometry below).
 - **3D menu** (the button with three axes, below 2D plots): eight tools, one for each kind of 3D object. Its variants are picked in its panel, not in the menu.
   - **3D plots:** Surface `z = f(x, y)` (set Type to Mesh for a wireframe), Parametric (x(u, v), y(u, v), z(u, v)), Space curve (x(t), y(t), z(t)) and Scatter 3D. The view angles follow pgfplots `view={az}{el}`.
   - **3D figures:** Solid region (Shape picks an ellipse, rectangle, polar curve or polar rectangle (a cylindrical wedge); Riemann columns turns it into boxes), Revolution (Lower g(x) makes washers, Turn about y-axis makes shells, Sweep cuts it open, Show a slice highlights Δx), Solid (Shape picks box, cylinder, cone, frustum, sphere, prism, pyramid or spherical wedge) and 3D Geometry.
@@ -136,7 +138,7 @@ npx wrangler preview
   - **Temml**: MathML set in Latin Modern Math by the browser. It covers more LaTeX and looks closer to MathJax / TeX, but fine details (accent widths, stretchy brackets) vary a little between browsers.
   - Exported SVGs carry the stylesheet for the engine in use. Temml SVGs keep real MathML.
 - **Styling:**
-  - colour picker with presets, alpha and "No colour"
+  - colour picker with presets, alpha and **Default** (**None** on fills). Every block editor (Quantum, Automaton, Bit field, CD, XyMatrix, Timing…) and the document toolbar use the same picker: a preset is written as its `xcolor` name (`red`, `blue!20`), any other colour as `rgb,255:red,…;green,…;blue,…`
   - **fills** with three tabs: Basic (a colour), **Gradient** (linear or radial, 12 presets, rotate, scale, centre and draggable colour stops; exported as pgf shadings) and **Pattern** (vertical, horizontal, grid, diagonal, crosshatch, bricks, dots, with size, line width and colour; exported with `patterns.meta`)
   - line width presets, dash presets (dotted, dashed, dash dot, densely dashed, long dashes…) or a custom `on off …` pattern in pt (`dash pattern=`), arrow tips, opacity
   - text boxes: drag the handle on a text's right edge to give it a wrap width, then choose left / centre / right / justify (`text width=`, `align=`)
@@ -186,6 +188,13 @@ npx wrangler preview
 - **Wires:** hover or select a node and drag the blue handle on its right to another cell (an empty end gets a `\zxN{}` point). Click a wire to choose its shape from pictures (straight, the package's `o` / `s` / `C` curves and more), put an H, Z or X marker on it, or make it classical, bold or dashed.
 - **Nodes:** the panel sets a spider's colour, phase (plain or a fraction, with its sign), where the phase goes (in the node or in a label beside it), the gap before its column, and lists the wires leaving it. Double-click a spider or press Enter to type its phase.
 - The `zx-calculus` code is live on the right, both ways; cells you didn't touch keep the code you wrote. It is exported inside `\begin{ZX}` with `\usepackage{zx-calculus}`, and **Import LaTeX/TikZ** turns a `ZX` environment back into a diagram.
+
+### 2D geometry (TikZ)
+- **2D plots → 2D Geometry** adds a figure: a vector v from P to Q at `(\vang:\vlen)` on a grid, with Δx and Δy printed from the values, and its angle θ marked. Double-click it, press Enter or use **Edit 2D Geometry…** in the panel to open the editor. The panel has a slider for each value set to a number (`\pgfmathsetmacro{\vlen}{4}`) and the scale.
+- **Editor:** the 3D geometry editor seen straight on, with a unit grid. Drag empty space or use the arrow keys to move the view. Drag a point to move it on the 0.05 grid (Alt places it freely); hold Shift to snap to whichever is nearer: a whole-number point, or a multiple of 15° from the point a line joins it to (its length on the 0.05 grid; Alt keeps only the angle); a point given as (angle:radius) keeps that form and snaps to 1° and 0.05. A circle moves by its rim or its centre; hovering the rim shows a square at its top right that sets the radius (snapped to 0.05; Alt sizes it freely): a number, a length in cm or mm, or the value it names (`circle (\r)`) is rewritten. Drag a line, edge or filled shape (a circle: its rim) to move the whole object by one step (0.05; Alt free): every literal point it uses moves, and a named point moves in its `\coordinate` (or the values it names), so anything else built on it follows; a path through computed points (`|-`, `$…$`, loops, plots) and grids don't move. ⌘A (Ctrl+A) selects every command: dragging any of them moves them all by one step (the grid too, both corners), a value they share is written once, ⌫ deletes them and Esc or a click on empty space clears the selection. A point whose coordinates are values (`\vlen`, `\vang`) writes the new values there, so everything that uses them follows. Click a line or label to select the command that drew it; double-click to label it; right-click to duplicate, change the draw order or delete.
+- **Palette:** axes, a grid, points (x, y) and (r, θ), labels, segments (between two selected points), vectors (to the selected point), projections onto the axes, polygons, circles, angle and right-angle marks (at the middle point of a selected path through three named points, such as `(A) -- (B) -- (C)`, or a new angle), plots y = f(x), polar r(θ) and parametric, and measures. Keys `A G P T S V C M F`.
+- **Measures** (Δx, Δy, Length, Angle) need two named points: select a segment between them, or a point (measured from the origin). Points written as numbers become `\pgfmathsetmacro` values first, so the measure is computed in the code (`veclen`, `atan2`) and printed with `\pgfmathprintnumber`; dragging a point updates it.
+- The drawing reads `(A |- B)` and `(A -| B)`, `grid`, `\pic{angle}` and `\pic{right angle}` with quoted labels, nodes with `pos=`, and `\pgfmathprintnumber` with `fixed`, `precision` and `zerofill`, plus everything 3D geometry reads. Exported with the libraries it uses (`angles`, `quotes`, `arrows.meta`, `calc`); the picture's options go on a shifted `scope`.
 
 ### 3D geometry (tikz-3dplot)
 - **3D → 3D Geometry** adds a figure: axes and a point P given by \tdplotsetcoord, with its φ and θ angles. Double-click it, press Enter or use **Edit 3D Geometry…** in the panel to open the editor. The panel also turns the view (tilt θ and turn φ, as in `\tdplotsetmaincoords`) and sets the scale.
@@ -350,6 +359,9 @@ Yes. It is free and open source, with no paid tier, account or login.
 **Does it work offline?**
 Yes. It is a progressive web app: after the first visit it works without a connection, and you can install it like a desktop app.
 
+**How do I know there is a newer version?**
+When a newer release is on the site you opened the app from, an amber dot appears before the version number at the bottom of the file list. Click it to reload into the new version. The app asks once per load, and only that same site (a small `version.json`); offline, nothing changes.
+
 **Does it work on phones and tablets?**
 Tablets, yes, including a phone opened flat or turned sideways. A phone held upright shows a notice asking you to continue on a bigger screen: the editor needs the room.
 
@@ -366,7 +378,7 @@ Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf pr
 Yes: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Plain `\draw`, `\fill`, `\node` and `\coordinate` paths become shapes; anything else is kept as TikZ code and exported exactly as written, so a figure you import and export again comes back unchanged. Files exported by DiagramTeX re-import exactly, plots included.
 
 **Which LaTeX packages does the output need?**
-TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams, `tikz-feynman` for Feynman diagrams, `tikz-3dplot` for 3D geometry, `tikz-timing` for timing diagrams, the TikZ `automata` library for state machines, `karnaugh-map` for Karnaugh maps, `bytefield` for bit fields, `chemfig` for chemistry and `blochsphere` for Bloch spheres. The export lists what each figure needs. quantikz2 restyles every `tikz-cd` diagram in the same document, so when a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own (a snippet lists them in its header comment).
+TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams, `tikz-feynman` for Feynman diagrams, `tikz-3dplot` for 3D geometry (2D geometry is plain TikZ), `tikz-timing` for timing diagrams, the TikZ `automata` library for state machines, `karnaugh-map` for Karnaugh maps, `bytefield` for bit fields, `chemfig` for chemistry and `blochsphere` for Bloch spheres. The export lists what each figure needs. quantikz2 restyles every `tikz-cd` diagram in the same document, so when a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own (a snippet lists them in its header comment).
 
 ## Project structure
 
@@ -384,8 +396,9 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` fo
 - `public/js/zxeditor.js`: the overlay ZX editor (palette, cell grid, wire handles and shapes, live zx-calculus code)
 - `public/js/feynman.js`: Feynman diagrams: tikz-feynman parser and writer, layout, canvas drawing and export
 - `public/js/fyeditor.js`: the overlay Feynman editor (palette, centimetre grid, vertex handles, properties and live code)
+- `public/js/geo2d.js`: the 2D geometry block: plain TikZ read by geo3d.js seen straight on, its panel sliders and export
 - `public/js/geo3d.js`: 3D geometry: tikz-3dplot reader (statements with their spans), projection, canvas drawing, code edits and export
-- `public/js/g3editor.js`: the overlay 3D geometry editor (palette, orbiting view, draggable points, properties and live code)
+- `public/js/g3editor.js`: the overlay 3D geometry editor (palette, orbiting view, draggable points, properties and live code); it also edits 2D geometry in a flat mode with its own palette
 - `public/js/timing.js`: timing diagrams: tikz-timing parser and writer, layout, canvas drawing and export
 - `public/js/tmeditor.js`: the overlay timing editor (value palette, painting, draggable transitions, arrows between edges, properties and live code)
 - `public/js/automata.js`: state machines: TikZ automata parser and writer, layout, auto layout, canvas drawing and export

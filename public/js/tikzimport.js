@@ -41,8 +41,27 @@
   function stripComments(src) {
     return src.split('\n').map((l) => { for (let i = 0; i < l.length; i++) { if (l[i] === '\\') { i++; continue; } if (l[i] === '%') return l.slice(0, i); } return l; }).join('\n');
   }
+  // numeric macros the picture defines (\def\r{1.5}, \newcommand{\r}{2pt}, \pgfmathsetmacro{\r}{3/2}): name -> text,
+  // written into coordinates and lengths where they are used. MAC is the current picture's (set by parseStatements).
+  let MAC = null;
+  function expandMac(v) {
+    v = String(v);
+    if (!MAC || !MAC.size || !v.includes('\\')) return v;
+    const t = v.trim(), whole = /^\\([A-Za-z@]+)$/.exec(t);
+    if (whole && MAC.has(whole[1])) return MAC.get(whole[1]);
+    return v.replace(/\\([A-Za-z@]+)/g, (m, n) => (MAC.has(n) ? `(${MAC.get(n)})` : m));
+  }
+  // a macro definition's name and value, when it takes no arguments
+  function macroDef(name, args) {
+    const m = /^\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*(\[[^\]]*\])?\s*\{([\s\S]*)\}\s*;?\s*$/.exec(args);
+    if (!m || m[2]) return null;
+    let v = expandMac(m[3].trim());
+    if (/^pgfmath/.test(name)) { const n = TD.evalNumber ? TD.evalNumber(v, NaN) : NaN; if (!isFinite(n)) return null; v = String(+n.toFixed(6)); }
+    return isFinite(len(v)) ? { nm: m[1], v } : null;
+  }
   // length with unit -> px (default unit: cm for coordinates, pt for widths)
   function len(v, defUnit = 'cm') {
+    v = expandMac(v);
     const m = String(v).trim().match(/^([-+]?[\d.]*\d(?:e[-+]?\d+)?|[-+]?\.\d+)\s*(cm|mm|pt|in|em|ex|bp)?$/i);
     if (!m) { const e = TD.evalNumber ? TD.evalNumber(v, NaN) : NaN; return isFinite(e) ? (defUnit === 'pt' ? e / K : e * PX) : NaN; }
     const n = parseFloat(m[1]), u = (m[2] || defUnit).toLowerCase();
@@ -50,7 +69,20 @@
   }
 
   function makeCtx() {
-    return { colors: { ...NAMED }, names: {}, sx: PX, sy: PX, warnings: [], styles: new Map(), boxes: {} };
+    return { colors: { ...NAMED }, macros: new Map(), names: {}, sx: PX, sy: PX, warnings: [], styles: new Map(), boxes: {} };
+  }
+  // xcolor's svgnames (DarkBlue, ForestGreen, SteelBlue…) are the CSS colour names, written in CamelCase; the
+  // browser knows their values. Lower-case names stay xcolor's own (green is #00ff00 there, not CSS's #008000).
+  let svgCtx = null;
+  function svgName(n) {
+    if (!/^[A-Z][a-z]+(?:[A-Z][a-z]+)*$/.test(n)) return null;
+    try {
+      svgCtx = svgCtx || document.createElement('canvas').getContext('2d');
+      if (!svgCtx) return null;
+      svgCtx.fillStyle = '#010203'; svgCtx.fillStyle = n;
+      const v = String(svgCtx.fillStyle).toLowerCase();
+      return v === '#010203' || !/^#[0-9a-f]{6}$/.test(v) ? null : v;
+    } catch (e) { return null; }
   }
   function color(C, spec) {
     if (!spec) return null;
@@ -60,7 +92,7 @@
     if (/:/.test(spec) && TD.xcolorExpr) return TD.xcolorExpr(spec, (n) => C.colors[n.trim()] || C.colors[n.trim().toLowerCase()] || null) || undefined;
     // mixes: red!50, red!30!blue, red!50!black
     const parts = spec.split('!').map((x) => x.trim());
-    const base = (n) => C.colors[n] || C.colors[n.toLowerCase()] || null;
+    const base = (n) => C.colors[n] || C.colors[n.toLowerCase()] || svgName(n);
     let c = base(parts[0]);
     if (!c) return undefined;
     const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -249,7 +281,7 @@
     return toks;
   }
   function coord(C, raw, cur) {
-    raw = raw.trim();
+    raw = expandMac(raw.trim());
     let m;
     if ((m = raw.match(/^([^,:]+):([^,:]+)$/))) { // polar
       const a = (TD.evalNumber(m[1], 0) * Math.PI) / 180, r = len(m[2]);
@@ -339,7 +371,7 @@
       if (tk.rel && cur) return { x: cur.x + p.x, y: cur.y + p.y };
       return p;
     };
-    let pendingOp = null, ctrl = [], lastSegLabel = null;
+    let pendingOp = null, ctrl = [], lastSegLabel = null, lastArc = null;
     for (let i = 0; i < toks.length; i++) {
       const tk = toks[i];
       if (tk.t === 'coord') {
@@ -402,7 +434,7 @@
             const nx = toks[i + 1];
             let a1, a2, r;
             if (nx && nx.t === 'opts') { const so = style(C, parseOpts(nx.v), cmd); a1 = so.a1; a2 = so.a2 ?? (so.da != null ? a1 + so.da : undefined); r = so.r ?? so.rx; i++; }
-            else if (nx && nx.t === 'coord') { const q = nx.raw.split(':'); a1 = parseFloat(q[0]); a2 = parseFloat(q[1]); r = len(q[2]); i++; }
+            else if (nx && nx.t === 'coord') { const q = nx.raw.split(':'); a1 = TD.evalNumber(expandMac(q[0]), NaN); a2 = TD.evalNumber(expandMac(q[1]), NaN); r = len(q[2]); i++; }
             if (![a1, a2, r].every(isFinite) || !cur) { C.warnings.push('arc not understood'); break; }
             const c = { x: cur.x - r * Math.cos((a1 * Math.PI) / 180), y: cur.y + r * Math.sin((a1 * Math.PI) / 180) };
             const end = { x: c.x + r * Math.cos((a2 * Math.PI) / 180), y: c.y - r * Math.sin((a2 * Math.PI) / 180) };
@@ -416,7 +448,7 @@
               for (let k = 1; k <= n; k++) { const a = ((a1 + ((a2 - a1) * k) / n) * Math.PI) / 180; pts.push({ x: c.x + r * Math.cos(a), y: c.y - r * Math.sin(a) }); }
               segs.push({ k: 'A', pts });
             }
-            cur = end;
+            cur = end; lastArc = { c, r, a1, a2, end };
             break;
           }
           default: C.warnings.push(`Path operation “${tk.v}” not supported`);
@@ -431,6 +463,12 @@
         if (pendingOp === '--' || pendingOp === 'to') { lastSegLabel = lab; continue; }
         const along = no.some((o) => ['midway', 'near start', 'near end', 'pos', 'sloped', 'auto', 'swap'].includes(o.k));
         if (along && segs.length && segs[segs.length - 1].k === 'L' && segs.length === 1) { segs[0].label = lab; continue; }
+        // midway (or pos=) on the arc just drawn: the point that far round it
+        if (along && lastArc && lastArc.end === cur) {
+          const A = lastArc, a = ((A.a1 + (A.a2 - A.a1) * lab.labelPos) * Math.PI) / 180;
+          if (tk.text.trim()) out.push(textShape(C, tk.text, no, { x: A.c.x + A.r * Math.cos(a), y: A.c.y - A.r * Math.sin(a) }));
+          continue;
+        }
         // node at the current point (e.g. after a coordinate): emit as a text shape
         if (cur && tk.text.trim()) out.push(textShape(C, tk.text, no, cur));
         if (tk.name && cur) C.names[tk.name] = { ...cur };
@@ -726,6 +764,8 @@
   function parseStatements(C, s, o) {
     o = o == null ? s : o;
     if (C.styles) STY = C.styles;
+    if (!C.macros) C.macros = new Map();
+    MAC = C.macros;
     const shapes = [];
     const preview = !!C.preview;
     let i = 0;
@@ -829,6 +869,10 @@
         const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
         i = end;
         // styles set outside any scope hold for the rest of the picture (and, from the preamble, every picture)
+        if (/^(g|e|x)?def$|^(re|provide|new)command$|^pgfmathsetmacro$|^pgfmathtruncatemacro$/.test(name)) {
+          const d = macroDef(name, s.slice(j, end));
+          if (d) C.macros.set(d.nm, name === 'pgfmathtruncatemacro' ? String(Math.trunc(+d.v)) : d.v);
+        }
         if ((name === 'tikzset' || name === 'tikzstyle') && C.styles && !(C.scopes || []).length) defineStyles(C, name, s.slice(j, end));
         if (name === 'definecolor' || name === 'colorlet') {
           const args = []; let q = j;
@@ -1023,6 +1067,8 @@
         own.ctx = ctx;
         const used = Object.keys(C.names).filter((nm) => own.code.includes('(' + nm));
         if (used.length) own.names = Object.fromEntries(used.map((nm) => [nm, C.names[nm]]));
+        const macs = [...C.macros.keys()].filter((nm) => new RegExp(`\\\\${nm}(?![A-Za-z@])`).test(own.code));
+        if (macs.length && own.kind !== 'defs') own.macros = Object.fromEntries(macs.map((nm) => [nm, C.macros.get(nm)]));
       }
       prevEnd = end;
     });
@@ -1041,7 +1087,7 @@
       if (t.k === 0 && t.i === 0) { t.open = open || null; t.N = N; if (drop.length) t.drop = drop; if (safe.length) t.po = safe.join(', '); }
       if (t.k === N - 1 && t.i === t.n - 1) t.tail = tail;
       x.tex = t;
-      if (x.type === 'tikz' && t.i === 0) { x.code = flat[n].code; x.ctx = flat[n].ctx; if (flat[n].names) x.names = flat[n].names; }
+      if (x.type === 'tikz' && t.i === 0) { x.code = flat[n].code; x.ctx = flat[n].ctx; if (flat[n].names) x.names = flat[n].names; if (flat[n].macros) x.macros = flat[n].macros; }
     });
     // lines that start or end on a named point stay attached to it (app.js links), so they follow it
     const pt = new Map();
@@ -1063,9 +1109,10 @@
     return shapes;
   }
   // the preview of TikZ code kept as an object, drawn where it was (its scopes, the names it uses)
-  function preview(code, ctx, names) {
+  function preview(code, ctx, names, macros) {
     const C = makeCtx();
     C.preview = true; C.scopes = []; C.names = { ...(names || {}) };
+    C.macros = new Map(Object.entries(macros || {}));
     for (const c of ctx || []) { pictureOpts(C, c); C.scopes.unshift({ ...readXf(C, parseOpts(c)), shape: false }); }
     let shapes = [];
     try { shapes = parseStatements(C, blankComments(String(code || ''))); } catch (e) { C.warnings.push(e.message); }
@@ -1221,5 +1268,6 @@
   TD.importInternals = { parseOpts, arrowSpec, len, tokenizePath, preview, blankComments };
   // a TikZ colour (red, blue!20, red!30!black) → '#rrggbb', or null / undefined (none / unknown)
   let colorCtx = null;
+  TD.svgColor = svgName;
   TD.tikzColor = (spec) => color(colorCtx || (colorCtx = makeCtx()), spec);
 })();

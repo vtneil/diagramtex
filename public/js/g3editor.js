@@ -3,7 +3,10 @@
 // empty space turns the view, dragging a point moves it (level, or up and down with ⇧), and clicking a line,
 // face or label selects the command that drew it; that command's properties; and the tikz-3dplot code beside
 // them, live both ways. Every edit is a change to the code, so untouched code is handed back as written.
-// TD.geo3dEditor.open(block, onDone) — block: { src }; onDone({ src }) on Done.
+// TD.geo3dEditor.open(block, onDone, { flat }) — block: { src }; onDone({ src }) on Done. With flat, the 2D geometry
+// editor: the same picture seen straight on, a 2D palette (points (x, y) and (r:θ), vectors, projections, angle
+// marks, function / polar / parametric plots, measures that print Δx, Δy, lengths and angles), and dragging empty
+// space moves the view.
 (function () {
   const TD = window.TD, G = TD.geo3d, V3 = TD.V3;
   const { esc, r2 } = TD.util;
@@ -87,8 +90,129 @@
       ['tarc', 'Angle from z', (n, sel, L) => thetaArc(sel, L), mini('\\tdplotsetthetaplanecoords{40}\\tdplotdrawarc[thick, tdplot_rotated_coords]{(0,0,0)}{0.6}{0}{50}{}{}')],
     ]],
   ];
-  const ITEM = {}, KEYS = {};
-  for (const [, items] of PAL) for (const [k, name, code, m, key] of items) { ITEM[k] = { k, name, code, mini: m, key }; if (key) KEYS[key.toLowerCase()] = k; }
+  function index(pal) {
+    const I = {}, K = {};
+    for (const [, items] of pal) for (const [k, name, code, m, key, need] of items) { I[k] = { k, name, code, mini: m, key, need, pt: k === 'point' || k === 'ppoint' }; if (key) K[key.toLowerCase()] = k; }
+    return [I, K];
+  }
+  const [ITEM3, KEYS3] = index(PAL);
+
+  // ---------------------------------------------------------------- 2D palette
+  const mini2 = (body) => `\\begin{tikzpicture}\n\\draw[gray, ->] (0,0) -- (1.3,0);\\draw[gray, ->] (0,0) -- (0,1);\n${body}\n\\end{tikzpicture}`;
+  const NUM = /^\s*-?(\d+\.?\d*|\.\d+)\s*$/;
+  const isName = (Lx, t) => { const m = /^\s*([A-Za-z][\w]*)\s*$/.exec(t); return m && Lx.names.has(m[1]) ? m[1] : null; };
+  // the named points of the selection: a point, or the named points a path goes through
+  function namedOf(sel, Lx) {
+    const st = sel != null ? Lx.S[sel] : null;
+    if (!st) return [];
+    if (st.k === 'coordinate') return [st.name];
+    if (st.k === 'path') return st.els.filter((x) => x.t === 'pt').map((p) => isName(Lx, Lx.src.slice(p.is, p.ie))).filter(Boolean);
+    return [];
+  }
+  // two points to measure or join: those of a selected path, or a selected point and the point named before it
+  function pairOf(sel, Lx) {
+    const nm = namedOf(sel, Lx), st = Lx.S[sel];
+    if (st && st.k === 'path') return nm.length >= 2 ? [nm[0], nm[nm.length - 1]] : null;
+    if (nm.length !== 1) return null;
+    const all = [...Lx.names.keys()], i = all.indexOf(nm[0]), o = all[i - 1] || all[i + 1];
+    return o ? [o, nm[0]] : null;
+  }
+  function freeNames(Lx, n) {
+    const out = [], has = (x) => Lx.names.has(x) || out.includes(x);
+    for (const c of ['A', 'B', 'C', 'D', 'E', 'P', 'Q', 'R', 'S', 'U', 'W']) { if (out.length === n) break; if (!has(c)) out.push(c); }
+    for (let i = 1; out.length < n; i++) if (!has('P' + i)) out.push('P' + i);
+    return out;
+  }
+  // macro names are letters only
+  const mbase = (n) => n.replace(/\d/g, (d) => 'abcdefghij'[d]).replace(/[^A-Za-z]/g, '');
+  const freeMacro = (Lx, n, taken = []) => { let m = n; while (Lx.macros.has(m) || taken.includes(m)) m += 'z'; return m; };
+  // a named point's x and y as pgfmath expressions; a point at plain numbers first gets them as values
+  // (\pgfmathsetmacro), so dragging it later still moves what is measured from it
+  function xyOf(N, Lx, edits, taken) {
+    const st = Lx.S.find((x) => x.k === 'coordinate' && x.name === N && x.atPt);
+    if (!st) return null;
+    const { is, ie } = st.atPt, comma = G.splitTop(Lx.src, is, ie), colon = G.splitTop(Lx.src, is, ie, ':');
+    const polar = comma.length === 1 && colon.length === 2, comps = polar ? colon : comma;
+    if (comps.length !== 2) return null;
+    let ex = comps.map((c) => c.t.trim());
+    if (comps.every((c) => NUM.test(c.t))) {
+      const names = (polar ? ['ang', 'len'] : ['x', 'y']).map((k) => freeMacro(Lx, mbase(N) + k, taken));
+      taken.push(...names);
+      let ind = ''; for (let i = st.s; i > 0 && /[ \t]/.test(Lx.src[i - 1]); i--) ind = Lx.src[i - 1] + ind;
+      edits.push({ s: st.s, e: st.s, t: names.map((m, i) => `\\pgfmathsetmacro{\\${m}}{${ex[i]}}\n${ind}`).join('') });
+      comps.forEach((c, i) => edits.push({ s: c.s, e: c.e, t: `\\${names[i]}` }));
+      ex = names.map((m) => `\\${m}`);
+    }
+    const par = (t) => (/^\\?[\w.]+$/.test(t) ? t : `(${t})`);
+    ex = ex.map(par);
+    return polar ? { x: `${ex[1]}*cos(${ex[0]})`, y: `${ex[1]}*sin(${ex[0]})` } : { x: ex[0], y: ex[1] };
+  }
+  const NEED_PAIR = 'Select a segment or vector between two named points first';
+  function measure(kind) {
+    return (n, sel, Lx) => {
+      const pr = pairOf(sel, Lx);
+      if (!pr) return null;
+      const [A, B] = pr, edits = [], taken = [], a = xyOf(A, Lx, edits, taken), b = xyOf(B, Lx, edits, taken);
+      if (!a || !b) return null;
+      const m = freeMacro(Lx, { dx: 'dx', dy: 'dy', len: 'len', ang: 'ang' }[kind] + mbase(A) + mbase(B), taken);
+      const pn = (v, d = 2) => `\\pgfmathprintnumber[fixed,precision=${d}]{\\${m}}`;
+      const dx = `${b.x}-${a.x}`, dy = `${b.y}-${a.y}`;
+      const code = {
+        dx: `\\pgfmathsetmacro{\\${m}}{${dx}}\n\\path (${A}) -- (${A} -| ${B}) node[midway, below]{$\\Delta x = ${pn()}$};`,
+        dy: `\\pgfmathsetmacro{\\${m}}{${dy}}\n\\path (${A} -| ${B}) -- (${B}) node[midway, right]{$\\Delta y = ${pn()}$};`,
+        len: `\\pgfmathsetmacro{\\${m}}{veclen(${dx},${dy})}\n\\path (${A}) -- (${B}) node[midway, below right]{$|${A}${B}| = ${pn()}$};`,
+        ang: `\\pgfmathsetmacro{\\${m}}{atan2(${dy},${dx})}\n\\node[below right] at (${A}) {$\\theta = ${pn(0, 1)}^\\circ$};`,
+      }[kind];
+      return { edits, code, atEnd: true };
+    };
+  }
+  // an angle mark at the middle point of a selected path through three named points, or a new corner to mark
+  function angleMark(right) {
+    return (n, sel, Lx) => {
+      const nm = namedOf(sel, Lx), st = sel != null ? Lx.S[sel] : null;
+      const pic = (a, b, c) => right ? `\\pic[draw, angle radius=3mm] {right angle = ${a}--${b}--${c}};` : `\\pic[draw, "$\\alpha$", angle radius=6mm] {angle = ${a}--${b}--${c}};`;
+      if (st && st.k === 'path' && nm.length >= 3) return pic(nm[0], nm[1], nm[2]);
+      const [a, b, c] = freeNames(Lx, 3);
+      return `\\coordinate (${a}) at (2,0);\n\\coordinate (${b}) at (0,0);\n\\coordinate (${c}) at (${right ? '0,1.5' : '1.2,1.6'});\n\\draw (${a}) -- (${b}) -- (${c});\n${pic(a, b, c)}`;
+    };
+  }
+  const PAL2 = [
+    ['Frames', [
+      ['axes', 'Axes', () => `\\draw[-stealth] (-0.5,0) -- (4.5,0) node[right]{$x$};\n\\draw[-stealth] (0,-0.5) -- (0,3.5) node[above]{$y$};\n\\foreach \\x in {1,...,4} \\draw (\\x,2pt) -- (\\x,-2pt) node[below]{$\\x$};\n\\foreach \\y in {1,...,3} \\draw (2pt,\\y) -- (-2pt,\\y) node[left]{$\\y$};`,
+        '\\begin{tikzpicture}\\draw[thick, ->] (0,0) -- (1.4,0);\\draw[thick, ->] (0,0) -- (0,1);\\foreach \\x in {0.4,0.8,1.2} \\draw (\\x,0.08) -- (\\x,-0.08);\\end{tikzpicture}', 'A'],
+      ['grid', 'Grid', () => `\\draw[step=1, very thin, black!15] (-0.5,-0.5) grid (4.5,3.5);`, '\\begin{tikzpicture}\\draw[step=0.25, gray] (0,0) grid (1.25,1);\\end{tikzpicture}', 'G'],
+    ]],
+    ['Points', [
+      ['point', 'Point (x, y)', (n) => `\\coordinate (${n}) at (1,2);\n\\fill (${n}) circle (1.5pt) node[above right]{$${n}$};`, mini2('\\fill (0.7,0.6) circle (2.5pt);'), 'P'],
+      ['ppoint', 'Point (r, θ)', (n) => `\\coordinate (${n}) at (40:2);\n\\draw[dashed, gray] (0,0) -- (${n});\n\\fill (${n}) circle (1.5pt) node[above right]{$${n}$};`, mini2('\\draw[dashed] (0,0) -- (40:1.1);\\draw (0.3,0) arc (0:40:0.3);\\fill (40:1.1) circle (2.5pt);')],
+      ['label', 'Label', () => `\\node at (1,1) {$A$};`, mini2('\\node at (0.6,0.5) {$A$};'), 'T'],
+    ]],
+    ['Lines', [
+      ['segment', 'Segment', (n, sel, Lx) => { const p = pairOf(sel, Lx), st = sel != null ? Lx.S[sel] : null; return p && st && st.k === 'coordinate' ? `\\draw (${p[0]}) -- (${p[1]});` : `\\draw (0.5,0.5) -- (2.5,1.5);`; }, mini2('\\draw[thick] (0.2,0.2) -- (1.1,0.8);'), 'S'],
+      ['vector', 'Vector', (n, sel, Lx) => { const nm = namedOf(sel, Lx), st = sel != null ? Lx.S[sel] : null; return `\\draw[-stealth, thick, blue] (0,0) -- ${st && st.k === 'coordinate' ? `(${nm[0]})` : '(2,1.5)'} node[midway, above left]{$\\vec{v}$};`; }, mini2('\\draw[-stealth, thick, blue] (0,0) -- (1,0.75);'), 'V'],
+      ['proj', 'Projection', (n, sel, Lx) => { const st = sel != null ? Lx.S[sel] : null; if (st && st.k === 'coordinate') return `\\draw[dashed, gray] (${st.name}) -- (${st.name} |- 0,0);\n\\draw[dashed, gray] (${st.name}) -- (${st.name} -| 0,0);`; return `\\draw[dashed, gray] (2,1.5) -- (2,0);\n\\draw[dashed, gray] (2,1.5) -- (0,1.5);`; }, mini2('\\draw[dashed] (0.9,0.7) -- (0.9,0) (0.9,0.7) -- (0,0.7);\\fill (0.9,0.7) circle (2.5pt);')],
+      ['polygon', 'Polygon', () => `\\draw (0,0) -- (2,0) -- (1.5,1.5) -- cycle;`, mini2('\\draw[thick] (0.1,0.1) -- (1.1,0.1) -- (0.8,0.85) -- cycle;')],
+      ['circle', 'Circle', () => `\\draw (1,1) circle (1);`, mini2('\\draw[thick] (0.6,0.5) circle (0.4);'), 'C'],
+    ]],
+    ['Angles', [
+      ['amark', 'Angle mark', angleMark(false), '\\begin{tikzpicture}\\draw[thick] (1.2,0) -- (0,0) -- (0.6,0.8);\\draw (0.35,0) arc (0:53:0.35);\\end{tikzpicture}', 'M'],
+      ['rmark', 'Right angle', angleMark(true), '\\begin{tikzpicture}\\draw[thick] (1.2,0) -- (0,0) -- (0,1);\\draw (0.25,0) -- (0.25,0.25) -- (0,0.25);\\end{tikzpicture}'],
+    ]],
+    ['Plots', [
+      ['fplot', 'y = f(x)', () => `\\draw[thick, blue, domain=-2:2, samples=60] plot (\\x, {0.5*\\x*\\x});`, mini2('\\draw[thick, blue, domain=-0.1:1.2, samples=30] plot (\\x, {0.7*\\x*\\x});'), 'F'],
+      ['rplot', 'Polar r(θ)', () => `\\draw[thick, blue, domain=0:360, samples=120] plot (\\x:{1+0.5*cos(3*\\x)});`, '\\begin{tikzpicture}\\draw[thick, blue, domain=0:360, samples=90] plot (\\x:{0.6+0.3*cos(3*\\x)});\\end{tikzpicture}'],
+      ['pplot', 'Parametric', () => `\\draw[thick, blue, variable=\\t, domain=0:360, samples=120] plot ({2*cos(\\t)}, {sin(2*\\t)});`, '\\begin{tikzpicture}\\draw[thick, blue, variable=\\t, domain=0:360, samples=90] plot ({0.8*cos(\\t)}, {0.5*sin(2*\\t)});\\end{tikzpicture}'],
+    ]],
+    ['Measures', [
+      ['mdx', 'Δx', measure('dx'), '\\begin{tikzpicture}\\draw[thick] (0,0) -- (1,0.7);\\draw[dashed] (0,0) -- (1,0);\\end{tikzpicture}', null, NEED_PAIR],
+      ['mdy', 'Δy', measure('dy'), '\\begin{tikzpicture}\\draw[thick] (0,0) -- (1,0.7);\\draw[dashed] (1,0) -- (1,0.7);\\end{tikzpicture}', null, NEED_PAIR],
+      ['mlen', 'Length', measure('len'), '\\begin{tikzpicture}\\draw[thick] (0,0) -- (1,0.7);\\draw (0.1,-0.14) -- (1.1,0.56);\\end{tikzpicture}', null, NEED_PAIR],
+      ['mang', 'Angle', measure('ang'), '\\begin{tikzpicture}\\draw[thick] (0,0) -- (1,0.7);\\draw[dashed] (0,0) -- (1.1,0);\\draw (0.4,0) arc (0:35:0.4);\\end{tikzpicture}', null, NEED_PAIR],
+    ]],
+  ];
+  const [ITEM2, KEYS2] = index(PAL2);
+  let FLAT = false;
+  const pal = () => (FLAT ? PAL2 : PAL), ITEMS = () => (FLAT ? ITEM2 : ITEM3), KEYS = () => (FLAT ? KEYS2 : KEYS3);
   // dashed lines from a point down to the xy-plane and across to the axes
   function projOf(sel, L) {
     const st = sel != null ? L.S[sel] : null, nm = st && (st.k === 'setcoord' || st.k === 'coordinate') ? st.name : null;
@@ -108,8 +232,9 @@
   }
   const miniCache = new Map();
   function miniSvg(code) {
-    if (miniCache.has(code)) return miniCache.get(code);
-    const L = G.layout(code), k = Math.min(56 / (L.bb.w || 1), 36 / (L.bb.h || 1)) * L.k;
+    const ck = (FLAT ? '2|' : '3|') + code;
+    if (miniCache.has(ck)) return miniCache.get(ck);
+    const L = G.layout(code, FLAT), k = Math.min(56 / (L.bb.w || 1), 36 / (L.bb.h || 1)) * L.k;
     const fit = { k, px: (p) => ({ x: p[0] * k, y: -p[1] * k }) };
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const it of L.items) for (const p of it.pts || (it.at ? [it.at] : [])) { const q = fit.px(p); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }
@@ -118,7 +243,7 @@
     try { body = V3.svg(items, fit, { export: true }); } catch (e) { body = ''; }
     body = body.replace(/stroke="#808080"/g, 'stroke="currentColor" stroke-opacity="0.4"').replace(/fill="currentColor"/g, 'fill="currentColor"');
     const out = `<svg class="zxmini" viewBox="${r2(x0 - 3)} ${r2(y0 - 3)} ${r2(x1 - x0 + 6)} ${r2(y1 - y0 + 6)}" aria-hidden="true">${body}</svg>`;
-    miniCache.set(code, out);
+    miniCache.set(ck, out);
     return out;
   }
 
@@ -151,7 +276,7 @@
       <aside class="cz-side">
         <div class="cz-props"></div>
         <div class="cz-code">
-          <div class="cz-code-head"><span>tikz-3dplot</span><small class="cz-count"></small><button class="flat" data-ge="copy" title="Copy the tikz-3dplot code">Copy</button></div>
+          <div class="cz-code-head"><span class="g3-lang">tikz-3dplot</span><small class="cz-count"></small><button class="flat" data-ge="copy" title="Copy the tikz-3dplot code">Copy</button></div>
           <textarea spellcheck="false" aria-label="tikz-3dplot code"></textarea>
           <div class="cz-msg"></div>
         </div>
@@ -168,7 +293,7 @@
   // ---------------------------------------------------------------- state
   // { src, sel: statement index | null, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E = null, lastDown = { t: 0, x: 0, y: 0 };
-  const L = () => G.layout(E.src);
+  const L = () => G.layout(E.src, FLAT);
   function begin() { if (E.pending == null) E.pending = E.src; }
   function commit() {
     if (E.pending == null) return;
@@ -177,10 +302,10 @@
     updateTools();
   }
   // a change to the code; keepSel: the selected statement stays the one at the same place in the list
-  function edit(fn) { begin(); const r = fn(); if (typeof r === 'string') E.src = r; commit(); clampSel(); draw(); renderProps(); }
+  function edit(fn) { E.many = null; begin(); const r = fn(); if (typeof r === 'string') E.src = r; commit(); clampSel(); draw(); renderProps(); }
   function restore(src) { E.src = src; clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(E.src); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(E.src); restore(E.redo.pop()); }
+  function undo() { E.many = null; commit(); if (!E.undo.length) return; E.redo.push(E.src); restore(E.undo.pop()); }
+  function redo() { E.many = null; commit(); if (!E.redo.length) return; E.undo.push(E.src); restore(E.redo.pop()); }
   const drawable = (st) => st && !['comment', 'begin', 'end', 'raw'].includes(st.k);
   function clampSel() { if (E.sel != null && !drawable(L().S[E.sel])) E.sel = null; }
   const selSt = () => (E.sel != null ? L().S[E.sel] || null : null);
@@ -192,8 +317,8 @@
     let i = 1; while (Lx.names.has('P' + i)) i++; return 'P' + i;
   }
   // new code goes after the selected command, or at the end of the picture
-  function insertAt(Lx) {
-    const st = selSt();
+  function insertAt(Lx, atEnd) {
+    const st = atEnd ? null : selSt();
     if (st && st.k !== 'main') return { at: st.e, lead: '\n' + indentOf(st.s) };
     const e = Lx.end != null ? Lx.S[Lx.end] : null;
     if (e) { let s = e.s; while (s > 0 && /[ \t]/.test(E.src[s - 1])) s--; return { at: s, lead: '', trail: '\n', ind: indentOf(Lx.S[Lx.end - 1] ? Lx.S[Lx.end - 1].s : e.s) || '  ' }; }
@@ -201,17 +326,19 @@
   }
   function indentOf(i) { let s = i; while (s > 0 && /[ \t]/.test(E.src[s - 1])) s--; return E.src.slice(s, i); }
   function add(key) {
-    const it = ITEM[key], Lx = L(), nm = freeName(Lx);
+    const it = ITEMS()[key], Lx = L(), nm = freeName(Lx);
     const selName = (() => { const st = selSt(); return st && (st.k === 'coordinate' || st.k === 'setcoord') ? st.name : null; })();
-    const code = it.code(nm, key === 'vector' ? selName : E.sel, Lx);
-    const pos = insertAt(Lx), ind = pos.ind ?? (pos.lead.replace('\n', '') || '  ');
+    // an item's code: text to add, or { edits made first, code, atEnd: added at the end of the picture }
+    const r = it.code(nm, key === 'vector' && !FLAT ? selName : E.sel, Lx);
+    if (r == null) { const msg = it.need || 'Select what this applies to first'; setTip(msg); setTimeout(() => { if (E && tip.textContent === msg) setTip(''); }, 2400); return; }
+    const code = typeof r === 'string' ? r : r.code, pre = typeof r === 'string' ? [] : r.edits || [];
+    const pos = insertAt(Lx, typeof r === 'object' && r.atEnd), ind = pos.ind ?? (pos.lead.replace('\n', '') || '  ');
     const lines = code.split('\n').map((l) => ind + l).join('\n');
-    const ins = pos.trail ? lines + pos.trail : pos.lead + lines.replace(/^[ \t]*/, ind.length ? '' : '').replace(/^/, pos.lead ? '' : '');
     const before = E.src;
-    edit(() => before.slice(0, pos.at) + (pos.trail ? lines + '\n' : '\n' + lines) + before.slice(pos.at));
-    // select the first drawn command of what was added
-    const L2 = L(), at = pos.at + (pos.trail ? 0 : 1);
-    const i = L2.S.findIndex((st) => st.s >= at && drawable(st) && !['macro', 'rot', 'tplane'].includes(st.k) && (st.k !== 'coordinate' || key === 'point'));
+    edit(() => G.edits(before, [...pre, { s: pos.at, e: pos.at, t: pos.trail ? lines + '\n' : '\n' + lines }]));
+    // select the first drawn command of what was added (past what the edits before it added)
+    const L2 = L(), at = pos.at + (pos.trail ? 0 : 1) + pre.filter((x) => x.e <= pos.at).reduce((a, x) => a + x.t.length - (x.e - x.s), 0);
+    const i = L2.S.findIndex((st) => st.s >= at && drawable(st) && !['macro', 'rot', 'tplane'].includes(st.k) && (st.k !== 'coordinate' || it.pt));
     E.sel = i >= 0 ? i : null;
     draw(); renderProps();
     setTip(`${it.name} added`);
@@ -225,7 +352,19 @@
     if ((s === 0 || E.src[s - 1] === '\n') && E.src[e] === '\n') e++;
     return { s, e };
   }
+  // a point's name where a 2D picture uses it: (P), (P.north), (P |- Q), (Q -| P), angle = A--P--B
+  const nameRe = (nm, g = '') => new RegExp(`(?<=[(\\s|-])${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=[\\s)|;}.-])`, g);
+  // ⌘A: every command the picture draws (not the view or its values); a drag moves them together
+  function selectAll() {
+    const Lx = L(), all = [];
+    Lx.S.forEach((x, i) => { if (drawable(x) && !['main', 'macro'].includes(x.k)) all.push(i); });
+    if (!all.length) return;
+    E.sel = null; E.many = all; closeMenu();
+    draw(); renderProps();
+  }
+  const inMany = (si) => !!(E.many && E.many.includes(si));
   function deleteSel() {
+    if (E.many) { const Lx = L(), del = E.many; edit(() => G.edits(E.src, del.map((i) => ({ ...lineSpan(Lx.S[i]), t: '' })))); E.sel = null; draw(); renderProps(); return; }
     const st = selSt();
     if (!st) return;
     if (st.k === 'main') { setTip('The view stays: turn it instead'); return; }
@@ -233,7 +372,7 @@
     const Lx = L(), del = [E.sel];
     const nm = st.k === 'coordinate' || st.k === 'setcoord' ? st.name : null;
     if (nm) {
-      const re = new RegExp(`\\((\\s*${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(xy|xz|yz|x|y|z)?\\s*)\\)`);
+      const re = FLAT ? nameRe(nm) : new RegExp(`\\((\\s*${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(xy|xz|yz|x|y|z)?\\s*)\\)`);
       Lx.S.forEach((x, i) => { if (i !== E.sel && drawable(x) && x.k !== 'macro' && re.test(E.src.slice(x.s, x.e))) del.push(i); });
     }
     edit(() => G.edits(E.src, del.map((i) => ({ ...lineSpan(Lx.S[i]), t: '' }))));
@@ -270,7 +409,7 @@
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    for (const [title, items] of PAL) {
+    for (const [title, items] of pal()) {
       const hits = items.filter(([k, name]) => !q || `${name} ${k} ${title}`.toLowerCase().includes(q));
       if (!hits.length) continue;
       html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , m, key]) =>
@@ -321,24 +460,69 @@
     }
     return best;
   }
-  function itemAt(e) {
+  // a circle's rim under the pointer (flat pictures): dragging it sets the radius
+  // a radius with a unit (2cm) is on the page, unscaled; a plain one is in the picture's units
+  function ringGeom(Lx, g) {
+    const C = S(g.c.s);
+    if (g.abs) return { C, R: g.r * E.view.k };
+    const E1 = S(Lx.view.P([g.c.m[0] + g.r, g.c.m[1], g.c.m[2]]));
+    return { C, R: Math.hypot(E1[0] - C[0], E1[1] - C[1]) };
+  }
+  function ringAt(e, px = 5) {
+    if (!FLAT) return null;
+    const Lx = L(), [x, y] = pos(e);
+    let best = null, bd = px;
+    for (const g of Lx.rings || []) {
+      const { C, R } = ringGeom(Lx, g);
+      if (R < 8) continue;
+      const d = Math.abs(Math.hypot(x - C[0], y - C[1]) - R);
+      if (d <= bd) { bd = d; best = g; }
+    }
+    return best;
+  }
+  const ringKey = (g) => g && `${g.si}:${g.span.s}`;
+  // a circle moves with its rim (and its centre); its radius has a square at the top right of the rim
+  const ringMoves = (Lx, g) => !!(Lx.moves && Lx.moves.has(g.si));
+  function knobPos(Lx, g) { const { C, R } = ringGeom(Lx, g), a = Math.SQRT1_2; return [C[0] + R * a, C[1] - R * a]; }
+  // the squares on show: the hovered circle's, the selected command's, the one being dragged
+  function knobRings(Lx) {
+    const d = E.drag, hk = E.hover && E.hover.ring && ringKey(E.hover.ring), dk = d && d.mode === 'radius' && ringKey(d.ring);
+    return (Lx.rings || []).filter((g) => g.writable && ringGeom(Lx, g).R >= 8 && (ringKey(g) === hk || ringKey(g) === dk || g.si === E.sel));
+  }
+  function knobAt(e) {
+    if (!FLAT) return null;
+    const Lx = L(), [x, y] = pos(e);
+    for (const g of knobRings(Lx)) { const K = knobPos(Lx, g); if (Math.max(Math.abs(x - K[0]), Math.abs(y - K[1])) <= 7) return g; }
+    return null;
+  }
+  const itemAt = (e) => { const h = hitAt(e); return h ? h.si : null; };
+  // a path's stroke or fill (not a label) that moves as a whole in a flat picture
+  function bodyAt(e) {
+    if (!FLAT) return null;
+    const h = hitAt(e), Lx = L();
+    if (!h || h.k === 'text' || !Lx.moves || !Lx.moves.has(h.si)) return null;
+    // a circle moves by its rim or its centre, not its inside
+    if (h.k === 'poly' && (Lx.rings || []).some((g) => g.si === h.si)) return null;
+    return h.si;
+  }
+  function hitAt(e) {
     const Lx = L(), [x, y] = pos(e), f = fitOf();
     const items = Lx.items;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
       if (it.k === 'text') {
         const b = TD.textBox(it.text, V3.NORMAL), q = G.labelAt(it, S(it.at), b);
-        if (Math.abs(x - q[0]) <= b.w / 2 + 3 && Math.abs(y - q[1]) <= b.h / 2 + 3) return it.si;
+        if (Math.abs(x - q[0]) <= b.w / 2 + 3 && Math.abs(y - q[1]) <= b.h / 2 + 3) return { si: it.si, k: 'text' };
       } else if (it.k === 'line') {
         const P = it.pts.map(S);
-        for (let j = 1; j < P.length; j++) if (segDist(x, y, P[j - 1], P[j]) <= 5) return it.si;
+        for (let j = 1; j < P.length; j++) if (segDist(x, y, P[j - 1], P[j]) <= 5) return { si: it.si, k: 'line' };
       } else if (it.k === 'ball') {
-        const [X, Y] = S(it.at); if (Math.hypot(X - x, Y - y) <= it.r * f.k) return it.si;
+        const [X, Y] = S(it.at); if (Math.hypot(X - x, Y - y) <= it.r * f.k) return { si: it.si, k: 'ball' };
       }
     }
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      if (it.k === 'poly' && inside(it.pts.map(S), x, y)) return it.si;
+      if (it.k === 'poly' && inside(it.pts.map(S), x, y)) return { si: it.si, k: 'poly' };
     }
     return null;
   }
@@ -362,12 +546,24 @@
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/>`;
     // the xy-plane's unit grid, faint, for orientation
     const vw = Lx.view, g = [];
-    for (let i = -2; i <= 2; i++) { g.push([[i, -2, 0], [i, 2, 0]]); g.push([[-2, i, 0], [2, i, 0]]); }
-    out += `<path class="g3-grid" d="${g.map(([a, b]) => { const A = S(vw.P(a)), B = S(vw.P(b)); return `M${r2(A[0])},${r2(A[1])}L${r2(B[0])},${r2(B[1])}`; }).join('')}"/>`;
+    if (FLAT) {
+      // a faint unit grid across the view (every 5 units when zoomed far out)
+      const k = E.view.k, st = k < 14 ? 5 : 1, x0 = Math.floor(-E.view.ox / k / st) * st, x1 = (W - E.view.ox) / k, y0 = Math.floor((E.view.oy - H) / k / st) * st, y1 = E.view.oy / k;
+      let d = '';
+      for (let x = x0; x <= x1; x += st) d += `M${r2(E.view.ox + x * k)},0V${r2(H)}`;
+      for (let y = y0; y <= y1; y += st) d += `M0,${r2(E.view.oy - y * k)}H${r2(W)}`;
+      out += `<path class="g3-grid" d="${d}"/>`;
+    } else {
+      for (let i = -2; i <= 2; i++) { g.push([[i, -2, 0], [i, 2, 0]]); g.push([[-2, i, 0], [2, i, 0]]); }
+      out += `<path class="g3-grid" d="${g.map(([a, b]) => { const A = S(vw.P(a)), B = S(vw.P(b)); return `M${r2(A[0])},${r2(A[1])}L${r2(B[0])},${r2(B[1])}`; }).join('')}"/>`;
+    }
+    // a path under the pointer that drags as a whole: a faint halo
+    const hb = E.drag && E.drag.mode === 'shift' ? E.drag.si : E.hover && E.hover.body;
+    if (hb != null && hb !== E.sel && !inMany(hb)) for (const it of Lx.items) if (it.si === hb && (it.k === 'line' || it.k === 'poly')) out += `<path class="g3-hov" d="${it.pts.map((p, i) => { const q = S(p); return `${i ? 'L' : 'M'}${r2(q[0])},${r2(q[1])}`; }).join('')}${it.k === 'poly' ? 'Z' : ''}"/>`;
     // the selected command, as a halo under the drawing
-    if (E.sel != null) {
+    if (E.sel != null || E.many) {
       for (const it of Lx.items) {
-        if (it.si !== E.sel) continue;
+        if (it.si !== E.sel && !inMany(it.si)) continue;
         if (it.k === 'line' || it.k === 'poly') out += `<path class="ze-wsel" d="${it.pts.map((p, i) => { const q = S(p); return `${i ? 'L' : 'M'}${r2(q[0])},${r2(q[1])}`; }).join('')}${it.k === 'poly' ? 'Z' : ''}" stroke-width="9"/>`;
         else if (it.k === 'text') { const b = TD.textBox(it.text, V3.NORMAL), q = G.labelAt(it, S(it.at), b); out += `<rect class="g3-tsel" x="${r2(q[0] - b.w / 2 - 3)}" y="${r2(q[1] - b.h / 2 - 2)}" width="${r2(b.w + 6)}" height="${r2(b.h + 4)}" rx="4"/>`; }
         else if (it.k === 'ball') { const q = S(it.at); out += `<circle class="ze-wsel" cx="${r2(q[0])}" cy="${r2(q[1])}" r="${r2(it.r * f.k)}" stroke-width="9"/>`; }
@@ -375,22 +571,30 @@
     }
     if (!Lx.empty) { try { out += V3.svg(Lx.items, f, { export: true }); } catch (e) { /* drawn next time */ } }
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Add axes or a point from the left to start</text>`;
+    // a circle's rim under the pointer or being dragged
+    const rg = E.drag && (E.drag.mode === 'radius' || E.drag.mode === 'shift') ? E.drag.ring : E.hover && E.hover.ring;
+    if (rg) { const g = (Lx.rings || []).find((x) => ringKey(x) === ringKey(rg)); if (g && (g.writable || ringMoves(Lx, g))) { const { C, R } = ringGeom(Lx, g); out += `<circle class="g3-ring" cx="${r2(C[0])}" cy="${r2(C[1])}" r="${r2(R)}"/>`; } }
+    // the square that sizes a circle, at the top right of its rim
+    for (const g of knobRings(Lx)) {
+      const K = knobPos(Lx, g), on = (E.hover && E.hover.knob && ringKey(E.hover.ring) === ringKey(g)) || (E.drag && E.drag.mode === 'radius' && ringKey(E.drag.ring) === ringKey(g));
+      out += `<rect class="g3-knob${on ? ' on' : ''}" x="${r2(K[0] - 4)}" y="${r2(K[1] - 4)}" width="8" height="8"/>`;
+    }
     // points that can be dragged
     for (const h of Lx.handles) {
-      const [X, Y] = S(h.at.s), on = E.sel === h.si, hov = E.hover && E.hover.h === h;
+      const [X, Y] = S(h.at.s), on = E.sel === h.si || inMany(h.si), hov = E.hover && E.hover.h === h;
       if (on) out += `<circle class="fy-vsel" cx="${r2(X)}" cy="${r2(Y)}" r="7"/>`;
       else if (hov) out += `<circle class="fy-vhov" cx="${r2(X)}" cy="${r2(Y)}" r="7"/>`;
       out += `<circle class="${h.kind === 'lit' ? 'g3-lit' : 'g3-pt'}${h.writable ? '' : ' off'}" cx="${r2(X)}" cy="${r2(Y)}" r="${h.kind === 'lit' ? 2.5 : 3.2}"/>`;
     }
     // a point being moved: its shadow on the xy-plane, so its height reads
     const d = E.drag;
-    if (d && d.mode === 'move' && d.moved && d.m) {
+    if (!FLAT && d && d.mode === 'move' && d.moved && d.m) {
       const A = S(vw.P(d.m)), B = S(vw.P([d.m[0], d.m[1], 0]));
       out += `<path class="g3-drop" d="M${r2(A[0])},${r2(A[1])}L${r2(B[0])},${r2(B[1])}"/><circle class="g3-shadow" cx="${r2(B[0])}" cy="${r2(B[1])}" r="2.5"/>`;
     }
     // the view's turn, bottom left: the three axes as they now point
     const O = [44, H - 40], ax = [[1, 0, 0, 'x'], [0, 1, 0, 'y'], [0, 0, 1, 'z']];
-    out += `<g class="g3-gizmo">${ax.map(([a, b, c, n]) => { const p = vw.P([a, b, c]); const X = O[0] + p[0] * 22, Y = O[1] - p[1] * 22; return `<path d="M${O[0]},${O[1]}L${r2(X)},${r2(Y)}"/><text x="${r2(O[0] + p[0] * 31)}" y="${r2(O[1] - p[1] * 31 + 4)}">${n}</text>`; }).join('')}<text class="g3-ang" x="${O[0] + 34}" y="${O[1] + 28}">θ ${fmt(vw.th, 0)}°  φ ${fmt(vw.ph, 0)}°</text></g>`;
+    if (!FLAT) out += `<g class="g3-gizmo">${ax.map(([a, b, c, n]) => { const p = vw.P([a, b, c]); const X = O[0] + p[0] * 22, Y = O[1] - p[1] * 22; return `<path d="M${O[0]},${O[1]}L${r2(X)},${r2(Y)}"/><text x="${r2(O[0] + p[0] * 31)}" y="${r2(O[1] - p[1] * 31 + 4)}">${n}</text>`; }).join('')}<text class="g3-ang" x="${O[0] + 34}" y="${O[1] + 28}">θ ${fmt(vw.th, 0)}°  φ ${fmt(vw.ph, 0)}°</text></g>`;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = out;
   }
@@ -405,6 +609,13 @@
     const [sx, sy] = pos(e);
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
+    if (E.many) {
+      const hit = FLAT && !handleAt(e) ? (ringAt(e) || {}).si ?? itemAt(e) : null;
+      if (hit != null && inMany(hit)) { E.drag = { mode: 'shift', si: E.many.slice(), sx, sy, moved: false }; svg.style.cursor = 'move'; return; }
+      E.many = null;
+    }
+    const kn = knobAt(e);
+    if (kn) { E.sel = kn.si; E.drag = { mode: 'radius', ring: kn, sx, sy, moved: false }; svg.style.cursor = 'nesw-resize'; draw(); renderProps(); return; }
     const h = handleAt(e);
     if (h) {
       E.sel = h.si;
@@ -412,12 +623,27 @@
       if (!h.writable) setTip('This point is computed in the code: change it there');
       draw(); renderProps(); return;
     }
+    const rg = ringAt(e);
+    if (rg && !dbl) {
+      // the rim moves the circle; the square at its top right sizes it
+      E.sel = rg.si;
+      const mv = ringMoves(L(), rg);
+      E.drag = mv ? { mode: 'shift', si: rg.si, ring: rg, sx, sy, moved: false } : null;
+      if (mv) svg.style.cursor = 'move';
+      else setTip(rg.writable ? 'This centre is computed in the code: drag the square to resize' : 'This circle is computed in the code: change it there');
+      draw(); renderProps(); return;
+    }
     const si = itemAt(e);
     if (si != null) {
       if (dbl && E.sel === si) { editLabel(si); return; }
-      E.sel = si; E.drag = null; draw(); renderProps(); return;
+      // a path's stroke or fill in a flat picture: dragging it moves the whole object
+      const bs = bodyAt(e);
+      E.sel = si; E.drag = bs != null ? { mode: 'shift', si: bs, sx, sy, moved: false } : null;
+      if (bs != null) svg.style.cursor = 'move';
+      draw(); renderProps(); return;
     }
-    // empty space: turn the view
+    // empty space: turn the view (a flat picture: move it)
+    if (FLAT) { E.sel = null; E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; svg.style.cursor = 'grabbing'; draw(); renderProps(); return; }
     const vw = L().view;
     E.sel = null; E.drag = { mode: 'orbit', sx, sy, th: vw.th, ph: vw.ph, idle: true };
     draw(); renderProps();
@@ -426,11 +652,12 @@
     if (!E) return;
     const d = E.drag, [sx, sy] = pos(e);
     if (!d) {
-      const h = handleAt(e), si = h ? null : itemAt(e);
-      const hv = h ? { h } : si != null ? { si } : null;
-      const ch = (hv && hv.h) !== (E.hover && E.hover.h);
+      const kn = knobAt(e), h = kn ? null : handleAt(e), rg = kn || h ? null : ringAt(e), si = kn || h || rg ? null : itemAt(e), body = si != null ? bodyAt(e) : null;
+      const hv = kn ? { ring: kn, knob: true } : h ? { h } : rg ? { ring: rg } : si != null ? { si, body } : null;
+      const ch = (hv && hv.h) !== (E.hover && E.hover.h) || ringKey(hv && hv.ring) !== ringKey(E.hover && E.hover.ring) || !!(hv && hv.knob) !== !!(E.hover && E.hover.knob) || (hv && hv.body) !== (E.hover && E.hover.body);
       E.hover = hv;
-      svg.style.cursor = h ? (h.writable ? 'move' : 'not-allowed') : si != null ? 'pointer' : 'grab';
+      const manyHit = E.many && FLAT && !h && (rg ? inMany(rg.si) : si != null && inMany(si));
+      svg.style.cursor = manyHit ? 'move' : kn ? 'nesw-resize' : h ? (h.writable ? 'move' : 'not-allowed') : rg ? (ringMoves(L(), rg) ? 'move' : rg.writable ? 'default' : 'not-allowed') : body != null ? 'move' : si != null ? 'pointer' : 'grab';
       if (ch) draw();
       return;
     }
@@ -443,28 +670,81 @@
       setTip(`θ ${th}°  φ ${ph}°  ·  drag to turn the view`);
       draw(); return;
     }
+    if (d.mode === 'shift') {
+      if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
+      if (!d.moved) { begin(); d.moved = true; d.src0 = E.src; }
+      // the offset snaps to 0.05 (⌥ moves freely), so points on the grid stay on it
+      const L0 = G.layout(d.src0, FLAT), snap = !e.altKey;
+      const a = unproject(L0.view, d.sx, d.sy, [0, 0, 0], false), b = unproject(L0.view, sx, sy, [0, 0, 0], false);
+      const dv = [snapV(b[0] - a[0], snap), snapV(b[1] - a[1], snap), 0];
+      const ed = G.shiftEdits(L0, d.si, dv);
+      if (ed) E.src = G.edits(d.src0, ed);
+      setTip(`moved by (${fmt(dv[0], 2)}, ${fmt(dv[1], 2)})${snap ? '  ·  ⌥ moves freely' : ''}`);
+      draw(); renderProps(); return;
+    }
+    if (d.mode === 'radius') {
+      if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
+      if (!d.moved) { begin(); d.moved = true; d.src0 = E.src; }
+      // against the code as it was when the drag started; the radius snaps to 0.05 (⌥ sizes freely)
+      const L0 = G.layout(d.src0, FLAT), g = (L0.rings || []).find((x) => ringKey(x) === ringKey(d.ring)) || d.ring, snap = !e.altKey;
+      const { C, R } = ringGeom(L0, g);
+      const r = Math.max(snap ? 0.05 : 0.001, snapV((g.r * Math.hypot(sx - C[0], sy - C[1])) / (R || 1), snap));
+      const ed = G.setRadius(L0, g, r);
+      E.src = G.edits(d.src0, [ed]);
+      svg.style.cursor = 'nesw-resize';
+      setTip(`r ${ed.t}${snap ? '  ·  ⌥ sizes freely' : ''}`);
+      draw(); renderProps(); return;
+    }
     if (d.mode === 'move') {
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
       if (!d.moved) { begin(); d.moved = true; d.src0 = E.src; }
       // the edits are made against the code as it was when the drag started
-      const L0 = G.layout(d.src0), h = L0.handles.find((x) => x.si === d.si && Math.hypot(x.at.s[0] - d.h.at.s[0], x.at.s[1] - d.h.at.s[1]) < 1e-9) || d.h;
-      const up = e.shiftKey, snap = !e.altKey;
+      const L0 = G.layout(d.src0, FLAT), h = L0.handles.find((x) => x.si === d.si && Math.hypot(x.at.s[0] - d.h.at.s[0], x.at.s[1] - d.h.at.s[1]) < 1e-9) || d.h;
+      const up = !FLAT && e.shiftKey, snap = !e.altKey;
       if (up !== d.up) { d.up = up; d.sx = sx; d.sy = sy; d.m0 = d.m || d.m0; }
       const S0 = S(L0.view.P(d.m0));
       let m = unproject(L0.view, S0[0] + (sx - d.sx), S0[1] + (sy - d.sy), d.m0, up, [d.sx, d.sy]);
+      // ⇧ in 2D: a 15° step along a line, or a whole point, whichever is nearer
+      const ang = FLAT && e.shiftKey ? angleSnap(L0, d.m0, m, snap) : null;
       if (up) m = [d.m0[0], d.m0[1], snapV(m[2], snap)];
-      else m = [snapV(m[0], snap), snapV(m[1], snap), d.m0[2]];
+      else if (ang) m = ang.m;
+      else if (FLAT && h.polar) {
+        // (angle:radius) snaps its radius to 0.05 and its angle to whole degrees
+        const rr = snapV(Math.hypot(m[0], m[1]), snap), aa = Math.atan2(m[1], m[0]) / D2R, a2 = snap ? Math.round(aa) : Math.round(aa * 10) / 10;
+        m = [rr * Math.cos(a2 * D2R), rr * Math.sin(a2 * D2R), 0];
+      } else m = [snapV(m[0], snap), snapV(m[1], snap), d.m0[2]];
       d.m = m;
-      E.src = G.edits(d.src0, G.moveHandle(L0, h, m));
-      setTip(`(${m.map((v) => fmt(v, 2)).join(', ')})  ·  ${up ? 'up and down' : '⇧ moves up and down'}${snap ? ' · ⌥ places freely' : ''}`);
+      E.src = G.edits(d.src0, G.moveHandle(L0, h, m, ang && ang.a != null ? 3 : 2));
+      if (FLAT) setTip(`${h.polar ? `r ${fmt(Math.hypot(m[0], m[1]), 2)}  θ ${fmt(Math.atan2(m[1], m[0]) / D2R, 1)}°` : `(${fmt(m[0], 2)}, ${fmt(m[1], 2)})`}${ang ? (ang.a != null ? `  ·  ${fmt(ang.a, 0)}°` : '') : (L0.links || []).some((k) => near(k[0], d.m0) || near(k[1], d.m0)) ? '  ·  ⇧ 15° or whole numbers' : '  ·  ⇧ whole numbers'}${snap ? '  ·  ⌥ places freely' : ''}`);
+      else setTip(`(${m.map((v) => fmt(v, 2)).join(', ')})  ·  ${up ? 'up and down' : '⇧ moves up and down'}${snap ? ' · ⌥ places freely' : ''}`);
       draw(); renderProps(); return;
     }
   });
+  // ⇧ in 2D: whichever is nearer m, the nearest whole point (x and y integers) or the nearest 15° direction
+  // from a point p is joined to by a straight segment (its length on the 0.05 grid). ⌥: the direction only,
+  // at any length. a is the angle when the direction won, else null.
+  const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6;
+  function angleSnap(L0, p, m, snap) {
+    const others = (L0.links || []).flatMap((k) => (near(k[0], p) ? [k[1]] : near(k[1], p) ? [k[0]] : [])).filter((o) => !near(o, p));
+    const z = p[2] || 0;
+    let best = snap ? { m: [Math.round(m[0]), Math.round(m[1]), z], a: null } : null;
+    if (best) best.dist = Math.hypot(best.m[0] - m[0], best.m[1] - m[1]);
+    for (const o of others) {
+      const vx = m[0] - o[0], vy = m[1] - o[1];
+      if (Math.hypot(vx, vy) < 1e-9) continue;
+      const a = Math.round(Math.atan2(vy, vx) / D2R / 15) * 15, ux = Math.cos(a * D2R), uy = Math.sin(a * D2R);
+      const len = Math.max(snapV(vx * ux + vy * uy, snap), 0), q = [o[0] + len * ux, o[1] + len * uy, z];
+      const dist = Math.hypot(q[0] - m[0], q[1] - m[1]);
+      if (!best || dist < best.dist) best = { m: q, a: ((a % 360) + 360) % 360, dist };
+    }
+    return best;
+  }
   svg.addEventListener('pointerup', () => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     svg.style.cursor = '';
-    if ((d.mode === 'orbit' && !d.idle) || (d.mode === 'move' && d.moved)) { setTip(''); commit(); renderProps(); }
+    if ((d.mode === 'orbit' && !d.idle) || ((d.mode === 'move' || d.mode === 'radius' || d.mode === 'shift') && d.moved)) { setTip(''); commit(); renderProps(); }
+    if (d.mode === 'pan' && FLAT && Math.hypot(d.ox - E.view.ox, d.oy - E.view.oy) < 1) renderProps();
     draw();
   });
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
@@ -484,7 +764,7 @@
     if (!E) return;
     const h = handleAt(e), si = h ? h.si : itemAt(e);
     if (si == null) { closeMenu(); return; }
-    E.sel = si;
+    E.sel = si; E.many = null;
     const st = selSt();
     menu.innerHTML = (labelOf(si) ? mItem('label', 'Edit Label', 'label', '↩') : '') + mItem('dup', 'Duplicate', 'dup', isMac ? '⌘D' : 'Ctrl+D') + '<hr>'
       + mItem('fwd', 'Draw Later', 'fwd', ']') + mItem('back', 'Draw Earlier', 'back', '[') + '<hr>' + mItem('del', st && (st.k === 'coordinate' || st.k === 'setcoord') ? 'Delete Point' : 'Delete', 'del', '⌫');
@@ -512,7 +792,7 @@
   const wrapMath = (t) => (String(t).trim() ? `$${t.trim()}$` : '');
   // write a label (math) for a command: into its node, or as a new node at the end of a path
   function setLabel(src, si, t) {
-    const Lx = G.layout(src), st = Lx.S[si], lb = labelOf(si);
+    const Lx = G.layout(src, FLAT), st = Lx.S[si], lb = labelOf(si);
     if (lb) return G.edits(src, [{ ...lb.span, t: wrapMath(t) }]);
     if (st && st.k === 'path' && t) return G.edits(src, [{ s: st.e - 1, e: st.e - 1, t: ` node[above]{${wrapMath(t)}}` }]);
     if (st && (st.k === 'coordinate' || st.k === 'setcoord') && t) {
@@ -559,10 +839,11 @@
   const valField = (label, f, sp) => field(label, f, text(sp).trim(), ' class="mono"');
   const COLORK = (o) => o.v == null && !!TD.tikzColor(o.k) && !G.WIDTHS[o.k];
   const WIDTH_OPTS = [['ultra thin', 'Ultra thin'], ['very thin', 'Very thin'], ['thin', 'Thin'], ['', 'Normal'], ['semithick', 'Semithick'], ['thick', 'Thick'], ['very thick', 'Very thick'], ['ultra thick', 'Ultra thick']];
-  const NAMES = { coordinate: 'Point', setcoord: 'Point (r, θ, φ)', node: 'Label', arc: 'Angle arc', rot: 'Rotated frame', rorig: 'Frame origin', rreset: 'Frame origin', tplane: 'Theta plane', main: 'View', macro: 'Value', cmd: 'Command', foreach: 'Loop', scope: 'Scope' };
+  const NAMES = { coordinate: 'Point', setcoord: 'Point (r, θ, φ)', node: 'Label', arc: 'Angle arc', rot: 'Rotated frame', rorig: 'Frame origin', rreset: 'Frame origin', tplane: 'Theta plane', main: 'View', macro: 'Value', cmd: 'Command', foreach: 'Loop', scope: 'Scope', pic: 'Angle mark' };
   function pathName(st) {
     const sty = G.styleOf(E.src, st.o), els = st.els;
     if (sty.ball) return 'Sphere';
+    if (els.some((x) => x.t === 'grid')) return 'Grid';
     if (els.some((x) => x.t === 'plot')) return 'Curve';
     if (els.some((x) => x.t === 'circle')) return els.filter((x) => x.t === 'pt').length > 1 ? 'Path' : 'Circle';
     if (els.some((x) => x.t === 'cycle')) return st.cmd === 'draw' && !sty.fillOn ? 'Polygon' : 'Face';
@@ -573,6 +854,18 @@
   function renderProps() {
     if (!E) return;
     const Lx = L(), st = selSt();
+    if (E.many) {
+      TD.morph(props, `<div class="sec"><div class="sec-title">Selection <small>${E.many.length} commands</small></div>
+        <div class="help">${FLAT ? 'Drag any of them to move them together; it snaps to 0.05, hold <kbd>⌥</kbd> to move freely. ' : ''}<kbd>⌫</kbd> deletes them; <kbd>Esc</kbd> or a click elsewhere clears the selection.</div>
+        <div class="row"><button class="danger" data-ge="del">Delete All</button></div></div>`);
+      return;
+    }
+    if (!st && FLAT) {
+      TD.morph(props, `<div class="sec"><div class="sec-title">Figure <small>${Lx.S.filter(drawable).length} commands</small></div>
+        ${row('Scale', `<div class="ctl"><input type="number" data-f="scale" value="${fmt(Lx.scale, 2)}" step="0.25" min="0.1"></div>`)}
+        <div class="help">Drag a point to move it; it snaps to 0.05, hold <kbd>⇧</kbd> for 15° steps along a line or whole numbers, <kbd>⌥</kbd> to place it freely. Drag a line or shape to move it whole (a circle by its rim; the square at its top right sizes it), empty space to move the view. Click a line or label to select what drew it; double-click to label it. Measures need two named points: select a segment between them, or a point.</div></div>`);
+      return;
+    }
     if (!st) {
       const vw = Lx.view;
       TD.morph(props, `<div class="sec"><div class="sec-title">Figure <small>${Lx.S.filter(drawable).length} commands</small></div>
@@ -587,7 +880,9 @@
     if (st.k === 'coordinate' && st.atPt) {
       const comps = G.splitTop(E.src, st.atPt.is, st.atPt.ie);
       body += field('Name', 'cname', st.name, ' class="mono"');
-      if (comps.length === 3) body += comps.map((c, i) => valField('xyz'[i], `c${i}`, c)).join('');
+      const polar = FLAT && comps.length === 1 ? G.splitTop(E.src, st.atPt.is, st.atPt.ie, ':') : [];
+      if (comps.length === (FLAT ? 2 : 3)) body += comps.map((c, i) => valField('xyz'[i], `c${i}`, c)).join('');
+      else if (polar.length === 2) body += valField('Angle θ', 'q0', polar[0]) + valField('Radius r', 'q1', polar[1]);
       else body += valField('At', 'at', { s: st.atPt.is, e: st.atPt.ie });
       body += field('Label', 'label', '', ' data-tx="math" placeholder="add a label"');
     } else if (st.k === 'setcoord') {
@@ -602,7 +897,7 @@
       const lb = labelOf(E.sel);
       if (st.k === 'path') {
         const pts = st.els.filter((x) => x.t === 'pt');
-        body += `<div class="g3-pts">${pts.map((p, i) => { const c = G.splitTop(E.src, p.is, p.ie); return c.length === 3 && !p.rel ? `<div class="g3-pt-row"><span>${i + 1}</span>${c.map((x, j) => `<input type="text" class="mono" data-f="p${i}:${j}" value="${esc(x.t)}" aria-label="${'xyz'[j]} of point ${i + 1}" spellcheck="false">`).join('')}</div>` : `<div class="g3-pt-row"><span>${i + 1}</span><input type="text" class="mono wide" data-f="p${i}" value="${esc(E.src.slice(p.is, p.ie))}" aria-label="Point ${i + 1}" spellcheck="false"></div>`; }).join('')}</div>`;
+        body += `<div class="g3-pts">${pts.map((p, i) => { const c = G.splitTop(E.src, p.is, p.ie); return c.length === (FLAT ? 2 : 3) && !p.rel ? `<div class="g3-pt-row"><span>${i + 1}</span>${c.map((x, j) => `<input type="text" class="mono" data-f="p${i}:${j}" value="${esc(x.t)}" aria-label="${'xyz'[j]} of point ${i + 1}" spellcheck="false">`).join('')}</div>` : `<div class="g3-pt-row"><span>${i + 1}</span><input type="text" class="mono wide" data-f="p${i}" value="${esc(E.src.slice(p.is, p.ie))}" aria-label="Point ${i + 1}" spellcheck="false"></div>`; }).join('')}</div>`;
       } else if (st.k === 'node' && st.atPt) body += valField('At', 'at', { s: st.atPt.is, e: st.atPt.ie });
       else if (st.k === 'arc') body += valField('Centre', 'ac', st.c) + valField('Radius', 'ar', st.r) + valField('From', 'a0', st.a0) + valField('To', 'a1', st.a1);
       body += row('Colour', colorSel(st.k === 'node' ? 'tcolor' : 'color', color));
@@ -618,7 +913,7 @@
         body += row('Line', seg('dash', sty.dash ? (/dot/.test(sty.dash) ? 'dotted' : 'dashed') : '', [['', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]));
         body += row('Width', `<div class="ctl"><select data-f="width">${WIDTH_OPTS.map(([v, n]) => `<option value="${v}"${v === w ? ' selected' : ''}>${n}</option>`).join('')}</select></div>`);
         if (st.k === 'path') body += row('Arrow', seg('arrow', `${sty.arrow0 ? 1 : 0}${sty.arrow ? 1 : 0}`, [['00', 'None'], ['01', 'End'], ['10', 'Start'], ['11', 'Both']]));
-        body += row('Frame', seg('frame', sty.frame || 'main', [['main', 'Main', 'tdplot_main_coords'], ['rotated', 'Rotated', 'tdplot_rotated_coords: the frame set by \\tdplotsetrotatedcoords'], ['screen', 'Screen', 'tdplot_screen_coords: flat on the page']]));
+        if (!FLAT) body += row('Frame', seg('frame', sty.frame || 'main', [['main', 'Main', 'tdplot_main_coords'], ['rotated', 'Rotated', 'tdplot_rotated_coords: the frame set by \\tdplotsetrotatedcoords'], ['screen', 'Screen', 'tdplot_screen_coords: flat on the page']]));
       }
       body += field('Label', 'label', lb ? mathOf(text(lb.span)) : '', ' data-tx="math" placeholder="none"');
       if (lb || st.k === 'node' || st.k === 'arc') {
@@ -652,11 +947,11 @@
     if (t.tagName === 'SELECT') { commit(); E.base = E.src; begin(); renderProps(); }
   });
   function applyField(src, f, v) {
-    const Lx = G.layout(src), st = E.sel != null ? Lx.S[E.sel] : null;
+    const Lx = G.layout(src, FLAT), st = E.sel != null ? Lx.S[E.sel] : null;
     const val = v.trim();
     const sp = (x) => [{ s: x.s, e: x.e, t: val }];
     if (f === 'vth' || f === 'vph') { const n = parseFloat(v); if (!isFinite(n)) return null; return G.setView(src, f === 'vth' ? n : Lx.view.th, f === 'vph' ? n : Lx.view.ph); }
-    if (f === 'scale') { const n = parseFloat(v); if (!(n > 0)) return null; return G.setScale(src, n); }
+    if (f === 'scale') { const n = parseFloat(v); if (!(n > 0)) return null; return G.setScale(src, n, FLAT); }
     if (!st) return null;
     if (!val && !/^(label|rest)$/.test(f)) return null;
     if (f === 'label') return setLabel(src, E.sel, v);
@@ -666,9 +961,15 @@
       const re = new RegExp(`\\((\\s*)${st.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(xy|xz|yz|x|y|z)?(\\s*)\\)`, 'g');
       const ed = [{ ...st.nameSpan || findName(src, st), t: val }];
       let m; const body = src;
+      if (FLAT) {
+        const r2e = nameRe(st.name, 'g');
+        while ((m = r2e.exec(body))) if (m.index >= st.e || m.index < st.s) ed.push({ s: m.index, e: m.index + m[0].length, t: val });
+        return G.edits(src, ed);
+      }
       while ((m = re.exec(body))) if (m.index >= st.e || m.index < st.s) ed.push({ s: m.index, e: m.index + m[0].length, t: `(${m[1]}${val}${m[2] || ''}${m[3]})` });
       return G.edits(src, ed);
     }
+    if (/^q\d$/.test(f)) { const c = G.splitTop(src, st.atPt.is, st.atPt.ie, ':')[+f[1]]; return c ? G.edits(src, sp(c)) : null; }
     if (/^c\d$/.test(f)) { const c = G.splitTop(src, st.atPt.is, st.atPt.ie)[+f[1]]; return c ? G.edits(src, sp(c)) : null; }
     if (f === 'at') { const a = st.atPt || null; return a ? G.edits(src, [{ s: a.is, e: a.ie, t: val }]) : null; }
     const SP = { sr: st.r, sth: st.th, sph: st.ph, ac: st.c, ar: st.r, a0: st.a0, a1: st.a1, ra: st.a, rb: st.b, rg: st.g, tp: st.ph, ro: st.at, mth: st.th, mph: st.ph, mv: st.v, fl: st.list, so: st.o };
@@ -738,7 +1039,7 @@
     if (!E) return;
     $('[data-ge="undo"]', root).disabled = !E.undo.length;
     $('[data-ge="redo"]', root).disabled = !E.redo.length;
-    $('[data-ge="delete"]', root).disabled = E.sel == null;
+    $('[data-ge="delete"]', root).disabled = E.sel == null && !E.many;
   }
   root.addEventListener('click', (e) => { const b = e.target.closest('[data-ge]'); if (!b || !E) return; act(b.dataset.ge, b); });
   function act(a, b) {
@@ -788,7 +1089,7 @@
       e.preventDefault();
       if (inField) { e.target.blur(); return; }
       if (!menu.hidden) { closeMenu(); return; }
-      if (E.sel != null) { E.sel = null; draw(); renderProps(); return; }
+      if (E.sel != null || E.many) { E.sel = null; E.many = null; draw(); renderProps(); return; }
       finish(false); return;
     }
     if (inField) return;
@@ -796,6 +1097,7 @@
     if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     if (mod && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicate(); return; }
+    if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectAll(); return; }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
@@ -804,7 +1106,15 @@
     if (e.key === '[') { reorder(-1); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     if ((e.key === 'Enter' || e.key === 'F2') && E.sel != null) { e.preventDefault(); editLabel(E.sel); return; }
-    // arrows turn the view (⇧: by 15°)
+    // arrows turn the view (⇧: by 15°); a flat picture moves instead
+    if (e.key.startsWith('Arrow') && FLAT) {
+      e.preventDefault();
+      const d = e.shiftKey ? 80 : 20;
+      E.view.ox += e.key === 'ArrowLeft' ? d : e.key === 'ArrowRight' ? -d : 0;
+      E.view.oy += e.key === 'ArrowUp' ? d : e.key === 'ArrowDown' ? -d : 0;
+      draw(); if (Lb) Lb.pop.place();
+      return;
+    }
     if (e.key.startsWith('Arrow')) {
       e.preventDefault();
       const vw = L().view, d = e.shiftKey ? 15 : 5;
@@ -812,7 +1122,7 @@
       edit(() => G.setView(E.src, th, ph));
       return;
     }
-    const k = KEYS[e.key.toLowerCase()];
+    const k = KEYS()[e.key.toLowerCase()];
     if (k) { e.preventDefault(); add(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
@@ -841,8 +1151,15 @@
     E = null;
     if (ok && changed) done({ src });
   }
-  function open(block, done) {
-    E = { src: String(block.src || ''), sel: null, view: { ox: 0, oy: 0, k: 120 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null, base: null };
+  function open(block, done, opts = {}) {
+    FLAT = !!opts.flat;
+    const lang = FLAT ? 'TikZ' : 'tikz-3dplot';
+    $('#g3Title', root).textContent = FLAT ? '2D geometry' : '3D geometry';
+    svg.setAttribute('aria-label', FLAT ? '2D geometry' : '3D geometry');
+    $('.g3-lang', root).textContent = lang;
+    codeTa.setAttribute('aria-label', `${lang} code`);
+    $('[data-ge="copy"]', root).title = `Copy the ${lang} code`;
+    E = { src: String(block.src || ''), sel: null, many: null, view: { ox: 0, oy: 0, k: 120 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null, base: null };
     E.start = E.src;
     root.hidden = false;
     document.body.classList.add('cz-open');

@@ -203,7 +203,7 @@
       <button data-fly="phys" title="Physics: mechanics and optics"><svg viewBox="0 0 20 20"><path d="M3 3.5h14"/><path d="M7.5 3.5l5.2 9.6"/><circle cx="13.6" cy="14.8" r="2.4"/></svg><i class="more"></i></button>
       <button data-fly="misc" title="Axis, wave, brace, ruler, grid"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M3 9h14M3 13h14M7 3v14M11 3v14M15 3v14" style="stroke-width:1.1"/></svg><i class="more"></i></button>
       <button data-fly="arrows" title="Block arrows"><svg viewBox="0 0 20 20"><path d="M2.5 7.5h8.5V4l6.5 6-6.5 6v-3.5H2.5z"/></svg><i class="more"></i></button>
-      <button data-fly="insertPop" id="btnInsert" title="2D plots and charts: function, line, scatter, area, bar, pie, contour, heatmap"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
+      <button data-fly="insertPop" id="btnInsert" title="2D plots and charts: function, line, scatter, area, bar, pie, contour, heatmap, 2D geometry"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
       <button data-fly="plots3d" id="btnPlots3d" title="3D: surfaces, parametric surfaces, space curves, solid regions, solids of revolution, basic solids, 3D geometry"><svg viewBox="0 0 20 20"><path d="M6.5 13.5V2.5M6.5 13.5H18M6.5 13.5l-4 4"/><path d="M9 7.5c2.2-2.4 4.2.6 8.5-2l-1.5 3.8c-4.3 2.6-6.3-.4-8.5 2z"/></svg><i class="more"></i></button>
       <button data-fly="blocks" id="btnBlocks" title="Blocks (experimental; some inputs might not be rendered correctly): commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman, timing, state machine, Karnaugh map, bit field, chemistry"><svg viewBox="0 0 20 20"><path d="M10 2l4 2.3v4.6L10 11.2 6 8.9V4.3zM6 4.3l4 2.3 4-2.3M10 6.6v4.6M6 8.9l4 2.3v4.6L6 18.1 2 15.8v-4.6zM2 11.2l4 2.3 4-2.3M6 13.5v4.6M14 8.9l4 2.3v4.6L14 18.1 10 15.8v-4.6zM10 11.2l4 2.3 4-2.3M14 13.5v4.6"/></svg><i class="more"></i></button>
       <div class="sep"></div>
@@ -228,6 +228,7 @@
         <button data-insert="pie"><svg viewBox="0 0 32 24"><circle cx="16" cy="12" r="9" class="a1"/><path d="M16 12V3M16 12l8 4M16 12l-6 7"/></svg>Pie</button>
         <button data-insert="plot:contour"><svg viewBox="0 0 32 24"><ellipse cx="16" cy="12" rx="12" ry="9" class="c1"/><ellipse cx="16" cy="12" rx="8" ry="6" class="c2"/><ellipse cx="16" cy="12" rx="3.5" ry="2.5" class="c3"/></svg>Contour</button>
         <button data-insert="plot:heatmap"><svg viewBox="0 0 32 24"><g class="heat"><rect x="4" y="3" width="8" height="6" fill="#f5c542"/><rect x="12" y="3" width="8" height="6" fill="#e2572b"/><rect x="20" y="3" width="8" height="6" fill="#f5c542"/><rect x="4" y="9" width="8" height="6" fill="#e2572b"/><rect x="12" y="9" width="8" height="6" fill="#b3122e"/><rect x="20" y="9" width="8" height="6" fill="#e2572b"/><rect x="4" y="15" width="8" height="6" fill="#f5c542"/><rect x="12" y="15" width="8" height="6" fill="#e2572b"/><rect x="20" y="15" width="8" height="6" fill="#f5c542"/></g></svg>Heatmap</button>
+        <button data-insert="geo2d" title="2D geometry in plain TikZ: points, vectors, projections, angle marks, function and polar plots, and labels that print computed values, edited visually"><svg viewBox="0 0 32 24"><path d="M4 20h25M6 22V3"/><path d="M6 20l15-13" class="c1"/><path d="M21 7v13" stroke-dasharray="1.6 1.4"/><path d="M12 20a6 6 0 00-1.5-4"/></svg>2D Geometry</button>
       </div>
     </div>
     <div id="fly-plots3d" class="popover flyout" hidden>
@@ -396,6 +397,7 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/figures3d.js"></script>
   <script src="js/sketch3d.js"></script>
   <script src="js/geo3d.js"></script>
+  <script src="js/geo2d.js"></script>
   <script src="js/quantum.js"></script>
   <script src="js/forest.js"></script>
   <script src="js/zx.js"></script>

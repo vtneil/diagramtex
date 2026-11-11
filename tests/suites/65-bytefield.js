@@ -211,6 +211,7 @@ T.test('bytefield editor: ⌘A selects every row with fields; dragging from a fi
     T.eq(E.sel.to, undefined, 'a click selects one field'); T.eq(E.M.items[E.sel.ii].text, 'B'); T.eq(ED._rows(), [1, 1]);
     // dragging from B down over D: rows 1–3
     const [, yd] = mid('D');
+    E.lastPress = null; // a second press here would be a double-click
     ev('pointerdown', x, y); ev('pointermove', x, y + 10); ev('pointermove', x, yd); ev('pointerup', x, yd);
     T.eq(ED._rows(), [1, 3], 'the drag covers rows 1–3');
     // and up past the top stops at the first row with fields
@@ -236,6 +237,14 @@ T.test('bytefield editor: ⌘A selects every row with fields; dragging from a fi
     ta.focus(); E.sel = null;
     ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', metaKey: true, bubbles: true }));
     T.eq(E.sel, null, 'not while typing'); ta.blur();
+    // a double press on a field edits its label in place (draw() on pointerdown eats the native dblclick)
+    [x, y] = mid('D');
+    E.lastPress = null;
+    ev('pointerdown', x, y); ev('pointerup', x, y); ev('pointerdown', x, y); ev('pointerup', x, y);
+    const pop = document.querySelector('.td-pop-ta');
+    T.ok(pop && pop.offsetParent !== null, 'the label editor opens');
+    T.eq(pop.value, 'D', 'holding the label');
+    pop.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   } finally {
     key('Enter');
   }

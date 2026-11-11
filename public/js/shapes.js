@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.26.1'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.27.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -369,7 +369,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'geo2d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -566,6 +566,9 @@
     return { px, css: `font-size:${r2(px)}px;font-family:${fam.replace(/"/g, "'")};${st && st.bold ? 'font-weight:bold;' : ''}${st && st.italic ? 'font-style:italic;' : ''}` };
   }
   TD.textStyle = textStyle;
+  // a wrapping text is exactly its text width wide (the TikZ text width), so resizing it keeps its edges
+  // where they were dropped; other text gets 2px of slack round the measured glyphs
+  const boxW = (st, w) => (st && st.tw > 0 ? r2(st.tw) : Math.ceil(w) + 2);
   function textBox(text, st) {
     if (typeof st !== 'object' || st === null) st = { size: st || 'normalsize' };
     const ts = textStyle(st), px = ts.px;
@@ -574,12 +577,12 @@
     else if (st.align && st.align !== 'center') ts.css += `text-align:${st.align};`; // lines of a multi-line label
     const key = ts.css + '|' + text;
     let box = sizeCache.get(key);
-    if (!box && batch) { batch.set(key, { css: ts.css, text }); box = { w: 10, h: 10 }; } // measured with the rest, then drawn again
+    if (!box && batch) { batch.set(key, { css: ts.css, text, tw: st.tw }); box = { w: 10, h: 10 }; } // measured with the rest, then drawn again
     else if (!box) {
       const m = document.getElementById('measure');
       m.setAttribute('style', ts.css);
       m.innerHTML = textHtml(text);
-      box = { w: Math.ceil(m.offsetWidth) + 2, h: Math.ceil(m.offsetHeight) };
+      box = { w: boxW(st, m.offsetWidth), h: Math.ceil(m.offsetHeight) };
       sizeCache.set(key, box);
     }
     return { ...box, px, css: ts.css, html: textHtml(text) };
@@ -606,7 +609,7 @@
       frag.appendChild(d); els.push([key, d]);
     }
     host.appendChild(frag);
-    for (const [key, d] of els) sizeCache.set(key, { w: Math.ceil(d.offsetWidth) + 2, h: Math.ceil(d.offsetHeight) });
+    for (const [key, d] of els) sizeCache.set(key, { w: boxW(miss.get(key), d.offsetWidth), h: Math.ceil(d.offsetHeight) });
     for (const [, d] of els) d.remove();
     return fn();
   };
@@ -1428,12 +1431,14 @@
     if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
     // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
     const forest = [...X.pkgs].filter((p) => /^forest\b/.test(p));
-    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p)) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : `\\usepackage{${p}}`);
+    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p) && !p.startsWith('svgcolor:')) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : `\\usepackage{${p}}`);
     if (forest.length) {
       const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
       pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);
     }
     pre.push(...compat.after);
+    // xcolor svgnames that kept code uses (DarkBlue): defined by value, which works whatever loaded xcolor first
+    for (const p of X.pkgs) if (p.startsWith('svgcolor:')) { const n = p.slice(9), h = TD.svgColor && TD.svgColor(n); if (h) pre.push(`\\definecolor{${n}}{HTML}{${h.slice(1).toUpperCase()}}`); }
     return pre;
   };
   // ---------- named point: \coordinate (A) at (x,y); ----------
@@ -1704,10 +1709,14 @@
     const po = [...new Set(shapes.map((s) => s.tex && s.tex.po).filter(Boolean))];
     return `\\begin{tikzpicture}[x=1cm, y=1cm${po.length === 1 ? ', ' + po[0] : ''}]`;
   };
+  // what the picture's own options use (a style naming DarkBlue, a library's keys), for the preamble
+  const openUses = (open, X) => { if (!TD.lint || !TD.lint.uses) return; const u = TD.lint.uses(open); for (const l of u.libs) X.libs.add(l); for (const p of u.pkgs) X.pkgs.add(p); };
   TD.tikzPicture = function (shapes, X) {
     const W = TD.tikzWhole(shapes, X);
-    if (W) return W.open + W.pre.map((c) => '\n  ' + c.replace(/\n/g, '\n  ')).join('') + W.body + W.close;
-    return [TD.tikzOpen(shapes), ...TD.tikzBody(shapes, X).map((l) => (l ? '  ' + l.replace(/\n/g, '\n  ') : l)), '\\end{tikzpicture}'].join('\n');
+    if (W) { openUses(W.open, X); return W.open + W.pre.map((c) => '\n  ' + c.replace(/\n/g, '\n  ')).join('') + W.body + W.close; }
+    const open = TD.tikzOpen(shapes);
+    openUses(open, X);
+    return [open, ...TD.tikzBody(shapes, X).map((l) => (l ? '  ' + l.replace(/\n/g, '\n  ') : l)), '\\end{tikzpicture}'].join('\n');
   };
 
   const notesOf = (X) => [...(X.notes || [])].map((n) => '% Note: ' + n);
