@@ -191,7 +191,7 @@
     const inkH = (b) => { const m = /katex-strut" style="height:([\d.]+)em/.exec(b.html || ''); return m ? +m[1] * b.px : b.h * 0.8; };
     const P = parse(s.src);
     const env = P.env, envHas = (k) => env.list.includes(k);
-    const ops = [], back = [], front = [], warnings = P.warnings.slice();
+    const ops = [], back = [], front = [], groups = [], warnings = P.warnings.slice();
     const warn = (w) => { if (!warnings.includes(w)) warnings.push(w); };
     // colours: TikZ names and mixes (blue!20, red!30!black) through the importer's colour table
     const hue = (v) => {
@@ -413,22 +413,33 @@
       const x1 = colL[c] - gpad, x2 = colR(c2) + gpad, y1 = rowT[r] - gpad, y2 = rowT[r2_] + rowH[r2_] + gpad;
       const ys = sty(o.map.style), dest = o.list.includes('background') ? back : front;
       dest.push({ k: 'rect', x: x1, y: y1, w: x2 - x1, h: y2 - y1, rx: ys.round ? 4 / K : 0, fill: !!ys.fill && ys.fill !== 'none', ...paint(ys) });
+      // for the editor: each group's box, and whether its border is drawn
+      groups.push({ r, c, r2: r2_, c2, n: at(r, c).filter((q) => q.name === 'gategroup').indexOf(it), x: x1, y: y1, w: x2 - x1, h: y2 - y1, rx: ys.round ? 4 / K : 0, bare: ys.draw === 'none' });
       // the label: above the box, raised 0.2cm and anchored at its middle (quantikz's group label style); a label
       // style's position, anchor and yshift change that (yshifts add up)
-      const t = plain(it.a[0]);
-      if (!t) continue;
-      const b = box(t), ls = opts(o.map['label style'] || '');
-      let pos = 'above', anchor = 'mid', ysh = 0.2 * PX;
-      for (const e of ls.list) {
-        let q;
-        if ((q = /^label position\s*=\s*(\w+)/.exec(e))) pos = q[1];
-        else if ((q = /^anchor\s*=\s*([\w ]+)/.exec(e))) anchor = q[1].trim();
-        else if ((q = /^yshift\s*=\s*(.+)$/.exec(e))) ysh += (length(q[1], E)?.px || 0) * (/^-/.test(q[1].trim()) ? 1 : 1);
-        else if (e === 'below' || e === 'above') { pos = e; anchor = e === 'below' ? 'north' : 'south'; }
+      // a second label in its style, label={[group label,label position=below,…]:text}, is placed the same way
+      const glabel = (t, list, tc, lab) => {
+        if (!t) return;
+        const b = box(t);
+        let pos = 'above', anchor = 'mid', ysh = 0.2 * PX;
+        for (const e of list) {
+          let q;
+          if ((q = /^label position\s*=\s*(\w+)/.exec(e))) pos = q[1];
+          else if ((q = /^anchor\s*=\s*([\w ]+)/.exec(e))) anchor = q[1].trim();
+          else if ((q = /^yshift\s*=\s*(.+)$/.exec(e))) ysh += length(q[1], E)?.px || 0;
+          else if (e === 'below' || e === 'above') { pos = e; anchor = e === 'below' ? 'north' : 'south'; }
+        }
+        const ty = pos === 'below' ? y2 : pos === 'center' ? (y1 + y2) / 2 : y1, half = inkH(b) / 2 + LGAP;
+        const cyl = (/north/.test(anchor) ? ty + half : /south/.test(anchor) ? ty - half : ty) - ysh;
+        dest.push({ k: 'text', t, x: (x1 + x2) / 2, y: cyl, b, lab, ...(tc ? { tc } : {}) });
+      };
+      // lab: where the label is written, so the editor can edit it on a double-click
+      const gi = at(r, c).indexOf(it);
+      glabel(plain(it.a[0]), opts(o.map['label style'] || '').list, sty(o.map['label style']).text, { r, c, i: gi });
+      for (const e of opts(o.map.style || '').list) {
+        const q = /^label\s*=\s*\{?\s*\[([\s\S]*?)\]\s*(?:(above|below)\s*)?:([\s\S]*?)\}?$/.exec(e);
+        if (q) glabel(plain(q[3].replace(/^\{([\s\S]*)\}$/, '$1')), [...opts(q[1]).list, ...(q[2] ? [q[2]] : [])], sty(q[1]).text, { r, c, i: gi, low: true });
       }
-      const ty = pos === 'below' ? y2 : pos === 'center' ? (y1 + y2) / 2 : y1, half = inkH(b) / 2 + LGAP;
-      const cyl = (/north/.test(anchor) ? ty + half : /south/.test(anchor) ? ty - half : ty) - ysh;
-      dest.push({ k: 'text', t, x: (x1 + x2) / 2, y: cyl, b, ...(sty(o.map['label style']).text ? { tc: sty(o.map['label style']).text } : {}) });
     }
 
     // where each multi-wire gate sits, for \gateinput / \gateoutput
@@ -603,7 +614,7 @@
     // ---- slices: a dashed line between columns, across every wire, its label on top.
     // \slice[style=…,label style=…]{label}, or slice all (titles from slice titles, \col for the number)
     const slices = [];
-    for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (const it of at(r, c)) if (it.name === 'slice') slices.push({ c, t: plain(it.a[0]), ls: sty(O(it).map.style), ll: sty(O(it).map['label style']) });
+    for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) for (const it of at(r, c)) if (it.name === 'slice') slices.push({ c, lab: { r, c, i: at(r, c).indexOf(it) }, t: plain(it.a[0]), ls: sty(O(it).map.style), ll: sty(O(it).map['label style']), so: opts(O(it).map.style || ''), lo: opts(O(it).map['label style'] || '') });
     if (envHas('slice all')) {
       const last = (rows[R - 1] || []).length, rem = intArg(env.map['remove end slices'], 0);
       for (let n = 2; n <= last - 1 - rem; n++) {
@@ -615,9 +626,23 @@
     for (const sl of slices) {
       const c = Math.min(sl.c, C - 1), xs = c < C - 1 ? (colR(c) + colL[c + 1]) / 2 : colR(c) + cs.px / 2;
       // quantikz: red, dashed 5pt/3pt, from the top row's top to 3pt under the bottom row (rows fitted with 1/3em)
-      const y1 = rowT[0] - E / 3, y2 = rowT[R - 1] + rowH[R - 1] + E / 3 + 3 / K;
-      ops.push({ k: 'line', x1: xs, y1, x2: xs, y2, slice: true, ...paint({ draw: sl.ls.draw, lw: sl.ls.lw }) });
-      if (sl.t) { const b = box(sl.t); ops.push({ k: 'text', t: sl.t, x: xs, y: y1 - 4 / K - inkH(b) / 2, b, ...(sl.ll.text ? { tc: sl.ll.text } : {}) }); }
+      // shorten <= / >= cut the line to fewer wires; draw=none leaves only the label (a second label below)
+      const y1 = rowT[0] - E / 3, y2 = rowT[R - 1] + rowH[R - 1] + E / 3 + 3 / K, so = sl.so ? sl.so.map : {};
+      const s1 = length(so['shorten <'] ?? '', E)?.px || 0, s2 = length(so['shorten >'] ?? '', E)?.px || 0;
+      if (sl.ls.draw !== 'none') ops.push({ k: 'line', x1: xs, y1: y1 + s1, x2: xs, y2: y2 - s2, slice: true, ...paint({ draw: sl.ls.draw, lw: sl.ls.lw }) });
+      // the label: a node at pos along the full line (0 the top), anchor south, 4pt inner sep; label style moves it
+      if (sl.t) {
+        const b = box(sl.t);
+        let pos = 0, anchor = 'south', ysh = 0;
+        for (const e of sl.lo ? sl.lo.list : []) {
+          let q;
+          if ((q = /^pos\s*=\s*([\d.]+)/.exec(e))) pos = +q[1];
+          else if ((q = /^anchor\s*=\s*([\w ]+)/.exec(e))) anchor = q[1].trim();
+          else if ((q = /^yshift\s*=\s*(.+)$/.exec(e))) ysh += length(q[1], E)?.px || 0;
+        }
+        const half = 4 / K + inkH(b) / 2, py = y1 + (y2 - y1) * pos;
+        ops.push({ k: 'text', t: sl.t, x: xs, y: (/north/.test(anchor) ? py + half : /south/.test(anchor) ? py - half : py) - ysh, b, lab: sl.lab, ...(sl.ll.text ? { tc: sl.ll.text } : {}) });
+      }
     }
     ops.unshift(...back);
     ops.push(...front);
@@ -640,7 +665,7 @@
     if (!(x2 > x1)) { x1 = colL[0]; x2 = colL[C - 1] + colW[C - 1]; }
     if (!(y2 > y1)) { y1 = rowT[0]; y2 = rowT[R - 1] + rowH[R - 1]; }
     const look = { gap: GAP, lw: LW, clear, ink: hue(env.map.color), paper: hue(env.map['background color']) };
-    return { ops, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, warnings, R, C, look, geo: { colL, colW, cx, rowT, rowH, cy, cs: cs.px, rs: rs.px } };
+    return { ops, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, warnings, R, C, look, groups, geo: { colL, colW, cx, rowT, rowH, cy, cs: cs.px, rs: rs.px } };
   }
 
   // ---------------------------------------------------------------- drawing

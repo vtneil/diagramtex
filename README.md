@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://diagramtex.igniting.space/"><img src="design/logo/final/lockup-horizontal-on-white.svg" alt="DiagramTeX logo" height="80"></a>
+  <a href="https://diagramtex.com/"><img src="design/logo/final/lockup-horizontal-on-white.svg" alt="DiagramTeX logo" height="80"></a>
 </p>
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
@@ -8,7 +8,7 @@
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
-**[Open DiagramTeX: diagramtex.igniting.space](https://diagramtex.igniting.space/)**
+**[Open DiagramTeX: diagramtex.com](https://diagramtex.com/)**
 
 ![DiagramTeX editing a diagram: formulae, a flowchart, an op-amp circuit, a plot and a QFT quantum circuit on one canvas, with the plot's properties open on the right](docs/screenshots/01-diagram.png)
 
@@ -64,12 +64,12 @@ How close does the exported LaTeX come to what you see? See [PARITY.md](PARITY.m
 
 ## Quick start
 
-1. Open **[diagramtex.igniting.space](https://diagramtex.igniting.space/)**.
+1. Open **[diagramtex.com](https://diagramtex.com/)**.
 2. Pick a tool from the left rail and draw. Type `$…$` in a label for maths.
 3. Press **LaTeX** (**Ctrl/⌘+E**) to see the code: the TikZ picture, a standalone file or the whole document, to copy or download. **Ctrl/⌘+Shift+E** downloads the whole document as `.tex` at once.
 4. Paste the code into your LaTeX document and compile.
 
-The full user guide (every tool, block, mode, export and shortcut) is at **[diagramtex.igniting.space/guide/](https://diagramtex.igniting.space/guide/)**, and in the app behind the book icon at the bottom of the document list.
+The full user guide (every tool, block, mode, export and shortcut) is at **[diagramtex.com/guide/](https://diagramtex.com/guide/)**, and in the app behind the book icon at the bottom of the document list.
 
 A new browser opens with a welcome file, a Classic document: what the app does, a list of everything you can draw and its four modes (Classic, Page, Whiteboard and Quick) on top, then a diagram with one example of each kind of object (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram), a second gallery (physics, optics, waveforms, a 3D surface plot, a solid of revolution, a 3D solid, a Feynman diagram, a tree, a ZX diagram and a Bloch sphere), then a short manual: drawing, text and maths, blocks, arranging, writing the document and getting the LaTeX out. Its shortcuts read Cmd on a Mac and Ctrl elsewhere.
 
@@ -178,10 +178,11 @@ npx wrangler preview
 ### Quantum circuits (quantikz)
 - **Blocks → Quantum** adds a circuit. Double-click it, press Enter or use **Edit Circuit…** in the panel to open the quantum circuit editor.
 - **Editor:** the circuit sits on a grid of cells (wires × steps). Drag an element from the palette onto a cell, or click it to place it in the selected cell. Keys place the common ones and step right: `H X Y Z S T U`, `C` control, `O` open control, `+` target, `M` meter. Drop on the dashed row or column to add a wire or a step. Right-click a cell (or a selected range) to insert wires above or below, insert steps before or after, move a step (or the selected steps) left or right, delete wires or steps, or clear cells.
-- Controls link to the nearest gate or target in their step; drag the blue handle to link another wire. Drag a cell to move it (Alt copies), Shift-click or drag to select a range, ⌘C/⌘V copy and paste cells. The panel edits labels, spans, links, wire types, slices and groups; inserting or deleting wires and steps keeps links and spans pointing at the same wires. A selected gate has a handle on its corner: drag it, or type in **Min width** / **Min height**, to set the gate's minimum size (`\gate[][width][height]{…}`, which widens its column as in quantikz). Drag the handle back to the gate's own size, or up or left, and it goes back to auto. Drag the bar on a gate's top or bottom edge to stretch it up or down over neighbouring wires (`\gate[n]`); it stops at the first wire that already has something in that step. Double-click a gate (or any element with a label, such as a stick or a meter) to edit its label in place, in LaTeX or MathLive as set under Text input.
+- Controls link to the nearest gate or target in their step; drag the blue handle to link another wire. Drag an element to move it (Alt copies); drag from anywhere else in a cell, or Shift-click, to select a range (the cursor turns to a move arrow over an element); ⌘C/⌘V copy and paste cells. The panel edits labels, spans, links, wire types, slices and groups; a group's **Border** switch (Shown | None) hides its box (`style={draw=none}`) so only its label shows, above a gate or a run of gates (the editor still outlines its box with a dashed blue line, which isn't exported), and **Label above** in the palette's Annotations adds one ready-made. Right-click a cell or a selected range for **Group Selection** or **Label Above Selection** (a group or a borderless label sized to the range), and **Delete Group** for each group whose box covers that cell. **Group** and **Label above** in the palette also work on a selected range, or, clicked first, by dragging across the cells to cover. Select any cell a group covers and the panel shows that group's fields (Label, **Label at** Top | Bottom | Both with a **Bottom label** for Both, Wires, Steps, Fill, Border, Line, and × to delete it), one section for each group over the cell, and its box shows a bar on each edge: drag one to another wire or step to resize the group (its code moves to the new top-left cell); inserting or deleting wires and steps keeps links and spans pointing at the same wires. A slice's section has Label, **Label at** (Top, Bottom, or Both with a second **Bottom label**, written as a borderless `\slice` beside it), **From wire** / **To wire** (the line covers only those wires: `shorten <=` / `>=` measured from the layout, kept in step as rows change height, with the label moved along with the cut end) and Colour. A selected gate has a handle on its corner: drag it, or type in **Min width** / **Min height**, to set the gate's minimum size (`\gate[][width][height]{…}`, which widens its column as in quantikz). Drag the handle back to the gate's own size, or up or left, and it goes back to auto. Drag the bar on a gate's top or bottom edge to stretch it up or down over neighbouring wires (`\gate[n]`); it stops at the first wire that already has something in that step. Double-click a gate (or any element with a label, such as a stick or a meter), or a slice's or a group's label (top or bottom), to edit that label in place, in LaTeX or MathLive as set under Text input.
 - The `quantikz` code is live on the right, both ways. Cells you didn't touch keep the code you wrote, and commands the editor doesn't draw are kept as written. It is exported inside `\begin{quantikz}` with `\usetikzlibrary{quantikz2}`.
 - The canvas draws an approximation of quantikz's layout: gates, controls and targets, swaps, meters, wire labels (`\lstick`, `\rstick`), slices, gate groups, bundles and classical wires.
 - Maths inside gate arguments and `$…$` in labels is highlighted green, and typing `\` suggests quantikz commands as well as LaTeX ones.
+- In maths (the green parts of any LaTeX field, and the Quick formula), `(`, `[` and `{` type their closing partner too, or wrap a selection in the pair (`\{` pairs with `\}`); typing the closer steps over it and Backspace between an empty pair removes both. The closer is added only when nothing, a space or the closing `$` follows the caret.
 
 ### ZX diagrams (zx-calculus)
 - **Blocks → ZX** adds a diagram. Double-click it, press Enter or use **Edit ZX…** in the panel to open the ZX editor.
@@ -244,7 +245,8 @@ npx wrangler preview
 ### Bit fields (bytefield)
 - **Blocks → Bit field** adds an IPv4-style header to start from. Double-click it, press Enter or use **Edit Bit Field…** in the panel to open the editor. The block is its `bytefield` code (version 2 of the package), with any `\bytefieldsetup{…}` written before it.
 - **Fields:** the palette has Bit box (`B`), Word box (`W`), Bits (`I`, one box per bit with `\bitboxes`), Skipped (`K`, `\skippedwords`) and Header (`H`, `\bitheader`). A new field goes after the selection, or in a new row when its row is full. Click a field to select it; drag its right edge to move the line between it and the next field (it snaps to bits; ⌥ resizes the field alone), drag a word box's bottom to change its height in rows. Double-click or Enter edits the label in place; `S` splits a field in half (or a word box into rows), `M` and `⇧M` merge it with the next or previous field, arrow keys move between fields.
-- **Groups:** click a row and ⇧-click another (or press on a field and drag across the rows, or ⌘A for every row with fields), then Right (`R`) or Left (`L`) to put a brace and label round them (`rightwordgroup`, `leftwordgroup`). Groups can be nested and moved to the other side. Click a brace and drag the handle at its top or bottom to another row to change which rows it covers; groups on the same side stay nested, so one can't be dragged across another (it wraps a group it now covers). With a range of rows selected, ⌫ or Delete Rows (in the right-click menu) deletes them all as one undo step. A label breaks onto more lines with `\\`, and a `\parbox`, `tabular` or `\shortstack` round it is shown with its own width and alignment.
+- **Selecting:** press on a field and drag across others, ⇧-click another field, or ⇧-arrow, to select every field in the rectangle between them; ⌘A selects every field. ⌫ deletes the selected fields (whole rows when the selection takes every field of its rows), as one undo step.
+- **Groups:** select fields in the rows you want, then Right (`R`) or Left (`L`) to put a brace and label round them (`rightwordgroup`, `leftwordgroup`). Groups can be nested and moved to the other side. Click a brace and drag the handle at its top or bottom to another row to change which rows it covers; groups on the same side stay nested, so one can't be dragged across another (it wraps a group it now covers). A label breaks onto more lines with `\\`, and a `\parbox`, `tabular` or `\shortstack` round it is shown with its own width and alignment.
 - **Right-click** a field for Edit Label, Split, Merge, Insert Field Before or After, Insert Row Above or Below, Group Rows and Delete; a brace for Edit Label, Move to the other side and Delete Group.
 - **Panel:** a field's label, width in bits (or height in rows), borders (`[lrtb]`), fill (`bgcolor`) and other options such as `boxformatting`; a header's numbers, endianness and lowest bit; the whole field's width in bits, `bitwidth` (`auto` too), `bitheight`, endianness, `lsb`, `bitformatting` and `boxformatting`.
 - The canvas follows the package's measurements under pdfLaTeX: bit widths and heights, the bit header above its row, skipped words, and the braces TeX picks for each group. Version 1 `\wordgroupr`/`\wordgroupl` are read and written back as the version 2 environments.
@@ -309,7 +311,7 @@ npx wrangler preview
   - Double-click a diagram block, or press **Edit**, to open it on the canvas. In diagram view, a selector picks between diagrams.
 - **Page setup** (right panel in document view): paper (A4, A5, B5, US Letter, US Legal, custom), orientation, margins, font size (10/11/12 pt) and whether to show a title. The page preview is true to scale and marks approximate page breaks; it centres beside the side panel. **Fit Width** fits it to that space and **100%** shows it at true size; zoom from 25% to 400% with pinch, Ctrl/⌘+scroll, Ctrl/⌘ + and −, or the − and + buttons (Ctrl/⌘ 0 returns to 100%), and scroll to move around.
   - Diagrams wider than the text width are scaled down, both in the preview and in the export (`\resizebox{\linewidth}{!}{…}`).
-- Documents are autosaved in the browser (IndexedDB). The top bar has one-click buttons:
+- Documents are autosaved in the browser (IndexedDB). A block editor's edits join the document on Done or ⌘S; reloading or closing the tab with edits not yet applied makes the browser ask first. The top bar has one-click buttons:
   - new, open (Ctrl+O, `.diagramtex` / `.tex`), save file (Ctrl+Shift+S), import LaTeX/TikZ
   - print / PDF (Ctrl+P), **Export** (PNG / SVG / PDF), **TikZ** (Ctrl+E), **LaTeX** (Ctrl+Shift+E), HTML
 - The ◧ button at the far left hides the document list.

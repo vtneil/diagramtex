@@ -261,17 +261,17 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 .files-foot { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
 .files-foot .app-src { align-self: center; display: inline-flex; padding: 3px; margin: -3px 0 -3px -3px; }
 .files-foot .app-ver { margin-left: auto; }
-/* autosave, beside the file name: quiet until a save fails */
+/* beside the file name: empty while autosave works (no badge, the top bar needs the room); a failure or a linked file shows */
+#saveState:not(.err):not(.linked) { display: none; }
 #saveState { flex: 0 0 auto; min-width: 0; margin-left: 2px; color: var(--pencil); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #saveState.err { color: var(--redpen); font-weight: 600; }
-/* below this the top bar has no room to spare: hidden while saving works, a short "Not saved" when it fails */
 /* linked to a file on disk: that file's name, with a dot while there are changes not yet saved to it */
 #saveState.linked { max-width: 180px; color: var(--graphite); }
 #saveState.linked::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; background: var(--rule-strong); }
 #saveState.linked.dirty::before { background: var(--marker); }
 @media (max-width: 1699px) {
   #saveState.linked { max-width: 120px; }
-  #saveState:not(.err):not(.linked) { display: none; }
+  /* below this the top bar has no room to spare: a short "Not saved" when a save fails */
   #saveState.err { font-size: 0; }
   #saveState.err::after { content: "Not saved"; font-size: 11px; }
 }
@@ -1209,6 +1209,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .qe-empty { fill: #8a8578; font-size: 12px; text-anchor: middle; pointer-events: none; }
 .qe-hover { fill: rgba(28, 27, 25, .04); stroke: none; pointer-events: none; }
 .qe-target { fill: color-mix(in srgb, var(--bluepen) 12%, transparent); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
+.qe-gbare { fill: color-mix(in srgb, var(--bluepen) 5%, transparent); stroke: color-mix(in srgb, var(--bluepen) 55%, transparent); stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
 .qe-sel { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; }
 .qe-link { stroke: var(--bluepen); stroke-width: 1.5; stroke-dasharray: 3 2; fill: none; pointer-events: none; }
 .qe-knob { fill: #fffdf8; stroke: var(--bluepen); stroke-width: 1.5; cursor: ns-resize; }
@@ -1221,6 +1222,8 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .qe-gbox { fill: none; stroke: var(--redpen); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
 .qe-size { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: nwse-resize; }
 .qe-span { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: ns-resize; }
+.qe-gedge { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: ns-resize; }
+.qe-gedge[data-e="l"], .qe-gedge[data-e="r"] { cursor: ew-resize; }
 .qe-ctx { z-index: 1500; }
 /* row / column delete gutters (TD.gridDel in qceditor.js): faint bins beside the hovered cell, red on the line being pointed at */
 .qe-del { color: var(--pencil); opacity: .5; pointer-events: none; }

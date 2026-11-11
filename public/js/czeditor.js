@@ -667,6 +667,8 @@
   }
   let savedT = 0;
   function flashSaved() { setTip('Saved to the page'); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500); }
+  // reloading or closing the tab asks first while this holds edits not yet applied (app.js, beforeunload)
+  TD.unsaved.push(() => !!E && snap() !== E.start);
   async function finish(ok) {
     closeMenu();
     if (!E) return;

@@ -1389,6 +1389,8 @@
     setTip('Saved to the page');
     setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
   }
+  // reloading or closing the tab asks first while this holds edits not yet applied (app.js, beforeunload)
+  TD.unsaved.push(() => !!E && E.src !== E.start);
   async function finish(ok) {
     if (!E) return;
     closeLabel();

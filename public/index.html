@@ -8,14 +8,14 @@
   <!-- Nothing is loaded from another site: every script, style, font and image is served from here (or made in the page). -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
-  <link rel="canonical" href="https://diagramtex.igniting.space/">
+  <link rel="canonical" href="https://diagramtex.com/">
   <!-- link previews (Slack, Discord, X, iMessage…) -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="DiagramTeX">
-  <meta property="og:url" content="https://diagramtex.igniting.space/">
+  <meta property="og:url" content="https://diagramtex.com/">
   <meta property="og:title" content="DiagramTeX: draw diagrams, export LaTeX/TikZ">
   <meta property="og:description" content="Draw physics and maths diagrams in your browser and export them as TikZ, LaTeX, PDF, SVG or PNG. Free, and it works offline.">
-  <meta property="og:image" content="https://diagramtex.igniting.space/icons/og-image.png">
+  <meta property="og:image" content="https://diagramtex.com/icons/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="DiagramTeX: draw diagrams, export LaTeX/TikZ">
@@ -25,19 +25,19 @@
   {
     "@context": "https://schema.org",
     "@graph": [
-      { "@type": "WebSite", "name": "DiagramTeX", "url": "https://diagramtex.igniting.space/" },
+      { "@type": "WebSite", "name": "DiagramTeX", "url": "https://diagramtex.com/" },
       {
         "@type": "WebApplication",
         "name": "DiagramTeX",
-        "url": "https://diagramtex.igniting.space/",
+        "url": "https://diagramtex.com/",
         "description": "Diagram editor for physics and maths that exports LaTeX/TikZ: circuits, quantum circuits, commutative diagrams, Bloch spheres, trees, ZX diagrams, Feynman diagrams, 3D geometry, timing diagrams, state machines, Karnaugh maps, bit fields, chemical structures and plots, with maths typeset as you type.",
         "applicationCategory": "DesignApplication",
         "operatingSystem": "Any (runs in a web browser)",
         "browserRequirements": "Requires JavaScript. Works offline once installed.",
         "isAccessibleForFree": true,
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "image": "https://diagramtex.igniting.space/icons/og-image.png",
-        "screenshot": "https://diagramtex.igniting.space/icons/og-image.png"
+        "image": "https://diagramtex.com/icons/og-image.png",
+        "screenshot": "https://diagramtex.com/icons/og-image.png"
       }
     ]
   }
@@ -127,7 +127,7 @@
     <h1 id="phoneWallTitle">DiagramTeX</h1>
     <p class="pw-lead">Draw physics and maths diagrams in your browser and export them as LaTeX/TikZ, PDF, SVG or PNG. Circuits, quantum circuits, commutative diagrams, Bloch spheres, trees and plots, with maths typeset as you type. Free, and it works offline.</p>
     <div class="pw-notice" data-nosnippet>
-      <p id="phoneWallText"><b>The editor needs a bigger screen.</b> Open <strong>diagramtex.igniting.space</strong> on a computer or a tablet to start drawing.</p>
+      <p id="phoneWallText"><b>The editor needs a bigger screen.</b> Open <strong>diagramtex.com</strong> on a computer or a tablet to start drawing.</p>
       <p class="pw-note">Nothing is uploaded: your files stay on your device.</p>
     </div>
   </div>
@@ -148,7 +148,7 @@
       <button data-quick class="toggle" title="Quick — type one formula and copy it as a picture (PNG or SVG)"><svg viewBox="0 0 20 20"><path d="M2.5 11h2.5l2.5 5.5 4-13h6"/><path d="M12.5 9l4 5M16.5 9l-4 5"/></svg><span class="lbl">Quick</span></button>
     </div>
     <input id="docName" class="doc-name" spellcheck="false" title="Document name" aria-label="Document name">
-    <span id="saveState" role="status" title="Every change is saved in this browser as you work">Autosave enabled</span>
+    <span id="saveState" role="status" title="Every change is saved in this browser as you work"></span>
     <div class="spacer"></div>
     <select id="blockSel" title="Diagram in this document" hidden></select>
     <div class="seg sub" id="classicSeg" role="group" aria-label="View">

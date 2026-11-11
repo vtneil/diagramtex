@@ -4,10 +4,10 @@
 .bf-mini path { fill: none; stroke: currentColor; stroke-width: 1; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .bf-mini text { fill: currentColor; font: 9px var(--font-tex); text-anchor: middle; }
 /* canvas: the bit columns (construction lines, darker every eight bits), the field under the pointer,
-   the selection and a ⇧-click range of rows, the resize handle */
+   the selected fields (one, or every field of a dragged, ⇧-clicked or ⇧-arrowed range), the resize handle */
 .bf-grid { fill: none; stroke: color-mix(in srgb, var(--bluepen) 10%, transparent); stroke-width: 1; pointer-events: none; }
 .bf-grid8 { fill: none; stroke: color-mix(in srgb, var(--bluepen) 24%, transparent); stroke-width: 1; pointer-events: none; }
-.bf-hov { fill: color-mix(in srgb, var(--bluepen) 9%, transparent); pointer-events: none; }
-.bf-range { fill: color-mix(in srgb, var(--redpen) 6%, transparent); pointer-events: none; }
-.bf-sel { fill: none; stroke: color-mix(in srgb, var(--redpen) 55%, transparent); stroke-width: 2; pointer-events: none; }
+.bf-hov { fill: rgba(28, 27, 25, .04); stroke: none; pointer-events: none; }
+.bf-sel { fill: none; stroke: var(--redpen); stroke-width: 1.5; stroke-linecap: square; pointer-events: none; }
+.bf-selfill { fill: var(--redpen-wash); stroke-width: 1.5; pointer-events: none; }
 .bf-handle { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; }

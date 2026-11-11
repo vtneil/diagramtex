@@ -249,7 +249,7 @@
   function showSaveState() {
     const st = $('#saveState'), f = TD.files.fileOf(state.docId);
     const dirty = !!f && saveOk && !TD.files.isSaved(state.docId, projectJson(state.doc));
-    const msg = !saveOk ? (saveFull ? 'Autosave failed: browser storage is full' : 'Autosave failed: browser storage unavailable') : f ? f.name : 'Autosave enabled';
+    const msg = !saveOk ? (saveFull ? 'Autosave failed: browser storage is full' : 'Autosave failed: browser storage unavailable') : f ? f.name : '';
     st.classList.toggle('err', !saveOk);
     st.classList.toggle('linked', saveOk && !!f);
     st.classList.toggle('dirty', dirty);
@@ -3768,7 +3768,7 @@
         else {
           saveNow();
           // without the File System Access API there is no file to keep in step, so remind people to keep one
-          const msg = `Saved in this browser — ${isMac ? '⇧⌘S' : 'Ctrl+Shift+S'} saves to a file`;
+          const msg = `Autosaved in this browser — ${isMac ? '⇧⌘S' : 'Ctrl+Shift+S'} saves to a file`;
           if (TD.files.can) showHint(msg, 1500);
           else showHint(`${msg}\nRemember to occasionally save to file to prevent accidental losses.`, 4000);
         }
@@ -4761,7 +4761,11 @@
       document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { TD.clearTextCache(); render(); });
     }
   }
-  window.addEventListener('beforeunload', () => { commit(); saveNow(); });
+  window.addEventListener('beforeunload', (e) => {
+    commit(); saveNow();
+    // documents save themselves; an open block editor's edits don't until Done, so the browser asks before they go
+    if (TD.unsaved.some((f) => { try { return f(); } catch { return false; } })) { e.preventDefault(); e.returnValue = ''; }
+  });
   // a tab put away (or closed on a phone, where beforeunload may not come) saves what it has
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { commit(); if (state.docId) saveNow(); } });
   // Switching the maths engine re-measures every text box, so redraw whatever view is open.

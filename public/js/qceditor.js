@@ -90,6 +90,7 @@
     ]],
     ['Annotations', [
       ['slice', 'Slice', [[0, '\\slice{}']]], ['group', 'Group', [[0, '\\gategroup[2,steps=2,style={dashed,rounded corners}]{}']]],
+      ['glabel', 'Label above', [[0, '\\gategroup[1,steps=1,style={draw=none}]{label}']], null, '& \\gate{U} \\gategroup[1,steps=1,style={draw=none}]{label} &'],
     ]],
   ];
   const ITEM = {}, KEYS = {};
@@ -181,6 +182,10 @@
           } else if (SPANS.has(it.name) && spanOf(it) > 1) {
             const last = lastKept(r, r + spanOf(it) - 1, rowMap, R), n = last == null ? 1 : rowMap(last) - r1 + 1;
             if (n !== spanOf(it)) { setSpan(it, n); changed = true; }
+          } else if (it.name === 'slice' && (it.wr || sliceShort(it))) {
+            const [a, b] = sliceWires(it), l = lastKept(a, b, rowMap, R);
+            let f = a; while (f <= b && rowMap(f) == null) f++;
+            if (l == null) delete it.wr; else it.wr = [rowMap(f), rowMap(l)];
           } else if (it.name === 'gategroup') {
             const d = groupDims(it), lr = lastKept(r, r + d.wires - 1, rowMap, R), lc = lastKept(c, c + d.steps - 1, colMap, C);
             const w = lr == null ? 1 : rowMap(lr) - r1 + 1, s = lc == null ? 1 : colMap(lc) - c1 + 1;
@@ -475,12 +480,16 @@
     if (h) { edit(() => place(d.k, h.r, h.c)); E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c }; renderProps(); }
     E.hover = null; draw();
   });
+  const GROUPING = new Set(['group', 'glabel']);
   function choose(k) {
+    // Group / Label above with cells selected: one sized to the selection
+    const b = selBox();
+    if (GROUPING.has(k) && b && !E.arm && b.r2 < nR(E.M) && b.c2 < nC(E.M)) { addGroup(b, k === 'glabel'); return; }
     const s = single();
     if (s && !E.arm) { put(k, s.r1, s.c1, true); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${ITEM[k].name}: click a cell to place it. Esc when done.` : '');
+    setTip(E.arm ? `${ITEM[k].name}: ${GROUPING.has(k) ? 'drag across the cells it should cover' : 'click a cell to place it'}. Esc when done.` : '');
   }
   function put(k, r, c, step) {
     edit(() => place(k, r, c));
@@ -522,6 +531,24 @@
   const toL = (e) => { const [x, y] = pos(e), v = E.view; return [(x - v.ox) / v.k, (y - v.oy) / v.k]; };
   // the cell under the pointer (r == R or c == C: the growing edge), or null
   // the cell a click picks: a covered cell gives the tall gate over it
+  // is the pointer on the element drawn in this cell (its box, plus 6 screen px)? A drag from there moves the
+  // element; a drag from the rest of the cell selects a range of cells. Gates use their drawn box (all their wires);
+  // other elements a small square on the wire; sticks hang off the cell, so their whole cell counts.
+  function onElement(e, h) {
+    const cell = at(h.r, h.c), G = E.G;
+    if (!cell || !G || G.empty) return false;
+    if (cell.opaque) return true;
+    const m = mainOf(cell);
+    if (!m) return false;
+    if (m.name === 'lstick' || m.name === 'rstick') return true;
+    const [x, y] = toL(e), tol = 5 / E.view.k;
+    const o = m.name === 'gate' && G.L.ops && G.L.ops.find((q) => q.gate && q.gate[0] === h.r && q.gate[1] === h.c);
+    // half the drawn size, in cm: control dots are 0.12cm across, targets and swaps about 0.35cm, meters 2em × 1.5em
+    const DOT = { ctrl: 0.1, octrl: 0.1, control: 0.1, ocontrol: 0.1, phase: 0.1, targ: 0.18, targX: 0.18, swap: 0.12, ground: 0.18, trash: 0.18 };
+    const half = (DOT[m.name] || 0.3) * TD.PX_PER_CM;
+    const b = o ? { x1: o.x, y1: o.y, x2: o.x + o.w, y2: o.y + o.h } : { x1: G.cx(h.c) - half, y1: G.cy(h.r) - half, x2: G.cx(h.c) + half, y2: G.cy(h.r) + half };
+    return x >= b.x1 - tol && x <= b.x2 + tol && y >= b.y1 - tol && y <= b.y2 + tol;
+  }
   function pick(e) { const h = cellAt(e); return h && h.r < nR(E.M) && h.c < nC(E.M) ? owner(h.r, h.c) : h; }
   function cellAt(e) {
     const G = E.G || (E.G = geom()), [x, y] = toL(e);
@@ -554,8 +581,10 @@
   // ---------------------------------------------------------------- drawing
   function draw() {
     if (!E) return;
+    E.G = geom();
+    if (syncSlices()) E.G = geom();
     syncCode();
-    const G = (E.G = geom()), r = rect(), W = r.width, H = r.height, v = E.view, k = v.k;
+    const G = E.G, r = rect(), W = r.width, H = r.height, v = E.view, k = v.k;
     // emptied (every wire or step deleted): bring the start cell into the middle
     if (!!G.empty !== !!E.wasEmpty) { E.wasEmpty = G.empty; if (G.empty && r.width && E.fitted) { fit(); return; } }
     const X = (x) => r2(v.ox + x * k), Y = (y) => r2(v.oy + y * k);
@@ -577,6 +606,8 @@
     out += plus((xs[C] + xs[C + 1]) / 2, (ys[0] + ys[R]) / 2) + plus((xs[0] + xs[C]) / 2, (ys[R] + ys[R + 1]) / 2);
     }
     out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${R && C ? Q.draw({ ...G.s, x: G.L.bb.x, y: G.L.bb.y }, { paper: PAPER, export: true }) : ''}</g>`;
+    // a group whose border isn't drawn (draw=none, a label above): its box outlined here only, never exported
+    if (!G.empty && G.L.groups) for (const g of G.L.groups) if (g.bare) out += `<rect class="qe-gbare" x="${X(g.x)}" y="${Y(g.y)}" width="${r2(g.w * k)}" height="${r2(g.h * k)}" rx="${r2(g.rx * k)}"/>`;
     if (G.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[1]) / 2)}" y="${Y(ys[0]) - 14}">Drop or click an element to start</text>`;
     const box = (r1, c1, r2_, c2, cls) => `<rect class="${cls}" x="${X(xs[c1])}" y="${Y(ys[r1])}" width="${r2((xs[c2 + 1] - xs[c1]) * k)}" height="${r2((ys[r2_ + 1] - ys[r1]) * k)}"/>`;
     const h = E.hover;
@@ -596,6 +627,13 @@
       const n = E.drag && E.drag.mode === 'link' ? E.drag.n : intArg(m.a[0]), x = X(G.cx(s.c1)), y = Y(G.cy(s.r1 + n));
       if (n) out += `<path class="qe-link" d="M${x},${Y(G.cy(s.r1))}V${y}"/>`;
       out += `<circle class="qe-knob" cx="${x}" cy="${n ? y : r2(Y(G.cy(s.r1)) + 16)}" r="5"/>`;
+    }
+    // the selected cell's group: a bar on each edge, dragged to another wire or step to resize it (under a selected gate's own handles)
+    const hg = !(E.drag && E.drag.mode === 'move') && handleGroup();
+    if (hg) {
+      const g = hg.g, x1 = X(g.x), y1 = Y(g.y), x2 = X(g.x + g.w), y2 = Y(g.y + g.h), mx = r2((x1 + x2) / 2), my = r2((y1 + y2) / 2);
+      out += `<rect class="qe-gedge" data-e="t" x="${r2(mx - 8)}" y="${r2(y1 - 3)}" width="16" height="6" rx="2"/><rect class="qe-gedge" data-e="b" x="${r2(mx - 8)}" y="${r2(y2 - 3)}" width="16" height="6" rx="2"/>`;
+      out += `<rect class="qe-gedge" data-e="l" x="${r2(x1 - 3)}" y="${r2(my - 8)}" width="6" height="16" rx="2"/><rect class="qe-gedge" data-e="r" x="${r2(x2 - 3)}" y="${r2(my - 8)}" width="6" height="16" rx="2"/>`;
     }
     // a selected gate: a red-pen handle on its lower right corner sets its minimum width / height
     const gb = !(E.drag && E.drag.mode === 'move') && gateBox();
@@ -655,15 +693,24 @@
       begin(); E.drag = { mode: 'span', c: s.c1, top: s.r1, bot: s.r1 + spanOf(m) - 1, edge: e.target.closest('.qe-span').dataset.e };
       return;
     }
+    if (e.target.closest('.qe-gedge')) {
+      const hg = handleGroup();
+      if (hg) { begin(); E.gpin = hg.it; E.drag = { mode: 'gedge', edge: e.target.closest('.qe-gedge').dataset.e, it: hg.it, b: { r1: hg.g.r, c1: hg.g.c, r2: hg.g.r2, c2: hg.g.c2 } }; return; }
+    }
     if (e.target.closest('.qe-knob')) { const s = single(); begin(); E.drag = { mode: 'link', r: s.r1, c: s.c1, n: intArg(mainOf(at(s.r1, s.c1)).a[0]) }; return; }
+    // a click on a slice's or a group's label selects the cell that writes it (it may sit over the add-a-wire strip)
+    const lt = !E.arm && titleAt(e);
+    if (lt) { E.sel = { r1: lt.o.lab.r, c1: lt.o.lab.c, r2: lt.o.lab.r, c2: lt.o.lab.c }; draw(); renderProps(); return; }
     const h = E.arm ? cellAt(e) : pick(e);
     if (!h) { E.sel = null; draw(); renderProps(); return; }
+    // an armed Group / Label above: drag across the cells it should cover (a click covers one)
+    if (E.arm && GROUPING.has(E.arm) && h.r < nR(E.M) && h.c < nC(E.M)) { E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c }; E.drag = { mode: 'range', r: h.r, c: h.c, group: E.arm }; draw(); renderProps(); return; }
     if (E.arm) { put(E.arm, h.r, h.c, false); return; }
     if (h.r >= nR(E.M) || h.c >= nC(E.M)) { edit(() => ensure(E.M, h.r + 1, h.c + 1)); E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c }; draw(); renderProps(); return; }
     if (e.shiftKey && E.sel) { E.sel.r2 = h.r; E.sel.c2 = h.c; draw(); renderProps(); return; }
     E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c };
     const cell = at(h.r, h.c);
-    E.drag = cell && (cell.text || cell.items.length) ? { mode: 'move', r: h.r, c: h.c, sx, sy, e: [sx, sy], moved: false } : { mode: 'range', r: h.r, c: h.c };
+    E.drag = cell && (cell.text || cell.items.length) && onElement(e, h) ? { mode: 'move', r: h.r, c: h.c, sx, sy, e: [sx, sy], moved: false } : { mode: 'range', r: h.r, c: h.c };
     draw(); renderProps();
   });
   svg.addEventListener('pointermove', (e) => {
@@ -671,7 +718,7 @@
     const d = E.drag, [sx, sy] = pos(e);
     if (!d) {
       const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : E.arm ? cellAt(e) : pick(e);
-      svg.style.cursor = dz ? 'pointer' : '';
+      svg.style.cursor = dz ? 'pointer' : h && !E.arm && h.r < nR(E.M) && h.c < nC(E.M) && onElement(e, h) ? 'move' : '';
       const nr = dz ? null : TD.gridDel.near(E.gut, sx, sy);
       if (JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(nr) !== JSON.stringify(E.near)) { E.hover = h; E.del = dz; E.near = nr; draw(); }
       return;
@@ -691,6 +738,27 @@
       // the panel follows live: size fields and the cell's code
       const gw = $('[data-f="gw"]', props), gh = $('[data-f="gh"]', props), cf = $('[data-f="code"]', props);
       if (gw) gw.value = wcm || ''; if (gh) gh.value = hcm || ''; if (cf) cf.value = cellText(cell);
+      return;
+    }
+    if (d.mode === 'gedge') {
+      // the edge follows the pointer to a wire or step, never past the opposite edge; the group's code moves to its top left cell
+      const h = cellAt(e);
+      if (!h) return;
+      const R = nR(E.M), C = nC(E.M), hr = Math.max(0, Math.min(R - 1, h.r)), hc = Math.max(0, Math.min(C - 1, h.c)), b = { ...d.b };
+      if (d.edge === 't') b.r1 = Math.min(hr, b.r2); else if (d.edge === 'b') b.r2 = Math.max(hr, b.r1);
+      else if (d.edge === 'l') b.c1 = Math.min(hc, b.c2); else b.c2 = Math.max(hc, b.c1);
+      if (b.r1 === d.b.r1 && b.c1 === d.b.c1 && b.r2 === d.b.r2 && b.c2 === d.b.c2) return;
+      const from = at(d.b.r1, d.b.c1), to = at(b.r1, b.c1);
+      if (to !== from) {
+        if (!to || to.opaque) { setTip('That cell is written as raw code: a group can\'t start there'); return; }
+        setItems(from, from.items.filter((q) => q !== d.it)); setItems(to, [...to.items, d.it]);
+      }
+      setGroupDims(d.it, b.r2 - b.r1 + 1, b.c2 - b.c1 + 1); to.dirty = true;
+      d.b = b;
+      const k = single();
+      if (!k || k.r1 < b.r1 || k.r1 > b.r2 || k.c1 < b.c1 || k.c1 > b.c2) E.sel = { r1: b.r1, c1: b.c1, r2: b.r1, c2: b.c1 };
+      setTip(`Group · ${b.r2 - b.r1 + 1} wire${b.r2 > b.r1 ? 's' : ''} × ${b.c2 - b.c1 + 1} step${b.c2 > b.c1 ? 's' : ''}`);
+      draw();
       return;
     }
     if (d.mode === 'span') {
@@ -731,8 +799,9 @@
   svg.addEventListener('pointerup', (e) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
+    if (d.mode === 'range' && d.group) { addGroup(selBox(), d.group === 'glabel'); return; }
     if (d.mode === 'span') clearUnder(d.top, d.c);
-    if (d.mode === 'size' || d.mode === 'span') { setTip(''); commit(); draw(); keepInView(); renderProps(); return; }
+    if (d.mode === 'size' || d.mode === 'span' || d.mode === 'gedge') { setTip(''); commit(); draw(); keepInView(); renderProps(); return; }
     if (d.mode === 'link') { const m = mainOf(at(d.r, d.c)); m.a[0] = d.n ? String(d.n) : ''; at(d.r, d.c).dirty = true; commit(); draw(); renderProps(); return; }
     if (d.mode === 'move' && d.moved) {
       const h = cellAt(e);
@@ -745,8 +814,45 @@
   const MI = {
     ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>',
     left: '<path d="M16 10H4M8.5 5.5L4 10l4.5 4.5"/>', right: '<path d="M4 10h12M11.5 5.5L16 10l-4.5 4.5"/>',
+    group: '<rect x="3" y="5" width="14" height="12" rx="2" stroke-dasharray="2.5 2"/><path d="M6 2.5h8"/>',
+    glabel: '<path d="M5 3h10M10 3v5"/><rect x="5" y="11" width="10" height="6" rx="1"/>',
+    gdel: '<rect x="3" y="5" width="14" height="12" rx="2" stroke-dasharray="2.5 2"/><path d="M7.5 8.5l5 5M12.5 8.5l-5 5"/>',
   };
-  const mItem = (act, label, ic, key, off) => `<button class="ctx-item${/^(rowdel|coldel|delete)$/.test(act) ? ' danger' : ''}" data-qm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  // the groups whose box covers a cell: [{ r, c, i, it }]
+  function groupsAt(r, c) {
+    const out = [];
+    E.M.rows.forEach((row, r0) => row.forEach((cell, c0) => {
+      if (cell.opaque) return;
+      cell.items.forEach((it, i) => {
+        if (it.name !== 'gategroup') return;
+        const d = groupDims(it);
+        if (r >= r0 && r < r0 + d.wires && c >= c0 && c < c0 + d.steps) out.push({ r: r0, c: c0, i, it });
+      });
+    }));
+    return out;
+  }
+  // the group whose edge handles show: with one cell selected, the group last resized if it covers the cell, else the
+  // smallest group that does. { g (layout box), it (the item), r, c }
+  function handleGroup() {
+    const s = single(), G = E.G;
+    if (!s || !G || G.empty || !G.L.groups) return null;
+    const item = (g) => { const cell = at(g.r, g.c); return cell && !cell.opaque ? cell.items.filter((q) => q.name === 'gategroup')[g.n] || null : null; };
+    const cover = G.L.groups.filter((g) => s.r1 >= g.r && s.r1 <= g.r2 && s.c1 >= g.c && s.c1 <= g.c2).map((g) => ({ g, it: item(g) })).filter((x) => x.it);
+    if (!cover.length) return null;
+    return cover.find((x) => x.it === E.gpin) || cover.sort((p, q) => (p.g.r2 - p.g.r + 1) * (p.g.c2 - p.g.c + 1) - (q.g.r2 - q.g.r + 1) * (q.g.c2 - q.g.c + 1))[0];
+  }
+  // a group over the selection, framed or (label) with no border; selects its cell and puts the caret in its label
+  function addGroup(s, label) {
+    const cell = at(s.r1, s.c1);
+    if (!cell || cell.opaque) return;
+    const w = s.r2 - s.r1 + 1, n = s.c2 - s.c1 + 1;
+    const it = Q.cell(`\\gategroup[${w},steps=${n},style={${label ? 'draw=none' : 'dashed,rounded corners'}}]{${label ? 'label' : ''}}`, () => {})[0];
+    edit(() => setItems(cell, [...cell.items, it]));
+    E.sel = { r1: s.r1, c1: s.c1, r2: s.r1, c2: s.c1 }; draw(); renderProps();
+    const f = $(`[data-f="Gx${s.r1}_${s.c1}_${cell.items.indexOf(it)}"]`, props);
+    if (f) { f.scrollIntoView({ block: 'nearest' }); f.focus({ preventScroll: true }); f.select(); }
+  }
+  const mItem = (act, label, ic, key, off) => `<button class="ctx-item${/^(rowdel|coldel|delete|gdel)/.test(act) ? ' danger' : ''}" data-qm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -763,6 +869,15 @@
       mItem('colright', nc > 1 ? `Move ${nc} Steps Right` : 'Move Step Right', 'right', '', s.c2 >= nC(E.M) - 1) + '<hr>' +
       mItem('rowdel', nr > 1 ? `Delete ${nr} Wires` : 'Delete Wire', 'rowdel') + mItem('coldel', nc > 1 ? `Delete ${nc} Steps` : 'Delete Step', 'coldel') + '<hr>' +
       mItem('delete', nr * nc > 1 ? 'Clear Cells' : 'Clear Cell', 'clear', 'Del');
+    // groups: frame or label the selection; delete any group whose box covers the clicked cell
+    const anchor = at(s.r1, s.c1), here = groupsAt(h.r, h.c), many = nr * nc > 1;
+    let gh = mItem('gadd', many ? 'Group Selection' : 'Group Cell', 'group', '', !anchor || anchor.opaque) +
+      mItem('glabel', many ? 'Label Above Selection' : 'Label Above', 'glabel', '', !anchor || anchor.opaque);
+    here.forEach((g) => {
+      const t = (g.it.a[0] || '').trim(), name = t ? `“${t.length > 24 ? t.slice(0, 23) + '…' : t}”` : '';
+      gh += mItem(`gdel:${g.r},${g.c},${g.i}`, here.length > 1 || name ? `Delete Group ${name}`.trim() : 'Delete Group', 'gdel');
+    });
+    menu.innerHTML = menu.innerHTML.replace(/<hr>(?=<button[^>]*data-qm="delete")/, '<hr>' + gh + '<hr>');
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
     menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
@@ -772,7 +887,14 @@
     const b = e.target.closest('[data-qm]');
     if (!b) return;
     closeMenu();
-    act(b.dataset.qm);
+    const q = b.dataset.qm;
+    if (q === 'gadd' || q === 'glabel') { addGroup(selBox(), q === 'glabel'); return; }
+    if (q.startsWith('gdel:')) {
+      const [r, c, i] = q.slice(5).split(',').map(Number), cell = at(r, c);
+      if (cell) edit(() => setItems(cell, cell.items.filter((_, k) => k !== i)));
+      return;
+    }
+    act(q);
   });
   root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('.qe-ctx')) closeMenu(); }, true);
   svg.addEventListener('wheel', closeMenu, { passive: true });
@@ -787,6 +909,7 @@
   // elements with a typeable label, and the name of its field in the panel
   const LABEL = { gate: 'Label', phase: 'Angle', meter: 'Label', metercw: 'Label', inputD: 'Label', trash: 'Label', makeebit: 'Label', permute: 'Order', phantomgate: 'Width of', hphantomgate: 'Width of', meterD: 'Label', measuretab: 'Label', measure: 'Label', lstick: 'Label', rstick: 'Label', push: 'Text', midstick: 'Label', qwbundle: 'Label' };
   function onDouble(e) {
+    if (editTitle(e)) return true;
     const s = single(), h = pick(e);
     if (!s || !h || h.r !== s.r1 || h.c !== s.c1) return false;
     return editLabel(s.r1, s.c1);
@@ -807,6 +930,29 @@
       text: m.a[0] || '', math: MATH_LABEL.has(m.name), bare: true,
       at: () => labelAt(r, c),
       onInput: (v) => { m.a[0] = v; cell.dirty = true; draw(); renderProps(); },
+      onDone: () => { if (L === me) L = null; commit(); draw(); renderProps(); },
+    });
+    return true;
+  }
+  // a slice's or a group's label (its top or its bottom one) under the pointer: edit it in place, under the label
+  function titleAt(e) {
+    const G = E.G, [x, y] = toL(e), tol = 4 / E.view.k;
+    const o = G && !G.empty && G.L.ops && [...G.L.ops].reverse().find((o) => o.k === 'text' && o.lab && Math.abs(x - o.x) <= o.b.w / 2 + tol && Math.abs(y - o.y) <= o.b.h / 2 + tol);
+    const cell = o && at(o.lab.r, o.lab.c), it = cell && !cell.opaque && cell.items[o.lab.i];
+    return it ? { o, cell, it } : null;
+  }
+  function editTitle(e) {
+    const t = titleAt(e);
+    if (!t || !TD.input) return false;
+    const { o, cell, it } = t;
+    const low = !!o.lab.low, sr = stage.getBoundingClientRect(), vr = svg.getBoundingClientRect(), oy = o.y + o.b.h / 2;
+    closeLabel();
+    begin();
+    const me = (L = { r: o.lab.r, c: o.lab.c });
+    me.pop = TD.input.popup(stage, {
+      text: low ? groupLow(it) : it.a[0] || '', math: false, bare: true,
+      at: () => { const v = E.view; return [vr.left - sr.left + v.ox + o.x * v.k, vr.top - sr.top + v.oy + oy * v.k + 8]; },
+      onInput: (v) => { if (low) setGroupMode(it, 'both', v); else it.a[0] = v; cell.dirty = true; draw(); renderProps(); },
       onDone: () => { if (L === me) L = null; commit(); draw(); renderProps(); },
     });
     return true;
@@ -843,6 +989,101 @@
   }
   // a colour field (the colour picker, written as an xcolor spec); Default leaves it to quantikz
   const hueSel = (label, f, cur, fill) => `<div class="row"><label>${label}</label>${TD.texColor.field(`data-f="${f}"`, TD.texColor.unwrap(cur), { nullable: true, dfltSw: fill ? '' : TD.css(INK), title: label })}</div>`;
+  // a group's border: Shown (its Line colour) or None (draw=none: only the label, above the gates)
+  function groupBorder(k, st) {
+    const off = /^none$/i.test((st.draw || '').trim());
+    return `<div class="row"><label>Border</label><div class="ctl seg-ctl">${[['1', 'Shown'], ['0', 'None']].map(([v, n]) => `<button data-qe="gb" data-g="${k}" data-v="${v}" class="${(v === '0') === off ? 'on' : ''}">${n}</button>`).join('')}</div></div>` +
+      `<div${off ? ' style="visibility:hidden"' : ''}>${hueSel('Line', 'Gd' + k, off ? '' : st.draw || st.color || '', false)}</div>`;
+  }
+  // a group named in the panel as "r_c_i": its anchor cell and item
+  function gref(k) {
+    const [r, c, i] = k.split('_').map(Number), cell = at(r, c), it = cell && !cell.opaque && cell.items[i];
+    return it && it.name === 'gategroup' ? { cell, it } : null;
+  }
+  // a top-level option written as key={a,b,…} (none: dropped)
+  function setOpt(m, key, list) {
+    const o = Q.opts(m.o[0] || ''), rest = o.list.filter((e) => !new RegExp(`^${key}\\s*=`).test(e));
+    if (list.length) rest.push(`${key}={${list.join(',')}}`);
+    const head = rest.join(',');
+    m.o = head || m.o.length > 1 ? [head, ...m.o.slice(1)] : [];
+  }
+  const lsOf = (m) => Q.opts(Q.opts(m.o[0] || '').map['label style'] || '').list;
+  // A group's label: above (quantikz's own), below (label position=below, as far under as the top one is over),
+  // or both (a second label={…} in its style).
+  const GLOW = 'group label,label position=below,yshift=-0.4cm';
+  function groupMode(it) {
+    if (Q.opts(Q.opts(it.o[0] || '').map.style || '').list.some((e) => /^label\s*=/.test(e))) return 'both';
+    return lsOf(it).some((e) => /^label position\s*=\s*below/.test(e) || e === 'below') ? 'bottom' : 'top';
+  }
+  function groupLow(it) {
+    const q = /\]\s*(?:\w+\s*)?:\s*([\s\S]*)$/.exec(styleOf(it).label || '');
+    return q ? q[1].trim().replace(/^\{([\s\S]*)\}$/, '$1') : '';
+  }
+  function setGroupMode(it, mode, low) {
+    const keep = lsOf(it).filter((e) => !/^(label position|yshift)\s*=/.test(e) && e !== 'below' && e !== 'above');
+    setOpt(it, 'label style', mode === 'bottom' ? [...keep, 'label position=below', 'yshift=-0.4cm'] : keep);
+    setStyle(it, 'label', mode === 'both' ? `{[${GLOW}]:{${low}}}` : '');
+  }
+  // A slice's label: at the top (quantikz's own), the bottom (label style={pos=1,anchor=north}), or both: a second,
+  // borderless \slice in the same cell carries the bottom one. A slice over fewer wires is shortened at its ends
+  // (shorten <=, >= from the layout); shortening leaves the label where it was, so a yshift follows the cut end.
+  // it.wr caches the wires [from, to] while editing; the code alone gives them back by the nearest wire edges.
+  const sliceNone = (it) => /^none$/i.test((styleOf(it).draw || '').trim());
+  function slicePair(cell) {
+    const sl = cell.opaque ? [] : cell.items.filter((it) => it.name === 'slice');
+    const main = sl.find((it) => !sliceNone(it)) || null;
+    return { main, comp: (main && sl.find((it) => it !== main && sliceNone(it))) || null };
+  }
+  const sliceBottom = (it) => lsOf(it).some((e) => /^pos\s*=\s*1(\.0*)?$/.test(e));
+  const sliceShort = (it) => !!(styleOf(it)['shorten <'] || styleOf(it)['shorten >']);
+  function rowsPx() { const G = E.G || (E.G = geom()), g = G.L && G.L.geo; return g && G.L.R ? { g, R: G.L.R } : null; }
+  const edgeT = (g, a) => g.rowT[a] - g.rowT[0], edgeB = (g, R, b) => g.rowT[R - 1] + g.rowH[R - 1] - g.rowT[b] - g.rowH[b];
+  function sliceWires(it) {
+    const R = nR(E.M), q = rowsPx();
+    if (it.wr) return it.wr;
+    if (!q || !sliceShort(it)) return [0, Math.max(0, R - 1)];
+    const cm = (v) => { const m = /(-?[\d.]+)\s*(cm|mm|pt)?/.exec(v || ''); return !m ? 0 : m[2] === 'mm' ? m[1] / 10 : m[2] === 'pt' ? m[1] / 28.45 : +m[1]; };
+    const T = cm(styleOf(it)['shorten <']) * TD.PX_PER_CM, B = cm(styleOf(it)['shorten >']) * TD.PX_PER_CM;
+    let a = 0, b = q.R - 1;
+    for (let i = 0; i < q.R; i++) { if (Math.abs(edgeT(q.g, i) - T) < Math.abs(edgeT(q.g, a) - T)) a = i; if (Math.abs(edgeB(q.g, q.R, i) - B) < Math.abs(edgeB(q.g, q.R, b) - B)) b = i; }
+    return [a, Math.max(a, b)];
+  }
+  // the cut at each end, in cm, for wires [a, b]
+  function sliceCut(it) {
+    const q = rowsPx();
+    if (!q || !(it.wr || sliceShort(it))) return [0, 0];
+    const [a, b] = sliceWires(it).map((v) => Math.min(Math.max(v, 0), q.R - 1)), cm = (v) => Math.round((v / TD.PX_PER_CM) * 100) / 100;
+    return [cm(edgeT(q.g, a)), cm(edgeB(q.g, q.R, Math.max(a, b)))];
+  }
+  function placeSlice(main, comp, bottom) {
+    const [T, B] = sliceCut(main), keep = (it) => lsOf(it).filter((e) => !/^(pos|anchor|yshift)\s*=/.test(e));
+    setStyle(main, 'shorten <', T ? `${T}cm` : ''); setStyle(main, 'shorten >', B ? `${B}cm` : '');
+    if (!T && !B) delete main.wr;
+    setOpt(main, 'label style', [...keep(main), ...(bottom ? ['pos=1', 'anchor=north', ...(B ? [`yshift=${B}cm`] : [])] : T ? [`yshift=-${T}cm`] : [])]);
+    if (comp) setOpt(comp, 'label style', [...keep(comp), 'pos=1', 'anchor=north', ...(B ? [`yshift=${B}cm`] : [])]);
+  }
+  // keep every shortened slice's cut on its wires as the rows around it change height
+  function syncSlices() {
+    let changed = false;
+    for (const row of E.M.rows) for (const cell of row) {
+      const { main, comp } = slicePair(cell);
+      if (!main || !(main.wr || sliceShort(main))) continue;
+      const was = itemCode(main) + (comp ? itemCode(comp) : '');
+      main.wr = sliceWires(main);
+      placeSlice(main, comp, sliceBottom(main));
+      if (itemCode(main) + (comp ? itemCode(comp) : '') !== was) { cell.dirty = true; changed = true; }
+    }
+    return changed;
+  }
+  function setSliceMode(cell, main, mode) {
+    let { comp } = slicePair(cell);
+    if (mode === 'both' && !comp) { comp = { name: 'slice', o: ['style={draw=none}'], a: [''] }; cell.items.splice(cell.items.indexOf(main) + 1, 0, comp); }
+    if (mode !== 'both' && comp) { cell.items.splice(cell.items.indexOf(comp), 1); comp = null; }
+    placeSlice(main, comp, mode === 'bottom');
+    cell.dirty = true;
+  }
+  const seg = (qe, data, cur, opts) => `<div class="row"><label>Label at</label><div class="ctl seg-ctl">${opts.map(([v, n]) => `<button data-qe="${qe}" ${data} data-v="${v}" class="${cur === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>`;
+  const AT = [['top', 'Top'], ['bottom', 'Bottom'], ['both', 'Both']];
   function renderProps() {
     if (!E) return;
     const b = selBox();
@@ -873,13 +1114,27 @@
     } else if (!cell.opaque && !cell.items.length) h += `<div class="help">Pick an element on the left, or type <kbd>H</kbd> <kbd>X</kbd> <kbd>Z</kbd> <kbd>C</kbd> <kbd>M</kbd>…</div>`;
     h += '</div>';
     if (!cell.opaque) cell.items.forEach((it, i) => {
-      if (it.name === 'slice') h += `<div class="sec"><div class="sec-title">Slice <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div>${field('Label', 'x' + i, it.a[0] || '', ' data-tx="text"')}${hueSel('Colour', 'cd' + i, styleOf(it).draw || styleOf(it).color || '', false)}</div>`;
-      else if (it.name === 'gategroup') { const d = groupDims(it), st = styleOf(it); h += `<div class="sec"><div class="sec-title">Group <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div>${field('Label', 'x' + i, it.a[0] || '', ' data-tx="text"')}${num('Wires', 'gw' + i, d.wires)}${num('Steps', 'gs' + i, d.steps)}${hueSel('Fill', 'cf' + i, st.fill || '', true)}${hueSel('Line', 'cd' + i, st.draw || st.color || '', false)}</div>`; }
+      if (it.name === 'slice') {
+        const { main, comp } = slicePair(cell);
+        if (it === comp) return; // shown with its slice, as the bottom label
+        const mode = it === main && comp ? 'both' : sliceBottom(it) ? 'bottom' : 'top', w = it === main ? sliceWires(it) : null, R = nR(E.M);
+        h += `<div class="sec"><div class="sec-title">Slice <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div>${field('Label', 'x' + i, it.a[0] || '', ' data-tx="text"')}`;
+        if (it === main) {
+          h += seg('sl', `data-i="${i}"`, mode, AT) + `<div${comp ? '' : ' style="visibility:hidden"'}>${field('Bottom label', 'xb' + i, comp ? comp.a[0] || '' : '', ' data-tx="text"')}</div>`;
+          h += num('From wire', 'sa' + i, w[0] + 1).replace('min="1"', `min="1" max="${R}"`) + num('To wire', 'sz' + i, w[1] + 1).replace('min="1"', `min="1" max="${R}"`);
+        }
+        h += `${hueSel('Colour', 'cd' + i, styleOf(it).draw || styleOf(it).color || '', false)}</div>`;
+      }
       else if (it.name === 'setwiretype') {
         const t = (it.a[0] || 'q').trim();
         h += `<div class="sec"><div class="sec-title">Wire from here <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div><div class="row"><div class="ctl seg-ctl">${[['q', 'Quantum'], ['c', 'Classical'], ['n', 'None']].map(([v, n]) => `<button data-qe="wt" data-i="${i}" data-v="${v}" class="${t === v ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>`;
       }
     });
+    // every group whose box covers this cell, wherever it is written (its top-left cell), edited the same from any cell it covers
+    for (const g of groupsAt(b.r1, b.c1)) {
+      const k = `${g.r}_${g.c}_${g.i}`, d = groupDims(g.it), st = styleOf(g.it), away = g.r !== b.r1 || g.c !== b.c1;
+      h += `<div class="sec"><div class="sec-title"><span>Group${away ? ` <small>from wire ${g.r + 1} · step ${g.c + 1}</small>` : ''}</span> <button class="flat qe-x" data-qe="gdrop" data-g="${k}" title="Remove">×</button></div>${field('Label', 'Gx' + k, g.it.a[0] || '', ' data-tx="text"')}${seg('gl', `data-g="${k}"`, groupMode(g.it), AT)}<div${groupMode(g.it) === 'both' ? '' : ' style="visibility:hidden"'}>${field('Bottom label', 'Gb' + k, groupLow(g.it), ' data-tx="text"')}</div>${num('Wires', 'Gw' + k, d.wires)}${num('Steps', 'Gs' + k, d.steps)}${hueSel('Fill', 'Gf' + k, st.fill || '', true)}${groupBorder(k, st)}</div>`;
+    }
     h += `<div class="sec">${field('Code', 'code', cellText(cell), ' class="mono"')}${cell.opaque ? '<div class="help">This cell has commands the editor doesn’t draw; they are kept as written.</div>' : ''}</div>`;
     TD.morph(props, h);
   }
@@ -890,6 +1145,21 @@
     if (!f || !s) return;
     const cell = at(s.r1, s.c1);
     if (f === 'code') { Object.assign(cell, parseCell(t.value)); }
+    else if (/^G[xbwsfd]/.test(f)) {
+      // a group's field, by its top-left cell; a filled group goes behind the circuit (background), or its fill hides the gates
+      const g = gref(f.slice(2));
+      if (!g) return;
+      const it = g.it;
+      if (f[1] === 'x') it.a[0] = t.value;
+      else if (f[1] === 'b') setGroupMode(it, 'both', t.value);
+      else if (f[1] === 'w' || f[1] === 's') { const d = groupDims(it), v = Math.max(1, intArg(t.value) || 1); setGroupDims(it, f[1] === 'w' ? v : d.wires, f[1] === 's' ? v : d.steps); }
+      else {
+        if (f[1] === 'd') setStyle(it, 'color', '');
+        setStyle(it, f[1] === 'f' ? 'fill' : 'draw', TD.texColor.wrap(t.value));
+        if (f[1] === 'f' && t.value) { const o = Q.opts(it.o[0] || ''); if (!o.list.includes('background')) it.o = [[...o.list, 'background'].join(','), ...it.o.slice(1)]; }
+      }
+      g.cell.dirty = true;
+    }
     else {
       const m = mainOf(cell);
       if (f === 'arg') { m.a[0] = t.value; cell.dirty = true; }
@@ -897,19 +1167,18 @@
       else if (f === 'span') { setSpan(m, Math.max(1, intArg(t.value) || 1)); cell.dirty = true; clearUnder(s.r1, s.c1); }
       else if (f === 'link') { const n = intArg(t.value); m.a[0] = n ? String(n) : ''; cell.dirty = true; }
       else if (f === 'cfill' || f === 'cdraw') { if (f === 'cdraw') setStyle(m, 'color', ''); setStyle(m, f === 'cfill' ? 'fill' : 'draw', TD.texColor.wrap(t.value)); cell.dirty = true; }
-      else if (/^c[fd]\d+$/.test(f)) {
-        // a group or slice's colour; a filled group goes behind the circuit (background), or its fill hides the gates
-        const it = cell.items[+f.slice(2)];
-        if (f[1] === 'd') setStyle(it, 'color', '');
-        setStyle(it, f[1] === 'f' ? 'fill' : 'draw', TD.texColor.wrap(t.value));
-        if (f[1] === 'f' && t.value) { const o = Q.opts(it.o[0] || ''); if (!o.list.includes('background')) it.o = [[...o.list, 'background'].join(','), ...it.o.slice(1)]; }
-        cell.dirty = true;
-      }
+      else if (/^cd\d+$/.test(f)) { const it = cell.items[+f.slice(2)]; setStyle(it, 'color', ''); setStyle(it, 'draw', TD.texColor.wrap(t.value)); cell.dirty = true; } // a slice's colour
       else if (/^x\d+$/.test(f)) { cell.items[+f.slice(1)].a[0] = t.value; cell.dirty = true; }
-      else if (/^g[ws]\d+$/.test(f)) { const it = cell.items[+f.slice(2)], d = groupDims(it), v = Math.max(1, intArg(t.value) || 1); setGroupDims(it, f[1] === 'w' ? v : d.wires, f[1] === 's' ? v : d.steps); cell.dirty = true; }
+      else if (/^xb\d+$/.test(f)) { const { comp } = slicePair(cell); if (comp) { comp.a[0] = t.value; cell.dirty = true; } }
+      else if (/^s[az]\d+$/.test(f)) {
+        // a slice's wires: the other end moves along when they would cross
+        const it = cell.items[+f.slice(2)], w = sliceWires(it).slice(), R = nR(E.M), v = Math.min(Math.max(intArg(t.value) || 1, 1), R) - 1;
+        if (f[1] === 'a') { w[0] = v; w[1] = Math.max(w[1], v); } else { w[1] = v; w[0] = Math.min(w[0], v); }
+        it.wr = w; placeSlice(it, slicePair(cell).comp, sliceBottom(it)); cell.dirty = true;
+      }
     }
     draw();
-    if (f === 'link' || f === 'cfill' || f === 'cdraw' || /^c[fd]\d+$/.test(f)) { commit(); begin(); }
+    if (f === 'link' || f === 'cfill' || f === 'cdraw' || /^cd\d+$/.test(f) || /^G[fd]/.test(f)) { commit(); begin(); }
   });
   // the panel follows each keystroke: the other fields show what this one changed (TD.morph keeps this one as typed)
   props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });
@@ -949,7 +1218,11 @@
       E.sel = { r1: s.r1, c1: s.c1 + d, r2: s.r2, c2: s.c2 + d }; draw(); renderProps();
     }
     else if (a === 'coldel') edit(() => { deleteCols(M, s.c1, s.c2); if (!nC(M)) E.sel = null; });
-    else if (a === 'drop') { const cell = at(s.r1, s.c1); edit(() => setItems(cell, cell.items.filter((_, i) => i !== +b.dataset.i))); }
+    else if (a === 'drop') { const cell = at(s.r1, s.c1), it = cell.items[+b.dataset.i], { main, comp } = slicePair(cell); edit(() => setItems(cell, cell.items.filter((x) => x !== it && !(it === main && x === comp)))); }
+    else if (a === 'sl') { const cell = at(s.r1, s.c1); edit(() => setSliceMode(cell, cell.items[+b.dataset.i], b.dataset.v)); }
+    else if (a === 'gl') { const g = gref(b.dataset.g); if (g) edit(() => { setGroupMode(g.it, b.dataset.v, groupLow(g.it)); g.cell.dirty = true; }); }
+    else if (a === 'gb') { const g = gref(b.dataset.g); if (g) edit(() => { setStyle(g.it, 'color', ''); setStyle(g.it, 'draw', b.dataset.v === '0' ? 'none' : ''); g.cell.dirty = true; }); renderProps(); }
+    else if (a === 'gdrop') { const g = gref(b.dataset.g); if (g) edit(() => setItems(g.cell, g.cell.items.filter((x) => x !== g.it))); }
     else if (a === 'wt') { const cell = at(s.r1, s.c1); edit(() => { cell.items[+b.dataset.i].a[0] = b.dataset.v; cell.dirty = true; }); }
   }
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
@@ -1044,6 +1317,8 @@
   }
   let savedT = 0;
   function flashSaved() { setTip('Saved to the page'); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500); }
+  // reloading or closing the tab asks first while this holds edits not yet applied (app.js, beforeunload)
+  TD.unsaved.push(() => !!E && snap() !== E.start);
   async function finish(ok) {
     if (!E) return;
     closeLabel();

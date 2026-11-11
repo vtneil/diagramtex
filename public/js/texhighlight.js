@@ -183,5 +183,53 @@
   const isField = (t) => t && t.matches && t.matches(FIELDS);
   document.addEventListener('focusin', (e) => { if (isField(e.target)) attach(e.target); }, true);
 
+  // ----- brackets in maths -----
+  // In maths (green), ( [ { type their closing partner after the caret, or wrap a selection in the pair;
+  // typing the closer just before an auto-typed one steps over it, and Backspace between an empty pair
+  // removes both. \{ pairs with \}. Outside maths, keys type as usual.
+  const PAIR = { '(': ')', '[': ']', '{': '}' }, SHUT = { ')': '(', ']': '[', '}': '{' };
+  const BRACKET_FIELDS = FIELDS + ', #quickTex';
+  function mathAt(el, pos) {
+    if (el.dataset.tx === 'math') return true;
+    if (isQc(el)) return TD.texMath.qcSpans(el.value).some(([a, b]) => pos >= a && pos <= b);
+    return inMath(el.value, pos);
+  }
+  // does the line around pos have as many closers as openers of this kind (escaped ones aside)?
+  function balanced(t, pos, open) {
+    const a = t.lastIndexOf('\n', pos - 1) + 1, b = t.indexOf('\n', pos), line = t.slice(a, b < 0 ? t.length : b);
+    let d = 0;
+    for (let i = 0; i < line.length; i++) { if (line[i] === '\\') { i++; continue; } if (line[i] === open) d++; else if (line[i] === PAIR[open]) d--; }
+    return d === 0;
+  }
+  function put(el, text, a, b, selA, selB) {
+    el.setSelectionRange(a, b);
+    // insertText keeps the field's own undo; setRangeText is the fallback
+    if (!document.execCommand('insertText', false, text)) { el.setRangeText(text, a, b, 'end'); el.dispatchEvent(new Event('input', { bubbles: true })); }
+    el.setSelectionRange(selA, selB);
+  }
+  document.addEventListener('keydown', (e) => {
+    const el = e.target, k = e.key;
+    if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || !(PAIR[k] || SHUT[k] || k === 'Backspace')) return;
+    if (!el || !el.matches || !el.matches(BRACKET_FIELDS) || el.readOnly) return;
+    const t = el.value, a = el.selectionStart, b = el.selectionEnd;
+    if (!mathAt(el, a)) return;
+    const esc = t[a - 1] === '\\' && !(t[a - 2] === '\\');
+    if (PAIR[k]) {
+      if (esc && k !== '{') return; // \( and \[ are delimiters of their own
+      const close = esc ? '\\}' : PAIR[k];
+      if (a !== b) { put(el, k + t.slice(a, b) + close, a, b, a + 1, b + 1); e.preventDefault(); return; }
+      if (a < t.length && !/[\s$]/.test(t[a])) return; // only at the end, or before a space or the $ that ends the maths: elsewhere just the opener
+      put(el, k + close, a, a, a + 1, a + 1);
+      e.preventDefault();
+    } else if (SHUT[k]) {
+      if (a !== b || t[a] !== k || !balanced(t, a, SHUT[k])) return;
+      el.setSelectionRange(a + 1, a + 1);
+      e.preventDefault();
+    } else if (a === b && a > 0 && PAIR[t[a - 1]] && t[a] === PAIR[t[a - 1]] && t[a - 2] !== '\\' && balanced(t, a, t[a - 1])) {
+      put(el, '', a - 1, a + 1, a - 1, a - 1);
+      e.preventDefault();
+    }
+  }, true); // capture: fields such as the label popup stop their keys from bubbling
+
   TD.texMath = { spans, inMath, qcSpans };
 })();

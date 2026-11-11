@@ -103,7 +103,7 @@
   const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
 
   // ---------------------------------------------------------------- state
-  // { M, sel: { t: 'box', ii, sub, to } | { t: 'group', beg } | null (to: the last row of a ⇧-click range),
+  // { M, sel: { t: 'box', ii, sub, fo, all } | { t: 'group', beg } | null (fo: a range's far field, see selBoxes),
   //   view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E = null;
   const snapCode = () => codeOf(E.M);
@@ -372,18 +372,68 @@
   function selectAll() {
     const fr = fieldRows(E.M.items);
     if (!fr.length) return;
-    const R = rowsOf()[fr[0]], first = E.M.items.slice(R.a, R.b).findIndex(FIELD);
-    E.sel = { t: 'box', ii: R.a + first, sub: null, to: fr[fr.length - 1] };
+    const bs = lay().boxes.filter((b) => b.k !== 'bitheader');
+    if (!bs.length) return;
+    const a = bs[0], z = bs[bs.length - 1];
+    E.sel = { t: 'box', ii: a.ii, sub: a.sub, fo: { ii: z.ii, sub: z.sub }, all: true };
     const n = fr[fr.length - 1] - fr[0] + 1;
     setTip(`${n} row${n === 1 ? '' : 's'} selected · R or L groups them, ⌫ deletes them`);
     draw(); renderProps();
   }
-  // the rows a selection covers: the selected field's row to the ⇧-clicked one
-  function selRowRange() {
+  // A selection is a field (the anchor) and, for a range, the field at its other end (fo): it covers every
+  // field the rectangle between the two touches, rows down and bit columns across. all: every field.
+  function selBoxes() {
     const s = E.sel;
-    if (!s || s.t !== 'box') return null;
-    const r = rowOfItem(s.ii), t = s.to != null ? s.to : r;
-    return [Math.min(r, t), Math.max(r, t)];
+    if (!s || s.t !== 'box') return [];
+    const a = boxOf(s.ii, s.sub);
+    if (!a) return [];
+    const bs = lay().boxes.filter((b) => b.k !== 'bitheader');
+    if (s.all) return bs;
+    const f = s.fo ? boxOf(s.fo.ii, s.fo.sub) : a;
+    if (!f || f === a) return [a];
+    // the rectangle grows to take in the whole of every field it touches, until nothing more joins
+    let r1 = Math.min(a.row, f.row), r2 = Math.max(a.row, f.row), x1 = Math.min(a.x, f.x), x2 = Math.max(a.x + a.w, f.x + f.w), got;
+    for (;;) {
+      got = bs.filter((b) => b.row >= r1 && b.row <= r2 && b.x < x2 - 0.5 && b.x + b.w > x1 + 0.5);
+      const n1 = Math.min(x1, ...got.map((b) => b.x)), n2 = Math.max(x2, ...got.map((b) => b.x + b.w));
+      if (n1 >= x1 - 0.5 && n2 <= x2 + 0.5) return got;
+      x1 = n1; x2 = n2;
+    }
+  }
+  const isRange = () => selBoxes().length > 1;
+  // the rows a selection covers
+  function selRowRange() {
+    const bs = selBoxes();
+    if (!bs.length) return null;
+    const rs = bs.map((b) => b.row);
+    return [Math.min(...rs), Math.max(...rs)];
+  }
+  // a range that takes in every field of its rows: deleting it deletes the rows
+  function wholeRows() {
+    const bs = selBoxes(), rr = selRowRange();
+    if (bs.length < 2) return false;
+    return lay().boxes.filter((b) => b.k !== 'bitheader' && b.row >= rr[0] && b.row <= rr[1]).every((b) => bs.includes(b));
+  }
+  // what ⌫ does to a range, for the menu and the panel
+  function rangeDelLabel() {
+    const bs = selBoxes();
+    if (bs.length < 2) return null;
+    const rr = selRowRange(), n = rr[1] - rr[0] + 1;
+    if (wholeRows()) return n === 1 ? 'Delete Row' : `Delete ${n} Rows`;
+    const m = new Set(bs.map((b) => b.ii)).size;
+    return `Delete ${m} Field${m === 1 ? '' : 's'}`;
+  }
+  function deleteRange() {
+    if (wholeRows()) { const rr = selRowRange(); deleteRows(rr[0], rr[1]); return; }
+    const iis = [...new Set(selBoxes().map((b) => b.ii))].sort((p, q) => q - p);
+    edit(() => { for (const ii of iis) { const r = rowOfItem(ii); removeAt(ii); dropEmptyRow(r); } });
+    E.sel = null; renderProps(); draw();
+  }
+  function rangeTip() {
+    const bs = selBoxes(), rr = selRowRange();
+    if (bs.length < 2) { if (bs[0]) setTip(boxTip(bs[0])); return; }
+    const n = rr[1] - rr[0] + 1;
+    setTip(`${bs.length} fields${n > 1 ? ` in ${n} rows` : ''} selected`);
   }
   function setText(ii, sub, v) {
     const it = E.M.items[ii];
@@ -490,6 +540,24 @@
   }
 
   // ---------------------------------------------------------------- drawing
+  // the selected fields as one shape: each tinted, outlined only where it doesn't meet another selected field
+  function selShape(qs) {
+    const near = (a, b) => Math.abs(a - b) < 0.75;
+    // what is left of [a, b] once the given spans are taken out
+    const cut = (a, b, spans) => {
+      let parts = [[a, b]];
+      for (const [c, d] of spans) parts = parts.flatMap(([p, q]) => (d <= p || c >= q ? [[p, q]] : [[p, Math.max(p, c)], [Math.min(q, d), q]].filter(([u, v]) => v - u > 0.75)));
+      return parts;
+    };
+    let fill = '', d = '';
+    for (const q of qs) {
+      fill += `<rect class="bf-selfill" x="${r2(q.x)}" y="${r2(q.y)}" width="${r2(q.w)}" height="${r2(q.h)}"/>`;
+      const o = qs.filter((p) => p !== q);
+      for (const [y, at] of [[q.y, (p) => p.y + p.h], [q.y + q.h, (p) => p.y]]) for (const [a, b] of cut(q.x, q.x + q.w, o.filter((p) => near(at(p), y)).map((p) => [p.x, p.x + p.w]))) d += `M${r2(a)},${r2(y)}H${r2(b)}`;
+      for (const [x, at] of [[q.x, (p) => p.x + p.w], [q.x + q.w, (p) => p.x]]) for (const [a, b] of cut(q.y, q.y + q.h, o.filter((p) => near(at(p), x)).map((p) => [p.y, p.y + p.h]))) d += `M${r2(x)},${r2(a)}V${r2(b)}`;
+    }
+    return `${fill}<path class="bf-sel" d="${d}"/>`;
+  }
   function draw() {
     if (!E) return;
     syncCode();
@@ -516,12 +584,11 @@
     // the selection: the field (and the rest of a ⇧-click range of rows), or the group
     const s = E.sel;
     if (s && s.t === 'box') {
-      const rr = selRowRange();
-      if (rr && rr[0] !== rr[1]) for (const b of L.boxes) if (b.row >= rr[0] && b.row <= rr[1] && b.k !== 'bitheader') { const q = scr(b); out += `<rect class="bf-range" x="${r2(q.x)}" y="${r2(q.y)}" width="${r2(q.w)}" height="${r2(q.h)}"/>`; }
-      const b = boxOf(s.ii, s.sub);
+      const bs = selBoxes();
+      out += selShape(bs.map(scr));
+      const b = bs.length === 1 ? bs[0] : null;
       if (b) {
         const q = scr(b);
-        out += `<rect class="bf-sel" x="${r2(q.x)}" y="${r2(q.y)}" width="${r2(q.w)}" height="${r2(q.h)}"/>`;
         // its handles: the right edge of a bit box, the bottom of a word box
         if (b.k === 'bitbox' || b.k === 'bitboxes') out += `<rect class="bf-handle" x="${r2(q.x + q.w - 3)}" y="${r2(q.y + q.h / 2 - 6)}" width="6" height="12" rx="1.5"/>`;
         if (b.k === 'wordbox') out += `<rect class="bf-handle" x="${r2(q.x + q.w / 2 - 6)}" y="${r2(q.y + q.h - 3)}" width="12" height="6" rx="1.5"/>`;
@@ -530,7 +597,7 @@
     const g = selGroup();
     if (g) {
       const q = scr(g), [cx] = S(g.cx, 0);
-      out += `<rect class="bf-sel" x="${r2(q.x - 2)}" y="${r2(q.y - 2)}" width="${r2(q.w + 4)}" height="${r2(q.h + 4)}" rx="3"/>`;
+      out += `<rect class="bf-sel bf-selfill" x="${r2(q.x - 2)}" y="${r2(q.y - 2)}" width="${r2(q.w + 4)}" height="${r2(q.h + 4)}" rx="3"/>`;
       // its handles: the top and bottom of the brace, dragged to another row
       for (const y of [q.y, q.y + q.h]) out += `<rect class="bf-handle" x="${r2(cx - 6)}" y="${r2(y - 3)}" width="12" height="6" rx="1.5"/>`;
     }
@@ -561,8 +628,8 @@
     }
     if (h && h.t === 'box') {
       const b = h.b, it = E.M.items[b.ii];
-      // ⇧-click: a range of rows, for grouping
-      if (e.shiftKey && E.sel && E.sel.t === 'box') { E.sel = { ...E.sel, to: b.row }; draw(); renderProps(); return; }
+      // ⇧-click: the range from the selected field to this one
+      if (e.shiftKey && E.sel && E.sel.t === 'box') { E.sel = { t: 'box', ii: E.sel.ii, sub: E.sel.sub, fo: { ii: b.ii, sub: b.sub } }; draw(); renderProps(); rangeTip(); return; }
       E.sel = { t: 'box', ii: b.ii, sub: b.sub };
       if (h.edge === 'r') {
         begin();
@@ -612,23 +679,22 @@
       return;
     }
     if (d.mode === 'sel') {
-      // press on a field and drag: the rows from that field's to the one under the pointer
+      // press on a field and drag: the fields from that one to the one under (or nearest) the pointer
       if (!d.box) return;
       if (d.idle && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
       d.idle = false;
-      const [, ly] = toL(0, sy), R = lay().rows;
-      let best = d.box.row, bd = Infinity;
-      for (const ri of fieldRows(E.M.items)) {
-        const r = R[ri]; if (!r) continue;
-        const dd = ly < r.top ? r.top - ly : ly > r.base ? ly - r.base : 0;
-        if (dd < bd) { bd = dd; best = ri; }
+      let best = null, bd = Infinity;
+      for (const b of lay().boxes) {
+        if (b.k === 'bitheader') continue;
+        const q = scr(b), dx = Math.max(q.x - sx, 0, sx - q.x - q.w), dy = Math.max(q.y - sy, 0, sy - q.y - q.h), dd = dx * dx + dy * dy;
+        if (dd < bd) { bd = dd; best = b; }
       }
-      const to = best === d.box.row ? undefined : best;
-      if (E.sel && E.sel.t === 'box' && E.sel.to === to) return;
-      E.sel = { t: 'box', ii: d.box.ii, sub: d.box.sub, ...(to != null ? { to } : {}) };
-      const n = Math.abs(best - d.box.row) + 1;
-      setTip(`${n} row${n === 1 ? '' : 's'} selected`);
-      draw(); renderProps();
+      if (!best) return;
+      const fo = best.ii === d.box.ii && best.sub === d.box.sub ? null : { ii: best.ii, sub: best.sub };
+      const cur = E.sel && E.sel.t === 'box' ? E.sel.fo || null : undefined;
+      if (cur !== undefined && (cur && fo ? cur.ii === fo.ii && cur.sub === fo.sub : cur === fo)) return;
+      E.sel = { t: 'box', ii: d.box.ii, sub: d.box.sub, ...(fo ? { fo } : {}) };
+      draw(); renderProps(); rangeTip();
       return;
     }
     if (d.mode === 'g') {
@@ -737,7 +803,7 @@
     let html = '';
     if (h && h.t === 'box') {
       // inside a row range the range stays, and the menu is the range's first field's
-      const r0 = selRowRange(), keep = r0 && r0[0] !== r0[1] && h.b.row >= r0[0] && h.b.row <= r0[1];
+      const keep = isRange() && selBoxes().some((q) => q.ii === h.b.ii && q.sub === h.b.sub);
       if (!keep) E.sel = { t: 'box', ii: h.b.ii, sub: h.b.sub };
       const b = keep ? boxOf(E.sel.ii, E.sel.sub) : h.b, it = E.M.items[b.ii];
       const box = BOXES.has(it.k), bit = it.k === 'bitbox', w = num(it.w);
@@ -753,8 +819,8 @@
       if (it.k === 'bitbox' || it.k === 'bitboxes') html += mItem('fbefore', 'Insert Field Before', 'before') + mItem('fafter', 'Insert Field After', 'after');
       html += mItem('rabove', 'Insert Row Above', 'above') + mItem('rbelow', 'Insert Row Below', 'below');
       html += '<hr>' + mItem('gright', 'Group Rows Right', null, 'R') + mItem('gleft', 'Group Rows Left', null, 'L');
-      const rr = selRowRange();
-      if (rr && rr[0] !== rr[1]) html += '<hr>' + mItem('rdel', `Delete ${rr[1] - rr[0] + 1} Rows`, 'rowdel', '⌫', true);
+      const dl = rangeDelLabel();
+      if (dl) html += '<hr>' + mItem('fdel', dl, wholeRows() ? 'rowdel' : 'del', '⌫', true);
       else {
         html += '<hr>' + mItem('fdel', it.k === 'wordbox' || it.k === 'skip' ? 'Delete Row' : 'Delete Field', it.k === 'wordbox' || it.k === 'skip' ? 'rowdel' : 'del', '⌫', true);
         if (it.k !== 'wordbox' && it.k !== 'skip' && it.k !== 'bitheader') html += mItem('rdel', 'Delete Row', 'rowdel', '', true);
@@ -794,7 +860,7 @@
     if (!E) return;
     const M = E.M, L = lay(), it = selItem(), g = selGroup();
     if (it) {
-      const b = boxOf(E.sel.ii, E.sel.sub), rr = selRowRange(), multi = rr && rr[0] !== rr[1], delN = multi ? `Delete ${rr[1] - rr[0] + 1} Rows` : null;
+      const b = boxOf(E.sel.ii, E.sel.sub), rr = selRowRange(), delN = rangeDelLabel(), multi = !!delN, nsel = selBoxes().length;
       const code = F.fmt(it);
       if (it.k === 'bitheader') {
         TD.morph(props, `<div class="sec"><div class="sec-title">Bit header <small>${F.headerNums(it.spec).length} numbers</small></div>
@@ -825,7 +891,7 @@
         ${row('Fill', fillSel(F.getKey(it.opts, 'bgcolor')))}
         ${field('Options', 'opts', it.opts || '', ' placeholder="boxformatting=…"')}
         ${row('Code', `<div class="ctl"><code class="km-cmd">${esc(code)}</code></div>`)}
-        <div class="help">${multi ? `Rows ${rr[0] + 1}–${rr[1] + 1} selected: add a word group from the palette.` : `Drag its ${word ? 'bottom edge to change its rows' : 'right edge to move the line between it and the next field (⌥ for this field alone)'}; double-click to edit its label. ⇧-click another row to select rows for a word group.`}</div>
+        <div class="help">${multi ? `${nsel} fields selected${rr[1] > rr[0] ? `, rows ${rr[0] + 1}–${rr[1] + 1}: R or L groups the rows` : ''}. This panel edits the first.` : `Drag its ${word ? 'bottom edge to change its rows' : 'right edge to move the line between it and the next field (⌥ for this field alone)'}; double-click to edit its label. Drag across fields, ⇧-click or ⇧-arrow to select a range.`}</div>
         <div class="row"><button class="danger" data-be="fdel">${delN || (word ? 'Delete Row' : 'Delete Field')}</button></div></div>`);
       return;
     }
@@ -925,7 +991,8 @@
     else if (a === 'delete' || a === 'fdel' || a === 'gdel' || a === 'rdel') {
       const rr = selRowRange();
       if (g && a !== 'fdel' && a !== 'rdel') deleteGroup(g);
-      else if (it && (a === 'rdel' || (rr && rr[0] !== rr[1]))) deleteRows(rr[0], rr[1]);
+      else if (it && isRange()) deleteRange();
+      else if (it && a === 'rdel') deleteRows(rr[0], rr[1]);
       else if (it) { if (it.k === 'wordbox' || it.k === 'skip') deleteRow(rowOfItem(s.ii)); else deleteField(s.ii); }
     }
     else if (a === 'label') editLabel();
@@ -964,10 +1031,12 @@
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   // arrow keys move between fields: along the row, or to the field above or below
-  function step(key) {
+  // ⇧ moves the range's far end instead, from the field it is on
+  function step(key, extend) {
     const L = lay(), bs = L.boxes.filter((b) => b.k !== 'bitheader');
     if (!bs.length) return;
-    const s = E.sel && E.sel.t === 'box' ? boxOf(E.sel.ii, E.sel.sub) : null;
+    const S0 = E.sel && E.sel.t === 'box' ? E.sel : null, fo = extend && S0 && S0.fo && !S0.all ? S0.fo : S0;
+    const s = fo ? boxOf(fo.ii, fo.sub) : null;
     if (!s) { const b = bs[0]; E.sel = { t: 'box', ii: b.ii, sub: b.sub }; draw(); renderProps(); return; }
     const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
     let best = null, bd = Infinity;
@@ -979,7 +1048,13 @@
       const dist = key === 'ArrowRight' || key === 'ArrowLeft' ? Math.abs(dx) : Math.abs(dy) * 4 + (bx < b.x + b.w && cx > b.x && cx < b.x + b.w ? 0 : Math.abs(dx));
       if (dist < bd) { bd = dist; best = b; }
     }
-    if (best) { E.sel = { t: 'box', ii: best.ii, sub: best.sub }; draw(); renderProps(); setTip(boxTip(best)); }
+    if (!best) return;
+    if (extend && S0) {
+      const back = best.ii === S0.ii && best.sub === S0.sub;
+      E.sel = { t: 'box', ii: S0.ii, sub: S0.sub, ...(back ? {} : { fo: { ii: best.ii, sub: best.sub } }) };
+      draw(); renderProps(); rangeTip(); return;
+    }
+    E.sel = { t: 'box', ii: best.ii, sub: best.sub }; draw(); renderProps(); setTip(boxTip(best));
   }
   window.addEventListener('keydown', (e) => {
     if (!E || root.hidden) return;
@@ -1005,7 +1080,7 @@
     if (mod) return;
     const it = selItem(), g = selGroup();
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); act('delete'); return; }
-    if (e.key.startsWith('Arrow')) { e.preventDefault(); step(e.key); return; }
+    if (e.key.startsWith('Arrow')) { e.preventDefault(); step(e.key, e.shiftKey); return; }
     if (e.key === 'Enter' && (it || g)) { e.preventDefault(); editLabel(); return; }
     if ((e.key === 's' || e.key === 'S') && it) { e.preventDefault(); split(E.sel.ii, false); return; }
     if ((e.key === 'm' || e.key === 'M') && it) { e.preventDefault(); merge(E.sel.ii, e.shiftKey ? -1 : 1); return; }
@@ -1030,6 +1105,8 @@
     setTip('Saved to the page');
     setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
   }
+  // reloading or closing the tab asks first while this holds edits not yet applied (app.js, beforeunload)
+  TD.unsaved.push(() => !!E && snapCode() !== E.start);
   async function finish(ok) {
     if (!E) return;
     if (LB) LB.pop.close();

@@ -7,7 +7,7 @@
   <meta name="description" content="How to use DiagramTeX: drawing, LaTeX maths, circuits, quantum circuits, plots, 3D, chemistry and the other blocks, documents and pages, and getting TikZ and LaTeX out.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
-  <link rel="canonical" href="https://diagramtex.igniting.space/guide/">
+  <link rel="canonical" href="https://diagramtex.com/guide/">
   <link rel="icon" href="../icons/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="../icons/favicon-32.png" sizes="32x32" type="image/png">
   <meta name="theme-color" content="#fffdf8">
@@ -298,7 +298,7 @@
           <li><b>LaTeX engine</b> (left sidebar) changes only the preview: <b>KaTeX</b> looks the same in every browser; <b>Temml</b> covers more LaTeX and looks closer to TeX. The exported code is the same.</li>
           <li>Labels on lines and curves use TikZ's <code>auto</code> and <code>swap</code> placement, so they sit where LaTeX puts them.</li>
         </ul>
-        <p class="note">Maths inside LaTeX source fields is shown in green, so you can see at a glance which part is maths.</p>
+        <p class="note">Maths inside LaTeX source fields is shown in green, so you can see at a glance which part is maths. In maths, typing <code>(</code>, <code>[</code> or <code>{</code> adds its closing partner when nothing, a space or the closing <code>$</code> follows the caret (or wraps the selected text in the pair); typing the closer steps over it, and Backspace between an empty pair removes both.</p>
       </section>
 
       <section id="plots">
@@ -346,7 +346,9 @@
             <li>The circuit is a grid of wires × steps. Keys place gates and step right: <kbd>H</kbd> <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd> <kbd>S</kbd> <kbd>T</kbd> <kbd>U</kbd>, <kbd>C</kbd> control, <kbd>O</kbd> open control, <kbd>+</kbd> target, <kbd>M</kbd> meter.</li>
             <li>Drop on the dashed row or column to add a wire or step. Right-click a cell or a range to insert or delete wires and steps, or clear cells.</li>
             <li>Controls link to the nearest gate in their step; drag the blue handle to link another wire. Drag a gate's top or bottom bar to span several wires, or its corner handle to set a minimum size.</li>
-            <li>The panel edits labels, spans, wire types (quantum, classical, bundle), slices and gate groups. Exported in <code>\begin{quantikz}</code> with <code>\usetikzlibrary{quantikz2}</code>.</li>
+            <li>Drag an element to move it; drag from the empty part of a cell to select a range of cells.</li>
+            <li>Double-click a gate, or a slice's or a group's label, to edit that label in place.</li>
+            <li>The panel edits labels, spans, wire types (quantum, classical, bundle), slices and gate groups. To label a gate or several gates without a box, use <b>Label above</b> from the palette, or set a group's <b>Border</b> to None. The editor still outlines such a group with a dashed blue line so you can see what it covers; it isn't exported. Right-click a cell or a selected range for <b>Group Selection</b>, <b>Label Above Selection</b> and <b>Delete Group</b>. <b>Group</b> and <b>Label above</b> in the palette also wrap a selected range, or, chosen first, the cells you then drag across. Select any cell a group covers to edit that group in the panel (one section per group over the cell) and to show a bar on each of its edges; drag one to another wire or step to resize the group. A group's or a slice's label can sit at the <b>Top</b>, the <b>Bottom</b> or <b>Both</b> (with its own <b>Bottom label</b>), and a slice's <b>From wire</b> / <b>To wire</b> make it cross only some wires. Exported in <code>\begin{quantikz}</code> with <code>\usetikzlibrary{quantikz2}</code>.</li>
           </ul>
         </div></details>
 
@@ -437,7 +439,7 @@
           <ul>
             <li>Starts from an IPv4-style header. The palette adds a Bit box (<kbd>B</kbd>), Word box (<kbd>W</kbd>), single Bits (<kbd>I</kbd>), Skipped words (<kbd>K</kbd>) and a bit Header (<kbd>H</kbd>).</li>
             <li>Drag a field's right edge to move the line between it and the next (it snaps to bits); drag a word box's bottom to change its height. <kbd>S</kbd> splits a field, <kbd>M</kbd> and <kbd class="shift">Shift</kbd><kbd>M</kbd> merge it with the next or previous one, and double-click or <kbd>Enter</kbd> edits its label.</li>
-            <li><b>Selecting rows:</b> drag across them, <kbd class="shift">Shift</kbd>-click a second row, or <kbd class="mod">Ctrl</kbd><kbd>A</kbd> for every row. Then <kbd>R</kbd> or <kbd>L</kbd> puts a labelled brace round them, and <kbd>Delete</kbd> removes them in one undo step. Drag a brace's end handle to change which rows it covers.</li>
+            <li><b>Selecting:</b> drag from a field across others, <kbd class="shift">Shift</kbd>-click a second field, or <kbd class="shift">Shift</kbd> and an arrow key, to select every field in between; <kbd class="mod">Ctrl</kbd><kbd>A</kbd> selects them all. Then <kbd>R</kbd> or <kbd>L</kbd> puts a labelled brace round their rows, and <kbd>Delete</kbd> removes them (whole rows if every field of them is selected) in one undo step. Drag a brace's end handle to change which rows it covers.</li>
             <li>The panel sets a field's borders, fill colour (<code>bgcolor</code>) and formatting, and the whole field's width, bit size and endianness. The canvas follows the package's own measurements, and code you didn't touch is kept as written.</li>
           </ul>
         </div></details>
@@ -521,7 +523,7 @@
       <section id="files">
         <h2>Files and saving</h2>
         <ul>
-          <li><b>Autosave:</b> every change is saved in your browser (IndexedDB) as you work. Nothing is uploaded.</li>
+          <li><b>Autosave:</b> every change is saved in your browser (IndexedDB) as you work. Nothing is uploaded. A block editor's edits join the document when you press Done (or ⌘S); reloading or closing the tab before that makes the browser ask first.</li>
           <li><b>Save</b> (<kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd>) writes a <code>.diagramtex</code> file (JSON inside); <b>Open</b> (<kbd class="mod">Ctrl</kbd><kbd>O</kbd>) loads it back in the right mode.</li>
           <li><b>Export All Files…</b> (right-click the empty part of the file list) saves every Pages, Classic and Whiteboard file into one <code>.diagramtex</code> bundle. Opening the bundle puts each file back in its own kind, skips ones already here unchanged, and adds “copy” to names that are taken.</li>
           <li><b>Linked files</b> (Chromium browsers): after the first Save, the file stays linked, so <kbd class="mod">Ctrl</kbd><kbd>S</kbd> writes straight to it. An amber dot by the name means unsaved changes. Safari and Firefox download a copy each time instead.</li>
