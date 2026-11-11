@@ -621,7 +621,8 @@
       maxW = Math.max(maxW, R.end);
       const name = shown(row.name), nb = name ? TD.textBox(name, LABEL) : { w: 2, h: 0 };
       const lx = -cd * U, by = -base * U;
-      if (name) texts.push({ t: name, st: LABEL, x: lx - (nb.w - 2) / 2, y: by - 0.3 * nb.h, b: nb, row: r });
+      // row names sit 3.2px lower than the 0.3-height rule, measured against pdflatex
+      if (name) texts.push({ t: name, st: LABEL, x: lx - (nb.w - 2) / 2, y: by - 0.3 * nb.h + 3.2, b: nb, row: r });
       ext(lx - (nb.w - 2), by - STRUT.h, lx, by + STRUT.d);
       for (const t of R.texts) {
         const tt = shown(t.t), b = TD.textBox(tt, DTEXT), [X, Y] = P(t.x, base + t.y);
@@ -648,7 +649,7 @@
         for (const [j, v] of list(x.list || `1,2,...,${n}`, vars).entries()) {
           const [, Y] = P(0, rd - v * rd);
           extra.push({ k: 'line', xi, j, d: `M0,${r2(Y)}H${r2(maxW * U)}`, st });
-          ext(0, Y - st.width / 2, maxW * U, Y + st.width / 2);
+          ext(-st.width / 2, Y - st.width / 2, maxW * U + st.width / 2, Y + st.width / 2);
         }
       } else if (x.k === 'grid' || x.k === 'fullgrid') {
         const st = lineStyle(x.o ? `help lines, ${x.o}` : 'help lines', null);
@@ -660,6 +661,7 @@
         if (x.k === 'fullgrid') grid(0, maxW, lastBase, 1);
         else for (const { base, R } of rows) grid(0, x.star ? R.end : maxW, base, base + 1);
         extra.push({ k: 'grid', xi, d, st, back: true });
+        for (const m of d.matchAll(/M(-?[\d.]+),(-?[\d.]+)([VH])(-?[\d.]+)/g)) { const a = +m[1], b = +m[2], c = +m[4], h = st.width / 2; if (m[3] === 'V') ext(a - h, Math.min(b, c) - h, a + h, Math.max(b, c) + h); else ext(Math.min(a, c) - h, b - h, Math.max(a, c) + h, b + h); }
       } else if (x.k === 'brk') {
         extra.push({ k: 'brk', xi, t: x.t, ys: x.ys });
         for (const y of x.ys) { const [Xa, Ya] = P(x.t - 0.2, y + 1.2), [Xb, Yb] = P(x.t + 0.2, y - 0.2); ext(Xa, Ya, Xb, Yb); }
@@ -668,11 +670,13 @@
         const [Xa, Ya] = P(x.x1, x.y1), [Xb, Yb] = P(x.x2, x.y2);
         const a = { k: 'annot', xi, st, tips, Xa, Ya, Xb, Yb };
         extra.push(a);
-        ext(Math.min(Xa, Xb) - 3 * PT, Math.min(Ya, Yb) - 3 * PT, Math.max(Xa, Xb) + 3 * PT, Math.max(Ya, Yb) + 3 * PT);
+        ext(Math.min(Xa, Xb) - LW / 2, Math.min(Ya, Yb) - LW / 2, Math.max(Xa, Xb) + LW / 2, Math.max(Ya, Yb) + LW / 2);
         if (x.t) {
           let size = 10;
           for (const it of x.lo) { const m = /^font\s*=\s*\{?\s*\\(\w+)/.exec(it); if (m && SIZES[m[1]]) size = SIZES[m[1]]; }
-          const t = shown(x.t), sty = { size: size * PT, font: 'cmss' }, b = TD.textBox(t, sty);
+          let tx = x.t.trim();
+          { const m = /^\\(\w+)\s*([\s\S]*)$/.exec(tx); if (m && SIZES[m[1]]) { size = SIZES[m[1]]; tx = m[2]; } }
+          const t = shown(tx), sty = { size: size * PT, font: 'cmss' }, b = TD.textBox(t, sty);
           const dir = (x.lo.find((it) => /^(above|below|left|right)( (left|right))?$/.test(it.trim())) || '').trim();
           const ux = /right/.test(dir) ? 1 : /left/.test(dir) ? -1 : 0, uy = /above/.test(dir) ? -1 : /below/.test(dir) ? 1 : 0;
           const inner = 0.3333 * size * PT, mx = (Xa + Xb) / 2, my = (Ya + Yb) / 2;

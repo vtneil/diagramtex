@@ -450,6 +450,7 @@
   function applyXf(shapes, lists) {
     for (const s of shapes) {
       for (const L of lists) {
+        if (L.opacity != null) s.opacity = (s.opacity ?? 1) * L.opacity;
         for (let i = L.xf.length - 1; i >= 0; i--) {
           const t = L.xf[i];
           if (t.rot === undefined) { TD.translate(s, t.dx, t.dy); continue; }
@@ -524,9 +525,11 @@
             const e2 = matchClose(s, i, '[', ']');
             const { xf, rest } = readXf(C, parseOpts(s.slice(i + 1, e2)));
             const shape = rest.some((o) => o.k === 'transform shape');
-            const other = rest.filter((o) => o.k !== 'transform shape');
+            // `transparency group, opacity=x` is how a translucent shape exports: the opacity belongs to the shapes inside
+            const op = rest.find((o) => o.k === 'opacity'), opv = op ? parseFloat(op.v) : NaN;
+            const other = rest.filter((o) => o.k !== 'transform shape' && o.k !== 'transparency group' && o.k !== 'opacity');
             if (other.length) C.warnings.push('scope options ignored: ' + other.map((o) => o.k).join(', '));
-            L = { xf, shape };
+            L = { xf, shape, ...(opv >= 0 && opv < 1 ? { opacity: opv } : {}) };
             i = e2 + 1;
           }
           (C.scopes = C.scopes || []).unshift(L);

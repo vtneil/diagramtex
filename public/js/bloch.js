@@ -395,7 +395,8 @@
     const st = it.st, col = TD.css(st.color || ink), w = st.lw * PT;
     let pts = it.pts.slice();
     let tips = '';
-    const tipAt = (P, u) => { const t = TD.tip('latex', P, u, w, col); tips += t.svg; return t.back; };
+    // blochsphere's arrowheads measure about 4.3pt long at 0.4pt lines: a 'latex' tip of 0.72 of the line width
+    const tipAt = (P, u) => { const t = TD.tip('latex', P, u, w * 0.72, col); tips += t.svg; return t.back; };
     // arrow tips: the path ends at the tip's back
     if (it.line && pts.length >= 2) {
       const unit = (a, b) => { const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / l, y: (b.y - a.y) / l }; };
@@ -449,7 +450,7 @@
           dots += `<circle cx="${r2(u.x * dd * PT)}" cy="${r2(u.y * dd * PT)}" r="${r}" fill-opacity="${r2(a)}"/>`;
         }
         const P = { x: u.x * (lpt - 0.5) * PT, y: u.y * (lpt - 0.5) * PT };
-        const t = TD.tip('latex', P, u, it.sw * PT, col);
+        const t = TD.tip('latex', P, u, it.sw * PT * 0.55, col); // 4pt long, as pdflatex draws it
         out += `<g fill="${col}">${dots}</g>` + (it.behind ? `<g opacity="0.2">${t.svg}</g>` : t.svg);
       } else if (it.k === 'node') out += TD.textSvg(it.text, { size: it.size, font: 'default' }, it.color, it.x, it.y, ctx);
     }

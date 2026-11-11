@@ -7,6 +7,12 @@ tikz-timing, automata, Karnaugh map).
 Tested on app version 1.18.0 plus the fixes on this branch (`claude/latex-parity-33a62e`), TeX Live 2026
 (pgf 3.1.x, pgfplots 1.18.3, circuitikz, quantikz2, tikz-cd, forest, zx-calculus, tikz-feynman, blochsphere).
 
+**Later round (after 1.21.0):** the composites in this folder have been re-made with the positioning fixes for
+quantikz, forest, tikz-cd, pgfplots, tikz-timing, Karnaugh maps, circuitikz labels, automata, arrow tips,
+bricks and translucent shapes, and now cover the 3D solids and the newer blocks too. Current scores and the
+remaining quirks are in [PARITY.md](../../PARITY.md). `tools/scenes-kit.js`, `tools/cdp.mjs` and
+`tools/match.py` re-run and score them headlessly. The text below is the original 1.18 report.
+
 ## Method
 
 1. Each scene was built in page JS from the app's own `TD.TYPES[type].create()` defaults and presets, and

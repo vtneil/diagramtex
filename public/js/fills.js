@@ -155,9 +155,19 @@
       case 'grid': pat = `{Hatch[angle=0, ${d}, ${w}]}`; break;
       case 'cross': pat = `{Hatch[angle=45, ${d}, ${w}]}`; break;
       case 'dots': pat = `{Dots[${d}, radius=${f(Math.max(0.3, v.lw) * K)}pt]}`; break;
-      case 'bricks': pat = 'bricks'; X.libs.add('patterns'); break;
+      case 'bricks': {
+        // a declared patterns.meta pattern, so size and line width match the canvas tile (the old `bricks` has a fixed size)
+        if (!X.decls) X.decls = new Map();
+        const sz = v.size * K, k = 'bricks' + sz.toFixed(3) + '/' + (v.lw * K).toFixed(3);
+        if (!X.decls.has(k)) {
+          const name = 'tdbricks' + [...X.decls.keys()].filter((x) => x.startsWith('bricks')).length, S = f(sz), Q = f(sz / 4), T = f(sz * 3 / 4);
+          X.decls.set(k, { name, decl: `\\pgfdeclarepattern{name=${name}, parameters={}, bottom left={\\pgfpoint{0pt}{0pt}}, top right={\\pgfpoint{${S}pt}{${S}pt}}, tile size={\\pgfpoint{${S}pt}{${S}pt}}, code={\\pgfsetlinewidth{${f(v.lw * K)}pt}\\pgfpathmoveto{\\pgfpoint{0pt}{${Q}pt}}\\pgfpathlineto{\\pgfpoint{${S}pt}{${Q}pt}}\\pgfpathmoveto{\\pgfpoint{0pt}{${T}pt}}\\pgfpathlineto{\\pgfpoint{${S}pt}{${T}pt}}\\pgfpathmoveto{\\pgfpoint{${Q}pt}{${Q}pt}}\\pgfpathlineto{\\pgfpoint{${Q}pt}{${T}pt}}\\pgfpathmoveto{\\pgfpoint{${T}pt}{0pt}}\\pgfpathlineto{\\pgfpoint{${T}pt}{${Q}pt}}\\pgfpathmoveto{\\pgfpoint{${T}pt}{${T}pt}}\\pgfpathlineto{\\pgfpoint{${T}pt}{${S}pt}}\\pgfusepath{stroke}}}` });
+        }
+        pat = X.decls.get(k).name;
+        break;
+      }
     }
-    if (pat !== 'bricks') X.libs.add('patterns.meta');
+    X.libs.add('patterns.meta');
     const o = [`pattern=${pat}`];
     if (X.col(v.color) !== 'black') o.push(`pattern color=${X.col(v.color)}`);
     return o;

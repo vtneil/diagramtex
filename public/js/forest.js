@@ -192,6 +192,52 @@
   }
 
   // ---------------------------------------------------------------- layout
+  // A TeX box is as tall as its tallest glyph and as deep as its deepest (no line leading, no strut): the
+  // height and depth (in units of the font size) of a one-line plain text, or of a $math$ of letters and
+  // digits only. null when the text has commands or several lines (the line box is measured instead).
+  function glyphHD(t, mono) {
+    let x = t.replace(/\\(le|leq|ge|geq|ne|neq|approx|equiv)(?![A-Za-z])/g, '\u0001').replace(/\$/g, '');
+    let sub = 0, sup = 0;
+    // sub- and superscripts: lowered by 0.15 and raised by 0.41 em, set at 0.7 of the size
+    x = x.replace(/([_^])(\{[^{}]*\}|.)/g, (m, k, a) => {
+      a = a.replace(/[{}]/g, '');
+      const h = glyphHD(a, mono);
+      if (!h) { sub = NaN; return ''; }
+      if (k === '_') sub = Math.max(sub, 0.15 + h.dp * 0.7); else sup = Math.max(sup, 0.41 + h.ht * 0.7);
+      return '';
+    });
+    if (sub !== sub) return null;
+    if (!x.trim() && !sub && !sup) return null;
+    if (/[\\{}&%#~\n]/.test(x) || /[^\x20-\x7e\u0001]/.test(x)) return null;
+    let ht = sup, dp = sub;
+    for (const c of x) {
+      let h, d = 0;
+      if (c === ' ') continue;
+      if (c === '\u0001') { h = 0.69; d = 0.19; }
+      else if (/[A-Z]/.test(c)) h = mono ? 0.611 : 0.683;
+      else if (/[0-9]/.test(c)) h = mono ? 0.611 : 0.644;
+      else if (/[bdfhkl]/.test(c)) h = mono ? 0.611 : 0.694;
+      else if (c === 't') h = mono ? 0.55 : 0.615;
+      else if (/[ij]/.test(c)) h = 0.669;
+      else if (/[?!]/.test(c)) h = 0.705;
+      else if (/[()[\]/|]/.test(c)) { h = 0.75; d = 0.25; }
+      else if (/[.:]/.test(c)) h = 0.43;
+      else if (/[,;]/.test(c)) { h = 0.43; d = 0.19; }
+      else if (/[-+=<>*'"`]/.test(c)) h = 0.5;
+      else if (c === '_') { h = 0; d = 0.1; }
+      else h = 0.431;
+      if (/[gjpqy]/.test(c)) d = mono ? 0.22 : 0.194;
+      ht = Math.max(ht, h); dp = Math.max(dp, d);
+    }
+    return { ht, dp };
+  }
+  // what pdflatex's \em, \strutbox height and forest's default level distance `l` are at each size (pt)
+  const TEXSZ = {
+    tiny: [6.806, 4.2, 15.849], scriptsize: [7.972, 5.6, 20.194], footnotesize: [8.5, 6.65, 22.66], small: [9.25, 7.7, 25.349],
+    normalsize: [10, 8.4, 27.688], large: [11.75, 9.8, 32.615], Large: [14.1, 12.6, 39.898], LARGE: [15.85, 15.4, 47.009],
+    huge: [19.024, 17.5, 55.358], Huge: [22.821, 21, 66.335],
+  };
+  const texsz = (name) => TEXSZ[name] || TEXSZ.normalsize;
   const cache = new Map();
   function layout(s) {
     const key = [s.src, s.size, s.font, TD.math && TD.math.engine].join('\u0001');
@@ -240,8 +286,11 @@
     }
     walk(T.root, 0, -1, [], []);
 
+    // the linguistics library (loaded for roofs) makes every node `align=center` and every edge run from the
+    // parent's near face to the child's (sn edges)
+    const ling = nodes.some((me) => me.eff.some((o) => o.k === 'roof' || o.k === 'sn edges'));
     // style of each node
-    const IS = E / 3;
+    const T0 = texsz(size), IS = T0[0] / K / 3;
     for (const me of nodes) {
       const st = {
         content: me.n.c, draw: false, dc: null, shape: 'rect', rc: 0, fill: null, tc: null, dash: null, lw: 0.4 / K,
@@ -300,10 +349,10 @@
         else if (k === 'roof') { st.roof = true; libs.add('linguistics'); }
         else if (k === 'forked edge') { st.fork = true; libs.add('edges'); }
         else if (k === 'folder') { st.folder = true; libs.add('edges'); }
-        else if (k === 'fork sep') setLen('fsep', o, E / 2);
-        else if (k === 'folder indent') setLen('findent', o, 0.45 * E);
-        else if (k === 'l') setLen('l', o, 2.3 * E);
-        else if (k === 'l sep') setLen('lsep', o, IS);
+        else if (k === 'fork sep') setLen('fsep', o, 5 / K);
+        else if (k === 'folder indent') setLen('findent', o, 4.5 / K);
+        else if (k === 'l') setLen('l', o, T0[2] / K);
+        else if (k === 'l sep') setLen('lsep', o, T0[1] / K + IS);
         else if (k === 's sep') setLen('ssep', o, 2 * IS);
         else if (k === 'grow' && v != null) {
           const a = GROW[v.trim()] != null ? GROW[v.trim()] : parseFloat(v);
@@ -320,7 +369,13 @@
       me.t = t;
       me.ts = { size: st.size, font: st.font, bold: st.bold, italic: st.italic, tw: st.tw || 0, align: st.align || 'center' };
       const b = t ? TD.textBox(t, me.ts) : { w: 0, h: 0 };
-      const tw = st.tw > 0 ? st.tw : b.w, th = t ? Math.max(0, b.h - 0.22 * TD.sizePx(st.size)) : 0;
+      const Es = TD.sizePx(st.size);
+      let hd = t && !st.tw ? glyphHD(t, st.font === 'cmtt') : null;
+      // align= typesets the text as a table row with a \strut: at least 0.7 and 0.3 baselineskips
+      if (hd && (st.align || ling)) { const sh = texsz(st.size)[1] / K / Es; hd = { ht: Math.max(hd.ht, sh), dp: Math.max(hd.dp, sh * 3 / 7) }; }
+      // the box of TeX: the glyphs' height and depth; the +2 in a measured width is slack, not text
+      const tw = st.tw > 0 ? st.tw : Math.max(0, b.w - 2), th = t ? (hd ? (hd.ht + hd.dp) * Es : Math.max(0, b.h - 0.22 * Es)) : 0;
+      me.off = hd ? (hd.ht - hd.dp) * Es / 2 : 0; // the box's centre above its baseline
       let w = tw + 2 * st.isx, h = th + 2 * st.isy;
       if (st.shape === 'circle') w = h = Math.hypot(tw + 2 * st.isx, th + 2 * st.isy);
       else if (st.shape === 'ellipse') { w *= Math.SQRT2; h *= Math.SQRT2; }
@@ -329,67 +384,96 @@
       me.w = w; me.h = h; me.st = st;
     }
 
-    // growth direction: the root's (forest lets each node turn; here the tree keeps one)
-    const R0 = nodes[0].st;
-    const grow = R0.grow != null ? R0.grow : 270, rev = !!R0.rev;
-    const ga = grow * Math.PI / 180, ua = (grow + (rev ? -90 : 90)) * Math.PI / 180;
+    // Every node turns its own children (`grow`, default south); G is the direction they grow in and U the
+    // one their order runs along. The root's pair is kept for the editor.
     const cl = (v) => (Math.abs(v) < 1e-9 ? 0 : v);
-    const G = [cl(Math.cos(ga)), cl(-Math.sin(ga))], U = [cl(Math.cos(ua)), cl(-Math.sin(ua))];
+    const frame = (st) => {
+      const grow = st.grow != null ? st.grow : 270, rev = !!st.rev;
+      const ga = grow * Math.PI / 180, ua = (grow + (rev ? -90 : 90)) * Math.PI / 180;
+      return { G: [cl(Math.cos(ga)), cl(-Math.sin(ga))], U: [cl(Math.cos(ua)), cl(-Math.sin(ua))], grow, rev };
+    };
+    for (const me of nodes) {
+      me.fr = frame(me.st);
+      // forest anchors a node at the baseline of its text, a folder's at the middle of its west side
+      if (me.st.folder) me.off = 0;
+      const asc = me.h / 2 + me.off, dsc = me.h / 2 - me.off;
+      me.box = { x1: -me.w / 2, x2: me.w / 2, y1: -asc, y2: dsc }; // round the anchor, y down
+    }
+    const { G, U, grow, rev } = nodes[0].fr;
     for (const me of nodes) {
       me.hd = Math.abs(G[0]) * me.w / 2 + Math.abs(G[1]) * me.h / 2;
       me.hs = Math.abs(U[0]) * me.w / 2 + Math.abs(U[1]) * me.h / 2;
     }
+    const LDEF = T0[2] / K, LSEP0 = T0[1] / K + IS, SSEP0 = 2 * IS;
+    // a box as seen along a frame: d along the growth, s across
+    const inFrame = (r, f) => {
+      let d1 = Infinity, d2 = -Infinity, s1 = Infinity, s2 = -Infinity;
+      for (const x of [r.x1, r.x2]) for (const y of [r.y1, r.y2]) {
+        const d = x * f.G[0] + y * f.G[1], s = x * f.U[0] + y * f.U[1];
+        d1 = Math.min(d1, d); d2 = Math.max(d2, d); s1 = Math.min(s1, s); s2 = Math.max(s2, s);
+      }
+      return { d1, d2, s1, s2 };
+    };
+    const shiftR = (r, x, y) => ({ x1: r.x1 + x, x2: r.x2 + x, y1: r.y1 + y, y2: r.y2 + y });
 
-    // packing: each subtree is a list of boxes (d: along the growth, s: across) round its root; siblings
-    // are pushed apart until no boxes that share a band of d come closer than s sep
+    // packing: a subtree is a list of boxes round its root's anchor; siblings are pushed apart until no
+    // boxes that share a band of d come closer than s sep. Each child gets rel {x, y} from its parent's anchor.
     const sub = (me) => {
-      const own = { d1: -me.hd, d2: me.hd, s1: -me.hs, s2: me.hs };
+      const own = me.box;
       if (!me.kids.length) return [own];
-      const st = me.st, kids = me.kids.map((i) => ({ c: nodes[i], b: sub(nodes[i]) }));
-      const ssep = st.ssep != null ? st.ssep : 2 * IS;
-      const out = [own];
-      if (st.folder) {
-        // children stacked under the parent, indented, each in its own band
-        const fi = st.findent != null ? st.findent : 0.45 * E;
-        const trunk = -me.hd + fi + st.isx;
-        let cur = me.hs + ssep / 2;
+      const st = me.st, f = me.fr, kids = me.kids.map((i) => ({ c: nodes[i], b: sub(nodes[i]) }));
+      const ssep = st.ssep != null ? st.ssep : SSEP0;
+      const out = [own], po = inFrame(own, f);
+      const place = (k, d, s) => { k.c.rel = { x: d * f.G[0] + s * f.U[0], y: d * f.G[1] + s * f.U[1] }; };
+      const pack = (dist) => { // each kid's boxes at distance dist(k); sets the s offsets
+        const placed = [];
+        let prev = -Infinity;
         for (const k of kids) {
-          const s1 = Math.min(...k.b.map((x) => x.s1)), s2 = Math.max(...k.b.map((x) => x.s2));
-          const dd = trunk + fi * 2 + k.c.hd, ss = cur - s1;
-          k.c.rel = { d: dd, s: ss }; k.c.trunk = { d: trunk, s: me.hs };
-          for (const x of k.b) out.push({ d1: x.d1 + dd, d2: x.d2 + dd, s1: x.s1 + ss, s2: x.s2 + ss });
-          cur = ss + s2 + ssep;
-        }
-        return out;
-      }
-      const lsep = st.lsep != null ? st.lsep : IS;
-      let dist = 0;
-      for (const k of kids) dist = Math.max(dist, k.c.st.l != null ? k.c.st.l : 2.3 * E, me.hd + lsep + k.c.hd);
-      const placed = [];
-      let prev = -Infinity;
-      for (const k of kids) {
-        let off = placed.length ? prev : 0;
-        if (placed.length) {
-          for (const b of k.b) {
-            const d1 = b.d1 + dist, d2 = b.d2 + dist;
-            for (const a of placed) if (a.d1 < d2 - 0.01 && d1 < a.d2 - 0.01) off = Math.max(off, a.s2 + ssep - b.s1);
+          const d0 = dist(k);
+          k.fr = k.b.map((r) => inFrame(r, f));
+          let off = placed.length ? prev : 0;
+          if (placed.length) {
+            for (const b of k.fr) {
+              const d1 = b.d1 + d0, d2 = b.d2 + d0;
+              for (const a of placed) if (a.d1 < d2 - 0.01 && d1 < a.d2 - 0.01) off = Math.max(off, a.s2 + ssep - b.s1);
+            }
           }
+          k.off = off; prev = off;
+          for (const b of k.fr) placed.push({ d1: b.d1 + d0, d2: b.d2 + d0, s1: b.s1 + off, s2: b.s2 + off });
         }
-        k.off = off; prev = off;
-        for (const b of k.b) placed.push({ d1: b.d1 + dist, d2: b.d2 + dist, s1: b.s1 + off, s2: b.s2 + off });
+      };
+      if (st.folder) {
+        // children hang below the parent, every one l sep from the parent's near side (their anchors are
+        // their west sides), the first s sep below the parent, the rest packed as usual
+        const fi = st.findent != null ? st.findent : 4.5 / K; // 0.45em of the 10pt font forest was loaded in
+        const fl = st.lsep != null ? st.lsep : LSEP0, hdp = (po.d2 - po.d1) / 2, hsp = (po.s2 - po.s1) / 2;
+        for (const k of kids) { const c = inFrame(k.c.box, f); k.dd = fl - hdp + (c.d2 - c.d1) / 2; }
+        pack((k) => k.dd);
+        const c0 = inFrame(kids[0].c.box, f), shift = hsp + ssep + (c0.s2 - c0.s1) / 2 - kids[0].off;
+        for (const k of kids) { place(k, k.dd, k.off + shift); k.c.trunk = { d: -hdp + fi, s: hsp }; }
+      } else {
+        const lsep = st.lsep != null ? st.lsep : LSEP0;
+        // each child's distance from this anchor: its own `l`, else the default; then all are pushed out
+        // until the nearest clears this node by l sep
+        let minNear = Infinity;
+        for (const k of kids) {
+          k.l = k.c.st.l != null ? k.c.st.l : LDEF;
+          minNear = Math.min(minNear, k.l + inFrame(k.c.box, f).d1);
+        }
+        const push = Math.max(0, po.d2 + lsep - minNear);
+        for (const k of kids) k.l += push;
+        pack((k) => k.l);
+        const first = kids[0].off, last = kids[kids.length - 1].off;
+        const mid = st.calign === 'first' ? first : st.calign === 'last' ? last : (first + last) / 2;
+        for (const k of kids) place(k, k.l, k.off - mid);
       }
-      const first = kids[0].off, last = kids[kids.length - 1].off;
-      const mid = st.calign === 'first' ? first : st.calign === 'last' ? last : (first + last) / 2;
-      for (const k of kids) k.c.rel = { d: dist, s: k.off - mid };
-      for (const b of placed) out.push({ d1: b.d1, d2: b.d2, s1: b.s1 - mid, s2: b.s2 - mid });
-      me.dist = dist;
+      for (const k of kids) for (const r of k.b) out.push(shiftR(r, k.c.rel.x, k.c.rel.y));
       return out;
     };
     sub(nodes[0]);
-    nodes[0].D = 0; nodes[0].S = 0;
-    for (const me of nodes) if (me.parent >= 0) { const p = nodes[me.parent]; me.D = p.D + me.rel.d; me.S = p.S + me.rel.s; }
-    const at = (D, S) => [D * G[0] + S * U[0], D * G[1] + S * U[1]];
-    for (const me of nodes) [me.x, me.y] = at(me.D, me.S);
+    nodes[0].ax = 0; nodes[0].ay = 0;
+    for (const me of nodes) if (me.parent >= 0) { const p = nodes[me.parent]; me.ax = p.ax + me.rel.x; me.ay = p.ay + me.rel.y; }
+    for (const me of nodes) { me.x = me.ax; me.y = me.ay - me.off; } // from the anchor to the node's centre
 
     // edges
     const border = (me, vx, vy) => {
@@ -433,16 +517,19 @@
       if (ed.none || me.st.phantom) continue;
       const style = { color: ed.color, dash: ed.dash, lw: ed.lw, start: ed.start, end: ed.end };
       let pts, roof = false;
+      // points in the parent's frame: d along its growth, s across, from a node's centre
+      const f = p.fr, pt = (c, d, sv) => [c.x + d * f.G[0] + sv * f.U[0], c.y + d * f.G[1] + sv * f.U[1]];
+      const half = (c, v) => Math.abs(v[0]) * c.w / 2 + Math.abs(v[1]) * c.h / 2;
+      const hdp = half(p, f.G), hdc = half(me, f.G), hsc = half(me, f.U), rs = (me.x - p.x) * f.U[0] + (me.y - p.y) * f.U[1];
       if (me.trunk) {
-        const [ax, ay] = at(p.D + me.trunk.d, p.S + me.trunk.s), [bx, by] = at(p.D + me.trunk.d, me.S), [cx, cy] = at(me.D - me.hd, me.S);
-        pts = [[ax, ay], [bx, by], [cx, cy]];
+        pts = [pt(p, me.trunk.d, me.trunk.s), pt(p, me.trunk.d, rs), pt(me, -hdc, 0)];
       } else if (me.st.roof) {
-        const [ax, ay] = at(p.D + p.hd, p.S), [bx, by] = at(me.D - me.hd, me.S - me.hs), [cx, cy] = at(me.D - me.hd, me.S + me.hs);
-        pts = [[ax, ay], [bx, by], [cx, cy], [ax, ay]]; roof = true;
+        pts = [pt(p, hdp, 0), pt(me, -hdc, -hsc), pt(me, -hdc, hsc), pt(p, hdp, 0)]; roof = true;
       } else if (me.st.fork) {
-        const fd = p.st.fsep != null ? p.hd + p.st.fsep : (p.hd + (p.dist || 2.3 * E) - Math.max(...p.kids.map((i) => nodes[i].hd))) / 2;
-        pts = [at(p.D + p.hd, p.S), at(p.D + fd, p.S), at(p.D + fd, me.S), at(me.D - me.hd, me.S)];
-      } else pts = [border(p, me.x - p.x, me.y - p.y), border(me, p.x - me.x, p.y - me.y)];
+        const fd = hdp + (p.st.fsep != null ? p.st.fsep : 5 / K); // fork sep is 0.5em of the 10pt font forest was loaded in
+        pts = [pt(p, hdp, 0), pt(p, fd, 0), pt(p, fd, rs), pt(me, -hdc, 0)];
+      } else if (ling) pts = [pt(p, hdp, 0), pt(me, -hdc, 0)];
+      else pts = [border(p, me.x - p.x, me.y - p.y), border(me, p.x - me.x, p.y - me.y)];
       const ed2 = { pts, roof, style, i: me.i };
       if (me.st.elabel && me.st.elabel.t) ed2.label = edgeLabel(me.st.elabel, pts, me.st);
       edges.push(ed2);
@@ -451,7 +538,7 @@
     // bounding box
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
     const ext = (a, b, c, d) => { x1 = Math.min(x1, a); y1 = Math.min(y1, b); x2 = Math.max(x2, c); y2 = Math.max(y2, d); };
-    for (const me of nodes) ext(me.x - me.w / 2, me.y - me.h / 2, me.x + me.w / 2, me.y + me.h / 2);
+    for (const me of nodes) if (!me.st.phantom) ext(me.x - me.w / 2, me.y - me.h / 2, me.x + me.w / 2, me.y + me.h / 2);
     for (const e of edges) {
       for (const [x, y] of e.pts) ext(x - 1, y - 1, x + 1, y + 1);
       if (e.label) { const l = e.label; ext(l.x - l.w / 2, l.y - l.h / 2, l.x + l.w / 2, l.y + l.h / 2); }

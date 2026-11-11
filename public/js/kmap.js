@@ -480,7 +480,7 @@
       // the phantom row reaches half a digit's height (3.22pt) and two inner seps below its middle
       ext(px - nodeHW(hb), py, px + nodeHW(hb) + INNER, py + DIGIT + 2 * INNER);
       const [qx] = S(ox - 0.5, 0);
-      if (m % 2 === 0) ext(qx - nodeHW(hb) - INNER, py, qx, py);
+      if (m % 2 === 0) ext(qx - nodeHW(hb) - 3 * INNER, py, qx, py);
     }
     // the cells
     for (let m = 0; m < Z; m++) for (let r = 0; r < Y; r++) for (let c = 0; c < X; c++) {
@@ -506,15 +506,18 @@
         ext(X_ - hw, Y_ - hw, X_ + hw, Y_ + hw);
       }
     } else {
-      const top = (cx, cy) => { const b = TD.textBox(shown(lb.X), SMALL), [x, y] = S(cx, cy); text(shown(lb.X), SMALL, x, y - INNER - 0.4 * b.h); };
-      const left = (cx, cy) => { const b = TD.textBox(shown(lb.Y), SMALL), [x, y] = S(cx, cy); text(shown(lb.Y), SMALL, x - INNER - (b.w - 2) / 2, y); };
+      // measured against pdflatex: karnaugh-map sets the variable names 7.2px lower and 4px further right than
+      // the anchor rule below gives, without growing its bounding box (so the extents stay at the rule's place)
+      const top = (cx, cy) => { const b = TD.textBox(shown(lb.X), SMALL), [x, y] = S(cx, cy); text(shown(lb.X), SMALL, x, y - INNER - 0.4 * b.h).y += 7.2; };
+      const left = (cx, cy) => { const b = TD.textBox(shown(lb.Y), SMALL), [x, y] = S(cx, cy); const o = text(shown(lb.Y), SMALL, x - INNER - (b.w - 2) / 2, y); ext(o.x - b.w / 2 - 2.9 * PT, o.y, o.x, o.y); o.x += 4; };
       top(X * 0.5, Y + 0.9); left(-0.9, Y * 0.5);
       if (Z >= 2) top(7, 4.9);
       if (Z === 4) left(-0.9, -3);
     }
     if (Z >= 2) {
       const at = Z === 2 ? [[2, -0.1, '0'], [7, -0.1, '1']] : [[2, -0.1, '00'], [7, -0.1, '01'], [2, -5.1, '10'], [7, -5.1, '11']];
-      for (const [cx, cy, v] of at) { const t = zl(v), b = TD.textBox(t, SMALL), [x, y] = S(cx, cy); text(t, SMALL, x, y + INNER + 0.4 * b.h); }
+      // sub-map labels (A = 0, AB = 00): 4.8px higher, measured against pdflatex
+      for (const [cx, cy, v] of at) { const t = zl(v), b = TD.textBox(t, SMALL), [x, y] = S(cx, cy); text(t, SMALL, x, y + INNER + 0.4 * b.h).y -= 4.8; }
     }
     // the groups, each in the next colour
     const cols = colorList(M);

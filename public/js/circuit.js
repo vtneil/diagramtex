@@ -74,22 +74,70 @@
     }
     return out;
   }
+  // `l_= a_= v_= i_=` live in the free options (they are exported as written): read them for the canvas
+  function optLabels(it) {
+    const out = {};
+    for (const x of splitTop(it.opts || '', ',')) {
+      const m = /^\s*(l|a|v|i)_\s*=\s*([\s\S]*?)\s*$/.exec(x);
+      if (m) out[m[1] + '_'] = unbrace(m[2]);
+    }
+    return out;
+  }
+  // circuitikz's voltage arc (european style): both ends sit 0.112 cm beside the part's pins, the controls come
+  // from the part's -110/-70 degree anchors scaled by `bump b` 1.5. Frame: x along the path, y to its left.
+  const VSHIFT = 0.112, BUMP = 1.5, LABEL_UP = 0.13, NODE_TXT = 0.1;
+  function voltageArc(it, def, G) {
+    const L = Math.hypot(it.b[0] - it.a[0], it.b[1] - it.a[1]) || 1, w = Math.min(def.w || 0, L);
+    const hy = G ? Math.max(G.box.y2, -G.box.y1) : 0.2, Ay = Math.max(hy, 0.325);
+    const ah = /^res:/.test(it.part) ? 0.77 : w / 2, xs = -L / 2 + (0.0875 + (L / 2 - ah)) / 2, cy = -(BUMP * Ay + VSHIFT), cx = BUMP * 0.364 * Ay;
+    return { p0: [xs, -VSHIFT], c1: [-cx, cy], c2: [cx, cy], p3: [-xs, -VSHIFT], bottom: -(0.25 * VSHIFT + 0.75 * -cy) };
+  }
   // where the labels go: l (and i) on the left of the path, a and v on the right; node text at its centre
   function labelSpots(it) {
     const def = CZ.parts[it.part], G = def && CZ.geom(it.part);
     const spots = [];
-    if (it.p) { if (it.text) spots.push({ t: it.text, at: it.p, dir: [0, 0] }); return spots; }
+    if (it.p) {
+      if (!it.text) return spots;
+      // circuitikz: the text of a ground symbol sits above its pin, a supply's beyond its arrow, a transistor's to the side
+      const T = nodeXf(it), up = (sgn, x, y) => { const a = T(0, 0), b = T(0, sgn); return { t: it.text, at: T(x, y), dir: [b[0] - a[0], b[1] - a[1]] }; };
+      if (it.part === 'ground:vcc') spots.push(up(1, 0, 0.42 + NODE_TXT));
+      else if (it.part === 'ground:vee') spots.push(up(-1, 0, -0.42 - NODE_TXT));
+      else if (/^ground:/.test(it.part)) spots.push(up(1, 0.26, -0.16)); // a ground's text hangs off the pin's upper right
+      else if (/^trans:/.test(it.part)) spots.push({ t: it.text, at: T(/mos|fet/.test(it.part) ? 0.36 : 0.45, 0), dir: [0, 0] });
+      else spots.push({ t: it.text, at: it.p, dir: [0, 0] });
+      return spots;
+    }
     const T = bipXf(it, true), hy = G ? Math.max(G.box.y2, -G.box.y1, 0.05) : 0.05;
-    const dx = it.b[0] - it.a[0], dy = it.b[1] - it.a[1], L = Math.hypot(dx, dy) || 1, n = [-dy / L, dx / L];
-    if (it.l) spots.push({ t: it.l, at: T(0, hy + 0.12), dir: n });
-    if (it.ann) spots.push({ t: it.ann, at: T(0, -hy - 0.12), dir: [-n[0], -n[1]] });
-    if (it.v) spots.push({ t: it.v, at: T(0, -hy - (it.ann ? 0.6 : 0.12)), dir: [-n[0], -n[1]] });
-    if (it.i) spots.push({ t: it.i, at: T(Math.min(L / 2 - 0.15, (def ? def.w / 2 : 0) + 0.3), 0.12), dir: n, arrow: true });
+    const dx = it.b[0] - it.a[0], dy = it.b[1] - it.a[1], L = Math.hypot(dx, dy) || 1, n = [-dy / L, dx / L], mn = [-n[0], -n[1]];
+    const ox = optLabels(it), LD = 0.12 - LABEL_UP, LB = 0.12;
+    const top = [], bot = [];
+    if (it.l) top.push(it.l);
+    if (ox['a_']) bot.push(ox['a_']); // circuitikz puts `a_` below too
+    if (it.ann) bot.push(it.ann);
+    if (ox['l_']) bot.push(ox['l_']);
+    top.forEach((t) => spots.push({ t, at: T(0, hy + LD), dir: n }));
+    bot.forEach((t) => spots.push({ t, at: T(0, -hy - LB), dir: mn }));
+    const vt = it.v || ox['v_'];
+    if (vt) {
+      const src = !def || /^src:/.test(it.part) || def.kind !== 'bipole';
+      if (src) spots.push({ t: vt, at: T(0, -hy - (it.ann ? 0.6 : LD)), dir: mn });
+      else { const A = voltageArc(it, def, G); spots.push({ t: vt, at: T(0, A.bottom), dir: mn, arc: A }); }
+    }
+    const ct = it.i || ox['i_'];
+    if (ct) {
+      const w = def ? Math.min(def.w || 0, L) : 0, sd = it.i ? 1 : -1;
+      spots.push({ t: ct, at: T((L + w) / 4, sd * 0.12), dir: sd > 0 ? n : mn, arrow: true });
+    }
     return spots;
   }
+  // a `latexslim`-like head with its tip at (X, Y) pointing along (ux, uy); k = px per cm
+  const arrowHead = (X, Y, ux, uy, c, k) => {
+    const hl = 0.2 * k, hw = 0.075 * k, bx = X - ux * hl, by = Y - uy * hl, nx = -uy, ny = ux;
+    return `<path d="M${r2(X)},${r2(Y)}L${r2(bx + nx * hw)},${r2(by + ny * hw)}L${r2(X - ux * hl * 0.72)},${r2(Y - uy * hl * 0.72)}L${r2(bx - nx * hw)},${r2(by - ny * hw)}Z" fill="${c}"/>`;
+  };
   function labelsSvg(it, m, k, c, o) {
     let s = '';
-    const st = o.st || { size: 'normalsize', font: 'default' }, zoom = k / PX;
+    const st = o.st || { size: 'normalsize', font: 'default' }, zoom = k / PX, wW = 0.4 / K / PX * k;
     for (const L of labelSpots(it)) {
       const b = TD.textBox(L.t, st), bw = b.w / PX, bh = b.h / PX; // text keeps its size in cm
       // push the box out along dir so its nearest edge sits at the spot
@@ -97,11 +145,17 @@
       const [X, Y] = m(L.at[0] + ox, L.at[1] + oy);
       if (zoom === 1) s += TD.textSvg(L.t, st, c, X, Y, o.ctx || {});
       else s += `<g transform="translate(${r2(X)},${r2(Y)}) scale(${r2(zoom)})">${TD.textSvg(L.t, st, c, 0, 0, o.ctx || {})}</g>`;
+      if (L.arc) {
+        const T = bipXf(it, true), P = ['p0', 'c1', 'c2', 'p3'].map((n) => m(...T(...L.arc[n])));
+        const tx = P[3][0] - P[2][0], ty = P[3][1] - P[2][1], tl = Math.hypot(tx, ty) || 1;
+        s += `<path d="M${r2(P[0][0])},${r2(P[0][1])}C${r2(P[1][0])},${r2(P[1][1])} ${r2(P[2][0])},${r2(P[2][1])} ${r2(P[3][0])},${r2(P[3][1])}" fill="none" stroke="${c}" stroke-width="${r2(wW)}"/>`;
+        s += arrowHead(P[3][0], P[3][1], tx / tl, ty / tl, c, k);
+      }
       if (L.arrow) {
-        const [ax, ay] = m(...L.at.map((v, i) => v - L.dir[i] * 0.12)), dir = [it.b[0] - it.a[0], it.b[1] - it.a[1]], l = Math.hypot(...dir) || 1;
-        const u = [dir[0] / l, -dir[1] / l], hl = 0.14 * k, hw = 0.06 * k;
-        const tx = ax + u[0] * hl / 2, ty = ay + u[1] * hl / 2;
-        s += `<path d="M${r2(tx)},${r2(ty)}L${r2(tx - u[0] * hl - u[1] * hw)},${r2(ty - u[1] * hl + u[0] * hw)}L${r2(tx - u[0] * hl + u[1] * hw)},${r2(ty - u[1] * hl - u[0] * hw)}Z" fill="${c}"/>`;
+        // the arrow sits on the wire, centred where the label's spot projects onto the path
+        const [wx, wy] = m(...L.at.map((v, i) => v - L.dir[i] * 0.12)), dir = [it.b[0] - it.a[0], it.b[1] - it.a[1]], l = Math.hypot(...dir) || 1;
+        const u = [dir[0] / l, -dir[1] / l], hl = 0.2 * k;
+        s += arrowHead(wx + u[0] * hl / 2, wy + u[1] * hl / 2, u[0], u[1], c, k);
       }
     }
     return s;

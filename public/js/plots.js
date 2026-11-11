@@ -518,16 +518,16 @@
     if (!entries.length || s.legendPos === 'none') return '';
     const st = NORMAL;
     const rows = entries.map((e) => ({ ...e, b: TD.textBox(e.text, st) }));
-    const sw = 22, pad = 5, gap = 4;
+    const sw = 24, pad = 5, padY = 3, gap = 3.6;
     const w = sw + gap + Math.max(...rows.map((r) => r.b.w)) + 2 * pad;
-    const h = rows.reduce((a, r) => a + r.b.h, 0) + 2 * pad;
-    const m = 6;
+    const h = rows.reduce((a, r) => a + r.b.h, 0) + 2 * padY;
+    const mx = 0.03 * s.w, my = 0.03 * s.h; // pgfplots legend pos: at (0.97, 0.97)
     const pos = s.legendPos || 'north east';
-    let x = pos.includes('east') ? s.x + s.w - w - m : s.x + m;
-    let y = pos.includes('north') ? s.y + m : s.y + s.h - h - m;
+    let x = pos.includes('east') ? s.x + s.w - w - mx : s.x + mx;
+    let y = pos.includes('north') ? s.y + my : s.y + s.h - h - my;
     if (pos === 'outer north east') { x = s.x + s.w + 10; y = s.y; }
     let out = `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="#fff" stroke="#000" stroke-width="${r2(AXIS_W)}"/>`;
-    let cy = y + pad;
+    let cy = y + padY;
     for (const r of rows) {
       const my = cy + r.b.h / 2, c = TD.css(r.color);
       if (r.kind === 'bar' || r.kind === 'area') out += `<rect x="${r2(x + pad + 5)}" y="${r2(my - 4)}" width="12" height="8" fill="${c}" ${r.kind === 'area' ? 'fill-opacity="0.3"' : ''} stroke="${c}" stroke-width="${AXIS_W}"/>`;
@@ -575,8 +575,8 @@
     const cid = 'clip-' + s.id + (ctx.export ? 'x' : '');
     let back = '', body = '', front = '', free = '';
     if (s.grid) {
-      for (const v of xt) back += `<path d="M${r2(mx(v))},${s.y}v${s.h}" stroke="#bfbfbf" stroke-width="${r2(AXIS_W)}"/>`;
-      for (const v of yt) back += `<path d="M${s.x},${r2(my(v))}h${s.w}" stroke="#bfbfbf" stroke-width="${r2(AXIS_W)}"/>`;
+      for (const v of xt) back += `<path d="M${r2(mx(v))},${s.y}v${s.h}" stroke="#bfbfbf" stroke-width="${r2(0.5 / K)}"/>`;
+      for (const v of yt) back += `<path d="M${s.x},${r2(my(v))}h${s.w}" stroke="#bfbfbf" stroke-width="${r2(0.5 / K)}"/>`;
     }
     const entries = [];
     const bars = s.series.filter((q) => q.kind === 'bar');
@@ -663,27 +663,25 @@
     for (const v of xt) {
       const X = mx(v);
       if (lines === 'middle' && Math.abs(v) < 1e-12) continue;
-      if (lines !== 'box' && X > s.x + s.w - 8) continue;
       front += `<path d="M${r2(X)},${r2(xAxisY)}v${lines === 'middle' ? -tk / 2 : -tk}${lines === 'middle' ? 'v' + tk : ''}" stroke="#000" stroke-width="${aw}"/>`;
       if (lines === 'box') front += `<path d="M${r2(X)},${s.y}v${tk}" stroke="#000" stroke-width="${aw}"/>`;
-      if (!(skip0 && Math.abs(v) < 1e-12)) front += txt(tickTex(v), X, xAxisY + 4, ctx, NORMAL, 'north');
+      if (!(skip0 && Math.abs(v) < 1e-12)) front += txt(tickTex(v), X, xAxisY + (lines === 'middle' ? 7.5 : 2), ctx, NORMAL, 'north');
     }
     let maxYW = 0;
     for (const v of yt) {
       const Y = my(v);
       if (lines === 'middle' && Math.abs(v) < 1e-12) continue;
-      if (lines !== 'box' && Y < s.y + 8) continue;
       front += `<path d="M${r2(yAxisX)},${r2(Y)}h${lines === 'middle' ? -tk / 2 : tk}${lines === 'middle' ? 'h' + tk : ''}" stroke="#000" stroke-width="${aw}"/>`;
       if (lines === 'box') front += `<path d="M${s.x + s.w},${r2(Y)}h${-tk}" stroke="#000" stroke-width="${aw}"/>`;
       maxYW = Math.max(maxYW, TD.textBox(tickTex(v), NORMAL).w);
-      front += txt(tickTex(v), yAxisX - 4, Y, ctx, NORMAL, 'east');
+      front += txt(tickTex(v), yAxisX - (lines === 'middle' ? 8 : 4), Y + 0.4, ctx, NORMAL, 'east');
     }
     if (lines === 'middle') {
       front += txt(s.xlabel, s.x + s.w + 4, xAxisY, ctx, NORMAL, 'west');
-      front += txt(s.ylabel, yAxisX, s.y - 4, ctx, NORMAL, 'south');
+      front += txt(s.ylabel, yAxisX, s.y - 1.2, ctx, NORMAL, 'south');
     } else {
       const th = TD.textBox('$0$', NORMAL).h;
-      front += txt(s.xlabel, s.x + s.w / 2, s.y + s.h + 4 + th + 4, ctx, NORMAL, 'north');
+      front += txt(s.xlabel, s.x + s.w / 2, s.y + s.h + 4 + th + 1.4, ctx, NORMAL, 'north');
       if (s.ylabel) {
         const b = TD.textBox(s.ylabel, NORMAL);
         const cx = s.x - 4 - maxYW - 6 - b.h / 2, cy = s.y + s.h / 2;
@@ -728,10 +726,10 @@
     const xt = ticks(L.xmin, L.xmax, 5), yt = ticks(L.ymin, L.ymax, 5), zt = ticks(L.zmin, L.zmax, 5);
     const nu = (v) => (v - L.xmin) / (L.xmax - L.xmin), nw = (v) => (v - L.ymin) / (L.ymax - L.ymin), nt = (v) => (v - L.zmin) / (L.zmax - L.zmin);
     if (s.grid) {
-      const gc = '#d0d0d0';
-      for (const v of xt) { back += ln(Pn(nu(v), bw, 0), Pn(nu(v), bw, 1), gc) + ln(Pn(nu(v), 0, bt), Pn(nu(v), 1, bt), gc); }
-      for (const v of yt) { back += ln(Pn(bu, nw(v), 0), Pn(bu, nw(v), 1), gc) + ln(Pn(0, nw(v), bt), Pn(1, nw(v), bt), gc); }
-      for (const v of zt) { back += ln(Pn(bu, 0, nt(v)), Pn(bu, 1, nt(v)), gc) + ln(Pn(0, bw, nt(v)), Pn(1, bw, nt(v)), gc); }
+      const gc = '#bfbfbf', gw = r2(0.5 / K); // pgfplots' major grid: gray!50
+      for (const v of xt) { back += ln(Pn(nu(v), bw, 0), Pn(nu(v), bw, 1), gc, gw) + ln(Pn(nu(v), 0, bt), Pn(nu(v), 1, bt), gc, gw); }
+      for (const v of yt) { back += ln(Pn(bu, nw(v), 0), Pn(bu, nw(v), 1), gc, gw) + ln(Pn(0, nw(v), bt), Pn(1, nw(v), bt), gc, gw); }
+      for (const v of zt) { back += ln(Pn(bu, 0, nt(v)), Pn(bu, 1, nt(v)), gc, gw) + ln(Pn(0, bw, nt(v)), Pn(1, bw, nt(v)), gc, gw); }
     }
     // back-face frame edges
     const edges = [];
@@ -740,7 +738,12 @@
     for (const u of [0, 1]) for (const w of [0, 1]) edges.push([[u, w, 0], [u, w, 1]]);
     for (const [a, b] of edges) {
       const onBack = (a[0] === bu && b[0] === bu) || (a[1] === bw && b[1] === bw) || (a[2] === bt && b[2] === bt);
-      if (onBack) back += ln(Pn(...a), Pn(...b));
+      if (!onBack) continue;
+      // pgfplots draws the hidden edges (the floor's back edges, the far vertical) grey, the visible frame black
+      const floorBack = a[2] === 0 && b[2] === 0 && ((a[1] === b[1] && a[1] === bw) || (a[0] === b[0] && a[0] === bu));
+      const zEdge = a[0] === b[0] && a[1] === b[1];
+      const farZ = zEdge && a[0] !== bu && a[1] === bw;
+      back += ln(Pn(...a), Pn(...b), floorBack || farZ ? '#808080' : '#000');
     }
     // series
     const items = [];
@@ -759,7 +762,7 @@
             items.push({
               d: (c[0].d + c[1].d + c[2].d + c[3].d) / 4,
               svg: ser.kind === 'surface'
-                ? `<path d="${d}" fill="${col}" stroke="#000" stroke-opacity="0.6" stroke-width="${aw}" stroke-linejoin="round"/>`
+                ? `<path d="${d}" fill="${col}" stroke="#000" stroke-opacity="0.25" stroke-width="${aw}" stroke-linejoin="round"/>`
                 : `<path d="${d}" fill="none" stroke="${col}" stroke-width="${r2(ser.width ?? 1)}"/>`,
             });
           }
@@ -772,7 +775,7 @@
             if (!q.every((p) => p.every(isFinite))) continue;
             const c = q.map((p) => P(p[0], p[1], p[2]));
             const col = cmap(s.colormap, ((q[0][2] + q[1][2] + q[2][2] + q[3][2]) / 4 - L.mmin) / (L.mmax - L.mmin));
-            items.push({ d: (c[0].d + c[1].d + c[2].d + c[3].d) / 4, svg: `<path d="${'M' + c.map((p) => r2(p.x) + ',' + r2(p.y)).join('L') + 'Z'}" fill="${col}" stroke="#000" stroke-opacity="0.6" stroke-width="${aw}" stroke-linejoin="round"/>` });
+            items.push({ d: (c[0].d + c[1].d + c[2].d + c[3].d) / 4, svg: `<path d="${'M' + c.map((p) => r2(p.x) + ',' + r2(p.y)).join('L') + 'Z'}" fill="${col}" stroke="#000" stroke-opacity="0.25" stroke-width="${aw}" stroke-linejoin="round"/>` });
           }
         }
       } else if (r.curve3) {
@@ -794,7 +797,7 @@
     body = items.map((it) => it.svg).join('');
     // tick labels on front-bottom edges
     const center = Pn(0.5, 0.5, 0.5);
-    const lab = (a, b, vals, mapN, mk, label) => {
+    const lab = (a, b, vals, mapN, mk, label, tsh = [0, 0], lsh = [0, 0]) => {
       let o = '';
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       let dir = { x: mid.x - center.x, y: mid.y - center.y };
@@ -804,22 +807,22 @@
         o += ln(p, { x: p.x - dir.x * 3, y: p.y - dir.y * 3 });
         const tb = TD.textBox(tickTex(v), NORMAL);
         const off = 4 + Math.abs(dir.x) * tb.w / 2 + Math.abs(dir.y) * tb.h / 2;
-        o += txt(tickTex(v), p.x + dir.x * off, p.y + dir.y * off, ctx, NORMAL);
+        o += txt(tickTex(v), p.x + dir.x * off + tsh[0], p.y + dir.y * off + tsh[1], ctx, NORMAL);
       }
       if (label) {
         const lb = TD.textBox(label, NORMAL);
         const off = 26 + Math.abs(dir.x) * lb.w / 2 + Math.abs(dir.y) * lb.h / 2;
-        o += txt(label, mid.x + dir.x * off, mid.y + dir.y * off, ctx, NORMAL);
+        o += txt(label, mid.x + dir.x * off + lsh[0], mid.y + dir.y * off + lsh[1], ctx, NORMAL);
       }
       return o;
     };
     const fw = 1 - bw, fu = 1 - bu;
-    front += lab(Pn(0, fw, 0), Pn(1, fw, 0), xt, nu, (n) => Pn(n, fw, 0), s.xlabel);
-    front += lab(Pn(fu, 0, 0), Pn(fu, 1, 0), yt, nw, (n) => Pn(fu, n, 0), s.ylabel);
+    front += lab(Pn(0, fw, 0), Pn(1, fw, 0), xt, nu, (n) => Pn(n, fw, 0), s.xlabel, [0, -2], [-3.2, 3.4]); // shifts measured against pgfplots (view 25/30)
+    front += lab(Pn(fu, 0, 0), Pn(fu, 1, 0), yt, nw, (n) => Pn(fu, n, 0), s.ylabel, [-2.1, 3.1], [6, 16]);
     // z axis: the vertical edge furthest left on screen
     let best = null;
     for (const u of [0, 1]) for (const w of [0, 1]) { const p = Pn(u, w, 0); if (!best || p.x < best.p.x) best = { u, w, p }; }
-    front += lab(Pn(best.u, best.w, 0), Pn(best.u, best.w, 1), zt, nt, (n) => Pn(best.u, best.w, n), s.zlabel);
+    front += lab(Pn(best.u, best.w, 0), Pn(best.u, best.w, 1), zt, nt, (n) => Pn(best.u, best.w, n), s.zlabel, [0, 0], [-1.6, 2.4]);
     front += txt(s.title, s.x + s.w / 2, s.y - 6, ctx, NORMAL, 'south');
     front += legendSvg(s, ctx, entries);
     if (s.colorbar) front += colorbarSvg(s, L, ctx);

@@ -266,7 +266,8 @@
   // A cell is TeX's box of its maths (height + depth) plus 0.85ex above and below. The measured line is
   // taller by about a constant, taken from an A (6.83pt, no depth); the box sits 0.9pt above the maths
   // axis, where tikz-cd's asymmetrical rectangle puts its centre (A: 8pt above the axis, 6.2pt below).
-  const CELL_UP = -0.92 * PT;
+  const TXT_DY = 1.4, BB_DY = 0.2, LAB_PAD = 1.2; // text lower, drawing within TeX's picture box (whose label nodes keep their inner sep)
+  const strutH = (b) => { const m = /katex-strut" style="height:([\d.]+)em/.exec(b.html || ''); return m ? +m[1] * b.px : HK * b.h; };
   const mathOf = (t) => (/\$/.test(t) ? t : `$${t}$`);
   const cache = new Map();
   function layout(s) {
@@ -303,16 +304,24 @@
     if (!R || !C || cells.every((r) => r.every((c) => !c.t && !c.arrows.length))) {
       return { empty: true, bb: { x: 0, y: 0, w: 4 * PX, h: 1.5 * PX }, warnings, R: 0, C: 0, P, arrows: [], nodes: [], labels: [] };
     }
-    // cells: an asymmetrical rectangle (centred on the maths axis), inner sep 1ex × 0.85ex
-    const slack = TD.textBox(mathOf('A'), NORMAL).h - 6.83 * PT;
+    // cells: TeX's box of the maths, with 0.85ex of inner sep above and below, hung on the baseline; arrows run at the maths
+    // axis (2.5pt above it), so a cell reaches (height + sep - axis) above the arrow line and (depth + sep + axis) below it.
+    const AXIS = 2.5 * PT, ISEP = 0.85 * EX;
     const look = cells.map((r) => r.map((c) => {
       if (!c.t) return null;
       const b = TD.textBox(mathOf(c.t), NORMAL);
-      return { b, w: b.w - 2 + 2 * EX, h: Math.max(b.h - slack, 2 * PT) + 1.7 * EX };
+      const m = /katex-strut" style="height:([\d.]+)em(?:;vertical-align:(-?[\d.]+)em)?/.exec(b.html || '');
+      let ht = 6.83 * PT, dp = 0;
+      if (m) { dp = Math.max(0, -(+m[2] || 0)) * b.px; ht = +m[1] * b.px - dp; }
+      let up = Math.max(ht, 0) + ISEP - AXIS, down = dp + ISEP + AXIS;
+      const need = s.minCell || 0;
+      if (up + down < need) { const e = (need - up - down) / 2; up += e; down += e; }
+      return { b, w: b.w - 2 + 2 * EX, up, down, h: up + down };
     }));
-    const colW = Array(C).fill(0), rowH = Array(R).fill(0);
-    for (let r = 0; r < R; r++) for (let c = 0; c < cells[r].length; c++) { const m = look[r][c]; if (m) { colW[c] = Math.max(colW[c], m.w); rowH[r] = Math.max(rowH[r], m.h); } }
-    if (s.minCell) { for (let c = 0; c < C; c++) colW[c] = Math.max(colW[c], s.minCell); for (let r = 0; r < R; r++) rowH[r] = Math.max(rowH[r], s.minCell); }
+    const colW = Array(C).fill(0), rowUp = Array(R).fill(0), rowDn = Array(R).fill(0);
+    for (let r = 0; r < R; r++) for (let c = 0; c < cells[r].length; c++) { const m = look[r][c]; if (m) { colW[c] = Math.max(colW[c], m.w); rowUp[r] = Math.max(rowUp[r], m.up); rowDn[r] = Math.max(rowDn[r], m.down); } }
+    if (s.minCell) for (let c = 0; c < C; c++) colW[c] = Math.max(colW[c], s.minCell);
+    const rowH = rowUp.map((u, r) => u + rowDn[r]);
     // &[…] and \\[…] add to the separation before that column / after that row
     const colX = Array(C).fill(0), rowX = Array(R).fill(0);
     const extra = (v, kind) => { const o = sepValue(kind, v, warn); return o.px; };
@@ -329,13 +338,14 @@
     }
     let y = 0;
     for (let r = 0; r < R; r++) {
-      if (r && rs.origins) { cy[r] = cy[r - 1] + rs.px + rowX[r]; rowT[r] = cy[r] + CELL_UP - rowH[r] / 2; }
-      else { if (r) y += rs.px + rowX[r]; rowT[r] = y; cy[r] = y + rowH[r] / 2 - CELL_UP; }
-      y = rowT[r] + rowH[r];
+      if (r && rs.origins) cy[r] = cy[r - 1] + rs.px + rowX[r];
+      else cy[r] = r ? y + rs.px + rowX[r] + rowUp[r] : rowUp[r];
+      rowT[r] = cy[r] - rowUp[r];
+      y = cy[r] + rowDn[r];
     }
-    const nodeAt = (r, c) => { const m = look[r] && look[r][c]; return { x: cx[c], y: cy[r], oy: m ? CELL_UP : 0, w: m ? m.w : 0, h: m ? m.h : 0 }; };
+    const nodeAt = (r, c) => { const m = look[r] && look[r][c]; return { x: cx[c], y: cy[r], oy: m ? (m.down - m.up) / 2 : 0, w: m ? m.w : 0, h: m ? m.h : 0 }; };
     const nodes = [];
-    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) { const m = look[r][c]; if (m) nodes.push({ x: cx[c], y: cy[r], oy: CELL_UP, w: m.w, h: m.h, t: mathOf(cells[r][c].t), b: m.b, cell: [r, c] }); }
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) { const m = look[r][c]; if (m) nodes.push({ x: cx[c], y: cy[r], oy: (m.down - m.up) / 2, w: m.w, h: m.h, t: mathOf(cells[r][c].t), b: m.b, cell: [r, c] }); }
 
     // a point on a node's border: from p along u (leaving the box), or in a direction (TikZ degrees)
     const exit = (n, p, u) => {
@@ -391,7 +401,7 @@
           else if (/^(above|below|left|right|anchor|inner sep|outer sep|near|sloped|font|text|fill|color|red|blue)/.test(name)) warn(`The label option "${o}" isn't drawn here (it is kept in the code)`);
         }
         const P0 = at(seg, pos), tu = tan(seg, pos);
-        const b = TD.textBox(mathOf(L.t), LABEL), w = b.w - 2 + EX, h = HK * b.h + EX;
+        const b = TD.textBox(mathOf(L.t), LABEL), w = b.w - 2 + EX, h = strutH(b) + EX; // TeX's label box: the glyphs' own height + depth, so a k sits lower than an f
         let x = P0.x, y = P0.y;
         if (!desc) {
           // TikZ's auto: the label's anchor faces the line, picked from eight by the side's direction
@@ -408,9 +418,10 @@
     const ext = (a, b, c, d) => { x1 = Math.min(x1, a); y1 = Math.min(y1, b); x2 = Math.max(x2, c); y2 = Math.max(y2, d); };
     for (const n of nodes) ext(n.x - n.w / 2, n.y + n.oy - n.h / 2, n.x + n.w / 2, n.y + n.oy + n.h / 2);
     for (const a of arrows) if (!a.A.phantom) for (let i = 0; i <= 16; i++) { const p = at(a.seg, i / 16); ext(p.x - 2 * PT, p.y - 2 * PT, p.x + 2 * PT, p.y + 2 * PT); }
-    for (const l of labels) ext(l.x - l.w / 2, l.y - l.h / 2, l.x + l.w / 2, l.y + l.h / 2);
+    for (const l of labels) ext(l.x - l.w / 2 - LAB_PAD, l.y - l.h / 2 - LAB_PAD, l.x + l.w / 2 + LAB_PAD, l.y + l.h / 2 + LAB_PAD);
     if (!(x2 > x1)) { x1 = colL[0] - 1; x2 = colL[C - 1] + colW[C - 1] + 1; }
     if (!(y2 > y1)) { y1 = rowT[0] - 1; y2 = rowT[R - 1] + rowH[R - 1] + 1; }
+    y1 -= BB_DY; y2 -= BB_DY;
     return { nodes, arrows, labels, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, warnings, R, C, P, geo: { colL, colW, cx, rowT, rowH, cy, cs: cs.px, rs: rs.px } };
   }
   const delta = (dirs) => { let dr = 0, dc = 0; for (const ch of dirs || '') { if (ch === 'r') dc++; else if (ch === 'l') dc--; else if (ch === 'd') dr++; else if (ch === 'u') dr--; } return [dr, dc]; };
@@ -466,7 +477,7 @@
       if (!ctx.export) out += TD.textSvg('Empty diagram', { size: 'small', font: 'default' }, '#888888', o.w / 2, o.h / 2, ctx);
     } else {
       for (const a of Lo.arrows) out += arrowSvg(a, ink, paper);
-      for (const n of Lo.nodes) out += TD.textSvg(n.t, NORMAL, s.color || '#000000', n.x, n.y, ctx);
+      for (const n of Lo.nodes) out += TD.textSvg(n.t, NORMAL, s.color || '#000000', n.x, n.y + TXT_DY, ctx);
       for (const l of Lo.labels) {
         if (l.fill) out += `<rect x="${r2(l.x - l.w / 2)}" y="${r2(l.y - l.h / 2)}" width="${r2(l.w)}" height="${r2(l.h)}" fill="${paper}"/>`;
         out += TD.textSvg(l.t, LABEL, l.color || s.color || '#000000', l.x, l.y, ctx);

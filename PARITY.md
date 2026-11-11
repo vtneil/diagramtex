@@ -4,10 +4,11 @@ You draw in DiagramTeX, copy the code, paste it into Overleaf or your own `.tex`
 answers how close the result comes to what you saw, with measured numbers, side-by-side samples, and the
 differences that are still there.
 
-**In short:** across 44 test figures, **95 % of the ink lands within 0.5 mm** of where the canvas drew it, and
-**98 % lands within 1 mm**. Half of the figures score 99.5 % or better. Shapes, arrows, symbols, 3D solids,
-chemistry, automata and most plots match. The figures that drift are quantum circuits, forest trees and
-commutative diagrams. They have the same parts in the same order, only spaced slightly differently.
+**In short:** across 45 test figures, **99.5 % of the ink lands within 0.5 mm** of where the canvas drew it,
+and **99.9 % lands within 1 mm**. Every figure type now scores at least 97 % within 0.5 mm. Shapes, arrows,
+symbols, plots, 3D figures and every block (quantum circuits, trees, commutative diagrams, circuits,
+automata, timing diagrams, Karnaugh maps, chemistry) are drawn in the same places. What is left is mostly
+the font: the canvas draws letters a little heavier than pdflatex does.
 
 The test setup, per-commit fixes and every image are in [docs/latex-parity/](docs/latex-parity/README.md).
 
@@ -22,49 +23,114 @@ The test setup, per-commit fixes and every image are in [docs/latex-parity/](doc
    within a given distance. 100 % means every line, letter and fill drawn by one is also drawn by the other,
    within that tolerance.
 
-The 0 mm column is an exact pixel overlap. It is mostly anti-aliasing and font-rendering noise: a perfect
-1-pixel line offset by half a pixel already scores about 50 %. **Read the 0.5 mm column** as "looks the same
-on paper" and the 1 mm column as "same layout, maybe nudged".
+The 0.2 mm column is close to an exact pixel overlap, so anti-aliasing and the heavier canvas font pull it
+down (text-heavy figures score lowest there). **Read the 0.5 mm column** as "looks the same on paper" and the
+1 mm column as "same layout, maybe nudged".
 
-39 figures were measured on DiagramTeX 1.18.0. The 5 newer blocks (3D geometry, timing, automata, K-map,
-chemistry) were measured on 1.20.0.
+Measured on DiagramTeX 1.21.0 with the fixes described below.
 
 ## Scores
 
-| Figure type | Test figures | ≤ 0.2 mm | ≤ 0.5 mm | ≤ 1 mm | Verdict |
-| --- | --- | ---: | ---: | ---: | --- |
-| Lines, arrow tips, dashes, shafts | lines | 99.7 % | 100 % | 100 % | matches |
-| Shapes, fills, patterns, gradients | shapes, region, plus | 98.1 % | 99.9 % | 100 % | matches |
-| Text and maths labels | text, labels | 96.1 % | 99.9 % | 100 % | matches |
-| Tick marks and rulers | ticks | 85.9 % | 97.0 % | 100 % | minor drift |
-| Symbol library (basic, electrical, flowchart, physics) | 4 sheets | 99.9 % | 99.9 % | 100 % | matches |
-| Pie chart | pie | 99.8 % | 100 % | 100 % | matches |
-| 2D plots: function, area, bar, contour, heatmap | 5 plots | 98.1 % | 99.7 % | 99.8 % | matches |
-| 2D plots: line, scatter, markers | 3 plots | 86.9 % | 90.2 % | 91.9 % | minor drift |
-| 3D plots: function, surface, mesh, parametric | 4 plots | 98.1 % | 99.2 % | 99.5 % | matches |
-| 3D plots: curve, scatter | 2 plots | 83.3 % | 91.9 % | 95.2 % | minor drift |
-| 3D solids, revolve, sketch | 6 scenes | 99.0 % | 99.8 % | 99.9 % | matches |
-| Circuit (circuitikz) | blk_cz | 89.5 % | 96.3 % | 98.3 % | matches |
-| ZX calculus | blk_zx | 91.6 % | 99.6 % | 100 % | matches |
-| Feynman diagram | blk_feynman | 86.7 % | 95.9 % | 99.8 % | matches |
-| Bloch sphere | blk_bloch | 92.4 % | 95.2 % | 97.8 % | matches |
-| Chemistry (chemfig) | blk_chem | 97.0 % | 100 % | 100 % | matches |
-| Automaton | blk_automata | 96.6 % | 98.5 % | 100 % | matches |
-| 3D geometry (tikz-3dplot) | blk_geo3d | 89.5 % | 97.0 % | 100 % | matches |
-| Timing diagram (tikz-timing) | blk_timing | 56.9 % | 86.5 % | 97.8 % | minor drift |
-| Karnaugh map | blk_kmap | 45.7 % | 85.2 % | 98.4 % | minor drift |
-| Commutative diagram (tikz-cd) | blk_cd | 50.5 % | 70.8 % | 92.6 % | drift |
-| Quantum circuit (quantikz) | blk_qc | 36.3 % | 54.0 % | 83.8 % | drift |
-| Tree (forest) | blk_forest | 30.5 % | 53.3 % | 80.9 % | drift |
-| **All 44 figures** (mean / median) | | 89.5 / 96.8 % | **94.9 / 99.5 %** | 98.0 / 99.9 % | |
+| Figure type | Test figures | ≤ 0.2 mm | ≤ 0.5 mm | ≤ 1 mm | ≤ 0.5 mm in 1.21.0 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Lines, arrow tips, dashes, ticked shafts | 5 | 98.9 % | 99.8 % | 100 % | 99.9 % |
+| Shapes, fills, translucent shapes | 2 | 97.3 % | 98.9 % | 100 % | 97.5 % |
+| Text and maths labels | 2 | 87.7 % | 98.9 % | 100 % | 98.9 % |
+| Symbol library (basic, electrical, flowchart, physics) | 4 | 99.8 % | 100 % | 100 % | 100 % |
+| Pie chart | 1 | 99.1 % | 99.9 % | 100 % | 99.9 % |
+| 2D plots: function, line, scatter, area, bar, contour, heatmap | 7 | 98.7 % | 99.7 % | 99.9 % | 97.6 % |
+| 3D plots: function, surface, mesh, parametric, curve, scatter | 6 | 97.7 % | 99.3 % | 99.8 % | 93.0 % |
+| 3D solids, revolve, sketch | 6 | 98.9 % | 99.8 % | 99.9 % | |
+| Quantum circuit (quantikz) | blk_qc | 99.2 % | 100 % | 100 % | 68.4 % |
+| Tree (forest) | blk_forest | 91.7 % | 100 % | 100 % | 69.2 % |
+| Commutative diagram (tikz-cd) | blk_cd | 97.9 % | 100 % | 100 % | 96.6 % |
+| Karnaugh map | blk_kmap | 99.5 % | 100 % | 100 % | 85.2 % |
+| Timing diagram (tikz-timing) | blk_timing | 99.1 % | 99.8 % | 100 % | 86.5 % |
+| Automaton | blk_automata | 99.4 % | 100 % | 100 % | 98.5 % |
+| Circuit (circuitikz) | blk_cz | 93.9 % | 98.4 % | 100 % | 97.7 % |
+| Chemistry (chemfig) | blk_chem | 91.2 % | 100 % | 100 % | 100 % |
+| ZX calculus | blk_zx | 100 % | 100 % | 100 % | 100 % |
+| Bloch sphere | blk_bloch | 94.1 % | 97.7 % | 99.2 % | 97.7 % |
+| Feynman diagram | blk_feynman | 90.9 % | 97.4 % | 100 % | 97.4 % |
+| 3D geometry (tikz-3dplot) | blk_geo3d | 89.5 % | 97.0 % | 100 % | 97.0 % |
+| **All 45 figures** (mean / median) | | 97.3 / 99.0 % | **99.5 / 99.9 %** | 99.9 / 100 % | |
 
-Rows with several figures show the mean.
+Rows with several figures show the mean. The last column is the same figures scored on the 1.21.0 release,
+before this round of fixes (blank where that figure wasn't scored then). On the 34 figures scored both times,
+the 0.5 mm mean went from 95.0 % to 99.4 %.
+
+Harder cases, scored separately (0.5 mm / 1 mm):
+
+| Case | ≤ 0.5 mm | ≤ 1 mm |
+| --- | ---: | ---: |
+| Quantum: gate over several wires | 99.9 % | 100 % |
+| Quantum: gate groups with labels | 97.8 % | 100 % |
+| tikz-cd: tall and deep cells (∏, ∑) | 100 % | 100 % |
+| forest: probability tree (per-node `grow`) | 100 % | 100 % |
+| forest: syntax tree with roofs | 100 % | 100 % |
+| forest: org chart (forked edges) | 97.1 % | 100 % |
+| forest: folder tree | 87.6 % | 99.1 % |
+| circuitikz: voltage arrows (`v=`) | 100 % | 100 % |
+| circuitikz: labels and currents on one part | 94.1 % | 99.3 % |
+
+## What changed in this round
+
+- **Quantum circuits:** wires, gates and meters now land on LaTeX's (they were about 0.1 cm off). Gate height
+  is the text's height plus quantikz's padding, the target circle and meters use TeX's real em, and the
+  canvas measures the picture the way TeX does, so the exported figure centres on the same point.
+- **Trees:** levels are spaced by forest's own rule (font-size based `l`, then pushed clear by `l sep`),
+  node boxes are as tall as their letters rather than a whole line, and nodes sit on their baseline. Trees
+  were about 18 % too tall. Each node can now turn its own children (`grow`), linguistics trees use
+  `sn edges`, and forked and folder trees follow forest's spacing.
+- **Commutative diagrams:** cells hang on their baseline with tikz-cd's spacing, so rows with tall or deep
+  maths (∏, ∑, fractions) are spaced as in LaTeX.
+- **Plots:** grid lines are as light as pgfplots', the top tick labels show, axis labels sit where pgfplots
+  puts them, 3D plots draw their hidden box edges grey, and surface meshes are as faint as in the PDF.
+- **Timing diagrams and Karnaugh maps:** row names, grids and variable names sit where the packages put
+  them.
+- **Circuits:** voltage arrows (`v=`) are drawn as circuitikz's curved arrow with the label under it,
+  current arrows (`i=`) are bigger and in the right place, the `l_=`, `a_=`, `v_=`, `i_=` forms are shown,
+  and top labels and node text (ground, supply, transistor) sit where circuitikz puts them.
+- **Automata:** labels above an edge sit 0.09 cm lower, as in LaTeX.
+- **Arrow tips:** re-derived from `arrows.meta`. Hooks were too big on the canvas (not in LaTeX), Square,
+  Diamond, Bar, Bracket and Parenthesis tips now have LaTeX's size, and To, harpoon and reversed tips no
+  longer overshoot the end of the line.
+- **Ticked shafts** carry their ticks under the arrowhead, as LaTeX does.
+- **Bricks** fill exports at the canvas's brick size and line width.
+- **Translucent shapes** export as one faded group (`transparency group`), so arrowheads and outlines no
+  longer get darker where they overlap the line or fill. Pasting that code back in keeps the opacity.
+- **Bloch sphere** arrowheads have pdflatex's size.
 
 ## Samples
 
 Each image is three panels: the app, LaTeX, and an overlay. In the overlay, **dark** is drawn by both, **red**
-only by the app and **blue** only by LaTeX. A thin red/blue fringe is half-pixel noise. A doubled shape is a
-real shift.
+only by the app and **blue** only by LaTeX. A thin red/blue fringe is half-pixel noise or the heavier canvas
+font. A doubled shape is a real shift.
+
+**Quantum circuit: 100 % within 0.5 mm** (was 68 % in 1.21.0). Wires, gates and meters coincide.
+
+![Bell circuit, app vs LaTeX](docs/latex-parity/blk_qc.png)
+
+**Tree: 100 % within 0.5 mm.** Levels, edges and labels coincide, including per-node growth. (The basic tree
+figure went from 69 % to 100 %.)
+
+![forest probability tree, app vs LaTeX](docs/latex-parity/forest_prob.png)
+
+**Circuit voltage arrow: 100 % within 0.5 mm.** The canvas now draws circuitikz's curved `v=` arrow.
+
+![circuitikz voltage arrow, app vs LaTeX](docs/latex-parity/cz_v1.png)
+
+**Timing diagram: 99.8 % within 0.5 mm** (was 86.5 %).
+
+![Timing diagram, app vs LaTeX](docs/latex-parity/blk_timing.png)
+
+**3D plot: 98.6 % within 0.5 mm** (was 80.7 %). Grey hidden box edges and grid as in pgfplots.
+
+![3D scatter plot, app vs LaTeX](docs/latex-parity/plot_scatter3d.png)
+
+**Arrow tips at 2 pt: 99.2 % within 0.5 mm.** Every tip in the library, thick enough to see its shape.
+
+![Arrow tips at 2pt, app vs LaTeX](docs/latex-parity/tip_w2.png)
 
 **Symbols: 100 % within 0.5 mm.** Every library symbol lands on the same pixels.
 
@@ -74,40 +140,14 @@ real shift.
 
 ![chemfig acetic acid and aspirin, app vs LaTeX](docs/latex-parity/blk_chem.png)
 
-**3D solids: 99.8 % within 0.5 mm.** Projection, shading and hidden edges match.
-
-![3D primitives, app vs LaTeX](docs/latex-parity/prim3d_a.png)
-
-**2D plot: 99.3 % within 0.5 mm.** Curves, axes and ticks coincide. Only the axis label sits slightly lower.
-
-![Function plot, app vs LaTeX](docs/latex-parity/plot_function.png)
-
-**Automaton: 98.5 % within 0.5 mm.** States and arrows coincide. Edge labels sit about 0.05 cm higher on the
-canvas.
-
-![Automaton, app vs LaTeX](docs/latex-parity/blk_automata.png)
-
-**Timing diagram: 86.5 % within 0.5 mm.** The waveforms line up horizontally, but the canvas draws the rows
-about 0.06 cm higher.
-
-![Timing diagram, app vs LaTeX](docs/latex-parity/blk_timing.png)
-
-**Quantum circuit: 54 % within 0.5 mm, 84 % within 1 mm.** It has the same gates in the same places, but the
-LaTeX wires sit about 0.1 cm lower and the canvas gate boxes are slightly wider.
-
-![Bell circuit, app vs LaTeX](docs/latex-parity/blk_qc.png)
-
-**Tree: 53 % within 0.5 mm.** forest spaces levels further apart, so the LaTeX tree is about 18 % taller.
-
-![forest tree, app vs LaTeX](docs/latex-parity/blk_forest.png)
-
 ## Quirks you may notice
 
 ### Everywhere
 
 - **Fonts.** The canvas typesets maths with KaTeX/Temml in Latin Modern-like fonts. LaTeX uses Computer
-  Modern, or whatever your preamble loads. Letter shapes are near-identical, but the canvas often renders them
+  Modern, or whatever your preamble loads. Letter shapes are near-identical, but the canvas renders them
   slightly heavier. Character widths can differ by a hair, so a long label may end 0.5–1 mm earlier or later.
+  This is now the largest remaining difference.
 - **Your preamble wins.** If your document loads another font package (`times`, `libertine`, `fourier`…) or
   changes `\tikzset` defaults, LaTeX follows your document, not the canvas.
 - **Packages.** The first lines of every export list what it needs (`% Requires: \usepackage{tikz}
@@ -115,35 +155,36 @@ LaTeX wires sit about 0.1 cm lower and the canvas gate boxes are slightly wider.
   `tikz-timing`, `chemfig` 1.6 or `zx-calculus`. Update TeX Live, or use Overleaf, which is current.
 - **Wrapped text.** A text box with a fixed width breaks lines with LaTeX's own rules. The words per line can
   differ from the canvas in a long paragraph.
-- **Transparency.** Translucent arrows get slightly darker tips in the PDF, where the shaft and head overlap.
 
-### Arrows and fills
+### Fills
 
-- **Hooks** tips are about 1.5× bigger in LaTeX, and open **Square** tips about 1.3× bigger.
-- The **Bricks** fill pattern has twice the brick size in LaTeX. Other patterns match.
-- **Ticked** shafts get one extra tick under the arrowhead at the end of the path in LaTeX.
+- **Pattern position.** Lines, Hatch, Dots and Bricks have the same spacing and line width in LaTeX, but
+  TikZ lines its pattern tiles up with the page corner, so the stripes or dots can be shifted inside the
+  shape. The canvas can't predict where your page puts the picture.
+- **Translucent symbols** (library symbols, balls, dots and text with opacity) still fade fill and outline
+  separately in LaTeX, so overlaps look slightly darker.
 
 ### Plots (pgfplots)
 
-- The x-axis label sits about 0.1 cm lower on the canvas.
-- The topmost y tick label (for example "1" on a 0–1 axis) is missing on the canvas. LaTeX prints it.
-- Grid lines are lighter grey on the canvas. This is most of the gap in the line and scatter scores.
-- **3D plots:** view angles are exact. Axis labels can be up to 0.2 cm off. The canvas draws every box edge
-  black, where pgfplots draws the front ones grey, and draws the surface mesh slightly darker.
+- **3D plots:** axis-label positions were tuned at the default view (25°/30°). At other view angles a label
+  can sit up to about 1 mm from where pgfplots puts it.
 
 ### Blocks
 
-- **Quantum circuits (quantikz):** wires about 0.1 cm lower in LaTeX, and canvas gates about 0.08 cm wider.
-  Loading `quantikz2` also restyles `tikz-cd` arrows, so put quantum and commutative diagrams in separate
-  documents (or separate `standalone` files) if both must look exactly like the canvas.
-- **Trees (forest):** LaTeX levels are about 18 % further apart (about 0.35 cm over two levels).
-- **Commutative diagrams (tikz-cd):** same grid and arrows, with labels about 0.1 cm apart.
-- **Circuits (circuitikz):** component labels sit about 0.13 cm higher in LaTeX.
-- **Bloch sphere:** arrowheads about 1.5× bigger in LaTeX, and the ball shading darkens sooner at the rim.
-- **Timing diagrams:** rows about 0.06 cm higher on the canvas. Timing options the canvas doesn't model are
-  kept in the code, so LaTeX still applies them, but the canvas doesn't preview them.
-- **Karnaugh maps:** the grid about 0.06 cm further left on the canvas, and the variable names (`CD`, `AB`)
-  about 0.15 cm higher.
+- **Quantum circuits (quantikz):** classical double wires show a clearer gap on the canvas. Loading
+  `quantikz2` also restyles `tikz-cd` arrows, so put quantum and commutative diagrams in separate documents
+  (or separate `standalone` files) if both must look exactly like the canvas.
+- **Trees (forest):** folder trees can differ by 1–2 px per row. `tier`, `fit`, `calign` variants and growth
+  at angles other than multiples of 90° are approximate on the canvas (LaTeX still applies them).
+- **Circuits (circuitikz):** the `v=` arrow's curve was fitted on resistors and capacitors; on other parts it
+  is close but not exact. Voltage labels on sources are plain text on the canvas. A part with a label, an
+  annotation and a voltage at once doesn't overlap them the way circuitikz does. Op-amp `+`/`−` signs can
+  sit slightly apart.
+- **Automata:** `bend left` edges can be about 1 mm off, and the loop on accepting states has a slightly
+  different shape.
+- **Bloch sphere:** the ball shading darkens a little sooner at the upper-left rim.
+- **Timing diagrams:** timing options the canvas doesn't model are kept in the code, so LaTeX still applies
+  them, but the canvas doesn't preview them.
 - **Chemistry:** submolecules (`\definesubmol`), `\chemmove` arrows and other code the canvas can't draw stay
   in the export, so LaTeX draws them even though the canvas doesn't.
 - **Feynman diagrams** placed by hand (the editor's vertices) build with pdflatex and match. Automatic layout
@@ -158,7 +199,9 @@ LaTeX wires sit about 0.1 cm lower and the canvas gate boxes are slightly wider.
 
 ## Reproduce it
 
-The harness is in [docs/latex-parity/tools/](docs/latex-parity/tools/). `parity_server.py` serves the app
-and compiles what the page posts. `harness.js` composes the three panels. `scenes.js` holds the test figures.
-To score a composite, take its overlay panel and count the ink pixels that have the other colour's ink within
-the tolerance.
+The harness is in [docs/latex-parity/tools/](docs/latex-parity/tools/):
+
+- `parity_server.py` serves the app and compiles what the page posts.
+- `harness.js` composes the three panels, `scenes.js` and `scenes-kit.js` hold the test figures.
+- `cdp.mjs` drives a headless Chrome on that page: `CDP=<port> node cdp.mjs run blk_qc blk_forest …`.
+- `match.py <figure.cmp.png …>` prints the scores at 0, 0.2, 0.5 and 1 mm.

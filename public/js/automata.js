@@ -24,6 +24,7 @@
   // TikZ's sizes at 10pt
   const EM = 10 * PT, EX = 4.3 * PT;
   const INNER = 0.3333 * EM;
+  const ABOVE = 0.09 * PX;         // labels above an edge sit this much lower than the text box suggests
   const LW = 0.4 * PT;
   const STATE_MIN = 2.5 * EM;      // minimum size of a state
   const DBL = 0.6 * PT;            // double distance (accepting)
@@ -443,7 +444,7 @@
         const line = polyline([p0, p1]);
         arrowed(line, { ...P0, arrow: { s: null, e: '>' }, color: P0.color }, paths, tips, 'init:' + n.name);
         if (S.initText) {
-          const t = shown(S.initText), b = TD.textBox(t, TEXT), d = INNER + Math.abs(ux) * ((b.w - 2) / 2) + Math.abs(uy) * (0.4 * b.h);
+          const t = shown(S.initText), b = TD.textBox(t, TEXT), d = INNER + Math.abs(ux) * ((b.w - 2) / 2) + Math.abs(uy) * (0.4 * b.h) - Math.max(0, -uy) * ABOVE;
           texts.push({ t, x: p0[0] + ux * d, y: p0[1] + uy * d, b });
         }
       }
@@ -495,7 +496,8 @@
           // left of the direction of travel (y down on screen)
           ux = (tan[1] / tl) * side; uy = (-tan[0] / tl) * side;
         }
-        const dd = T.dir || T.auto ? INNER + Math.abs(ux) * ((b.w - 2) / 2) + Math.abs(uy) * (0.4 * b.h) : 0;
+        // TeX's south anchor sits on the text's depth, so a label above its edge is closer than the box's middle suggests
+        const dd = T.dir || T.auto ? INNER + Math.abs(ux) * ((b.w - 2) / 2) + Math.abs(uy) * (0.4 * b.h) - Math.max(0, -uy) * ABOVE : 0;
         label = { t, x: p[0] + ux * dd, y: p[1] + uy * dd, b, color: T.textColor || T.color };
         texts.push(label);
       }

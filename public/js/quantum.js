@@ -6,6 +6,9 @@
   const { r2, esc } = TD.util;
   const PX = TD.PX_PER_CM, K = TD.PT_PER_PX;
 
+  // em (the font's quad) over the nominal size, for TeX's standard sizes
+  const QUAD = { tiny: 1.361, scriptsize: 1.139, footnotesize: 1.0625, small: 1.028, normalsize: 1, large: 0.979, Large: 0.979, LARGE: 0.917, huge: 0.917, Huge: 0.917 };
+
   TD.QC_DEFAULT = [
     '\\begin{quantikz}',
     '\\lstick{\\ket{0}} & \\gate{H} & \\ctrl{1} & \\meter{} \\\\',
@@ -171,15 +174,20 @@
     const st = { size: s.size || 'normalsize', font: s.font };
     const stSmall = { size: 'footnotesize', font: s.font };
     const E = TD.sizePx(st.size);
+    // TeX's em is the font's quad, not its nominal size (cmr12 at \large: 11.75pt, not 12pt): em-based sizes use Q
+    const Q = E * (QUAD[st.size] || 1);
+    // height + depth of a text box as TeX sets it (KaTeX's strut), rather than the line the canvas reserves for it
+    const inkH = (b) => { const m = /katex-strut" style="height:([\d.]+)em/.exec(b.html || ''); return m ? +m[1] * b.px : b.h * 0.8; };
     // sizes follow quantikz2: gates are their text plus 4pt a side, meters 2em x 1.5em, control dots 0.12cm,
     // the target 0.3cm across. Text boxes are measured a little wider than the ink, and a line high.
-    const G = 1.5 * E;             // a one-line gate's height (and a meter's)
-    const gw = (b) => b.w + 0.55 * E, gh = (b) => Math.max(G, b.h + 0.2 * E);
-    const DOT = 0.06 * PX, TARG = 0.42 * E, SW = 0.3 * E;
+    const G = 1.5 * Q;             // a meter's height (1.5em)
+    const gw = (b) => b.w + 0.55 * E, gh = (b) => inkH(b) + 8 / K; // text height + depth, and 4pt inner sep a side
+    const LW = 0.8 / K, DOT = 0.06 * PX, TARG = 3 * Math.SQRT2 / K, SW = 0.35 * Q; // the target is a circle of an empty node with 3pt inner sep: radius 3pt*sqrt 2
     const LGAP = E / 3;            // a stick label's gap to its wire (TikZ's label inner sep)
     const box = (t, small) => TD.textBox(t, small ? stSmall : st);
     const P = parse(s.src);
     const rows = P.rows, R = rows.length, C = Math.max(0, ...rows.map((r) => r.length));
+    const PAD = 10 / 3 / K, PADX = PAD * 0.6, meterTops = [];
     const ops = [], warnings = P.warnings.slice();
     const warn = (w) => { if (!warnings.includes(w)) warnings.push(w); };
     // \gate[options][min width][min height]{…}: the cell's minimum size (it widens the column, as in quantikz),
@@ -200,15 +208,16 @@
       let w = 0, h = 0;
       const k = it.name;
       if (k === 'gate') { const b = box(math(it.a[0])), m = gateMin(it); w = Math.max(gw(b), m.w); h = wiresOf(it) > 1 ? 0 : Math.max(gh(b), m.h); }
-      else if (k === 'meter' || k === 'meterD' || k === 'measuretab' || k === 'measure') { const b = it.a[0] && k !== 'meter' ? box(math(it.a[0])) : { w: 0, h: 0 }; w = Math.max(2 * E, gw(b)); h = G; }
-      else if (k === 'ctrl' || k === 'octrl' || k === 'control' || k === 'ocontrol') w = 2 * DOT;
-      else if (k === 'targ') { w = 2 * TARG; h = 2 * TARG; }
-      else if (k === 'swap' || k === 'targX') w = 2 * SW;
-      else if (k === 'phase') { const b = box(math(it.a[0]), true); w = 2 * DOT + b.w; }
-      else if (k === 'push' || k === 'midstick') { const b = box(math(it.a[0])); w = b.w + GAP; h = b.h; }
-      else if (k === 'lstick' || k === 'rstick') { const b = box(stickText(it.a[0])); h = wiresOf(it) > 1 ? 0 : b.h; } // the label hangs outside its column
+      else if (k === 'meter' || k === 'meterD' || k === 'measuretab' || k === 'measure') { const b = it.a[0] && k !== 'meter' ? box(math(it.a[0])) : { w: 0, h: 0 }; w = Math.max(2 * Q, gw(b)); h = G; }
+      // drawn nodes count half a line width more on every side (TikZ's outer sep); a swap's crosses add nothing to the cell
+      else if (k === 'ctrl' || k === 'octrl' || k === 'control' || k === 'ocontrol' || k === 'phase') w = h = 2 * DOT + LW;
+      else if (k === 'targ') w = h = 2 * TARG + LW;
+      else if (k === 'push' || k === 'midstick') { const b = box(math(it.a[0])); w = b.w - 2; h = inkH(b); }
+      // a stick label hangs outside its column and takes no room in its row (it is a label, not a cell)
       else if (k === 'ground') { w = 1.2 * E; }
       colW[c] = Math.max(colW[c], w); rowH[r] = Math.max(rowH[r], h);
+      // a gate over several wires gives its first and last row its own height (the rows between stay as they are)
+      if (k === 'gate' && wiresOf(it) > 1) { const b = box(math(it.a[0])), hh = Math.max(gh(b), gateMin(it).h); for (const q of [r, Math.min(R, r + wiresOf(it)) - 1]) rowH[q] = Math.max(rowH[q], hh); }
     }
     // spacing (quantikz: row sep / column sep, optionally between origins)
     const rs = length(P.env.map['row sep'], E) || { px: 0.5 * PX }, cs = length(P.env.map['column sep'], E) || { px: 0.5 * PX };
@@ -282,8 +291,8 @@
       const x1 = colL[c] - gpad, x2 = colR(c2) + gpad, y1 = rowT[r] - gpad, y2 = rowT[r2_] + rowH[r2_] + gpad;
       const below = /below/.test(o.map['label style'] || ''), gs = o.map.style || '';
       ops.push({ k: 'rect', x: x1, y: y1, w: x2 - x1, h: y2 - y1, dash: /dash|dott/.test(gs), rx: /rounded/.test(gs) ? 4 / K : 0, fill: false });
-      // the label: above the box, raised 0.2cm (quantikz's group label style)
-      if (plain(it.a[0])) { const b = box(plain(it.a[0])); ops.push({ k: 'text', t: plain(it.a[0]), x: (x1 + x2) / 2, y: below ? y2 + 0.2 * PX : y1 - 0.2 * PX, b }); }
+      // the label: centred on the box edge and raised 0.2cm (quantikz's group label style)
+      if (plain(it.a[0])) { const b = box(plain(it.a[0])); ops.push({ k: 'text', t: plain(it.a[0]), x: (x1 + x2) / 2, y: below ? y2 - 0.2 * PX : y1 - 0.2 * PX, b }); } // 'below' only moves the anchor: the 0.2cm yshift still raises it
     }
 
     // ---- elements
@@ -294,15 +303,16 @@
         const m = gateMin(it), cellH = Math.max(gh(b), m.h);
         // the box fits its cells; a style's minimum size then grows it in place, over its neighbours
         const w = Math.max(gw(b), m.w, m.sw);
-        let y1 = n > 1 ? cy[r] - G / 2 : Y - cellH / 2;
-        let y2 = n > 1 ? cy[r + n - 1] + G / 2 : Y + cellH / 2;
+        let y1 = Y - cellH / 2;
+        let y2 = n > 1 ? cy[r + n - 1] + cellH / 2 : Y + cellH / 2;
         if (m.sh > y2 - y1) { const ym = (y1 + y2) / 2; y1 = ym - m.sh / 2; y2 = ym + m.sh / 2; }
         if (/\$/.test(it.a[0] || '')) warn('\\gate{…} is already maths in quantikz: drop its $ signs, or LaTeX stops with "Missing $ inserted"');
         if (m.sw > Math.max(gw(b), m.w)) warn('style={minimum width=…} widens the gate box but not its column, so it covers its neighbours in LaTeX too; \\gate[…][width]{…} widens the column');
         ops.push({ k: 'rect', x: X - w / 2, y: y1, w, h: y2 - y1, fill: true, gate: [r, c], fit: [gw(b), gh(b)] });
         if (t) ops.push({ k: 'text', t, x: X, y: (y1 + y2) / 2, b });
       } else if (k === 'meter') {
-        const w = 2 * E, h = G, x1 = X - w / 2, x2 = X + w / 2, u = 0.1 * PX;
+        const w = 2 * Q, h = G, x1 = X - w / 2, x2 = X + w / 2, u = 0.1 * PX;
+        meterTops.push({ x: X, y: Y - h / 2, w });
         ops.push({ k: 'rect', x: x1, y: Y - h / 2, w, h, fill: true });
         // the dial: an arc 'bend left=50' between points 0.1cm in from the sides, 0.06cm below the middle
         const ay = Y + 0.6 * u, half = (x2 - x1 - 2 * u) / 2, rr = half / Math.sin((50 * Math.PI) / 180);
@@ -314,11 +324,11 @@
         ops.push({ k: 'path', solid: true, d: `M${r2(nx2)},${r2(ny2)}L${r2(bx - uy * aw)},${r2(by + ux * aw)}L${r2(bx + uy * aw)},${r2(by - ux * aw)}Z`, bb: [nx1, ny2, nx2, ny1] });
         if (it.a[0]) { const b = box(math(it.a[0]), true); ops.push({ k: 'text', t: math(it.a[0]), small: true, x: X, y: Y - h / 2 - b.h / 2 - 1, b }); }
       } else if (k === 'meterD') {
-        const t = math(it.a[0]), b = box(t), w = Math.max(2 * E, gw(b)), h = G, x1 = X - w / 2, y1 = Y - h / 2, rr = h / 2;
+        const t = math(it.a[0]), b = box(t), w = Math.max(2 * Q, gw(b)), h = G, x1 = X - w / 2, y1 = Y - h / 2, rr = h / 2;
         ops.push({ k: 'path', fill: true, d: `M${r2(x1)},${r2(y1)}H${r2(x1 + w - rr)}A${r2(rr)},${r2(rr)} 0 0,1 ${r2(x1 + w - rr)},${r2(y1 + h)}H${r2(x1)}Z`, bb: [x1, y1, x1 + w, y1 + h] });
         if (t) ops.push({ k: 'text', t, x: X - rr / 4, y: Y, b });
       } else if (k === 'measuretab' || k === 'measure') {
-        const t = math(it.a[0]), b = box(t), w = Math.max(2 * E, gw(b)), h = G, x1 = X - w / 2, y1 = Y - h / 2, tip = h * 0.3;
+        const t = math(it.a[0]), b = box(t), w = Math.max(2 * Q, gw(b)), h = G, x1 = X - w / 2, y1 = Y - h / 2, tip = h * 0.3;
         ops.push({ k: 'path', fill: true, d: `M${r2(x1)},${r2(y1)}H${r2(x1 + w - tip)}L${r2(x1 + w)},${r2(Y)}L${r2(x1 + w - tip)},${r2(y1 + h)}H${r2(x1)}Z`, bb: [x1, y1, x1 + w, y1 + h] });
         if (t) ops.push({ k: 'text', t, x: X - tip / 3, y: Y, b });
       } else if (k === 'ctrl' || k === 'control') ops.push({ k: 'dot', x: X, y: Y, r: DOT, open: false });
@@ -371,10 +381,14 @@
     for (const o of ops) {
       if (o.k === 'wire' || o.k === 'line') ext(Math.min(o.x1, o.x2), Math.min(o.y1, o.y2) - 1.5, Math.max(o.x1, o.x2), Math.max(o.y1, o.y2) + 1.5);
       else if (o.k === 'rect') ext(o.x, o.y, o.x + o.w, o.y + o.h);
-      else if (o.k === 'text') ext(o.x - o.b.w / 2, o.y - o.b.h / 2, o.x + o.b.w / 2, o.y + o.b.h / 2);
+      else if (o.k === 'text') ext(o.x - o.b.w / 2 - PADX, o.y - o.b.h / 2 - PAD, o.x + o.b.w / 2 + PADX, o.y + o.b.h / 2 + PAD); // a label node keeps its inner sep
       else if (o.k === 'path') ext(...o.bb);
       else if (o.k === 'dot' || o.k === 'targ') ext(o.x - o.r, o.y - o.r, o.x + o.r, o.y + o.r);
     }
+    // TeX measures the picture by its matrix node, which has an inner sep (1/3 of a 10pt em, whatever the circuit's size)
+    // all round the grid of cells, and a meter carries an empty label node above it (0.1cm up, about an ex tall)
+    ext(colL[0] - PAD, rowT[0] - PAD, colR(C - 1) + PAD, rowT[R - 1] + rowH[R - 1] + PAD);
+    for (const m of meterTops) ext(m.x - m.w / 2, m.y - 0.1 * PX - 0.44 * Q, m.x + m.w / 2, m.y);
     // nothing drawn (every wire switched off): the grid's own extent
     if (!(x2 > x1)) { x1 = colL[0]; x2 = colL[C - 1] + colW[C - 1]; }
     if (!(y2 > y1)) { y1 = rowT[0]; y2 = rowT[R - 1] + rowH[R - 1]; }

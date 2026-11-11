@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.21.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.22.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -182,19 +182,19 @@
         return { svg: `<path d="M${pt(P)}L${pt(at(L, W))}L${pt(at(0.675 * L, 0))}L${pt(at(L, -W))}Z" fill="${color}"/>`, back: 0.6 * L };
       case 'latex':
         return {
-          svg: `<path d="M${pt(P)}Q${pt(at(0.5 * L, W * 0.9))} ${pt(at(L, W))}L${pt(at(L, -W))}Q${pt(at(0.5 * L, -W * 0.9))} ${pt(P)}Z" fill="${color}"/>`,
+          svg: `<path d="M${pt(P)}C${pt(at(0.1228 * L, 0.0779 * W))} ${pt(at(0.6626 * L, 0.5195 * W))} ${pt(at(L, W))}L${pt(at(L, -W))}C${pt(at(0.6626 * L, -0.5195 * W))} ${pt(at(0.1228 * L, -0.0779 * W))} ${pt(P)}Z" fill="${color}"/>`,
           back: 0.8 * L,
         };
       case 'to': {
-        const l = 0.6 * L;
+        const l = 0.6 * L, sh = 0.85 * w;
         return {
-          svg: `<path d="M${pt(at(l, 0.75 * l))}Q${pt(at(0.25 * l, 0.15 * l))} ${pt(P)}Q${pt(at(0.25 * l, -0.15 * l))} ${pt(at(l, -0.75 * l))}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`,
+          svg: `<path d="M${pt(at(l + sh, 0.75 * l))}Q${pt(at(0.25 * l + sh, 0.15 * l))} ${pt(at(sh, 0))}Q${pt(at(0.25 * l + sh, -0.15 * l))} ${pt(at(l + sh, -0.75 * l))}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`,
           back: w * 0.5,
         };
       }
       case 'bar': {
-        const H = (1.5 + 2.25 * lw) / K;
-        return { svg: `<path d="M${pt(at(0, H))}L${pt(at(0, -H))}" stroke="${color}" stroke-width="${w}"/>`, back: 0 };
+        const H = (1.5 + 2 * lw) / K;
+        return { svg: `<path d="M${pt(at(w / 2, H))}L${pt(at(w / 2, -H))}" stroke="${color}" stroke-width="${w}"/>`, back: 0 };
       }
       case 'circle':
       case 'ocircle': {
@@ -206,8 +206,8 @@
       }
       case 'stealthr': case 'latexr': case 'tor': {
         // same tip turned round: its back sits on the end of the path
-        const base = type.slice(0, -1), l = base === 'to' ? 0.6 * L : base === 'latex' ? L : 0.675 * L;
-        const q = tip(base, at(l, 0), { x: -u.x, y: -u.y }, w, color);
+        const base = type.slice(0, -1), l = base === 'to' ? 0.6 * L : L;
+        const q = tip(base, at(l + (base === 'to' ? 1.3 * w : 0), 0), { x: -u.x, y: -u.y }, w, color);
         return { svg: q.svg, back: base === 'to' ? w * 0.5 : 0.3 * L };
       }
       case 'stealth2': case 'latex2': case 'to2': {
@@ -217,40 +217,48 @@
       }
       case 'harpoon': case 'harpoonr': {
         const l = 0.75 * L, sgn = type === 'harpoon' ? -1 : 1;
-        return { svg: `<path d="M${pt(P)}L${pt(at(l, sgn * 0.6 * l))}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`, back: w * 0.5 };
+        return { svg: `<path d="M${pt(at(w * 0.45, 0))}L${pt(at(l + w * 0.45, sgn * 0.6 * l))}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`, back: w * 0.5 };
       }
       case 'hooks': case 'hook': {
-        const r = 0.3 * L, sides = type === 'hooks' ? [-1, 1] : [1];
+        // arrows.meta Hooks: length 0.75pt+1.25lw; two forward half-circles of radius length-lw/2 whose junction sits `length` behind the path end
+        const l = (0.75 + 1.25 * lw) / K, r = (0.75 + 0.75 * lw) / K, sides = type === 'hooks' ? [-1, 1] : [1], J = at(l, 0);
         const d = sides.map((sg) => {
-          const Q = at(0, sg * 2 * r), M = at(-r, sg * r);
-          const cr = (M.x - P.x) * (Q.y - M.y) - (M.y - P.y) * (Q.x - M.x);
-          return `M${pt(P)}A${r2(r)},${r2(r)} 0 0,${cr > 0 ? 1 : 0} ${pt(Q)}`;
+          const Q = at(l, sg * 2 * r), M = at(l - r, sg * r);
+          const cr = (M.x - J.x) * (Q.y - M.y) - (M.y - J.y) * (Q.x - M.x);
+          return `M${pt(J)}A${r2(r)},${r2(r)} 0 0,${cr > 0 ? 1 : 0} ${pt(Q)}`;
         }).join('');
-        return { svg: `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`, back: 0 };
+        return { svg: `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`, back: l - 0.25 * w };
       }
       case 'bar2': case 'tobar': {
-        const H = (1.5 + 2.25 * lw) / K, g = Math.max(2 * w, 0.25 * L);
-        const bar = (a) => `<path d="M${pt(at(a, H))}L${pt(at(a, -H))}" stroke="${color}" stroke-width="${w}"/>`;
+        const H = (1.5 + 2 * lw) / K, g = Math.max(2 * w, 0.25 * L);
+        const bar = (a) => `<path d="M${pt(at(a + w / 2, H))}L${pt(at(a + w / 2, -H))}" stroke="${color}" stroke-width="${w}"/>`;
         if (type === 'bar2') return { svg: bar(0) + bar(g), back: 0 };
-        const t2 = tip('to', at(w, 0), u, w, color);
+        const t2 = tip('to', at(1.5 * w, 0), u, w, color);
         return { svg: bar(0) + t2.svg, back: 0 };
       }
       case 'bracket': case 'bracketr': {
-        const H = (1.5 + 2.25 * lw) / K, d = (type === 'bracket' ? 1 : -1) * 0.35 * H;
-        return { svg: `<path d="M${pt(at(d, H))}L${pt(at(0, H))}L${pt(at(0, -H))}L${pt(at(d, -H))}" fill="none" stroke="${color}" stroke-width="${w}"/>`, back: 0 };
+        // Tee Barb: bar width 3pt+4lw, arms 0.75pt+lw long, the bar's front edge on the path end
+        const H = (1.5 + 2 * lw) / K - w / 2, arm = (0.75 + lw) / K, rev = type === 'bracketr', x0 = rev ? arm + w / 2 : w / 2, d = rev ? -arm : arm;
+        return { svg: `<path d="M${pt(at(x0 + d, H))}L${pt(at(x0, H))}L${pt(at(x0, -H))}L${pt(at(x0 + d, -H))}" fill="none" stroke="${color}" stroke-width="${w}"/>`, back: 0 };
       }
       case 'paren': case 'parenr': {
-        const H = (1.5 + 2.25 * lw) / K, d = (type === 'paren' ? 1 : -1) * 0.45 * H;
-        return { svg: `<path d="M${pt(at(d, H))}Q${pt(at(-d, 0))} ${pt(at(d, -H))}" fill="none" stroke="${color}" stroke-width="${w}"/>`, back: 0 };
+        // Arc Barb[arc=120]: +-60 degree elliptical arc, length 1.725pt+2.3lw, width 2*length, front on the path end
+        const l = (1.725 + 2.3 * lw) / K, rx = l - w / 2, ry = l - w / 2, rev = type === 'parenr', pts = [];
+        for (let k = 0; k <= 24; k++) {
+          const a = ((60 - (120 * k) / 24) * Math.PI) / 180, x = rx * Math.cos(a);
+          pts.push(at(rev ? x : l - x, ry * Math.sin(a)));
+        }
+        return { svg: `<path d="M${pts.map(pt).join('L')}" fill="none" stroke="${color}" stroke-width="${w}"/>`, back: 0 };
       }
       case 'square': case 'osquare': case 'diamond': case 'odiamond': {
+        // Square: side 2.12pt+2.83lw. Turned Square (Kite): length 3pt+4lw. The tip's stroke sits inside that size.
         const open = type[0] === 'o', dia = type.endsWith('diamond');
-        const a = (2.39 + 3.19 * lw) / K / 2 * (dia ? 1.25 : 1);
-        const pts = dia ? [at(0, 0), at(a, a), at(2 * a, 0), at(a, -a)] : [at(0, a), at(2 * a, a), at(2 * a, -a), at(0, -a)];
+        const sz = (dia ? 3 + 4 * lw : 2.12132 + 2.828427 * lw) / K, a = sz / 2, e = open ? (dia ? Math.SQRT2 : 1) * w / 2 : 0;
+        const pts = dia ? [at(e, 0), at(a, a - e), at(2 * a - e, 0), at(a, e - a)] : [at(e, a - e), at(2 * a - e, a - e), at(2 * a - e, e - a), at(e, e - a)];
         const dd = 'M' + pts.map(pt).join('L') + 'Z';
         return open
-          ? { svg: `<path d="${dd}" fill="#fff" stroke="${color}" stroke-width="${w}" stroke-linejoin="miter"/>`, back: 2 * a }
-          : { svg: `<path d="${dd}" fill="${color}"/>`, back: a };
+          ? { svg: `<path d="${dd}" fill="#fff" stroke="${color}" stroke-width="${w}" stroke-linejoin="miter"/>`, back: 2 * a - w / 2 }
+          : { svg: `<path d="${dd}" fill="${color}"/>`, back: dia ? a : 2 * a - w / 2 };
       }
       case 'plus': {
         // TikZ's Rays[n=4] starts its rays half a step (45°) round, so it is a cross: ×
@@ -315,7 +323,7 @@
       out += `<path d="${dd}" fill="none" stroke="${col}" stroke-width="${r2(3 * s.width)}"${dash}/>` +
         `<path d="${dd}" fill="none" stroke="#fff" stroke-width="${r2(s.width)}"${dash}/>`;
     } else out += `<path d="${dd}" ${strokeAttrs(s, fillable && shaft === 'single')} stroke-linejoin="round"/>`;
-    if (shaft === 'ticks') out += `<path d="${tickPath(d, s)}" fill="none" stroke="${col}" stroke-width="${s.width}"/>`;
+    if (shaft === 'ticks') out += `<path d="${tickPath(full || d, s)}" fill="none" stroke="${col}" stroke-width="${s.width}"/>`;
     const mt = ext(s, 'midTip');
     if (mt !== 'none' && full) {
       const m = measurePath(full);
@@ -693,7 +701,7 @@
       if (a || b) { o.push(`${a}-${b}`); X.libs.add('arrows.meta'); }
     }
     if (TD.LINEISH.has(s.type)) o.push(...decoOpts(s, X, bends));
-    if (s.opacity != null && s.opacity < 1) o.push(`opacity=${f(s.opacity)}`);
+    if (s.opacity != null && s.opacity < 1 && !X.groupOpacity) o.push(`opacity=${f(s.opacity)}`);
     return o;
   }
   // Pick \draw / \fill / null depending on stroke & fill.
@@ -1386,7 +1394,15 @@
   TD.tikzBody = function (shapes, X) {
     shapes = shapes.filter((s) => !s.hidden); // a hidden layer is not exported
     X.scene = shapes;
-    const body = shapes.map((s) => T[s.type].tikz(s, X)).filter(Boolean);
+    // a translucent shape fades as one group (as on the canvas): fill and stroke separately would darken where they overlap
+    const GROUPED = new Set(['line', 'curve', 'poly', 'region', 'rect', 'ellipse', 'arc', 'spring']);
+    const body = shapes.map((s) => {
+      if (!(s.opacity != null && s.opacity < 1 && GROUPED.has(s.type))) return T[s.type].tikz(s, X);
+      X.groupOpacity = true;
+      let code;
+      try { code = T[s.type].tikz(s, X); } finally { X.groupOpacity = false; }
+      return code ? `\\begin{scope}[transparency group, opacity=${f(s.opacity)}]\n  ${code.replace(/\n/g, '\n  ')}\n\\end{scope}` : code;
+    }).filter(Boolean);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
     if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
     return [...defs, ...(defs.length ? [''] : []), ...body];
