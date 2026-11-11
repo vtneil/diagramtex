@@ -211,3 +211,26 @@ KIT.solid = () => SC.fig3d('solid', ['region', 'wedge', 'columns']);
 KIT.revolve = () => SC.fig3d('revolve', ['disk', 'washer', 'shell']);
 KIT.sketch3d_a = () => SC.fig3d('sketch3d', ['vectors', 'cylindrical', 'spherical']);
 KIT.sketch3d_b = () => SC.fig3d('sketch3d', ['plane', 'curve']);
+
+// ---- xy_* : xymatrix blocks
+const xyS = (src) => () => SC.block('xy', { src });
+KIT.blk_xy = () => SC.block('xy');
+KIT.xy_long = xyS('\\xymatrix{ 0 \\ar[r] & A \\ar[r]^{\\alpha} \\ar[d]_{f} & B \\ar[r]_{\\beta} \\ar[d]^{g} & C \\ar[r] \\ar[d]^{h} & 0 \\\\ 0 \\ar[r] & A\' \\ar[r]_{\\alpha\'} & B\' \\ar[r]^{\\beta\'} & C\' \\ar[r] & 0 }');
+KIT.xy_tips = xyS('\\xymatrix@R=3pc@C=3pc{ G \\ar@{->>}[r] \\ar@{>->}[d] & H \\ar@{=>}[d] \\\\ K \\ar@{|->}[r]^{\\phi} & L \\ar@{=}[u]^(.2){e} }');
+KIT.xy_bend = xyS('\\xymatrix{ X \\ar@/^/[r]^{f} \\ar@/_1pc/[r]_{g} & Y \\ar@<.5ex>[d]^{p} \\ar@<-.5ex>[d]_{q} \\\\ Z \\ar@{-->}[ur]^{r} & W \\ar@{_{(}->}[l]|{i} }');
+KIT.xy_lab = xyS('\\xymatrix{ A \\ar[r]^{f} & B }');
+KIT.xy_nolab = xyS('\\xymatrix{ A \\ar[r] & B }');
+KIT.xy_vlab = xyS('\\xymatrix{ A \\ar[d]^{g} \\\\ C }');
+KIT.cd_hook = () => SC.block('cd', { src: '\\begin{tikzcd}\n A \\arrow[r, hook] & B \\arrow[d, hook] \\\\ C & D \\arrow[l, hook\']\n\\end{tikzcd}' });
+KIT.xy_hook = xyS('\\xymatrix{ A \\ar@{^{(}->}[r] & B \\ar@{^{(}->}[d] \\\\ C & D \\ar@{_{(}->}[l] }');
+KIT.xy_curves = xyS('\\xymatrix@C=4pc{ A \\ar@/^/[r] \\ar@/_/[r] & B \\ar@/^1pc/[r] \\ar@/_2pc/[r] & C }');
+KIT.cd_hook2 = () => SC.block('cd', { src: '\\begin{tikzcd}\n A \\arrow[r, hook\'] & B \\arrow[d, hook\'] \\\\ C & D \\arrow[l, hook]\n\\end{tikzcd}' });
+KIT.cd_hookl = () => SC.block('cd', { src: '\\begin{tikzcd}\n A \\arrow[r, hookleftarrow] & B \\arrow[d, hookrightarrow] \\\\ & D\n\\end{tikzcd}' });
+KIT.xy_mix = xyS('\\xymatrix@C=3pc{ A \\ar[r]^{f} \\ar@{^{(}->}[d]_{g} \\ar@/^1.5pc/[rr]^{h} & B \\ar@{->>}[d]^(.3){p} \\ar@<.5ex>[r] \\ar@<-.5ex>[r]_{q} & C \\\\ D \\ar@{=>}[r] & E \\ar@{-->}[ur] \\ar@{}[r]|{\\circ} & F \\ar@{|->}[u] }');
+KIT.xy_sep = xyS('\\xymatrix@R=1pc@C=4pc{ A \\ar[r] \\ar[d] & B \\ar[d] \\\\ C \\ar[r] & D }');
+
+// ---- routes: xy turns, tikz-cd to paths, from=
+KIT.xy_turn = xyS("\\xymatrix{\n& H^{k+1}(M) \\ar[r]^<<<<<<<<<<<{i^*} & \\cdots \\\\\n& H^k(M) \\ar[r]^>>>>>{i^*} \n& H^k(U) \\oplus H^k(V) \\ar[r]^>>>>>{j^*} \n& H^k(U \\cap V) \\ar `[ul] `[l] `[lllu] |{d^*} `[l] [rlllu] \\\\\n&  *{}  & \\cdots \\ar[r]^<<<<<<<<<<{j^*} \n& H^{k-1}(U \\cap V) \\ar `[ul] `[l] `[lllu] |{d^*} `[l] [rlllu] }");
+KIT.cd_topath = () => SC.block('cd', { src: "\\tikzset{\ncurarrow/.style={\nrounded corners=8pt,\nexecute at begin to={every node/.style={fill=red}},\nto path={-- ([xshift=50pt]\\tikztostart.center)\n  |- (#1) node[fill=white] {$\\scriptstyle d^*$}\n  -| ([xshift=-40pt]\\tikztotarget.center)\n  -- (\\tikztotarget)}\n  }\n}\n\\begin{tikzcd}[cells={nodes={text height=2ex,text depth=0.75ex}}]\n  {} & & H^{k+1}(M) \\arrow{r}{i^*} & \\cdots \\\\\n  {} & & H^k(M) \\arrow{r}{i^*} & H^k(U) \\oplus H^k(V) \\arrow{r}{j^*}\n  \\arrow[draw=none]{u}[name=Y, shape=coordinate]{}\n  \\arrow[draw=none]{d}[name=Z,shape=coordinate]{}\n  & H^k(U \\cap V) \\arrow[curarrow=Y]{ull}{} \\\\\n  & & & \\cdots \\arrow{r}{j^*} & H^{k-1}(U \\cap V)\n  \\arrow[curarrow=Z]{ull}{} \\\\\n\\end{tikzcd}" });
+KIT.cd_from = () => SC.block('cd', { src: "\\begin{tikzcd}\n%first row\nA \\ar[rr] \\ar[dd] \n& \n& B \\ar[dd] \\ar[dr] \\ar[from=ddll,bend left=30]\n& \n\\\\\n%second row\n& E \\ar[rr] \\ar[dd] \\ar[from=ul,crossing over]\n& \n& F \\ar[dd]\n\\\\\n%third row\nC \\ar[rr] \\ar[dr] \n& \n& D \\ar[dr]\n& \n\\\\\n%forth row\n& G \\ar[rr] \\ar[from=uurr,bend left=30,crossing over]\n& \n& H\n\\end{tikzcd}" });
+KIT.cd_trail = () => SC.block('cd', { src: '\\begin{tikzcd}\n A \\arrow[r] & B \\\\\n C & D \\\\\n\\end{tikzcd}' });

@@ -195,6 +195,7 @@
         <li><a href="#parity">How close to LaTeX</a></li>
         <li><a href="#keys">Keyboard shortcuts</a></li>
         <li><a href="#privacy">Offline and privacy</a></li>
+        <li><a href="#ai">Use of generative AI</a></li>
         <li><a href="#faq">Questions</a></li>
       </ol>
     </nav>
@@ -315,7 +316,7 @@
 
       <section id="blocks">
         <h2>Blocks</h2>
-        <p>A block is a whole figure written in one LaTeX package, edited in its own editor. Add one from the <b>Blocks</b> menu (the cube on the tool rail). Placing a block only selects it; <b>double-click</b> it, press <kbd>Enter</kbd> or use the <b>Edit…</b> button in the panel to open its editor.</p>
+        <p>A block is a whole figure written in one LaTeX package, edited in its own editor. Add one from the <b>Blocks</b> menu (the cube on the tool rail). Blocks are experimental, so check the compiled figure before you rely on it. Placing a block only selects it; <b>double-click</b> it, press <kbd>Enter</kbd> or use the <b>Edit…</b> button in the panel to open its editor.</p>
         <figure>
           <img src="img/05-quantum.png" width="1920" height="1080" alt="The quantum circuit editor: a palette of gates on the left, a three-qubit QFT circuit with a dashed gate group in the middle, and its quantikz code on the right" loading="lazy">
           <figcaption>Every block editor has the same shape: palette on the left, the drawing in the middle, the panel and the code on the right.</figcaption>
@@ -351,6 +352,14 @@
           <ul>
             <li>Select a cell and type its object, or drop one from the palette. Drag from cell to cell to draw an arrow in the palette's style (maps to, inclusion, onto, dashed, implies, equal, harpoon, squiggly…).</li>
             <li>The panel sets an arrow's label and side, head, line, crossing gap, bend and shift; <b>Reverse</b> swaps its ends.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Commutative diagram <code>xymatrix</code></summary><div>
+          <ul>
+            <li>The CD editor, writing <code>\xymatrix{…}</code> for the <code>xy</code> package: arrows like <code>\ar@{-&gt;&gt;}[r]^{f}</code>, curves <code>@/^1pc/</code>, shifts <code>@&lt;.5ex&gt;</code>, spacing <code>@R=</code>, <code>@C=</code>.</li>
+            <li>Drawn with xy's spacing and arrow tips, and exported as written with <code>\usepackage[all]{xy}</code>.</li>
+            <li><b>Convert to tikz-cd</b> in the panel rewrites the block as a CD block, and <b>Convert to xymatrix</b> on a CD block goes the other way. Converting back before you edit restores your original code; anything the other package can't say is listed in a hint.</li>
           </ul>
         </div></details>
 
@@ -451,8 +460,8 @@
         <table>
           <thead><tr><th>Command</th><th>What you get</th></tr></thead>
           <tbody>
-            <tr><td><b>Code</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>A <code>tikzpicture</code> snippet or a <code>standalone</code> document, for everything or only the selection. The header comment lists the packages and libraries to load.</td></tr>
-            <tr><td><b>LaTeX</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>The whole document as an <code>article</code> with <code>geometry</code> page settings and each diagram in a <code>tikzpicture</code>. Each picture carries a <code>% diagramtex-data:</code> comment, so it re-imports exactly.</td></tr>
+            <tr><td><b>LaTeX</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>The code dialog, to copy or download. Pick a <code>tikzpicture</code> snippet or a <code>standalone</code> document, for everything or only the selection (the header comment lists the packages and libraries to load), or the whole document.</td></tr>
+            <tr><td><b>Whole document</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>Downloads the whole document at once as an <code>article</code> with <code>geometry</code> page settings and each diagram in a <code>tikzpicture</code>. Each picture carries a <code>% diagramtex-data:</code> comment, so it re-imports exactly.</td></tr>
             <tr><td><b>Export</b></td><td><b>PNG</b> at any DPI from 24 to 2400 (written into the file, so it opens at true size, optionally transparent), <b>SVG</b> (vector, maths fonts embedded) or <b>PDF</b> (pictures at the chosen DPI).</td></tr>
             <tr><td><b>Print</b> <kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>Pages at true size; choose Save as PDF for a vector PDF.</td></tr>
             <tr><td><b>Right-click → Copy TikZ</b></td><td>Just the selected objects' code, straight to the clipboard.</td></tr>
@@ -465,7 +474,7 @@
   \draw[line width=0.71pt, -{Stealth}] (0,0) -- (3,0) node[midway, above] {$\vec v$};
   \draw[line width=0.71pt] (4,0) circle (0.5);
 \end{tikzpicture}</code></pre>
-        <p><b>Packages by block:</b> TikZ always; <code>circuitikz</code>, <code>pgfplots</code>, <code>tikz-cd</code>, the <code>quantikz2</code> library, <code>forest</code>, <code>zx-calculus</code>, <code>tikz-feynman</code>, <code>tikz-3dplot</code>, <code>tikz-timing</code>, the <code>automata</code> library, <code>karnaugh-map</code>, <code>chemfig</code> and <code>blochsphere</code> as used. All of them are in TeX Live and on Overleaf.</p>
+        <p><b>Packages by block:</b> TikZ always; <code>circuitikz</code>, <code>pgfplots</code>, <code>tikz-cd</code>, <code>xy</code>, the <code>quantikz2</code> library, <code>forest</code>, <code>zx-calculus</code>, <code>tikz-feynman</code>, <code>tikz-3dplot</code>, <code>tikz-timing</code>, the <code>automata</code> library, <code>karnaugh-map</code>, <code>chemfig</code> and <code>blochsphere</code> as used. All of them are in TeX Live and on Overleaf.</p>
         <p class="note warn">quantikz2 restyles every <code>tikz-cd</code> diagram in the same document. When a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own.</p>
       </section>
 
@@ -512,7 +521,7 @@
             <tr><td><kbd>V</kbd> <kbd>L</kbd> <kbd>A</kbd> <kbd>C</kbd> <kbd>P</kbd></td><td>Select, line, arrow, curve, polyline</td></tr>
             <tr><td><kbd>O</kbd> <kbd>S</kbd> <kbd>R</kbd> <kbd>E</kbd></td><td>Arc, spring, rectangle, ellipse</td></tr>
             <tr><td><kbd>B</kbd> <kbd>D</kbd> <kbd>T</kbd> <kbd>M</kbd></td><td>Ball, dot, text, maths</td></tr>
-            <tr><td><kbd>I</kbd> <kbd>N</kbd> <kbd>H</kbd></td><td>Image, pencil, hand (Whiteboard)</td></tr>
+            <tr><td><kbd>I</kbd> <kbd>N</kbd> <kbd>H</kbd></td><td>Image, pencil, hand (Whiteboard and Page)</td></tr>
             <tr><td><kbd class="shift">Shift</kbd></td><td>Constrain angle to 15°, square, circle</td></tr>
             <tr><td><kbd class="alt">Alt</kbd></td><td>Drag without snapping</td></tr>
             <tr><td><kbd>Space</kbd>+drag</td><td>Pan (or the middle mouse button)</td></tr>
@@ -544,6 +553,11 @@
           <li><b>No requests to other sites,</b> even from your exports: SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them.</li>
           <li><b>Open source</b> under the MIT License; you can host it yourself as plain static files.</li>
         </ul>
+      </section>
+
+      <section id="ai">
+        <h2>Use of generative AI</h2>
+        <p>DiagramTeX was built with the help of generative AI: much of its code, tests and documentation were written with AI coding assistants, directed, reviewed and tested by the author. The app itself uses no AI: nothing you draw is sent to an AI service or anywhere else.</p>
       </section>
 
       <section id="faq">

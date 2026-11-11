@@ -9,6 +9,7 @@
   const PX = TD.PX_PER_CM;
   const fx = (n) => (Math.abs(n) < 0.005 ? 0 : n).toFixed(2).replace('-', '−');
 
+  const hasHand = (m) => m === 'board' || m === 'page'; // modes with a Hand tool
   const isDrawTool = (t) => !['select', 'hand', 'text', 'math', 'image'].includes(t);
   const toolType = (t) => ({ arrow: 'line', curvearrow: 'curve', blob: 'poly', pencil: 'poly', math: 'text' })[t] || t.split(':')[0];
   const TOOL_KEYS = { v: 'select', h: 'hand', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
@@ -347,7 +348,7 @@
     document.body.classList.toggle('mode-doc', m === 'document');
     document.body.classList.toggle('mode-page', m === 'page');
     document.body.classList.toggle('mode-board', m === 'board');
-    if (m !== 'board' && state.tool === 'hand') setTool('select'); // the hand tool is a whiteboard's
+    if (!hasHand(m) && state.tool === 'hand') setTool('select'); // the hand tool is a whiteboard's and a page's
     document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
     document.querySelectorAll('[data-kind]').forEach((b) => b.classList.toggle('on', b.dataset.kind === kindOf(m)));
     if (m === 'document') { if (fit) fitLater = true; if (TD.docview) TD.docview.render(); }
@@ -1006,7 +1007,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|cd|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1035,7 +1036,7 @@
   function flyOf(t) {
     if (/^(solid|prim3d|revolve|sketch3d|geo3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)$/.test(t)) return 'blocks';
+    if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
@@ -1386,6 +1387,7 @@
         if (s.type === 'kmap') { state.sel = new Set([hitId]); render(); renderProps(); openKmap(hitId); return; }
         if (s.type === 'chemfig') { state.sel = new Set([hitId]); render(); renderProps(); openChem(hitId); return; }
         if (s.type === 'cd') { state.sel = new Set([hitId]); render(); renderProps(); openCD(hitId); return; }
+        if (s.type === 'xy') { state.sel = new Set([hitId]); render(); renderProps(); openXY(hitId); return; }
       }
       const grp = groupIds(hitId);
       if (e.shiftKey) { if (state.sel.has(hitId)) grp.forEach((id) => state.sel.delete(id)); else grp.forEach((id) => state.sel.add(id)); }
@@ -1864,6 +1866,19 @@
     });
   }
   TD.cdOpen = openCD;
+  // XyMatrix (xy.js): the same editor, reading and writing xymatrix code
+  function openXY(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.cdEditor || !TD.xy) return;
+    TD.cdEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      begin(); t.src = res.src; commit();
+      render(); renderProps();
+    }, TD.xy);
+  }
+  TD.xyOpen = openXY;
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
@@ -2039,6 +2054,7 @@
     sketch3d: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     pie: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
     cd: [['x', 'x'], ['y', 'y']],
+    xy: [['x', 'x'], ['y', 'y']],
     qc: [['x', 'x'], ['y', 'y']],
     forest: [['x', 'x'], ['y', 'y']],
     zx: [['x', 'x'], ['y', 'y']],
@@ -2179,7 +2195,7 @@
         PROPS.filter((p) => keys.includes(p.key)).map((p) => fieldHtml(p, d[p.key])).join('') + `</div>` +
         `<div class="sec"><div class="sec-title">Shortcuts</div><table class="keys">${[
           ['V L A C P', 'select · line · arrow · curve · polyline'], ['O S R E', 'arc · spring · rect · ellipse'], ['B D T', 'ball · dot · text'],
-          ['Shift', 'constrain angle / square'], ['Alt', 'drag without snapping'], ...(state.mode === 'board' ? [['H', 'hand: drag the board'], ['wheel', 'move around']] : []), ['Space+drag', 'pan (or middle mouse)'], ['Ctrl+wheel', 'zoom'],
+          ['Shift', 'constrain angle / square'], ['Alt', 'drag without snapping'], ...(state.mode === 'board' ? [['H', 'hand: drag the board'], ['wheel', 'move around']] : state.mode === 'page' ? [['H', 'hand: drag the page']] : []), ['Space+drag', 'pan (or middle mouse)'], ['Ctrl+wheel', 'zoom'],
           ['Ctrl+G', 'group (Shift: ungroup)'], ['Ctrl+R', 'rotate 90°'], ['Ctrl+] / [', 'forward / backward'], ['Ctrl+D', 'duplicate'],
           ['Ctrl+E', 'TikZ code'], ['Ctrl+O', 'open file'], ['Right-click', 'object menu'],
         ].map(([k, d]) => `<tr><td>${k.split(' ').map((x) => `<kbd>${kb(x)}</kbd>`).join('')}</td><td>${d}</td></tr>`).join('')}</table></div>`;
@@ -2453,6 +2469,7 @@
       const msg = TD.panels[s.type].action(s, pa.dataset.act, +pa.dataset.i);
       render(); commit(); renderPanel();
       if (typeof msg === 'string') showHint(msg, 1500);
+      else if (msg && msg.text) showHint(msg.text, msg.ms || 1500);
       return;
     }
     const act = e.target.closest('[data-act]')?.dataset.act;
@@ -2905,7 +2922,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(s.type)) {
+      if (['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3293,7 +3310,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } if (s.type === 'xy') { openXY(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3339,11 +3356,17 @@
     if (e.key === 'Escape' && (openFly || ctxOpen())) { hideFly(); closeCtx(); return; }
     if (mod && !e.altKey) {
       const k0 = e.key.toLowerCase();
-      if (k0 === 'e') { e.preventDefault(); runCmd(e.shiftKey ? 'latex' : (state.mode === 'document' ? 'latex' : 'tikz')); return; }
+      if (k0 === 'e') { e.preventDefault(); runCmd(e.shiftKey ? 'latex' : 'tikz'); return; }
       if (k0 === 's') {
         e.preventDefault();
         if (e.shiftKey || TD.files.fileOf(state.docId)) runCmd('save'); // a file linked to one on disk saves to it
-        else { saveNow(); showHint('Saved in this browser — Ctrl+Shift+S saves to a file', 1500); }
+        else {
+          saveNow();
+          // without the File System Access API there is no file to keep in step, so remind people to keep one
+          const msg = `Saved in this browser — ${isMac ? '⇧⌘S' : 'Ctrl+Shift+S'} saves to a file`;
+          if (TD.files.can) showHint(msg, 1500);
+          else showHint(`${msg}\nRemember to occasionally save to file to prevent accidental losses.`, 4000);
+        }
         return;
       }
       if (k0 === 'o') { e.preventDefault(); runCmd('open'); return; }
@@ -3369,7 +3392,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -3382,7 +3405,7 @@
     if (e.key === 'ArrowUp') { e.preventDefault(); nudge(0, -step); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); nudge(0, step); return; }
     if (k === 'g') { toggleGrid(); return; }
-    if (TOOL_KEYS[k] && (k !== 'h' || state.mode === 'board')) setTool(TOOL_KEYS[k]);
+    if (TOOL_KEYS[k] && (k !== 'h' || hasHand(state.mode))) setTool(TOOL_KEYS[k]);
   });
   document.addEventListener('keyup', (e) => { if (e.key === ' ') { spaceDown = false; svg.classList.remove('pan-ready'); } });
   window.addEventListener('blur', () => { spaceDown = false; svg.classList.remove('pan-ready'); });
@@ -3426,7 +3449,7 @@
     bs.style.visibility = state.mode === 'document' ? 'hidden' : '';
     const what = state.mode === 'board' ? 'this whiteboard' : 'this diagram';
     $('#btnExport').title = state.mode === 'page' ? 'Export the page as PNG (choose DPI), SVG or PDF' : `Export ${what} as PNG (choose DPI), SVG or PDF`;
-    $('#btnTikz').title = state.mode === 'page' ? 'LaTeX for this page (Ctrl+E)' : `TikZ code for ${what} (Ctrl+E)`;
+    $('#btnTikz').title = state.mode === 'page' ? 'LaTeX for this page, to copy or download (Ctrl+E)' : `LaTeX code for ${what} or the whole document, to copy or download (Ctrl+E)`;
     bs.innerHTML = diagrams.map(([b, i], n) => `<option value="${i}"${i === state.doc.active ? ' selected' : ''}>Diagram ${n + 1} of ${diagrams.length}</option>`).join('');
     $('#btnUndo').disabled = !state.undo.length;
     $('#btnRedo').disabled = !state.redo.length;
@@ -3893,16 +3916,20 @@
 
   // TikZ modal
   function genTikz() {
-    const selOnly = $('#tikzSelOnly').checked && state.sel.size;
+    const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value;
+    $('#tikzSelWrap').style.display = state.sel.size && scope !== 'doc' ? '' : 'none';
+    const selOnly = $('#tikzSelOnly').checked && state.sel.size && scope !== 'doc';
     const list = selOnly ? selected() : shapes();
-    $('#tikzOut').value = state.mode === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
-      : TD.toTikz(list, { standalone: $('#tikzStandalone').checked });
+    $('#tikzOut').value = scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
+      : scope === 'doc' ? TD.docToLatex(state.doc)
+      : TD.toTikz(list, { standalone: scope === 'standalone' });
   }
-  function openTikz() {
+  // one dialog for all the LaTeX out: a picture, a standalone file or the whole document (Document view starts on that)
+  function openTikz(scope) {
     finishEdit(); finishPoly(); commit();
-    $('#tikzStandalone').parentElement.style.display = state.mode === 'page' ? 'none' : '';
-    const ttl = $('#modal .modal-head strong'); if (ttl) ttl.textContent = state.mode === 'page' ? 'LaTeX for This Page' : 'TikZ Code';
-    $('#tikzSelWrap').style.display = state.sel.size ? '' : 'none';
+    $('#tikzScope').style.display = state.mode === 'page' ? 'none' : '';
+    if (state.mode !== 'page') $('#tikzScope').value = scope || (state.mode === 'document' ? 'doc' : $('#tikzScope').value === 'doc' ? 'pic' : $('#tikzScope').value);
+    const ttl = $('#modal .modal-head strong'); if (ttl) ttl.textContent = state.mode === 'page' ? 'LaTeX for This Page' : 'LaTeX Code';
     $('#tikzSelOnly').checked = false;
     genTikz();
     $('#modal').hidden = false;
@@ -3911,7 +3938,7 @@
   function closeModal() { $('#modal').hidden = true; }
   $('#modalClose').onclick = closeModal;
   $('#modal').addEventListener('pointerdown', (e) => { if (e.target.id === 'modal') closeModal(); });
-  $('#tikzStandalone').onchange = genTikz;
+  $('#tikzScope').onchange = genTikz;
   $('#tikzSelOnly').onchange = genTikz;
   $('#tikzCopy').onclick = async () => {
     const t = $('#tikzOut');
@@ -3939,7 +3966,7 @@
     '- \\textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.',
     '- \\textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.',
     '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; and 3D geometry in tikz-3dplot (points, vectors, planes, rotated frames, projections and angles), edited by dragging.',
-    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
+    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
     '- \\textbf{Images} and \\textbf{freehand} pencil strokes.',
     '',
     '# Four modes',
@@ -3978,8 +4005,8 @@
     '- Your work saves in this browser as you go. ' + key('Mod+S') + ' saves a \\texttt{.diagramtex} file to keep or share, and ' + key('Mod+O') + ' opens one. \\textbf{Import} reads TikZ or \\LaTeX\\ back in.',
     '',
     '## Get the LaTeX out',
-    '- In Diagram view, \\textbf{Code} (' + key('Mod+E') + ') shows the TikZ for the diagram, ready to paste into your paper. It lists the packages your preamble needs.',
-    '- \\textbf{LaTeX} (' + key('Mod+Shift+E') + ') downloads the whole document as a \\texttt{.tex} file.',
+    '- \\textbf{LaTeX} (' + key('Mod+E') + ') shows the code to copy or download: the TikZ picture for the diagram (it lists the packages your preamble needs), a standalone file, or the whole document.',
+    '- ' + key('Mod+Shift+E') + ' downloads the whole document as a \\texttt{.tex} file straight away.',
     '- \\textbf{Export} saves a PNG, SVG or PDF. ' + key('Mod+P') + ' prints.',
   ].join('\n');
   function sampleBlocks() {

@@ -338,7 +338,7 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 #status .zoom #zoomVal:hover { background: var(--wash); color: var(--ink); }
 #status .zoom #zoomVal:focus { background: var(--sheet-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
 
-#hint { position: absolute; left: 50%; top: calc(var(--ruler) + 12px); transform: translateX(-50%); background: var(--ink); color: var(--sheet); padding: 4px 12px; border-radius: var(--r); font-size: 12px; line-height: 20px; pointer-events: none; display: none; z-index: 4; }
+#hint { position: absolute; left: calc((100% - var(--props-w) - 16px) / 2); width: max-content; max-width: calc(100% - var(--props-w) - 48px); top: calc(var(--ruler) + 12px); transform: translateX(-50%); background: var(--ink); color: var(--sheet); padding: 4px 12px; border-radius: var(--r); font-size: 12px; line-height: 20px; pointer-events: none; display: none; z-index: 4; white-space: pre-line; text-align: center; }
 #emptyHint { position: absolute; left: calc((100% - var(--props-w) - 16px) / 2); top: 42%; transform: translate(-50%, -50%); background: var(--sheet-raised); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-knob); padding: 16px 20px; color: var(--graphite); font-size: 13px; line-height: 1.7; text-align: center; pointer-events: none; width: max-content; max-width: min(420px, 100% - var(--props-w) - 48px); text-wrap: pretty; }
 #emptyHint[hidden] { display: none; }
 #emptyHint .eh-title { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
@@ -819,6 +819,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 .popover.flyout::-webkit-scrollbar-thumb:hover { background-color: var(--pencil); }
 @supports not selector(::-webkit-scrollbar) { .popover.flyout { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; } }
 .flyout .pop-title { margin: 12px 4px 6px; line-height: 16px; }
+.pop-title .pop-warn { display: block; font-weight: 500; color: var(--redpen); }
 .flyout .pop-title:first-child { margin-top: 2px; }
 .sym-grid { display: grid; grid-template-columns: repeat(10, 36px); gap: 2px; }
 #fly-lines .sym-grid { grid-template-columns: repeat(8, 36px); }
@@ -926,6 +927,9 @@ body.mode-page #emptyHint .eh-page { display: block; }
 /* Whiteboard: an endless canvas. No rulers, no origin axes, a dot grid instead of lines, a hand tool. */
 .board-only { display: none !important; }
 body.mode-board #tools .board-only { display: inline-flex !important; }
+/* the Hand tool: on whiteboards and Page files */
+.hand-only { display: none !important; }
+body.mode-board #tools .hand-only, body.mode-page #tools .hand-only { display: inline-flex !important; }
 body.mode-board .seg.sub, body.mode-board .ruler, body.mode-board #rulerCorner, body.mode-board #origin { display: none; }
 body.mode-board #gridRect { fill: url(#gridDots); }
 .grid-dot { fill: var(--faint); }

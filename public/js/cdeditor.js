@@ -2,7 +2,8 @@
 // diagram drawn over its grid of cells, where objects are typed or dropped and moved, and arrows are
 // dragged from cell to cell; the selected cell's or arrow's properties; and beside them the tikz-cd code,
 // live both ways. Only the cells that change are rewritten, so hand-written code keeps its form.
-// TD.cdEditor.open(block, onDone) — block: { src }; onDone({ src }) on Done.
+// TD.cdEditor.open(block, onDone, X) — block: { src }; onDone({ src }) on Done. X (TD.xy) edits xymatrix code
+// instead: the model stays tikz-cd code, read from and written back to the xy dialect.
 (function () {
   const TD = window.TD, D = TD.cd, Z = TD.zx;
   const { esc, r2 } = TD.util;
@@ -45,13 +46,14 @@
     else a.items = o.concat(a.items.filter((x) => !isHead(x)));
   }
   const SEP_OPTS = [['', 'Normal']].concat(TD.CD_SEPS.filter((x) => x !== 'normal').map((x) => [x, x[0].toUpperCase() + x.slice(1)]));
+  const XY_SEPS = [['', 'Normal (2pc)'], ['.5pc', '0.5pc'], ['1pc', '1pc'], ['1.5pc', '1.5pc'], ['3pc', '3pc'], ['4pc', '4pc']];
 
   // ---------------------------------------------------------------- model
   // M: { wrapped, env, amp, rows: [{ cells: [cell], sep }] }; cell: { text, sep (the &[…] before it), t (its
   // maths), arrows: [{ dirs, items, cmd }], dirty }. A cell is written from t + arrows only once it is dirty.
   function parseCell(text, sep = '') {
     const p = D.cell(text);
-    return { text: text.trim(), sep, t: p.t, arrows: p.arrows, dirty: false };
+    return { text: text.trim(), sep, t: p.t, node: p.node, arrows: p.arrows, dirty: false };
   }
   const emptyCell = () => ({ text: '', sep: '', t: '', arrows: [], dirty: false });
   const isEmpty = (c) => !c || (!c.text && !c.t && !c.arrows.length);
@@ -62,16 +64,20 @@
     const g = Z.grid(inner, amp), C = Math.max(0, ...g.map((r) => r.cells.length));
     let rows = g.map((r) => { const cells = r.cells.map((c) => parseCell(c.text, c.colSep)); while (cells.length < C) cells.push(emptyCell()); return { cells, sep: r.rowSep || '' }; });
     if (rows.length === 1 && rows[0].cells.every(isEmpty)) rows = [];
-    return { wrapped: /\\begin\{tikzcd\}/.test(t) || !t.trim(), env, amp, rows };
+    // kept as written: code around the environment (\tikzset{…}) and a \\ after the last row (tikz-cd's empty row)
+    const b = t.indexOf('\\begin{tikzcd}'), e = t.lastIndexOf('\\end{tikzcd}');
+    const pre = b > 0 ? t.slice(0, b) : '', post = b >= 0 && e >= 0 ? t.slice(e + '\\end{tikzcd}'.length) : '';
+    const tm = /\\\\\s*(\[[^\]]*\])?\s*$/.exec(inner);
+    return { wrapped: /\\begin\{tikzcd\}/.test(t) || !t.trim(), env, amp, rows, pre, post, trail: tm ? ` \\\\${tm[1] || ''}` : '' };
   }
   const nR = (M) => M.rows.length, nC = (M) => (M.rows[0] ? M.rows[0].cells.length : 0);
   function arrowCode(a) {
     const o = a.items.length ? `[${a.items.join(', ')}]` : '';
     // a shortcut (\rar …) stays one while it still points its way
     if (a.cmd && Z.ARROWS[a.cmd] && Z.ARROWS[a.cmd] === a.dirs) return `\\${a.cmd}${o}`;
-    return `\\arrow[${[a.dirs, ...a.items].join(', ')}]`;
+    return `\\arrow[${[a.dirs, ...a.items].filter(Boolean).join(', ')}]`;
   }
-  const cellText = (c) => (c.dirty ? [c.t, ...c.arrows.map(arrowCode)].filter(Boolean).join(' ') : c.text);
+  const cellText = (c) => (c.dirty ? [c.node != null ? `|[${c.node}]|` : '', c.t, ...c.arrows.map(arrowCode)].filter(Boolean).join(' ') : c.text);
   // the code, with the & signs lined up
   function codeOf(M) {
     const R = nR(M), C = nC(M);
@@ -79,16 +85,17 @@
     const parts = M.rows.map((row) => row.cells.map((c, i) => { const t = cellText(c); return (i ? `${amp}${c.sep ? `[${c.sep}]` : ''}${t ? ' ' : ''}` : '') + t; }));
     // trailing empty cells go, unless an arrow ends there (tikz-cd needs the node)
     const hit = new Set();
-    M.rows.forEach((row, r) => row.cells.forEach((c, i) => c.arrows.forEach((a) => { const [dr, dc] = delta(a.dirs); hit.add(`${r + dr},${i + dc}`); })));
+    M.rows.forEach((row, r) => row.cells.forEach((c, i) => c.arrows.forEach((a) => { const m = !a.dirs && a.items.map((x) => /^(?:from|to)\s*=\s*([rlud]+)\s*$/.exec(x)).find(Boolean); const [dr, dc] = delta(m ? m[1] : a.dirs); hit.add(`${r + dr},${i + dc}`); })));
     parts.forEach((p, r) => { while (p.length > 1 && /^\\?&\s*$/.test(p[p.length - 1]) && !hit.has(`${r},${p.length - 1}`)) p.pop(); });
     const w = [];
     for (let c = 0; c < C; c++) w[c] = Math.max(0, ...parts.map((p) => (p[c] || '').length));
-    const lines = parts.map((p, r) => '  ' + p.map((t, c) => (c < p.length - 1 ? t.padEnd(w[c]) + ' ' : t)).join('').replace(/\s+$/, '') + (r < R - 1 ? ` \\\\${M.rows[r].sep ? `[${M.rows[r].sep}]` : ''}` : ''));
+    const lines = parts.map((p, r) => '  ' + p.map((t, c) => (c < p.length - 1 ? t.padEnd(w[c]) + ' ' : t)).join('').replace(/\s+$/, '') + (r < R - 1 ? ` \\\\${M.rows[r].sep ? `[${M.rows[r].sep}]` : ''}` : M.trail || ''));
     const body = R ? lines.join('\n') : '';
-    return M.wrapped ? `\\begin{tikzcd}${M.env ? `[${M.env}]` : ''}\n${body}${body ? '\n' : ''}\\end{tikzcd}` : body;
+    return M.wrapped ? `${M.pre || ''}\\begin{tikzcd}${M.env ? `[${M.env}]` : ''}\n${body}${body ? '\n' : ''}\\end{tikzcd}${M.post || ''}` : body;
   }
   const delta = D.delta;
   const dirsOf = (dr, dc) => (dc > 0 ? 'r'.repeat(dc) : 'l'.repeat(-dc)) + (dr > 0 ? 'd'.repeat(dr) : 'u'.repeat(-dr));
+  const same = (a, b) => delta(a).join() === delta(b).join(); // ddll and lldd point the same way
   // Cells move to new places (map: [r, c] → [r, c] or null); every arrow keeps (or drops) its two ends.
   function remap(M, map, R2, C2) {
     const out = Array.from({ length: R2 }, () => ({ cells: Array.from({ length: C2 }, emptyCell), sep: '' }));
@@ -98,12 +105,21 @@
         if (!to) return;
         const keep = [];
         for (const a of cell.arrows) {
-          if (!a.dirs) { keep.push(a); continue; }
+          if (!a.dirs) {
+            // from=… / to=…: the other end, moved with its cell
+            const k = a.items.findIndex((x) => /^(from|to)\s*=\s*[rlud]+\s*$/.test(x));
+            if (k < 0) { keep.push(a); continue; }
+            const m = /^(from|to)\s*=\s*([rlud]+)/.exec(a.items[k]), [dr, dc] = delta(m[2]), t = map(r + dr, c + dc);
+            const d = t && dirsOf(t[0] - to[0], t[1] - to[1]);
+            if (!d) { cell.dirty = true; continue; }
+            if (!same(d, m[2])) { a.items[k] = `${m[1]}=${d}`; cell.dirty = true; }
+            keep.push(a); continue;
+          }
           const [dr, dc] = delta(a.dirs), t = map(r + dr, c + dc);
           if (!t) { cell.dirty = true; continue; }
           const d = dirsOf(t[0] - to[0], t[1] - to[1]);
           if (!d) { cell.dirty = true; continue; }
-          if (d !== a.dirs) { a.dirs = d; cell.dirty = true; }
+          if (!same(d, a.dirs)) { a.dirs = d; cell.dirty = true; }
           keep.push(a);
         }
         cell.arrows = keep;
@@ -188,6 +204,9 @@
   // { M, sel, arrow: [r, c, i] | null, arm, style (for new arrows), view, undo, redo, pending, start, done, drag, hover, ghost, codeAt, codeTimer, clip, G }
   let E = null, lastDown = { t: 0, x: 0, y: 0 };
   const snap = () => codeOf(E.M);
+  // the code as the block keeps it: tikz-cd, or xymatrix in the xy dialect
+  const out = () => (E.X ? E.X.fromCd(snap()) : snap());
+  const layoutOf = (src) => (E.X ? E.X.layout : D.layout)({ src });
   function begin() { if (E.pending == null) E.pending = snap(); }
   function commit() {
     if (E.pending == null) return;
@@ -384,7 +403,7 @@
   // halfway between columns / rows, and one more column and row past the end that grow the grid.
   function geom() {
     const s = { type: 'cd', x: 0, y: 0, src: snap(), color: INK, minCell: 4 * MM };
-    const L = D.layout(s), R = nR(E.M), C = nC(E.M);
+    const L = (E.X ? E.X.layoutCd : D.layout)(s), R = nR(E.M), C = nC(E.M);
     const pitch = 8 * MM, xs = [], ys = [];
     if (L.R && L.C && L.geo) {
       const g = L.geo, colR = (c) => g.colL[c] + g.colW[c], rowB = (r) => g.rowT[r] + g.rowH[r];
@@ -486,7 +505,7 @@
       for (const l of L.labels) if (l.src.slice(0, 3).join() === E.arrow.join()) out += `<rect class="ze-wsel" x="${r2(l.x - l.w / 2)}" y="${r2(l.y - l.h / 2)}" width="${r2(l.w)}" height="${r2(l.h)}" stroke-width="${r2(3 / k)}"/>`;
       out += '</g>';
     }
-    if (R && C && !L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${D.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true })}</g>`;
+    if (R && C && !L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${D.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true }, L)}</g>`;
     if (!R || !C || L.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${R && C ? 'Type in a cell, or drop an object' : 'Drop an object here to start'}</text>`;
     // an arrow being drawn
     if (E.drag && E.drag.mode === 'arrow') {
@@ -712,8 +731,9 @@
   }
   function sepRow(label, name) {
     const v = envGet(name) || envGet('sep') || '';
-    const known = SEP_OPTS.some(([k]) => k === v) || v === 'normal';
-    return row(label, `<div class="ctl"><select data-f="${name}">${SEP_OPTS.map(([k, n]) => `<option value="${k}"${(v === 'normal' ? '' : v) === k ? ' selected' : ''}>${n}</option>`).join('')}${known ? '' : `<option value="${esc(v)}" selected>${esc(v)}</option>`}</select></div>`);
+    const opts = E.X ? XY_SEPS : SEP_OPTS;
+    const known = opts.some(([k]) => k === v) || v === 'normal';
+    return row(label, `<div class="ctl"><select data-f="${name}">${opts.map(([k, n]) => `<option value="${k}"${(v === 'normal' ? '' : v) === k ? ' selected' : ''}>${n}</option>`).join('')}${known ? '' : `<option value="${esc(v)}" selected>${esc(v)}</option>`}</select></div>`);
   }
   function renderProps() {
     if (!E) return;
@@ -735,11 +755,11 @@
         ${row('At', seg('pos', p, POSN, noLabel))}
         <div class="ze-shapes">${pics}</div>
         ${row('Line', seg('line', lk, [['', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['squiggly', 'Squiggly']]))}
-        ${row('Crossing', seg('cross', find(a, /^crossing over$/) ? '1' : '', [['', 'None'], ['1', 'Gap', 'crossing over: a gap where it crosses another arrow']]))}
+        ${E.X ? '' : row('Crossing', seg('cross', find(a, /^crossing over$/) ? '1' : '', [['', 'None'], ['1', 'Gap', 'crossing over: a gap where it crosses another arrow']]))}
         ${row('Bend', seg('bend', bendSide, [['', 'None'], ['left', 'Left'], ['right', 'Right']]))}
-        ${bendSide ? row('Angle', `<div class="ctl unit"><input type="number" data-f="bendA" value="${esc(bendA)}" min="0" max="90" step="5"><span>°</span></div>`) : ''}
+        ${bendSide && !E.X ? row('Angle', `<div class="ctl unit"><input type="number" data-f="bendA" value="${esc(bendA)}" min="0" max="90" step="5"><span>°</span></div>`) : ''}
         ${row('Shift', seg('shift', shiftSide, [['', 'None'], ['left', 'Left', 'shift left: for parallel arrows'], ['right', 'Right', 'shift right']]))}
-        ${field('Options', 'items', a.items.join(', '), ' class="mono"')}
+        ${E.X ? '' : field('Options', 'items', a.items.join(', '), ' class="mono"')}
         <div class="row"><button data-ce="reverse">Reverse</button><button class="danger" data-ce="arrowdel">Delete Arrow</button></div></div>`);
       sizeMinis(props, 48, 26, 2);
       return;
@@ -749,7 +769,7 @@
       TD.morph(props, `<div class="sec"><div class="sec-title">Diagram <small>${nR(M)} × ${nC(M)}</small></div>
         ${sepRow('Row sep', 'row sep')}
         ${sepRow('Column sep', 'column sep')}
-        ${field('Options', 'env', M.env, ' class="mono" placeholder="e.g. row sep=large"')}
+        ${E.X ? '' : field('Options', 'env', M.env, ' class="mono" placeholder="e.g. row sep=large"')}
         <div class="help">Type in a cell to write its object. Drag a cell's blue handle to another cell to draw an arrow; click an arrow to label and style it. <kbd>Enter</kbd> edits, <kbd>⌫</kbd> clears.</div></div>`);
       return;
     }
@@ -765,10 +785,10 @@
     if (cell.arrows.length) {
       h += `<div class="sec"><div class="sec-title">Arrows from here</div><div class="ze-wires">${cell.arrows.map((a, i) => {
         const [dr, dc] = delta(a.dirs);
-        return `<button data-ce="pickarrow" data-i="${i}"><span>→ row ${b.r1 + dr + 1}, col ${b.c1 + dc + 1}</span><code>${esc(arrowCode(a))}</code></button>`;
+        return `<button data-ce="pickarrow" data-i="${i}"><span>→ row ${b.r1 + dr + 1}, col ${b.c1 + dc + 1}</span><code>${esc(E.X ? E.X.arrowXy(a) : arrowCode(a))}</code></button>`;
       }).join('')}</div></div>`;
     }
-    h += `<div class="sec">${field('Code', 'code', cellText(cell), ' class="mono"')}</div>`;
+    h += `<div class="sec">${field('Code', 'code', E.X ? E.X.cellFromCd(cellText(cell)) : cellText(cell), ' class="mono"')}</div>`;
     TD.morph(props, h);
   }
   props.addEventListener('focusin', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) begin(); });
@@ -794,7 +814,7 @@
     const s = single();
     if (!s) return;
     const cell = at(s.r1, s.c1);
-    if (f === 'code') { Object.assign(cell, parseCell(t.value, cell.sep)); cell.text = t.value.trim(); }
+    if (f === 'code') { const v = E.X ? E.X.cellToCd(t.value) : t.value; Object.assign(cell, parseCell(v, cell.sep)); cell.text = v.trim(); }
     else if (f === 't') { cell.t = t.value; touch(cell); }
     draw();
   });
@@ -861,17 +881,17 @@
     const R = nR(E.M), C = nC(E.M);
     count.textContent = `${R} row${R === 1 ? '' : 's'} · ${C} column${C === 1 ? '' : 's'}`;
     if (document.activeElement === codeTa) return;
-    const c = snap();
+    const c = out();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = D.layout({ src: c }).warnings.map((w) => `<div>${esc(w)}</div>`).join('');
+    codeMsg.innerHTML = layoutOf(c).warnings.map((w) => `<div>${esc(w)}</div>`).join('');
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value;
+    E.M = load(E.X ? E.X.toCd(codeTa.value) : codeTa.value); E.codeAt = codeTa.value;
     clampSel(); draw(); keepInView(); renderProps();
-    codeMsg.innerHTML = D.layout({ src: codeTa.value }).warnings.map((w) => `<div>${esc(w)}</div>`).join('');
+    codeMsg.innerHTML = layoutOf(codeTa.value).warnings.map((w) => `<div>${esc(w)}</div>`).join('');
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
@@ -944,7 +964,7 @@
     closePop();
     if (document.activeElement === codeTa) readCode();
     commit();
-    const src = snap();
+    const src = out();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     setTip('Saved to the page');
     setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
@@ -955,7 +975,7 @@
     if (document.activeElement === codeTa) readCode();
     if (document.activeElement && root.contains(document.activeElement)) document.activeElement.blur();
     commit();
-    const src = snap(), changed = src !== E.start;
+    const src = out(), changed = src !== E.start;
     if (!ok && changed && !(await TD.confirm('Discard changes to this diagram?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
     const done = E.done;
     root.hidden = true;
@@ -963,10 +983,15 @@
     E = null;
     if (ok && changed) done({ src });
   }
-  function open(block, done) {
-    const M = load(block.src);
-    E = { M, sel: null, arrow: null, arm: null, style: 'to', view: { ox: 0, oy: 0, k: 4 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null, clip: null, G: null };
-    E.start = codeOf(M);
+  function open(block, done, X) {
+    const M = load(X ? X.toCd(block.src) : block.src);
+    const lang = X ? 'xymatrix' : 'tikz-cd';
+    $('#cdTitle', root).textContent = X ? 'XyMatrix' : 'Commutative diagram';
+    $('.cz-code-head span', root).textContent = lang;
+    $('[data-ce="copy"]', root).title = `Copy the ${lang} code`;
+    codeTa.setAttribute('aria-label', `${lang} code`);
+    E = { X: X || null, M, sel: null, arrow: null, arm: null, style: 'to', view: { ox: 0, oy: 0, k: 4 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null, clip: null, G: null };
+    E.start = out();
     root.hidden = false;
     document.body.classList.add('cz-open');
     search.value = '';

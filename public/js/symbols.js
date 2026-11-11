@@ -162,7 +162,7 @@
     b.pl(0.12, 0.08, 0.12, 0, 1, 0, 1, 0.72, 0.94, 0.7); b.pl(0.06, 0.16, 0.06, 0.08, 0.94, 0.08, 0.94, 0.8, 0.88, 0.78);
     return b.M(0, 0.16).L(0.88, 0.16).L(0.88, 0.88).C(0.66, 0.72, 0.44, 1.08, 0, 0.92).Z();
   });
-  F('fc-term', 'Terminator', (b) => b.box(0, 0, 1, 1, ['r', 'r', 'r', 'r'], 25));
+  F('fc-term', 'Terminator', (b) => b.box(0, 0, 1, 1, ['r', 'r', 'r', 'r'], Math.min(b.w, b.h) / 2)); // stadium at any size
   F('fc-prep', 'Preparation', (b) => b.pg(0.15, 0, 0.85, 0, 1, 0.5, 0.85, 1, 0.15, 1, 0, 0.5));
   F('fc-manin', 'Manual input', (b) => b.pg(0, 0.3, 1, 0, 1, 1, 0, 1));
   F('fc-manop', 'Manual operation', (b) => b.pg(0, 0, 1, 0, 0.8, 1, 0.2, 1));
@@ -205,11 +205,29 @@
   A('ar-quad', 'Quad arrow', (b) => b.pg(0.5, 0, 0.65, 0.15, 0.56, 0.15, 0.56, 0.44, 0.85, 0.44, 0.85, 0.35, 1, 0.5, 0.85, 0.65, 0.85, 0.56, 0.56, 0.56, 0.56, 0.85, 0.65, 0.85, 0.5, 1, 0.35, 0.85, 0.44, 0.85, 0.44, 0.56, 0.15, 0.56, 0.15, 0.65, 0, 0.5, 0.15, 0.35, 0.15, 0.44, 0.44, 0.44, 0.44, 0.15, 0.35, 0.15), { size: [70, 70] });
   A('ar-lru', 'Left-right-up arrow', (b) => b.pg(0.5, 0, 0.65, 0.2, 0.57, 0.2, 0.57, 0.64, 0.82, 0.64, 0.82, 0.5, 1, 0.75, 0.82, 1, 0.82, 0.86, 0.18, 0.86, 0.18, 1, 0, 0.75, 0.18, 0.5, 0.18, 0.64, 0.43, 0.64, 0.43, 0.2, 0.35, 0.2), { size: [80, 60] });
   A('ar-bent', 'Bent arrow', (b) => { b.M(0, 1).L(0, 0.55); b.arc(0.45, 0.55, 0.45, 0.3, 180, 90, true); b.L(0.7, 0.25).L(0.7, 0).L(1, 0.4).L(0.7, 0.8).L(0.7, 0.55).L(0.45, 0.55); b.arc(0.45, 0.85, 0.2, 0.3, 90, 180, true); b.L(0.25, 1); return b.Z(); }, { size: [70, 70] });
-  A('ar-uturn', 'U-turn arrow', (b) => { b.M(0, 1).L(0, 0.45); b.arc(0.42, 0.45, 0.42, 0.45, 180, 0, true); b.L(1, 0.55).L(0.67, 0.55).L(0.67, 0.45); b.arc(0.42, 0.45, 0.25, 0.25, 0, 180, true); b.L(0.17, 1); b.Z(); b.pg(0.62, 0.55, 1.05, 0.55, 0.835, 0.85); return b; }, { size: [70, 70] });
+  // U-turn: up the left leg, over the top, down the right leg into a down-pointing head
+  A('ar-uturn', 'U-turn arrow', (b) => {
+    b.M(0, 1).L(0, 0.4); b.arc(0.43, 0.4, 0.43, 0.4, 180, 0, true);
+    b.L(0.86, 0.62).L(1, 0.62).L(0.75, 1).L(0.5, 0.62).L(0.64, 0.62).L(0.64, 0.4);
+    b.arc(0.43, 0.4, 0.21, 0.18, 0, 180, true); b.L(0.22, 1); return b.Z();
+  }, { size: [70, 70] });
   A('ar-leftup', 'Left-up arrow', (b) => b.pg(0.15, 0.5, 0.35, 0.3, 0.35, 0.42, 0.62, 0.42, 0.62, 0.2, 0.5, 0.2, 0.7, 0, 0.9, 0.2, 0.78, 0.2, 0.78, 0.58, 0.35, 0.58, 0.35, 0.7), { size: [60, 60] });
   A('ar-bentup', 'Bent-up arrow', (b) => b.pg(0, 0.7, 0.6, 0.7, 0.6, 0.3, 0.45, 0.3, 0.75, 0, 1, 0.3, 0.85, 0.3, 0.85, 1, 0, 1), { size: [60, 60] });
-  A('ar-circl', 'Circular arrow (left)', (b) => { b.arc(0.5, 0.55, 0.5, 0.35, 20, 340); b.arc(0.5, 0.55, 0.33, 0.2, 330, 30, true); b.L(0.68, 0.32).L(0.95, 0.25).L(0.88, 0.5).Z(); return b; }, { size: [70, 60] });
-  A('ar-circr', 'Circular arrow (right)', (b) => { b.arc(0.5, 0.55, 0.5, 0.35, 160, -160); b.arc(0.5, 0.55, 0.33, 0.2, -150, 150, true); b.L(0.32, 0.32).L(0.05, 0.25).L(0.12, 0.5).Z(); return b; }, { size: [70, 60] });
+  // circular arrows: an elliptic band round three sides, ending in a head that points back into the gap
+  // (left: gap on the right, head top right; right: its mirror image)
+  const circArrow = (mir) => (b) => {
+    const cx = 0.5, cy = 0.5, rx = 0.36, ry = 0.33, t = 0.09, hw = 0.18, hl = 0.24, a = 25;
+    const A = (d) => (mir ? 180 - d : d), U = (u) => (mir ? 1 - u : u), rad = (d) => (d * Math.PI) / 180;
+    const R = (d, o) => b.L(U(cx + (rx + o) * Math.cos(rad(d))), cy - (ry + o) * Math.sin(rad(d)));
+    b.arc(cx, cy, rx + t, ry + t, A(a), A(360 - a));
+    R(360 - a, -t); b.arc(cx, cy, rx - t, ry - t, A(360 - a), A(a), true);
+    R(a, -hw);
+    const tx = rx * Math.sin(rad(a)), ty = ry * Math.cos(rad(a)), tl = Math.hypot(tx, ty);
+    b.L(U(cx + rx * Math.cos(rad(a)) + (hl * tx) / tl), cy - ry * Math.sin(rad(a)) + (hl * ty) / tl);
+    R(a, hw); return b.Z();
+  };
+  A('ar-circl', 'Circular arrow (left)', circArrow(false), { size: [70, 60] });
+  A('ar-circr', 'Circular arrow (right)', circArrow(true), { size: [70, 60] });
   A('ar-striped', 'Striped right arrow', (b) => { b.pg(0.22, 0.25, 0.62, 0.25, 0.62, 0, 1, 0.5, 0.62, 1, 0.62, 0.75, 0.22, 0.75); b.box(0, 0.25, 0.05, 0.75); b.box(0.09, 0.25, 0.16, 0.75); return b; });
   A('ar-notched', 'Notched right arrow', (b) => b.pg(0, 0.25, 0.6, 0.25, 0.6, 0, 1, 0.5, 0.6, 1, 0.6, 0.75, 0, 0.75, 0.15, 0.5));
   A('ar-home', 'Pentagon', (b) => b.pg(0, 0, 0.75, 0, 1, 0.5, 0.75, 1, 0, 1), { text: true });
@@ -218,7 +236,7 @@
   A('ar-lrcallout', 'Left-right arrow callout', (b) => b.pg(0.25, 0, 0.75, 0, 0.75, 0.3, 0.85, 0.3, 0.85, 0.15, 1, 0.5, 0.85, 0.85, 0.85, 0.7, 0.75, 0.7, 0.75, 1, 0.25, 1, 0.25, 0.7, 0.15, 0.7, 0.15, 0.85, 0, 0.5, 0.15, 0.15, 0.15, 0.3, 0.25, 0.3), { text: true, size: [110, 55] });
   A('ar-quadc', 'Quad arrow callout', (b) => b.pg(0.5, 0, 0.62, 0.12, 0.56, 0.12, 0.56, 0.3, 0.7, 0.3, 0.7, 0.44, 0.88, 0.44, 0.88, 0.38, 1, 0.5, 0.88, 0.62, 0.88, 0.56, 0.7, 0.56, 0.7, 0.7, 0.56, 0.7, 0.56, 0.88, 0.62, 0.88, 0.5, 1, 0.38, 0.88, 0.44, 0.88, 0.44, 0.7, 0.3, 0.7, 0.3, 0.56, 0.12, 0.56, 0.12, 0.62, 0, 0.5, 0.12, 0.38, 0.12, 0.44, 0.3, 0.44, 0.3, 0.3, 0.44, 0.3, 0.44, 0.12, 0.38, 0.12), { size: [70, 70] });
   A('ar-move', 'Move arrows', (b) => {
-    const H = (u, v, du, dv) => b.head(u, v, du, dv, 9);
+    const H = (u, v, du, dv) => b.head(u, v, du, dv, Math.min(9, 0.2 * Math.min(b.w, b.h))); // heads shrink with the shape (and in the icon)
     b.pl(0.5, 0.06, 0.5, 0.94); b.pl(0.06, 0.5, 0.94, 0.5); H(0.5, 0, 0, -1); H(0.5, 1, 0, 1); H(0, 0.5, -1, 0); H(1, 0.5, 1, 0); return b;
   }, { fill: false, size: [50, 50] });
 

@@ -66,6 +66,15 @@ Harder cases, scored separately (0.5 mm / 1 mm):
 | Quantum: gate over several wires | 99.9 % | 100 % |
 | Quantum: gate groups with labels | 97.8 % | 100 % |
 | tikz-cd: tall and deep cells (∏, ∑) | 100 % | 100 % |
+| xymatrix: the default square (blk_xy) | 99.3 % | 100 % |
+| xymatrix: exact sequences over two rows | 99.4 % | 100 % |
+| xymatrix: curves, shifts, hooks, `\|` labels | 99.8 % | 100 % |
+| xymatrix: tips (`->>`, `>->`, `=>`, `\|->`, `=`) | 100 % | 100 % |
+| xymatrix: mixed styles with `@C=3pc` | 99.7 % | 100 % |
+| xymatrix: turning arrow (`` `[ul] `[l] ``…) | 89.3 % | 98.2 % |
+| tikz-cd: custom `to path` with rounded corners | 87.6 % | 98.0 % |
+| tikz-cd: `from=` arrows, `bend`, `crossing over` | 100 % | 100 % |
+| tikz-cd: trailing `\\` before `\end{tikzcd}` | 100 % | 100 % |
 | forest: probability tree (per-node `grow`) | 100 % | 100 % |
 | forest: syntax tree with roofs | 100 % | 100 % |
 | forest: org chart (forked edges) | 97.1 % | 100 % |
@@ -83,7 +92,14 @@ Harder cases, scored separately (0.5 mm / 1 mm):
   were about 18 % too tall. Each node can now turn its own children (`grow`), linguistics trees use
   `sn edges`, and forked and folder trees follow forest's spacing.
 - **Commutative diagrams:** cells hang on their baseline with tikz-cd's spacing, so rows with tall or deep
-  maths (∏, ∑, fractions) are spaced as in LaTeX.
+  maths (∏, ∑, fractions) are spaced as in LaTeX. `hook` and `hook'` now curl to the side tikz-cd draws them
+  on (they were swapped).
+- **XyMatrix:** a new block, laid out with xy's own spacing, tips and curves. Its export centres on xy's own
+  box, which leaves out curved arrows. Turning arrows (`` `ul[l] ``…) take xy's 10pt corners, and `*{}`
+  objects are kept. The turns that remain off come from KaTeX setting wide maths slightly wider than TeX.
+- **tikz-cd paths:** a style's `to path` (`--`, `|-`, `-|`, shifted anchors, named label points and nodes on
+  the path) is drawn with its `rounded corners`; `\tikzset` styles are read; `from=` arrows, written in the
+  other cell, now show; and a trailing `\\` leaves the same space below as in LaTeX.
 - **Plots:** grid lines are as light as pgfplots', the top tick labels show, axis labels sit where pgfplots
   puts them, 3D plots draw their hidden box edges grey, and surface meshes are as faint as in the PDF.
 - **Timing diagrams and Karnaugh maps:** row names, grids and variable names sit where the packages put
@@ -95,6 +111,9 @@ Harder cases, scored separately (0.5 mm / 1 mm):
 - **Arrow tips:** re-derived from `arrows.meta`. Hooks were too big on the canvas (not in LaTeX), Square,
   Diamond, Bar, Bracket and Parenthesis tips now have LaTeX's size, and To, harpoon and reversed tips no
   longer overshoot the end of the line.
+- **Curved heads everywhere:** To, its reversed, doubled and barred forms, and tikz-cd's heads are now pgf's
+  Computer Modern Rightarrow curve (tikz-cd's `cm to`, its two-heads overlap and `Implies`), and xymatrix's
+  `->>`, `>->` and `=>` use xy's own curved heads, so no head is drawn as a straight chevron any more.
 - **Ticked shafts** carry their ticks under the arrowhead, as LaTeX does.
 - **Bricks** fill exports at the canvas's brick size and line width.
 - **Translucent shapes** export as one faded group (`transparency group`), so arrowheads and outlines no
@@ -128,7 +147,7 @@ figure went from 69 % to 100 %.)
 
 ![3D scatter plot, app vs LaTeX](docs/latex-parity/plot_scatter3d.png)
 
-**Arrow tips at 2 pt: 99.2 % within 0.5 mm.** Every tip in the library, thick enough to see its shape.
+**Arrow tips at 2 pt: 99.7 % within 0.5 mm.** Every tip in the library, thick enough to see its shape.
 
 ![Arrow tips at 2pt, app vs LaTeX](docs/latex-parity/tip_w2.png)
 

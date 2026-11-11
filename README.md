@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata**, **karnaugh-map**, **chemfig** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams, Feynman diagrams, 3D geometry, timing diagrams, state machines, Karnaugh maps, chemical structures and reaction schemes, and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata**, **karnaugh-map**, **chemfig** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams, Feynman diagrams, 3D geometry, timing diagrams, state machines, Karnaugh maps, chemical structures and reaction schemes, and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -32,7 +32,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
   - **Solids of revolution:** the region between y = g(x) and y = f(x) turned about the x-axis (disks, washers) or the y-axis (shells). Sweep less than 360° to cut it open and show the region, or highlight one slice of width Δx.
   - **Basic solids:** box, cylinder, cone, frustum, sphere, prism, pyramid and spherical wedge, with dimension labels.
   - **3D geometry** (in the 3D menu): a `tikz-3dplot` picture edited visually: turn the view by dragging, drag points (level, or up and down with Shift), and add axes, rotated frames, points by (x, y, z) or (r, θ, φ), vectors, segments, projections, planes (any plane a x + b y + c z = d), surfaces z = f(x, y) and (u, v), triangles, circles, spheres, boxes, space curves and angle arcs. The code is the figure and is exported as written.
-- **Commutative diagrams:** a `tikz-cd` editor: type or drop objects on a grid, drag arrows from cell to cell, and pick each arrow's style, label, bend and shift, with the code live beside it.
+- **Commutative diagrams:** a `tikz-cd` editor: type or drop objects on a grid, drag arrows from cell to cell, and pick each arrow's style, label, bend and shift, with the code live beside it. The same editor writes `xymatrix` code (the `xy` package) for the XyMatrix block.
 - **Bloch spheres:** a `blochsphere` block drawn with the package's own geometry; set the radius, view angles, ball style and states in the panel.
 - **Quantum circuits:** a drag-and-drop `quantikz` editor (gates, controls, CNOT/controlled-U/Toffoli/SWAP, meters, labels, wire types, slices, groups) with the code live beside it.
 - **Trees:** a `forest` editor for syntax trees, org charts, directory trees, decision and probability trees: add, move and restyle nodes by keyboard or drag, with templates and the code live beside it.
@@ -64,7 +64,7 @@ How close does the exported LaTeX come to what you see? See [PARITY.md](PARITY.m
 
 1. Open **[diagramtex.igniting.space](https://diagramtex.igniting.space/)**.
 2. Pick a tool from the left rail and draw. Type `$…$` in a label for maths.
-3. Press **Ctrl/⌘+E** to open the TikZ code and copy it, or **Ctrl/⌘+Shift+E** to download the whole document as `.tex`.
+3. Press **LaTeX** (**Ctrl/⌘+E**) to see the code: the TikZ picture, a standalone file or the whole document, to copy or download. **Ctrl/⌘+Shift+E** downloads the whole document as `.tex` at once.
 4. Paste the code into your LaTeX document and compile.
 
 The full user guide (every tool, block, mode, export and shortcut) is at **[diagramtex.igniting.space/guide/](https://diagramtex.igniting.space/guide/)**, and in the app behind the book icon at the bottom of the document list.
@@ -124,7 +124,7 @@ npx wrangler preview
   - **3D plots:** Surface `z = f(x, y)` (set Type to Mesh for a wireframe), Parametric (x(u, v), y(u, v), z(u, v)), Space curve (x(t), y(t), z(t)) and Scatter 3D. The view angles follow pgfplots `view={az}{el}`.
   - **3D figures:** Solid region (Shape picks an ellipse, rectangle, polar curve or polar rectangle (a cylindrical wedge); Riemann columns turns it into boxes), Revolution (Lower g(x) makes washers, Turn about y-axis makes shells, Sweep cuts it open, Show a slice highlights Δx), Solid (Shape picks box, cylinder, cone, frustum, sphere, prism, pyramid or spherical wedge) and 3D Geometry.
   - Files with a 3D sketch from earlier versions still open, draw and export as before; new figures with points, vectors and planes use 3D Geometry.
-- **Blocks menu** (the cube button below 3D): CD, Bloch, Quantum, Circuit, Tree, ZX, Feynman, Timing, Automaton, K-map and Chemistry. A new block starts with `large` labels, whatever the default text size is.
+- **Blocks menu** (the cube button below 3D, marked experimental): CD, XyMatrix, Bloch, Quantum, Circuit, Tree, ZX, Feynman, Timing, Automaton, K-map and Chemistry. A new block starts with `large` labels, whatever the default text size is.
 - **Grid editors** (Quantum, ZX, CD): point just left of a row or just above a column and a bin appears; click it to delete that row or column. Every field in an editor's panel updates the others as you type (a label and its code, an option and its buttons).
 - **Plots:** each plot can have several series, given as expressions (`sin(x)*exp(-x/4)`, `x^2+y^2`, …) or as data. You can set axis labels, ranges, grid, legend, colormaps (hot, viridis, jet, cool, gray) and a colour bar. Expression errors show in the panel and on the canvas.
   - **Function plot series types** (Mathcha's set): regular `y = f(x)`, **inequality** (`y < f(x)`, `≤`, `>`, `≥`; shaded, with a dashed edge when strict), **bounded region** between `f` and `g`, **x in terms of y**, **parametric** `(x(t), y(t))`, **polar** `r(θ)`, **implicit** `F(x, y) = 0`, **points**, **vectors** (`x y` or `x y u v`), **vector field** `(P, Q)` and **phase portrait** (trajectories with arrows).
@@ -233,10 +233,16 @@ npx wrangler preview
 - The code is live on the right, both ways, and is drawn by chemfig's own rules (atom sep 3em, ring and branch angles, double bonds inside rings, Cram wedges, arrow lengths), so the canvas matches the PDF. Code you didn't touch is kept as written. It is exported unchanged in a node with `\usepackage{chemfig}` and builds with pdfLaTeX. Not drawn (kept in the code and warned about): submolecules (`!{…}`), `\subscheme`, `\merge`, arrows between named compounds (`\arrow(@a--@b)`), the `-U>` arrow's arc and `\chemfig`'s optional arguments.
 
 ### Commutative diagrams (tikz-cd)
-- **Blocks → CD** adds a diagram. Double-click it, press Enter or use **Edit Diagram…** in the panel to open the CD editor. Older XyMatrix shapes open as CD blocks.
+- **Blocks → CD** adds a diagram. Double-click it, press Enter or use **Edit Diagram…** in the panel to open the CD editor. Diagrams from the old grid editor open as CD blocks.
 - **Editor:** the diagram sits on a grid of cells. Select a cell and type to write its object, or drop one from the palette (A, 0, ℤ, A ⊕ B, Hom(A, B), …). Drag from one cell to another to draw an arrow in the style picked in the palette (arrow, maps to, inclusion, onto, into, dashed, implies, equal, both ways, line, harpoon, squiggly). Drag a cell to move it (Alt copies); right-click for rows and columns.
 - **Arrows:** the panel sets the label (Side and At apply once it has one), the head (pictures), the line (solid, dashed, dotted, squiggly), a crossing gap, bend and shift, each on its own so none undoes another, and shows the arrow's options as written; **Reverse** swaps its ends. Picking Dashed or Squiggly in the palette changes only the line.
 - The `tikz-cd` code is live on the right, both ways; cells you didn't touch keep the code you wrote. The canvas sizes cells as tikz-cd does. It is exported inside `\begin{tikzcd}` with `\usepackage{tikz-cd}` (and `decorations.pathmorphing` for squiggly arrows).
+
+### Commutative diagrams (xymatrix)
+- **Blocks → XyMatrix** adds a diagram written for the `xy` package. It opens in the same editor as CD, with the same palette, grid and arrow panel, but the live code is `\xymatrix{…}`: `\ar@{->>}[r]^{f}`, hooks `@{^{(}->}`, curves `@/^1pc/`, shifts `@<.5ex>`, labels `^`, `_`, `|` with a position such as `^(.3)`, and `@R=`/`@C=`/`@M=` spacing.
+- The canvas uses xy's geometry: 2pc between entries, 3pt object margins, labels in script size 2.5pt from the arrow, xy's arrow tip, and `@/^/` curves .5pc deep. xy code with no tikz-cd counterpart is kept as written.
+- It is exported unchanged, as `$\xymatrix{…}$` in a node, with `\usepackage[all]{xy}`. It builds with pdfLaTeX alongside tikz-cd.
+- **Convert to xymatrix** (in a CD block's panel) and **Convert to tikz-cd** (in an XyMatrix block's panel) rewrite the block in the other package: spacing, arrow styles, labels and their positions, bends and curves, shifts, framed objects, and xy turns `` `[ul] `[l]… `` as tikz-cd `to path`s with rounded corners. Converting back before you edit gives your original code exactly. What the other package can't say (`crossing over`, colours, named coordinates) is approximated or dropped, and the hint lists it.
 
 ### Bloch spheres (blochsphere)
 - **Blocks → Bloch** adds a sphere. Its `blochsphere` code is the object: the canvas draws it with the package's projection, circles, shaded ball and state vectors.
@@ -265,6 +271,7 @@ npx wrangler preview
   - An object belongs to the page under its centre, so moving, duplicating or deleting a page takes its objects with it. All page actions can be undone.
   - The status bar shows **Page k / n**, with ‹ › buttons and **+ Page** (inserts after the current page). PgUp / PgDn also move between pages.
   - Rulers measure from the paper's top-left corner.
+  - The **Hand** tool (`H`) drags the view around, as on a whiteboard; Space-drag does the same with any tool.
 - **LaTeX / TikZ export** writes a complete `article`: one `tikzpicture[remember picture, overlay]` per page anchored at `current page.north west`, so every object keeps its exact position. Compile twice.
 - **Export** (see below) saves each page as PNG, SVG or PDF, and **Print / PDF** prints each page at true size.
 
@@ -306,6 +313,10 @@ DiagramTeX is privacy-focused by design:
 - **Files stay yours.** Save, Open, Import and Export work on files on your own computer. The app never contacts another site: everything it uses is served with it, a Content-Security-Policy blocks any other origin, and SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them, so opening an export requests nothing either.
 - **Open source.** Every line is in this repository ([MIT License](LICENSE)), and you can self-host it as plain static files.
 
+## Use of generative AI
+
+DiagramTeX was built with the help of generative AI: much of its code, tests and documentation were written with AI coding assistants, directed, reviewed and tested by the author. The app itself uses no AI: nothing you draw is sent to an AI service or anywhere else.
+
 ## Coordinates
 
 1 cm in TikZ is 40 px on the canvas. The y axis is flipped: canvas y points down, TikZ y points up. The faint cross on the canvas marks the TikZ origin.
@@ -334,7 +345,7 @@ Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf pr
 Yes, for most `\draw`, `\fill`, `\node` and `\coordinate` paths: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Files exported by DiagramTeX re-import exactly, plots included.
 
 **Which LaTeX packages does the output need?**
-TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams, `tikz-feynman` for Feynman diagrams, `tikz-3dplot` for 3D geometry, `tikz-timing` for timing diagrams, the TikZ `automata` library for state machines, `karnaugh-map` for Karnaugh maps, `chemfig` for chemistry and `blochsphere` for Bloch spheres. The export lists what each figure needs. quantikz2 restyles every `tikz-cd` diagram in the same document, so when a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own (a snippet lists them in its header comment).
+TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams, `tikz-feynman` for Feynman diagrams, `tikz-3dplot` for 3D geometry, `tikz-timing` for timing diagrams, the TikZ `automata` library for state machines, `karnaugh-map` for Karnaugh maps, `chemfig` for chemistry and `blochsphere` for Bloch spheres. The export lists what each figure needs. quantikz2 restyles every `tikz-cd` diagram in the same document, so when a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own (a snippet lists them in its header comment).
 
 ## Project structure
 
@@ -375,7 +386,8 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/js/view3d.js`: the shared 3D engine: projection, shaded meshes with hidden edges, fitting into the box, SVG and plain TikZ output
 - `public/js/solid3d.js`, `public/js/figures3d.js`, `public/js/sketch3d.js`: solid regions, basic solids and solids of revolution, and the 3D sketch (kept so older files open; no longer in the menu)
 - `public/js/cd.js`: commutative diagrams: tikz-cd parser, layout, canvas drawing and export
-- `public/js/cdeditor.js`: the overlay CD editor (palette, cell grid, arrows, live tikz-cd code)
+- `public/js/cdeditor.js`: the overlay CD editor (palette, cell grid, arrows, live tikz-cd or xymatrix code)
+- `public/js/xy.js`: the XyMatrix block: xymatrix to tikz-cd and back, xy's geometry, export
 - `public/js/bloch.js`: Bloch spheres: blochsphere parser, canvas drawing, panel and export
 - `public/js/segthumb.js`: the sliding knob of segmented switches
 - `public/js/tikzimport.js`: LaTeX/TikZ importer

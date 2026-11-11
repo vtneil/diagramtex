@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.22.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.23.3'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -169,6 +169,17 @@
   const wrap = (s, inner) => (s.opacity != null && s.opacity < 1 ? `<g opacity="${s.opacity}">${inner}</g>` : inner);
   const hit = (d, ctx) => (ctx.export ? '' : `<path class="hit" d="${d}" stroke-width="${ctx.hit}"/>`);
 
+  // Computer Modern Rightarrow (arrows.meta To, tikz-cd's cm to): width 2.097 x length, two curves from the back
+  // corners into the point, round caps and join. d = distance of the drawn point behind P; dir -1 = reversed, its
+  // back corners on P. back = where the line stops, end = the back end (where a following tip's point goes).
+  function cmArrow(P, u, w, color, len, d, dir) {
+    const n = { x: -u.y, y: u.x }, ca = len - w, cb = 2.096774 * len - w;
+    const X = (x) => (dir > 0 ? d - x : d + ca + 0.5 * w + x);
+    const c = (x, y) => pt({ x: P.x - u.x * X(x) + n.x * y, y: P.y - u.y * X(x) + n.y * y });
+    const svg = `<path d="M${c(-ca, cb / 2)}C${c(-0.81731 * ca, 0.2 * cb)} ${c(-0.41019 * ca, 0.05833 * cb)} ${c(0, 0)}C${c(-0.41019 * ca, -0.05833 * cb)} ${c(-0.81731 * ca, -0.2 * cb)} ${c(-ca, -cb / 2)}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    return { svg, back: dir > 0 ? d + 0.5 * w : d + ca, end: d + ca + w };
+  }
+
   // Arrow tip geometry. P = tip point, u = unit direction pointing out of the path at P.
   function tip(type, P, u, w, color) {
     if (!type || type === 'none') return { svg: '', back: 0 };
@@ -177,6 +188,7 @@
     const n = { x: -u.y, y: u.x };
     const at = (a, b) => ({ x: P.x - u.x * a + n.x * b, y: P.y - u.y * a + n.y * b });
     const W = 0.375 * L;
+    const cmTo = (d, dir) => cmArrow(P, u, w, color, (1.6 + 2.2 * lw) / K, d, dir);
     switch (type) {
       case 'stealth':
         return { svg: `<path d="M${pt(P)}L${pt(at(L, W))}L${pt(at(0.675 * L, 0))}L${pt(at(L, -W))}Z" fill="${color}"/>`, back: 0.6 * L };
@@ -185,13 +197,7 @@
           svg: `<path d="M${pt(P)}C${pt(at(0.1228 * L, 0.0779 * W))} ${pt(at(0.6626 * L, 0.5195 * W))} ${pt(at(L, W))}L${pt(at(L, -W))}C${pt(at(0.6626 * L, -0.5195 * W))} ${pt(at(0.1228 * L, -0.0779 * W))} ${pt(P)}Z" fill="${color}"/>`,
           back: 0.8 * L,
         };
-      case 'to': {
-        const l = 0.6 * L, sh = 0.85 * w;
-        return {
-          svg: `<path d="M${pt(at(l + sh, 0.75 * l))}Q${pt(at(0.25 * l + sh, 0.15 * l))} ${pt(at(sh, 0))}Q${pt(at(0.25 * l + sh, -0.15 * l))} ${pt(at(l + sh, -0.75 * l))}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`,
-          back: w * 0.5,
-        };
-      }
+      case 'to': return cmTo(0.5 * w, 1);
       case 'bar': {
         const H = (1.5 + 2 * lw) / K;
         return { svg: `<path d="M${pt(at(w / 2, H))}L${pt(at(w / 2, -H))}" stroke="${color}" stroke-width="${w}"/>`, back: 0 };
@@ -204,14 +210,19 @@
           ? { svg: `<circle cx="${r2(c.x)}" cy="${r2(c.y)}" r="${r2(R)}" fill="${color}"/>`, back: R }
           : { svg: `<circle cx="${r2(c.x)}" cy="${r2(c.y)}" r="${r2(R - w / 2)}" fill="none" stroke="${color}" stroke-width="${w}"/>`, back: 2 * R };
       }
-      case 'stealthr': case 'latexr': case 'tor': {
+      case 'tor': return cmTo(0, -1);
+      case 'stealthr': case 'latexr': {
         // same tip turned round: its back sits on the end of the path
-        const base = type.slice(0, -1), l = base === 'to' ? 0.6 * L : L;
-        const q = tip(base, at(l + (base === 'to' ? 1.3 * w : 0), 0), { x: -u.x, y: -u.y }, w, color);
-        return { svg: q.svg, back: base === 'to' ? w * 0.5 : 0.3 * L };
+        const q = tip(type.slice(0, -1), at(L, 0), { x: -u.x, y: -u.y }, w, color);
+        return { svg: q.svg, back: 0.3 * L };
       }
-      case 'stealth2': case 'latex2': case 'to2': {
-        const base = type.slice(0, -1), off = base === 'to' ? 0.45 * L : base === 'latex' ? 0.8 * L : 0.6 * L;
+      case 'to2': {
+        // the second tip's point sits on the first one's back end; the line runs on to the front tip
+        const t1 = cmTo(0.5 * w, 1), t2 = cmTo(t1.end, 1);
+        return { svg: t1.svg + t2.svg, back: t1.back };
+      }
+      case 'stealth2': case 'latex2': {
+        const base = type.slice(0, -1), off = base === 'latex' ? 0.8 * L : 0.6 * L;
         const a = tip(base, P, u, w, color), b = tip(base, at(off, 0), u, w, color);
         return { svg: a.svg + b.svg, back: off + b.back };
       }
@@ -233,8 +244,8 @@
         const H = (1.5 + 2 * lw) / K, g = Math.max(2 * w, 0.25 * L);
         const bar = (a) => `<path d="M${pt(at(a + w / 2, H))}L${pt(at(a + w / 2, -H))}" stroke="${color}" stroke-width="${w}"/>`;
         if (type === 'bar2') return { svg: bar(0) + bar(g), back: 0 };
-        const t2 = tip('to', at(1.5 * w, 0), u, w, color);
-        return { svg: bar(0) + t2.svg, back: 0 };
+        // To's point touches the bar's back
+        return { svg: bar(0) + cmTo(1.5 * w, 1).svg, back: 0 };
       }
       case 'bracket': case 'bracketr': {
         // Tee Barb: bar width 3pt+4lw, arms 0.75pt+lw long, the bar's front edge on the path end
@@ -358,7 +369,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -395,6 +406,7 @@
   }
 
   TD.tip = tip;
+  TD.cmArrow = cmArrow;
 
   // ---------- text rendering (KaTeX for $...$) ----------
   const htmlCache = new Map();
@@ -1382,7 +1394,7 @@
     if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
     // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
     const forest = [...X.pkgs].filter((p) => /^forest\b/.test(p));
-    for (const p of X.pkgs) if (p !== 'pgfplots' && !/^forest\b/.test(p)) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : `\\usepackage{${p}}`);
+    for (const p of X.pkgs) if (p !== 'pgfplots' && !/^forest\b/.test(p)) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? '\\usepackage[all]{xy}' : `\\usepackage{${p}}`);
     if (forest.length) {
       const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
       pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);
