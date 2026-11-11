@@ -198,6 +198,11 @@
   function insertRow(M, at) { remap(M, (r) => (r >= at ? r + 1 : r), (c) => c, nR(M) + 1, Math.max(1, nC(M))); }
   function deleteRows(M, a, b) { remap(M, (r) => (r < a ? r : r > b ? r - (b - a + 1) : null), (c) => c, nR(M) - (b - a + 1), nC(M)); }
   function insertCol(M, at) { remap(M, (r) => r, (c) => (c >= at ? c + 1 : c), Math.max(1, nR(M)), nC(M) + 1); }
+  // steps a..b trade places with the step beside them (d = -1: left, +1: right)
+  function moveCols(M, a, b, d) {
+    const o = d < 0 ? a - 1 : b + 1;
+    remap(M, (r) => r, (c) => (c >= a && c <= b ? c + d : c === o ? (d < 0 ? b : a) : c), nR(M), nC(M));
+  }
   function deleteCols(M, a, b) { remap(M, (r) => r, (c) => (c < a ? c : c > b ? c - (b - a + 1) : null), nR(M), nC(M) - (b - a + 1)); if (!nC(M)) M.rows = []; }
   function ensure(M, R, C) {
     while (nR(M) < R) M.rows.push(Array.from({ length: Math.max(nC(M), 1) }, emptyCell));
@@ -739,8 +744,9 @@
   // right-click: wires and steps, around the cell (or range) under the pointer
   const MI = {
     ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>',
+    left: '<path d="M16 10H4M8.5 5.5L4 10l4.5 4.5"/>', right: '<path d="M4 10h12M11.5 5.5L16 10l-4.5 4.5"/>',
   };
-  const mItem = (act, label, ic, key) => `<button class="ctx-item${/^(rowdel|coldel|delete)$/.test(act) ? ' danger' : ''}" data-qm="${act}"><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act, label, ic, key, off) => `<button class="ctx-item${/^(rowdel|coldel|delete)$/.test(act) ? ' danger' : ''}" data-qm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -753,6 +759,8 @@
     const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
     menu.innerHTML = mItem('rowabove', 'Insert Wire Above', 'above') + mItem('rowbelow', 'Insert Wire Below', 'below') + '<hr>' +
       mItem('colbefore', 'Insert Step Before', 'before') + mItem('colafter', 'Insert Step After', 'after') + '<hr>' +
+      mItem('colleft', nc > 1 ? `Move ${nc} Steps Left` : 'Move Step Left', 'left', '', s.c1 === 0) +
+      mItem('colright', nc > 1 ? `Move ${nc} Steps Right` : 'Move Step Right', 'right', '', s.c2 >= nC(E.M) - 1) + '<hr>' +
       mItem('rowdel', nr > 1 ? `Delete ${nr} Wires` : 'Delete Wire', 'rowdel') + mItem('coldel', nc > 1 ? `Delete ${nc} Steps` : 'Delete Step', 'coldel') + '<hr>' +
       mItem('delete', nr * nc > 1 ? 'Clear Cells' : 'Clear Cell', 'clear', 'Del');
     menu.hidden = false;
@@ -934,6 +942,12 @@
     else if (a === 'rowdel') edit(() => { deleteRows(M, s.r1, s.r2); if (!nR(M)) E.sel = null; });
     else if (a === 'colbefore') { edit(() => insertCol(M, s.c1)); E.sel = { r1: s.r1, c1: s.c1, r2: s.r1, c2: s.c1 }; draw(); renderProps(); }
     else if (a === 'colafter') { edit(() => insertCol(M, s.c2 + 1)); E.sel = { r1: s.r1, c1: s.c2 + 1, r2: s.r1, c2: s.c2 + 1 }; draw(); renderProps(); }
+    else if (a === 'colleft' || a === 'colright') {
+      const d = a === 'colleft' ? -1 : 1;
+      if (d < 0 ? s.c1 === 0 : s.c2 >= nC(M) - 1) return;
+      edit(() => moveCols(M, s.c1, s.c2, d));
+      E.sel = { r1: s.r1, c1: s.c1 + d, r2: s.r2, c2: s.c2 + d }; draw(); renderProps();
+    }
     else if (a === 'coldel') edit(() => { deleteCols(M, s.c1, s.c2); if (!nC(M)) E.sel = null; });
     else if (a === 'drop') { const cell = at(s.r1, s.c1); edit(() => setItems(cell, cell.items.filter((_, i) => i !== +b.dataset.i))); }
     else if (a === 'wt') { const cell = at(s.r1, s.c1); edit(() => { cell.items[+b.dataset.i].a[0] = b.dataset.v; cell.dirty = true; }); }

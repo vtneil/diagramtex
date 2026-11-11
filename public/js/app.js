@@ -1443,13 +1443,20 @@
         if (s.type === 'cd') { state.sel = new Set([hitId]); render(); renderProps(); openCD(hitId); return; }
         if (s.type === 'xy') { state.sel = new Set([hitId]); render(); renderProps(); openXY(hitId); return; }
       }
-      const grp = groupIds(hitId);
+      // Groups select as one on the first click. A second click (without dragging) on a member of the selected
+      // group selects that member alone; while inside a group, a click on another member selects just it.
+      const grp = groupIds(hitId), hg = byId(hitId).g, cur = selected();
+      const wholeGroup = hg && cur.length === grp.length && grp.every((id) => state.sel.has(id));
+      const inGroup = hg && cur.length && !wholeGroup && cur.every((q) => q.g === hg);
+      let narrow = null;
       if (e.shiftKey) { if (state.sel.has(hitId)) grp.forEach((id) => state.sel.delete(id)); else grp.forEach((id) => state.sel.add(id)); }
+      else if (inGroup && !state.sel.has(hitId)) state.sel = new Set([hitId]);
       else if (!state.sel.has(hitId)) state.sel = new Set(grp);
+      else if (wholeGroup && grp.length > 1) narrow = hitId;
       if (state.sel.has(hitId)) {
         begin();
         const sel = selected(), fast = sel.length > FAST_DRAG;
-        drag = { mode: 'move', a: p, orig: new Map(sel.map((s) => [s.id, fast ? s : clone(s)])), ref: TYPES[byId(hitId).type].anchors(byId(hitId))[0] };
+        drag = { mode: 'move', a: p, narrow, cx: e.clientX, cy: e.clientY, orig: new Map(sel.map((s) => [s.id, fast ? s : clone(s)])), ref: TYPES[byId(hitId).type].anchors(byId(hitId))[0] };
         if (fast) startFastMove(drag);
       }
       renderOverlay(); renderProps();
@@ -1646,9 +1653,20 @@
     return false;
   }
 
-  function endDrag() {
+  function endDrag(e) {
     if (!drag) return;
     const d = drag;
+    // a click (no drag) on a member of the selected group: select that member alone
+    if (d.mode === 'move' && d.narrow && (!d.moved || (e && e.clientX != null && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) <= 3))) {
+      if (d.fast) endFastMove(d);
+      for (const [id, o] of d.orig) { const q = byId(id); if (q && o !== q) Object.assign(q, clone(o)); }
+      drag = null; snapHint = null;
+      svg.classList.remove('drag-cur');
+      commit();
+      state.sel = new Set([d.narrow]);
+      render(); renderProps();
+      return;
+    }
     drag = null;
     svg.classList.remove('panning', 'drag-cur');
     if (d.mode === 'rotate') svg.classList.remove('rot-zone');
@@ -2709,6 +2727,8 @@
       TD.translate(s, dx, dy);
       addShape(s); state.sel.add(s.id);
     }
+    // a lone member copied out of a group pastes as a plain shape, not a group of one
+    for (const g of gmap.values()) { const m = made.filter((q) => q.g === g); if (m.length === 1) { delete m[0].g; delete m[0].gname; } }
     remapLinks(made, idmap);
     commit(); render(); renderProps();
   }
