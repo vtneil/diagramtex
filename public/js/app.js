@@ -1033,9 +1033,9 @@
   $('#fly-elec').innerHTML = `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: about 250 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>Circuit…</button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`
     + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
   function flyOf(t) {
-    if (/^(solid|prim3d|revolve|sketch3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
+    if (/^(solid|prim3d|revolve|sketch3d|geo3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|qc|cz|forest|zx|bloch|feynman|geo3d|timing|automata|kmap|chemfig)$/.test(t)) return 'blocks';
+    if (/^(cd|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
@@ -3938,8 +3938,8 @@
     '- \\textbf{Physics}: ground, walls and ceilings, blocks, inclines, carts, pulleys and pendulums; lenses, mirrors, prisms, screens, slits, rays and light sources.',
     '- \\textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.',
     '- \\textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.',
-    '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; 3D sketches with points, vectors and planes; and 3D geometry in tikz-3dplot, with rotated frames, projections and angles, edited by dragging.',
-    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), 3D geometry (tikz-3dplot), timing diagrams (tikz-timing), state machines (TikZ automata), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
+    '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; and 3D geometry in tikz-3dplot (points, vectors, planes, rotated frames, projections and angles), edited by dragging.',
+    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
     '- \\textbf{Images} and \\textbf{freehand} pencil strokes.',
     '',
     '# Four modes',
