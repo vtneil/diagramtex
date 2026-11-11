@@ -3489,6 +3489,55 @@
     if (state.docId === id) state.docId = null; // reopen without saving the old contents over the new
     openDoc(id);
   }
+  // A bundle: every file of the app (Pages, Classic and Whiteboard) in one .diagramtex,
+  // { app, version: 3, kind: 'bundle', files: [project file, …] }, in the order of the file list.
+  function bundleJson() {
+    if (state.docId) saveNow();
+    const files = index().map((x) => { const d = store.get(LS_DOC + x.id, null); return d ? JSON.parse(projectJson(d)) : null; }).filter(Boolean);
+    return { text: JSON.stringify({ app: 'diagramtex', version: 3, kind: 'bundle', files }, null, 1), n: files.length };
+  }
+  function exportAll() {
+    finishEdit();
+    const { text, n } = bundleJson();
+    if (!n) { showHint('No files to export', 1400); return; }
+    download(`DiagramTeX files ${new Date().toISOString().slice(0, 10)}${FILE_EXT}`, text, FILE_TYPE);
+    showHint(`Exported ${n} file${n === 1 ? '' : 's'} in one bundle`, 1600);
+  }
+  const isBundle = (d) => !!d && typeof d === 'object' && d.kind === 'bundle' && Array.isArray(d.files);
+  // Each file of a bundle goes to the list of its kind. A file already here with the same name and contents is
+  // skipped (opening a backup twice adds nothing); one whose name is taken gets "copy" added.
+  function importBundle(d) {
+    const idx = index(), names = new Set(idx.map((x) => x.name)), have = new Map();
+    const key = (q) => { try { const r = parseProject(projectJson(q)); return r ? projectJson(r) : null; } catch { return null; } };
+    for (const x of idx) { const s = store.get(LS_DOC + x.id, null); const k = s && key(s); if (k) have.set(k, x.id); }
+    const n = { page: 0, classic: 0, board: 0 };
+    let same = 0, bad = 0, first = null;
+    for (const f of d.files) {
+      let p = null;
+      try { p = parseProject(JSON.stringify(f), 'Untitled'); } catch { p = null; }
+      if (!p) { bad++; continue; }
+      if (have.has(projectJson(p))) { same++; continue; }
+      let name = p.name;
+      if (names.has(name)) { let k = 1; name = `${p.name} copy`; while (names.has(name)) name = `${p.name} copy ${++k}`; }
+      names.add(name);
+      const id = uid();
+      store.set(LS_DOC + id, p.kind === 'page'
+        ? { kind: 'page', name, page: p.page, sheet: p.sheet, mode: 'page' }
+        : { kind: p.kind, name, blocks: p.blocks, active: 0, page: p.page, mode: p.kind === 'board' ? 'board' : 'document' });
+      idx.push({ id, name, kind: p.kind, updated: Date.now() });
+      have.set(projectJson({ ...p, name }), id);
+      n[p.kind]++;
+      if (!first) first = id;
+    }
+    store.set(LS_INDEX, idx);
+    renderDocList();
+    const parts = [[n.page, 'Pages'], [n.classic, 'Classic'], [n.board, 'Whiteboard']].filter(([k]) => k).map(([k, w]) => `${k} ${w}`);
+    const added = n.page + n.classic + n.board;
+    const msg = (added ? `Added ${added} file${added === 1 ? '' : 's'}: ${parts.join(', ')}` : 'No new files')
+      + (same ? `; ${same} already here` : '') + (bad ? `; ${bad} not readable` : '');
+    showHint(msg, 3000);
+    return { ...n, same, bad, first };
+  }
   async function pasteDoc() {
     let text = null;
     try { text = await navigator.clipboard.readText(); } catch { /* permission denied: use our own copy */ }
@@ -3530,7 +3579,8 @@
     } else {
       h = item(page ? 'New Page' : 'New Document', d('new'), { ic: 'newdoc' }) +
         item('Open File…', d('openfile'), { ic: 'open', key: 'Ctrl+O' }) + hr +
-        item('Paste', d('paste'), { ic: 'paste' });
+        item('Paste', d('paste'), { ic: 'paste' }) + hr +
+        item('Export All Files…', d('exportall'), { ic: 'save' });
     }
     ctx.innerHTML = h;
     ctx.dataset.doc = id || '';
@@ -3594,6 +3644,7 @@
         break;
       }
       case 'paste': pasteDoc(); break;
+      case 'exportall': exportAll(); break;
       case 'save': openFirst(); saveFile(); break;
       case 'savenew': openFirst(); saveFile(true); break;
       case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { if (id === state.docId) showSaveState(); if (f) showHint(`No longer linked to ${f.name}`, 1400); }); break; }
@@ -3882,6 +3933,9 @@
   async function openText(text, name, handle) {
     if (!/\.(diagramtex|json)$/i.test(name) && !/^\s*\{/.test(text)) { openImport(text); return; }
     try {
+      let bd = null;
+      try { bd = JSON.parse(text); } catch { bd = null; }
+      if (isBundle(bd)) { importBundle(bd); return; }
       const known = handle && (await TD.files.docFor(handle, index().map((x) => x.id)));
       if (known) { await reopenLinked(known, text, name); return; }
       if (!openProjectText(text, baseName(name))) throw new Error('not valid JSON');

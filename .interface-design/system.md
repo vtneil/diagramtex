@@ -146,7 +146,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 ## Files sidebar
 - Right-click a file: Open (if not the open one), Rename…, Duplicate, Save As…; Copy, Paste; Download (.json); Export ▸ LaTeX, TikZ (Classic), HTML, Image, Print; Delete. Rename/Duplicate/Save As/Copy/Paste/Delete work on that file in place; Download/Export/Print open it first, since they act on the open file.
 - Rename… turns the row's name into a field in place (Enter or clicking away keeps it, Esc cancels); the file isn't opened, and the top-bar name follows when it is the open file. With the sidebar hidden it falls back to the top-bar name field.
-- Right-click the empty list area: New, Open File…, Paste.
+- Right-click the empty list area: New, Open File…, Paste; Export All Files… (one `.diagramtex` bundle, `kind: "bundle"`, `files: [...]`; opening it adds each file to its kind and shows a count in the hint, without opening any).
 - Copy puts the project JSON (same as Download) on the system clipboard; Paste opens it as a new file and never reuses an existing name ("… copy", "… copy 2").
 
 ## Layers (`#layersWin`, the layers block in app.js)

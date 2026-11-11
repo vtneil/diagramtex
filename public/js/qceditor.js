@@ -285,13 +285,9 @@
   }
   // one edit: begin, change, commit, redraw
   function edit(fn) { begin(); fn(); commit(); clampSel(); draw(); keepInView(); renderProps(); }
-  // a circuit that grew past the view is fitted again
-  function keepInView() {
-    const G = E.G, r = rect(), v = E.view;
-    if (!G) return;
-    const x1 = v.ox + G.xs[0] * v.k, x2 = v.ox + G.xs[G.xs.length - 1] * v.k, y1 = v.oy + Math.min(G.ys[0], G.L.bb.y) * v.k, y2 = v.oy + G.ys[G.ys.length - 1] * v.k;
-    if (x1 < 0 || y1 < 0 || x2 > r.width || y2 > r.height) fit();
-  }
+  // while the view is fitted (on open, or after Fit / 0), every edit fits the circuit again; once the user pans
+  // or zooms, the camera stays where they put it until Fit is pressed again
+  function keepInView() { if (E.G && E.fitted) fit(); }
   function restore(code) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
   function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); }
   function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); }
@@ -496,6 +492,11 @@
     const s = { type: 'qc', x: 0, y: 0, src: snap(), size: E.st.size, font: E.st.font, color: INK };
     const L = Q.layout(s), R = nR(E.M), C = nC(E.M);
     const pitch = 0.6 * TD.PX_PER_CM, xs = [], ys = [];
+    // nothing yet: one start cell, a drop or click there makes the first wire and step
+    if (!R || !C) {
+      const z = 1.2 * TD.PX_PER_CM, ex = [0, z], ey = [0, z];
+      return { s, L: { ...L, bb: { x: 0, y: 0, w: z, h: z } }, xs: ex, ys: ey, R: 0, C: 0, empty: true, cx: () => z / 2, cy: () => z / 2 };
+    }
     if (L.R && L.C) {
       const g = L.geo, colR = (c) => g.colL[c] + g.colW[c], rowB = (r) => g.rowT[r] + g.rowH[r];
       for (let c = 0; c < L.C; c++) xs.push(c ? (colR(c - 1) + g.colL[c]) / 2 : g.colL[0] - g.cs / 2);
@@ -521,7 +522,7 @@
     const G = E.G || (E.G = geom()), [x, y] = toL(e);
     const find = (a, v) => { for (let i = 0; i < a.length - 1; i++) if (v >= a[i] && v < a[i + 1]) return i; return -1; };
     const c = find(G.xs, x), r = find(G.ys, y);
-    if (c < 0 || r < 0 || (r === G.R && c === G.C)) return null;
+    if (c < 0 || r < 0 || (!G.empty && r === G.R && c === G.C)) return null;
     return { r, c };
   }
   function fit() {
@@ -531,11 +532,13 @@
     const y1 = Math.min(G.ys[0], G.L.bb.y) - 24, y2 = Math.max(G.ys[G.ys.length - 1], G.L.bb.y + G.L.bb.h) + 10;
     const k = Math.max(0.6, Math.min(3, Math.min((r.width - 80) / (x2 - x1), (r.height - 80) / (y2 - y1))));
     E.view = { k, ox: r.width / 2 - ((x1 + x2) / 2) * k, oy: r.height / 2 - ((y1 + y2) / 2) * k };
+    E.fitted = true;
     draw();
   }
   svg.addEventListener('wheel', (e) => {
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
+    E.fitted = false;
     if (e.ctrlKey || e.metaKey) {
       const k2 = Math.max(0.4, Math.min(6, v.k * Math.exp(-e.deltaY * 0.01)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
@@ -548,28 +551,34 @@
     if (!E) return;
     syncCode();
     const G = (E.G = geom()), r = rect(), W = r.width, H = r.height, v = E.view, k = v.k;
+    // emptied (every wire or step deleted): bring the start cell into the middle
+    if (!!G.empty !== !!E.wasEmpty) { E.wasEmpty = G.empty; if (G.empty && r.width && E.fitted) { fit(); return; } }
     const X = (x) => r2(v.ox + x * k), Y = (y) => r2(v.oy + y * k);
     const { xs, ys, R, C } = G;
     // paper under the circuit, cell rules, then the circuit
     const px1 = Math.min(xs[0], G.L.bb.x) - 16, px2 = xs[xs.length - 1] + 8, py1 = Math.min(ys[0], G.L.bb.y) - 16, py2 = Math.max(ys[ys.length - 1], G.L.bb.y + G.L.bb.h) + 8;
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/><rect class="qe-paper" x="${X(px1)}" y="${Y(py1)}" width="${r2((px2 - px1) * k)}" height="${r2((py2 - py1) * k)}"/>`;
     let rules = '';
-    for (let c = 0; c <= C; c++) rules += `M${X(xs[c])},${Y(ys[0])}V${Y(ys[R])}`;
-    for (let i = 0; i <= R; i++) rules += `M${X(xs[0])},${Y(ys[i])}H${X(xs[C])}`;
+    if (!G.empty) for (let c = 0; c <= C; c++) rules += `M${X(xs[c])},${Y(ys[0])}V${Y(ys[R])}`;
+    if (!G.empty) for (let i = 0; i <= R; i++) rules += `M${X(xs[0])},${Y(ys[i])}H${X(xs[C])}`;
     out += `<path class="qe-rule" d="${rules}"/>`;
+    const plus = (x, y) => `<path class="qe-plus" d="M${X(x) - 5},${Y(y)}h10M${X(x)},${Y(y) - 5}v10"/>`;
+    if (G.empty) {
+      out += `<rect class="qe-grow" x="${X(xs[0])}" y="${Y(ys[0])}" width="${r2((xs[1] - xs[0]) * k)}" height="${r2((ys[1] - ys[0]) * k)}"/>` + plus((xs[0] + xs[1]) / 2, (ys[0] + ys[1]) / 2);
+    } else {
     // the growing edges: one more step, one more wire
     out += `<rect class="qe-grow" x="${X(xs[C])}" y="${Y(ys[0])}" width="${r2((xs[C + 1] - xs[C]) * k)}" height="${r2((ys[R] - ys[0]) * k)}"/>`;
     out += `<rect class="qe-grow" x="${X(xs[0])}" y="${Y(ys[R])}" width="${r2((xs[C] - xs[0]) * k)}" height="${r2((ys[R + 1] - ys[R]) * k)}"/>`;
-    const plus = (x, y) => `<path class="qe-plus" d="M${X(x) - 5},${Y(y)}h10M${X(x)},${Y(y) - 5}v10"/>`;
     out += plus((xs[C] + xs[C + 1]) / 2, (ys[0] + ys[R]) / 2) + plus((xs[0] + xs[C]) / 2, (ys[R] + ys[R + 1]) / 2);
+    }
     out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${R && C ? Q.draw({ ...G.s, x: G.L.bb.x, y: G.L.bb.y }, { paper: PAPER, export: true }) : ''}</g>`;
-    if (!R || !C) out += `<text class="qe-empty" x="${X((xs[0] + xs[C + 1]) / 2)}" y="${Y(ys[0]) - 10}">Drop an element here to start</text>`;
+    if (G.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[1]) / 2)}" y="${Y(ys[0]) - 14}">Drop or click an element to start</text>`;
     const box = (r1, c1, r2_, c2, cls) => `<rect class="${cls}" x="${X(xs[c1])}" y="${Y(ys[r1])}" width="${r2((xs[c2 + 1] - xs[c1]) * k)}" height="${r2((ys[r2_ + 1] - ys[r1]) * k)}"/>`;
     const h = E.hover;
     if (h) {
       // the growing row / column light up whole: a drop there adds a wire / a step
-      const hb = h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, h.r + spanAt(h.r, h.c) - 1, h.c];
-      if (R && C || h.r < R || h.c < C) {
+      const hb = G.empty ? [0, 0, 0, 0] : h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, h.r + spanAt(h.r, h.c) - 1, h.c];
+      if (G.empty || R && C || h.r < R || h.c < C) {
         if (E.arm || E.ghost || (E.drag && E.drag.mode === 'move' && E.drag.moved)) out += box(...hb, 'qe-target');
         else if (!E.drag) out += box(...hb, 'qe-hover');
       }
@@ -662,7 +671,7 @@
       if (JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(nr) !== JSON.stringify(E.near)) { E.hover = h; E.del = dz; E.near = nr; draw(); }
       return;
     }
-    if (d.mode === 'pan') { E.view.ox = d.ox + sx - d.sx; E.view.oy = d.oy + sy - d.sy; draw(); return; }
+    if (d.mode === 'pan') { E.fitted = false; E.view.ox = d.ox + sx - d.sx; E.view.oy = d.oy + sy - d.sy; draw(); return; }
     if (d.mode === 'size') {
       const [x, y] = toL(e), PX = TD.PX_PER_CM, snap = (v) => Math.round(v * 20) / 20;
       // the handle is the lower right corner: right / down grows the gate, left / up shrinks it. The column's
