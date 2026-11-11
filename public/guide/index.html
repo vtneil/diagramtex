@@ -306,14 +306,14 @@
         <h3>2D plots (pgfplots)</h3>
         <p>Click the plot button to place one, or drag out a box. Each plot holds several series, written as expressions such as <code>sin(x)*exp(-x/4)</code> or as data. Kinds: function, line, scatter, area, bar, contour, heatmap, and pie chart (one <code>label value [#color]</code> per line). A function series can also be an inequality (shaded, dashed edge when strict), a region between two curves, <i>x</i> in terms of <i>y</i>, parametric, polar, implicit <code>F(x, y) = 0</code>, points, vectors, a vector field or a phase portrait. Define variables once (<code>a = 2, b = 0.5</code>) and use them in every series. Axis labels, ranges, grid, legend, colour maps and a colour bar are in the panel; expression errors show both there and on the canvas.</p>
         <h3>2D geometry</h3>
-        <p>The last tool in the 2D plots menu, <b>2D Geometry</b>, is a plain TikZ figure for vectors and coordinate geometry: drag points, add vectors, projections such as <code>(Q |- P)</code>, angle marks and plots, and measures that print their value and update when a point moves. See <a href="#blocks">Blocks</a>.</p>
+        <p><b>2D Geometry</b>, in the Blocks menu, is a plain TikZ figure for vectors and coordinate geometry: drag points, add vectors, projections such as <code>(Q |- P)</code>, angle marks and plots, and measures that print their value and update when a point moves. See <a href="#blocks">Blocks</a>.</p>
         <h3>3D</h3>
-        <p>The 3D menu has eight tools; each one's variants are chosen in its panel.</p>
+        <p>The 3D menu has seven tools; each one's variants are chosen in its panel.</p>
         <ul>
           <li><b>3D plots</b> (pgfplots): surface <code>z = f(x, y)</code> (or a mesh), parametric surface, space curve and 3D scatter, with pgfplots' <code>view={az}{el}</code> angles.</li>
           <li><b>3D figures in plain TikZ</b>, for calculus: solid regions over an ellipse, rectangle, polar curve or polar rectangle (with Riemann columns), solids of revolution (disks, washers, shells, cut open, with a highlighted slice) and basic solids (box, cylinder, cone, frustum, sphere, prism, pyramid, spherical wedge). Hidden edges are dashed; lower a colour's alpha to see through.</li>
-          <li><b>3D Geometry</b> (<code>tikz-3dplot</code>): a picture you turn by dragging, with points, vectors, projections, planes, surfaces, spheres and angle arcs. See <a href="#blocks">Blocks</a>.</li>
         </ul>
+        <p><b>3D Geometry</b> (<code>tikz-3dplot</code>), a picture you turn by dragging, is in the Blocks menu, next to 2D Geometry. See <a href="#blocks">Blocks</a>.</p>
       </section>
 
       <section id="blocks">
@@ -490,7 +490,7 @@
           <tbody>
             <tr><td><b>LaTeX</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>The code dialog, to copy or download. Pick a <code>tikzpicture</code> snippet or a <code>standalone</code> document, for everything or only the selection (the header comment lists the packages and libraries to load), or the whole document.</td></tr>
             <tr><td><b>Whole document</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>Downloads the whole document at once as an <code>article</code> with <code>geometry</code> page settings and each diagram in a <code>tikzpicture</code>. Each picture carries a <code>% diagramtex-data:</code> comment, so it re-imports exactly.</td></tr>
-            <tr><td><b>Export</b></td><td><b>PNG</b> at any DPI from 24 to 2400 (written into the file, so it opens at true size, optionally transparent), <b>SVG</b> (vector, maths fonts embedded) or <b>PDF</b> (pictures at the chosen DPI).</td></tr>
+            <tr><td><b>Export</b></td><td><b>PNG</b> at any DPI from 24 to 2400 (written into the file, so it opens at true size, optionally transparent), <b>SVG</b> (vector, maths fonts embedded) or <b>PDF</b> (vector with selectable text, through the print window; turn on <b>Flatten</b> for pages as pictures at a DPI you choose, 300 by default, saved directly).</td></tr>
             <tr><td><b>Print</b> <kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>Pages at true size; choose Save as PDF for a vector PDF.</td></tr>
             <tr><td><b>Right-click → Copy TikZ</b></td><td>Just the selected objects' code, straight to the clipboard.</td></tr>
           </tbody>

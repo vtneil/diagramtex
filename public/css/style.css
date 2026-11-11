@@ -225,6 +225,10 @@ body:not(.no-files) #btnSidebar { color: var(--ink); background: var(--wash); }
   #kindSeg:hover button:not(.on) { padding: 0 10px; }
   #kindSeg:hover button:not(.on) .lbl { max-width: 7em; opacity: 1; margin-left: 0; }
 }
+/* Upcoming features, shown but not usable: greyed out, a dashed outline, no hover, and clicks do nothing (app.js). */
+.soon, .soon:hover { opacity: .45; cursor: default; }
+#kindSeg button.soon, #kindSeg button.soon:hover { background: transparent; color: var(--graphite); box-shadow: inset 0 0 0 1px transparent; outline: 1px dashed var(--rule-strong); outline-offset: -1px; }
+.pop-grid button.soon, .pop-grid button.soon:hover { border-style: dashed; border-color: var(--rule-strong); background: transparent; color: var(--graphite); }
 body.mode-page .seg.sub { display: none; }
 .seg button svg { width: 16px; height: 16px; }
 #blockSel { font: inherit; height: var(--ctl); }
@@ -1048,6 +1052,13 @@ body.mode-board #emptyHint .eh-board { display: block; }
 .exp-dpi select { width: 92px; }
 .exp-dpi input { width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
 .exp-meta { display: flex; justify-content: space-between; color: var(--pencil); font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+/* a switch: a checkbox with role="switch", ink when on (used by Flatten in the PDF export) */
+.exp-sw { cursor: pointer; color: var(--graphite); }
+input[type=checkbox][role=switch] { appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 28px; height: 16px; margin: 0; padding: 0; border: 0; border-radius: 8px; background: var(--rule-strong); cursor: pointer; transition: background-color 220ms var(--ease); }
+input[type=checkbox][role=switch]::before { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--sheet-raised); box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform 220ms var(--ease); }
+input[type=checkbox][role=switch]:checked { background: var(--ink); }
+input[type=checkbox][role=switch]:checked::before { transform: translateX(12px); }
+input[type=checkbox][role=switch]:focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
 .exp-chk { display: flex; align-items: center; gap: 6px; color: var(--graphite); margin-bottom: 8px; }
 .exp-note { color: var(--pencil); line-height: 1.4; margin-bottom: 8px; }
 .exp-go { width: 100%; height: var(--ctl); }

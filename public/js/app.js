@@ -1082,9 +1082,9 @@
   $('#fly-elec').innerHTML = sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'))
     + `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: 415 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>Advanced Circuit Block (<code>circuitikz</code>)</span></button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`;
   function flyOf(t) {
-    if (/^(solid|prim3d|revolve|sketch3d|geo3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
-    if (/^(plot|pie|geo2d)/.test(t)) return 'insertPop';
-    if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)$/.test(t)) return 'blocks';
+    if (/^(solid|prim3d|revolve|sketch3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
+    if (/^(plot|pie)/.test(t)) return 'insertPop';
+    if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig|geo2d|geo3d)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
@@ -4078,6 +4078,8 @@
     }
   }
   $('#kindSeg [data-quick]').onclick = () => setQuick(true);
+  // upcoming features (.soon) are shown greyed out; a click on one does nothing
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('.soon')) { e.preventDefault(); e.stopPropagation(); } }, true);
   document.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { setQuick(false); setMode(b.dataset.mode); }));
   // Classic reopens the last Classic file in the view it was left in (Diagram or Document).
   document.querySelectorAll('[data-kind]').forEach((b) => (b.onclick = () => { setQuick(false); if (state.doc.kind !== b.dataset.kind) { finishEdit(); finishPoly(); commit(); switchKind(b.dataset.kind); } }));
@@ -4100,7 +4102,7 @@
   // so they render inside the image. PDF goes through the browser's own PDF engine (print → Save as PDF)
   // on pages sized exactly to the diagram or the page, so shapes stay vector and text stays real text.
   const EXP_KEY = 'diagramtex.export';
-  const expOpts = (() => { try { return { fmt: 'png', dpi: 300, transparent: false, ...JSON.parse(localStorage.getItem(EXP_KEY) || '{}') }; } catch (e) { return { fmt: 'png', dpi: 300, transparent: false }; } })();
+  const expOpts = (() => { try { return { fmt: 'png', dpi: 300, transparent: false, flat: false, flatDpi: 300, ...JSON.parse(localStorage.getItem(EXP_KEY) || '{}') }; } catch (e) { return { fmt: 'png', dpi: 300, transparent: false, flat: false, flatDpi: 300 }; } })();
   const saveExpOpts = () => { try { localStorage.setItem(EXP_KEY, JSON.stringify(expOpts)); } catch (e) { /* storage blocked */ } };
   let rasterCss = null;
   async function rasterStyle() {
@@ -4165,6 +4167,34 @@
     out.set(buf.subarray(0, at)); out.set(chunk, at); out.set(buf.subarray(at), at + 21);
     return new Blob([out], { type: 'image/png' });
   }
+  // A flattened PDF: each sheet one RGB image at the chosen DPI (Flate-compressed), on a page of the
+  // sheet's true size. Written here, so it saves like a PNG does, without the print window.
+  async function flatPdf(srcs, dpi) {
+    const enc = new TextEncoder(), parts = [], offs = [];
+    let len = 0;
+    const add = (x) => { const u = typeof x === 'string' ? enc.encode(x) : x; parts.push(u); len += u.length; };
+    const deflate = async (u8) => new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+    const n = srcs.length, obj = (i, body) => { offs[i] = len; add(`${i} 0 obj\n`); for (const b of [].concat(body)) add(b); add('\nendobj\n'); };
+    add('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
+    // 1 catalog, 2 pages, then per sheet: page, image, content
+    obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+    obj(2, `<< /Type /Pages /Count ${n} /Kids [${srcs.map((_, k) => `${3 + 3 * k} 0 R`).join(' ')}] >>`);
+    for (let k = 0; k < n; k++) {
+      const c = await rasterise(srcs[k], false, dpi), W = c.width, H = c.height;
+      const px = c.getContext('2d').getImageData(0, 0, W, H).data, rgb = new Uint8Array(W * H * 3);
+      for (let i = 0, j = 0; i < px.length; i += 4) { rgb[j++] = px[i]; rgb[j++] = px[i + 1]; rgb[j++] = px[i + 2]; }
+      const img = await deflate(rgb);
+      const pw = r2(srcs[k].vb[2] / PX / 2.54 * 72), ph = r2(srcs[k].vb[3] / PX / 2.54 * 72), cs = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+      const P = 3 + 3 * k;
+      obj(P, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${P + 1} 0 R >> >> /Contents ${P + 2} 0 R >>`);
+      obj(P + 1, [`<< /Type /XObject /Subtype /Image /Width ${W} /Height ${H} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${img.length} >>\nstream\n`, img, '\nendstream']);
+      obj(P + 2, `<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`);
+    }
+    const xref = len, N = 3 + 3 * n;
+    add(`xref\n0 ${N}\n0000000000 65535 f \n` + offs.slice(1, N).map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join(''));
+    add(`trailer\n<< /Size ${N} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+    return new Blob(parts, { type: 'application/pdf' });
+  }
   function downloadBlob(name, blob) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = name;
@@ -4190,8 +4220,13 @@
     if (fmt === 'svg') { runCmd('svg'); return; }
     const srcs = exportSources();
     if (!srcs.length) { showHint('This diagram is empty', 1200); return; }
-    if (fmt === 'pdf') { printVector(srcs); return; }
+    if (fmt === 'pdf' && !expOpts.flat) { printVector(srcs); return; }
     await askDir();
+    if (fmt === 'pdf') {
+      showHint(`Exporting a flattened PDF at ${expOpts.flatDpi} DPI…`, 1500);
+      try { await out(slug() + '.pdf', await flatPdf(srcs, expOpts.flatDpi)); } catch (e) { showHint('Export failed: ' + (e.message || e), 3000); }
+      return;
+    }
     showHint(`Exporting ${fmt.toUpperCase()} at ${expOpts.dpi} DPI…`, 1500);
     try {
       for (let k = 0; k < srcs.length; k++) {
@@ -4217,17 +4252,20 @@
         ${dirRow()}<button type="button" class="primary exp-go" data-ego>${TD.files.dirOf(state.docId) ? 'Save' : 'Download'} web page</button>`;
       return;
     }
-    const srcs = exportSources(), sc = expScale();
+    const flat = o.fmt === 'pdf' && o.flat, dpi = flat ? o.flatDpi : o.dpi;
+    const srcs = exportSources(), sc = expScale(dpi);
     const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : 'empty';
     const cm = srcs.length ? `${r2(srcs[0].vb[2] / PX)} × ${r2(srcs[0].vb[3] / PX)} cm` : '';
-    const raster = o.fmt === 'png';
+    const raster = o.fmt === 'png' || flat;
     expPop.innerHTML = `<div class="exp-h">Export ${state.mode === 'page' ? 'page' + (srcs.length > 1 ? 's' : '') : state.mode === 'board' ? 'whiteboard' : 'diagram'}</div>
       <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      ${raster ? `<div class="exp-row"><label for="expDpi">Resolution</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === o.dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(o.dpi) ? '' : `<option value="${o.dpi}" selected>${o.dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${o.dpi}" aria-label="DPI"></span></div>
+      ${o.fmt === 'pdf' ? `<label class="exp-row exp-sw"><span>Flatten</span><input type="checkbox" role="switch" id="expFlat"${flat ? ' checked' : ''} title="Pages as images at a set DPI, instead of vector with selectable text"></label>` : ''}
+      ${raster ? `<div class="exp-row"><label for="expDpi">Resolution</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(dpi) ? '' : `<option value="${dpi}" selected>${dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${dpi}" aria-label="DPI"></span></div>
       <div class="exp-meta">${dim}${srcs.length > 1 ? ` per page · ${srcs.length} ${o.fmt === 'pdf' ? 'pages' : 'files'}` : ''}<span>${cm}</span></div>` : `<div class="exp-meta">Vector, scales to any size<span>${cm}</span></div>`}
       ${o.fmt === 'png' && state.mode !== 'page' ? `<label class="exp-chk"><input type="checkbox" id="expTr"${o.transparent ? ' checked' : ''}> Transparent background</label>` : ''}
-      ${o.fmt === 'pdf' ? `<div class="exp-note">Vector PDF with selectable text${srcs.length > 1 ? `, ${srcs.length} pages` : ''}. In the print window, choose <b>Save as PDF</b> as the destination.</div>` : ''}
-      ${o.fmt === 'pdf' ? '' : dirRow()}<button type="button" class="primary exp-go" data-ego>${o.fmt === 'pdf' ? 'Save PDF…' : (TD.files.dirOf(state.docId) ? 'Save ' : 'Download ') + o.fmt.toUpperCase()}</button>`;
+      ${flat ? `<div class="exp-note">Each ${srcs.length > 1 ? 'page' : 'sheet'} becomes one image; text can't be selected.</div>` : ''}
+      ${o.fmt === 'pdf' && !flat ? `<div class="exp-note">Vector PDF with selectable text${srcs.length > 1 ? `, ${srcs.length} pages` : ''}. In the print window, choose <b>Save as PDF</b> as the destination.</div>` : ''}
+      ${o.fmt === 'pdf' && !flat ? '' : dirRow()}<button type="button" class="primary exp-go" data-ego>${o.fmt === 'pdf' && !flat ? 'Save PDF…' : (TD.files.dirOf(state.docId) ? 'Save ' : 'Download ') + o.fmt.toUpperCase()}</button>`;
   }
   // Where exports go: Downloads, or a folder picked once for this file (where the browser allows it).
   function dirRow() {
@@ -4252,7 +4290,8 @@
     if (e.target.closest('[data-ego]')) { expPop.hidden = true; if (expFmt() === 'html') exportHtml(); else runExport(); }
   });
   expPop.addEventListener('change', (e) => {
-    if (e.target.id === 'expDpiSel' || e.target.id === 'expDpi') { const v = Math.round(+e.target.value); if (v >= 24 && v <= 2400) expOpts.dpi = v; saveExpOpts(); renderExpPop(); }
+    if (e.target.id === 'expDpiSel' || e.target.id === 'expDpi') { const v = Math.round(+e.target.value); if (v >= 24 && v <= 2400) expOpts[expOpts.fmt === 'pdf' ? 'flatDpi' : 'dpi'] = v; saveExpOpts(); renderExpPop(); }
+    if (e.target.id === 'expFlat') { expOpts.flat = e.target.checked; saveExpOpts(); setTimeout(renderExpPop, 220); } // after the knob slides
     if (e.target.id === 'expTr') { expOpts.transparent = e.target.checked; saveExpOpts(); }
   });
   expPop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { expPop.hidden = true; $('#btnExport')?.focus(); } if (e.key === 'Enter' && e.target.id === 'expDpi') e.target.blur(); });
