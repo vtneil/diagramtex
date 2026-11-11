@@ -9,7 +9,16 @@
   const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const GRID = 0.25;                 // cm
   const SNAP_PX = 10;                // pin snap radius on screen
-  const OPEN_CATS = new Set(['wires', 'res', 'cap', 'ind', 'diode', 'trans', 'opamp', 'src', 'ground', 'switch']);
+  // the palette's top sections: everyday parts, then the ones placed lately (remembered in this browser)
+  const COMMON = ['short', 'circ', 'ocirc', 'res:us', 'res:iec', 'cap:iec', 'cap:pol', 'ind:L', 'diode:d', 'diode:led', 'trans:npn', 'trans:pnp',
+    'trans:nmos', 'trans:pmos', 'opamp:3', 'src:battery', 'src:vsource-us', 'src:isource-us', 'ground:gnd', 'ground:vcc', 'switch:open',
+    'meter:ammeter', 'meter:voltmeter', 'meter:lamp'];
+  const RECENT_KEY = 'diagramtex.cz.recent', OPEN_KEY = 'diagramtex.cz.open', RECENT_MAX = 12;
+  const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
+  // which sections are open: only what the person opened (Common and Recent start open)
+  const isOpen = (id) => { const o = lsGet(OPEN_KEY, {}); return id in o ? !!o[id] : id === 'common' || id === 'recent'; };
+  function used(part) { lsSet(RECENT_KEY, [part, ...lsGet(RECENT_KEY, []).filter((k) => k !== part)].slice(0, RECENT_MAX)); }
   const r3 = (n) => Math.round(n * 1000) / 1000;
   const snapG = (v) => r3(Math.round(v / GRID) * GRID);
   const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -81,18 +90,29 @@
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     const match = (d) => !q || q.split(/\s+/).every((w) => `${d.name} ${d.tikz} ${d.keywords || ''} ${d.cat}`.toLowerCase().includes(w));
-    let html = '', n = 0;
-    for (const [cat, title] of CZ.CATS) {
-      const keys = CZ.order.filter((k) => CZ.parts[k].cat === cat && match(CZ.parts[k]));
-      if (!keys.length) continue;
-      n += keys.length;
+    let html = '';
+    const section = (id, title, keys) => {
       const rows = keys.map((k) => `<button class="cz-part${E && E.part === k ? ' on' : ''}" data-part="${k}" title="${esc(CZ.parts[k].name)} — ${CZ.parts[k].kind === 'node' ? 'node' : 'to'}[${esc(CZ.parts[k].tikz)}]" role="listitem">${CZ.icon(k, 44, 26)}<span>${esc(CZ.parts[k].name)}</span></button>`).join('');
       html += q ? `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div>${rows}</div>`
-        : `<details class="cz-cat"${OPEN_CATS.has(cat) ? ' open' : ''}><summary class="cz-cat-t">${esc(title)} <small>${keys.length}</small></summary>${rows}</details>`;
+        : `<details class="cz-cat" data-cat="${id}"${isOpen(id) ? ' open' : ''}><summary class="cz-cat-t">${esc(title)} <small>${keys.length}</small></summary>${rows}</details>`;
+    };
+    if (!q) {
+      const recent = lsGet(RECENT_KEY, []).filter((k) => CZ.parts[k]);
+      if (recent.length) section('recent', 'Recently used', recent);
+      section('common', 'Common', COMMON.filter((k) => CZ.parts[k]));
+    }
+    for (const [cat, title] of CZ.CATS) {
+      const keys = CZ.order.filter((k) => CZ.parts[k].cat === cat && match(CZ.parts[k]));
+      if (keys.length) section(cat, title, keys);
     }
     list.innerHTML = html || `<div class="cz-empty">No part matches “${esc(search.value)}”</div>`;
-    void n;
   }
+  // opening or closing a section is remembered; nothing else opens one
+  list.addEventListener('toggle', (e) => {
+    const d = e.target, id = d.dataset && d.dataset.cat;
+    if (!id || !d.matches('details') || isOpen(id) === d.open) return;
+    lsSet(OPEN_KEY, { ...lsGet(OPEN_KEY, {}), [id]: d.open });
+  }, true);
   search.addEventListener('input', buildPalette);
   search.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
@@ -189,7 +209,7 @@
     let it;
     if (def.kind === 'node') it = newNode(part, snapPt(q).p);
     else { const L = defLen(part), a = [snapG(q[0] - L / 2), snapG(q[1])]; it = newBip(part, a, [r3(a[0] + L), a[1]]); }
-    E.items.push(it);
+    E.items.push(it); used(part);
     E.sel = new Set([it.id]);
     return it;
   }
@@ -334,6 +354,7 @@
     if (E.tool === 'place' || E.tool === 'wire') {
       const part = E.tool === 'wire' ? 'short' : E.part, def = CZ.parts[part];
       begin();
+      if (E.tool !== 'wire') used(part);
       if (def.kind === 'node') { const it = newNode(part, snapPt(q).p); E.items.push(it); E.sel = new Set([it.id]); E.drag = { mode: 'node', id: it.id }; }
       else { const a = snapPt(q).p, it = newBip(part, a, a.slice()); E.items.push(it); E.sel = new Set([it.id]); E.drag = { mode: 'new', id: it.id, sx, sy, q }; }
       draw(); return;

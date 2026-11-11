@@ -69,6 +69,8 @@
       for (const p of s.pkgs || []) X.pkgs.add(p);
       const code = dedent(s.code);
       if (!code.trim()) return '';
+      // and what the code itself uses (decorate, right=of …), so the export compiles without the source's preamble
+      if (TD.lint && TD.lint.uses) { const u = TD.lint.uses(code); for (const l of u.libs) X.libs.add(l); for (const p of u.pkgs) X.pkgs.add(p); }
       // definitions from the source's preamble go to the preamble when there is one (standalone, document)
       if (s.pre && X.preDefs) { X.preDefs.add(code); return ''; }
       const moved = Math.abs(s.x || 0) > 1e-6 || Math.abs(s.y || 0) > 1e-6;
@@ -111,6 +113,16 @@
       TD.app.state.sel = new Set(made.map((c) => c.id));
       return `Converted to ${made.length} shape${made.length === 1 ? '' : 's'}`;
     },
+  };
+  // a named point (shapes.js T.coord): its name
+  TD.panels.coord = {
+    html(s) {
+      const nm = s.tikzName || '';
+      return `<div class="sec"><div class="sec-title">Named Point</div>
+        <div class="row"><label>Name</label><div class="ctl"><input type="text" data-p="tikzName" value="${esc(nm)}" spellcheck="false"></div></div>
+        <div class="help">Written as <code>\\coordinate (${esc(nm)}) at …;</code>. Lines that start or end on it stay attached and are written with its name. It draws nothing in exports.</div></div>`;
+    },
+    apply(s, t) { if (t.dataset.p === 'tikzName') s.tikzName = t.value.replace(/[(),;.\s]/g, ''); return false; },
   };
   TD.rawTikz = { dedent, wrapCode, box, refresh };
 })();

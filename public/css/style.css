@@ -352,6 +352,10 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 /* kept TikZ code (rawtikz.js): the frame and tag keep their size on screen at any zoom */
 #content .rawtikz-frame { fill: none; stroke: var(--graphite); stroke-width: calc(0.8px / var(--zoom, 1)); stroke-dasharray: calc(3px / var(--zoom, 1)) calc(2px / var(--zoom, 1)); }
 #content .rawtikz-tag { fill: var(--graphite); font-family: var(--font-mono); font-size: calc(10px / var(--zoom, 1)); transform: translateY(calc(-3px / var(--zoom, 1))); }
+/* a named point: a cross and its name, the same size on screen at any zoom */
+#content .tkcoord-mark { fill: none; stroke: var(--bluepen); stroke-width: 1.2px; vector-effect: non-scaling-stroke; transform: scale(calc(4 / var(--zoom, 1))); }
+#content .tkcoord-tag { fill: var(--bluepen); font-family: var(--font-mono); font-size: calc(10px / var(--zoom, 1)); transform: translate(calc(5px / var(--zoom, 1)), calc(-5px / var(--zoom, 1))); }
+#content .tkcoord .hitfill { transform: scale(calc(6 / var(--zoom, 1))); }
 #content > g.mv { transform: translate(var(--mx, 0), var(--my, 0)); } /* a large selection while it is dragged (app.js fastMove) */
 .tx { font-family: var(--font-tex); line-height: 1.2; white-space: pre; text-align: center; display: inline-block; pointer-events: none; }
 .tx .katex { font-size: 1em; }
@@ -504,6 +508,16 @@ body.mode-doc #layersWin { display: none; }
   width: 100%; font: inherit; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); min-width: 0;
 }
 #props input[type=number] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* geometry fields and variables: a number or an expression (params.js); an expression is construction (blue
+   pen), one that can't be worked out is red */
+#props input.geomin { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+#props input.geomin.ex { color: var(--bluepen); }
+#props input.geomin.bad, #props input.geomin.bad:hover { color: var(--redpen); border-color: var(--redpen); }
+#props .row.var .vname { width: 84px; flex: none; font-family: var(--font-mono); font-size: 12px; }
+#props .row.var .vdel { flex: none; width: var(--ctl-sm); height: var(--ctl-sm); }
+#props .row.var .vdel:hover { color: var(--redpen); }
+#props .hint-line code { font-family: var(--font-mono); font-size: 11px; color: var(--graphite); }
+#props .hint-inline { font-size: 12px; color: var(--pencil); white-space: nowrap; }
 #props input:hover, #props select:hover, #props textarea:hover { border-color: var(--rule-strong); }
 #props input:focus, #props select:focus, #props textarea:focus,
 .cp-inputs input:focus, .fp input:focus, .dd-custom input:focus, .exp-pop input:focus, .exp-pop select:focus, .fmt-bar input:focus, .fmt-bar select:focus {
@@ -683,6 +697,16 @@ textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); r
 .modal-head label { display: flex; align-items: center; gap: 6px; color: var(--graphite); }
 .modal-head .spacer + button, .modal-head button + button { margin-left: -4px; }
 #tikzOut, #impText { flex: 1; border: 0; border-radius: 0; padding: 16px; font: 12px/1.6 var(--font-mono); resize: none; outline: none; color: var(--ink); background: var(--sheet); }
+/* the code dialog: one row per line, numbers in a gutter that copying leaves out (app.js copies the text) */
+#tikzOut { padding: 12px 16px 12px 0; overflow: auto; white-space: pre; user-select: text; cursor: text; }
+#tikzOut .cl { position: relative; min-height: 1.6em; padding-left: 56px; width: max-content; min-width: 100%; box-sizing: border-box; }
+#tikzOut .cl::before { content: attr(data-n); position: absolute; left: 0; width: 40px; text-align: right; color: var(--faint); user-select: none; }
+#tikzOut .cl::after { content: ''; position: absolute; left: 46px; top: 2px; bottom: 2px; width: 2px; border-radius: 1px; }
+#tikzOut .cl.sel { background: var(--redpen-wash); }
+#tikzOut .cl.sel::before { color: var(--redpen); }
+#tikzOut .cl.chg::after { background: var(--bluepen); }
+#tikzOut .cl.err { text-decoration: underline wavy var(--redpen); text-decoration-skip-ink: none; text-underline-offset: 3px; }
+#tikzOut .cl.err::before { color: var(--redpen); font-weight: 600; }
 .modal-foot { padding: 8px 16px; min-height: 32px; color: var(--redpen); font-size: 12px; border-top: 1px solid var(--rule); }
 .modal-foot:empty { display: none; }
 /* the import report: what stays TikZ code, and why */

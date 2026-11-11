@@ -360,7 +360,7 @@
         <button id="tikzCopy" class="primary">Copy</button>
         <button id="modalClose" class="icon flat" title="Close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button>
       </div>
-      <textarea id="tikzOut" readonly spellcheck="false"></textarea>
+      <div id="tikzOut" class="codeview" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label="LaTeX code"></div>
       <div id="tikzLint" class="modal-foot report"></div>
     </div>
   </div>
@@ -430,6 +430,8 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/rotate.js"></script>
   <script src="js/tikzimport.js"></script>
   <script src="js/rawtikz.js"></script>
+  <script src="js/params.js"></script>
+  <script src="js/components.js"></script>
   <script src="js/tooltip.js"></script>
   <script src="js/segthumb.js"></script>
   <script src="js/selectmenu.js"></script>

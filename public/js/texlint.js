@@ -159,5 +159,12 @@
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   lint.html = (list, max = 12) => list.slice(0, max).map((d) => `<div class="lint ${d.sev}"><span class="ln">line ${d.line}</span> ${esc(d.msg)}</div>`).join('')
     + (list.length > max ? `<div class="lint info">… ${list.length - max} more</div>` : '');
+  // the TikZ libraries and packages a piece of code uses (for code kept as written: the export loads them)
+  lint.uses = (code) => {
+    const b = blank(String(code || '')), libs = [], pkgs = [];
+    for (const [l, re] of LIBS) if (!libs.includes(l) && (typeof re === 'function' ? re(b, b) : (re.lastIndex = 0, re.exec(b) || { index: -1 }).index) >= 0) libs.push(l);
+    for (const [p, re] of PKGS) if (re.exec(b)) pkgs.push(p);
+    return { libs, pkgs };
+  };
   TD.lint = lint;
 })();

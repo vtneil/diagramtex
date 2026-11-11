@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.24.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.25.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -665,10 +665,11 @@
   const f = (n) => { const v = Math.round(n * 100) / 100; return Object.is(v, -0) ? '0' : String(v); };
   function makeX() {
     const colors = new Map();
-    return {
+    const X = {
       colors, libs: new Set(), pkgs: new Set(), n: 0,
       uid() { return 'td' + ++this.n; },
-      c: (x, y) => `(${f(x / PX)},${f(-y / PX)})`,
+      // a point a named point stands at is written by its name (X.refs, set per shape by TD.tikzLines)
+      c: (x, y) => { const v = `(${f(x / PX)},${f(-y / PX)})`; return (X.refs && X.refs.get(v)) || v; },
       len: (px) => f(px / PX),
       pt: (px) => `${f(px * K)}pt`,
       col(c) {
@@ -684,6 +685,7 @@
         return colors.get(hex);
       },
     };
+    return X;
   }
   TD.makeTikzContext = makeX;
   TD.tikzText = tikzText;
@@ -1434,17 +1436,44 @@
     pre.push(...compat.after);
     return pre;
   };
+  // ---------- named point: \coordinate (A) at (x,y); ----------
+  // A point other code refers to by name. On the canvas it is a small cross with its name (the size stays the
+  // same on screen); it draws nothing in exports. Lines that start or end on it stay attached and are written
+  // with the name, (A), rather than its numbers.
+  T.coord = {
+    name: 'Named Point',
+    pts: [['x', 'y']],
+    create: (p) => ({ type: 'coord', x: p.x, y: p.y, tikzName: 'A' }),
+    valid: (s) => !!String(s.tikzName || '').trim(),
+    handles: () => [],
+    anchors: (s) => [{ x: s.x, y: s.y }],
+    samples: (s) => [{ x: s.x, y: s.y }],
+    svg(s, ctx) {
+      if (ctx && ctx.export) return '';
+      const x = r2(s.x), y = r2(s.y);
+      return `<g class="tkcoord" transform="translate(${x} ${y})"><path class="tkcoord-mark" d="M-1 0H1M0 -1V1"/>`
+        + `<text class="tkcoord-tag" x="0" y="0">${esc(s.tikzName || '')}</text><circle class="hitfill" r="1"/></g>`;
+    },
+    translate(s, dx, dy) { s.x += dx; s.y += dy; },
+    tikz(s, X) {
+      const nm = String(s.tikzName || '').trim();
+      return nm ? `\\coordinate (${nm}) at ${X.c(s.x, s.y)};` : '';
+    },
+  };
+
   // ---------- source write-back ----------
   // Imported shapes carry s.tex (tikzimport.js importPicture): the statement they came from and a signature of
   // the shape as imported. While a statement's shapes are all there, in order and unchanged, it exports as it was
   // written (comments and formatting included); a picture with nothing changed exports exactly as written.
-  const SIG_SKIP = new Set(['id', 'tex', 'name', 'gname', 'g', 'locked', 'hidden']);
-  const stable = (v) => (Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object'
-    ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',')}}` : JSON.stringify(v));
-  TD.texSig = function (s) {
+  const SIG_SKIP = new Set(['id', 'tex', 'name', 'gname', 'g', 'locked', 'hidden', 'ex']);
+  // round: numbers to 1e-4 px (the signature a move and a move back do not change)
+  const stable = (v, R) => (Array.isArray(v) ? `[${v.map((q) => stable(q, R)).join(',')}]` : v && typeof v === 'object'
+    ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k], R)).join(',')}}`
+    : R && typeof v === 'number' ? JSON.stringify(Math.round(v * 1e4) / 1e4 || 0) : JSON.stringify(v));
+  TD.texSig = function (s, round) {
     const c = {};
     for (const k of Object.keys(s)) if (!SIG_SKIP.has(k) && k[0] !== '_') c[k] = s[k];
-    const str = stable(c);
+    const str = stable(c, !!round);
     let h = 0x811c9dc5;
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
     return h.toString(36) + '.' + str.length.toString(36);
@@ -1454,6 +1483,7 @@
   function needs(list, X) {
     const Y = makeX(); Y.scene = X.scene || list;
     for (const s of list) { try { T[s.type].tikz(s, Y); } catch (e) { /* only the libraries matter here */ } }
+    if (list.some((s) => s.pos)) Y.libs.add('positioning');
     for (const l of Y.libs) X.libs.add(l);
     for (const p of Y.pkgs) X.pkgs.add(p);
   }
@@ -1466,9 +1496,125 @@
     return code ? `\\begin{scope}[transparency group, opacity=${f(s.opacity)}]\n  ${code.replace(/\n/g, '\n  ')}\n\\end{scope}` : code;
   }
   const GROUPED = new Set(['line', 'curve', 'poly', 'region', 'rect', 'ellipse', 'arc', 'spring']);
+  // ---------- structure kept from the source (tikzimport.js) ----------
+  // the TikZ names an object defines: a named point's, an imported node's
+  const namesOf = (q) => (q.type === 'coord' && q.tikzName ? [q.tikzName] : q.tex && q.tex.i === 0 && q.tex.nm ? q.tex.nm : []);
+  // statements in code: the ; outside braces and brackets
+  const stmtCount = (c) => { let d = 0, n = 0; for (let i = 0; i < c.length; i++) { const ch = c[i]; if (ch === '\\') { i++; continue; } if (ch === '{' || ch === '[') d++; else if (ch === '}' || ch === ']') d--; else if (ch === ';' && !d) n++; } return n; };
+  // points of s that sit on a named point defined before it (one it went through in the source, or one an end
+  // is attached to) are written by the name: (A) rather than (1.5,2)
+  function refMap(s, list, n, X) {
+    const want = new Set(s.refs || []);
+    for (const L of ['link1', 'link2']) if (s[L]) { const c = list.find((q) => q.id === s[L].id); if (c && c.type === 'coord' && c.tikzName) want.add(c.tikzName); }
+    if (!want.size) return null;
+    const m = new Map();
+    for (const nm of want) {
+      let c = null;
+      for (let q = 0; q < n; q++) if (list[q].type === 'coord' && list[q].tikzName === nm) c = list[q];
+      if (c) { const k = X.c(c.x, c.y); if (!m.has(k)) m.set(k, `(${nm})`); }
+    }
+    return m.size ? m : null;
+  }
+  // a shape whose options came from named styles: the styles by name while the fields they set still hold
+  // (s.tkStyle = { n: names, f: { field: [as styled, without the styles] } })
+  function styledCode(s, X) {
+    const S = s.tkStyle;
+    if (!S || !S.n || !S.n.length) return null;
+    const J = (v) => JSON.stringify(v ?? null);
+    const F = Object.entries(S.f || {});
+    if (!F.every(([k, [v]]) => J(s[k]) === J(v))) return null;
+    const b = { ...s };
+    delete b.tkStyle;
+    for (const [k, [, v]] of F) { if (v == null) delete b[k]; else b[k] = v; }
+    // the options as written now, less those the styles account for (the ones the shape without its styles
+    // would not write the same); then, if reading that back does not give the shape, also the options the
+    // styles share a key with. A colour named only for the comparison is not kept.
+    const code = shapeCode(s, X), keep = new Map(X.colors), refs = X.refs;
+    let base, plain;
+    try { base = shapeCode(b, X); X.refs = null; plain = shapeCode(s, X); } finally { X.refs = refs; X.colors.clear(); for (const [k, v] of keep) X.colors.set(k, v); }
+    const RE = /^\\(draw|fill|filldraw|path|node|shade|shadedraw)\b(?:\[((?:[^\[\]]|\[[^\]]*\])*)\])?/;
+    const m = RE.exec(code || ''), mb = RE.exec(base || ''), mp = RE.exec(plain || '');
+    if (!m || !mb || !mp || m[1] !== mb[1] || stmtCount(code) !== 1) return null;
+    const cur = splitOpts(m[2] || ''), own = splitOpts(mb[2] || ''), key = (o) => o.split('=')[0].trim();
+    const lost = new Set(own.filter((o) => !cur.includes(o)).map(key));
+    for (const X2 of [cur.filter((o) => own.includes(o)), cur.filter((o) => own.includes(o) || lost.has(key(o)))]) {
+      if (!readsBack(s, plain.replace(mp[0], `\\${m[1]}[${[...S.n.map((nm) => (S.d || {})[nm] || ''), ...X2].filter(Boolean).join(', ')}]`))) continue;
+      return code.replace(m[0], `\\${m[1]}[${[...S.n, ...X2].join(', ')}]`);
+    }
+    return null;
+  }
+  // code read back (styles written out) gives the shape again: the fields the same, numbers to rounding
+  function readsBack(s, code) {
+    const R = TD.importInternals && TD.importInternals.preview;
+    if (!R) return false;
+    let r;
+    try { r = R(code, [], {}).shapes; } catch (e) { return false; }
+    if (!r || r.length !== 1 || r[0].type !== s.type) return false;
+    const skip = new Set(['id', 'tex', 'tkStyle', 'refs', 'link1', 'link2', 'g', 'gname', 'name', 'pos', 'locked', 'hidden', 'ex']);
+    const near = (a, b) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 0.25
+      : Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((v, i) => near(v, b[i]))
+      : a && b && typeof a === 'object' && typeof b === 'object' ? [...new Set([...Object.keys(a), ...Object.keys(b)])].every((k) => near(a[k], b[k]))
+      : (a ?? null) === (b ?? null));
+    return [...new Set([...Object.keys(s), ...Object.keys(r[0])])].every((k) => skip.has(k) || k[0] === '_' || near(s[k], r[0][k]));
+  }
+  // an option list's entries (commas inside braces, brackets or parentheses do not split)
+  function splitOpts(str) {
+    const out = [];
+    let d = 0, cur = '';
+    for (const ch of str) {
+      if ('{[('.includes(ch)) d++; else if ('}])'.includes(ch)) d--;
+      if (ch === ',' && !d) { if (cur.trim()) out.push(cur.trim()); cur = ''; } else cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  }
+  // a node placed with the positioning library (s.pos = { k: 'right', v: '1cm of a', of, off }): written so
+  // again while it is still where that puts it from the node it names
+  function posCode(s, code, list, n) {
+    const P = s.pos;
+    if (s.type !== 'text' || !P || !code) return null;
+    let r = null;
+    for (let q = 0; q < n; q++) if (namesOf(list[q]).includes(P.of)) r = list[q];
+    if (!r || Math.abs(s.x - r.x - P.off[0]) > 1e-6 || Math.abs(s.y - r.y - P.off[1]) > 1e-6) return null;
+    const m = /^\\node(?:\[([^\]]*)\])? at \([^()]*\) \{/.exec(code);
+    if (!m || /\banchor=/.test(m[1] || '') || stmtCount(code) !== 1) return null;
+    const nm = s.tex && s.tex.i === 0 && s.tex.nm && s.tex.nm[0];
+    return code.replace(m[0], `\\node[${[m[1], `${P.k}=${P.v}`].filter(Boolean).join(', ')}]${nm ? ` (${nm})` : ''} {`);
+  }
+  // a statement whose shapes only moved, together: the move (px), else null
+  function shiftOf(run) {
+    const t = run[0].tex;
+    if (!t.b || !run.every((r) => r.tex.sr)) return null;
+    const b = TD.bbox(run[0]), dx = b.x - t.b[0], dy = b.y - t.b[1];
+    if (!isFinite(dx) || !isFinite(dy) || (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6)) return null;
+    for (const r of run) {
+      const c = JSON.parse(JSON.stringify(r));
+      TD.translate(c, -dx, -dy);
+      if (TD.texSig(c, true) !== r.tex.sr) return null;
+    }
+    return { dx, dy };
+  }
   // the code of each object in order: statements written as they were where nothing changed, generated code elsewhere
+  // Source map for the code dialog: with TD.srcMark set, each statement is wrapped in invisible marks naming
+  // its shapes; TD.srcMap takes them out and says which lines each statement fills
+  const M0 = '\uE000', M1 = '\uE001', M2 = '\uE002';
+  const mark = (ids, code) => (TD.srcMark && code ? M0 + ids.join(',') + M1 + code + M2 : code);
+  TD.srcMap = function (text) {
+    let out = '', line = 1, cur = null;
+    const spans = [];
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === M0) { const j = text.indexOf(M1, i); cur = { ids: text.slice(i + 1, j).split(','), a: 0, b: 0 }; spans.push(cur); i = j; continue; }
+      if (ch === M2) { cur = null; continue; }
+      if (ch === '\n') line++;
+      else if (cur && !/\s/.test(ch)) { if (!cur.a) cur.a = line; cur.b = line; }
+      out += ch;
+    }
+    return { text: out, spans: spans.filter((x) => x.a) };
+  };
   TD.tikzLines = function (shapes, X) {
     const items = [];
+    if (shapes.some((s) => s.pos)) X.libs.add('positioning'); // right=1cm of a, as written or kept (posCode)
     for (const s of shapes) {
       const code = s.type === 'tikz' ? s.code : s.tex && s.tex.src;
       if (!code || !code.includes('color')) continue;
@@ -1486,18 +1632,31 @@
       const s = shapes[n], t = s.tex;
       if (t && t.i === 0 && t.src != null) {
         const run = shapes.slice(n, n + t.n);
-        if (run.length === t.n && run.every((r, q) => r.tex && r.tex.p === t.p && r.tex.k === t.k && r.tex.i === q && unchanged(r))) {
+        const whole = run.length === t.n && run.every((r, q) => r.tex && r.tex.p === t.p && r.tex.k === t.k && r.tex.i === q);
+        // (a named point alone is simply written where it is now)
+        const same = whole && run.every(unchanged), d = whole && !same && !run.every((r) => r.type === 'coord') ? shiftOf(run) : null;
+        if (same || d) {
           needs(run, X);
           const own = TD.rawTikz.dedent(t.src.slice(t.cut));
-          if (own.trim()) items.push({ code: own, ctx: t.ctx || [] });
+          // only moved: as written, in a shift scope outside its own scopes
+          const ids = run.map((r) => r.id);
+          if (own.trim()) items.push(d ? { code: mark(ids, TD.rawTikz.wrapCode(own, t.ctx || [], X.c(d.dx, d.dy))), ctx: [] } : { code: mark(ids, own), ctx: t.ctx || [] });
           if (t.drop) (X.notes = X.notes || new Set()).add(`Picture options left out (they belong to the whole picture): ${t.drop.join(', ')}`);
           n += t.n; continue;
         }
       }
-      let code = shapeCode(s, X);
-      // a node other statements still name keeps its name, as a coordinate where the text is
-      if (code && t && t.nm && t.i === 0 && s.type === 'text') code += '\n' + t.nm.map((nm) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
-      if (code) items.push({ code, ctx: [] });
+      X.refs = refMap(s, shapes, n, X);
+      let code, placed = null;
+      try {
+        code = styledCode(s, X) || shapeCode(s, X);
+        placed = posCode(s, code, shapes, n);
+        if (placed) code = placed;
+      } finally { X.refs = null; }
+      // a node other statements still name keeps its name, as a coordinate where the text is (a named point
+      // renamed here keeps its old name the same way, for the code kept as written that uses it)
+      const old = t && t.nm && t.i === 0 ? t.nm.filter((nm) => !(s.type === 'coord' && nm === s.tikzName)) : [];
+      if (code && old.length && !placed && (s.type === 'text' || s.type === 'coord')) code += '\n' + old.map((nm) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
+      if (code) items.push({ code: mark([s.id], code), ctx: [] });
       n++;
     }
     // consecutive statements from the same scopes share them
@@ -1526,8 +1685,9 @@
     if (k !== t0.N || i !== 0) return null;
     needs(L, X);
     // definitions from the source's preamble: to the preamble, or (a snippet) first in the picture
-    const pre = shapes.filter((s) => !s.hidden && s.type === 'tikz' && s.pre).map((s) => T.tikz.tikz(s, X)).filter(Boolean);
-    return { open: t0.open, pre, body: L.filter((s) => s.tex.i === 0).map((s) => s.tex.src).join('') + L[L.length - 1].tex.tail, close: '\\end{tikzpicture}' };
+    const pre = shapes.filter((s) => !s.hidden && s.type === 'tikz' && s.pre).map((s) => mark([s.id], T.tikz.tikz(s, X))).filter(Boolean);
+    const runIds = (s) => L.filter((r) => r.tex.k === s.tex.k).map((r) => r.id);
+    return { open: t0.open, pre, body: L.filter((s) => s.tex.i === 0).map((s) => mark(runIds(s), s.tex.src)).join('') + L[L.length - 1].tex.tail, close: '\\end{tikzpicture}' };
   };
   // Body lines (definecolors + shapes) for a list of shapes.
   TD.tikzBody = function (shapes, X) {

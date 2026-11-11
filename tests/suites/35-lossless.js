@@ -23,16 +23,16 @@ T.test('lossless: editing one shape regenerates only its statement', () => {
   const out = picOf(TD.toTikz(shapes, { standalone: true }));
   const A = picOf(HW()).split('\n'), B = out.split('\n');
   const changed = B.filter((l) => !A.includes(l));
-  T.eq(changed, ['\\begin{tikzpicture}[x=1cm, y=1cm, >=Stealth]', '  \\draw[draw=accent, line width=1.6pt] (0,0) -- (3,0);'], 'only the opening line and the edited statement change');
+  T.eq(changed, ['\\begin{tikzpicture}[x=1cm, y=1cm, >=Stealth]', '  \\draw[draw=accent, line width=1.6pt] (O) -- (A);'], 'only the opening line and the edited statement change (its named points by name)');
   T.ok(out.includes('% --- named points ---') && out.includes('% inside a scope'), 'comments kept');
   T.tex('lossless-edited', TD.toTikz(shapes, { standalone: true }));
 });
 
-T.test('lossless: a dragged kept statement gets a shift', () => {
+T.test('lossless: a dragged statement gets a shift', () => {
   const shapes = imp();
-  const loop = shapes.find((s) => s.type === 'tikz' && /\\foreach/.test(s.code));
-  T.ok(loop, 'the \\foreach is kept as code');
-  TD.translate(loop, TD.PX_PER_CM, 0);
+  const loop = shapes.filter((s) => s.g && s.gname === 'foreach loop');
+  T.eq(loop.length, 4, 'the \\foreach is a group of its four dots');
+  for (const s of loop) TD.translate(s, TD.PX_PER_CM, 0);
   const out = TD.toTikz(shapes, { standalone: true });
   T.ok(/\\begin\{scope\}\[shift=\{\(1,0\)\}\]\s*\n\s*\\foreach/.test(out), 'shift scope around the loop');
   T.tex('lossless-moved', out);

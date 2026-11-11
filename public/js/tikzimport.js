@@ -50,7 +50,7 @@
   }
 
   function makeCtx() {
-    return { colors: { ...NAMED }, names: {}, sx: PX, sy: PX, warnings: [] };
+    return { colors: { ...NAMED }, names: {}, sx: PX, sy: PX, warnings: [], styles: new Map(), boxes: {} };
   }
   function color(C, spec) {
     if (!spec) return null;
@@ -75,13 +75,38 @@
     }
     return c;
   }
-  function parseOpts(str) {
+  // styles named in an option list (\tikzset{name/.style={…}}) stand for their keys; styUsed collects the names
+  // a statement used, and styOff reads them as nothing (the statement without its styles: what the styles add)
+  let STY = null, styUsed = null, styOff = false;
+  function parseOpts(str, depth = 0, raw = false) {
     if (!str) return [];
-    return splitTop(str, ',').map((x) => x.trim()).filter(Boolean).map((x) => {
+    const out = [];
+    for (const x of splitTop(str, ',').map((q) => q.trim()).filter(Boolean)) {
       const eq = splitTop(x, '=');
-      if (eq.length > 1) return { k: eq[0].trim(), v: eq.slice(1).join('=').trim().replace(/^\{([\s\S]*)\}$/, '$1') };
-      return { k: x, v: null };
-    });
+      const o = eq.length > 1 ? { k: eq[0].trim(), v: eq.slice(1).join('=').trim().replace(/^\{([\s\S]*)\}$/, '$1') } : { k: x, v: null };
+      if (!raw && o.v === null && STY && STY.has(o.k) && depth < 8) {
+        if (styUsed) styUsed.add(o.k);
+        if (!styOff) out.push(...parseOpts(STY.get(o.k), depth + 1));
+        continue;
+      }
+      out.push(o);
+    }
+    return out;
+  }
+  // \tikzset{a/.style={…}, …}, \tikzstyle{a}=[…] and a picture's a/.style={…}: styles with fixed keys only
+  function addStyle(C, nm, body) {
+    if (/#\d/.test(body) || /^every /.test(nm)) { C.styles.delete(nm); return; }
+    C.styles.set(nm, body);
+  }
+  function defineStyles(C, cmd, args) {
+    if (cmd === 'tikzstyle') { const m = /^\s*\{([^}]*)\}\s*=?\s*\[([\s\S]*)\]/.exec(args); if (m) addStyle(C, m[1].trim(), m[2]); return; }
+    const m = /^\s*\{([\s\S]*)\}/.exec(args);
+    if (!m) return;
+    for (const { k, v } of parseOpts(m[1], 0, true)) {
+      const sm = /^(.+?)\/\.(style|append style|prefix style|style \d+ args|style n args|default)$/.exec(k);
+      if (!sm) continue;
+      if (sm[2] === 'style' && v != null) addStyle(C, sm[1].trim(), v); else C.styles.delete(sm[1].trim());
+    }
   }
   let gtTip = null; // the tip `>` stands for in the picture being read (>=Stealth), null for TikZ's default
   function arrowSpec(spec) { // "->", "{Stealth}-{Latex[open]}", "<->", "-latex", "|->"
@@ -614,6 +639,15 @@
     });
     return out;
   }
+  // the passes of a loop as statements of their own: their shapes when every one is exact, else null
+  function foreachExact(C, f) {
+    const Q = { ...C, preview: false, stmts: [], struct: null, warnings: [], names: { ...C.names }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) } };
+    let made;
+    try { made = expandForeach(Q, f); } catch (e) { return null; }
+    if (!made.length || Q.warnings.length || !Q.stmts.length || Q.stmts.some((st) => st.raw)) return null;
+    Object.assign(C.names, Q.names); C.kinds = Object.assign(C.kinds || {}, Q.kinds); C.boxes = Object.assign(C.boxes || {}, Q.boxes);
+    return { made, names: [...new Set(Q.stmts.flatMap((st) => st.names || []))] };
+  }
   // \begin{env} … \end{env} with nesting: index just after the matching \end
   function envEnd(s, env, from) {
     const re = new RegExp(`\\\\(begin|end)\\{${env.replace(/[*]/g, '\\*')}\\}`, 'g');
@@ -661,6 +695,24 @@
     return null;
   }
 
+  // a statement that named styles: what the styles set (each field as styled and as without them), so the
+  // export can name the styles again while those fields still hold (shapes.js styledCode)
+  function keepStyles(made, used, build) {
+    if (!used.size || !made.length) return;
+    let base = null;
+    styOff = true;
+    try { base = build(); } catch (e) { base = null; } finally { styOff = false; }
+    if (!base || base.length !== made.length) return;
+    const J = (v) => JSON.stringify(v ?? null);
+    made.forEach((m, n) => {
+      const b = base[n];
+      if (!b || b.type !== m.type) return;
+      const f = {};
+      for (const k of new Set([...Object.keys(m), ...Object.keys(b)])) if (J(m[k]) !== J(b[k])) f[k] = [m[k] ?? null, b[k] ?? null];
+      m.tkStyle = { n: [...used], f, d: Object.fromEntries([...used].map((nm) => [nm, STY.get(nm)])) };
+    });
+  }
+
   // Statements of a picture. `s` is the code with comments blanked (same length as `o`, the code as written).
   // Every statement becomes shapes (C.preview, or when it is exact) or one TikZ code object; C.stmts gets
   // where each one was, for the source write-back (s.tex).
@@ -671,6 +723,7 @@
     'centering', 'small', 'footnotesize', 'scriptsize', 'tiny', 'normalsize', 'large', 'Large', 'LARGE', 'huge', 'Huge', 'bfseries', 'itshape', 'sffamily', 'ttfamily', 'rmfamily', 'color', 'selectfont', 'fontsize']);
   function parseStatements(C, s, o) {
     o = o == null ? s : o;
+    if (C.styles) STY = C.styles;
     const shapes = [];
     const preview = !!C.preview;
     let i = 0;
@@ -690,6 +743,7 @@
         if (C.pkgs && C.pkgs.length) r.pkgs = C.pkgs.slice();
         list = [r];
       }
+      if (exact && extra.group && list.length > 1) { const g = uid8(); for (const x of list) { x.g = g; x.gname = extra.group; } }
       C.stmts.push({ start, end, shapes: list, raw: !exact, ctx: scopeCtx(), names: extra.names });
       shapes.push(...list);
     };
@@ -759,6 +813,10 @@
         const f = foreachParse(s, j);
         i = f.end;
         const P = { ...C, preview: true, warnings: [], struct: null, names: { ...C.names } };
+        // a loop whose every pass is shapes held exactly: those shapes, as one group, written as the loop until
+        // one of them is edited (then as the shapes, unrolled)
+        const E = !preview && f.body != null ? foreachExact(C, f) : null;
+        if (E) { done(bs, f.end, E.made, [], { names: E.names.length ? E.names : undefined, group: 'foreach loop' }); continue; }
         const made = f.body != null ? applyXf(expandForeach(P, f), C.scopes || []) : [];
         if (preview) { shapes.push(...made); continue; }
         done(bs, f.end, made, ['\\foreach is kept as code', ...P.warnings], { raw: true });
@@ -768,6 +826,8 @@
         let end = argsEnd(s, j);
         const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
         i = end;
+        // styles set outside any scope hold for the rest of the picture (and, from the preamble, every picture)
+        if ((name === 'tikzset' || name === 'tikzstyle') && C.styles && !(C.scopes || []).length) defineStyles(C, name, s.slice(j, end));
         if (name === 'definecolor' || name === 'colorlet') {
           const args = []; let q = j;
           while (args.length < (name === 'definecolor' ? 3 : 2)) { while (/\s/.test(s[q])) q++; if (s[q] === '[') { q = shut(s, q, '[', ']') + 1; continue; } if (s[q] !== '{') break; const e = shut(s, q, '{', '}'); args.push(s.slice(q + 1, e)); q = e + 1; }
@@ -791,53 +851,101 @@
           let body = stmt.trim(), optStr = '';
           if (body[0] === '[') { const e = matchClose(body, 0, '[', ']'); optStr = body.slice(1, e); body = body.slice(e + 1); }
           let made = [];
+          const su = styUsed = new Set();
           const lossy = preview ? [] : pathIssues(C, optStr, body);
           const before = { ...C.names };
-          try {
-            made = pathToShapes(C, PATHS[name], optStr, body);
+          const build = () => {
+            let L = pathToShapes(C, PATHS[name], optStr, body);
             const po = parseOpts(optStr);
-            if (po.some((x) => x.k === 'even odd rule')) made = evenOdd(made);
+            if (po.some((x) => x.k === 'even odd rule')) L = evenOdd(L);
             const own = readXf(C, po);
-            made = applyXf(made, [{ xf: own.xf, shape: true }, ...(C.scopes || [])]);
-          } catch (err) { C.warnings.push(`\\${name}: ${err.message}`); }
+            return applyXf(L, [{ xf: own.xf, shape: true }, ...(C.scopes || [])]);
+          };
+          try { made = build(); } catch (err) { C.warnings.push(`\\${name}: ${err.message}`); }
+          styUsed = null;
           const names = Object.keys(C.names).filter((n) => C.names[n] !== before[n]);
-          done(bs, k, made, [...issues(), ...lossy], { names: names.length ? names : undefined });
+          if (!preview) {
+            keepStyles(made, su, build);
+            // named points the statement goes through: written by name again while the ends are still there
+            const refs = [...new Set(tokenizePath(C, body).filter((t) => t.t === 'coord').map((t) => t.raw.trim()).filter((nm) => (C.kinds || {})[nm] === 'coordinate' && C.names[nm]))];
+            if (refs.length) for (const x of made) x.refs = refs;
+          }
+          const viaSty = su.size && lossy.length ? [`styles used: ${[...su].join(', ')}`] : [];
+          done(bs, k, made, [...issues(), ...lossy, ...viaSty], { names: names.length ? names : undefined });
           continue;
         }
         if (SEMI.has(name)) { if (preview) continue; done(bs, k, [], [`\\${name} is kept as code`], { raw: true }); continue; }
+        const su = styUsed = new Set();
         const toks = tokenizePath(C, (name === 'coordinate' ? 'coordinate ' : 'node ') + stmt.trim());
-        let at = null, node = null;
+        let at = null, node = null, hasAt = false;
         for (const t of toks) {
-          if (t.t === 'at') at = coord(C, t.raw);
+          if (t.t === 'at') { at = coord(C, t.raw); hasAt = true; }
           if (t.t === 'node') node = t;
-          if (t.t === 'coord' && !at) at = coord(C, t.raw);
+          if (t.t === 'coord' && !at) { at = coord(C, t.raw); hasAt = true; }
         }
-        if (!node) { if (!preview) done(bs, k, [], ['not understood'], { raw: true }); continue; }
+        if (!node) { styUsed = null; if (!preview) done(bs, k, [], ['not understood'], { raw: true }); continue; }
         at = at || { x: 0, y: 0 };
-        // placed by name: at=(n1.east), or the positioning library's right=1cm of n1 (an estimate: node sizes are not known)
+        // placed by name: at=(n1.east) (kept as code), or the positioning library's right=1cm of n1: the node
+        // goes where TikZ puts it (beside the other node's box) and keeps the relation (s.pos) for the export
         const placeIss = [];
+        let pos = null;
         for (const t of toks) if (t.t === 'at' || (t.t === 'coord' && t === toks.find((q) => q.t === 'coord'))) { const w = nameIssue(C, t.raw); if (w) placeIss.push(w); }
-        for (const { k: pk, v } of parseOpts(node.opts || '')) {
+        const nopts = parseOpts(node.opts || '');
+        for (const { k: pk, v } of nopts) {
           const pm = v && /^(above|below|left|right|above left|above right|below left|below right)$/.test(pk) && /^(?:(.*?)\s+)?of\s+(.+)$/.exec(v.trim());
           if (!pm) continue;
-          const ref = coord(C, pm[2].trim()) || at, d = pm[1] ? len(pm[1]) : 1 * PX, dx = /left/.test(pk) ? -1 : /right/.test(pk) ? 1 : 0, dy = /above/.test(pk) ? -1 : /below/.test(pk) ? 1 : 0;
-          at = { x: ref.x + dx * (d + 0.6 * PX), y: ref.y + dy * (d + 0.3 * PX) };
-          placeIss.push(`placed ${pk} of (${pm[2].trim()}) with the positioning library`);
+          const of = pm[2].trim(), ref = coord(C, of) || at;
+          const dd = (pm[1] || '').split(/\s+and\s+/).map((x) => len(x));
+          const diag = / /.test(pk), dist = C.nodeDist ?? PX;
+          let dy0 = isFinite(dd[0]) ? dd[0] : diag ? dist * Math.SQRT1_2 : dist, dx0 = isFinite(dd[1]) ? dd[1] : isFinite(dd[0]) ? dd[0] : dy0;
+          if (!diag) dx0 = dy0;
+          const dx = /left/.test(pk) ? -1 : /right/.test(pk) ? 1 : 0, dy = /above/.test(pk) ? -1 : /below/.test(pk) ? 1 : 0;
+          // the other node's border (its box and inner sep; a coordinate has none); this node's own half box and
+          // inner sep are added where the text is made (textShape reads the same key)
+          const bx = C.boxes[of], sep = bx && !bx.pt ? 3.33 / K : 0;
+          const hw = bx ? bx.w / 2 + sep : 0, hh = bx ? bx.h / 2 + sep : 0;
+          at = { x: ref.x + dx * (hw + dx0), y: ref.y + dy * (hh + dy0) };
+          const plain = !(C.scopes || []).some((L) => L.xf && L.xf.length) && bx && !(C.approx && C.approx.has(of)) && /^[^().,:$\\]+$/.test(of);
+          if (plain && !pos && !nopts.some((o) => o.k === 'anchor')) pos = { k: pk, v: v.trim(), of };
+          else { placeIss.push(`placed ${pk} of (${of}) with the positioning library`); pos = null; }
         }
         if (placeIss.length && node.name) (C.approx = C.approx || new Set()).add(node.name);
         const nodeIss = () => [...issues(), ...placeIss];
         if (node.name) { C.names[node.name] = { ...at }; (C.kinds = C.kinds || {})[node.name] = node.coordinate ? 'coordinate' : 'node'; }
         const names = node.name ? [node.name] : undefined;
-        if (node.coordinate) { if (!preview) done(bs, k, [], ['a named point: kept so the code that uses its name still works'], { raw: true, at: applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], C.scopes || []).map((d) => ({ x: d.cx, y: d.cy }))[0], names }); continue; }
+        if (node.coordinate) {
+          styUsed = null;
+          const abs = applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], C.scopes || []).map((d) => ({ x: d.cx, y: d.cy }))[0];
+          if (node.name) C.boxes[node.name] = { w: 0, h: 0, pt: true };
+          if (preview) continue;
+          // \coordinate (A) at (x,y); is a named point the canvas shows and moves; lines through it keep the name
+          const plainPt = node.name && hasAt && !pos && !placeIss.length && !nopts.length && !toks.some((t2) => t2.t === 'op' || t2.t === 'brace' || t2.t === 'opts');
+          if (plainPt) done(bs, k, [{ type: 'coord', x: abs.x, y: abs.y, tikzName: node.name }], issues(), { names });
+          else done(bs, k, [], ['a named point: kept so the code that uses its name still works'], { raw: true, at: abs, names });
+          continue;
+        }
         const blk = nodeBlock(C, node, at);
-        if (blk) { done(bs, k, [blk.shape], [...nodeIss(), ...blk.issues], { names }); continue; }
+        if (blk) { styUsed = null; done(bs, k, [blk.shape], [...nodeIss(), ...blk.issues], { names }); continue; }
         if (node.text.trim()) {
-          const no = parseOpts(node.opts), own = readXf(C, no), t = textShape(C, node.text, no, at);
-          // a node's own rotate turns it about its own position
-          const xf = own.xf.map((x) => (x.rot !== undefined && !x.px && !x.py ? { ...x, px: t.x, py: t.y } : x));
-          const bad = preview ? [] : unknownKeys(C, no, NODE_KEYS);
+          const make = () => {
+            const no = parseOpts(node.opts), own = readXf(C, no), t = textShape(C, node.text, no, at);
+            // a node's own rotate turns it about its own position
+            const xf = own.xf.map((x) => (x.rot !== undefined && !x.px && !x.py ? { ...x, px: t.x, py: t.y } : x));
+            return applyXf([t], [{ xf, shape: true }, ...(C.scopes || [])]);
+          };
+          const made = make();
+          styUsed = null;
+          const bad = preview ? [] : unknownKeys(C, nopts, NODE_KEYS);
           if (toks.some((t2) => t2.t === 'op' || t2.t === 'brace')) bad.push('path after the node');
-          done(bs, k, applyXf([t], [{ xf, shape: true }, ...(C.scopes || [])]), [...nodeIss(), ...(bad.length ? [`options the text does not hold: ${bad.join(', ')}`] : [])], { names });
+          if (!preview) {
+            keepStyles(made, su, make);
+            const t = made[0];
+            if (node.name && t) { const b = TD.bbox(t); C.boxes[node.name] = { w: b.w, h: b.h }; }
+            if (pos && t) { const r = C.names[pos.of]; t.pos = { ...pos, off: [t.x - r.x, t.y - r.y] }; }
+          }
+          done(bs, k, made, [...nodeIss(), ...(bad.length ? [`options the text does not hold: ${bad.join(', ')}${su.size ? ` (styles used: ${[...su].join(', ')})` : ''}`] : [])], { names });
+          // a node kept as code has a size the canvas only estimates: nothing is placed beside it exactly
+          if (!preview && node.name && C.stmts.length && C.stmts[C.stmts.length - 1].raw) delete C.boxes[node.name];
         } else if (!preview) done(bs, k, [], ['empty node'], { raw: true, at, names });
         continue;
       }
@@ -872,7 +980,7 @@
   // comments and scope lines come along), cut (where its own text starts in src), ctx (the scopes around it),
   // nm (names it defines). The picture's first statement holds open and N (statements), the last one tail.
   function importPicture(C, s, o, open) {
-    C.sx = PX; C.sy = PX; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.picIssue = null; gtTip = null;
+    C.sx = PX; C.sy = PX; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.picIssue = null; C.nodeDist = undefined; C.boxes = {}; gtTip = null;
     const optM = open && /^\\begin\{tikzpicture\}\s*\[([\s\S]*)\]\s*$/.exec(blankComments(open));
     const optStr = optM ? optM[1] : '';
     if (optStr) pictureOpts(C, optStr);
@@ -881,8 +989,16 @@
     const neutral = (x) => /^(x|y)\s*=\s*\{?1\s*cm\}?$/.test(x);
     const keep = items.filter((x) => !PIC_ONLY.has(keyOf(x)) && !neutral(x));
     const drop = items.filter((x) => PIC_ONLY.has(keyOf(x))).map(keyOf);
+    // styles and the node distance the picture sets: read, and kept on the picture for the code written from shapes
+    const own = (x) => {
+      const k = keyOf(x), v = splitTop(x, '=').slice(1).join('=').trim().replace(/^\{([\s\S]*)\}$/, '$1');
+      const sm = /^(.+?)\/\.style$/.exec(k);
+      if (sm && C.styles) { addStyle(C, sm[1].trim(), v); return C.styles.has(sm[1].trim()); }
+      if (k === 'node distance') { const d = len(v); if (isFinite(d)) { C.nodeDist = d; return true; } }
+      return false;
+    };
     // >=Tip only sets what `>` means: shapes written from the model name their tips, so it stays on the picture
-    const safe = keep.filter((x) => keyOf(x) === '>' && gtTip), rest = keep.filter((x) => !safe.includes(x));
+    const safe = keep.filter((x) => (keyOf(x) === '>' && gtTip) || own(x)), rest = keep.filter((x) => !safe.includes(x));
     const odd = rest.map(keyOf).filter((k) => !['x', 'y', 'scale'].includes(k));
     if (odd.length) C.picIssue = 'picture options not drawn: ' + odd.join(', ');
     const picCtx = rest.length ? [rest.join(', ')] : [];
@@ -925,7 +1041,23 @@
       x.tex = t;
       if (x.type === 'tikz' && t.i === 0) { x.code = flat[n].code; x.ctx = flat[n].ctx; if (flat[n].names) x.names = flat[n].names; }
     });
-    for (const x of shapes) if (x.tex) x.tex.sig = TD.texSig(x);
+    // lines that start or end on a named point stay attached to it (app.js links), so they follow it
+    const pt = new Map();
+    for (const x of shapes) {
+      if (x.type === 'coord' && x.tikzName) pt.set(x.tikzName, x);
+      if (!x.refs || !['line', 'curve', 'spring'].includes(x.type)) continue;
+      for (const [L, kx, ky] of [['link1', 'x1', 'y1'], ['link2', 'x2', 'y2']]) {
+        const c = x.refs.map((nm) => pt.get(nm)).find((q) => q && Math.abs(q.x - x[kx]) < 1e-6 && Math.abs(q.y - x[ky]) < 1e-6);
+        if (c) x[L] = { id: c.id, u: 0.5, v: 0.5 };
+      }
+    }
+    // the signature, and one that a move does not change (rounded, with the first shape's corner): a statement
+    // whose shapes only moved together is written as it was, in a shift scope
+    for (const x of shapes) if (x.tex) {
+      x.tex.sig = TD.texSig(x);
+      x.tex.sr = TD.texSig(x, true);
+      if (x.tex.i === 0) { const b = TD.bbox(x); if (isFinite(b.x) && isFinite(b.y)) x.tex.b = [b.x, b.y]; }
+    }
     return shapes;
   }
   // the preview of TikZ code kept as an object, drawn where it was (its scopes, the names it uses)

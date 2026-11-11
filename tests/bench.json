@@ -1,0 +1,72 @@
+{
+ "Box with a label": {
+  "steps": 4,
+  "clicks": 0,
+  "drags": 1,
+  "keys": 3,
+  "switches": 2
+ },
+ "Change a box label": {
+  "steps": 3,
+  "clicks": 2,
+  "drags": 0,
+  "keys": 1,
+  "switches": 1
+ },
+ "Arrow between two boxes": {
+  "steps": 6,
+  "clicks": 0,
+  "drags": 3,
+  "keys": 3,
+  "switches": 5
+ },
+ "Three boxes in a row": {
+  "steps": 4,
+  "clicks": 0,
+  "drags": 1,
+  "keys": 3,
+  "switches": 2
+ },
+ "Text": {
+  "steps": 3,
+  "clicks": 1,
+  "drags": 0,
+  "keys": 2,
+  "switches": 2
+ },
+ "Copy the TikZ of the diagram": {
+  "steps": 1,
+  "clicks": 0,
+  "drags": 0,
+  "keys": 1,
+  "switches": 0
+ },
+ "Insert TikZ from the clipboard": {
+  "steps": 1,
+  "clicks": 0,
+  "drags": 0,
+  "keys": 1,
+  "switches": 0
+ },
+ "Copy and paste a box": {
+  "steps": 3,
+  "clicks": 1,
+  "drags": 0,
+  "keys": 2,
+  "switches": 1
+ },
+ "Component with a linked copy": {
+  "steps": 3,
+  "clicks": 0,
+  "drags": 0,
+  "keys": 3,
+  "switches": 0
+ },
+ "Place a box by expression": {
+  "steps": 3,
+  "clicks": 2,
+  "drags": 0,
+  "keys": 1,
+  "switches": 1
+ }
+}

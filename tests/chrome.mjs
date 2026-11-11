@@ -70,5 +70,5 @@ export async function launch(url) {
     await new Promise((r) => setTimeout(r, 100));
   }
   await ev('if (TD.ready) await TD.ready; return true', 30000);
-  return { ev, logs, close: () => { try { ws.close(); } catch (e) { /* closed */ } proc.kill(); setTimeout(() => fs.rmSync(prof, { recursive: true, force: true }), 500); } };
+  return { ev, send, logs, close: () => { try { ws.close(); } catch (e) { /* closed */ } proc.kill(); setTimeout(() => fs.rmSync(prof, { recursive: true, force: true }), 500); } };
 }

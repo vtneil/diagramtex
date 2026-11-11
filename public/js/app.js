@@ -64,6 +64,8 @@
   function uid() { return Math.random().toString(36).slice(2, 10); }
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const shapes = () => state.doc.shapes;
+  // where the diagram's variables live (saved with it): the page sheet, or the diagram block
+  const home = () => (state.doc.kind === 'page' ? state.doc.sheet : state.doc.blocks[state.doc.active]);
   // shape by id: an index into the shape list, rebuilt when it no longer matches (loops over a large
   // selection call this once per shape, so a scan each time would be quadratic)
   let idList = null, idPos = new Map();
@@ -88,7 +90,7 @@
   function capture() {
     const L = shapes(), json = new Map();
     for (const s of L) json.set(s.id, JSON.stringify(s));
-    return { owner: owner(), ids: L.map((s) => s.id), json, pages: state.doc.kind === 'page' ? state.doc.sheet.pages : undefined };
+    return { owner: owner(), ids: L.map((s) => s.id), json, pages: state.doc.kind === 'page' ? state.doc.sheet.pages : undefined, vars: JSON.stringify(home().vars || null) };
   }
   function begin() {
     if (pending) return;
@@ -117,10 +119,11 @@
     });
     for (const [id, o] of base.json) if (!now.json.has(id)) before.push([id, o, posB.get(id)]);
     const moved = !sameOrder(base.ids, base.json, now.ids, now.json);
-    if (before.length || after.length || moved || now.pages !== base.pages) {
+    if (before.length || after.length || moved || now.pages !== base.pages || now.vars !== base.vars) {
       const step = { before, after, size: 64 };
       if (moved) { step.ib = base.ids; step.ia = now.ids; step.size += 12 * (base.ids.length + now.ids.length); }
       if (now.pages !== base.pages) { step.pb = base.pages; step.pa = now.pages; }
+      if (now.vars !== base.vars) { step.vb = base.vars; step.va = now.vars; }
       for (const e of before) step.size += e[1].length;
       for (const e of after) step.size += e[1].length;
       state.undo.push(step);
@@ -166,11 +169,14 @@
     state.doc.shapes = list;
     const pages = back ? step.pb : step.pa;
     if (pages !== undefined) state.doc.sheet.pages = pages;
+    const vars = back ? step.vb : step.va;
+    if (vars !== undefined) { const v = JSON.parse(vars); if (v) home().vars = v; else delete home().vars; }
     if (base && base.owner === owner()) {
       for (const id of fromIds) if (!toMap.has(id)) base.json.delete(id);
       for (const [id, j] of toMap) base.json.set(id, j);
       base.ids = list.map((s) => s.id);
       if (pages !== undefined) base.pages = pages;
+      if (vars !== undefined) base.vars = vars;
     } else base = null;
     for (const id of [...state.sel]) if (!byId(id)) state.sel.delete(id);
     render(); renderProps(); scheduleSave(); updateTopbar();
@@ -599,6 +605,7 @@
   let linkHint = null; // id of the shape an end would attach to (outlined while drawing)
   function linkFrame(t) {
     if (!t || CONNECT.has(t.type)) return null;
+    if (t.type === 'coord') return [[t.x - 1, t.y - 1], [t.x + 1, t.y - 1], [t.x + 1, t.y + 1], [t.x - 1, t.y + 1]]; // a point: ends sit on it
     if (TD.ROT_TYPES.has(t.type) || t.type === 'sym') { const C = TD.rotFrame(t); if (C) return C; }
     const b = TD.bbox(t);
     return [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]];
@@ -643,7 +650,11 @@
   }
   const linkPoint = (k) => { const C = linkFrame(byId(k.id)); return C && fromUV(C, k.u, k.v); };
   // put every attached end back on its shape (after anything moved); drops links to shapes that are gone
+  let paramErr = new Map();
   function syncLinks() {
+    // fields given as expressions (params.js) first: connectors and placed nodes then follow what they moved
+    const vars = home().vars;
+    paramErr = TD.GEOM && ((vars && Object.keys(vars).length) || shapes().some((s) => s.ex)) ? TD.params.solve(shapes(), vars, TD.GEOM) : new Map();
     for (const s of shapes()) {
       if (!CONNECT.has(s.type) || !(s.link1 || s.link2)) continue;
       for (const [L, X, Y, CX, CY] of Object.values(END)) {
@@ -655,6 +666,24 @@
         s[X] = P.x; s[Y] = P.y;
         if (s.type === 'curve') { s[CX] += dx; s[CY] += dy; } // the curve keeps its shape near that end
       }
+    }
+    syncPos();
+  }
+  // a node placed beside another with the positioning library (s.pos, from tikzimport.js) moves with that
+  // node, so it stays `right=1cm of a` in the code; moved on its own, it lets go
+  function syncPos() {
+    const L = shapes();
+    for (const s of L) {
+      if (!s.pos) continue;
+      const nm = s.pos.of;
+      const r = L.find((q) => q !== s && (q.type === 'coord' ? q.tikzName === nm : !!(q.tex && q.tex.i === 0 && q.tex.nm && q.tex.nm.includes(nm))));
+      if (!r) continue;
+      const pr = s._pr;
+      s._pr = { x: r.x, y: r.y };
+      const ox = s.x - r.x - s.pos.off[0], oy = s.y - r.y - s.pos.off[1];
+      if (Math.abs(ox) < 1e-6 && Math.abs(oy) < 1e-6) continue;
+      if (pr && (Math.abs(pr.x - r.x) > 1e-9 || Math.abs(pr.y - r.y) > 1e-9)) TD.translate(s, -ox, -oy);
+      else delete s.pos;
     }
   }
   // connectors moved by themselves let go of shapes that aren't moving with them
@@ -1380,6 +1409,7 @@
         const s = byId(hitId);
         if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) { startEdit(hitId, 'text'); return; }
         if (s.type === 'line' || s.type === 'curve') { startEdit(hitId, 'label'); return; }
+        if (BOXED.has(s.type) && (s.type !== 'poly' || s.closed)) { labelInside(s); return; }
         if (s.type === 'qc') { state.sel = new Set([hitId]); openQuantum(hitId); return; }
         if (s.type === 'cz') { state.sel = new Set([hitId]); render(); renderProps(); openCircuit(hitId); return; }
         if (s.type === 'forest') { state.sel = new Set([hitId]); render(); renderProps(); openTree(hitId); return; }
@@ -2071,9 +2101,11 @@
     chemfig: [['x', 'x'], ['y', 'y']],
     bloch: [['x', 'x'], ['y', 'y']],
     tikz: [['x', 'x'], ['y', 'y']],
+    coord: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
   };
+  TD.GEOM = GEOM;
   const toUnit = (v, k) => (k === 'deg' ? r2(v) : k === 'y' ? r2(-v / PX) : r2(v / PX));
   function propsEl0() { return $('#props'); }
   const fromUnit = (v, k) => (k === 'deg' ? v : k === 'y' ? -v * PX : v * PX);
@@ -2205,11 +2237,12 @@
       const d = state.defaults;
       const keys = ['stroke', 'fill', 'width', 'dash', 'color', 'size', 'font', 'ballColor'];
       el.innerHTML = (state.mode === 'page' ? pagePanel() : '') + `<h3>Default style <small>for new shapes</small></h3><div class="sec" data-target="defaults">` +
-        PROPS.filter((p) => keys.includes(p.key)).map((p) => fieldHtml(p, d[p.key])).join('') + `</div>` +
+        PROPS.filter((p) => keys.includes(p.key)).map((p) => fieldHtml(p, d[p.key])).join('') + `</div>` + varsHtml() + compListHtml() +
         `<div class="sec"><div class="sec-title">Shortcuts</div><table class="keys">${[
           ['V L A C P', 'select · line · arrow · curve · polyline'], ['O S R E', 'arc · spring · rect · ellipse'], ['B D T', 'ball · dot · text'],
           ['Shift', 'constrain angle / square'], ['Alt', 'drag without snapping'], ...(state.mode === 'board' ? [['H', 'hand: drag the board'], ['wheel', 'move around']] : state.mode === 'page' ? [['H', 'hand: drag the page']] : []), ['Space+drag', 'pan (or middle mouse)'], ['Ctrl+wheel', 'zoom'],
           ['Ctrl+G', 'group (Shift: ungroup)'], ['Ctrl+R', 'rotate 90°'], ['Ctrl+] / [', 'forward / backward'], ['Ctrl+D', 'duplicate'],
+          ['Enter', 'label a box'], ['Ctrl+C', 'copy, also as TikZ code'], ['Ctrl+V', 'paste; TikZ code imports'], ['Ctrl+Alt+K', 'make component'],
           ['Ctrl+E', 'TikZ code'], ['Ctrl+O', 'open file'], ['Right-click', 'object menu'],
         ].map(([k, d]) => `<tr><td>${k.split(' ').map((x) => `<kbd>${kb(x)}</kbd>`).join('')}</td><td>${d}</td></tr>`).join('')}</table></div>`;
       return;
@@ -2258,8 +2291,9 @@
         .map(([k, d, t]) => `<button class="icon" data-act="l:${k}" title="${t}"><svg viewBox="0 0 20 20"><path d="${d}"/></svg></button>`).join('')}</div></div>`;
     if (combinable()) html += `<div class="sec"><div class="sec-title">Combine</div><div class="align-row">
       ${COMBINE.map(([k, t]) => `<button class="icon" data-act="cb:${k}" title="${t}${k === 'subtract' ? ': cut the shapes above out of the bottom one' : k === 'divide' ? ': split into every overlap piece' : ''}"><svg viewBox="0 0 20 20">${COMBINE_IC[k]}</svg></button>`).join('')}</div></div>`;
+    html += compHtml(sel);
     html += `<div class="sec"><div class="btns">
-      ${canGroup() ? '<button data-act="group" title="Ctrl+G">Group</button>' : ''}${canUngroup() ? '<button data-act="ungroup" title="Ctrl+Shift+G">Ungroup</button>' : ''}
+      ${canGroup() ? '<button data-act="group" title="Ctrl+G">Group</button>' : ''}${sel.length > 1 && !sel.some((q) => q.cpart) ? '<button data-act="comp:make" title="Save these as one reusable part: copies stay linked">Make Component</button>' : ''}${canUngroup() ? '<button data-act="ungroup" title="Ctrl+Shift+G">Ungroup</button>' : ''}
       <button data-act="front">Bring to Front</button><button data-act="back">Send to Back</button>
       <button data-act="dup">Duplicate</button><button data-act="del">Delete</button></div>
       <div class="hint-line">Right-click for more: ${rotatable(sel) ? 'rotate, flip, ' : ''}arrange, distribute.</div></div>`;
@@ -2315,14 +2349,43 @@
     const k = +a.dataset.k;
     ({ go: () => goToPage(k), add: () => insertPage(k), ins: () => insertPage(k), up: () => movePage(k, -1), down: () => movePage(k, 1), dup: () => duplicatePage(k), del: () => deletePage(k) })[a.dataset.pg]();
   });
-  function renderGeom() {
+  // each field takes a number or an expression (params.js): w/2, a.east.x + gap. An expression is kept and
+  // shown in blue pen, its value in the tooltip; one that can't be worked out is red, with the reason
+  function renderGeom(force) {
     const sec = $('#geomSec');
     const sel = selected();
     if (!sec || sel.length !== 1) return;
     const s = sel[0];
-    if (sec.contains(document.activeElement)) return;
+    if (!force && sec.contains(document.activeElement)) return;
+    const ex = s.ex || {};
     sec.innerHTML = `<div class="sec-title">Geometry (TikZ ${GEOM[s.type].some((g) => g[1] === 'deg') ? 'cm / °' : 'cm'})</div>` +
-      GEOM[s.type].map(([k, kind]) => `<div class="row"><label>${k === 'tw' ? 'wrap width' : k === 'th' ? 'box height' : k}</label><div class="ctl"><input type="number" step="${kind === 'deg' ? 5 : 0.05}" data-geom="${k}" data-kind="${kind}" value="${toUnit(s[k] ?? 0, kind)}"${k === 'tw' ? ' min="0" title="Wrap width in cm (0 = no wrapping)"' : k === 'th' ? ' min="0" title="Paragraph box height in cm (0 = grows with the text). Needs a wrap width."' : ''}></div></div>`).join('');
+      GEOM[s.type].map(([k, kind]) => {
+        const e = ex[k] != null ? paramErr.get(s.id + ':' + k) : null;
+        const tip = ex[k] != null ? (e ? e : `= ${toUnit(s[k] ?? 0, kind)}${kind === 'deg' ? '°' : ' cm'}`)
+          : k === 'tw' ? 'Wrap width in cm (0 = no wrapping)' : k === 'th' ? 'Paragraph box height in cm (0 = grows with the text). Needs a wrap width.' : '';
+        return `<div class="row"><label>${k === 'tw' ? 'wrap width' : k === 'th' ? 'box height' : k}</label><div class="ctl"><input type="text" inputmode="decimal" spellcheck="false" autocomplete="off" data-geom="${k}" data-kind="${kind}" data-step="${kind === 'deg' ? 5 : 0.05}"`
+          + ` class="geomin${ex[k] != null ? ' ex' : ''}${e ? ' bad' : ''}" value="${esc(ex[k] != null ? ex[k] : String(toUnit(s[k] ?? 0, kind)))}"${tip ? ` title="${esc(tip)}"` : ''}></div></div>`;
+      }).join('');
+  }
+  // Variables of the diagram (shown with nothing selected): a name and an expression each
+  function varsHtml() {
+    const V = home().vars || {}, vals = paramErr.vals || new Map();
+    const rows = Object.entries(V).map(([n, x]) => {
+      const e = paramErr.get('var:' + n), v = vals.get(n);
+      return `<div class="row var"><input type="text" class="vname" data-vname="${esc(n)}" value="${esc(n)}" spellcheck="false" autocomplete="off" aria-label="Variable name">`
+        + `<div class="ctl"><input type="text" data-vexpr="${esc(n)}" value="${esc(x)}" class="geomin${e ? ' bad' : ''}" spellcheck="false" autocomplete="off" aria-label="Value of ${esc(n)}"${e ? ` title="${esc(e)}"` : typeof v === 'number' && String(r2(v)) !== String(x).trim() ? ` title="= ${r2(v)}"` : ''}></div>`
+        + `<button class="icon flat vdel" data-vdel="${esc(n)}" title="Delete Variable" aria-label="Delete variable ${esc(n)}"><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button></div>`;
+    }).join('');
+    return `<div class="sec" id="varSec"><div class="sec-title">Variables</div>${rows}<div class="btns"><button data-act="var:add">Add Variable</button></div>`
+      + `<div class="hint-line">Any Geometry field takes an expression over these and over objects named in Layers: <code>w/2</code>, <code>a.east.x + gap</code>, <code>a.r * 2</code>, <code>dist(a, b)</code>. The export writes the values.</div></div>`;
+  }
+  // rename a variable everywhere it is used (not after a dot: a.w is the field w of a)
+  function renameVar(from, to) {
+    const re = new RegExp(`(?<![\\w.])${from}(?![\\w(])`, 'g');
+    const V = home().vars, out = {};
+    for (const [n, x] of Object.entries(V)) out[n === from ? to : n] = String(x).replace(re, to);
+    home().vars = out;
+    for (const s of shapes()) if (s.ex) for (const f of Object.keys(s.ex)) s.ex[f] = s.ex[f].replace(re, to);
   }
 
   // Inline vs display maths of text objects: 'inline' | 'display' | 'mixed', or null when there is no maths.
@@ -2390,11 +2453,37 @@
       if (rerender || t.tagName === 'SELECT' || t.type === 'checkbox') renderPanel(); else refreshPanelErrors();
       return;
     }
+    if (t.dataset.vexpr != null) {
+      const n = t.dataset.vexpr, x = t.value.trim().replace(/^=\s*/, '') || '0';
+      try { TD.params.parse(x); } catch (err) { t.classList.add('bad'); t.title = err.message; return; }
+      begin(); home().vars[n] = x; render(); commit(); renderProps(); return;
+    }
+    if (t.dataset.cname != null) {
+      const s0 = selected()[0], v = t.value.trim();
+      if (!s0 || s0.type !== 'comp' || !v) { renderProps(); return; }
+      begin(); for (const q of shapes()) if (q.type === 'comp' && q.ref === s0.ref) q.cname = v; render(); commit(); renderProps(); return;
+    }
+    if (t.dataset.vname != null) {
+      const from = t.dataset.vname, to = t.value.trim();
+      if (to === from) return;
+      if (!TD.params.okName(to) || (home().vars && to in home().vars)) { showHint(!TD.params.okName(to) ? 'A name is letters, digits and _, starting with a letter (and not a function such as sin)' : `There is already a variable called ${to}`, 2400); t.value = from; return; }
+      begin(); renameVar(from, to); render(); commit(); renderProps(); return;
+    }
     if (t.dataset.geom) {
-      const v = parseFloat(t.value);
-      if (!isFinite(v)) return;
-      const s = selected()[0];
+      const s = selected()[0], k = t.dataset.geom, raw = t.value.trim();
+      const v = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?$/i.test(raw) ? parseFloat(raw) : NaN;
+      if (!isFinite(v)) {
+        // an expression: kept on the field and worked out again whenever what it uses changes (syncLinks)
+        if (!raw) { renderGeom(true); return; }
+        try { TD.params.parse(raw); } catch (err) { t.classList.add('bad'); t.title = err.message; return; }
+        begin();
+        s.ex = { ...(s.ex || {}), [k]: raw.replace(/^=\s*/, '') };
+        if (s._ev) delete s._ev[k];
+        if (CONNECT.has(s.type)) { if (k === 'x1' || k === 'y1') delete s.link1; if (k === 'x2' || k === 'y2') delete s.link2; }
+        render(); commit(); renderGeom(true); return;
+      }
       begin();
+      if (s.ex && k in s.ex) { delete s.ex[k]; if (s._ev) delete s._ev[k]; if (!Object.keys(s.ex).length) { delete s.ex; delete s._ev; } }
       s[t.dataset.geom] = fromUnit(v, t.dataset.kind);
       if (CONNECT.has(s.type)) { const g = t.dataset.geom; if (g === 'x1' || g === 'y1') delete s.link1; if (g === 'x2' || g === 'y2') delete s.link2; } // typed coordinates let go
       if (s.type === 'arc' && t.dataset.geom === 'a2' && s.a2 <= s.a1) s.a2 += 360;
@@ -2403,7 +2492,7 @@
         if (s.tw > 0 && !s.align) s.align = 'left';
         render(); commit(); renderProps(); return;
       }
-      render(); commit();
+      render(); commit(); renderGeom(true);
       return;
     }
     const r = readField(t);
@@ -2487,7 +2576,21 @@
       else if (msg && msg.text) showHint(msg.text, msg.ms || 1500);
       return;
     }
+    const vd = e.target.closest('[data-vdel]');
+    if (vd) { begin(); delete home().vars[vd.dataset.vdel]; if (!Object.keys(home().vars).length) delete home().vars; render(); commit(); renderProps(); return; }
     const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'comp:make') return makeComponent();
+    if (act === 'comp:edit') return editComponent(selected()[0]);
+    if (act === 'comp:detach') return detachComponent(selected()[0]);
+    if (act === 'comp:save') { const c = selected().find((q) => q.cpart); return c && saveComponent(c.cpart.ref); }
+    if (act && act.startsWith('comp:ins:')) { const c = shapes().find((q) => q.type === 'comp' && q.ref === act.slice(9)); if (c) { state.sel = new Set([c.id]); duplicate(); } return; }
+    if (act === 'var:add') {
+      const V = home().vars || {};
+      let k = 1; while (('v' + k) in V) k++;
+      begin(); home().vars = { ...V, ['v' + k]: '1' }; render(); commit(); renderProps();
+      const inp = propsEl.querySelector(`[data-vname="v${k}"]`); if (inp) { inp.focus({ preventScroll: true }); inp.select(); }
+      return;
+    }
     if (act === 'front' || act === 'back') reorder(act);
     if (act === 'group') groupSel();
     if (act?.startsWith('cb:')) combineSel(act.slice(3));
@@ -2497,7 +2600,22 @@
     if (act === 'del') deleteSel();
     if (act === 'pt:add' || act === 'pt:rm') { const s = selected()[0]; if (s && s.type === 'poly') TD.polyPoints[act === 'pt:add' ? 'add' : 'remove'](s); }
   });
-  propsEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur(); });
+  propsEl.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (!t.matches || !t.matches('input.geomin')) return;
+    t.select(); t._keepSel = true; // the mouseup of the click that focused it would put a caret instead
+  });
+  propsEl.addEventListener('mouseup', (e) => { if (e.target._keepSel) { e.target._keepSel = false; if (e.target.selectionStart !== e.target.selectionEnd) e.preventDefault(); } });
+  propsEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur();
+    const t = e.target;
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && t.dataset.geom && /^\s*[-+]?(?:\d+\.?\d*|\.\d+)\s*$/.test(t.value)) {
+      e.preventDefault();
+      const st = +t.dataset.step * (e.shiftKey ? 10 : 1), v = parseFloat(t.value) + (e.key === 'ArrowUp' ? st : -st);
+      t.value = String(r2(v));
+      t.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
 
 
   // ---------------- commands ----------------
@@ -2542,7 +2660,39 @@
   }
   // Paste lands centred in the visible canvas, moved by whole grid steps so it stays on the grid.
   // Pasting again without moving the view steps each copy down-right, so they don't stack.
+  // ⌘C also puts the TikZ code on the system clipboard as text: of the selection, or of the whole diagram when
+  // nothing is selected, ready for a .tex file.
+  let codeCopied = null;
+  function copyCode() {
+    const list = state.sel.size ? selected() : shapes();
+    if (!list.length || !navigator.clipboard) return;
+    let code;
+    try { code = state.mode === 'page' ? TD.pageToLatex(state.doc, { only: state.sel.size ? list : null }) : TD.toTikz(list); } catch (err) { return; }
+    codeCopied = code;
+    navigator.clipboard.writeText(code).then(() => { if (!state.sel.size) showHint('Copied the TikZ code of this diagram', 1500); }, () => {});
+  }
+  // ⌘V: TikZ or LaTeX from elsewhere is imported (straight in when every line becomes shapes, else through the
+  // import dialog, which says what stays code); anything else pastes the copied shapes. A browser that sends no
+  // paste event gets the shapes.
+  let pasteTimer = 0;
+  function pasteSoon() { clearTimeout(pasteTimer); pasteTimer = setTimeout(paste, 80); }
+  const looksTex = (t) => /\\(begin\{(tikzpicture|circuitikz|document)\}|draw|fill|filldraw|node|path|coordinate)\b/.test(t);
+  document.addEventListener('paste', (e) => {
+    if (!pasteTimer || isTyping(e.target) || !$('#modal').hidden || !imp.hidden) return;
+    clearTimeout(pasteTimer); pasteTimer = 0;
+    const text = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
+    if (!text.trim() || text === codeCopied || !looksTex(text)) { paste(); return; }
+    e.preventDefault();
+    let res = null;
+    try { res = TD.importLatex(text); } catch (err) { res = null; }
+    const list = res ? res.blocks.flatMap((b) => b.shapes || []) : [];
+    const clean = res && list.length && !(res.kept || []).length && !res.warnings.length && !res.blocks.some((b) => b.type === 'text');
+    if (!clean) { openImport(text); return; }
+    $('#impText').value = text;
+    runImport(false);
+  });
   function paste() {
+    pasteTimer = 0;
     const c = clip();
     if (!c) return;
     const r = stageSize(), v = state.view, G = TD.GRID;
@@ -2612,6 +2762,100 @@
     begin();
     for (const s of selected()) { delete s.g; delete s.gname; }
     commit(); render(); renderProps(); showHint('Ungrouped', 1000);
+  }
+
+  // ---------- components (components.js) ----------
+  // Make: the selection becomes one instance, its origin the middle of their box (on the grid). Edit: an
+  // instance opens into its shapes, grouped and marked (cpart); Save writes them back to every linked copy.
+  function replaceWith(old, made) {
+    const all = shapes(), ids = new Set(old.map((q) => q.id));
+    const at = Math.max(...old.map((q) => all.indexOf(q)));
+    const rest = all.filter((q) => !ids.has(q.id)), pos = all.slice(0, at).filter((q) => !ids.has(q.id)).length;
+    state.doc.shapes = [...rest.slice(0, pos), ...made, ...rest.slice(pos)];
+    state.sel = new Set(made.map((q) => q.id));
+  }
+  // A box's label: a text in its middle, grouped with it so they move together (Enter or a double-click on the box).
+  // A second time edits the same text.
+  const BOXED = new Set(['rect', 'ellipse', 'ball', 'poly']);
+  function labelInside(s) {
+    if (s.type === 'poly' && !s.closed) return;
+    const b = TD.bbox(s), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    let t = s.g && shapes().find((q) => q.g === s.g && q.type === 'text' && Math.abs(q.x - cx) < b.w / 2 && Math.abs(q.y - cy) < b.h / 2);
+    if (!t) {
+      begin();
+      t = addShape(TYPES.text.create({ x: cx, y: cy }, state.defaults));
+      delete t.valign; // grows both ways from the middle
+      const g = s.g || uid();
+      s.g = g; t.g = g;
+      // the label right above its box in the order
+      const all = shapes(); all.splice(all.indexOf(t), 1); all.splice(all.indexOf(s) + 1, 0, t);
+      commit();
+    }
+    state.sel = new Set([t.id]);
+    render(); renderProps();
+    startEdit(t.id, 'text');
+  }
+  function makeComponent() {
+    const all = shapes(), list = selected().slice().sort((a, b) => all.indexOf(a) - all.indexOf(b));
+    if (list.length < 2) return showHint('Select two or more objects (or a group) to make a component', 1800);
+    const b = unionBox(list), G = TD.GRID, ox = Math.round((b.x + b.w / 2) / G) * G, oy = Math.round((b.y + b.h / 2) / G) * G;
+    const used = new Set(all.filter((q) => q.type === 'comp').map((q) => q.cname));
+    let k = 1; while (used.has('part' + k)) k++;
+    begin();
+    const inst = { id: uid(), type: 'comp', x: ox, y: oy, ref: uid(), cname: 'part' + k, def: TD.comp.defOf(list, ox, oy) };
+    replaceWith(list, [inst]);
+    commit(); render(); renderProps();
+    showHint(`Made component part${k}: duplicate it for linked copies, exported as a TikZ pic`, 2400);
+  }
+  function openParts(inst, mark) {
+    const P = TD.comp.placed(inst), idmap = new Map(), g = uid();
+    for (const p of P) {
+      const n = uid(); idmap.set(p.id, n); p.id = n; p.g = g; p.gname = inst.cname;
+      if (mark) p.cpart = { ref: inst.ref, name: inst.cname, at: [inst.x, inst.y] };
+    }
+    remapLinks(P, idmap);
+    return P;
+  }
+  function editComponent(inst) {
+    if (!inst || inst.type !== 'comp') return;
+    begin(); replaceWith([inst], openParts(inst, true)); commit(); render(); renderProps();
+    showHint(`Editing ${inst.cname}: change its parts, then Save Component to update every copy`, 2600);
+  }
+  function detachComponent(inst) {
+    if (!inst || inst.type !== 'comp') return;
+    begin(); replaceWith([inst], openParts(inst, false)); commit(); render(); renderProps();
+    showHint('Detached: plain shapes, no longer linked', 1500);
+  }
+  function saveComponent(ref) {
+    const list = shapes().filter((q) => q.cpart && q.cpart.ref === ref);
+    if (!list.length) return;
+    const { at, name } = list[0].cpart, def = TD.comp.defOf(list, at[0], at[1]);
+    begin();
+    let n = 0;
+    for (const q of shapes()) if (q.type === 'comp' && q.ref === ref) { q.def = clone(def); q.cname = name; n++; }
+    replaceWith(list, [{ id: uid(), type: 'comp', x: at[0], y: at[1], ref, cname: name, def }]);
+    commit(); render(); renderProps();
+    showHint(n ? `Saved ${name}: ${n + 1} copies updated` : `Saved ${name}`, 1800);
+  }
+  function compHtml(sel) {
+    const one = sel.length === 1 && sel[0].type === 'comp' ? sel[0] : null;
+    if (one) {
+      const n = shapes().filter((q) => q.type === 'comp' && q.ref === one.ref).length;
+      return `<div class="sec"><div class="sec-title">Component</div>
+        <div class="row"><label for="pCname">Name</label><div class="ctl"><input type="text" id="pCname" data-cname value="${esc(one.cname || '')}" spellcheck="false" autocomplete="off"></div></div>
+        <div class="btns"><button data-act="comp:edit" title="Open the parts to change them; Save Component then updates every copy">Edit Parts</button><button data-act="comp:detach" title="Turn this copy into plain shapes, no longer linked">Detach</button></div>
+        <div class="hint-line">${n > 1 ? `${n} linked copies in this diagram.` : 'Duplicate it for linked copies.'} The export defines it once as a TikZ pic, <code>\\pic at (x,y) {${esc(TD.comp.picBase(one.cname))}}</code>.</div></div>`;
+    }
+    const c = sel.find((q) => q.cpart);
+    if (c) return `<div class="sec"><div class="sec-title">Component</div><div class="btns"><button data-act="comp:save" title="Write these parts back to ${esc(c.cpart.name)} and every linked copy">Save Component</button></div>
+        <div class="hint-line">Editing ${esc(c.cpart.name)}. Save writes every shape of this group back to the component.</div></div>`;
+    return '';
+  }
+  function compListHtml() {
+    const seen = new Map();
+    for (const q of shapes()) if (q.type === 'comp') { const e = seen.get(q.ref) || { name: q.cname, n: 0 }; e.n++; seen.set(q.ref, e); }
+    if (!seen.size) return '';
+    return `<div class="sec"><div class="sec-title">Components</div>${[...seen].map(([ref, e]) => `<div class="row"><label>${esc(e.name)}</label><div class="ctl"><span class="hint-inline">${e.n} cop${e.n === 1 ? 'y' : 'ies'}</span><div class="spacer"></div><button data-act="comp:ins:${esc(ref)}">Insert Copy</button></div></div>`).join('')}</div>`;
   }
 
   // ---------- layers ----------
@@ -3086,6 +3330,7 @@
         item('Delete', 'del', { ic: 'del', key: 'Del' }) + hr;
       if (canGroup()) h += item('Group', 'group', { ic: 'group', key: 'Ctrl+G' });
       if (canUngroup()) h += item('Ungroup', 'ungroup', { ic: 'ungroup', key: 'Ctrl+Shift+G' });
+      if (n > 1) h += item('Make Component', 'comp:make', { ic: 'group' });
       if (n > 1) h += item('Combine', '', { ic: 'group', dis: !combinable(), sub: COMBINE.map(([k, t]) => item(t, 'cb:' + k)).join('') });
       h += item('Arrange', '', { ic: 'arrange', sub:
           item('Bring to Front', 'a:front', { key: 'Ctrl+Shift+]' }) + item('Bring Forward', 'a:forward', { key: 'Ctrl+]' }) +
@@ -3141,7 +3386,7 @@
     const name = d.name || fallbackName || 'Untitled';
     if (d.kind === 'page') {
       if (!d.sheet || !validShapes(d.sheet.shapes)) throw new Error('not a DiagramTeX page file');
-      return { kind: 'page', name, page: d.page, sheet: { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes } };
+      return { kind: 'page', name, page: d.page, sheet: { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes, ...(d.sheet.vars ? { vars: d.sheet.vars } : {}) } };
     }
     let blocks = d.blocks || (Array.isArray(d.shapes) ? [{ type: 'diagram', shapes: d.shapes }] : null);
     if (!blocks || blocks.some((b) => b.type === 'diagram' && !validShapes(b.shapes))) throw new Error('not a DiagramTeX file');
@@ -3339,6 +3584,7 @@
     if (a === 'group') groupSel();
     if (a === 'cb') combineSel(arg);
     if (a === 'ungroup') ungroupSel();
+    if (a === 'comp:make') makeComponent();
     if (a === 'a') arrange(arg);
     if (a === 'r') transformSel(arg);
     if (a === 'l') alignSel(arg);
@@ -3393,9 +3639,10 @@
     if (mod) {
       if (k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       else if (k === 'y') { e.preventDefault(); redo(); }
-      else if (k === 'c') { copySel(); }
-      else if (k === 'x') { copySel(); deleteSel(); }
-      else if (k === 'v') { e.preventDefault(); paste(); }
+      else if (k === 'c') { copySel(); copyCode(); }
+      else if (k === 'x') { if (state.sel.size) { copySel(); copyCode(); deleteSel(); } }
+      else if (k === 'v') pasteSoon(); // the paste event below decides: TikZ code from elsewhere, or copied shapes
+      else if (e.code === 'KeyK' && e.altKey) { e.preventDefault(); makeComponent(); }
       else if (k === 'd') { e.preventDefault(); duplicate(); }
       else if (k === 'g') { e.preventDefault(); if (e.shiftKey) ungroupSel(); else groupSel(); }
       else if (k === 'r') { e.preventDefault(); transformSel(e.shiftKey ? 'ccw' : 'cw'); }
@@ -3407,7 +3654,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -3953,18 +4200,105 @@
   imp.addEventListener('pointerdown', (e) => { if (e.target === imp) closeImport(); });
 
   // TikZ modal
+  // The code is shown one row per line. The lines of the selected objects are marked, and a click on a line
+  // selects the object it draws. Lines pdflatex would stop on are marked red (the message is the tooltip),
+  // and lines changed since the code was last copied or downloaded get a blue bar.
+  const view = $('#tikzOut');
+  let tikzText = '', tikzSpans = [], tikzErr = new Map();
+  const tikzBase = new Map(); // what was last copied or downloaded, per file, scope and selection
+  const baseKey = () => [state.docId, state.mode === 'page' ? 'page' : $('#tikzScope').value, $('#tikzSelOnly').checked ? 'sel' : ''].join(':');
+  // lines of b (0-based) not in a longest common subsequence with a
+  function changedLines(a, b) {
+    let p = 0, q = 0;
+    while (p < a.length && p < b.length && a[p] === b[p]) p++;
+    while (q < a.length - p && q < b.length - p && a[a.length - 1 - q] === b[b.length - 1 - q]) q++;
+    const A = a.slice(p, a.length - q), B = b.slice(p, b.length - q), out = new Set();
+    if (A.length * B.length > 4e6) { const has = new Set(A); B.forEach((l, i) => { if (!has.has(l)) out.add(p + i); }); return out; }
+    const W = B.length + 1, D = new Uint32Array((A.length + 1) * W);
+    for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--) D[i * W + j] = A[i] === B[j] ? D[(i + 1) * W + j + 1] + 1 : Math.max(D[(i + 1) * W + j], D[i * W + j + 1]);
+    let i = 0, j = 0;
+    while (j < B.length) {
+      if (i < A.length && A[i] === B[j]) { i++; j++; }
+      else if (i < A.length && D[(i + 1) * W + j] >= D[i * W + j + 1]) i++;
+      else out.add(p + j++);
+    }
+    return out;
+  }
+  const selLines = () => {
+    const L = new Set();
+    for (const sp of tikzSpans) if (sp.ids.some((id) => state.sel.has(id))) for (let n = sp.a; n <= sp.b; n++) L.add(n);
+    return L;
+  };
+  function markSel(scroll) {
+    const L = selLines();
+    let first = null;
+    for (const el of view.children) { const on = L.has(+el.dataset.n); el.classList.toggle('sel', on); if (on && !first) first = el; }
+    if (scroll && first) view.scrollTop = Math.max(0, first.offsetTop - 48);
+  }
+  function paintTikz() {
+    const lines = tikzText.split('\n'), base = tikzBase.get(baseKey());
+    const ch = base == null ? new Set() : changedLines(base.split('\n'), lines);
+    view.innerHTML = lines.map((l, i) => {
+      const e = tikzErr.get(i + 1);
+      return `<div class="cl${e ? ' err' : ''}${ch.has(i) ? ' chg' : ''}" data-n="${i + 1}"${e ? ` title="${esc(e.join('\n'))}"` : ''}>${esc(l)}</div>`;
+    }).join('');
+    markSel(false);
+  }
   function genTikz() {
     const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value;
     $('#tikzSelWrap').style.display = state.sel.size && scope !== 'doc' ? '' : 'none';
     const selOnly = $('#tikzSelOnly').checked && state.sel.size && scope !== 'doc';
     const list = selOnly ? selected() : shapes();
-    $('#tikzOut').value = scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
-      : scope === 'doc' ? TD.docToLatex(state.doc)
-      : TD.toTikz(list, { standalone: scope === 'standalone' });
+    let raw;
+    TD.srcMark = true;
+    try {
+      raw = scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
+        : scope === 'doc' ? TD.docToLatex(state.doc)
+        : TD.toTikz(list, { standalone: scope === 'standalone' });
+    } finally { TD.srcMark = false; }
+    const m = TD.srcMap(raw);
+    tikzText = m.text; tikzSpans = m.spans;
     // what would stop pdflatex: mostly TikZ code kept as written (imported or typed in a code object)
-    const L = TD.lint ? TD.lint($('#tikzOut').value, { preview: false }).filter((d) => d.sev !== 'info') : [];
+    const L = TD.lint ? TD.lint(tikzText, { preview: false }).filter((d) => d.sev !== 'info') : [];
+    tikzErr = new Map();
+    for (const d of L) tikzErr.set(d.line, [...(tikzErr.get(d.line) || []), d.msg]);
     $('#tikzLint').innerHTML = L.length ? TD.lint.html(L) : '';
+    paintTikz();
   }
+  // a click on a line selects what it draws (⇧ adds); dragging across lines selects text as usual
+  view.addEventListener('click', (e) => {
+    const el = e.target.closest('.cl');
+    if (!el || !getSelection().isCollapsed) return;
+    const n = +el.dataset.n, here = new Set(shapes().map((s) => s.id));
+    const hits = tikzSpans.filter((sp) => sp.a <= n && n <= sp.b);
+    if (!hits.length) return;
+    const sp = hits.reduce((x, y) => (y.b - y.a < x.b - x.a ? y : x));
+    const ids = sp.ids.filter((id) => here.has(id));
+    if (!ids.length) return;
+    if (!e.shiftKey) state.sel.clear();
+    for (const id of ids) state.sel.add(id);
+    render(); renderProps(); markSel(false);
+  });
+  // copying a selection gives the code exactly (the line numbers are drawn, not text)
+  const posIn = (node, off) => {
+    if (node === view) { const k = Math.min(off, view.children.length - 1), el = view.children[k]; return el ? [+el.dataset.n, off >= view.children.length ? el.textContent.length : 0] : null; }
+    const el = (node.nodeType === 3 ? node.parentElement : node).closest('.cl');
+    return el ? [+el.dataset.n, node.nodeType === 3 ? off : off ? el.textContent.length : 0] : null;
+  };
+  view.addEventListener('copy', (e) => {
+    const S = getSelection();
+    if (!S.rangeCount || S.isCollapsed) return;
+    const R = S.getRangeAt(0), a = posIn(R.startContainer, R.startOffset), b = posIn(R.endContainer, R.endOffset);
+    if (!a || !b) return;
+    const lines = tikzText.split('\n').slice(a[0] - 1, b[0]);
+    lines[lines.length - 1] = lines[lines.length - 1].slice(0, b[1]); lines[0] = lines[0].slice(a[1]);
+    e.clipboardData.setData('text/plain', lines.join('\n'));
+    e.preventDefault();
+  });
+  view.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); const r = document.createRange(); r.selectNodeContents(view); getSelection().removeAllRanges(); getSelection().addRange(r); }
+  });
+  const taken = () => { tikzBase.set(baseKey(), tikzText); paintTikz(); };
   // one dialog for all the LaTeX out: a picture, a standalone file or the whole document (Document view starts on that)
   function openTikz(scope) {
     finishEdit(); finishPoly(); commit();
@@ -3974,7 +4308,8 @@
     $('#tikzSelOnly').checked = false;
     genTikz();
     $('#modal').hidden = false;
-    $('#tikzOut').focus(); $('#tikzOut').setSelectionRange(0, 0); $('#tikzOut').scrollTop = 0;
+    view.focus({ preventScroll: true }); view.scrollTop = 0;
+    markSel(true);
   }
   function closeModal() { $('#modal').hidden = true; }
   $('#modalClose').onclick = closeModal;
@@ -3982,12 +4317,12 @@
   $('#tikzScope').onchange = genTikz;
   $('#tikzSelOnly').onchange = genTikz;
   $('#tikzCopy').onclick = async () => {
-    const t = $('#tikzOut');
-    try { await navigator.clipboard.writeText(t.value); } catch (e) { t.select(); document.execCommand('copy'); }
+    try { await navigator.clipboard.writeText(tikzText); } catch (e) { const t = document.createElement('textarea'); t.value = tikzText; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
     $('#tikzCopy').textContent = 'Copied';
     setTimeout(() => ($('#tikzCopy').textContent = 'Copy'), 1200);
+    taken();
   };
-  $('#tikzDownload').onclick = () => out(slug() + '.tex', $('#tikzOut').value, 'text/x-tex');
+  $('#tikzDownload').onclick = () => { out(slug() + '.tex', tikzText, 'text/x-tex'); taken(); };
 
   // ---------------- sample document ----------------
   // The first file a new user sees, a Classic file that opens in Document view: what the app is, its
@@ -4273,6 +4608,7 @@
   TD.app = {
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
     parseProject, projectJson, // project files, for the tests
+    newDoc, // tests/bench.mjs
     newSample: () => { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); },
     get slug() { return slug(); },
     // pictures of shapes that are not on the canvas (Quick): a standalone SVG, or a PNG at `dpi`
