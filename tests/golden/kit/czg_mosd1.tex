@@ -1,0 +1,17 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[nmosd] at (0,0) {};
+    \node[pmosd] at (4,0) {};
+    \node[nfetd] at (8,0) {};
+    \node[pfetd] at (12,0) {};
+    \node[nigfetd] at (0,-4) {};
+    \node[pigfetd] at (4,-4) {};
+    \node[nigfetebulk] at (8,-4) {};
+    \node[pigfetebulk] at (12,-4) {};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,99 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, decorations.pathmorphing, quantikz2}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{circuitikz}
+\definecolor{tdc1}{HTML}{6B6B6B}
+\definecolor{tdc2}{HTML}{E8F0FB}
+\definecolor{tdc3}{HTML}{E6F4EA}
+\definecolor{tdc4}{HTML}{A05A5A}
+\definecolor{tdc5}{HTML}{1E5BD6}
+\definecolor{tdc6}{HTML}{D62728}
+\definecolor{tdc7}{HTML}{1E63C4}
+
+\title{Welcome to DiagramTeX}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % diagramtex-data: W3sidHlwZSI6InRleHQiLCJ4Ijo0NDAsInkiOjAsInRleHQiOiJXZWxjb21lIHRvIERpYWdyYW1UZVgiLCJ0dyI6MCwic2l6ZSI6IkxBUkdFIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjp0cnVlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJ0ZXh0IiwieCI6NDQwLCJ5Ijo0MCwidGV4dCI6IkRyYXcgd2l0aCB0aGUgdG9vbHMgb24gdGhlIGxlZnQsIG9yIGRyYWcgYW55dGhpbmcgaW4gZnJvbSB0aGUgTGlicmFyeS4iLCJ0dyI6MCwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiM2YjZiNmIiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJ0ZXh0IiwieCI6NDQwLCJ5Ijo2NiwidGV4dCI6IkRvdWJsZS1jbGljayBhbiBvYmplY3QgdG8gZWRpdCBpdC4gTWF0aHMgZ29lcyBiZXR3ZWVuIFxcdGV4dGRvbGxhclxcIHNpZ25zLCBhcyBpbiBcXExhVGVYLiIsInR3IjowLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzZiNmI2YiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4Ijo0NDAsInkiOjkyLCJ0ZXh0IjoiRXhwb3J0IHR1cm5zIHRoZSBkcmF3aW5nIGludG8gVGlrWiBjb2RlIGZvciB5b3VyIHBhcGVyLCBvciBhbiBTVkcgLyBQTkcuIiwidHciOjAsInNpemUiOiJub3JtYWxzaXplIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoidGV4dCIsIngiOjEzMCwieSI6MTUwLCJ0ZXh0IjoiVEVYVCBBTkQgRk9STVVMQUUiLCJ0dyI6MCwic2l6ZSI6InNtYWxsIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjp0cnVlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiM2YjZiNmIiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJ0ZXh0IiwieCI6MTMwLCJ5IjoxOTYsInRleHQiOiIkXFx2ZWMgRiA9IHFcXGxlZnQoXFx2ZWMgRSArIFxcdmVjIHYgXFx0aW1lcyBcXHZlYyBCXFxyaWdodCkkIiwidHciOjAsInNpemUiOiJsYXJnZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4IjoxMzAsInkiOjI1MiwidGV4dCI6IiRcXGRpc3BsYXlzdHlsZVxcaW50XzBeXFxpbmZ0eSBlXnsteF4yfVxcLGR4ID0gXFxmcmFje1xcc3FydHtcXHBpfX17Mn0kIiwidHciOjAsInNpemUiOiJub3JtYWxzaXplIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjMDAwMDAwIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoidGV4dCIsIngiOjEzMCwieSI6MzA0LCJ0ZXh0IjoiUGxhaW4gdGV4dCBpbiBcXHRleHRiZntib2xkfSwgXFx0ZXh0aXR7aXRhbGljfSBvciBcXHRleHR0dHt0eXBld3JpdGVyfSIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJ0ZXh0IiwieCI6NDQwLCJ5IjoxNTAsInRleHQiOiJTSEFQRVMgQU5EIEFSUk9XUyIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOnRydWUsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzZiNmI2YiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InN5bSIsImtpbmQiOiJycmVjdCIsIngiOjM1MCwieSI6MTc4LCJ3Ijo3NiwiaCI6NDAsInJvdCI6MCwiZngiOmZhbHNlLCJmeSI6ZmFsc2UsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwiZmlsbCI6IiNlOGYwZmIiLCJhbmdsZSI6MCwic2tldyI6MCwidGV4dCI6IklkZWEiLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6ImxpbmUiLCJ4MSI6NDI2LCJ5MSI6MTk4LCJ4MiI6NDYyLCJ5MiI6MTk4LCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInN0YXJ0VGlwIjoibm9uZSIsImVuZFRpcCI6InN0ZWFsdGgiLCJtaWRUaXAiOiJub25lIiwic2hhZnQiOiJzaW5nbGUiLCJjcm9zcyI6Im5vbmUiLCJsYWJlbCI6IiIsImxhYmVsUG9zIjowLjUsImxhYmVsU2lkZSI6ImxlZnQiLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6InN5bSIsImtpbmQiOiJkaWFtb25kIiwieCI6NDYyLCJ5IjoxNzIsInciOjYwLCJoIjo1Miwicm90IjowLCJmeCI6ZmFsc2UsImZ5IjpmYWxzZSwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJmaWxsIjpudWxsLCJhbmdsZSI6MCwic2tldyI6MCwidGV4dCI6IiQ/JCIsInNpemUiOiJub3JtYWxzaXplIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoibGluZSIsIngxIjo0OTIsInkxIjoyMjQsIngyIjo0OTIsInkyIjoyNjIsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoic3RlYWx0aCIsIm1pZFRpcCI6Im5vbmUiLCJzaGFmdCI6InNpbmdsZSIsImNyb3NzIjoibm9uZSIsImxhYmVsIjoiIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsInNpemUiOiJub3JtYWxzaXplIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoic3ltIiwia2luZCI6InJyZWN0IiwieCI6NDU0LCJ5IjoyNjIsInciOjc2LCJoIjo0MCwicm90IjowLCJmeCI6ZmFsc2UsImZ5IjpmYWxzZSwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJmaWxsIjoiI2U2ZjRlYSIsImFuZ2xlIjowLCJza2V3IjowLCJ0ZXh0IjoiRG9uZSIsInNpemUiOiJub3JtYWxzaXplIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoiYmFsbCIsImN4IjozNzIsImN5IjoyODIsInIiOjE2LCJiYWxsQ29sb3IiOiIjYTA1YTVhIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoic3ByaW5nIiwieDEiOjM4OCwieTEiOjI4MiwieDIiOjQ0NiwieTIiOjI4MiwicGl0Y2giOjEyLCJhbXBsaXR1ZGUiOjYsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoidGV4dCIsIngiOjc1MCwieSI6MTUwLCJ0ZXh0IjoiQ0lSQ1VJVFMiLCJ0dyI6MCwic2l6ZSI6InNtYWxsIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjp0cnVlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiM2YjZiNmIiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJjeiIsIngiOjY5MCwieSI6MjkwLCJpdGVtcyI6W3siaWQiOiJ6cngwYjQxYiIsInBhcnQiOiJzcmM6dnNvdXJjZS1ldSIsImEiOlswLDBdLCJiIjpbMCwyXSwibCI6IiRWJCIsImFubiI6IiIsInYiOiIiLCJpIjoiIiwicG9sZXMiOiIiLCJuYW1lIjoiIiwib3B0cyI6IiJ9LHsiaWQiOiJoZ3c4b2xrOCIsInBhcnQiOiJyZXM6aWVjIiwiYSI6WzAsMl0sImIiOlszLDJdLCJsIjoiJFIkIiwiYW5uIjoiIiwidiI6IiIsImkiOiIiLCJwb2xlcyI6IiIsIm5hbWUiOiIiLCJvcHRzIjoiIn0seyJpZCI6InZpeHZtaGZwIiwicGFydCI6ImNhcDppZWMiLCJhIjpbMywyXSwiYiI6WzMsMF0sImwiOiIkQyQiLCJhbm4iOiIiLCJ2IjoiIiwiaSI6IiIsInBvbGVzIjoiIiwibmFtZSI6IiIsIm9wdHMiOiIifSx7ImlkIjoiY2h2dzM4cmYiLCJwYXJ0Ijoic2hvcnQiLCJhIjpbMywwXSwiYiI6WzAsMF0sImwiOiIiLCJhbm4iOiIiLCJ2IjoiIiwiaSI6IiIsInBvbGVzIjoiIiwibmFtZSI6IiIsIm9wdHMiOiIifV0sInJhdyI6IiIsInNpemUiOiJub3JtYWxzaXplIiwiZm9udCI6ImRlZmF1bHQiLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJ0ZXh0IiwieCI6MTcwLCJ5IjozNzAsInRleHQiOiJQTE9UUyIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOnRydWUsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzZiNmI2YiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InBsb3QiLCJ4Ijo0MCwieSI6Mzk2LCJ3IjoyNjAsImgiOjE3MCwiZGltIjoyLCJ0aXRsZSI6IiIsInhsYWJlbCI6IiR4JCIsInlsYWJlbCI6IiR5JCIsInpsYWJlbCI6IiIsImF4aXNMaW5lcyI6Im1pZGRsZSIsImdyaWQiOmZhbHNlLCJ4bWluIjoiIiwieG1heCI6IiIsInltaW4iOiIiLCJ5bWF4IjoiIiwiem1pbiI6IiIsInptYXgiOiIiLCJ2aWV3IjpbMjUsMzBdLCJjb2xvcm1hcCI6ImhvdCIsImNvbG9yYmFyIjpmYWxzZSwibGVnZW5kUG9zIjoibm9ydGggZWFzdCIsInNlcmllcyI6W3sia2luZCI6ImxpbmUiLCJzb3VyY2UiOiJleHByIiwiZXhwciI6InNpbih4KSIsImRhdGEiOiIiLCJkb21haW4iOlsiLTIqcGkiLCIyKnBpIl0sInlkb21haW4iOlsiLTUiLCI1Il0sInNhbXBsZXMiOjEwMCwiY29sb3IiOiIjMWU1YmQ2Iiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm1hcmsiOiJub25lIiwibGVnZW5kIjoiIiwibGV2ZWxzIjo4LCJiYXJXaWR0aCI6MTIsIm9wYWNpdHkiOjF9LHsia2luZCI6ImxpbmUiLCJzb3VyY2UiOiJleHByIiwiZXhwciI6ImNvcyh4KSIsImRhdGEiOiIiLCJkb21haW4iOlsiLTIqcGkiLCIyKnBpIl0sInlkb21haW4iOlsiLTUiLCI1Il0sInNhbXBsZXMiOjEwMCwiY29sb3IiOiIjZDYyNzI4Iiwid2lkdGgiOjEsImRhc2giOiJkYXNoZWQiLCJtYXJrIjoibm9uZSIsImxlZ2VuZCI6IiIsImxldmVscyI6OCwiYmFyV2lkdGgiOjEyLCJvcGFjaXR5IjoxfV0sIl9wdyI6MjgwLCJfcGgiOjIwMH0seyJ0eXBlIjoidGV4dCIsIngiOjUwMCwieSI6MzcwLCJ0ZXh0IjoiUVVBTlRVTSBDSVJDVUlUUyIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOnRydWUsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzZiNmI2YiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InFjIiwieCI6NDI4LCJ5Ijo0MTAsInNyYyI6IlxcYmVnaW57cXVhbnRpa3p9XG5cXGxzdGlja3tcXGtldHswfX0gJiBcXGdhdGV7SH0gJiBcXGN0cmx7MX0gJiBcXG1ldGVye30gXFxcXFxuXFxsc3RpY2t7XFxrZXR7MH19ICYgJiBcXHRhcmd7fSAmIFxcbWV0ZXJ7fVxuXFxlbmR7cXVhbnRpa3p9Iiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6InRleHQiLCJ4Ijo3NzAsInkiOjM3MCwidGV4dCI6IkNPTU1VVEFUSVZFIERJQUdSQU1TIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoiY2QiLCJ4Ijo3MzAsInkiOjQxMCwic3JjIjoiJEEkICYgJEIkIFxcXFwgJEMkICYgJEQkIiwiY29sU2VwIjo4MCwicm93U2VwIjo2MCwic2l6ZSI6Im5vcm1hbHNpemUiLCJsYWJlbFNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiY29sb3IiOiIjMDAwMDAwIiwid2lkdGgiOjAuODQzNTAyMjIxMjIyNTE2LCJhcnJvd3MiOlt7InIxIjowLCJjMSI6MCwicjIiOjAsImMyIjoxLCJsYWJlbCI6IiRmJCIsInNpZGUiOiJsZWZ0Iiwic3R5bGUiOiItPiIsImJlbmQiOjB9LHsicjEiOjAsImMxIjowLCJyMiI6MSwiYzIiOjAsImxhYmVsIjoiJGckIiwic2lkZSI6InJpZ2h0Iiwic3R5bGUiOiItPiIsImJlbmQiOjB9LHsicjEiOjAsImMxIjoxLCJyMiI6MSwiYzIiOjEsImxhYmVsIjoiJGgkIiwic2lkZSI6ImxlZnQiLCJzdHlsZSI6Ii0+IiwiYmVuZCI6MH0seyJyMSI6MSwiYzEiOjAsInIyIjoxLCJjMiI6MSwibGFiZWwiOiIkayQiLCJzaWRlIjoicmlnaHQiLCJzdHlsZSI6Ii0+IiwiYmVuZCI6MH1dfSx7InR5cGUiOiJ0ZXh0IiwieCI6NDQwLCJ5Ijo2MjAsInRleHQiOiJEb3VibGUtY2xpY2sgdGhlIGNpcmN1aXQgb3IgdGhlIHF1YW50dW0gY2lyY3VpdCB0byBvcGVuIGl0cyBlZGl0b3IuIERlbGV0ZSB0aGlzIHNhbXBsZSB3aGVuZXZlciB5b3UgbGlrZS4iLCJ0dyI6MCwic2l6ZSI6InNtYWxsIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjMWU2M2M0Iiwib3BhY2l0eSI6MX1d
+  \node[font=\LARGE\bfseries] at (11,0) {Welcome to DiagramTeX};
+  \node[text=tdc1] at (11,-1) {Draw with the tools on the left, or drag anything in from the Library.};
+  \node[text=tdc1] at (11,-1.65) {Double-click an object to edit it. Maths goes between \textdollar\ signs, as in \LaTeX.};
+  \node[text=tdc1] at (11,-2.3) {Export turns the drawing into TikZ code for your paper, or an SVG / PNG.};
+  \node[font=\small\bfseries, text=tdc1] at (3.25,-3.75) {TEXT AND FORMULAE};
+  \node[font=\large] at (3.25,-4.9) {$\vec F = q\left(\vec E + \vec v \times \vec B\right)$};
+  \node at (3.25,-6.3) {$\displaystyle\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}$};
+  \node[font=\small] at (3.25,-7.6) {Plain text in \textbf{bold}, \textit{italic} or \texttt{typewriter}};
+  \node[font=\small\bfseries, text=tdc1] at (11,-3.75) {SHAPES AND ARROWS};
+  \draw[line width=0.71pt, fill=tdc2, line join=round] (8.95,-4.45) -- (10.45,-4.45) -- (10.45,-4.45) .. controls (10.56,-4.45) and (10.65,-4.54) .. (10.65,-4.65) -- (10.65,-5.25) -- (10.65,-5.25) .. controls (10.65,-5.36) and (10.56,-5.45) .. (10.45,-5.45) -- (8.95,-5.45) -- (8.95,-5.45) .. controls (8.84,-5.45) and (8.75,-5.36) .. (8.75,-5.25) -- (8.75,-4.65) -- (8.75,-4.65) .. controls (8.75,-4.54) and (8.84,-4.45) .. (8.95,-4.45) -- cycle;
+  \node[align=center] at (9.7,-4.95) {Idea};
+  \draw[line width=0.71pt, -{Stealth}] (10.65,-4.95) -- (11.55,-4.95);
+  \draw[line width=0.71pt, line join=round] (12.3,-4.3) -- (13.05,-4.95) -- (12.3,-5.6) -- (11.55,-4.95) -- cycle;
+  \node[align=center] at (12.3,-4.95) {$?$};
+  \draw[line width=0.71pt, -{Stealth}] (12.3,-5.6) -- (12.3,-6.55);
+  \draw[line width=0.71pt, fill=tdc3, line join=round] (11.55,-6.55) -- (13.05,-6.55) -- (13.05,-6.55) .. controls (13.16,-6.55) and (13.25,-6.64) .. (13.25,-6.75) -- (13.25,-7.35) -- (13.25,-7.35) .. controls (13.25,-7.46) and (13.16,-7.55) .. (13.05,-7.55) -- (11.55,-7.55) -- (11.55,-7.55) .. controls (11.44,-7.55) and (11.35,-7.46) .. (11.35,-7.35) -- (11.35,-6.75) -- (11.35,-6.75) .. controls (11.35,-6.64) and (11.44,-6.55) .. (11.55,-6.55) -- cycle;
+  \node[align=center] at (12.3,-7.05) {Done};
+  \shade[ball color=tdc4] (9.3,-7.05) circle (0.4);
+  \draw[line width=0.71pt, decorate, decoration={zigzag, segment length=0.2752cm, amplitude=0.15cm, pre length=0.174cm, post length=0.174cm}] (9.7,-7.05) -- (11.15,-7.05);
+  \node[font=\small\bfseries, text=tdc1] at (18.75,-3.75) {CIRCUITS};
+  \begin{scope}[shift={(17.25,-7.25)}]
+    \draw (0,0) to[european voltage source, l=$V$] (0,2);
+    \draw (0,2) to[european resistor, l=$R$] (3,2);
+    \draw (3,2) to[capacitor, l=$C$] (3,0);
+    \draw (3,0) -- (0,0);
+  \end{scope}
+  \node[font=\small\bfseries, text=tdc1] at (4.25,-9.25) {PLOTS};
+  \begin{axis}[
+    at={(1,-14.15)},
+    anchor=south west,
+    scale only axis,
+    width=6.5cm,
+    height=4.25cm,
+    xmin=-6.2832,
+    xmax=6.2832,
+    ymin=-0.9999,
+    ymax=1,
+    xtick={-5,0,5},
+    ytick={-0.5,0,0.5,1},
+    axis lines=middle,
+    axis line style={-{Stealth}},
+    every axis x label/.style={at={(current axis.right of origin)}, anchor=west},
+    every axis y label/.style={at={(current axis.above origin)}, anchor=south},
+    xlabel={$x$},
+    ylabel={$y$}
+  ]
+    \addplot[color=tdc5, line width=0.71pt, no marks, domain=-6.2832:6.2832, samples=100, forget plot] {sin(deg(x))};
+    \addplot[color=tdc6, line width=0.71pt, dashed, no marks, domain=-6.2832:6.2832, samples=100, forget plot] {cos(deg(x))};
+  \end{axis}
+  \node[font=\small\bfseries, text=tdc1] at (12.5,-9.25) {QUANTUM CIRCUITS};
+  \node at (12.35,-11.03) {\pgfinterruptpicture%
+  \begin{quantikz}
+  \lstick{\ket{0}} & \gate{H} & \ctrl{1} & \meter{} \\
+  \lstick{\ket{0}} & & \targ{} & \meter{}
+  \end{quantikz}%
+  \endpgfinterruptpicture};
+  \node[font=\small\bfseries, text=tdc1] at (19.25,-9.25) {COMMUTATIVE DIAGRAMS};
+  \node (td1-0-0) at (18.25,-10.25) {$A$};
+  \node (td1-0-1) at (20.25,-10.25) {$B$};
+  \node (td1-1-0) at (18.25,-11.75) {$C$};
+  \node (td1-1-1) at (20.25,-11.75) {$D$};
+  \draw[->, line width=0.6pt] (td1-0-0) to node[auto, font=\small] {$f$} (td1-0-1);
+  \draw[->, line width=0.6pt] (td1-0-0) to node[auto, swap, font=\small] {$g$} (td1-1-0);
+  \draw[->, line width=0.6pt] (td1-0-1) to node[auto, font=\small] {$h$} (td1-1-1);
+  \draw[->, line width=0.6pt] (td1-1-0) to node[auto, swap, font=\small] {$k$} (td1-1-1);
+  \node[font=\small, text=tdc7] at (11,-15.5) {Double-click the circuit or the quantum circuit to open its editor. Delete this sample whenever you like.};
+\end{tikzpicture}
+}
+\end{center}
+
+\end{document}

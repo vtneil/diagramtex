@@ -168,6 +168,185 @@ KIT.cz_l2 = czScene(`\\draw (0,0) to[european resistor, l_=$R$, a_=$a$] (3,0);`)
 KIT.cz_v3 = czScene(`\\draw (0,0) to[capacitor, v=$u$] (3,0);`);
 KIT.cz_v4 = czScene(`\\draw (0,0) to[european resistor, v=$u$] (0,3);`);
 KIT.cz_i4 = czScene(`\\draw (0,0) to[european resistor, i=$i$] (0,3);`);
+// voltage and current forms, voltage styles, colour and the path syntax (relative coordinates, corners)
+KIT.cz_vup = czScene(`\\draw (0,0) to[european resistor, v^=$u$] (3,0);
+\\draw (0,2) to[european resistor, v<=$u$] (3,2);
+\\draw (0,4) to[capacitor, v^<=$u$] (3,4);`);
+KIT.cz_vst = czScene(`\\draw (0,0) to[european resistor, straight voltages, v=$u$] (3,0);
+\\draw (0,2) to[european resistor, straight voltages, v^<=$u$] (3,2);
+\\draw (0,4) to[capacitor, straight voltages, v=$u$] (3,4);`);
+KIT.cz_vam = czScene(`\\draw (0,0) to[european resistor, american voltages, v=$u$] (3,0);
+\\draw (0,2) to[european resistor, american voltages, v^<=$u$] (3,2);
+\\draw (0,4) to[capacitor, american voltages, v=$u$] (3,4);`);
+KIT.cz_vra = czScene(`\\draw (0,0) to[european resistor, raised voltages, v=$u$] (3,0);
+\\draw (0,2) to[european resistor, raised voltages, v^=$u$] (3,2);`);
+KIT.cz_vset = czScene(`\\ctikzset{voltage=american}
+\\draw (0,0) to[european resistor, v=$u$] (3,0);
+\\draw (0,2) to[capacitor, v<=$u$] (3,2);`);
+KIT.cz_vsrc = czScene(`\\draw (0,0) to[european voltage source, v=$E$] (3,0);
+\\draw (0,2.5) to[european current source, v=$u$] (3,2.5);
+\\draw (0,5) to[european voltage source, american voltages, v=$E$] (3,5);
+\\draw (0,7.5) to[european voltage source, v_<=$E$] (3,7.5);`);
+KIT.cz_idir = czScene(`\\draw (0,0) to[european resistor, i<=$i$] (3,0);
+\\draw (0,1.5) to[european resistor, i>_=$i$] (3,1.5);
+\\draw (0,3) to[european resistor, i_<=$i$] (3,3);
+\\draw (0,4.5) to[european resistor, i<^=$i$] (3,4.5);
+\\draw (0,6) to[european voltage source, i=$i$] (3,6);`);
+KIT.cz_color = czScene(`\\draw (0,0) to[european resistor, color=red, l=$R$, v=$u$] (3,0);
+\\draw (0,2) to[capacitor, blue!70!black, i=$i$] (3,2);`);
+KIT.cz_path = czScene(`\\coordinate (A) at (0,3);
+\\draw (0,0) to[european resistor] ++(3,0) |- (A) -- (0,0);
+\\draw (4,0) -| (6,2) to[capacitor] +(0,-2);`);
+// generated parts (scripts/cz-extract.py): every family, as pdflatex draws it
+KIT.czg_amp1 = czScene(`\\node[en amp] at (0,0) {};
+\\node[fd op amp] at (4,0) {};
+\\node[gm amp] at (8,0) {};
+\\node[inst amp] at (12,0) {};
+\\node[fd inst amp] at (0,-4) {};
+\\node[inst amp ra] at (4,-4) {};
+\\node[plain amp] at (8,-4) {};
+\\node[plain mono amp] at (12,-4) {};
+\\node[plain gm mono amp] at (0,-8) {};
+\\node[buffer] at (4,-8) {};`);
+KIT.czg_logic1 = czScene(`\\node[ieeestd and port] at (0,0) {};
+\\node[ieeestd nand port] at (4,0) {};
+\\node[ieeestd or port] at (8,0) {};
+\\node[ieeestd nor port] at (12,0) {};
+\\node[ieeestd xor port] at (0,-4) {};
+\\node[ieeestd xnor port] at (4,-4) {};
+\\node[ieeestd buffer port] at (8,-4) {};
+\\node[ieeestd not port] at (12,-4) {};
+\\node[ieeestd schmitt port] at (0,-8) {};
+\\node[ieeestd invschmitt port] at (4,-8) {};
+\\node[ieee tgate] at (8,-8) {};
+\\node[ieee double tgate] at (12,-8) {};`);
+KIT.czg_logic2 = czScene(`\\node[notcirc] at (0,0) {};
+\\node[schmitt symbol] at (4,0) {};`);
+KIT.czg_mosd1 = czScene(`\\node[nmosd] at (0,0) {};
+\\node[pmosd] at (4,0) {};
+\\node[nfetd] at (8,0) {};
+\\node[pfetd] at (12,0) {};
+\\node[nigfetd] at (0,-4) {};
+\\node[pigfetd] at (4,-4) {};
+\\node[nigfetebulk] at (8,-4) {};
+\\node[pigfetebulk] at (12,-4) {};`);
+KIT.czg_src1 = czScene(`\\draw (-1,0) to[sinusoidal current source] (1,0);
+\\draw (3,0) to[controlled sinusoidal voltage source] (5,0);
+\\draw (7,0) to[controlled sinusoidal current source] (9,0);
+\\draw (11,0) to[ioosource] (13,0);
+\\draw (-1,-4) to[voosource] (1,-4);
+\\draw (3,-4) to[dcvsource] (5,-4);
+\\draw (7,-4) to[dcisource] (9,-4);
+\\draw (11,-4) to[rmeter] (13,-4);
+\\draw (-1,-8) to[tlmic] (1,-8);`);
+KIT.czg_ind1 = czScene(`\\draw (-1,0) to[american inductor] (1,0);
+\\draw (3,0) to[variable american inductor] (5,0);
+\\draw (7,0) to[american inductive sensor] (9,0);
+\\draw (11,0) to[european inductor] (13,0);
+\\draw (-1,-4) to[variable european inductor] (1,-4);
+\\draw (3,-4) to[european inductive sensor] (5,-4);
+\\draw (7,-4) to[cute inductive sensor] (9,-4);
+\\draw (11,-4) to[generic] (13,-4);
+\\draw (-1,-8) to[tgeneric] (1,-8);
+\\draw (3,-8) to[thermistor] (5,-8);`);
+KIT.czg_dio1 = czScene(`\\draw (-1,0) to[empty diode] (1,0);
+\\draw (3,0) to[empty Schottky diode] (5,0);
+\\draw (7,0) to[empty Zener diode] (9,0);
+\\draw (11,0) to[empty tunnel diode] (13,0);
+\\draw (-1,-4) to[empty photodiode] (1,-4);
+\\draw (3,-4) to[empty led] (5,-4);
+\\draw (7,-4) to[empty varcap] (9,-4);
+\\draw (11,-4) to[full ZZener diode] (13,-4);
+\\draw (-1,-8) to[full laser diode] (1,-8);
+\\draw (3,-8) to[full TVS diode] (5,-8);
+\\draw (7,-8) to[full Shockley diode] (9,-8);
+\\draw (11,-8) to[full bidirectionaldiode] (13,-8);`);
+KIT.czg_dio2 = czScene(`\\draw (-1,0) to[full triac] (1,0);
+\\draw (3,0) to[full thyristor] (5,0);
+\\draw (7,0) to[full put] (9,0);
+\\draw (11,0) to[full gto] (13,0);
+\\draw (-1,-4) to[full gtobar] (1,-4);
+\\draw (3,-4) to[full agtobar] (5,-4);
+\\draw (7,-4) to[stroke diode] (9,-4);
+\\draw (11,-4) to[stroke Schottky diode] (13,-4);
+\\draw (-1,-8) to[stroke Zener diode] (1,-8);
+\\draw (3,-8) to[stroke ZZener diode] (5,-8);
+\\draw (7,-8) to[stroke tunnel diode] (9,-8);
+\\draw (11,-8) to[stroke photodiode] (13,-8);`);
+KIT.czg_dio3 = czScene(`\\draw (-1,0) to[stroke led] (1,0);
+\\draw (3,0) to[stroke laser diode] (5,0);
+\\draw (7,0) to[stroke varcap] (9,0);
+\\draw (11,0) to[stroke triac] (13,0);
+\\draw (-1,-4) to[stroke thyristor] (1,-4);
+\\draw (3,-4) to[stroke put] (5,-4);
+\\draw (7,-4) to[stroke gto] (9,-4);
+\\draw (11,-4) to[stroke gtobar] (13,-4);
+\\draw (-1,-8) to[stroke agtobar] (1,-8);`);
+KIT.czg_wire1 = czScene(`\\node[jump crossing] at (0,0) {};
+\\node[plain crossing] at (4,0) {};
+\\node[currarrow] at (8,0) {};
+\\node[inputarrow] at (12,0) {};
+\\node[trarrow] at (0,-4) {};
+\\node[flowarrow] at (4,-4) {};
+\\node[diamondpole] at (8,-4) {};
+\\node[odiamondpole] at (12,-4) {};
+\\node[squarepole] at (0,-8) {};
+\\node[osquarepole] at (4,-8) {};
+\\draw (7,-8) to[iecconn] (9,-8);
+\\node[iecplugL] at (12,-8) {};`);
+KIT.czg_wire2 = czScene(`\\node[iecplugR] at (0,0) {};
+\\node[iecsocketL] at (4,0) {};
+\\node[iecsocketR] at (8,0) {};
+\\draw (11,0) to[multiwire] (13,0);
+\\draw (-1,-4) to[bmultiwire] (1,-4);
+\\draw (3,-4) to[tmultiwire] (5,-4);
+\\node[tlground] at (8,-4) {};
+\\node[rground] at (12,-4) {};
+\\node[tground] at (0,-8) {};`);
+KIT.czg_sw1 = czScene(`\\node[cute spdt up] at (0,0) {};
+\\node[cute spdt mid] at (4,0) {};
+\\node[cute spdt down] at (8,0) {};
+\\node[cute spdt up arrow] at (12,0) {};
+\\node[cute spdt mid arrow] at (0,-4) {};
+\\node[cute spdt down arrow] at (4,-4) {};
+\\node[proximeter] at (8,-4) {};
+\\draw (11,-4) to[ncs] (13,-4);
+\\draw (-1,-8) to[oncs] (1,-8);
+\\draw (3,-8) to[cncs] (5,-8);
+\\draw (7,-8) to[onos] (9,-8);
+\\draw (11,-8) to[cnos] (13,-8);`);
+KIT.czg_sw2 = czScene(`\\draw (-1,0) to[cute closed switch] (1,0);
+\\draw (3,0) to[cute open switch] (5,0);
+\\draw (7,0) to[cute closing switch] (9,0);
+\\draw (11,0) to[cute opening switch] (13,0);`);
+KIT.czg_tube1 = czScene(`\\node[diodetube] at (0,0) {};
+\\node[triode] at (4,0) {};
+\\node[tetrode] at (8,0) {};
+\\node[pentode] at (12,0) {};
+\\node[pentode suppressor to cathode] at (0,-4) {};
+\\node[magnetron] at (4,-4) {};
+\\node[dynode] at (8,-4) {};`);
+KIT.czg_rf1 = czScene(`\\node[antenna] at (0,0) {};
+\\node[rxantenna] at (4,0) {};
+\\node[txantenna] at (8,0) {};
+\\node[bareRXantenna] at (12,0) {};
+\\node[bareTXantenna] at (0,-4) {};
+\\node[harmonics] at (4,-4) {};
+\\node[match] at (8,-4) {};
+\\node[mixer] at (12,-4) {};
+\\node[adder] at (0,-8) {};
+\\node[oscillator] at (4,-8) {};
+\\draw (7,-8) to[vco] (9,-8);
+\\node[circulator] at (12,-8) {};`);
+KIT.czg_rf2 = czScene(`\\node[wilkinson] at (0,0) {};
+\\node[splitter] at (4,0) {};
+\\node[genericsplitter] at (8,0) {};
+\\node[gridnode] at (12,0) {};
+\\node[mzm] at (0,-4) {};
+\\node[fourport] at (4,-4) {};
+\\node[coupler] at (8,-4) {};
+\\node[coupler2] at (12,-4) {};
+\\node[double bipole] at (0,-8) {};`);
 
 // ---- qc_*/cd_* scenes (worker 1)
 const qcS = (src, o) => () => SC.block('qc', Object.assign({ src }, o || {}));
@@ -234,3 +413,43 @@ KIT.xy_turn = xyS("\\xymatrix{\n& H^{k+1}(M) \\ar[r]^<<<<<<<<<<<{i^*} & \\cdots 
 KIT.cd_topath = () => SC.block('cd', { src: "\\tikzset{\ncurarrow/.style={\nrounded corners=8pt,\nexecute at begin to={every node/.style={fill=red}},\nto path={-- ([xshift=50pt]\\tikztostart.center)\n  |- (#1) node[fill=white] {$\\scriptstyle d^*$}\n  -| ([xshift=-40pt]\\tikztotarget.center)\n  -- (\\tikztotarget)}\n  }\n}\n\\begin{tikzcd}[cells={nodes={text height=2ex,text depth=0.75ex}}]\n  {} & & H^{k+1}(M) \\arrow{r}{i^*} & \\cdots \\\\\n  {} & & H^k(M) \\arrow{r}{i^*} & H^k(U) \\oplus H^k(V) \\arrow{r}{j^*}\n  \\arrow[draw=none]{u}[name=Y, shape=coordinate]{}\n  \\arrow[draw=none]{d}[name=Z,shape=coordinate]{}\n  & H^k(U \\cap V) \\arrow[curarrow=Y]{ull}{} \\\\\n  & & & \\cdots \\arrow{r}{j^*} & H^{k-1}(U \\cap V)\n  \\arrow[curarrow=Z]{ull}{} \\\\\n\\end{tikzcd}" });
 KIT.cd_from = () => SC.block('cd', { src: "\\begin{tikzcd}\n%first row\nA \\ar[rr] \\ar[dd] \n& \n& B \\ar[dd] \\ar[dr] \\ar[from=ddll,bend left=30]\n& \n\\\\\n%second row\n& E \\ar[rr] \\ar[dd] \\ar[from=ul,crossing over]\n& \n& F \\ar[dd]\n\\\\\n%third row\nC \\ar[rr] \\ar[dr] \n& \n& D \\ar[dr]\n& \n\\\\\n%forth row\n& G \\ar[rr] \\ar[from=uurr,bend left=30,crossing over]\n& \n& H\n\\end{tikzcd}" });
 KIT.cd_trail = () => SC.block('cd', { src: '\\begin{tikzcd}\n A \\arrow[r] & B \\\\\n C & D \\\\\n\\end{tikzcd}' });
+
+// ---- chem_* : chemfig blocks (submols, Cram bonds, charges, \chemmove, schemes, \hreac)
+const chS = (src) => () => SC.block('chemfig', { src });
+KIT.chem_sugar = chS(String.raw`\setchemfig{cram width=2pt}
+\definesubmol{c1}{-[:200]-[:120]O-[:190]}
+\definesubmol{c2}{-[:170](-[:200,0.7]HO)<[:300](-[:170,0.6]HO)
+-[:10,,,,line width=2pt](-[:-40,0.6]OH)>[:-10]}
+\definesubmol{csub}{-[:155,0.65]-[:90,0.65]}
+\chemfig{O(!{c1}(!{csub}O(!{c1}(!{csub}OH)!{c2}))!{c2})-[:-30](-[:-90]CN)-[:30]*6(=-=-=-)}`);
+KIT.chem_move = chS(String.raw`\schemestart
+  \chemfig{C([3]-)([5]-)=[@{db,.5}]@{atoo}\charge{0=\|,-90=\|}{O}}
+  \arrow(.mid east--.mid west){<->}
+  \chemfig{\charge{90:3pt=$\scriptstyle\oplus$}{C}([3]-)([5]-)-%
+    \charge{0=\|,90=\|,-90=\|,45:3pt=$\scriptstyle\ominus$}{O}}
+\schemestop
+\chemmove{\draw[shorten <=2pt, shorten >=2pt](db) ..controls +(up:5mm) and +(up:5mm)..(atoo);}`);
+KIT.chem_nitro = chS(String.raw`\schemestart
+  \chemfig{R-\charge{225:3pt=$\scriptstyle\oplus$}{N}([1]=[@{db}]@{atoo1}O)([7]-[@{sb}]@{atoo2}
+  \charge{45=\|,-45=\|,-135=\|,45:5pt=$\scriptstyle\ominus$}{O})}
+  \arrow(.mid east--.mid west){<->}
+  \chemfig{R-\charge{135:3pt=$\scriptstyle\oplus$}{N}([1]-\charge{90:3pt=$\scriptstyle\ominus$}{O})([7]=O)}
+\schemestop
+\chemmove{
+  \draw[shorten <=2pt, shorten >=2pt](db) ..controls +(120:5mm) and +(120:7mm)..(atoo1);
+  \draw[shorten <=3pt, shorten >=2pt](atoo2) ..controls +(225:10mm) and +(225:10mm)..(sb);
+}`);
+KIT.chem_hreac = chS(String.raw`\definesubmol{0}{-[-3,.15,,,draw=none]}% invisible bond to stack
+\definesubmol{COO/Na+}1{-[7]((-[-3,.66]COO^{-}!0N|a^+#1))}
+\definesubmol{chain}{-[5]!{COO/Na+}{}-[5]!{COO/Na+}{}-[5]-[7]}
+\definesubmol{COO/Ca2+}1{-[7]((-[-3,.66]COO^{-}!0C|a^{2+}!0COO^{-}-[-3,.66](-[7]-[5])#1))}
+\hreac[fixed length,atom sep=2.5em,angle increment=30]
+  \chemfig{-[5]!{COO/Na+}{!0\phantom{C}!0(!{COO/Na+}{}!{chain})(-[-1])}!{chain}}
+  >[\printatom{Ca^{2+}}]
+  \chemfig{-[5]!{COO/Ca2+}{(-[-1]-[1])}-[5]!{COO/Ca2+}{}-[5]!{COO/Ca2+}{}-[5]-[7]}
+\endhreac`);
+KIT.chem_text = chS(String.raw`\schemestart
+  \chemfig{H_2C=CH_2}\quad or \quad\chemfig{*6(=-=-=-)}
+  \arrow{->[$h\nu$]}
+  \chemfig{A-B}
+\schemestop`);

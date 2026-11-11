@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \draw (0,0) to[european voltage source, v=$E$] (3,0);
+    \draw (0,2.5) to[european current source, v=$u$] (3,2.5);
+    \draw (0,5) to[european voltage source, v=$E$, american voltages] (3,5);
+    \draw (0,7.5) to[european voltage source, v_<=$E$] (3,7.5);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

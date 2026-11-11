@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{forest}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (1.79,-1.21) {\pgfinterruptpicture%
+  \begin{forest}
+    for tree={draw, l sep=10pt, s sep=10pt}
+    [Root [Branch [Leaf] [Leaf]] [Branch [Leaf]]]
+  \end{forest}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{forest}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[font=\large] at (2.11,-1.32) {\pgfinterruptpicture%
+  \begin{forest}
+    for tree={draw, grow=east}
+    [Root [alpha [x] [y]] [beta] [gamma [z]]]
+  \end{forest}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

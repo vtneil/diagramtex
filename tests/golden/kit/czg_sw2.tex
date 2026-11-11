@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \draw (-1,0) to[cute closed switch] (1,0);
+    \draw (3,0) to[cute open switch] (5,0);
+    \draw (7,0) to[cute closing switch] (9,0);
+    \draw (11,0) to[cute opening switch] (13,0);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

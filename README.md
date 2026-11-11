@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://diagramtex.igniting.space/"><img src="design/logo/final/lockup-horizontal.svg" alt="DiagramTeX logo" height="64"></a>
+  <a href="https://diagramtex.igniting.space/"><img src="design/logo/final/lockup-horizontal-on-white.svg" alt="DiagramTeX logo" height="80"></a>
 </p>
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
@@ -25,7 +25,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 ## What you can draw
 
 - **Physics diagrams:** springs, waves, balls, axes, rulers, vectors, fields and force diagrams.
-- **Circuit diagrams:** a drag-and-drop circuit editor with 266 `circuitikz` components (resistors, capacitors, inductors, sources, meters, diodes, transistors, op-amps, switches, logic gates, flip-flops, ICs, block-diagram parts) that exports `circuitikz` code, plus 35 quick electrical symbols and waveforms.
+- **Circuit diagrams:** a drag-and-drop circuit editor with 415 `circuitikz` components (resistors, capacitors, inductors, sources, meters, diodes, transistors, op-amps and amplifiers, switches, logic gates including IEEE ones, flip-flops, ICs, vacuum tubes, antennas, block-diagram parts) that exports `circuitikz` code, plus 35 quick electrical symbols and waveforms.
 - **Function plots and charts:** 2D and 3D pgfplots (functions, parametric, polar, implicit, inequalities, vector fields, contour, heatmap, bar, scatter) and pie charts.
 - **3D figures for calculus, in plain TikZ:** all shaded or drawn as lines, with hidden edges dashed, turned with the view angles, and exported as plain TikZ with no extra package. Lower a solid colour's alpha in the colour picker to make the solid see-through.
   - **Solid regions** for multiple integrals: a solid E over a base D between z = u₁(x, y) and z = u₂(x, y), or along the x- or y-axis instead. The base is an ellipse, rectangle, polar curve or annular sector (a cylindrical wedge), with drop lines and labelled callouts. Riemann columns show the boxes over a grid on D.
@@ -139,6 +139,7 @@ npx wrangler preview
   - **fills** with three tabs: Basic (a colour), **Gradient** (linear or radial, 12 presets, rotate, scale, centre and draggable colour stops; exported as pgf shadings) and **Pattern** (vertical, horizontal, grid, diagonal, crosshatch, bricks, dots, with size, line width and colour; exported with `patterns.meta`)
   - line width presets, dash presets (dotted, dashed, dash dot, densely dashed, long dashes…) or a custom `on off …` pattern in pt (`dash pattern=`), arrow tips, opacity
   - text boxes: drag the handle on a text's right edge to give it a wrap width, then choose left / centre / right / justify (`text width=`, `align=`)
+  - vertical alignment (**Vertical** in the panel: top, middle, bottom): top-aligned text grows downward as you add lines or enlarge the font, bottom-aligned grows upward, middle grows both ways. New text starts top-aligned. In a paragraph box it places the text at the frame's top, middle or bottom. The export anchors the same edge (`anchor=north`/`south`), so LaTeX keeps it still too
   - math in text and Math objects: `$…$` is inline; `$$…$$` or `\[…\]` is display style (full-size fractions, sums and limits), exported as `$\displaystyle …$`, and imported back the same way. **Math style** (Inline / Display) in the properties panel switches every formula in the selected objects at once.
   - **command suggestions:** type `\` in the canvas text editor, the Text / Label fields or a Document text block, and matching LaTeX commands appear at the caret with a rendered preview. About 250 common ones (Greek, operators, arrows, `\frac`, `\sqrt`, matrices, `aligned`, `cases`…) come first, then everything else the selected engine supports, such as `\bra`, `\ket` and `\braket` (about 900 for KaTeX and 1,000 for Temml). Use ↑ ↓ to choose, Enter or Tab to insert (the caret lands in the first `{}`), and Esc to close.
   - font family, bold/italic, and font size: `\tiny` … `\Huge` or a custom px size (exported as `\fontsize`)
@@ -153,15 +154,16 @@ npx wrangler preview
   - Rotate: 90° either way, flip horizontally/vertically
   - Align: left, center, right, top, middle, bottom
   - Distribute: horizontally, vertically
-- **Groups** (Ctrl+G, Ctrl+Shift+G): clicking any member selects the whole group, and align/distribute move a group as one block. Plots and blocks are moved by rotate/flip but not rotated themselves.
+- **Groups** (Ctrl+G, Ctrl+Shift+G): clicking any member selects the whole group, and align/distribute move a group as one block. Plots and blocks are moved by rotate/flip but not rotated themselves, so one selected on its own offers no rotate cursor, rotate menu or rotate hint.
 - **Layers panel** (under the properties panel, top first): click a row to select it, Shift-click for a range, Ctrl/⌘-click to add or remove. Drag rows to restack them; drop onto an open group to put a shape in it, or out of it to take it out. Groups fold open and closed. Each row has an eye (hide: not drawn or exported) and a lock (shown on canvas but can't be picked). Double-click a name to rename it; renaming a group renames the whole group. Hovering a row outlines it on the canvas. The footer groups, ungroups and deletes; right-click a row for Rename, Hide/Show, Lock/Unlock and the usual menu. Click the header to fold the panel away.
 
 ### Electrical circuits (circuitikz)
 - **Electrical → Circuit…** (or **Blocks → Circuit**) adds a circuit block; double-click it (or press Enter) to open the circuit editor in an overlay, so the tool rail stays uncluttered.
-- **Parts:** 266 `circuitikz` components in searchable categories. Click a part and click the grid (it lands where the blue preview shows it), or drag it in; drag from start to end to set a two-terminal part's length.
+- **Parts:** 415 `circuitikz` components in searchable categories, including empty, full and stroke diodes, depletion MOSFETs, IEEE logic ports, instrumentation and fully differential amplifiers, cute switches, vacuum tubes and RF parts, each drawn as pdflatex draws it. Click a part and click the grid (it lands where the blue preview shows it), or drag it in; drag from start to end to set a two-terminal part's length.
 - **Wires** (`W`) snap to part pins and stay attached when parts move. Nodes such as transistors, op-amps and ICs are auto-named (`Q1`, `U1`…), so wires export as `(Q1.B)`.
 - **Properties:** label, annotation, voltage and current arrows, open/closed ends (`*-o`), rotation, mirroring (X left to right, Y top to bottom, from the right-click menu or the keys) and extra options. Labels take maths: `$R_1$`, `$10\,\mathrm{k\Omega}$`. Double-click a part to edit its label (a node's text) in place, in LaTeX or MathLive as set under Text input. A part is picked by clicking anywhere on its body, not only on its lines.
 - **Code, side by side:** the `circuitikz` source sits on the right of the editor and follows the drawing as you work. Type in it and the drawing follows after a short pause; lines the editor can't draw are kept and exported as written.
+- **Voltages, currents and colour from the code:** the drawing follows circuitikz's direction forms (`v^=`, `v<=`, `v_>=`, `i<=`, `i>_=`, `i_<=`…), the voltage styles (`american`, `european`, `straight` or `raised voltages` on a part, or `\ctikzset{voltage=american}` for the whole circuit) and a part's colour (`color=red`, `blue!70!black`). Voltage sources draw their straight arrow, or `+`/`−` in American style. Paths may use `++(3,0)` and `+(0,2)`, corners (`-|`, `|-`) and named `\coordinate`s.
 - **Saving:** Done (⌘/Ctrl+Enter) writes the circuit back and closes; ⌘/Ctrl+S writes it back and keeps the editor open, so Esc afterwards closes without asking. This applies to the quantum editor too.
 - Export: the circuit goes into the picture as a `scope` and the preamble gets `\usepackage{circuitikz}`. **Copy circuitikz Code** in the panel gives a standalone `circuitikz` environment.
 
@@ -230,13 +232,14 @@ npx wrangler preview
 - **Palette:** Atoms, Bonds (single, double, triple, wedge, hashed, hollow wedge, reversed), Rings (benzene, aromatic circle, 3 to 7 sides), Groups (OH, NH₂, CH₃, OCH₃, CHO, COOH, NO₂, CN, SH, written the right way round when they point left), Charges (+, −, lone pair, radical, δ+, δ−) and Reactions (arrow, equilibrium, resonance, no reaction, plus). With an atom picked, a ring or group is attached to it by a bond; with a ring's side picked, a ring is fused onto that side. With nothing picked, the item is armed: click an atom or bond to apply it.
 - **Panel:** an atom has its label, a + or − charge and lone pairs above, right, below or left; a bond its type, angle, length and TikZ options; an arrow its type, the conditions above and below, angle and length. In a scheme, a molecule can be named (`\chemname`) or deleted. Right-click for bond types, Edit Label, Delete Atom, Bond, Ring, Molecule or Arrow.
 - **Reactions:** Arrow, Equilibrium, Resonance or No reaction turns the drawing into a `\schemestart … \schemestop` scheme and adds the arrow and a copy of the molecule after it, ready to change into the product.
-- The code is live on the right, both ways, and is drawn by chemfig's own rules (atom sep 3em, ring and branch angles, double bonds inside rings, Cram wedges, arrow lengths), so the canvas matches the PDF. Code you didn't touch is kept as written. It is exported unchanged in a node with `\usepackage{chemfig}` and builds with pdfLaTeX. Not drawn (kept in the code and warned about): submolecules (`!{…}`), `\subscheme`, `\merge`, arrows between named compounds (`\arrow(@a--@b)`), the `-U>` arrow's arc and `\chemfig`'s optional arguments.
+- The code is live on the right, both ways, and is drawn by chemfig's own rules (atom sep 3em, ring and branch angles, double bonds inside rings, Cram wedges, arrow lengths), so the canvas matches the PDF. Code you didn't touch is kept as written. It is exported unchanged in a node with `\usepackage{chemfig}` and builds with pdfLaTeX. Also drawn: `\definesubmol` (with arguments, `!{name}{arg}`, `!0`), `\setchemfig` (atom sep, angle increment, cram width, bond offset, fixed length…), atoms split with `|`, `\printatom`, `\phantom`, text between molecules, scheme arrows from anchors (`\arrow(.mid east--.mid west){<->}`), `\hreac … \endhreac`, and `\chemmove` curved arrows between `@{name}` atoms and bonds (`--`, `..controls … and ..`, `to[bend left]`, shorten, tips, dashed, colour). Submolecule atoms are edited in their `\definesubmol`, not on the canvas. Not drawn (kept in the code and warned about): `\subscheme`, `\merge`, arrows between named compounds (`\arrow(@a--@b)`), the `-U>` arrow's arc and `\chemfig`'s optional arguments.
 
 ### Commutative diagrams (tikz-cd)
 - **Blocks → CD** adds a diagram. Double-click it, press Enter or use **Edit Diagram…** in the panel to open the CD editor. Diagrams from the old grid editor open as CD blocks.
 - **Editor:** the diagram sits on a grid of cells. Select a cell and type to write its object, or drop one from the palette (A, 0, ℤ, A ⊕ B, Hom(A, B), …). Drag from one cell to another to draw an arrow in the style picked in the palette (arrow, maps to, inclusion, onto, into, dashed, implies, equal, both ways, line, harpoon, squiggly). Drag a cell to move it (Alt copies); right-click for rows and columns.
 - **Arrows:** the panel sets the label (Side and At apply once it has one), the head (pictures), the line (solid, dashed, dotted, squiggly), a crossing gap, bend and shift, each on its own so none undoes another, and shows the arrow's options as written; **Reverse** swaps its ends. Picking Dashed or Squiggly in the palette changes only the line.
 - The `tikz-cd` code is live on the right, both ways; cells you didn't touch keep the code you wrote. The canvas sizes cells as tikz-cd does. It is exported inside `\begin{tikzcd}` with `\usepackage{tikz-cd}` (and `decorations.pathmorphing` for squiggly arrows).
+- **quiver:** code exported from [quiver](https://github.com/varkor/quiver) draws as it does with `quiver.sty`: arrows written by position (`from=1-1, to=1-2`) or to a named label (2-cells between arrows), `curve={height=…}`, `between={0.2}{0.8}`, `nfold`, `tail reversed`, `2tail`, `no body`, loops (`loop, in, out, distance`), markings (`\shortmid`, `\bullet`, `\circ`), pullback and pushout corners, and colours written as `{rgb,255:red,…;green,…;blue,…}` on arrows, labels and `\textcolor`. The editor moves arrows written by position into their cells as `\arrow[r]`; arrows to a name stay as written. Exported with `\usepackage{quiver}` when the code uses its keys. 3-fold and higher arrows are drawn double, with a hint.
 
 ### Commutative diagrams (xymatrix)
 - **Blocks → XyMatrix** adds a diagram written for the `xy` package. It opens in the same editor as CD, with the same palette, grid and arrow panel, but the live code is `\xymatrix{…}`: `\ar@{->>}[r]^{f}`, hooks `@{^{(}->}`, curves `@/^1pc/`, shifts `@<.5ex>`, labels `^`, `_`, `|` with a position such as `^(.3)`, and `@R=`/`@C=`/`@M=` spacing.
@@ -296,12 +299,14 @@ npx wrangler preview
 - **Export TikZ** (Ctrl/⌘+E): a `tikzpicture` snippet or a `standalone` document, for everything or only the selection. The header comment lists the needed packages and libraries (`pgfplots`, `arrows.meta`, …).
 - **Export LaTeX:** writes the whole document as an `article` with `geometry` page settings, and each diagram in a `tikzpicture`. Each picture carries a `% diagramtex-data:` comment, so files this app exports re-import exactly, plots included.
 - **Import LaTeX/TikZ:** paste code or open a `.tex` file.
+  - **Nothing is lost.** Statements that become shapes are re-exported exactly as you wrote them until you edit them; an edited shape rewrites only its own statement. Everything else (a `\foreach`, a pgfplots `axis`, a node placed with `right=1cm of a`, a path ending at a named node, `\tikzset`, `\definecolor`, comments) is kept as **TikZ code**: drawn as a preview in a dashed frame tagged with its first command, exported unchanged inside the scopes it sat in, and moved with a `shift` scope when dragged. Its panel shows the code (editable, the preview follows) and **Convert to Shapes**. Preamble definitions (`\usepackage`, `\usetikzlibrary`, `\tikzset`, `\newcommand`, colours) go back into the exported preamble, and the picture's own `>=Stealth` stays on it.
+  - **Report as you type:** the dialog lists, by line, each statement that will be kept as code and why (a named point, an estimated position, an option the model has no field for…), plus the LaTeX checks below.
   - Transforms: `rotate`, `rotate around`, `shift`, `xshift`, `yshift` on paths, nodes and (nested) scopes; `transform shape` decides whether text in a rotated scope turns too. `even odd rule` paths with several parts become a Region with holes.
   - Supported: `\draw`, `\fill`, `\filldraw`, `\node`, `\coordinate`.
   - Path operations: `--`, `..controls..`, `|-`, `rectangle`, `circle`, `ellipse`, `arc`, `to[bend]`, `grid`, inline nodes.
   - Options: colours (including `red!50`), widths, dashes, arrows, `scale`, and polar and relative coordinates.
   - Document text becomes text blocks, and `\documentclass` / `geometry` options become the page setup.
-  - Hand-written `axis` and `tikzcd` environments are skipped, with a warning.
+- **LaTeX checks:** the TikZ/LaTeX code dialog, the import dialog and a TikZ code object's panel point out, by line, unbalanced braces and `\begin`/`\end`, a TikZ library or package the code uses but doesn't load (`patterns`, `positioning`, `arrows.meta`, `calc`, `decorations.*`, `amssymb` for `\mathbb`…), quantikz2 next to tikz-cd or ZX, LuaLaTeX-only code, and maths commands the preview can't draw (LaTeX is unaffected if they are defined).
 
 ## Privacy
 
@@ -342,7 +347,7 @@ In your browser: files in IndexedDB, settings in local storage. Files saved by o
 Yes. Open the TikZ code (Ctrl/⌘+E), copy it and paste it into your Overleaf project. The comment at the top lists the packages and TikZ libraries to load.
 
 **Can I edit TikZ code I already have?**
-Yes, for most `\draw`, `\fill`, `\node` and `\coordinate` paths: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Files exported by DiagramTeX re-import exactly, plots included.
+Yes: use **Import LaTeX/TikZ** and paste the code or open the `.tex` file. Plain `\draw`, `\fill`, `\node` and `\coordinate` paths become shapes; anything else is kept as TikZ code and exported exactly as written, so a figure you import and export again comes back unchanged. Files exported by DiagramTeX re-import exactly, plots included.
 
 **Which LaTeX packages does the output need?**
 TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` for commutative diagrams, the `quantikz2` TikZ library for quantum circuits, `forest` for trees, `zx-calculus` for ZX diagrams, `tikz-feynman` for Feynman diagrams, `tikz-3dplot` for 3D geometry, `tikz-timing` for timing diagrams, the TikZ `automata` library for state machines, `karnaugh-map` for Karnaugh maps, `chemfig` for chemistry and `blochsphere` for Bloch spheres. The export lists what each figure needs. quantikz2 restyles every `tikz-cd` diagram in the same document, so when a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own (a snippet lists them in its header comment).
@@ -391,6 +396,9 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` fo
 - `public/js/bloch.js`: Bloch spheres: blochsphere parser, canvas drawing, panel and export
 - `public/js/segthumb.js`: the sliding knob of segmented switches
 - `public/js/tikzimport.js`: LaTeX/TikZ importer
+- `public/js/rawtikz.js`: TikZ code kept as written (the `tikz` object: preview, dashed frame, export inside its scopes)
+- `public/js/texlint.js`: LaTeX checks (`TD.lint`): brackets, environments, missing libraries and packages, engine clashes
+- `tests/`: `node tests/run.mjs [filter] [--update] [--no-tex]` runs the suites in `tests/suites/` in headless Chrome against `tests/golden/` (TikZ of every parity figure, round trips, lossless import, lint) and compiles each export with pdfLaTeX (cached); `--update` rewrites the golden files. `node tests/probe.mjs script.js` runs a script in the loaded app and prints what it returns
 - `public/js/storage.js`: files and the file list in IndexedDB (read into memory at start, written in the background, shared between tabs)
 - `public/js/app.js`: editor state, interaction, history, properties panel, storage, menu, export
 - `public/js/docview.js`: document view and whole-document LaTeX export

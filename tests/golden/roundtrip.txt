@@ -1,0 +1,158 @@
+lines: 46/50 modelled · regenerated differs from line 4 (line → line,tikz)
+shapes: 26/43 modelled · regenerated differs from line 18 (arc,ball,curve,dot,ellipse,poly,rect,spring → arc,ball,curve,dot,ellipse,poly,rect,spring,tikz)
+text: 14/19 modelled · regenerated differs from line 4 (line,sym,text → line,text,tikz)
+labels: 11/12 modelled · regenerated differs from line 12 (curve,line → curve,line,text,tikz)
+pie: 12/20 modelled · regenerated differs from line 6 (pie → text,tikz)
+plot_function: 2/3 modelled · regenerated differs from line 4 (plot → tikz)
+plot_line: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_scatter: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_area: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_bar: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_contour: 11/12 modelled · regenerated differs from line 13 (plot → tikz)
+plot_heatmap: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_param3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_curve3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_function3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_surface3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_mesh3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_scatter3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+blk_qc: 1/1 modelled · regenerated same
+blk_cd: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+blk_forest: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+blk_cz: 0/4 modelled · regenerated differs from line 4 (cz → tikz)
+blk_zx: 1/1 modelled · regenerated differs from line 4 (zx → zx)
+blk_feynman: 1/1 modelled · regenerated differs from line 4 (feynman → feynman)
+blk_bloch: 1/1 modelled · regenerated differs from line 4 (bloch → bloch)
+blk_timing: 1/1 modelled · regenerated same
+blk_kmap: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+blk_automata: 0/4 modelled · regenerated differs from line 4 (automata → tikz)
+blk_geo3d: 3/15 modelled · regenerated differs from line 5 (geo3d → tikz)
+blk_chem: 1/1 modelled · regenerated same
+sym_basic: 1/53 modelled · regenerated differs from line 3 (sym → tikz)
+sym_flow: 5/69 modelled · regenerated differs from line 3 (sym → poly,tikz)
+sym_elec: 3/58 modelled · regenerated differs from line 3 (sym → poly,tikz)
+sym_phys: 12/36 modelled · regenerated differs from line 3 (sym → poly,text,tikz)
+tip_w04: 27/27 modelled · regenerated same
+tip_w1: 27/27 modelled · regenerated same
+tip_w2: 27/27 modelled · regenerated same
+op_shapes: 9/10 modelled · regenerated differs from line 7 (curve,ellipse,line,rect → curve,ellipse,line,rect,tikz)
+tip_ticks: 0/4 modelled · regenerated same
+pat_all: 2/10 modelled · regenerated differs from line 4 (rect → tikz)
+cz_a: 0/11 modelled · regenerated differs from line 4 (cz → tikz)
+cz_b: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
+cz_c: 0/7 modelled · regenerated differs from line 4 (cz → tikz)
+cz_d: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
+fsm_a: 0/5 modelled · regenerated differs from line 4 (automata → tikz)
+fsm_b: 0/5 modelled · regenerated differs from line 4 (automata → tikz)
+forest_syntax: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_org: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_dir: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_decision: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_binary: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_prob: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_sz_small: 1/1 modelled · regenerated differs from line 2 (forest → forest)
+forest_sz_normalsize: 1/1 modelled · regenerated differs from line 2 (forest → forest)
+forest_sz_Large: 1/1 modelled · regenerated differs from line 2 (forest → forest)
+forest_ls_0pt: 1/1 modelled · regenerated differs from line 2 (forest → forest)
+forest_ls_10pt: 1/1 modelled · regenerated differs from line 2 (forest → forest)
+forest_ls_30pt: 1/1 modelled · regenerated differs from line 2 (forest → forest)
+forest_nd: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_nd2: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_east: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_north: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_deep: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_wide: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_unbal: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+tm_opts: 1/1 modelled · regenerated same
+tm_many: 1/1 modelled · regenerated same
+tm_big: 1/1 modelled · regenerated same
+km_2: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+km_3a: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+km_3b: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+km_4: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+km_4b: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+km_5: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+km_6: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
+cz_h1: 0/1 modelled · regenerated same
+cz_v1: 0/1 modelled · regenerated same
+cz_i1: 0/1 modelled · regenerated same
+cz_vv: 0/1 modelled · regenerated same
+cz_v2: 0/1 modelled · regenerated same
+cz_i2: 0/1 modelled · regenerated same
+cz_l2: 0/1 modelled · regenerated same
+cz_v3: 0/1 modelled · regenerated same
+cz_v4: 0/1 modelled · regenerated same
+cz_i4: 0/1 modelled · regenerated same
+cz_vup: 0/3 modelled · regenerated differs from line 4 (cz → tikz)
+cz_vst: 0/3 modelled · regenerated differs from line 4 (cz → tikz)
+cz_vam: 0/3 modelled · regenerated differs from line 4 (cz → tikz)
+cz_vra: 0/2 modelled · regenerated differs from line 4 (cz → tikz)
+cz_vset: 1/3 modelled · regenerated differs from line 4 (cz → tikz)
+cz_vsrc: 0/4 modelled · regenerated differs from line 4 (cz → tikz)
+cz_idir: 0/5 modelled · regenerated differs from line 4 (cz → tikz)
+cz_color: 0/2 modelled · regenerated differs from line 4 (cz → tikz)
+cz_path: 0/8 modelled · regenerated differs from line 4 (cz → tikz)
+czg_amp1: 0/10 modelled · regenerated differs from line 4 (cz → tikz)
+czg_logic1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
+czg_logic2: 0/2 modelled · regenerated differs from line 4 (cz → tikz)
+czg_mosd1: 0/8 modelled · regenerated differs from line 4 (cz → tikz)
+czg_src1: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
+czg_ind1: 0/10 modelled · regenerated differs from line 4 (cz → tikz)
+czg_dio1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
+czg_dio2: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
+czg_dio3: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
+czg_wire1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
+czg_wire2: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
+czg_sw1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
+czg_sw2: 0/4 modelled · regenerated differs from line 4 (cz → tikz)
+czg_tube1: 0/7 modelled · regenerated differs from line 4 (cz → tikz)
+czg_rf1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
+czg_rf2: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
+qc_long: 1/1 modelled · regenerated same
+qc_multi: 1/1 modelled · regenerated same
+qc_group: 1/1 modelled · regenerated same
+qc_cw: 1/1 modelled · regenerated same
+qc_small: 1/1 modelled · regenerated differs from line 2 (qc → qc)
+qc_large: 1/1 modelled · regenerated differs from line 2 (qc → qc)
+cz_e: 0/11 modelled · regenerated differs from line 4 (cz → tikz)
+plt_legend_sw: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plt_legend_se: 2/3 modelled · regenerated differs from line 4 (plot → tikz)
+plt_middle_line: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+cd_long: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_bend: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_tips: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_big: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_lab: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_labb: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_nolab: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_vlab: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_vlabb: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+prim3d_a: 11/138 modelled · regenerated differs from line 3 (prim3d → text,tikz)
+prim3d_b: 11/482 modelled · regenerated differs from line 2 (prim3d → ball,ellipse,text,tikz)
+solid: 16/501 modelled · regenerated differs from line 4 (solid → text,tikz)
+revolve: 9/1741 modelled · regenerated differs from line 4 (revolve → text,tikz)
+sketch3d_a: 24/46 modelled · regenerated differs from line 3 (sketch3d → dot,text,tikz)
+sketch3d_b: 16/27 modelled · regenerated differs from line 5 (sketch3d → dot,poly,text,tikz)
+blk_xy: 1/1 modelled · regenerated differs from line 4 (xy → xy)
+xy_long: 1/1 modelled · regenerated same
+xy_tips: 1/1 modelled · regenerated same
+xy_bend: 1/1 modelled · regenerated same
+xy_lab: 1/1 modelled · regenerated same
+xy_nolab: 1/1 modelled · regenerated same
+xy_vlab: 1/1 modelled · regenerated same
+cd_hook: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+xy_hook: 1/1 modelled · regenerated same
+xy_curves: 1/1 modelled · regenerated same
+cd_hook2: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_hookl: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+xy_mix: 1/1 modelled · regenerated same
+xy_sep: 1/1 modelled · regenerated same
+xy_turn: 1/1 modelled · regenerated differs from line 4 (xy → xy)
+cd_topath: 0/1 modelled · regenerated same
+cd_from: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+cd_trail: 1/1 modelled · regenerated differs from line 4 (cd → cd)
+chem_sugar: 0/1 modelled · regenerated same
+chem_move: 0/1 modelled · regenerated same
+chem_nitro: 0/1 modelled · regenerated same
+chem_hreac: 0/1 modelled · regenerated same
+chem_text: 0/1 modelled · regenerated same

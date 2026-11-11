@@ -1,0 +1,18 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[iecplugR] at (0,0) {};
+    \node[iecsocketL] at (4,0) {};
+    \node[iecsocketR] at (8,0) {};
+    \node[tlground] at (8,-4) {};
+    \node[rground] at (12,-4) {};
+    \node[tground] at (0,-8) {};
+    \draw (11,0) to[multiwire] (13,0);
+    \draw (-1,-4) to[bmultiwire] (1,-4);
+    \draw (3,-4) to[tmultiwire] (5,-4);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

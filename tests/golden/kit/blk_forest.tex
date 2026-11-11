@@ -1,0 +1,16 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{forest}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[font=\large] at (2.02,-1.43) {\pgfinterruptpicture%
+  \begin{forest}
+    for tree={draw, rounded corners}
+    [Root
+      [Branch [Leaf] [Leaf]]
+      [Branch [Leaf]]
+    ]
+  \end{forest}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

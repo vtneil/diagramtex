@@ -1,0 +1,16 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[ground] at (0,0) {};
+    \node[vcc] at (2,0) {$V_{cc}$};
+    \node[npn] at (5,0) {};
+    \node[pnp] at (8,0) {};
+    \node[op amp] at (3,4) {};
+    \node[nmos] at (7,4) {};
+    \node[pmos] at (10,4) {};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

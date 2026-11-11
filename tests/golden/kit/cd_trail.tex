@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{tikz-cd}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (1.01,-1.13) {\pgfinterruptpicture%
+  \begin{tikzcd}
+   A \arrow[r] & B \\
+   C & D \\
+  \end{tikzcd}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

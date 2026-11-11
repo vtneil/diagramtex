@@ -49,7 +49,7 @@
     const wW = 0.4 / K / PX * k, bW = 2 * wW; // wires 0.4pt, component bodies twice that (circuitikz thickness 2)
     let out = '';
     for (const it of items) {
-      const def = CZ.parts[it.part], c = o.colorOf ? o.colorOf(it) : col;
+      const def = CZ.parts[it.part], ic = colorOf(it), c = o.colorOf ? o.colorOf(it, ic) : ic ? TD.css(ic) : col;
       let s = '';
       if (it.p) {
         if (!def) { const [X, Y] = m(it.p[0], it.p[1]); s += `<circle cx="${r2(X)}" cy="${r2(Y)}" r="${r2(0.15 * k)}" fill="none" stroke="${c}" stroke-dasharray="2 2"/>`; }
@@ -74,26 +74,70 @@
     }
     return out;
   }
-  // `l_= a_= v_= i_=` live in the free options (they are exported as written): read them for the canvas
-  function optLabels(it) {
+  // what the free options say about labels and style: { l_, a_, v: {mods, t}, i: {mods, t}, vstyle, color }
+  // (`v^= i<_=` … are exported as written; plain `v= i=` live in the item's own fields)
+  const VSTYLE = { american: 'american', european: 'european', straight: 'straight', raised: 'raised', curved: 'european' };
+  function optsOf(it) {
     const out = {};
     for (const x of splitTop(it.opts || '', ',')) {
-      const m = /^\s*(l|a|v|i)_\s*=\s*([\s\S]*?)\s*$/.exec(x);
-      if (m) out[m[1] + '_'] = unbrace(m[2]);
+      const t = x.trim();
+      let m = /^(l|a)_\s*=\s*([\s\S]*)$/.exec(t);
+      if (m) { out[m[1] + '_'] = unbrace(m[2]); continue; }
+      m = /^(v|i)([_^<>]{1,3})\s*=\s*([\s\S]*)$/.exec(t);
+      if (m) { out[m[1]] = { mods: m[2], t: unbrace(m[3]) }; continue; }
+      m = /^(american|european|straight|raised)\s+voltages$/.exec(norm(t));
+      if (m) { out.vstyle = m[1]; continue; }
+      m = /^(?:color|draw)\s*=\s*([\s\S]+)$/.exec(t);
+      const c = TD.tikzColor && (m ? TD.tikzColor(unbrace(m[1])) : !/[=\s]/.test(t) && TD.tikzColor(t));
+      if (c) out.color = c;
     }
     return out;
+  }
+  // the circuit-wide voltage style a `\ctikzset{voltage=…}` (or `\tikzset{… voltages}`) line in the code sets
+  function vstyleOf(raw) {
+    let v = 'european';
+    for (const m of String(raw || '').matchAll(/voltage\s*=\s*(american|european|straight|raised|curved)\b|\b(american|european|straight|raised)\s+voltages\b/g)) v = VSTYLE[m[1] || m[2]];
+    return v;
+  }
+  const colorOf = (it) => optsOf(it).color || null;
+  // sources: 'v' (a voltage source), 'i' (a current source) or ''
+  const srcKind = (part) => (!/^src:/.test(part) || /nullator|norator/.test(part) ? '' : /^src:c?isource/.test(part) ? 'i' : 'v');
+  // circuitikz's defaults (no `oldvoltagedirection`): a part's voltage below and forward, a voltage source's above,
+  // a current source's backward; `^ _` pick the side, `> <` the direction
+  function voltOf(it, ox) {
+    const o = ox.v || (it.v ? { mods: '', t: it.v } : null);
+    if (!o) return null;
+    const k = srcKind(it.part), md = o.mods;
+    return { t: o.t, s: md.includes('^') ? 1 : md.includes('_') ? -1 : k === 'v' ? 1 : -1, back: md.includes('<') ? true : md.includes('>') ? false : k === 'i', gen: k === 'v' };
+  }
+  // currents: forward after the part above the wire; on a voltage source backward and before it.
+  // `i<` is backward and before; with a side too, the order says where: `i>_` before, `i_>` after
+  function currOf(it, ox) {
+    const o = ox.i || (it.i ? { mods: '', t: it.i } : null);
+    if (!o) return null;
+    const vs = srcKind(it.part) === 'v', md = o.mods, pi = md.search(/[_^]/), di = md.search(/[<>]/);
+    let back = vs, before = vs;
+    if (di >= 0) { back = md[di] === '<'; before = pi < 0 ? back : di < pi; }
+    return { t: o.t, s: md[pi] === '_' ? -1 : 1, back, before };
   }
   // circuitikz's voltage arc (european style): both ends sit 0.112 cm beside the part's pins, the controls come
   // from the part's -110/-70 degree anchors scaled by `bump b` 1.5. Frame: x along the path, y to its left.
   const VSHIFT = 0.112, BUMP = 1.5, LABEL_UP = 0.13, NODE_TXT = 0.1;
+  // a TeX label anchored at distance d from the path (north below it, south above) has its canvas box edge at
+  // d − 0.096 below and d + 0.039 above (the canvas text box is taller than TeX's); a voltage label (inner sep
+  // 2pt) above the path at d − 0.09. Measured against pdflatex at normalsize.
+  const TEX_BELOW = 0.096, TEX_ABOVE = 0.039, TEX_ABOVE_V = -0.09;
   function voltageArc(it, def, G) {
     const L = Math.hypot(it.b[0] - it.a[0], it.b[1] - it.a[1]) || 1, w = Math.min(def.w || 0, L);
-    const hy = G ? Math.max(G.box.y2, -G.box.y1) : 0.2, Ay = Math.max(hy, 0.325);
+    const hy = G ? Math.max(G.box.y2, -G.box.y1) : 0.2, Ay = srcKind(it.part) ? 1.1 * hy : Math.max(hy, 0.325);
     const ah = /^res:/.test(it.part) ? 0.77 : w / 2, xs = -L / 2 + (0.0875 + (L / 2 - ah)) / 2, cy = -(BUMP * Ay + VSHIFT), cx = BUMP * 0.364 * Ay;
-    return { p0: [xs, -VSHIFT], c1: [-cx, cy], c2: [cx, cy], p3: [-xs, -VSHIFT], bottom: -(0.25 * VSHIFT + 0.75 * -cy) };
+    // where circuitikz anchors the label (north of it): a resistor's anchors sit lower than its curve's controls
+    const lab = /^res:/.test(it.part) ? BUMP * 0.308 + VSHIFT : -cy;
+    return { p0: [xs, -VSHIFT], c1: [-cx, cy], c2: [cx, cy], p3: [-xs, -VSHIFT], xs, hy, lab };
   }
-  // where the labels go: l (and i) on the left of the path, a and v on the right; node text at its centre
-  function labelSpots(it) {
+  // where the labels go: l (and i) on the left of the path, a and v on the right; node text at its centre.
+  // Spots: { t, at, dir } plus arc (a curved arrow), line (a straight one) or arrow (the current's, on the wire)
+  function labelSpots(it, st) {
     const def = CZ.parts[it.part], G = def && CZ.geom(it.part);
     const spots = [];
     if (it.p) {
@@ -109,7 +153,7 @@
     }
     const T = bipXf(it, true), hy = G ? Math.max(G.box.y2, -G.box.y1, 0.05) : 0.05;
     const dx = it.b[0] - it.a[0], dy = it.b[1] - it.a[1], L = Math.hypot(dx, dy) || 1, n = [-dy / L, dx / L], mn = [-n[0], -n[1]];
-    const ox = optLabels(it), LD = 0.12 - LABEL_UP, LB = 0.12;
+    const ox = optsOf(it), LD = 0.12 - LABEL_UP, LB = 0.12;
     const top = [], bot = [];
     if (it.l) top.push(it.l);
     if (ox['a_']) bot.push(ox['a_']); // circuitikz puts `a_` below too
@@ -117,16 +161,46 @@
     if (ox['l_']) bot.push(ox['l_']);
     top.forEach((t) => spots.push({ t, at: T(0, hy + LD), dir: n }));
     bot.forEach((t) => spots.push({ t, at: T(0, -hy - LB), dir: mn }));
-    const vt = it.v || ox['v_'];
-    if (vt) {
-      const src = !def || /^src:/.test(it.part) || def.kind !== 'bipole';
-      if (src) spots.push({ t: vt, at: T(0, -hy - (it.ann ? 0.6 : LD)), dir: mn });
-      else { const A = voltageArc(it, def, G); spots.push({ t: vt, at: T(0, A.bottom), dir: mn, arc: A }); }
+    // a label anchored by TeX at distance d on side s, and one centred at (x, y)
+    // (the offsets were fitted on level paths, where the box is pushed up or down; pushed sideways it is as below)
+    const vy = Math.abs(n[1]), vx = 1 - vy;
+    const side = (t, x, d, s) => ({ t, at: T(x, s > 0 ? d + vy * TEX_ABOVE_V - vx * TEX_BELOW : -(d - TEX_BELOW)), dir: s > 0 ? n : mn });
+    const mid = (t, x, y) => ({ t, at: T(x, y), dir: [0, 0] });
+    const V = def && voltOf(it, ox);
+    if (V) {
+      const sty = ox.vstyle || (st && st.vstyle) || 'european', am = sty === 'american' || sty === 'raised', s = V.s;
+      const sign = (from, to, y) => { const [p, q] = V.back ? [to, from] : [from, to]; spots.push(mid('$+$', p, y), mid('$-$', q, y)); };
+      if (V.gen) {
+        // a voltage source: a straight arrow (or + and −) between its 120° and 60° anchors scaled by `bump a` 1.2
+        const ex = 0.762 * hy, ey = 1.32 * hy;
+        if (am && !/^src:c?vsource-us$/.test(it.part)) sign(-ex, ex, s * ey); // an American source already has its signs
+        const L0 = side(V.t, 0, 1.52 * hy + (s < 0 ? 0.08 : 0), s);
+        if (!am) L0.line = V.back ? [[ex, s * ey], [-ex, s * ey]] : [[-ex, s * ey], [ex, s * ey]];
+        spots.push(L0);
+      } else {
+        const A = voltageArc(it, def, G), xs = A.xs, hb = 1.1 * A.hy + VSHIFT;
+        if (sty === 'european') {
+          const y = (q) => [q[0], q[1] * -s], arc = V.back ? { p0: y(A.p3), c1: y(A.c2), c2: y(A.c1), p3: y(A.p0) } : { p0: y(A.p0), c1: y(A.c1), c2: y(A.c2), p3: y(A.p3) };
+          spots.push({ ...side(V.t, 0, A.lab, s), arc });
+        } else if (sty === 'straight') {
+          const Ls = side(V.t, 0, hb, s);
+          Ls.line = V.back ? [[-xs, s * hb], [xs, s * hb]] : [[xs, s * hb], [-xs, s * hb]];
+          spots.push(Ls);
+        } else if (sty === 'american') {
+          sign(xs, -xs, s * 0.255 + 0.013); // a + glyph sits a little below its canvas box's middle
+          spots.push(side(V.t, 0, hb, s));
+        } else { // raised: signs and label on one line beyond the part
+          const y = s * (hb + 0.24);
+          sign(xs, -xs, y);
+          spots.push(mid(V.t, 0, y));
+        }
+      }
     }
-    const ct = it.i || ox['i_'];
-    if (ct) {
-      const w = def ? Math.min(def.w || 0, L) : 0, sd = it.i ? 1 : -1;
-      spots.push({ t: ct, at: T((L + w) / 4, sd * 0.12), dir: sd > 0 ? n : mn, arrow: true });
+    const C = def && currOf(it, ox);
+    if (C) {
+      const w = Math.min(def.w || 0, L), x = ((L + w) / 4) * (C.before ? -1 : 1);
+      // the box edge sits just past the wire: the canvas box is roomier than TeX's around the glyph
+      spots.push({ t: C.t, at: T(x, C.s * (vx * 0.12) + vy * (C.s > 0 ? -0.02 : -0.03)), dir: C.s > 0 ? n : mn, arrow: { x, back: C.back } });
     }
     return spots;
   }
@@ -138,23 +212,29 @@
   function labelsSvg(it, m, k, c, o) {
     let s = '';
     const st = o.st || { size: 'normalsize', font: 'default' }, zoom = k / PX, wW = 0.4 / K / PX * k;
-    for (const L of labelSpots(it)) {
+    for (const L of labelSpots(it, st)) {
       const b = TD.textBox(L.t, st), bw = b.w / PX, bh = b.h / PX; // text keeps its size in cm
       // push the box out along dir so its nearest edge sits at the spot
       const ox = L.dir[0] * (bw / 2), oy = L.dir[1] * (bh / 2);
       const [X, Y] = m(L.at[0] + ox, L.at[1] + oy);
       if (zoom === 1) s += TD.textSvg(L.t, st, c, X, Y, o.ctx || {});
       else s += `<g transform="translate(${r2(X)},${r2(Y)}) scale(${r2(zoom)})">${TD.textSvg(L.t, st, c, 0, 0, o.ctx || {})}</g>`;
+      const T = bipXf(it, true);
       if (L.arc) {
-        const T = bipXf(it, true), P = ['p0', 'c1', 'c2', 'p3'].map((n) => m(...T(...L.arc[n])));
+        const P = ['p0', 'c1', 'c2', 'p3'].map((n) => m(...T(...L.arc[n])));
         const tx = P[3][0] - P[2][0], ty = P[3][1] - P[2][1], tl = Math.hypot(tx, ty) || 1;
         s += `<path d="M${r2(P[0][0])},${r2(P[0][1])}C${r2(P[1][0])},${r2(P[1][1])} ${r2(P[2][0])},${r2(P[2][1])} ${r2(P[3][0])},${r2(P[3][1])}" fill="none" stroke="${c}" stroke-width="${r2(wW)}"/>`;
         s += arrowHead(P[3][0], P[3][1], tx / tl, ty / tl, c, k);
       }
+      if (L.line) {
+        const [P, Q] = L.line.map((q) => m(...T(...q))), tx = Q[0] - P[0], ty = Q[1] - P[1], tl = Math.hypot(tx, ty) || 1;
+        s += `<path d="M${r2(P[0])},${r2(P[1])}L${r2(Q[0])},${r2(Q[1])}" fill="none" stroke="${c}" stroke-width="${r2(wW)}"/>`;
+        s += arrowHead(Q[0], Q[1], tx / tl, ty / tl, c, k);
+      }
       if (L.arrow) {
-        // the arrow sits on the wire, centred where the label's spot projects onto the path
-        const [wx, wy] = m(...L.at.map((v, i) => v - L.dir[i] * 0.12)), dir = [it.b[0] - it.a[0], it.b[1] - it.a[1]], l = Math.hypot(...dir) || 1;
-        const u = [dir[0] / l, -dir[1] / l], hl = 0.2 * k;
+        // the current's arrow sits on the wire, centred at x along the path
+        const [wx, wy] = m(...T(L.arrow.x, 0)), [ex, ey] = m(...T(L.arrow.x + (L.arrow.back ? -1 : 1), 0)), l = Math.hypot(ex - wx, ey - wy) || 1;
+        const u = [(ex - wx) / l, (ey - wy) / l], hl = 0.2 * k;
         s += arrowHead(wx + u[0] * hl / 2, wy + u[1] * hl / 2, u[0], u[1], c, k);
       }
     }
@@ -168,7 +248,7 @@
       const G = CZ.parts[it.part] && CZ.geom(it.part), T = xfOf(it);
       if (G) { const b = G.box; [[b.x1, b.y1], [b.x2, b.y1], [b.x2, b.y2], [b.x1, b.y2]].forEach((q) => grow(...T(...q))); }
       if (!it.p) { grow(...it.a); grow(...it.b); } else grow(...it.p);
-      for (const L of labelSpots(it)) {
+      for (const L of labelSpots(it, st)) {
         const b = TD.textBox(L.t, st || { size: 'normalsize', font: 'default' }), bw = b.w / PX, bh = b.h / PX;
         const cx = L.at[0] + L.dir[0] * bw / 2, cy = L.at[1] + L.dir[1] * bh / 2;
         grow(cx - bw / 2, cy - bh / 2); grow(cx + bw / 2, cy + bh / 2);
@@ -218,7 +298,11 @@
       if (isWire(it) && !o.length) lines.push(`\\draw ${pt(it.a)} -- ${pt(it.b)};`);
       else lines.push(`\\draw ${pt(it.a)} to[${[def.tikz, ...o].join(', ')}] ${pt(it.b)};`);
     }
-    if (raw && raw.trim()) lines.push(...raw.replace(/\s+$/, '').split('\n'));
+    // \ctikzset / \tikzset lines go first: they set the style of everything drawn after them
+    if (raw && raw.trim()) {
+      const R = raw.replace(/\s+$/, '').split('\n'), set = (l) => /^\s*\\(ctikzset|tikzset)\b/.test(l);
+      lines.unshift(...R.filter(set)); lines.push(...R.filter((l) => !set(l)));
+    }
     return lines.join('\n');
   }
 
@@ -254,16 +338,19 @@
       tikzIndex = CZ.order.map((k) => ({ k, kind: CZ.parts[k].kind, t: splitTop(CZ.parts[k].tikz, ',').map(norm) }));
       tikzIndex.sort((a, b) => b.t.length - a.t.length);
     }
+    // the part's name usually comes first, but `to[american voltages, R]` is fine too
     const L = list.map(norm);
-    for (const e of tikzIndex) if (e.kind === kind && e.t.every((t, i) => L[i] === t)) return { key: e.k, rest: list.slice(e.t.length) };
+    for (let j = 0; j < L.length; j++)
+      for (const e of tikzIndex) if (e.kind === kind && e.t.every((t, i) => L[j + i] === t)) return { key: e.k, rest: [...list.slice(0, j), ...list.slice(j + e.t.length)] };
     return null;
   }
   const unbrace = (v) => v.trim().replace(/^\{([\s\S]*)\}$/, '$1');
   function parse(src) {
     const items = [], raw = [];
     const text = String(src || '').replace(/(^|[^\\])%.*$/gm, '$1');
+    const coords = new Map(); // \coordinate (name) at (x,y);
     const named = () => {
-      const m = new Map();
+      const m = new Map(coords);
       for (const it of items) if (it.name) for (const [n, q] of Object.entries(pinsOf(it))) { m.set(`${it.name}.${n}`, q); if (n === 'center') m.set(it.name, q); }
       return m;
     };
@@ -275,8 +362,20 @@
       return null;
     };
     for (let stmt of splitTop(text, ';')) {
-      const orig = stmt.trim();
+      let orig = stmt.trim();
       if (!orig) continue;
+      // settings ahead of the statement (\ctikzset{…} needs no semicolon): kept as written, on lines of their own
+      let m;
+      while ((m = /^\\(ctikzset|tikzset|usetikzlibrary)\s*\{/.exec(stmt.trim()))) {
+        const t = stmt.trim(), j = closeAt(t, m[0].length - 1);
+        if (j < 0) break;
+        raw.push(t.slice(0, j + 1)); stmt = t.slice(j + 1);
+      }
+      if (!stmt.trim()) continue;
+      orig = stmt.trim();
+      // a named coordinate: kept as written, and its name is known to the statements after it
+      const cm = /^\\coordinate\s*\(\s*([^()]+?)\s*\)\s*at\s*(\([^()]*\))$/.exec(orig);
+      if (cm) { const q = coord(cm[2], named()); if (q) coords.set(cm[1], q); raw.push(orig + ';'); continue; }
       const got = readStmt(orig, coord, named);
       if (got) items.push(...got); else raw.push(orig + ';');
     }
@@ -290,7 +389,8 @@
       const ch = s[i];
       if (/\s/.test(ch)) { i++; continue; }
       if ('([{'.includes(ch)) { const j = closeAt(s, i); if (j < 0) return null; out.push(s.slice(i, j + 1)); i = j + 1; continue; }
-      if (s.startsWith('--', i)) { out.push('--'); i += 2; continue; }
+      const op = ['--', '-|', '|-', '++', '+'].find((o) => s.startsWith(o, i));
+      if (op) { out.push(op); i += op.length; continue; }
       const m = /^\\?[A-Za-z]+/.exec(s.slice(i));
       if (!m) return null;
       out.push(m[0]); i += m[0].length;
@@ -328,8 +428,20 @@
     }
     if (T[0] !== '\\draw' && T[0] !== '\\path') return null;
     const out = [];
-    let names = named(), k = 1;
-    let cur = coord(T[k++] || '', names);
+    let names = named(), k = 1, base = null;
+    // the coordinate at T[k]: absolute, ++(dx,dy) (moves the base) or +(dx,dy) (from the base, which stays)
+    const at = () => {
+      const rel = T[k] === '++' ? 2 : T[k] === '+' ? 1 : 0;
+      if (rel) k++;
+      const q = coord(T[k] || '', names);
+      if (!q) return null;
+      k++;
+      if (rel) { if (!base || !/^\(\s*-?[\d.]/.test(T[k - 1])) return null; q[0] += base[0]; q[1] += base[1]; }
+      if (rel !== 1) base = q.slice();
+      return q;
+    };
+    const wire = (a, b) => ({ id: uid(), part: 'short', a, b, l: '', ann: '', v: '', i: '', poles: '', name: '', opts: '' });
+    let cur = at();
     if (!cur) return null;
     while (k < T.length) {
       const t = T[k];
@@ -346,15 +458,20 @@
         out.push(it);
         continue;
       }
-      if (t === '--') {
-        const q = coord(T[k + 1] || '', names);
+      if (t === '--' || t === '-|' || t === '|-') {
+        // a corner (-| across then up, |- up then across) is two wires
+        k++;
+        const q = at();
         if (!q) return null;
-        out.push({ id: uid(), part: 'short', a: cur, b: q, l: '', ann: '', v: '', i: '', poles: '', name: '', opts: '' });
-        cur = q; k += 2; continue;
+        const c = t === '-|' ? [q[0], cur[1]] : t === '|-' ? [cur[0], q[1]] : null;
+        if (c && !same(c, cur) && !same(c, q)) out.push(wire(cur, c), wire(c, q));
+        else out.push(wire(cur, q));
+        cur = q; continue;
       }
       if (t === 'to' && T[k + 1] && T[k + 1][0] === '[') {
         const list = splitTop(T[k + 1].slice(1, -1), ',').map((x) => x.trim()).filter(Boolean);
-        const q = coord(T[k + 2] || '', names);
+        k += 2;
+        const q = at();
         const hit = partFor(list, 'bipole');
         if (!q || !hit) return null;
         const it = { id: uid(), part: hit.key, a: cur, b: q, l: '', ann: '', v: '', i: '', poles: '', name: '', opts: '' };
@@ -368,7 +485,7 @@
         it.opts = rest.join(', ');
         out.push(it);
         if (it.name) names = new Map([...names, ...Object.entries(pinsOf(it)).map(([n, p]) => [`${it.name}.${n}`, p])]);
-        cur = q; k += 3; continue;
+        cur = q; continue;
       }
       return null;
     }
@@ -389,10 +506,10 @@
   }
   const cache = new Map();
   function layout(s) {
-    const key = JSON.stringify([s.items, s.size, s.font, TD.math && TD.math.engine]);
+    const key = JSON.stringify([s.items, s.raw || '', s.size, s.font, TD.math && TD.math.engine]);
     const hit = cache.get(key);
     if (hit) return hit;
-    const b = itemsBox(s.items || [], { size: s.size, font: s.font });
+    const b = itemsBox(s.items || [], { size: s.size, font: s.font, vstyle: vstyleOf(s.raw) });
     // in canvas px, relative to (s.x, s.y)
     const bb = b ? { x: b.x1 * PX, y: -b.y2 * PX, w: (b.x2 - b.x1) * PX, h: (b.y2 - b.y1) * PX } : { x: 0, y: 0, w: 4 * PX, h: 1.5 * PX };
     const L = { bb, empty: !b };
@@ -411,7 +528,7 @@
       out = `<rect x="${r2(bb.x)}" y="${r2(bb.y)}" width="${r2(bb.w)}" height="${r2(bb.h)}" fill="none" stroke="${col}" stroke-dasharray="4 3" rx="4"/>`;
       if (!ctx.export) out += TD.textSvg('Empty circuit', { size: 'small', font: s.font }, '#888888', bb.x + bb.w / 2, bb.y + bb.h / 2, ctx);
     } else {
-      out = itemsSvg(s.items, (x, y) => [x * PX, -y * PX], PX, { color: col, paper: ctx.paper || '#ffffff', ctx, st: { size: s.size || 'normalsize', font: s.font || 'default' } });
+      out = itemsSvg(s.items, (x, y) => [x * PX, -y * PX], PX, { color: col, paper: ctx.paper || '#ffffff', ctx, st: { size: s.size || 'normalsize', font: s.font || 'default', vstyle: vstyleOf(s.raw) } });
     }
     if (!ctx.export) out += `<rect class="hitfill" x="${r2(bb.x)}" y="${r2(bb.y)}" width="${r2(bb.w)}" height="${r2(bb.h)}"/>`;
     return `<g transform="translate(${r2(s.x)},${r2(s.y)})">${out}</g>`;
@@ -465,5 +582,5 @@
     },
   };
 
-  TD.cz = { pinsOf, nodeXf, bipXf, xfOf, itemsSvg, itemsBox, code, parse, layout, same, uid, isWire, NODE_R, RLEN, defaultItems };
+  TD.cz = { vstyleOf, colorOf, pinsOf, nodeXf, bipXf, xfOf, itemsSvg, itemsBox, code, parse, layout, same, uid, isWire, NODE_R, RLEN, defaultItems };
 })();

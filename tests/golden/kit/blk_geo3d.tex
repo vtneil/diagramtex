@@ -1,0 +1,24 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{tikz-3dplot}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \tdplotsetmaincoords{60}{110}
+  \begin{scope}[shift={(1.38,-3.15)}, scale=3, tdplot_main_coords]
+    \def\rvec{0.8}
+    \def\thetavec{40}
+    \def\phivec{60}
+    \coordinate (O) at (0,0,0);
+    \draw[thick, ->] (0,0,0) -- (1,0,0) node[anchor=north east]{$x$};
+    \draw[thick, ->] (0,0,0) -- (0,1,0) node[anchor=north west]{$y$};
+    \draw[thick, ->] (0,0,0) -- (0,0,1) node[anchor=south]{$z$};
+    \tdplotsetcoord{P}{\rvec}{\thetavec}{\phivec}
+    \draw[-stealth, color=red] (O) -- (P) node[above right]{$P$};
+    \draw[dashed, color=red] (O) -- (Pxy);
+    \draw[dashed, color=red] (P) -- (Pxy);
+    \tdplotdrawarc{(O)}{0.2}{0}{\phivec}{anchor=north}{$\phi$}
+    \tdplotsetthetaplanecoords{\phivec}
+    \tdplotdrawarc[tdplot_rotated_coords]{(0,0,0)}{0.5}{0}{\thetavec}{anchor=south west}{$\theta$}
+  \end{scope}
+\end{tikzpicture}
+\end{document}

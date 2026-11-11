@@ -1,0 +1,11 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \draw (0,0) to[european resistor, l=$R$, v=$u$, color=red] (3,0);
+    \draw (0,2) to[capacitor, i=$i$, blue!70!black] (3,2);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

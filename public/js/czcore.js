@@ -16,7 +16,7 @@
     ['diode', 'Diodes'], ['trans', 'Transistors'], ['opamp', 'Op-amps'], ['src', 'Sources & cells'],
     ['switch', 'Switches & jumpers'], ['fuse', 'Fuses & protection'], ['ground', 'Grounds & supplies'],
     ['meter', 'Meters & devices'], ['audio', 'Audio & acoustics'], ['rf', 'Antennas & RF'], ['filter', 'Filters'],
-    ['gen', 'Generators'], ['emech', 'Electro-mechanical'], ['dsp', 'Signal & DSP'], ['power', 'Power converters'],
+    ['gen', 'Generators'], ['tube', 'Tubes'], ['emech', 'Electro-mechanical'], ['dsp', 'Signal & DSP'], ['power', 'Power converters'],
     ['conn', 'Connectors'], ['ic', 'ICs & packages'], ['logic', 'Logic gates'], ['ff', 'Flip-flops'], ['mech', 'Mechanics'],
   ];
 

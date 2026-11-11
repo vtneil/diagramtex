@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.23.3'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.24.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -369,7 +369,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig', 'tikz'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -675,7 +675,12 @@
         let hex = TD.parseColor(c).hex;
         if (hex === '#000000') return 'black';
         if (hex === '#ffffff') return 'white';
-        if (!colors.has(hex)) colors.set(hex, 'tdc' + (colors.size + 1));
+        if (this.named && this.named.has(hex)) return this.named.get(hex); // a colour kept code already names
+        if (!colors.has(hex)) {
+          // not a name that code kept as written defines (TD.tikzLines reserves those)
+          let n = colors.size + 1; while (this.reserved && this.reserved.has('tdc' + n)) n++;
+          colors.set(hex, 'tdc' + n);
+        }
         return colors.get(hex);
       },
     };
@@ -1231,13 +1236,27 @@
     const f = paraFrame(s), p = s.boxed ? textPad(s) : 0;
     const st = { ...s, tw: Math.max(4, s.tw - 2 * p) };
     const b = textBox(s.text || ' ', st);
-    return { f, p, st, b, cx: f.x + p + b.w / 2, cy: f.y + p + b.h / 2, bottom: Math.max(f.y + f.h, f.y + 2 * p + b.h) };
+    // vertical alignment inside the frame; text taller than the frame starts at its top and runs on below
+    const free = Math.max(0, f.h - 2 * p - b.h), dy = s.valign === 'bottom' ? free : s.valign === 'middle' ? free / 2 : 0;
+    return { f, p, st, b, dy, cx: f.x + p + b.w / 2, cy: f.y + p + dy + b.h / 2, bottom: Math.max(f.y + f.h, f.y + 2 * p + b.h) };
   }
   TD.paraLayout = paraLayout;
+  // Vertical alignment of point text: (x, y) stays the box centre, and a change that makes the box taller
+  // or shorter (a new line, a bigger font) moves the centre so the top (valign 'top') or bottom edge holds
+  // still, along the text's own up-down axis when it is rotated. Without valign the box grows both ways.
+  const textH = (s) => textBox(s.text || ' ', s).h + (s.boxed ? 2 * textPad(s) : 0);
+  TD.textHold = function (s, fn) {
+    if (!s || s.type !== 'text' || isPara(s) || (s.valign !== 'top' && s.valign !== 'bottom')) return fn();
+    const h0 = textH(s), r = fn();
+    if (s.type !== 'text' || isPara(s)) return r;
+    const d = ((textH(s) - h0) / 2) * (s.valign === 'top' ? 1 : -1), a = ((s.angle || 0) * Math.PI) / 180;
+    s.x += Math.sin(a) * d; s.y += Math.cos(a) * d; // angle is counter-clockwise on screen
+    return r;
+  };
   T.text = {
     name: 'Text',
     pts: [['x', 'y']],
-    create: (p, d) => ({ type: 'text', x: p.x, y: p.y, text: '', tw: 0, size: d.size || 'normalsize', font: d.font || 'default', bold: false, italic: false, color: d.color || '#000000', opacity: 1 }),
+    create: (p, d) => ({ type: 'text', x: p.x, y: p.y, text: '', tw: 0, valign: d.valign || 'top', size: d.size || 'normalsize', font: d.font || 'default', bold: false, italic: false, color: d.color || '#000000', opacity: 1 }),
     valid: (s) => s.text.trim().length > 0,
     // paragraph box: eight frame handles; point text: a right-edge handle that sets a wrapping width
     handles(s) {
@@ -1257,9 +1276,10 @@
       const w = Math.max(20, q.x - left);
       s.tw = w; s.x = left + w / 2;
       if (!s.align) s.align = 'left';
-      // keep the top edge fixed while the height changes with wrapping
-      const nb = textBox(s.text || ' ', s);
-      s.y = o.y - ob.h / 2 + nb.h / 2;
+      // keep the top edge fixed while the height changes with wrapping (the bottom one for bottom-aligned
+      // text, the centre for middle-aligned)
+      const nb = textBox(s.text || ' ', s), v = o.valign || 'top';
+      s.y = v === 'bottom' ? o.y + ob.h / 2 - nb.h / 2 : v === 'middle' ? o.y : o.y - ob.h / 2 + nb.h / 2;
     },
     anchors: (s) => (isPara(s) ? boxHandles(paraFrame(s)).map((h) => ({ x: h.x, y: h.y })).concat([{ x: s.x, y: s.y }]) : [{ x: s.x, y: s.y }]),
     samples(s) {
@@ -1305,13 +1325,25 @@
           if (s.opacity < 1) so.push(`opacity=${f(s.opacity)}`);
           frame = `\\path${opts(so)} ${X.c(F.x, F.y)} rectangle ${X.c(F.x + F.w, F.y + F.h)};\n`;
         }
-        o.push(`text width=${X.len(L.st.tw)}cm`, `align=${s.align || 'left'}`, 'inner sep=0pt', 'anchor=north west');
-        return frame + `\\node${opts(o)} at ${X.c(F.x + L.p, F.y + L.p)} {${tikzText(s.text)}};`;
+        o.push(`text width=${X.len(L.st.tw)}cm`, `align=${s.align || 'left'}`, 'inner sep=0pt');
+        // top-aligned text hangs from the frame's top-left corner; middle and bottom sit on the frame's
+        // middle or bottom inner edge (unless the text is taller than the frame)
+        const vb = L.dy > 0 && s.valign === 'bottom', vm = L.dy > 0 && s.valign === 'middle';
+        o.push(vb ? 'anchor=south west' : vm ? 'anchor=west' : 'anchor=north west');
+        const ny = vb ? F.y + F.h - L.p : vm ? F.y + F.h / 2 : F.y + L.p;
+        return frame + `\\node${opts(o)} at ${X.c(F.x + L.p, ny)} {${tikzText(s.text)}};`;
       }
       if (s.boxed) o.push(...frameOpts());
       if (s.tw > 0) o.push(`text width=${X.len(s.tw)}cm`, `align=${s.align || 'left'}`, `inner sep=${s.boxed ? X.pt(textPad(s)) : '0pt'}`);
       else if (s.boxed) { o.push(`inner sep=${X.pt(textPad(s))}`); if (s.text.includes('\n')) o.push(`align=${s.align || 'center'}`); }
       else if (s.text.includes('\n')) o.push(`align=${s.align || 'center'}`);
+      // top- or bottom-aligned multi-line text: anchor that edge, so LaTeX grows the node away from it as well
+      // (the anchor sits inner sep outside the glyph box: 0 for unboxed wrapping text, ⅓ em otherwise)
+      if ((s.valign === 'top' || s.valign === 'bottom') && (s.text.includes('\n') || s.tw > 0) && !s.angle) {
+        const b = textBox(s.text, s), sep = s.tw > 0 && !s.boxed ? 0 : textPad(s), dn = s.valign === 'top' ? -1 : 1;
+        o.push(dn < 0 ? 'anchor=north' : 'anchor=south');
+        return `\\node${opts(o)} at ${X.c(s.x, s.y + dn * (b.h / 2 + sep))} {${tikzText(s.text)}};`;
+      }
       return `\\node${opts(o)} at ${X.c(s.x, s.y)} {${tikzText(s.text)}};`;
     },
   };
@@ -1402,40 +1434,139 @@
     pre.push(...compat.after);
     return pre;
   };
+  // ---------- source write-back ----------
+  // Imported shapes carry s.tex (tikzimport.js importPicture): the statement they came from and a signature of
+  // the shape as imported. While a statement's shapes are all there, in order and unchanged, it exports as it was
+  // written (comments and formatting included); a picture with nothing changed exports exactly as written.
+  const SIG_SKIP = new Set(['id', 'tex', 'name', 'gname', 'g', 'locked', 'hidden']);
+  const stable = (v) => (Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object'
+    ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',')}}` : JSON.stringify(v));
+  TD.texSig = function (s) {
+    const c = {};
+    for (const k of Object.keys(s)) if (!SIG_SKIP.has(k) && k[0] !== '_') c[k] = s[k];
+    const str = stable(c);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(36) + '.' + str.length.toString(36);
+  };
+  const unchanged = (s) => !!(s.tex && s.tex.sig && s.tex.sig === TD.texSig(s));
+  // what code written as-is needs: the packages and libraries the shapes would ask for
+  function needs(list, X) {
+    const Y = makeX(); Y.scene = X.scene || list;
+    for (const s of list) { try { T[s.type].tikz(s, Y); } catch (e) { /* only the libraries matter here */ } }
+    for (const l of Y.libs) X.libs.add(l);
+    for (const p of Y.pkgs) X.pkgs.add(p);
+  }
+  function shapeCode(s, X) {
+    // a translucent shape fades as one group (as on the canvas): fill and stroke separately would darken where they overlap
+    if (!(s.opacity != null && s.opacity < 1 && GROUPED.has(s.type))) return T[s.type].tikz(s, X);
+    X.groupOpacity = true;
+    let code;
+    try { code = T[s.type].tikz(s, X); } finally { X.groupOpacity = false; }
+    return code ? `\\begin{scope}[transparency group, opacity=${f(s.opacity)}]\n  ${code.replace(/\n/g, '\n  ')}\n\\end{scope}` : code;
+  }
+  const GROUPED = new Set(['line', 'curve', 'poly', 'region', 'rect', 'ellipse', 'arc', 'spring']);
+  // the code of each object in order: statements written as they were where nothing changed, generated code elsewhere
+  TD.tikzLines = function (shapes, X) {
+    const items = [];
+    for (const s of shapes) {
+      const code = s.type === 'tikz' ? s.code : s.tex && s.tex.src;
+      if (!code || !code.includes('color')) continue;
+      for (const m of code.matchAll(/\\(?:definecolor|colorlet)\s*\{([^}]*)\}/g)) (X.reserved = X.reserved || new Set()).add(m[1].trim());
+      // \definecolor{name}{HTML|RGB|rgb}{…} at the top level: generated code may use the name for that colour
+      if (s.type === 'tikz' && !(s.ctx && s.ctx.length)) for (const m of code.matchAll(/\\definecolor\s*\{([^}]*)\}\s*\{(HTML|RGB|rgb)\}\s*\{([^}]*)\}/g)) {
+        const v = m[3].split(',').map((x) => x.trim());
+        const n = m[2] === 'HTML' ? [0, 2, 4].map((i) => parseInt(v[0].slice(i, i + 2), 16)) : v.map((x) => Math.round(m[2] === 'rgb' ? +x * 255 : +x));
+        if (n.length !== 3 || !n.every((x) => x >= 0 && x <= 255)) continue;
+        const hex = '#' + n.map((x) => x.toString(16).padStart(2, '0')).join('');
+        X.named = X.named || new Map(); if (!X.named.has(hex)) X.named.set(hex, m[1].trim());
+      }
+    }
+    for (let n = 0; n < shapes.length;) {
+      const s = shapes[n], t = s.tex;
+      if (t && t.i === 0 && t.src != null) {
+        const run = shapes.slice(n, n + t.n);
+        if (run.length === t.n && run.every((r, q) => r.tex && r.tex.p === t.p && r.tex.k === t.k && r.tex.i === q && unchanged(r))) {
+          needs(run, X);
+          const own = TD.rawTikz.dedent(t.src.slice(t.cut));
+          if (own.trim()) items.push({ code: own, ctx: t.ctx || [] });
+          if (t.drop) (X.notes = X.notes || new Set()).add(`Picture options left out (they belong to the whole picture): ${t.drop.join(', ')}`);
+          n += t.n; continue;
+        }
+      }
+      let code = shapeCode(s, X);
+      // a node other statements still name keeps its name, as a coordinate where the text is
+      if (code && t && t.nm && t.i === 0 && s.type === 'text') code += '\n' + t.nm.map((nm) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
+      if (code) items.push({ code, ctx: [] });
+      n++;
+    }
+    // consecutive statements from the same scopes share them
+    const out = [];
+    for (let a = 0; a < items.length;) {
+      const key = JSON.stringify(items[a].ctx);
+      let b = a + 1;
+      while (b < items.length && JSON.stringify(items[b].ctx) === key) b++;
+      if (!items[a].ctx.length) out.push(...items.slice(a, b).map((x) => x.code));
+      else out.push(TD.rawTikz.wrapCode(items.slice(a, b).map((x) => x.code).join('\n'), items[a].ctx));
+      a = b;
+    }
+    return out;
+  };
+  // the whole picture as written, when every statement of one imported picture is there, in order and unchanged
+  TD.tikzWhole = function (shapes, X) {
+    const L = shapes.filter((s) => !s.hidden && !(s.type === 'tikz' && s.pre));
+    const t0 = L.length && L[0].tex;
+    if (!t0 || t0.k !== 0 || t0.i !== 0 || !t0.open) return null;
+    let k = 0, i = 0;
+    for (const s of L) {
+      const t = s.tex;
+      if (!t || t.p !== t0.p || t.k !== k || t.i !== i || !unchanged(s)) return null;
+      if (++i === t.n) { k++; i = 0; }
+    }
+    if (k !== t0.N || i !== 0) return null;
+    needs(L, X);
+    // definitions from the source's preamble: to the preamble, or (a snippet) first in the picture
+    const pre = shapes.filter((s) => !s.hidden && s.type === 'tikz' && s.pre).map((s) => T.tikz.tikz(s, X)).filter(Boolean);
+    return { open: t0.open, pre, body: L.filter((s) => s.tex.i === 0).map((s) => s.tex.src).join('') + L[L.length - 1].tex.tail, close: '\\end{tikzpicture}' };
+  };
   // Body lines (definecolors + shapes) for a list of shapes.
   TD.tikzBody = function (shapes, X) {
     shapes = shapes.filter((s) => !s.hidden); // a hidden layer is not exported
     X.scene = shapes;
-    // a translucent shape fades as one group (as on the canvas): fill and stroke separately would darken where they overlap
-    const GROUPED = new Set(['line', 'curve', 'poly', 'region', 'rect', 'ellipse', 'arc', 'spring']);
-    const body = shapes.map((s) => {
-      if (!(s.opacity != null && s.opacity < 1 && GROUPED.has(s.type))) return T[s.type].tikz(s, X);
-      X.groupOpacity = true;
-      let code;
-      try { code = T[s.type].tikz(s, X); } finally { X.groupOpacity = false; }
-      return code ? `\\begin{scope}[transparency group, opacity=${f(s.opacity)}]\n  ${code.replace(/\n/g, '\n  ')}\n\\end{scope}` : code;
-    }).filter(Boolean);
+    const body = TD.tikzLines(shapes, X);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
     if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
     return [...defs, ...(defs.length ? [''] : []), ...body];
   };
+  // \begin{tikzpicture}[…] for written code: the source picture's options that only set defaults the generated
+  // code does not rely on (>=Stealth), when the shapes came from one picture
+  TD.tikzOpen = function (shapes) {
+    const po = [...new Set(shapes.map((s) => s.tex && s.tex.po).filter(Boolean))];
+    return `\\begin{tikzpicture}[x=1cm, y=1cm${po.length === 1 ? ', ' + po[0] : ''}]`;
+  };
   TD.tikzPicture = function (shapes, X) {
-    return ['\\begin{tikzpicture}[x=1cm, y=1cm]', ...TD.tikzBody(shapes, X).map((l) => (l ? '  ' + l.replace(/\n/g, '\n  ') : l)), '\\end{tikzpicture}'].join('\n');
+    const W = TD.tikzWhole(shapes, X);
+    if (W) return W.open + W.pre.map((c) => '\n  ' + c.replace(/\n/g, '\n  ')).join('') + W.body + W.close;
+    return [TD.tikzOpen(shapes), ...TD.tikzBody(shapes, X).map((l) => (l ? '  ' + l.replace(/\n/g, '\n  ') : l)), '\\end{tikzpicture}'].join('\n');
   };
 
+  const notesOf = (X) => [...(X.notes || [])].map((n) => '% Note: ' + n);
+  TD.tikzNotes = notesOf;
   // Full TikZ document generation.
   TD.toTikz = function (shapes, { standalone = false } = {}) {
     const X = makeX();
+    if (standalone) X.preDefs = new Set();
     const pic = TD.tikzPicture(shapes, X);
-    const pre = TD.preamble(X);
+    const pre = [...TD.preamble(X), ...(X.preDefs ? X.preDefs : [])];
     if (!standalone) {
       // a snippet: the packages on one comment line, and any compatibility lines (each its own line) to copy
       const c = TD.preambleCompat(X), extra = [...c.before, ...c.after];
       const head = '% Requires: ' + pre.filter((l) => !extra.includes(l)).join(' ');
       const note = c.before.length ? ['% and, in the preamble, these lines (the first block before \\usetikzlibrary{quantikz2}):', ...extra.map((l) => '%   ' + l)] : [];
-      return [head, ...note, pic, ''].join('\n');
+      return [head, ...note, ...notesOf(X), pic, ''].join('\n');
     }
     return [
+      ...notesOf(X),
       // standalone's tikz option breaks zx-calculus (an error at \begin{document}); one picture needs no option
       pre.some((l) => l.includes('{zx-calculus}')) ? '\\documentclass[border=4pt]{standalone}' : '\\documentclass[tikz, border=4pt]{standalone}',
       ...pre,

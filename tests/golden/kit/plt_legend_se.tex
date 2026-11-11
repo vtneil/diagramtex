@@ -1,0 +1,29 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \definecolor{tdc1}{HTML}{1E5BD6}
+  \definecolor{tdc2}{HTML}{D62728}
+
+  \begin{axis}[
+    at={(0cm,-5cm)},
+    anchor=south west,
+    scale only axis,
+    width=7cm,
+    height=5cm,
+    xmin=-6.2832,
+    xmax=6.2832,
+    ymin=-0.9999,
+    ymax=1,
+    xtick={-5,0,5},
+    ytick={-0.5,0,0.5,1},
+    xlabel={$x$},
+    ylabel={$y$}
+  ]
+    \addplot[color=tdc1, line width=0.71pt, no marks, domain=-6.2832:6.2832, samples=100, forget plot] {sin(deg(x))};
+    \addplot[color=tdc2, line width=0.71pt, dashed, no marks, domain=-6.2832:6.2832, samples=100, forget plot] {cos(deg(x))};
+  \end{axis}
+\end{tikzpicture}
+\end{document}

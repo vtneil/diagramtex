@@ -408,6 +408,7 @@
     const w = r.w / v.zoom, h = r.h / v.zoom;
     svg.setAttribute('viewBox', `${v.x} ${v.y} ${w} ${h}`);
     svg.style.setProperty('--hitw', 14 / v.zoom + 'px');
+    svg.style.setProperty('--zoom', v.zoom); // marks that keep their size on screen (the frames of kept TikZ code)
     for (const id of ['#paper', '#gridRect']) {
       const el = $(id);
       el.setAttribute('x', v.x); el.setAttribute('y', v.y); el.setAttribute('width', w); el.setAttribute('height', h);
@@ -1201,9 +1202,12 @@
 
   // ---------------- rotate by dragging just outside a corner (like Photoshop) ----------------
   // the frame is the shape's own (rotated) box for one shape, else the selection's bounding box
+  // blocks whose content never turns: rotating one alone does nothing, so it gets no rotate zone, hint or menu item
+  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig', 'tikz']);
+  const rotatable = (sel = selected()) => sel.length > 1 || (sel.length === 1 && !FIXED.has(sel[0].type));
   function rotFrame() {
     const sel = selected();
-    if (!sel.length || state.tool !== 'select') return null;
+    if (!sel.length || state.tool !== 'select' || !rotatable(sel)) return null;
     let C = null;
     if (sel.length === 1 && (TD.ROT_TYPES.has(sel[0].type) || sel[0].type === 'sym')) C = TD.rotFrame(sel[0]);
     if (!C) { const b = unionBox(sel); C = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]; }
@@ -1944,7 +1948,7 @@
     if (!editing) return;
     const s = byId(editing.id);
     if (!s) return;
-    s[editing.field] = v;
+    TD.textHold(s, () => { s[editing.field] = v; });
     render(); sizeEditor(); positionEditor();
     const ta = document.querySelector(`#props [data-key="${editing.field}"], #props [data-panel] [data-p="${editing.field}"]`);
     if (ta) ta.value = v;
@@ -1999,6 +2003,7 @@
     { key: 'font', label: 'Font', type: 'select', options: TD.FONTS.map((f) => [f[0], f[1]]) },
     { key: 'bold', label: 'Style', type: 'bi' },
     { key: 'align', label: 'Align', type: 'align' },
+    { key: 'valign', label: 'Vertical', type: 'valign' },
     { key: 'color', label: 'Text color', type: 'color' },
     { key: 'ballColor', label: 'Ball color', type: 'color' },
     { key: 'stroke', label: 'Stroke', type: 'color', nullable: true },
@@ -2065,6 +2070,7 @@
     kmap: [['x', 'x'], ['y', 'y']],
     chemfig: [['x', 'x'], ['y', 'y']],
     bloch: [['x', 'x'], ['y', 'y']],
+    tikz: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
   };
@@ -2075,6 +2081,10 @@
   // Four bars, alternating long/short, drawn heavy so they read like the usual paragraph-align icons.
   const ALIGNS = [['left', 'Align Left', 'M3 4h14M3 8h9M3 12h14M3 16h9'], ['center', 'Align Centre', 'M3 4h14M5.5 8h9M3 12h14M5.5 16h9'],
     ['right', 'Align Right', 'M3 4h14M8 8h9M3 12h14M8 16h9'], ['justify', 'Justify', 'M3 4h14M3 8h14M3 12h14M3 16h14']];
+  // A rule for the edge the text holds to, with an arrow towards it (both arrows for middle)
+  const VALIGNS = [['top', 'Align Top: new lines grow the box downward', 'M3 3h14M10 17V7M6.5 10.5 10 7l3.5 3.5'],
+    ['middle', 'Align Middle: new lines grow the box both ways', 'M3 10h14M10 2v5M7.5 4.5 10 7l2.5-2.5M10 18v-5M7.5 15.5 10 13l2.5 2.5'],
+    ['bottom', 'Align Bottom: new lines grow the box upward', 'M3 17h14M10 3v10M6.5 9.5 10 13l3.5-3.5']];
   function fieldHtml(p, v, labelOverride) {
     const id = 'f-' + p.key;
     let ctl = '';
@@ -2095,6 +2105,9 @@
       case 'align': // segmented: how lines sit against each other (Justify needs a wrap width, so it is disabled until then)
         ctl = `<div class="seg-ctl" role="radiogroup" aria-label="Align">${ALIGNS.map(([k, n, d]) => { const off = k === 'justify' && !p.wraps;
           return `<button type="button" role="radio" data-alignv="${k}" class="${k === v ? 'on' : ''}" aria-checked="${k === v}"${off ? ' disabled' : ''} title="${off ? 'Justify (paragraph boxes only: drag with the text tool)' : n}"><svg viewBox="0 0 20 20"><path d="${d}"/></svg></button>`; }).join('')}</div>`; break;
+      case 'valign':
+        ctl = `<div class="seg-ctl" role="radiogroup" aria-label="Vertical alignment">${VALIGNS.map(([k, n, d]) =>
+          `<button type="button" role="radio" data-valign="${k}" class="${k === v ? 'on' : ''}" aria-checked="${k === v}" title="${n}"><svg viewBox="0 0 20 20"><path d="${d}"/></svg></button>`).join('')}</div>`; break;
       case 'color': ctl = colorBtn(p.key, v, p.nullable, p.fills); break;
       case 'width': ctl = `<input type="number" id="${id}" data-key="width" value="${typeof v === 'number' ? +v.toFixed(3) : ''}" min="0.25" step="0.25">` +
         `<button type="button" class="ddbtn" data-dd="width" title="Line width presets"><svg viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3"/></svg></button><span class="val">px</span>`; break;
@@ -2127,10 +2140,10 @@
   // keys a shape has, counting the line extras older files lack
   const SYM_XF = new Set(['angle', 'skew']), TICK_KEYS = { tick: 6 / TD.PT_PER_PX, ticksz: 6 / TD.PT_PER_PX };
   const symParams = (s) => (s.type === 'sym' && TD.SYMS[s.kind] && TD.SYMS[s.kind].params) || null;
-  const hasKey = (s, k) => s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align')) || (k === 'angle' && TD.ROT_TYPES.has(s.type)) ||
+  const hasKey = (s, k) => s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && TD.ROT_TYPES.has(s.type)) ||
     (s.type === 'sym' && (SYM_XF.has(k) || !!(symParams(s) && k in symParams(s)))) || (TD.LINEISH.has(s.type) && k in TICK_KEYS && keyVal(s, 'shaft') === 'ticks');
   // text with no alignment set: centred lines, or left in a wrapping box
-  const keyVal = (s, k) => s[k] ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
+  const keyVal = (s, k) => s[k] ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
   const dashName = (v) => (TD.DASHES.find((d) => d[0] === v) || [0, TD.dashPat(v) ? 'Custom' : 'Solid'])[1];
   function dashPreview(v, w) {
     const da = TD.dashArray(v, w);
@@ -2249,7 +2262,7 @@
       ${canGroup() ? '<button data-act="group" title="Ctrl+G">Group</button>' : ''}${canUngroup() ? '<button data-act="ungroup" title="Ctrl+Shift+G">Ungroup</button>' : ''}
       <button data-act="front">Bring to Front</button><button data-act="back">Send to Back</button>
       <button data-act="dup">Duplicate</button><button data-act="del">Delete</button></div>
-      <div class="hint-line">Right-click for more: rotate, flip, arrange, distribute.</div></div>`;
+      <div class="hint-line">Right-click for more: ${rotatable(sel) ? 'rotate, flip, ' : ''}arrange, distribute.</div></div>`;
     el.innerHTML = html;
     renderGeom();
   }
@@ -2330,14 +2343,14 @@
     if (target === 'defaults') { state.defaults[key] = value; savePrefs(); return; }
     if (key === 'mathStyle') {
       begin();
-      for (const s of selected()) if (s.type === 'text') setMathStyle(s, value);
+      for (const s of selected()) if (s.type === 'text') TD.textHold(s, () => setMathStyle(s, value));
       render(); commit(); renderProps(); return;
     }
     begin();
-    for (const s of selected()) if (hasKey(s, key)) {
+    for (const s of selected()) if (hasKey(s, key)) TD.textHold(s, () => {
       s[key] = value;
       if (key === 'boxed' && value && s.type === 'text') { s.stroke ??= '#000000'; s.fill ??= null; s.width ??= 1; s.dash ??= 'solid'; s.radius ??= 0; }
-    }
+    });
     render();
     if (isFinal) commit();
   }
@@ -2456,6 +2469,8 @@
     if (dd) { openDd(dd); return; }
     const al = e.target.closest('[data-alignv]');
     if (al) { applyProp('align', al.dataset.alignv, true); renderProps(); return; }
+    const va = e.target.closest('[data-valign]');
+    if (va) { applyProp('valign', va.dataset.valign, true); renderProps(); return; }
     const sc = e.target.closest('[data-sercolor]');
     if (sc) {
       const s = selected()[0], h = TD.panels[s.type].color(s, +sc.dataset.sercolor);
@@ -2887,7 +2902,7 @@
   // how: 'cw' | 'ccw' | 'fliph' | 'flipv'  (screen coordinates, y down)
   function transformSel(how) {
     const sel = selected();
-    if (!sel.length) return;
+    if (!rotatable(sel)) return;
     const b = unionBox(sel), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
     const M = { cw: (dx, dy) => [-dy, dx], ccw: (dx, dy) => [dy, -dx], fliph: (dx, dy) => [-dx, dy], flipv: (dx, dy) => [dx, -dy] }[how];
     const P = (x, y) => { const [u, v] = M(x - cx, y - cy); return [cx + u, cy + v]; };
@@ -2922,7 +2937,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig'].includes(s.type)) {
+      if (FIXED.has(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3075,9 +3090,9 @@
       h += item('Arrange', '', { ic: 'arrange', sub:
           item('Bring to Front', 'a:front', { key: 'Ctrl+Shift+]' }) + item('Bring Forward', 'a:forward', { key: 'Ctrl+]' }) +
           item('Send Backward', 'a:backward', { key: 'Ctrl+[' }) + item('Send to Back', 'a:back', { key: 'Ctrl+Shift+[' }) }) +
-        item('Rotate', '', { ic: 'rotate', sub:
+        (rotatable() ? item('Rotate', '', { ic: 'rotate', sub:
           item('Rotate 90° Clockwise', 'r:cw', { key: 'Ctrl+R' }) + item('Rotate 90° Counterclockwise', 'r:ccw', { key: 'Ctrl+Shift+R' }) + hr +
-          item('Flip Horizontal', 'r:fliph') + item('Flip Vertical', 'r:flipv') }) +
+          item('Flip Horizontal', 'r:fliph') + item('Flip Vertical', 'r:flipv') }) : '') +
         item('Align', '', { ic: 'align', dis: nu < 2, sub:
           item('Left', 'l:left') + item('Center', 'l:center') + item('Right', 'l:right') + hr +
           item('Top', 'l:top') + item('Middle', 'l:middle') + item('Bottom', 'l:bottom') }) +
@@ -3883,9 +3898,31 @@
     $('#impText').value = text || '';
     $('#impMsg').textContent = '';
     imp.hidden = false;
+    importReport();
     $('#impText').focus();
   }
   function closeImport() { imp.hidden = true; }
+  // as the code is typed or pasted: what will become shapes and what stays TikZ code, and why (with its line)
+  function importReport() {
+    const msg = $('#impMsg'), src = $('#impText').value;
+    msg.classList.remove('report'); msg.textContent = '';
+    if (!src.trim()) return;
+    let res;
+    try { res = TD.importLatex(src); } catch (err) { msg.textContent = 'Could not parse: ' + err.message; return; }
+    const shapes = res.blocks.flatMap((b) => b.shapes || []);
+    const n = shapes.filter((x) => x.type !== 'tikz').length, kept = res.kept || [];
+    if (!kept.length && !res.warnings.length && !(TD.lint && TD.lint(src).length)) return;
+    const first = (c) => { const l = String(c).split('\n').find((x) => x.trim() && !/^\s*%/.test(x)) || ''; return l.trim().length > 60 ? l.trim().slice(0, 59) + '…' : l.trim(); };
+    const rows = kept.slice(0, 40).map((k) => `<li><span class="ln">${k.line ? 'line ' + k.line : ''}</span><code>${esc(first(k.code))}</code><span class="why">${esc(k.issues.join('; '))}</span></li>`);
+    msg.classList.add('report');
+    const lint = TD.lint ? TD.lint(src) : [];
+    if (lint.length) msg.classList.add('report');
+    msg.innerHTML = (lint.length ? TD.lint.html(lint, 8) : '') + `<div>${n} shape${n === 1 ? '' : 's'}${kept.length ? ` · ${kept.length} statement${kept.length === 1 ? '' : 's'} kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame` : ''}</div>`
+      + (rows.length ? `<ul>${rows.join('')}${kept.length > 40 ? `<li>… ${kept.length - 40} more</li>` : ''}</ul>` : '')
+      + res.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('');
+  }
+  let impTimer = 0;
+  $('#impText').addEventListener('input', () => { clearTimeout(impTimer); impTimer = setTimeout(importReport, 300); });
   function runImport(asNew) {
     const src = $('#impText').value;
     let res;
@@ -3906,7 +3943,8 @@
       render(); renderProps();
     }
     closeImport();
-    showHint(`Imported ${nShapes} object${nShapes === 1 ? '' : 's'}${res.warnings.length ? ' · ' + res.warnings.length + ' command(s) skipped' : ''}`, 2500);
+    const nKept = (res.kept || []).length;
+    showHint(`Imported ${nShapes - nKept} shape${nShapes - nKept === 1 ? '' : 's'}${nKept ? ` · ${nKept} kept as TikZ code (dashed frames)` : ''}`, 3000);
   }
   $('#impClose').onclick = closeImport;
   $('#impNew').onclick = () => runImport(true);
@@ -3923,6 +3961,9 @@
     $('#tikzOut').value = scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
       : scope === 'doc' ? TD.docToLatex(state.doc)
       : TD.toTikz(list, { standalone: scope === 'standalone' });
+    // what would stop pdflatex: mostly TikZ code kept as written (imported or typed in a code object)
+    const L = TD.lint ? TD.lint($('#tikzOut').value, { preview: false }).filter((d) => d.sev !== 'info') : [];
+    $('#tikzLint').innerHTML = L.length ? TD.lint.html(L) : '';
   }
   // one dialog for all the LaTeX out: a picture, a standalone file or the whole document (Document view starts on that)
   function openTikz(scope) {
@@ -4231,6 +4272,7 @@
   TD.state = state; // for debugging
   TD.app = {
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
+    parseProject, projectJson, // project files, for the tests
     newSample: () => { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); },
     get slug() { return slug(); },
     // pictures of shapes that are not on the canvas (Quick): a standalone SVG, or a PNG at `dpi`

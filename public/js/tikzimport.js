@@ -36,6 +36,8 @@
     }
     return -1;
   }
+  // the same, or the end of the text when the bracket is never closed (so a reader always moves on)
+  const shut = (s, i, open, close) => { const e = matchClose(s, i, open, close); return e < 0 ? s.length : e; };
   function stripComments(src) {
     return src.split('\n').map((l) => { for (let i = 0; i < l.length; i++) { if (l[i] === '\\') { i++; continue; } if (l[i] === '%') return l.slice(0, i); } return l; }).join('\n');
   }
@@ -52,8 +54,10 @@
   }
   function color(C, spec) {
     if (!spec) return null;
-    spec = spec.trim();
+    spec = spec.trim().replace(/^\{([\s\S]*)\}$/, '$1').trim();
     if (spec === 'none') return null;
+    // xcolor's rgb,255:red,92;green,214;blue,92 (as q.uiver.app writes colours)
+    if (/:/.test(spec) && TD.xcolorExpr) return TD.xcolorExpr(spec, (n) => C.colors[n.trim()] || C.colors[n.trim().toLowerCase()] || null) || undefined;
     // mixes: red!50, red!30!blue, red!50!black
     const parts = spec.split('!').map((x) => x.trim());
     const base = (n) => C.colors[n] || C.colors[n.toLowerCase()] || null;
@@ -79,6 +83,7 @@
       return { k: x, v: null };
     });
   }
+  let gtTip = null; // the tip `>` stands for in the picture being read (>=Stealth), null for TikZ's default
   function arrowSpec(spec) { // "->", "{Stealth}-{Latex[open]}", "<->", "-latex", "|->"
     const m = spec.match(/^(.*?)-(?!.*-)(.*)$/);
     if (!m) return null;
@@ -89,6 +94,7 @@
       if (ex) return ex;
       t = t.replace(/\[.*\]/, (x) => (/open/.test(x) ? '[open]' : ''));
       const k = t.toLowerCase().replace(/\s+/g, '');
+      if ((k === '>' || k === '<') && gtTip) return gtTip; // the picture's >=… default
       if (k.includes('hook')) return 'to';
       if (k === '>>' || k === '<<') return 'to';
       return TIP_NAMES[k] || (k.length ? 'stealth' : 'none');
@@ -122,6 +128,13 @@
         case 'ball color': st.ballColor = color(C, v); break;
         case 'text': st.color = color(C, v); break;
         case 'font': st.font = v; break;
+        case 'dash pattern': {
+          // on/off lengths in pt: the model keeps them as a custom dash ('p:on off …'); anything else stays unread
+          const q = [...v.matchAll(/(on|off)\s*([\d.]+)\s*pt/g)];
+          if (q.length && q.map((m) => m[0]).join(' ').replace(/\s+/g, '') === v.replace(/\s+/g, '')) st.dash = 'p:' + q.map((m) => +m[2]).join(' ');
+          else st.dashUnread = true;
+          break;
+        }
         case 'decoration': st.decoration = v; break;
         case 'pos': st.pos = parseFloat(v); break;
         case 'anchor': st.anchor = v; break;
@@ -177,34 +190,34 @@
       let m;
       if (rest.startsWith('++(') || rest.startsWith('+(')) {
         const rel = rest[1] === '+' ? 2 : 1;
-        const st = i + rel, e = matchClose(s, st, '(', ')');
+        const st = i + rel, e = shut(s, st, '(', ')');
         toks.push({ t: 'coord', raw: s.slice(st + 1, e), rel });
         i = e + 1; continue;
       }
       if (rest[0] === '(') {
-        const e = matchClose(s, i, '(', ')');
+        const e = shut(s, i, '(', ')');
         toks.push({ t: 'coord', raw: s.slice(i + 1, e), rel: 0 });
         i = e + 1; continue;
       }
-      if (rest[0] === '[') { const e = matchClose(s, i, '[', ']'); toks.push({ t: 'opts', v: s.slice(i + 1, e) }); i = e + 1; continue; }
+      if (rest[0] === '[') { const e = shut(s, i, '[', ']'); toks.push({ t: 'opts', v: s.slice(i + 1, e) }); i = e + 1; continue; }
       if ((m = rest.match(/^(--|\.\.|\|-|-\|)/))) { toks.push({ t: 'op', v: m[1] }); i += m[1].length; continue; }
       if ((m = rest.match(/^(node|coordinate)\b\s*/))) {
         i += m[0].length;
         let opts = '', name = '';
         for (;;) {
           ws();
-          if (s[i] === '[') { const e = matchClose(s, i, '[', ']'); opts += (opts ? ',' : '') + s.slice(i + 1, e); i = e + 1; continue; }
-          if (s[i] === '(') { const e = matchClose(s, i, '(', ')'); name = s.slice(i + 1, e); i = e + 1; continue; }
-          if (s.slice(i, i + 2) === 'at') { i += 2; ws(); const e = matchClose(s, i, '(', ')'); toks.push({ t: 'at', raw: s.slice(i + 1, e) }); i = e + 1; continue; }
+          if (s[i] === '[') { const e = shut(s, i, '[', ']'); opts += (opts ? ',' : '') + s.slice(i + 1, e); i = e + 1; continue; }
+          if (s[i] === '(') { const e = shut(s, i, '(', ')'); name = s.slice(i + 1, e); i = e + 1; continue; }
+          if (s.slice(i, i + 2) === 'at') { i += 2; ws(); const e = shut(s, i, '(', ')'); toks.push({ t: 'at', raw: s.slice(i + 1, e) }); i = e + 1; continue; }
           break;
         }
         let text = '';
-        if (m[1] === 'node' && s[i] === '{') { const e = matchClose(s, i, '{', '}'); text = s.slice(i + 1, e); i = e + 1; }
+        if (m[1] === 'node' && s[i] === '{') { const e = shut(s, i, '{', '}'); text = s.slice(i + 1, e); i = e + 1; }
         toks.push({ t: 'node', opts, text, name, coordinate: m[1] === 'coordinate' });
         continue;
       }
       if ((m = rest.match(/^(controls|and|rectangle|circle|ellipse|arc|cycle|to|grid|edge|let|in|plot|sin|cos|parabola)\b/))) { toks.push({ t: 'op', v: m[1] }); i += m[1].length; continue; }
-      if (rest[0] === '{') { const e = matchClose(s, i, '{', '}'); toks.push({ t: 'brace', v: s.slice(i + 1, e) }); i = e + 1; continue; }
+      if (rest[0] === '{') { const e = shut(s, i, '{', '}'); toks.push({ t: 'brace', v: s.slice(i + 1, e) }); i = e + 1; continue; }
       warn && warn(`Unknown path text “${rest.slice(0, 12)}”`);
       i++;
     }
@@ -472,98 +485,326 @@
     return [region, ...shapes.filter((s) => !parts.includes(s))];
   }
 
-  function parseStatements(C, src) {
+  // ---------- what the model holds exactly ----------
+  // A statement becomes shapes only when every option and coordinate in it is one the shapes hold exactly;
+  // anything else stays TikZ code (rawtikz.js), with the shapes as its preview.
+  const W_KEYS = ['ultra thin', 'very thin', 'thin', 'semithick', 'thick', 'very thick', 'ultra thick', 'dashed', 'densely dashed', 'loosely dashed', 'dotted', 'densely dotted', 'loosely dotted', 'dash dot', 'dashdotted'];
+  const PATH_KEYS = new Set([...W_KEYS, 'draw', 'fill', 'color', 'line width', 'opacity', 'draw opacity', 'fill opacity', 'rounded corners', 'ball color', 'dash pattern',
+    'radius', 'x radius', 'y radius', 'start angle', 'end angle', 'delta angle', 'bend left', 'bend right', 'even odd rule', 'shift', 'xshift', 'yshift', 'rotate', 'rotate around']);
+  const NODE_KEYS = new Set(['font', 'text', 'color', 'opacity', 'anchor', 'rotate', 'above', 'below', 'left', 'right', 'above left', 'above right', 'below left', 'below right', 'shift', 'xshift', 'yshift']);
+  const LABEL_KEYS = new Set(['above', 'below', 'left', 'right', 'midway', 'pos', 'near start', 'near end', 'swap', "'", 'auto', 'font', 'text', 'color', 'fill']);
+  const COLOR_KEYS = new Set(['draw', 'fill', 'color', 'text', 'ball color']);
+  function exactTip(t) {
+    t = t.trim().replace(/^\{|\}$/g, '').trim();
+    if (!t) return true;
+    const k = t.toLowerCase().replace(/\s+/g, '');
+    return !!(TIP_EXACT()[k] || TIP_NAMES[k]);
+  }
+  // keys in `list` the shapes do not hold: [] when all are understood
+  function unknownKeys(C, list, allowed) {
+    const bad = [];
+    for (const { k, v } of list) {
+      if (v === null && !allowed.has(k)) {
+        if (k.includes('-') && /^(.*?)-(?!.*-)(.*)$/.test(k)) { const m = k.match(/^(.*?)-(?!.*-)(.*)$/); if (exactTip(m[1]) && exactTip(m[2])) continue; }
+        if (color(C, k) !== undefined) continue;
+        bad.push(k); continue;
+      }
+      if (!allowed.has(k)) { bad.push(k); continue; }
+      if (v !== null && COLOR_KEYS.has(k) && v !== 'none' && color(C, v) === undefined) bad.push(`${k}=${v}`);
+      if (k === 'decoration' && !/^zigzag\b/.test(v)) bad.push('decoration=' + v);
+      if (k === 'dash pattern' && !/^(\s*(on|off)\s*[\d.]+\s*pt)+\s*$/.test(v)) bad.push('dash pattern=' + v);
+    }
+    return bad;
+  }
+  // option lists of a path statement: its own, each to[…]/circle[…]/arc[…], and the nodes on it
+  // a point given by name that the shapes cannot hold exactly: a node (TikZ starts and ends lines at its border,
+  // and its anchors depend on its size) or a point the importer only placed approximately
+  function nameIssue(C, raw) {
+    const r = String(raw || '').trim();
+    if (!r || /^[-+\d.\s]/.test(r) || r.includes(',') || r.includes(':') || r.includes('$')) return null;
+    const anchor = /\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|\d+)$/.test(r);
+    const nm = r.replace(/\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|\d+)$/, '').trim();
+    if (!C.names[nm]) return null;
+    if (C.approx && C.approx.has(nm)) return `(${nm}) is placed approximately`;
+    if ((C.kinds || {})[nm] !== 'coordinate') return anchor ? `an anchor of node (${nm})` : `node (${nm}) as an end (TikZ stops at its border)`;
+    return null;
+  }
+  function pathIssues(C, optStr, body) {
+    const toks = tokenizePath(C, body);
+    const own = parseOpts(optStr);
+    const keys = new Set(PATH_KEYS);
+    if (own.some((o) => o.k === 'decorate') && own.some((o) => o.k === 'decoration')) { keys.add('decorate'); keys.add('decoration'); }
+    const bad = unknownKeys(C, own, keys), pts = [];
+    for (const t of toks) {
+      if (t.t === 'opts') bad.push(...unknownKeys(C, parseOpts(t.v), PATH_KEYS));
+      if (t.t === 'node') bad.push(...unknownKeys(C, parseOpts(t.opts), LABEL_KEYS));
+      if (t.t === 'node' && t.coordinate) bad.push('coordinate on a path');
+      if (t.t === 'op' && ['edge', 'let', 'plot', 'sin', 'cos', 'parabola', 'grid', 'in'].includes(t.v)) bad.push(t.v);
+      if (t.t === 'brace') bad.push('{…}');
+      if (t.t === 'coord') { const w = nameIssue(C, t.raw); if (w) pts.push(w); }
+    }
+    return [...(bad.length ? [`options the shapes do not hold: ${[...new Set(bad)].join(', ')}`] : []), ...new Set(pts)];
+  }
+
+  // ---------- statement extents ----------
+  // the end of a command's arguments: {…}, […], =, a macro name (\def\x, \newcommand\foo), #1
+  function argsEnd(s, j) {
+    let k = j, first = true;
+    for (;;) {
+      let q = k; while (q < s.length && /[ \t]/.test(s[q])) q++;
+      if (s[q] === '\n') { let r = q + 1; while (r < s.length && /[ \t]/.test(s[r])) r++; if (s[r] === '{' || s[r] === '[') q = r; else break; }
+      const c = s[q];
+      if (c === '{' || c === '[') { const e = matchClose(s, q, c, c === '{' ? '}' : ']'); if (e < 0) return s.length; k = e + 1; first = false; continue; }
+      if (c === '=' ) { k = q + 1; continue; }
+      if (c === '#' && /\d/.test(s[q + 1])) { k = q + 2; continue; }
+      if (c === '\\' && first) { const m = /^\\[a-zA-Z@]+/.exec(s.slice(q)); if (m) { k = q + m[0].length; first = false; continue; } }
+      break;
+    }
+    return k;
+  }
+  function semiEnd(s, j) { // just after the first ';' at depth 0
+    let d = 0, k = j;
+    for (; k < s.length; k++) {
+      const c = s[k];
+      if (c === '\\') { k++; continue; }
+      if (c === '{' || c === '[' || c === '(') d++;
+      else if (c === '}' || c === ']' || c === ')') d--;
+      else if (c === ';' && d <= 0) return k + 1;
+    }
+    return s.length;
+  }
+  // \foreach \x [opts] in {list} body — body a {group}, another \foreach or one statement
+  function foreachParse(s, j) {
+    const m = /^\s*((?:\\[a-zA-Z@]+\s*\/?\s*)+)(\[[^\]]*\])?\s*in\s*/.exec(s.slice(j));
+    if (!m) return { end: semiEnd(s, j) };
+    const vars = m[1].split('/').map((v) => v.trim()).filter(Boolean);
+    let k = j + m[0].length, list = '';
+    if (s[k] === '{') { const e = matchClose(s, k, '{', '}'); if (e < 0) return { end: s.length }; list = s.slice(k + 1, e); k = e + 1; } else { const e = /^[^\s{\\]+/.exec(s.slice(k)); list = e ? e[0] : ''; k += list.length; }
+    while (/\s/.test(s[k])) k++;
+    let body, end;
+    if (s[k] === '{') { const e = matchClose(s, k, '{', '}'); if (e < 0) return { end: s.length }; body = s.slice(k + 1, e); end = e + 1; }
+    else if (s.startsWith('\\foreach', k)) { const r = foreachParse(s, k + 8); body = s.slice(k, r.end); end = r.end; }
+    else { end = semiEnd(s, k); body = s.slice(k, end); }
+    return { end, vars, opts: m[2] || '', list, body };
+  }
+  function foreachValues(list) {
+    const it = splitTop(list, ',').map((x) => x.trim()).filter((x) => x !== '');
+    const out = [];
+    for (let i = 0; i < it.length; i++) {
+      if (it[i] !== '...') { out.push(it[i]); continue; }
+      const a = parseFloat(it[i - 2] ?? it[i - 1]), b = parseFloat(it[i - 1]), c = parseFloat(it[i + 1]);
+      const step = it[i - 2] !== undefined && isFinite(a) ? b - a : (b <= c ? 1 : -1);
+      if (![b, c, step].every(isFinite) || !step) return null;
+      for (let v = b + step, n = 0; (step > 0 ? v < c - 1e-9 : v > c + 1e-9) && n < 400; v += step, n++) out.push(String(Math.round(v * 1e6) / 1e6));
+      if (out.length > 400) return null;
+    }
+    return out;
+  }
+  function expandForeach(C, f) {
+    const vals = foreachValues(f.list);
+    if (!vals || !f.vars || /evaluate|remember/.test(f.opts)) { C.warnings.push('\\foreach list not understood: no preview'); return []; }
+    const count = /count\s*=\s*(\\[a-zA-Z@]+)/.exec(f.opts || '');
+    const out = [];
+    vals.forEach((v, n) => {
+      const parts = f.vars.length > 1 ? v.replace(/^\{|\}$/g, '').split('/') : [v];
+      let body = f.body;
+      f.vars.forEach((nm, q) => { body = body.split(nm).join(`{${(parts[q] ?? parts[parts.length - 1]).trim()}}`); });
+      if (count) body = body.split(count[1]).join(String(n + 1));
+      out.push(...parseStatements(C, body.replace(/\{([-\d.]+)\}/g, '$1')));
+    });
+    return out;
+  }
+  // \begin{env} … \end{env} with nesting: index just after the matching \end
+  function envEnd(s, env, from) {
+    const re = new RegExp(`\\\\(begin|end)\\{${env.replace(/[*]/g, '\\*')}\\}`, 'g');
+    re.lastIndex = from; let d = 1, m;
+    while ((m = re.exec(s))) { d += m[1] === 'begin' ? 1 : -1; if (!d) return m.index + m[0].length; }
+    return s.length;
+  }
+  // the size pgfplots gives an axis, for the frame of one kept as code
+  function axisBox(C, optStr) {
+    const o = parseOpts(optStr), g = (k) => (o.find((x) => x.k === k) || {}).v;
+    const w = g('width') ? len(g('width'), 'pt') : 240 / K, h = g('height') ? len(g('height'), 'pt') : 207 / K;
+    const at = g('at') ? coord(C, g('at').replace(/^\{|\}$/g, '').trim().replace(/^\(|\)$/g, '')) : null;
+    return { at: at || { x: 0, y: 0 }, w: isFinite(w) ? w : 240 / K, h: isFinite(h) ? h : 207 / K };
+  }
+
+  // blocks inside a node: the environment, the block type, and where the node puts the block
+  const NODE_BLOCKS = [
+    { re: /\\begin\{quantikz\}[\s\S]*\\end\{quantikz\}/, type: 'qc', bb: (q) => TD.qcLayout(q).bb, dedent: true },
+    { re: /\\begin\{tikztimingtable\}[\s\S]*\\end\{tikztimingtable\}/, type: 'timing', bb: (q) => TD.timing.layout(q).bb, dedent: true },
+    { re: /\\begin\{forest\}[\s\S]*\\end\{forest\}/, type: 'forest', bb: (q) => TD.ftLayout(q).bb },
+    { re: /\\begin\{ZX\}[\s\S]*\\end\{ZX\}/, type: 'zx', bb: (q) => TD.zxLayout(q).bb },
+    { re: /\\begin\{tikzcd\}[\s\S]*\\end\{tikzcd\}/, type: 'cd', bb: (q) => TD.cdLayout(q).bb },
+    { re: /\\begin\{karnaugh-map\}[\s\S]*\\end\{karnaugh-map\}/, type: 'kmap', bb: (q) => TD.kmap.layout(q).bb },
+    { re: /\\begin\{blochsphere\}[\s\S]*\\end\{blochsphere\}/, type: 'bloch', bb: (q) => TD.bloch.layout(q).bb },
+    { re: /\\xymatrix[^{]*\{[\s\S]*\}/, type: 'xy', place: (q, at) => { const L = TD.xy.layout(q), b = L.bb, e = L.ebox || b; q.x = at.x - (e.x - b.x + e.w / 2); q.y = at.y - (e.y - b.y + e.h / 2); } },
+    { re: /\\chemfig[\s\S]*/, type: 'chemfig', place: (q, at) => { q.x = at.x; q.y = at.y; }, opts: ['anchor', 'inner sep', 'text'] },
+  ];
+  const dedentLines = (src) => {
+    const ind = Math.min(...src.split('\n').slice(1).filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)[0].length));
+    return ind > 0 && isFinite(ind) ? src.split('\n').map((l, i) => (i ? l.slice(Math.min(ind, /^[ \t]*/.exec(l)[0].length)) : l)).join('\n') : src;
+  };
+  function nodeBlock(C, node, at) {
+    const text = node.text.replace(/^\s*\\pgfinterruptpicture%?\s*|\s*%?\s*\\endpgfinterruptpicture\s*$/g, '').replace(/^\$\s*([\s\S]*?)\s*\$$/, '$1').trim();
+    for (const B of NODE_BLOCKS) {
+      if (!TD.TYPES[B.type]) continue;
+      const m = B.re.exec(text);
+      if (!m) continue;
+      const q = TD.TYPES[B.type].create(at, {});
+      q.src = B.dedent ? dedentLines(m[0]) : m[0];
+      if (B.place) B.place(q, at); else { const b = B.bb(q); q.x = at.x - b.w / 2; q.y = at.y - b.h / 2; }
+      const extra = text.replace(m[0], '').replace(/\\color\{[^}]*\}/g, '').trim();
+      const bad = unknownKeys(C, parseOpts(node.opts), new Set(['inner sep', 'anchor', 'text', 'color', 'font']));
+      return { shape: q, issues: [...(extra ? [`text beside the ${B.type} block`] : []), ...(bad.length ? [`node options the block does not hold: ${bad.join(', ')}`] : [])] };
+    }
+    return null;
+  }
+
+  // Statements of a picture. `s` is the code with comments blanked (same length as `o`, the code as written).
+  // Every statement becomes shapes (C.preview, or when it is exact) or one TikZ code object; C.stmts gets
+  // where each one was, for the source write-back (s.tex).
+  const PATHS = { draw: 'draw', fill: 'fill', filldraw: 'filldraw', path: 'path', shade: 'shade', shadedraw: 'shade', clip: null, useasboundingbox: null };
+  const SEMI = new Set(['pic', 'matrix', 'graph', 'datavisualization', 'calendar', 'spy', 'pattern', 'shadedraw']);
+  const DEFS = new Set(['tikzset', 'tikzstyle', 'def', 'gdef', 'edef', 'xdef', 'let', 'newcommand', 'renewcommand', 'providecommand', 'definecolor', 'colorlet', 'pgfmathsetmacro', 'pgfmathtruncatemacro',
+    'pgfmathparse', 'pgfplotsset', 'pgfdeclarelayer', 'pgfsetlayers', 'usetikzlibrary', 'tikzmath', 'pgfkeys', 'newlength', 'setlength', 'pgfmathsetlengthmacro', 'tikzcdset', 'ctikzset', 'pgfdeclarepatternformonly', 'pgfdeclarepattern', 'pgfdeclarehorizontalshading', 'pgfdeclareverticalshading', 'pgfdeclareradialshading', 'pgfdeclarefunctionalshading', 'pgfdeclareplotmark', 'pgfdeclarearrow',
+    'centering', 'small', 'footnotesize', 'scriptsize', 'tiny', 'normalsize', 'large', 'Large', 'LARGE', 'huge', 'Huge', 'bfseries', 'itshape', 'sffamily', 'ttfamily', 'rmfamily', 'color', 'selectfont', 'fontsize']);
+  function parseStatements(C, s, o) {
+    o = o == null ? s : o;
     const shapes = [];
+    const preview = !!C.preview;
     let i = 0;
-    const s = src;
+    const scopeCtx = () => (C.scopes || []).slice().reverse().map((L) => L.opts).filter(Boolean);
+    const scopeIssue = () => (C.scopes || []).map((L) => L.issue).filter(Boolean);
+    // one statement: shapes when exact, else one code object previewing them
+    const done = (start, end, made, issues, extra = {}) => {
+      if (preview) { shapes.push(...made); return; }
+      issues = [...issues, ...scopeIssue(), ...(C.picIssue ? [C.picIssue] : [])];
+      const exact = !extra.raw && !issues.length && made.length > 0;
+      let list = made;
+      if (!exact) {
+        const r = { type: 'tikz', kind: extra.kind || 'code', code: '', x: 0, y: 0, ctx: [], prev: made.filter((p) => p.type !== 'tikz'), issues: [...new Set(issues)] };
+        if (extra.at) r.at = extra.at;
+        if (extra.size) r.size = extra.size;
+        if (C.libs && C.libs.length) r.libs = C.libs.slice();
+        if (C.pkgs && C.pkgs.length) r.pkgs = C.pkgs.slice();
+        list = [r];
+      }
+      C.stmts.push({ start, end, shapes: list, raw: !exact, ctx: scopeCtx(), names: extra.names });
+      shapes.push(...list);
+    };
+    let last = -1;
     while (i < s.length) {
+      // always move on: unbalanced input must not send the reader back (it would loop for ever)
+      if (i <= last) i = last + 1;
+      last = i;
       const bs = s.indexOf('\\', i);
       if (bs < 0) break;
-      const m = s.slice(bs).match(/^\\([a-zA-Z]+)\*?/);
+      const m = s.slice(bs).match(/^\\([a-zA-Z@]+)\*?/);
       if (!m) { i = bs + 2; continue; }
       const name = m[1];
       let j = bs + m[0].length;
-      if (name === 'definecolor') {
-        const args = [];
-        for (let k = 0; k < 3; k++) { while (/\s/.test(s[j])) j++; const e = matchClose(s, j, '{', '}'); args.push(s.slice(j + 1, e)); j = e + 1; }
-        const [nm, model, val] = args;
-        if (/^html$/i.test(model)) C.colors[nm] = '#' + val.trim().toLowerCase();
-        else if (model === 'rgb') C.colors[nm] = '#' + val.split(',').map((v) => hex2(parseFloat(v) * 255)).join('');
-        else if (model === 'RGB') C.colors[nm] = '#' + val.split(',').map((v) => hex2(parseFloat(v))).join('');
-        else if (model === 'gray') C.colors[nm] = '#' + hex2(parseFloat(val) * 255).repeat(3);
-        i = j; continue;
-      }
-      if (name === 'tddata') { const e = matchClose(s, j, '{', '}'); i = e + 1; continue; }
-      if (name === 'colorlet') {
-        const a = []; for (let k = 0; k < 2; k++) { while (/\s/.test(s[j])) j++; const e = matchClose(s, j, '{', '}'); a.push(s.slice(j + 1, e)); j = e + 1; }
-        const c = color(C, a[1]); if (c) C.colors[a[0]] = c;
-        i = j; continue;
-      }
+      const w0 = C.warnings.length;
+      const issues = () => C.warnings.slice(w0);
+      if (name === 'tddata') { const e = matchClose(s, j, '{', '}'); i = e < 0 ? s.length : e + 1; continue; }
       if (name === 'begin' || name === 'end') {
         const e = s.indexOf('}', j);
         const env = s.slice(j + 1, e).trim();
-        if (name === 'begin' && /^(axis|semilogxaxis|semilogyaxis|loglogaxis|polaraxis|tikzcd)$/.test(env)) {
-          const endIdx = s.indexOf(`\\end{${env}}`, e);
-          C.warnings.push(`\\begin{${env}} … \\end{${env}} is not imported`);
-          i = endIdx < 0 ? s.length : endIdx + env.length + 6; continue;
-        }
-        if (name === 'begin' && env === 'feynman' && TD.TYPES.feynman) {
-          // a tikz-feynman diagram: one Feynman object, its origin where the picture's is
-          const endIdx = s.indexOf('\\end{feynman}', e);
-          const stop = endIdx < 0 ? s.length : endIdx + 13;
-          const q = TD.TYPES.feynman.create({ x: 0, y: 0 }, {});
-          q.src = s.slice(bs, stop).trim();
-          const b = TD.feyn.layout(q).bb;
-          q.x = b.x; q.y = b.y;
-          shapes.push(...applyXf([q], C.scopes || []));
-          i = stop; continue;
-        }
         if (name === 'begin' && env === 'scope') {
           i = e + 1; while (/\s/.test(s[i])) i++;
-          let L = { xf: [], shape: false };
+          let L = { xf: [], shape: false, opts: '' };
           if (s[i] === '[') {
             const e2 = matchClose(s, i, '[', ']');
-            const { xf, rest } = readXf(C, parseOpts(s.slice(i + 1, e2)));
-            const shape = rest.some((o) => o.k === 'transform shape');
+            const str = s.slice(i + 1, e2);
+            const { xf, rest } = readXf(C, parseOpts(str));
+            const shape = rest.some((x) => x.k === 'transform shape');
             // `transparency group, opacity=x` is how a translucent shape exports: the opacity belongs to the shapes inside
-            const op = rest.find((o) => o.k === 'opacity'), opv = op ? parseFloat(op.v) : NaN;
-            const other = rest.filter((o) => o.k !== 'transform shape' && o.k !== 'transparency group' && o.k !== 'opacity');
-            if (other.length) C.warnings.push('scope options ignored: ' + other.map((o) => o.k).join(', '));
-            L = { xf, shape, ...(opv >= 0 && opv < 1 ? { opacity: opv } : {}) };
+            const op = rest.find((x) => x.k === 'opacity'), opv = op ? parseFloat(op.v) : NaN;
+            const other = rest.filter((x) => x.k !== 'transform shape' && x.k !== 'transparency group' && x.k !== 'opacity');
+            L = { xf, shape, ...(opv >= 0 && opv < 1 ? { opacity: opv } : {}), opts: str.replace(/\s+/g, ' ').trim() };
+            if (other.length) L.issue = 'scope options not drawn: ' + other.map((x) => x.k).join(', ');
             i = e2 + 1;
-          }
+          } else i = e + 1;
           (C.scopes = C.scopes || []).unshift(L);
+          if (C.struct) C.struct.push(i);
           continue;
         }
-        if (name === 'end' && env === 'scope') { if (C.scopes && C.scopes.length) C.scopes.shift(); i = e + 1; continue; }
-        i = e + 1; continue;
-      }
-      // find end of statement: first ';' at depth 0
-      let d = 0, k = j;
-      for (; k < s.length; k++) {
-        const c = s[k];
-        if (c === '\\') { k++; continue; }
-        if (c === '{' || c === '[' || c === '(') d++;
-        else if (c === '}' || c === ']' || c === ')') d--;
-        else if (c === ';' && d <= 0) break;
-      }
-      const stmt = s.slice(j, k);
-      i = k + 1;
-      const PATHS = { draw: 'draw', fill: 'fill', filldraw: 'filldraw', path: 'path', shade: 'shade', shadedraw: 'shade', clip: null, useasboundingbox: null };
-      if (name in PATHS) {
-        if (!PATHS[name]) continue;
-        let body = stmt.trim(), optStr = '';
-        if (body[0] === '[') { const e = matchClose(body, 0, '[', ']'); optStr = body.slice(1, e); body = body.slice(e + 1); }
-        try {
-          let made = pathToShapes(C, PATHS[name], optStr, body);
-          const po = parseOpts(optStr);
-          if (po.some((o) => o.k === 'even odd rule')) made = evenOdd(made);
-          const own = readXf(C, po);
-          shapes.push(...applyXf(made, [{ xf: own.xf, shape: true }, ...(C.scopes || [])]));
-        } catch (err) { C.warnings.push(`\\${name}: ${err.message}`); }
+        if (name === 'end' && env === 'scope') { if (C.scopes && C.scopes.length) C.scopes.shift(); i = e + 1; if (C.struct) C.struct.push(i); continue; }
+        if (name === 'end') { i = e + 1; continue; }
+        const stop = envEnd(s, env, e + 1);
+        if (env === 'feynman' && TD.TYPES.feynman) {
+          // a tikz-feynman diagram: one Feynman object, its origin where the picture's is
+          const q = TD.TYPES.feynman.create({ x: 0, y: 0 }, {});
+          q.src = o.slice(bs, stop).trim();
+          const b = TD.feyn.layout(q).bb;
+          q.x = b.x; q.y = b.y;
+          done(bs, stop, applyXf([q], C.scopes || []), issues());
+          i = stop; continue;
+        }
+        // any other environment (pgfonlayer, axis, …) is kept whole; its drawing statements preview it
+        i = stop;
+        if (preview) { if (!/axis$/.test(env)) shapes.push(...parseStatements(C, s.slice(e + 1, stop - env.length - 6))); continue; }
+        const P = { ...C, preview: true, warnings: [], struct: null };
+        const inner = /axis$|^tikzcd$/.test(env) ? [] : parseStatements(P, s.slice(e + 1, stop - env.length - 6));
+        let at, size;
+        if (/axis$/.test(env)) {
+          let q = e + 1; while (/\s/.test(s[q])) q++;
+          const ob = s[q] === '[' ? matchClose(s, q, '[', ']') : -1, ab = axisBox(C, ob > 0 ? s.slice(q + 1, ob) : '');
+          at = { x: ab.at.x, y: ab.at.y - ab.h }; size = { w: ab.w, h: ab.h };
+        }
+        done(bs, stop, applyXf(inner, C.scopes || []), [`\\begin{${env}} is kept as code`], { raw: true, at, size });
         continue;
       }
-      if (name === 'node' || name === 'coordinate') {
+      if (name === 'foreach') {
+        const f = foreachParse(s, j);
+        i = f.end;
+        const P = { ...C, preview: true, warnings: [], struct: null, names: { ...C.names } };
+        const made = f.body != null ? applyXf(expandForeach(P, f), C.scopes || []) : [];
+        if (preview) { shapes.push(...made); continue; }
+        done(bs, f.end, made, ['\\foreach is kept as code', ...P.warnings], { raw: true });
+        continue;
+      }
+      if (DEFS.has(name)) {
+        let end = argsEnd(s, j);
+        const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
+        i = end;
+        if (name === 'definecolor' || name === 'colorlet') {
+          const args = []; let q = j;
+          while (args.length < (name === 'definecolor' ? 3 : 2)) { while (/\s/.test(s[q])) q++; if (s[q] === '[') { q = shut(s, q, '[', ']') + 1; continue; } if (s[q] !== '{') break; const e = shut(s, q, '{', '}'); args.push(s.slice(q + 1, e)); q = e + 1; }
+          if (name === 'definecolor' && args.length === 3) {
+            const [nm, model, val] = args;
+            if (/^html$/i.test(model)) C.colors[nm] = '#' + val.trim().toLowerCase();
+            else if (model === 'rgb') C.colors[nm] = '#' + val.split(',').map((v) => hex2(parseFloat(v) * 255)).join('');
+            else if (model === 'RGB') C.colors[nm] = '#' + val.split(',').map((v) => hex2(parseFloat(v))).join('');
+            else if (model === 'gray') C.colors[nm] = '#' + hex2(parseFloat(val) * 255).repeat(3);
+          } else if (args.length === 2) { const c = color(C, args[1]); if (c) C.colors[args[0]] = c; }
+        }
+        if (!preview && name !== 'usetikzlibrary') done(bs, end, [], [], { raw: true, kind: 'defs' });
+        continue;
+      }
+      if (name in PATHS || name === 'node' || name === 'coordinate' || SEMI.has(name)) {
+        const k = semiEnd(s, j);
+        const stmt = s.slice(j, k - 1);
+        i = k;
+        if (name in PATHS) {
+          if (!PATHS[name]) { if (!preview) done(bs, k, [], [], { raw: true }); continue; }
+          let body = stmt.trim(), optStr = '';
+          if (body[0] === '[') { const e = matchClose(body, 0, '[', ']'); optStr = body.slice(1, e); body = body.slice(e + 1); }
+          let made = [];
+          const lossy = preview ? [] : pathIssues(C, optStr, body);
+          const before = { ...C.names };
+          try {
+            made = pathToShapes(C, PATHS[name], optStr, body);
+            const po = parseOpts(optStr);
+            if (po.some((x) => x.k === 'even odd rule')) made = evenOdd(made);
+            const own = readXf(C, po);
+            made = applyXf(made, [{ xf: own.xf, shape: true }, ...(C.scopes || [])]);
+          } catch (err) { C.warnings.push(`\\${name}: ${err.message}`); }
+          const names = Object.keys(C.names).filter((n) => C.names[n] !== before[n]);
+          done(bs, k, made, [...issues(), ...lossy], { names: names.length ? names : undefined });
+          continue;
+        }
+        if (SEMI.has(name)) { if (preview) continue; done(bs, k, [], [`\\${name} is kept as code`], { raw: true }); continue; }
         const toks = tokenizePath(C, (name === 'coordinate' ? 'coordinate ' : 'node ') + stmt.trim());
         let at = null, node = null;
         for (const t of toks) {
@@ -571,59 +812,43 @@
           if (t.t === 'node') node = t;
           if (t.t === 'coord' && !at) at = coord(C, t.raw);
         }
-        if (!node) continue;
+        if (!node) { if (!preview) done(bs, k, [], ['not understood'], { raw: true }); continue; }
         at = at || { x: 0, y: 0 };
-        if (node.name) C.names[node.name] = { ...at };
-        if (!node.coordinate && /\\begin\{quantikz\}/.test(node.text) && TD.TYPES.qc) {
-          // a quantikz circuit in a node: one quantum circuit object, centred there
-          const q = TD.TYPES.qc.create(at, {});
-          q.src = (node.text.match(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}/) || [node.text.trim()])[0];
-          const ind = Math.min(...q.src.split('\n').slice(1).filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)[0].length));
-          if (ind > 0 && isFinite(ind)) q.src = q.src.split('\n').map((l, i) => (i ? l.slice(Math.min(ind, /^[ \t]*/.exec(l)[0].length)) : l)).join('\n');
-          const b = TD.qcLayout(q).bb;
-          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
-          shapes.push(q);
-          continue;
+        // placed by name: at=(n1.east), or the positioning library's right=1cm of n1 (an estimate: node sizes are not known)
+        const placeIss = [];
+        for (const t of toks) if (t.t === 'at' || (t.t === 'coord' && t === toks.find((q) => q.t === 'coord'))) { const w = nameIssue(C, t.raw); if (w) placeIss.push(w); }
+        for (const { k: pk, v } of parseOpts(node.opts || '')) {
+          const pm = v && /^(above|below|left|right|above left|above right|below left|below right)$/.test(pk) && /^(?:(.*?)\s+)?of\s+(.+)$/.exec(v.trim());
+          if (!pm) continue;
+          const ref = coord(C, pm[2].trim()) || at, d = pm[1] ? len(pm[1]) : 1 * PX, dx = /left/.test(pk) ? -1 : /right/.test(pk) ? 1 : 0, dy = /above/.test(pk) ? -1 : /below/.test(pk) ? 1 : 0;
+          at = { x: ref.x + dx * (d + 0.6 * PX), y: ref.y + dy * (d + 0.3 * PX) };
+          placeIss.push(`placed ${pk} of (${pm[2].trim()}) with the positioning library`);
         }
-        if (!node.coordinate && /\\begin\{tikztimingtable\}/.test(node.text) && TD.TYPES.timing) {
-          // a tikz-timing table in a node: one timing object, centred there
-          const q = TD.TYPES.timing.create(at, {});
-          q.src = (node.text.match(/\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}/) || [node.text.trim()])[0];
-          const ind = Math.min(...q.src.split('\n').slice(1).filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)[0].length));
-          if (ind > 0 && isFinite(ind)) q.src = q.src.split('\n').map((l, i) => (i ? l.slice(Math.min(ind, /^[ \t]*/.exec(l)[0].length)) : l)).join('\n');
-          const b = TD.timing.layout(q).bb;
-          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
-          shapes.push(q);
-          continue;
-        }
-        if (!node.coordinate && /\\begin\{forest\}/.test(node.text) && TD.TYPES.forest) {
-          // a forest tree in a node: one Tree object, centred there
-          const q = TD.TYPES.forest.create(at, {});
-          q.src = (node.text.match(/\\begin\{forest\}[\s\S]*?\\end\{forest\}/) || [node.text.trim()])[0];
-          const b = TD.ftLayout(q).bb;
-          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
-          shapes.push(q);
-          continue;
-        }
-        if (!node.coordinate && /\\begin\{ZX\}/.test(node.text) && TD.TYPES.zx) {
-          // a ZX diagram in a node: one ZX object, centred there
-          const q = TD.TYPES.zx.create(at, {});
-          q.src = (node.text.match(/\\begin\{ZX\}[\s\S]*?\\end\{ZX\}/) || [node.text.trim()])[0];
-          const b = TD.zxLayout(q).bb;
-          q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
-          shapes.push(q);
-          continue;
-        }
-        if (!node.coordinate && node.text.trim()) {
+        if (placeIss.length && node.name) (C.approx = C.approx || new Set()).add(node.name);
+        const nodeIss = () => [...issues(), ...placeIss];
+        if (node.name) { C.names[node.name] = { ...at }; (C.kinds = C.kinds || {})[node.name] = node.coordinate ? 'coordinate' : 'node'; }
+        const names = node.name ? [node.name] : undefined;
+        if (node.coordinate) { if (!preview) done(bs, k, [], ['a named point: kept so the code that uses its name still works'], { raw: true, at: applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], C.scopes || []).map((d) => ({ x: d.cx, y: d.cy }))[0], names }); continue; }
+        const blk = nodeBlock(C, node, at);
+        if (blk) { done(bs, k, [blk.shape], [...nodeIss(), ...blk.issues], { names }); continue; }
+        if (node.text.trim()) {
           const no = parseOpts(node.opts), own = readXf(C, no), t = textShape(C, node.text, no, at);
           // a node's own rotate turns it about its own position
           const xf = own.xf.map((x) => (x.rot !== undefined && !x.px && !x.py ? { ...x, px: t.x, py: t.y } : x));
-          shapes.push(...applyXf([t], [{ xf, shape: true }, ...(C.scopes || [])]));
-        }
+          const bad = preview ? [] : unknownKeys(C, no, NODE_KEYS);
+          if (toks.some((t2) => t2.t === 'op' || t2.t === 'brace')) bad.push('path after the node');
+          done(bs, k, applyXf([t], [{ xf, shape: true }, ...(C.scopes || [])]), [...nodeIss(), ...(bad.length ? [`options the text does not hold: ${bad.join(', ')}`] : [])], { names });
+        } else if (!preview) done(bs, k, [], ['empty node'], { raw: true, at, names });
         continue;
       }
-      if (/^(tddata|usetikzlibrary|usepackage|tikzset|pgfplotsset|documentclass|centering|small|footnotesize|large|Large|scriptsize|tiny|normalsize|caption|label|par|noindent|vspace|hspace)$/.test(name)) continue;
-      C.warnings.push(`\\${name} not supported`);
+      // anything else: its arguments (and a ; right after them) are one statement, kept as code
+      let end = argsEnd(s, j);
+      const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
+      if (/^\s*[([]/.test(s.slice(end)) || /^\s*(node|--)/.test(s.slice(end))) end = semiEnd(s, end); // \tkzDraw-like commands with path syntax
+      i = end;
+      if (preview) { C.warnings.push(`\\${name} not drawn`); continue; }
+      if (/^(documentclass|usepackage|title|author|date)$/.test(name)) continue;
+      done(bs, end, [], [`\\${name} is kept as code`], { raw: true });
     }
     return shapes;
   }
@@ -632,13 +857,85 @@
       if (k === 'x' && v) C.sx = len(v);
       else if (k === 'y' && v) C.sy = len(v);
       else if (k === 'scale' && v) { C.sx = PX * parseFloat(v); C.sy = PX * parseFloat(v); }
+      else if (k === '>' && v && exactTip(v)) gtTip = arrowSpec('-' + v).end;
     }
   }
-  function importPicture(C, inner, opts) {
-    C.sx = PX; C.sy = PX; C.scopes = [];
-    if (opts) pictureOpts(C, opts);
-    const shapes = parseStatements(C, inner);
-    return shapes.map((s) => ({ ...s, id: Math.random().toString(36).slice(2, 10) }));
+  // comments become spaces: positions in the blanked text are positions in the source
+  function blankComments(src) {
+    return src.split('\n').map((l) => { for (let i = 0; i < l.length; i++) { if (l[i] === '\\') { i++; continue; } if (l[i] === '%') return l.slice(0, i) + ' '.repeat(l.length - i); } return l; }).join('\n');
+  }
+  const PIC_ONLY = new Set(['remember picture', 'overlay', 'baseline', 'trim left', 'trim right']);
+  const uid8 = () => Math.random().toString(36).slice(2, 10);
+  // One picture: `s` its body with comments blanked, `o` as written, `open` the \begin{tikzpicture}[…] as written.
+  // Each shape gets s.tex = { p, k, i, n, sig } (picture, statement, place in the statement's shapes, how many);
+  // the first shape of a statement also holds its source: src (from the end of the previous statement, so
+  // comments and scope lines come along), cut (where its own text starts in src), ctx (the scopes around it),
+  // nm (names it defines). The picture's first statement holds open and N (statements), the last one tail.
+  function importPicture(C, s, o, open) {
+    C.sx = PX; C.sy = PX; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.picIssue = null; gtTip = null;
+    const optM = open && /^\\begin\{tikzpicture\}\s*\[([\s\S]*)\]\s*$/.exec(blankComments(open));
+    const optStr = optM ? optM[1] : '';
+    if (optStr) pictureOpts(C, optStr);
+    const items = splitTop(optStr, ',').map((x) => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const keyOf = (x) => splitTop(x, '=')[0].trim();
+    const neutral = (x) => /^(x|y)\s*=\s*\{?1\s*cm\}?$/.test(x);
+    const keep = items.filter((x) => !PIC_ONLY.has(keyOf(x)) && !neutral(x));
+    const drop = items.filter((x) => PIC_ONLY.has(keyOf(x))).map(keyOf);
+    // >=Tip only sets what `>` means: shapes written from the model name their tips, so it stays on the picture
+    const safe = keep.filter((x) => keyOf(x) === '>' && gtTip), rest = keep.filter((x) => !safe.includes(x));
+    const odd = rest.map(keyOf).filter((k) => !['x', 'y', 'scale'].includes(k));
+    if (odd.length) C.picIssue = 'picture options not drawn: ' + odd.join(', ');
+    const picCtx = rest.length ? [rest.join(', ')] : [];
+    const shapes = parseStatements(C, s, o).map((x) => ({ ...x, id: uid8() }));
+    const byShape = new Map();
+    const p = uid8(), N = C.stmts.length;
+    let prevEnd = 0;
+    C.stmts.forEach((st, k) => {
+      let end = st.end;
+      const nl = o.indexOf('\n', end) < 0 ? o.length : o.indexOf('\n', end);
+      if (!s.slice(end, nl).trim() && o.slice(end, nl).trim()) end = nl; // a comment at the end of its line
+      let cut = Math.max(prevEnd, ...C.struct.filter((q) => q <= st.start));
+      let q = cut; while (q < st.start && /[ \t]/.test(o[q])) q++;
+      if (o[q] === '\n') cut = q + 1;
+      const src = o.slice(prevEnd, end), ctx = [...picCtx, ...st.ctx];
+      st.shapes.forEach((sh, i) => byShape.set(sh, { p, k, i, n: st.shapes.length, ...(i ? {} : { src, cut: cut - prevEnd, ...(ctx.length ? { ctx } : {}), ...(st.names ? { nm: st.names } : {}) }) }));
+      const own = st.shapes[0];
+      if (st.raw && own) {
+        own.code = TD.rawTikz.dedent(o.slice(cut, end));
+        own.ctx = ctx;
+        const used = Object.keys(C.names).filter((nm) => own.code.includes('(' + nm));
+        if (used.length) own.names = Object.fromEntries(used.map((nm) => [nm, C.names[nm]]));
+      }
+      prevEnd = end;
+    });
+    const tail = o.slice(prevEnd);
+    // code with nothing to show and no place of its own sits at the picture's top-left, one under another
+    const placed = shapes.filter((x) => x.type !== 'tikz' || (x.prev && x.prev.length) || x.at);
+    const pts = placed.flatMap((x) => { const b = TD.bbox(x); return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]; });
+    const tl = pts.length ? TD.bboxOf(pts, 0) : { x: 0, y: 0 };
+    let row = 0;
+    for (const x of shapes) if (x.type === 'tikz' && !(x.prev && x.prev.length) && !x.at) x.at = { x: tl.x, y: tl.y - 6 - 20 * row++ };
+    // the shapes (new objects from the map above) take their records by position
+    const flat = C.stmts.flatMap((st) => st.shapes);
+    shapes.forEach((x, n) => {
+      const t = byShape.get(flat[n]);
+      if (!t) return;
+      if (t.k === 0 && t.i === 0) { t.open = open || null; t.N = N; if (drop.length) t.drop = drop; if (safe.length) t.po = safe.join(', '); }
+      if (t.k === N - 1 && t.i === t.n - 1) t.tail = tail;
+      x.tex = t;
+      if (x.type === 'tikz' && t.i === 0) { x.code = flat[n].code; x.ctx = flat[n].ctx; if (flat[n].names) x.names = flat[n].names; }
+    });
+    for (const x of shapes) if (x.tex) x.tex.sig = TD.texSig(x);
+    return shapes;
+  }
+  // the preview of TikZ code kept as an object, drawn where it was (its scopes, the names it uses)
+  function preview(code, ctx, names) {
+    const C = makeCtx();
+    C.preview = true; C.scopes = []; C.names = { ...(names || {}) };
+    for (const c of ctx || []) { pictureOpts(C, c); C.scopes.unshift({ ...readXf(C, parseOpts(c)), shape: false }); }
+    let shapes = [];
+    try { shapes = parseStatements(C, blankComments(String(code || ''))); } catch (e) { C.warnings.push(e.message); }
+    return { shapes, issues: [...new Set(C.warnings)] };
   }
 
   // LaTeX text (between pictures) -> DiagramTeX text block (simple markdown-ish)
@@ -660,7 +957,7 @@
   }
 
   function embedded(inner) {
-    const m = inner.match(/\\tddata\{([A-Za-z0-9+/=]+)\}/);
+    const m = inner.match(/(?:\\tddata\{|%\s*(?:diagramtex|texdiagram)-data:\s*)([A-Za-z0-9+/=]+)/);
     if (!m) return null;
     try {
       const shapes = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
@@ -698,42 +995,96 @@
 
   TD.importLatex = function (src) {
     const C = makeCtx();
-    // DiagramTeX's own exports carry the exact shapes in a comment: keep it through comment stripping
-    src = src.replace(/%\s*(?:diagramtex|texdiagram)-data:\s*([A-Za-z0-9+/=]+)/g, '\\tddata{$1}');
-    src = stripComments(src);
+    const o = String(src);
+    // positions in s are positions in o: comments and the wrappers round wide pictures become spaces
+    const keepGroup = (m, pic) => { const a = m.indexOf(pic); return ' '.repeat(a) + pic + ' '.repeat(m.length - a - pic.length); };
+    let s = blankComments(o)
+      // pictures wrapped in \resizebox{..}{..}{ ... } (wide diagrams in our exports)
+      .replace(/\\resizebox\{[^}]*\}\{[^}]*\}\{%?\s*(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})\s*\}/g, keepGroup)
+      // …and, since 1.24, boxed first: \begin{lrbox}{\dtxbox} picture \end{lrbox} \resizebox{..}{..}{\usebox{\dtxbox}}
+      .replace(/\\begin\{lrbox\}\{\\\w+\}%?\s*(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})\s*\\end\{lrbox\}%?\s*\\resizebox\{[^}]*\}\{[^}]*\}\{\\usebox\{\\\w+\}\}/g, keepGroup);
     let title = null;
-    const tm = src.match(/\\title\{([^}]*)\}/);
+    const tm = s.match(/\\title\{([^}]*)\}/);
     if (tm) title = tm[1];
-    const page = parsePage(src);
-    // pictures wrapped in \resizebox{..}{..}{ ... } (wide diagrams in our exports)
-    src = src.replace(/\\resizebox\{[^}]*\}\{[^}]*\}\{%?\s*(\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\})\s*\}/g, '$1');
-    // global colour definitions (preamble)
-    const docM = src.match(/\\begin\{document\}([\s\S]*?)(\\end\{document\}|$)/);
-    if (docM) { parseStatements(C, src.slice(0, docM.index).replace(/\\documentclass[^\n]*|\\usepackage[^\n]*|\\usetikzlibrary\{[^}]*\}|\\title\{[^}]*\}|\\author\{[^}]*\}|\\date\{[^}]*\}/g, '')); C.warnings = []; }
-    // a bare quantikz, forest, ZX or tikz-timing environment becomes a picture holding one circuit, tree or ZX diagram
-    const body = (docM ? docM[1] : src).replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}|(\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\})/g,
-      (m, q) => (q ? `\\begin{tikzpicture}\\node at (0,0) {${q}};\\end{tikzpicture}` : m));
-    const blocks = [];
-    const re = /\\begin\{tikzpicture\}(\[[^\]]*(?:\[[^\]]*\][^\]]*)*\])?([\s\S]*?)\\end\{tikzpicture\}/g;
-    let last = 0, m;
-    let any = false;
-    while ((m = re.exec(body))) {
-      any = true;
-      const before = latexToText(body.slice(last, m.index));
-      if (before && docM) blocks.push({ type: 'text', text: before });
-      blocks.push({ type: 'diagram', shapes: embedded(m[2]) || importPicture(C, m[2], m[1] ? m[1].slice(1, -1) : '') });
-      last = re.lastIndex;
+    const page = parsePage(s);
+    // the preamble: colours and definitions the pictures use, and the libraries and packages they load
+    const docM = s.match(/\\begin\{document\}([\s\S]*?)(\\end\{document\}|$)/);
+    let preDefs = '';
+    if (docM) {
+      const ps = s.slice(0, docM.index), po = o.slice(0, docM.index);
+      for (const m of ps.matchAll(/\\usetikzlibrary\{([^}]*)\}/g)) C.libs = [...new Set([...(C.libs || []), ...m[1].split(',').map((x) => x.trim()).filter(Boolean)])];
+      for (const m of ps.matchAll(/\\usepackage(?:\[[^\]]*\])?\{([^}]*)\}/g)) for (const p of m[1].split(',').map((x) => x.trim())) if (DRAW_PKGS.has(p) && p !== 'tikz') C.pkgs = [...new Set([...(C.pkgs || []), p])];
+      const P = { ...C, warnings: [], scopes: [], stmts: [], struct: null };
+      parseStatements(P, ps, po);
+      Object.assign(C.colors, P.colors);
+      preDefs = P.stmts.filter((st) => st.raw && st.shapes[0] && st.shapes[0].kind === 'defs' && !/^\s*\\(centering|small|large|normalsize|footnotesize|color)\b/.test(po.slice(st.start, st.end)))
+        .map((st) => po.slice(st.start, st.end).trim())
+        // not the lines DiagramTeX's own preamble adds (quantikz compatibility, pgfplots compat)
+        .filter((t) => !t.includes('@') && !/^\\pgfplotsset\{compat=[^}]*\}$/.test(t)).join('\n');
     }
-    if (!any) {
-      if (/\\(draw|fill|filldraw|node|shade|path|coordinate)\b/.test(body)) blocks.push({ type: 'diagram', shapes: importPicture(C, body, '') });
-      else if (body.trim()) blocks.push({ type: 'text', text: latexToText(body) });
+    const base = docM ? docM.index + docM[0].indexOf(docM[1]) : 0;
+    const bodyS = docM ? docM[1] : s, bodyO = o.slice(base, base + bodyS.length);
+    // pictures, and bare quantikz / forest / ZX / tikz-timing environments (each becomes a picture holding the block)
+    const found = [];
+    const re = /\\begin\{tikzpicture\}(\s*\[[^\]]*(?:\[[^\]]*\][^\]]*)*\])?([\s\S]*?)\\end\{tikzpicture\}/g;
+    let m;
+    while ((m = re.exec(bodyS))) found.push({ at: m.index, end: re.lastIndex, open: m.index, inner: m.index + m[0].length - m[2].length - 17, len: m[2].length });
+    const inPic = (i) => found.some((f) => i >= f.at && i < f.end);
+    for (const b of bodyS.matchAll(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}/g))
+      if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, bare: bodyO.slice(b.index, b.index + b[0].length) });
+    found.sort((a, b) => a.at - b.at);
+    const blocks = [];
+    let last = 0;
+    for (const f of found) {
+      const before = latexToText(bodyS.slice(last, f.at));
+      if (before && docM) blocks.push({ type: 'text', text: before });
+      last = f.end;
+      if (f.bare) {
+        const q = `\\node at (0,0) {${f.bare}};`;
+        const shapes = importPicture(C, q, q, '');
+        for (const x of shapes) delete x.tex;
+        blocks.push({ type: 'diagram', shapes });
+        continue;
+      }
+      const picO = bodyO.slice(f.at, f.end);
+      const data = embedded(picO);
+      if (data) { blocks.push({ type: 'diagram', shapes: data }); continue; }
+      const shapes = importPicture(C, bodyS.slice(f.inner, f.inner + f.len), bodyO.slice(f.inner, f.inner + f.len), bodyO.slice(f.open, f.inner));
+      blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
+    }
+    if (!found.length) {
+      if (/\\(draw|fill|filldraw|node|shade|path|coordinate|foreach|tikzset|begin\{axis\})\b/.test(bodyS)) {
+        const shapes = importPicture(C, bodyS, bodyO, '');
+        blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
+      } else if (bodyS.trim()) blocks.push({ type: 'text', text: latexToText(bodyS) });
     } else {
-      const after = latexToText(body.slice(last));
+      const after = latexToText(bodyS.slice(last));
       if (after && docM) blocks.push({ type: 'text', text: after });
     }
-    return { blocks, warnings: [...new Set(C.warnings)], title, page };
+    // what was kept as code, in source order, with the line its statement starts on
+    let from = 0;
+    const lineAt = (code) => {
+      const first = String(code || '').split('\n').find((l) => l.trim() && !/^\s*%/.test(l));
+      const k = first ? o.indexOf(first.trim(), from) : -1;
+      if (k < 0) return null;
+      from = k + 1;
+      return o.slice(0, k).split('\n').length;
+    };
+    const report = blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes).filter((x) => x.type === 'tikz' && x.kind !== 'defs' && x.tex)
+      .map((x) => ({ code: x.code, line: lineAt(x.code), issues: x.issues || [], preview: (x.prev || []).length }));
+    return { blocks, warnings: [...new Set(C.warnings)], kept: report, title, page };
   };
-  TD.importInternals = { parseOpts, arrowSpec, len, tokenizePath };
+  // packages a picture's code may need (others in a preamble are the document's own)
+  const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'blochsphere',
+    'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',
+    'amsmath', 'amssymb', 'amsfonts', 'mathrsfs', 'stmaryrd', 'upgreek', 'esint', 'dsfont', 'bbm']);
+  // the preamble's definitions go with each picture, as a code object that exports them to the preamble
+  function withDefs(shapes, defs, C) {
+    if (!defs) return shapes;
+    const tl = shapes.length ? TD.bboxOf(shapes.flatMap((x) => { const b = TD.bbox(x); return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]; }), 0) : { x: 0, y: 0 };
+    return [{ type: 'tikz', kind: 'defs', pre: true, code: defs, x: 0, y: 0, at: { x: tl.x, y: tl.y - 26 }, ctx: [], prev: [], issues: [], ...(C.libs ? { libs: C.libs.slice() } : {}), ...(C.pkgs ? { pkgs: C.pkgs.slice() } : {}), id: uid8() }, ...shapes];
+  }
+  TD.importInternals = { parseOpts, arrowSpec, len, tokenizePath, preview, blankComments };
   // a TikZ colour (red, blue!20, red!30!black) → '#rrggbb', or null / undefined (none / unknown)
   let colorCtx = null;
   TD.tikzColor = (spec) => color(colorCtx || (colorCtx = makeCtx()), spec);

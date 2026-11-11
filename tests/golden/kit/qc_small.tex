@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{quantikz2}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[font=\small] at (1.86,-0.92) {\pgfinterruptpicture%
+  \begin{quantikz}
+  \lstick{$\ket{0}$} & \gate{H} & \ctrl{1} & \meter{} \\
+  \lstick{$\ket{0}$} & \qw & \targ{} & \meter{}
+  \end{quantikz}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

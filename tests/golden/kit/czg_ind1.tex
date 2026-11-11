@@ -1,0 +1,19 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \draw (-1,0) to[american inductor] (1,0);
+    \draw (3,0) to[variable american inductor] (5,0);
+    \draw (7,0) to[american inductive sensor] (9,0);
+    \draw (11,0) to[european inductor] (13,0);
+    \draw (-1,-4) to[variable european inductor] (1,-4);
+    \draw (3,-4) to[european inductive sensor] (5,-4);
+    \draw (7,-4) to[cute inductive sensor] (9,-4);
+    \draw (11,-4) to[generic] (13,-4);
+    \draw (-1,-8) to[tgeneric] (1,-8);
+    \draw (3,-8) to[thermistor] (5,-8);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

@@ -81,6 +81,30 @@ Harder cases, scored separately (0.5 mm / 1 mm):
 | forest: folder tree | 87.6 % | 99.1 % |
 | circuitikz: voltage arrows (`v=`) | 100 % | 100 % |
 | circuitikz: labels and currents on one part | 94.1 % | 99.3 % |
+| circuitikz: `v^= v<= v^<=` (curved, above and backward) | 98.9 % | 100 % |
+| circuitikz: straight voltages | 99.9 % | 100 % |
+| circuitikz: American voltages (`+`/`−`) | 100 % | 100 % |
+| circuitikz: raised voltages | 100 % | 100 % |
+| circuitikz: `\ctikzset{voltage=american}` for the circuit | 100 % | 100 % |
+| circuitikz: voltages on sources (generator arrow, `+`/`−`, `v_<=`) | 99.9 % | 100 % |
+| circuitikz: current directions (`i< i>_ i_< i<^`, on a source) | 99.9 % | 100 % |
+| circuitikz: part colour (`color=red`, `blue!70!black`) | 99.9 % | 100 % |
+| circuitikz: `++`, `+`, `-\|`, `\|-`, `\coordinate` | 100 % | 100 % |
+| circuitikz: amplifiers (`en amp`, `fd op amp`, `inst amp`, `plain amp`, `buffer`…) | 100 % | 100 % |
+| circuitikz: IEEE logic ports, transmission gates, `notcirc` | 100 % | 100 % |
+| circuitikz: depletion MOS and FET variants (`nmosd`, `nfetd`, `nigfetebulk`…) | 100 % | 100 % |
+| circuitikz: sources (`dcvsource`, `voosource`, controlled sinusoidal…), `rmeter`, `tlmic` | 100 % | 100 % |
+| circuitikz: American and European inductors, sensors; `generic`, `thermistor` | 100 % | 100 % |
+| circuitikz: empty, full and stroke diodes, thyristors, triacs (33 parts) | 100 % | 100 % |
+| circuitikz: crossings, arrows, poles, multiwires, IEC connectors, grounds | 100 % | 100 % |
+| circuitikz: cute switches and SPDTs, `ncs`/`onos`…, `proximeter` node | 100 % | 100 % |
+| circuitikz: tubes (diode to pentode, magnetron, dynode) | 100 % | 100 % |
+| circuitikz: antennas (clipped waves), `harmonics`, mixers, splitters, couplers | 100 % | 100 % |
+| chemfig: submolecules, Cram bonds, `cram width` (disaccharide) | 100 % | 100 % |
+| chemfig: `\chemmove` curve, lone pairs, `@{db,.5}`, anchored arrow | 99.9 % | 100 % |
+| chemfig: nitro resonance, two `\chemmove` curves | 99.9 % | 100 % |
+| chemfig: `\hreac`, submols with arguments, `!0`, `\|`, fixed length | 100 % | 100 % |
+| chemfig: text between molecules (`\quad or \quad`) | 87.5 % | 100 % |
 
 ## What changed in this round
 
@@ -196,7 +220,8 @@ figure went from 69 % to 100 %.)
 - **Trees (forest):** folder trees can differ by 1–2 px per row. `tier`, `fit`, `calign` variants and growth
   at angles other than multiples of 90° are approximate on the canvas (LaTeX still applies them).
 - **Circuits (circuitikz):** the `v=` arrow's curve was fitted on resistors and capacitors; on other parts it
-  is close but not exact. Voltage labels on sources are plain text on the canvas. A part with a label, an
+  is close but not exact. Label offsets were measured at normalsize on level paths, so other sizes and
+  slanted parts can be a little off. A part with a label, an
   annotation and a voltage at once doesn't overlap them the way circuitikz does. Op-amp `+`/`−` signs can
   sit slightly apart.
 - **Automata:** `bend left` edges can be about 1 mm off, and the loop on accepting states has a slightly
@@ -224,3 +249,8 @@ The harness is in [docs/latex-parity/tools/](docs/latex-parity/tools/):
 - `harness.js` composes the three panels, `scenes.js` and `scenes-kit.js` hold the test figures.
 - `cdp.mjs` drives a headless Chrome on that page: `CDP=<port> node cdp.mjs run blk_qc blk_forest …`.
 - `match.py <figure.cmp.png …>` prints the scores at 0, 0.2, 0.5 and 1 mm.
+
+Between measurement rounds, `node tests/run.mjs` guards the same figures: it keeps each one's exported TikZ
+as a golden file (so any change to an export shows as a diff), compiles every export with pdflatex, checks
+that each re-imports and exports again byte for byte, and runs the LaTeX checks (`TD.lint`) over them.
+A change that leaves those golden files untouched cannot move the scores above.

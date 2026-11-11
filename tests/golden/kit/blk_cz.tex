@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \draw (0,0) to[european voltage source, l=$V$] (0,2);
+    \draw (0,2) to[european resistor, l=$R$] (3,2);
+    \draw (3,2) to[capacitor, l=$C$] (3,0);
+    \draw (3,0) -- (0,0);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

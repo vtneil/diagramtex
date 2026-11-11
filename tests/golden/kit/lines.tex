@@ -1,0 +1,60 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, decorations.pathmorphing, decorations.pathreplacing, decorations.markings}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \definecolor{tdc1}{HTML}{D62728}
+  \definecolor{tdc2}{HTML}{1E5BD6}
+
+  \draw[line width=0.71pt] (0,0) -- (4,0);
+  \draw[line width=0.71pt, dotted] (0,-0.5) -- (4,-0.5);
+  \draw[line width=0.71pt, dashed] (0,-1) -- (4,-1);
+  \draw[line width=0.71pt, dash dot] (0,-1.5) -- (4,-1.5);
+  \draw[line width=0.71pt, dash pattern=on 1.5pt off 1.5pt] (0,-2) -- (4,-2);
+  \draw[line width=0.71pt, dash pattern=on 6pt off 3pt] (0,-2.5) -- (4,-2.5);
+  \draw[line width=0.71pt, dash pattern=on 6pt off 2pt on 1pt off 2pt on 1pt off 2pt] (0,-3) -- (4,-3);
+  \draw[line width=0.18pt] (5,0) -- (8.5,0);
+  \draw[line width=0.36pt] (5,-0.4) -- (8.5,-0.4);
+  \draw[line width=0.53pt] (5,-0.8) -- (8.5,-0.8);
+  \draw[line width=0.71pt] (5,-1.2) -- (8.5,-1.2);
+  \draw[line width=1.07pt] (5,-1.6) -- (8.5,-1.6);
+  \draw[line width=1.42pt] (5,-2) -- (8.5,-2);
+  \draw[line width=2.13pt] (5,-2.4) -- (8.5,-2.4);
+  \draw[line width=2.85pt] (5,-2.8) -- (8.5,-2.8);
+  \draw[line width=4.27pt] (5,-3.2) -- (8.5,-3.2);
+  \draw[line width=0.71pt, -{Stealth}] (9.5,0) -- (11.75,0);
+  \draw[line width=0.71pt, -{Latex}] (9.5,-0.4) -- (11.75,-0.4);
+  \draw[line width=0.71pt, -{To}] (9.5,-0.8) -- (11.75,-0.8);
+  \draw[line width=0.71pt, -{Stealth[reversed]}] (9.5,-1.2) -- (11.75,-1.2);
+  \draw[line width=0.71pt, -{Latex[reversed]}] (9.5,-1.6) -- (11.75,-1.6);
+  \draw[line width=0.71pt, -{To[reversed]}] (9.5,-2) -- (11.75,-2);
+  \draw[line width=0.71pt, -{Stealth[] Stealth[]}] (9.5,-2.4) -- (11.75,-2.4);
+  \draw[line width=0.71pt, -{Latex[] Latex[]}] (9.5,-2.8) -- (11.75,-2.8);
+  \draw[line width=0.71pt, -{To[] To[]}] (9.5,-3.2) -- (11.75,-3.2);
+  \draw[line width=0.71pt, -{Straight Barb[harpoon]}] (9.5,-3.6) -- (11.75,-3.6);
+  \draw[line width=0.71pt, -{Straight Barb[harpoon, swap]}] (9.5,-4) -- (11.75,-4);
+  \draw[line width=0.71pt, -{Hooks}] (9.5,-4.4) -- (11.75,-4.4);
+  \draw[line width=0.71pt, -{Hooks[right]}] (9.5,-4.8) -- (11.75,-4.8);
+  \draw[line width=0.71pt, -{Bar}] (9.5,-5.2) -- (11.75,-5.2);
+  \draw[line width=0.71pt, -{Bar[] Bar[]}] (12.5,0) -- (14.75,0);
+  \draw[line width=0.71pt, -{To[] Bar[]}] (12.5,-0.4) -- (14.75,-0.4);
+  \draw[line width=0.71pt, -{Bracket}] (12.5,-0.8) -- (14.75,-0.8);
+  \draw[line width=0.71pt, -{Bracket[reversed]}] (12.5,-1.2) -- (14.75,-1.2);
+  \draw[line width=0.71pt, -{Parenthesis}] (12.5,-1.6) -- (14.75,-1.6);
+  \draw[line width=0.71pt, -{Parenthesis[reversed]}] (12.5,-2) -- (14.75,-2);
+  \draw[line width=0.71pt, -{Circle}] (12.5,-2.4) -- (14.75,-2.4);
+  \draw[line width=0.71pt, -{Circle[open]}] (12.5,-2.8) -- (14.75,-2.8);
+  \draw[line width=0.71pt, -{Square}] (12.5,-3.2) -- (14.75,-3.2);
+  \draw[line width=0.71pt, -{Square[open]}] (12.5,-3.6) -- (14.75,-3.6);
+  \draw[line width=0.71pt, -{Turned Square}] (12.5,-4) -- (14.75,-4);
+  \draw[line width=0.71pt, -{Turned Square[open]}] (12.5,-4.4) -- (14.75,-4.4);
+  \draw[line width=0.71pt, -{Rays[n=4]}] (12.5,-4.8) -- (14.75,-4.8);
+  \draw[line width=0.71pt, -{Stealth}, double, double distance=0.71pt] (0,-4.25) -- (4,-4.25);
+  \draw[line width=0.71pt, -{Stealth}, decorate, decoration={snake, amplitude=2.5pt, segment length=10pt}] (0,-4.87) -- (4,-4.87);
+  \draw[line width=0.71pt, postaction={draw, -, solid, decorate, decoration={ticks, segment length=6pt, amplitude=3pt}}] (0,-5.5) -- (4,-5.5);
+  \draw[draw=tdc1, line width=1.07pt, postaction={decorate, decoration={markings, mark=at position 0.5 with {\arrow{Stealth}}}}] (5,-4.25) -- (8.5,-4.25);
+  \begin{scope}[transparency group, opacity=0.5]
+    \draw[draw=tdc2, line width=1.42pt, {Latex}-{Latex}] (5,-5) -- (8.5,-5);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

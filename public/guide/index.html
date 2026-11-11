@@ -423,6 +423,7 @@
             <li>The palette adds rings (benzene, aromatic, 3 to 7 sides, fused onto a picked side), groups (OH, COOH, NO₂…), charges and lone pairs.</li>
             <li><b>Reactions:</b> an arrow turns the drawing into a <code>\schemestart … \schemestop</code> scheme with a copy of the molecule to change into the product.</li>
             <li>Drawn by chemfig's own rules, so the canvas matches the PDF.</li>
+            <li>Pasted code can use submolecules (<code>\definesubmol</code>, with arguments), <code>\setchemfig</code>, curved electron-pushing arrows (<code>@{name}</code> and <code>\chemmove</code>) and <code>\hreac … \endhreac</code>: all are drawn. Atoms that come from a submolecule are changed in its <code>\definesubmol</code> line.</li>
           </ul>
         </div></details>
 
@@ -508,7 +509,7 @@
           <li><b>Fonts:</b> the preview uses KaTeX or Temml, which are close to Computer Modern but not identical; line breaks in wrapped text can fall slightly differently.</li>
           <li><b>Fill patterns:</b> LaTeX lines up stripes and dots with the page corner, so they can be shifted inside a shape.</li>
           <li><b>Small offsets:</b> a circuit's curved voltage arrow on parts other than resistors and capacitors, op-amp signs, and 3D plot axis labels at unusual view angles can be up to about 1 mm off.</li>
-          <li><b>Code the editor keeps but doesn't draw</b> (an unusual option, a chemfig submolecule) appears only in the PDF. Each editor lists such lines.</li>
+          <li><b>Code the editor keeps but doesn't draw</b> (an unusual option, a chemfig <code>\subscheme</code>) appears only in the PDF. Each editor lists such lines.</li>
         </ul>
         <p>The full report, with side-by-side images and a match rate for every kind of figure, is <a href="https://gitlab.com/igniting-space/diagramtex/-/blob/main/PARITY.md" target="_blank" rel="noopener">PARITY.md</a>.</p>
       </section>

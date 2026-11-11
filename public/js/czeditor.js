@@ -133,7 +133,7 @@
   function toCm(e) { const r = rect(), v = E.view; return [(e.clientX - r.left - v.ox) / v.k, (v.oy - (e.clientY - r.top)) / v.k]; }
   const m = (x, y) => [E.view.ox + x * E.view.k, E.view.oy - y * E.view.k];
   function fit() {
-    const r = rect(), b = C.itemsBox(E.items) || { x1: -2, y1: -1, x2: 2, y2: 1 };
+    const r = rect(), b = C.itemsBox(E.items, { size: 'normalsize', font: 'default', vstyle: C.vstyleOf(E.raw) }) || { x1: -2, y1: -1, x2: 2, y2: 1 };
     const w = Math.max(b.x2 - b.x1, 2), h = Math.max(b.y2 - b.y1, 2);
     const k = Math.max(20, Math.min(110, Math.min((r.width - 80) / w, (r.height - 80) / h)));
     E.view = { k, ox: r.width / 2 - ((b.x1 + b.x2) / 2) * k, oy: r.height / 2 + ((b.y1 + b.y2) / 2) * k };
@@ -276,7 +276,7 @@
     for (let i = xs; i <= xe; i++) { const X = Math.round(v.ox + i * step * k) + 0.5, maj = Math.abs((i * step) % 1) < 1e-6; (maj ? (major += `M${X},0V${H}`) : (minor += `M${X},0V${H}`)); }
     for (let j = ys; j <= ye; j++) { const Y = Math.round(v.oy - j * step * k) + 0.5, maj = Math.abs((j * step) % 1) < 1e-6; (maj ? (major += `M0,${Y}H${W}`) : (minor += `M0,${Y}H${W}`)); }
     grid = `<path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/>`;
-    const colorOf = (it) => (E.sel.has(it.id) ? 'var(--redpen)' : '#1c1b19');
+    const colorOf = (it, ic) => (E.sel.has(it.id) ? 'var(--redpen)' : ic || '#1c1b19');
     const wrap = (it, s) => {
       let hit;
       if (it.p) {
@@ -293,7 +293,7 @@
       }
       return `<g data-id="${it.id}">${s}${hit}</g>`;
     };
-    let body = C.itemsSvg(E.items, m, k, { colorOf, paper: '#fffdf8', wrap, st: { size: 'normalsize', font: 'default' } });
+    let body = C.itemsSvg(E.items, m, k, { colorOf, paper: '#fffdf8', wrap, st: { size: 'normalsize', font: 'default', vstyle: C.vstyleOf(E.raw) } });
     // pins: shown while wiring, placing or dragging an end
     let pins = '';
     const showPins = E.tool !== 'select' || (E.drag && (E.drag.mode === 'end' || E.drag.mode === 'new'));

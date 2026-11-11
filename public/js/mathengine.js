@@ -14,10 +14,45 @@
   if (!lib(engine)) engine = 'katex';
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  // xcolor's colour expressions, which KaTeX and Temml don't read: rgb,255:red,92;green,214;blue,92 is the named
+  // colours mixed by their weights (over 255, or over the weights' sum when no divisor is given) → #rrggbb
+  const BASIC = { red: '#ff0000', green: '#00ff00', blue: '#0000ff', cyan: '#00ffff', magenta: '#ff00ff', yellow: '#ffff00', black: '#000000', white: '#ffffff', gray: '#808080', orange: '#ff8000', violet: '#800080', purple: '#bf0040', brown: '#bf8040', lime: '#bfff00', olive: '#808000', pink: '#ffbfbf', teal: '#008080', darkgray: '#404040', lightgray: '#bfbfbf' };
+  const hex2 = (v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
+  function xcolorExpr(spec, base = (n) => BASIC[n]) {
+    const m = /^\s*(rgb|RGB)\s*(?:,\s*([\d.]+))?\s*:\s*([\s\S]+)$/.exec(String(spec || ''));
+    if (!m) return null;
+    const acc = [0, 0, 0];
+    let sum = 0;
+    for (const part of m[3].split(';')) {
+      const q = /^\s*([^,]+?)\s*,\s*([\d.]+)\s*$/.exec(part), h = q && base(q[1]);
+      if (!h) return null;
+      const w = parseFloat(q[2]);
+      [1, 3, 5].forEach((i, k) => { acc[k] += w * parseInt(h.slice(i, i + 2), 16); });
+      sum += w;
+    }
+    const div = m[2] != null ? parseFloat(m[2]) : sum;
+    if (!(div > 0)) return null;
+    return '#' + acc.map((v) => hex2(v / div)).join('');
+  }
+  // \textcolor[RGB]{92,214,92}, [rgb]{…}, [HTML]{…}, [gray]{…} and {rgb,255:…}: written as #rrggbb for the renderer
+  function modelHex(model, v) {
+    const n = v.split(',').map((x) => parseFloat(x));
+    if (model === 'HTML') return /^[0-9a-f]{6}$/i.test(v.trim()) ? '#' + v.trim() : null;
+    if (model === 'gray') return isFinite(n[0]) ? '#' + hex2(n[0] * 255).repeat(3) : null;
+    if (n.length !== 3 || !n.every(isFinite)) return null;
+    return '#' + n.map((x) => hex2(model === 'RGB' ? x : x * 255)).join('');
+  }
+  function colors(tex) {
+    if (!/\\(text)?color|\\colorbox/.test(tex)) return tex;
+    return tex
+      .replace(/\\(textcolor|color|colorbox)\s*\[\s*(rgb|RGB|HTML|gray)\s*\]\s*\{([^{}]*)\}/g, (all, c, model, v) => { const h = modelHex(model, v); return h ? `\\${c}{${h}}` : all; })
+      .replace(/\\(textcolor|color|colorbox)\s*\{([^{}]*:[^{}]*)\}/g, (all, c, v) => { const h = xcolorExpr(v); return h ? `\\${c}{${h}}` : all; });
+  }
   // TeX → HTML string. With throwOnError, a parse error throws; otherwise it is shown in red.
   function render(tex, opts = {}) {
     const L = lib(engine);
     if (!L) return `<i>${esc(tex)}</i>`;
+    tex = colors(String(tex));
     try { return L.renderToString(tex, { displayMode: !!opts.display, throwOnError: !!opts.throwOnError }); }
     catch (e) { if (opts.throwOnError) throw e; return `<i>${esc(tex)}</i>`; }
   }
@@ -55,6 +90,7 @@
   listeners.push(mount);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 
+  TD.xcolorExpr = xcolorExpr;
   TD.math = {
     render, set, exportStyle, forXml, ENGINES,
     get engine() { return engine; },

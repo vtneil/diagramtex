@@ -10,11 +10,29 @@
 
   // Maths spans of one line as [start, end) offsets, delimiters included. Same rules as the renderer
   // (TD.textSegments), except an unclosed $ runs to the end of the line, so maths lights up as it is typed.
+  // In maths, the argument of these is text again: not green, and only text commands are suggested there
+  // ($…$ inside it is maths once more)
+  const TEXT_ARG = /^\\(text(?:bf|it|rm|sf|tt|up|sl|sc|md|normal)?|mbox|hbox|emph|textnormal)\s*\{/;
   function spans(line) {
     const out = [];
     let at = -1, display = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
+      if (c === '\\' && at >= 0) {
+        const m = TEXT_ARG.exec(line.slice(i));
+        if (m) { // maths up to the {, then the text argument, then maths again after its }
+          const open = i + m[0].length - 1;
+          let d = 0, k = open;
+          for (; k < line.length; k++) {
+            if (line[k] === '\\') { k++; continue; }
+            if (line[k] === '{') d++; else if (line[k] === '}' && --d === 0) break;
+          }
+          out.push([at, open + 1]);
+          for (const [x, y] of spans(line.slice(open + 1, Math.min(k, line.length)))) out.push([open + 1 + x, open + 1 + y]);
+          if (k >= line.length) return out; // still typing the argument: the caret is in text
+          at = k; i = k; continue;
+        }
+      }
       if (c === '\\') {
         if (at < 0 && line[i + 1] === '[') { at = i; display = true; i++; continue; }
         if (at >= 0 && display && line[i + 1] === ']') { out.push([at, i + 2]); at = -1; i++; continue; }

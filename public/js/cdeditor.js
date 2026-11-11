@@ -64,6 +64,32 @@
     const g = Z.grid(inner, amp), C = Math.max(0, ...g.map((r) => r.cells.length));
     let rows = g.map((r) => { const cells = r.cells.map((c) => parseCell(c.text, c.colSep)); while (cells.length < C) cells.push(emptyCell()); return { cells, sep: r.rowSep || '' }; });
     if (rows.length === 1 && rows[0].cells.every(isEmpty)) rows = [];
+    // arrows between two cells written by position (quiver puts them all in the last cell: from=1-1, to=1-2) move into
+    // their source cell as \arrow[r] …; the ones that end at a name (a 2-cell) stay put, after the labels naming them
+    rows.forEach((row, r) => row.cells.forEach((cell, c) => {
+      cell.arrows = cell.arrows.filter((a) => {
+        if (a.dirs) return true;
+        let from = [r, c], to = [r, c], ok = true;
+        const rest = a.items.filter((x) => {
+          const m = /^(from|to)\s*=\s*\{?\s*(?:(\d+)\s*-\s*(\d+)|([rlud]+)|(.*?))\s*\}?\s*$/.exec(x.trim());
+          if (!m) return true;
+          let p;
+          if (m[2]) p = [+m[2] - 1, +m[3] - 1];
+          else if (m[4]) { const [dr, dc] = delta(m[4]); p = [r + dr, c + dc]; }
+          else { ok = false; return true; }
+          if (m[1] === 'from') from = p; else to = p;
+          return false;
+        });
+        const dirs = dirsOf(to[0] - from[0], to[1] - from[1]);
+        const src = ok && rows[from[0]] && rows[from[0]].cells[from[1]];
+        if (!ok || !dirs || !src || !rows[to[0]] || !rows[to[0]].cells[to[1]]) return true;
+        a.dirs = dirs; a.items = rest; a.cmd = 'arrow';
+        src.dirty = cell.dirty = true;
+        if (src === cell) return true;
+        src.arrows.push(a);
+        return false;
+      });
+    }));
     // kept as written: code around the environment (\tikzset{…}) and a \\ after the last row (tikz-cd's empty row)
     const b = t.indexOf('\\begin{tikzcd}'), e = t.lastIndexOf('\\end{tikzcd}');
     const pre = b > 0 ? t.slice(0, b) : '', post = b >= 0 && e >= 0 ? t.slice(e + '\\end{tikzcd}'.length) : '';

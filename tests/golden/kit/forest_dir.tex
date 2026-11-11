@@ -1,0 +1,17 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage[edges]{forest}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[font=\large] at (2.02,-3.05) {\pgfinterruptpicture%
+  \begin{forest}
+    for tree={folder, grow'=0, font=\ttfamily}
+    [project/
+      [src/ [main.tex] [figures.tex]]
+      [figures/ [plot.pdf]]
+      [README.md]
+    ]
+  \end{forest}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

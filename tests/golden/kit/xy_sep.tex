@@ -1,0 +1,10 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage[all]{xy}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (1.34,-0.66) {\pgfinterruptpicture%
+  $\xymatrix@R=1pc@C=4pc{ A \ar[r] \ar[d] & B \ar[d] \\ C \ar[r] & D }$%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

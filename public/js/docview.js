@@ -225,8 +225,9 @@
   }
   TD.docToLatex = function (doc) {
     const X = TD.makeTikzContext();
+    X.preDefs = new Set(); // definitions kept from an imported preamble
     const P = TD.pageSize(doc.page);
-    let needGraphicx = false;
+    let needGraphicx = false, needBox = false;
     const pk = new Set();
     const body = [];
     const tctx = { numbered: !!P.numbered };
@@ -244,14 +245,19 @@
       if (b.type === 'image') { if (b.src) { needGraphicx = true; body.push(imageToLatex(b, i), ''); } return; }
       if (!b.shapes || !b.shapes.length) return;
       X.scene = b.shapes;
-      const lines = b.shapes.map((s) => TD.TYPES[s.type].tikz(s, X)).filter(Boolean);
       const data = btoa(unescape(encodeURIComponent(JSON.stringify(b.shapes.map(({ id, ...rest }) => rest)))));
+      // a picture imported and not changed is written as it was (the data comment first inside it)
+      const W = TD.tikzWhole(b.shapes.filter((s) => !s.hidden), X);
+      const pic = W ? [W.open + `\n  % diagramtex-data: ${data}` + W.pre.map((c) => '\n  ' + c.replace(/\n/g, '\n  ')).join('') + W.body + W.close]
+        : [TD.tikzOpen(b.shapes), `  % diagramtex-data: ${data}`, ...TD.tikzLines(b.shapes, X).map((l) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}'];
       // wider than the text block: scale down to \linewidth, as the page preview does
       const wide = diagramWidthCm(b.shapes) > P.textW + 0.01;
-      if (wide) needGraphicx = true;
-      body.push('\\begin{center}', ...(wide ? ['\\resizebox{\\linewidth}{!}{%'] : []),
-        '\\begin{tikzpicture}[x=1cm, y=1cm]', `  % diagramtex-data: ${data}`, ...lines.map((l) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}',
-        ...(wide ? ['}'] : []), '\\end{center}', '');
+      if (wide) needGraphicx = needBox = true;
+      // the picture goes into a box first and the box is scaled: inside \resizebox's argument, the & of a
+      // tikz-cd or quantikz matrix would already be read and break the compile
+      body.push('\\begin{center}', ...(wide ? ['\\begin{lrbox}{\\dtxbox}%'] : []),
+        ...pic,
+        ...(wide ? ['\\end{lrbox}%', '\\resizebox{\\linewidth}{!}{\\usebox{\\dtxbox}}'] : []), '\\end{center}', '');
     });
     const pre = TD.preamble(X);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
@@ -263,10 +269,12 @@
       '\\usepackage{amsmath, amssymb}',
       '\\usepackage{xcolor}',
       ...(needGraphicx ? ['\\usepackage{graphicx}'] : []),
+      ...(needBox ? ['\\newsavebox{\\dtxbox}'] : []),
       ...extra,
       ...pre,
       ...(pk.has('{hyperref}') ? ['\\usepackage{hyperref}'] : []), // hyperref goes last
       ...defs,
+      ...X.preDefs,
       ...(spread !== 1 ? [`\\linespread{${spread}}`] : []),
       '',
       ...(P.title ? [`\\title{${textToLatex(doc.name || 'Untitled')}}`, '\\date{}', ''] : []),
@@ -283,6 +291,7 @@
   // tikzpicture anchored at the page's top-left corner (needs two LaTeX runs: remember picture).
   TD.pageToLatex = function (doc, { only } = {}) {
     const X = TD.makeTikzContext();
+    X.preDefs = new Set(); // definitions kept from an imported preamble
     const P = TD.pageSize(doc.page);
     const h = P.H * PX_PER_CM, gap = PX_PER_CM, n = Math.max(1, doc.sheet.pages | 0);
     const pages = Array.from({ length: n }, () => []);
@@ -299,7 +308,7 @@
         return c;
       });
       X.scene = copies;
-      const lines = copies.map((c) => TD.TYPES[c.type].tikz(c, X)).filter(Boolean);
+      const lines = TD.tikzLines(copies, X);
       body.push(`% ---- page ${k + 1} ----`, '\\noindent',
         '\\begin{tikzpicture}[remember picture, overlay, x=1cm, y=1cm, shift={(current page.north west)}]',
         ...lines.map((l) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}', '');
@@ -317,6 +326,7 @@
       '\\usepackage{xcolor}',
       ...pre,
       ...defs,
+      ...X.preDefs,
       '\\pagestyle{empty}',
       '',
       '\\begin{document}',

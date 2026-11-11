@@ -1,0 +1,14 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{karnaugh-map}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[inner sep=0pt] at (2.28,-3.11) {\pgfinterruptpicture%
+  \begin{karnaugh-map}[2][4][1][$C$][$B$][$A$]
+    \maxterms{1,2,4}
+    \implicant{0}{2}
+    \implicantedge{0}{4}{2}{6}
+  \end{karnaugh-map}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

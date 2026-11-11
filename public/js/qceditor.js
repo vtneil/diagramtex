@@ -291,6 +291,25 @@
   }
   const selBox = () => { const s = E.sel; return s && { r1: Math.min(s.r1, s.r2), r2: Math.max(s.r1, s.r2), c1: Math.min(s.c1, s.c2), c2: Math.max(s.c1, s.c2) }; };
   const single = () => { const b = selBox(); return b && b.r1 === b.r2 && b.c1 === b.c2 ? b : null; };
+  // a gate over several wires: its own cell owns the cells under it, so a click there picks the gate
+  const spanAt = (r, c) => { const x = at(r, c), m = x && !x.opaque && mainOf(x); return m && SPANS.has(m.name) ? spanOf(m) : 1; };
+  function owner(r, c) {
+    for (let rr = r - 1; rr >= 0; rr--) if (rr + spanAt(rr, c) - 1 >= r) return { r: rr, c };
+    return { r, c };
+  }
+  // the box drawn round a selection: grown down to the last wire of any tall gate in it
+  function shownBox(b) {
+    let r2_ = b.r2;
+    for (let c = b.c1; c <= b.c2; c++) for (let r = b.r1; r <= b.r2; r++) r2_ = Math.max(r2_, r + spanAt(r, c) - 1);
+    return { ...b, r2: Math.min(r2_, nR(E.M) - 1) };
+  }
+  // a cell with nothing but its wire (\qw, \cw): free for a tall gate to cover
+  const wireOnly = (x) => !x || (!x.opaque && x.items.every((it) => it.name === 'qw' || it.name === 'cw') && (x.items.length > 0 || !x.text.trim()));
+  // the cells a tall gate covers hold nothing: their wire is under the gate
+  function clearUnder(r, c) {
+    const n = spanAt(r, c);
+    for (let i = 1; i < n; i++) { const x = at(r + i, c); if (x && (x.text || x.items.length) && wireOnly(x)) Object.assign(x, emptyCell()); }
+  }
 
   // ---------------------------------------------------------------- placing
   // put a palette element with its top cell at (r, c); returns false when nothing changed
@@ -449,6 +468,8 @@
   const pos = (e) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const toL = (e) => { const [x, y] = pos(e), v = E.view; return [(x - v.ox) / v.k, (y - v.oy) / v.k]; };
   // the cell under the pointer (r == R or c == C: the growing edge), or null
+  // the cell a click picks: a covered cell gives the tall gate over it
+  function pick(e) { const h = cellAt(e); return h && h.r < nR(E.M) && h.c < nC(E.M) ? owner(h.r, h.c) : h; }
   function cellAt(e) {
     const G = E.G || (E.G = geom()), [x, y] = toL(e);
     const find = (a, v) => { for (let i = 0; i < a.length - 1; i++) if (v >= a[i] && v < a[i + 1]) return i; return -1; };
@@ -500,13 +521,13 @@
     const h = E.hover;
     if (h) {
       // the growing row / column light up whole: a drop there adds a wire / a step
-      const hb = h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, h.r, h.c];
+      const hb = h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, h.r + spanAt(h.r, h.c) - 1, h.c];
       if (R && C || h.r < R || h.c < C) {
         if (E.arm || E.ghost || (E.drag && E.drag.mode === 'move' && E.drag.moved)) out += box(...hb, 'qe-target');
         else if (!E.drag) out += box(...hb, 'qe-hover');
       }
     }
-    const b = selBox();
+    const b = selBox() && shownBox(selBox());
     if (b) out += box(b.r1, b.c1, b.r2, b.c2, 'qe-sel');
     // a selected control's link: a blue knob at the wire it reaches; drag it to another wire
     const s = single(), m = s && at(s.r1, s.c1) && mainOf(at(s.r1, s.c1));
@@ -574,7 +595,7 @@
       return;
     }
     if (e.target.closest('.qe-knob')) { const s = single(); begin(); E.drag = { mode: 'link', r: s.r1, c: s.c1, n: intArg(mainOf(at(s.r1, s.c1)).a[0]) }; return; }
-    const h = cellAt(e);
+    const h = E.arm ? cellAt(e) : pick(e);
     if (!h) { E.sel = null; draw(); renderProps(); return; }
     if (E.arm) { put(E.arm, h.r, h.c, false); return; }
     if (h.r >= nR(E.M) || h.c >= nC(E.M)) { edit(() => ensure(E.M, h.r + 1, h.c + 1)); E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c }; draw(); renderProps(); return; }
@@ -588,7 +609,7 @@
     if (!E) return;
     const d = E.drag, [sx, sy] = pos(e);
     if (!d) {
-      const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : cellAt(e);
+      const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : E.arm ? cellAt(e) : pick(e);
       svg.style.cursor = dz ? 'pointer' : '';
       if (JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(dz) !== JSON.stringify(E.del)) { E.hover = h; E.del = dz; draw(); }
       return;
@@ -616,7 +637,7 @@
       let wire = 0, dist = Infinity;
       for (let i = 0; i < G.R; i++) { const dd = Math.abs(G.cy(i) - y); if (dd < dist) { dist = dd; wire = i; } }
       // a cell with nothing but its wire (\qw, \cw) is free: the gate is drawn over it
-      const free = (r) => { const x = at(r, c); return !x || (!x.opaque && x.items.every((it) => it.name === 'qw' || it.name === 'cw') && (x.items.length > 0 || !x.text.trim())); };
+      const free = (r) => wireOnly(at(r, c));
       if (d.edge === 'b') {
         let lim = d.top; while (lim + 1 < R && (lim + 1 <= d.bot || free(lim + 1))) lim++;
         d.bot = Math.max(d.top, Math.min(wire, lim));
@@ -643,11 +664,12 @@
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
       d.moved = true; d.e = [sx, sy]; E.hover = cellAt(e); draw(); return;
     }
-    if (d.mode === 'range') { const h = cellAt(e); if (h && h.r < nR(E.M) && h.c < nC(E.M)) { E.sel.r2 = h.r; E.sel.c2 = h.c; draw(); renderProps(); } }
+    if (d.mode === 'range') { const h = pick(e); if (h && h.r < nR(E.M) && h.c < nC(E.M)) { E.sel.r2 = h.r; E.sel.c2 = h.c; draw(); renderProps(); } }
   });
   svg.addEventListener('pointerup', (e) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
+    if (d.mode === 'span') clearUnder(d.top, d.c);
     if (d.mode === 'size' || d.mode === 'span') { setTip(''); commit(); draw(); keepInView(); renderProps(); return; }
     if (d.mode === 'link') { const m = mainOf(at(d.r, d.c)); m.a[0] = d.n ? String(d.n) : ''; at(d.r, d.c).dirty = true; commit(); draw(); renderProps(); return; }
     if (d.mode === 'move' && d.moved) {
@@ -700,7 +722,7 @@
   // elements with a typeable label, and the name of its field in the panel
   const LABEL = { gate: 'Label', phase: 'Angle', meter: 'Label', meterD: 'Label', measuretab: 'Label', measure: 'Label', lstick: 'Label', rstick: 'Label', push: 'Text', midstick: 'Label', qwbundle: 'Label' };
   function onDouble(e) {
-    const s = single(), h = cellAt(e);
+    const s = single(), h = pick(e);
     if (!s || !h || h.r !== s.r1 || h.c !== s.c1) return false;
     return editLabel(s.r1, s.c1);
   }
@@ -784,7 +806,7 @@
       const m = mainOf(cell);
       if (f === 'arg') { m.a[0] = t.value; cell.dirty = true; }
       else if (f === 'gw' || f === 'gh') { const z = gateSize(m), v = Math.max(0, parseFloat(t.value) || 0); setGateSize(m, f === 'gw' ? v : z.w, f === 'gh' ? v : z.h); cell.dirty = true; }
-      else if (f === 'span') { setSpan(m, Math.max(1, intArg(t.value) || 1)); cell.dirty = true; }
+      else if (f === 'span') { setSpan(m, Math.max(1, intArg(t.value) || 1)); cell.dirty = true; clearUnder(s.r1, s.c1); }
       else if (f === 'link') { const n = intArg(t.value); m.a[0] = n ? String(n) : ''; cell.dirty = true; }
       else if (/^x\d+$/.test(f)) { cell.items[+f.slice(1)].a[0] = t.value; cell.dirty = true; }
       else if (/^g[ws]\d+$/.test(f)) { const it = cell.items[+f.slice(2)], d = groupDims(it), v = Math.max(1, intArg(t.value) || 1); setGroupDims(it, f[1] === 'w' ? v : d.wires, f[1] === 's' ? v : d.steps); cell.dirty = true; }

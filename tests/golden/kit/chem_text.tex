@@ -1,0 +1,14 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{chemfig}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[anchor=north west, inner sep=0pt] at (0,0) {%
+  \schemestart
+    \chemfig{H_2C=CH_2}\quad or \quad\chemfig{*6(=-=-=-)}
+    \arrow{->[$h\nu$]}
+    \chemfig{A-B}
+  \schemestop%
+  };
+\end{tikzpicture}
+\end{document}

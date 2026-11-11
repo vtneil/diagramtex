@@ -1,0 +1,1074 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{cd}
+\makeatletter % quantikz2 restyles every tikz-cd diagram: keep tikz-cd's own look outside quantum circuits
+\pgfkeysgetvalue{/tikz/commutative diagrams/every cell/.@cmd}\dtx@cdcell
+\pgfkeysgetvalue{/tikz/commutative diagrams/arrows/.@cmd}\dtx@cdarrows
+\pgfkeysgetvalue{/tikz/commutative diagrams/row sep/normal}\dtx@cdrow
+\pgfkeysgetvalue{/tikz/commutative diagrams/column sep/normal}\dtx@cdcol
+\newcommand\dtx@cdplain{%
+  \pgfkeyslet{/tikz/commutative diagrams/every cell/.@cmd}\dtx@cdcell
+  \pgfkeyslet{/tikz/commutative diagrams/arrows/.@cmd}\dtx@cdarrows
+  \pgfkeyslet{/tikz/commutative diagrams/row sep/normal}\dtx@cdrow
+  \pgfkeyslet{/tikz/commutative diagrams/column sep/normal}\dtx@cdcol
+  \tikzset{nodes in empty cells=false}%
+  \let\DivideRowsCols\relax}
+\AddToHook{env/tikzcd/begin}{\dtx@cdplain}
+\makeatother
+\usetikzlibrary{arrows.meta, decorations.pathmorphing, quantikz2}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{circuitikz}
+\usepackage{tikz-cd}
+\usepackage[compat=1.1.0]{tikz-feynman}
+\usepackage{zx-calculus}
+\usepackage{blochsphere}
+\usepackage{forest}
+\makeatletter % quantikz2 makes every tikz-cd diagram reset the layers to its own; give ZX diagrams theirs too
+\let\dtx@setlayers\pgfsetlayers
+\newcommand\dtx@zxlayers[1]{\dtx@setlayers{background,quantback,belownodelayer,edgelayer,nodelayer,main,abovenodelayer,box,labellayer,foreground}}
+\AddToHook{env/ZX/begin}{\let\pgfsetlayers\dtx@zxlayers}
+\makeatother
+\definecolor{tdc1}{HTML}{6B6B6B}
+\definecolor{tdc2}{HTML}{E8F0FB}
+\definecolor{tdc3}{HTML}{E6F4EA}
+\definecolor{tdc4}{HTML}{A05A5A}
+\definecolor{tdc5}{HTML}{1E5BD6}
+\definecolor{tdc6}{HTML}{D62728}
+\definecolor{tdc7}{HTML}{1E63C4}
+\definecolor{tdc8}{HTML}{C0392B}
+\definecolor{tdc9}{HTML}{2F7FC1}
+\definecolor{tdc10}{HTML}{E8703A}
+
+\title{Welcome to DiagramTeX}
+\date{}
+
+\begin{document}
+\maketitle
+
+Draw figures for \LaTeX\ and export them as TikZ, SVG, PNG or PDF. Your work saves in this browser as you go.
+
+\section*{What you can draw}
+\begin{itemize}
+  \item \textbf{Text and maths}: labels, formulae and paragraphs typed as \LaTeX, or in a visual maths editor.
+  \item \textbf{Lines and arrows}: straight and curved lines, arrows with many heads, polylines, smooth closed curves, angle marks, springs, and wavy, double or ticked lines.
+  \item \textbf{Shapes}: rectangles with rounded or cut corners, circles, polygons, stars, clouds and more basic shapes, 28 flowchart symbols and 28 block arrows.
+  \item \textbf{Electrical}: a circuit editor with about 250 circuitikz parts, common symbols, logic gates and waveforms such as sine, square and sawtooth.
+  \item \textbf{Physics}: ground, walls and ceilings, blocks, inclines, carts, pulleys and pendulums; lenses, mirrors, prisms, screens, slits, rays and light sources.
+  \item \textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.
+  \item \textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.
+  \item \textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; and 3D geometry in tikz-3dplot (points, vectors, planes, rotated frames, projections and angles), edited by dragging.
+  \item \textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).
+  \item \textbf{Images} and \textbf{freehand} pencil strokes.
+\end{itemize}
+
+\section*{Four modes}
+\begin{itemize}
+  \item \textbf{Classic}: diagrams arranged with text, like this file. Familiar with Mathcha? Classic mode offers a similar editing workflow.
+  \item \textbf{Page}: a free-form sheet. Place anything anywhere, for posters and handouts.
+  \item \textbf{Whiteboard}: an endless canvas for sketching.
+  \item \textbf{Quick}: one formula, copied as a PNG or SVG.
+\end{itemize}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % diagramtex-data: W3sidHlwZSI6InRleHQiLCJ4IjoxMzAsInkiOjE1MCwidGV4dCI6IlRFWFQgQU5EIEZPUk1VTEFFIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoidGV4dCIsIngiOjEzMCwieSI6MTk2LCJ0ZXh0IjoiJFxcdmVjIEYgPSBxXFxsZWZ0KFxcdmVjIEUgKyBcXHZlYyB2IFxcdGltZXMgXFx2ZWMgQlxccmlnaHQpJCIsInR3IjowLCJzaXplIjoibGFyZ2UiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJ0ZXh0IiwieCI6MTMwLCJ5IjoyNTIsInRleHQiOiIkXFxkaXNwbGF5c3R5bGVcXGludF8wXlxcaW5mdHkgZV57LXheMn1cXCxkeCA9IFxcZnJhY3tcXHNxcnR7XFxwaX19ezJ9JCIsInR3IjowLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4IjoxMzAsInkiOjMwNCwidGV4dCI6IlBsYWluIHRleHQgaW4gXFx0ZXh0YmZ7Ym9sZH0sIFxcdGV4dGl0e2l0YWxpY30gb3IgXFx0ZXh0dHR7dHlwZXdyaXRlcn0iLCJ0dyI6MCwic2l6ZSI6InNtYWxsIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjMDAwMDAwIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoidGV4dCIsIngiOjQ0MCwieSI6MTUwLCJ0ZXh0IjoiU0hBUEVTIEFORCBBUlJPV1MiLCJ0dyI6MCwic2l6ZSI6InNtYWxsIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjp0cnVlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiM2YjZiNmIiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJzeW0iLCJraW5kIjoicnJlY3QiLCJ4IjozNTAsInkiOjE3OCwidyI6NzYsImgiOjQwLCJyb3QiOjAsImZ4IjpmYWxzZSwiZnkiOmZhbHNlLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsImZpbGwiOiIjZThmMGZiIiwiYW5nbGUiOjAsInNrZXciOjAsInRleHQiOiJJZGVhIiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJsaW5lIiwieDEiOjQyNiwieTEiOjE5OCwieDIiOjQ2MiwieTIiOjE5OCwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIiwibWlkVGlwIjoibm9uZSIsInNoYWZ0Ijoic2luZ2xlIiwiY3Jvc3MiOiJub25lIiwibGFiZWwiOiIiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0Iiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJzeW0iLCJraW5kIjoiZGlhbW9uZCIsIngiOjQ2MiwieSI6MTcyLCJ3Ijo2MCwiaCI6NTIsInJvdCI6MCwiZngiOmZhbHNlLCJmeSI6ZmFsc2UsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwiZmlsbCI6bnVsbCwiYW5nbGUiOjAsInNrZXciOjAsInRleHQiOiIkPyQiLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6ImxpbmUiLCJ4MSI6NDkyLCJ5MSI6MjI0LCJ4MiI6NDkyLCJ5MiI6MjYyLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInN0YXJ0VGlwIjoibm9uZSIsImVuZFRpcCI6InN0ZWFsdGgiLCJtaWRUaXAiOiJub25lIiwic2hhZnQiOiJzaW5nbGUiLCJjcm9zcyI6Im5vbmUiLCJsYWJlbCI6IiIsImxhYmVsUG9zIjowLjUsImxhYmVsU2lkZSI6ImxlZnQiLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6InN5bSIsImtpbmQiOiJycmVjdCIsIngiOjQ1NCwieSI6MjYyLCJ3Ijo3NiwiaCI6NDAsInJvdCI6MCwiZngiOmZhbHNlLCJmeSI6ZmFsc2UsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwiZmlsbCI6IiNlNmY0ZWEiLCJhbmdsZSI6MCwic2tldyI6MCwidGV4dCI6IkRvbmUiLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6ImJhbGwiLCJjeCI6MzcyLCJjeSI6MjgyLCJyIjoxNiwiYmFsbENvbG9yIjoiI2EwNWE1YSIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InNwcmluZyIsIngxIjozODgsInkxIjoyODIsIngyIjo0NDYsInkyIjoyODIsInBpdGNoIjoxMiwiYW1wbGl0dWRlIjo2LCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4Ijo3NTAsInkiOjE1MCwidGV4dCI6IkNJUkNVSVRTIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoiY3oiLCJ4Ijo2OTAsInkiOjI5MCwiaXRlbXMiOlt7ImlkIjoiNjdiZjU0ajYiLCJwYXJ0Ijoic3JjOnZzb3VyY2UtZXUiLCJhIjpbMCwwXSwiYiI6WzAsMl0sImwiOiIkViQiLCJhbm4iOiIiLCJ2IjoiIiwiaSI6IiIsInBvbGVzIjoiIiwibmFtZSI6IiIsIm9wdHMiOiIifSx7ImlkIjoiajNsMm9tcWEiLCJwYXJ0IjoicmVzOmllYyIsImEiOlswLDJdLCJiIjpbMywyXSwibCI6IiRSJCIsImFubiI6IiIsInYiOiIiLCJpIjoiIiwicG9sZXMiOiIiLCJuYW1lIjoiIiwib3B0cyI6IiJ9LHsiaWQiOiJzcXJ5MmVibiIsInBhcnQiOiJjYXA6aWVjIiwiYSI6WzMsMl0sImIiOlszLDBdLCJsIjoiJEMkIiwiYW5uIjoiIiwidiI6IiIsImkiOiIiLCJwb2xlcyI6IiIsIm5hbWUiOiIiLCJvcHRzIjoiIn0seyJpZCI6ImZ6MTJ1MDZhIiwicGFydCI6InNob3J0IiwiYSI6WzMsMF0sImIiOlswLDBdLCJsIjoiIiwiYW5uIjoiIiwidiI6IiIsImkiOiIiLCJwb2xlcyI6IiIsIm5hbWUiOiIiLCJvcHRzIjoiIn1dLCJyYXciOiIiLCJzaXplIjoibGFyZ2UiLCJmb250IjoiZGVmYXVsdCIsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6InRleHQiLCJ4IjoxNzAsInkiOjM3MCwidGV4dCI6IlBMT1RTIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoicGxvdCIsIngiOjQwLCJ5IjozOTYsInciOjI2MCwiaCI6MTcwLCJkaW0iOjIsInRpdGxlIjoiIiwieGxhYmVsIjoiJHgkIiwieWxhYmVsIjoiJHkkIiwiemxhYmVsIjoiIiwiYXhpc0xpbmVzIjoibWlkZGxlIiwiZ3JpZCI6ZmFsc2UsInhtaW4iOiIiLCJ4bWF4IjoiIiwieW1pbiI6IiIsInltYXgiOiIiLCJ6bWluIjoiIiwiem1heCI6IiIsInZpZXciOlsyNSwzMF0sImNvbG9ybWFwIjoiaG90IiwiY29sb3JiYXIiOmZhbHNlLCJsZWdlbmRQb3MiOiJub3J0aCBlYXN0Iiwic2VyaWVzIjpbeyJraW5kIjoibGluZSIsInNvdXJjZSI6ImV4cHIiLCJleHByIjoic2luKHgpIiwiZGF0YSI6IiIsImRvbWFpbiI6WyItMipwaSIsIjIqcGkiXSwieWRvbWFpbiI6WyItNSIsIjUiXSwic2FtcGxlcyI6MTAwLCJjb2xvciI6IiMxZTViZDYiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwibWFyayI6Im5vbmUiLCJsZWdlbmQiOiIiLCJsZXZlbHMiOjgsImJhcldpZHRoIjoxMiwib3BhY2l0eSI6MX0seyJraW5kIjoibGluZSIsInNvdXJjZSI6ImV4cHIiLCJleHByIjoiY29zKHgpIiwiZGF0YSI6IiIsImRvbWFpbiI6WyItMipwaSIsIjIqcGkiXSwieWRvbWFpbiI6WyItNSIsIjUiXSwic2FtcGxlcyI6MTAwLCJjb2xvciI6IiNkNjI3MjgiLCJ3aWR0aCI6MSwiZGFzaCI6ImRhc2hlZCIsIm1hcmsiOiJub25lIiwibGVnZW5kIjoiIiwibGV2ZWxzIjo4LCJiYXJXaWR0aCI6MTIsIm9wYWNpdHkiOjF9XSwiX3B3IjoyODAsIl9waCI6MjAwfSx7InR5cGUiOiJ0ZXh0IiwieCI6NTAwLCJ5IjozNzAsInRleHQiOiJRVUFOVFVNIENJUkNVSVRTIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoicWMiLCJ4Ijo0MjgsInkiOjQxMCwic3JjIjoiXFxiZWdpbntxdWFudGlren1cblxcbHN0aWNre1xca2V0ezB9fSAmIFxcZ2F0ZXtIfSAmIFxcY3RybHsxfSAmIFxcbWV0ZXJ7fSBcXFxcXG5cXGxzdGlja3tcXGtldHswfX0gJiAmIFxcdGFyZ3t9ICYgXFxtZXRlcnt9XG5cXGVuZHtxdWFudGlren0iLCJzaXplIjoibGFyZ2UiLCJmb250IjoiZGVmYXVsdCIsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6InRleHQiLCJ4Ijo3NzAsInkiOjM3MCwidGV4dCI6IkNPTU1VVEFUSVZFIERJQUdSQU1TIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoiY2QiLCJ4Ijo3MzAsInkiOjQxMCwic3JjIjoiXFxiZWdpbnt0aWt6Y2R9XG4gIEEgXFxhcnJvd1tyLCBcImZcIl0gXFxhcnJvd1tkLCBcImdcIiddICYgQiBcXGFycm93W2QsIFwiaFwiXSBcXFxcXG4gIEMgXFxhcnJvd1tyLCBcImtcIiddICAgICAgICAgICAgICAgICAgJiBEXG5cXGVuZHt0aWt6Y2R9IiwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoidGV4dCIsIngiOjQ0MCwieSI6NjIwLCJ0ZXh0IjoiT24gdGhlIGNhbnZhcywgZG91YmxlLWNsaWNrIHRoZSBjaXJjdWl0IG9yIHRoZSBxdWFudHVtIGNpcmN1aXQgdG8gb3BlbiBpdHMgZWRpdG9yLiIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMxZTYzYzQiLCJvcGFjaXR5IjoxfV0=
+  \node[font=\small\bfseries, text=tdc1] at (3.25,-3.75) {TEXT AND FORMULAE};
+  \node[font=\large] at (3.25,-4.9) {$\vec F = q\left(\vec E + \vec v \times \vec B\right)$};
+  \node at (3.25,-6.3) {$\displaystyle\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}$};
+  \node[font=\small] at (3.25,-7.6) {Plain text in \textbf{bold}, \textit{italic} or \texttt{typewriter}};
+  \node[font=\small\bfseries, text=tdc1] at (11,-3.75) {SHAPES AND ARROWS};
+  \draw[line width=0.71pt, fill=tdc2, line join=round] (8.95,-4.45) -- (10.45,-4.45) -- (10.45,-4.45) .. controls (10.56,-4.45) and (10.65,-4.54) .. (10.65,-4.65) -- (10.65,-5.25) -- (10.65,-5.25) .. controls (10.65,-5.36) and (10.56,-5.45) .. (10.45,-5.45) -- (8.95,-5.45) -- (8.95,-5.45) .. controls (8.84,-5.45) and (8.75,-5.36) .. (8.75,-5.25) -- (8.75,-4.65) -- (8.75,-4.65) .. controls (8.75,-4.54) and (8.84,-4.45) .. (8.95,-4.45) -- cycle;
+  \node[align=center] at (9.7,-4.95) {Idea};
+  \draw[line width=0.71pt, -{Stealth}] (10.65,-4.95) -- (11.55,-4.95);
+  \draw[line width=0.71pt, line join=round] (12.3,-4.3) -- (13.05,-4.95) -- (12.3,-5.6) -- (11.55,-4.95) -- cycle;
+  \node[align=center] at (12.3,-4.95) {$?$};
+  \draw[line width=0.71pt, -{Stealth}] (12.3,-5.6) -- (12.3,-6.55);
+  \draw[line width=0.71pt, fill=tdc3, line join=round] (11.55,-6.55) -- (13.05,-6.55) -- (13.05,-6.55) .. controls (13.16,-6.55) and (13.25,-6.64) .. (13.25,-6.75) -- (13.25,-7.35) -- (13.25,-7.35) .. controls (13.25,-7.46) and (13.16,-7.55) .. (13.05,-7.55) -- (11.55,-7.55) -- (11.55,-7.55) .. controls (11.44,-7.55) and (11.35,-7.46) .. (11.35,-7.35) -- (11.35,-6.75) -- (11.35,-6.75) .. controls (11.35,-6.64) and (11.44,-6.55) .. (11.55,-6.55) -- cycle;
+  \node[align=center] at (12.3,-7.05) {Done};
+  \shade[ball color=tdc4] (9.3,-7.05) circle (0.4);
+  \draw[line width=0.71pt, decorate, decoration={zigzag, segment length=0.2752cm, amplitude=0.15cm, pre length=0.174cm, post length=0.174cm}] (9.7,-7.05) -- (11.15,-7.05);
+  \node[font=\small\bfseries, text=tdc1] at (18.75,-3.75) {CIRCUITS};
+  \begin{scope}[shift={(17.25,-7.25)}, font=\large]
+    \draw (0,0) to[european voltage source, l=$V$] (0,2);
+    \draw (0,2) to[european resistor, l=$R$] (3,2);
+    \draw (3,2) to[capacitor, l=$C$] (3,0);
+    \draw (3,0) -- (0,0);
+  \end{scope}
+  \node[font=\small\bfseries, text=tdc1] at (4.25,-9.25) {PLOTS};
+  \begin{axis}[
+    at={(1cm,-14.15cm)},
+    anchor=south west,
+    scale only axis,
+    width=6.5cm,
+    height=4.25cm,
+    xmin=-6.2832,
+    xmax=6.2832,
+    ymin=-0.9999,
+    ymax=1,
+    xtick={-5,0,5},
+    ytick={-0.5,0,0.5,1},
+    axis lines=middle,
+    axis line style={-{Stealth}},
+    every axis x label/.style={at={(current axis.right of origin)}, anchor=west},
+    every axis y label/.style={at={(current axis.above origin)}, anchor=south},
+    xlabel={$x$},
+    ylabel={$y$}
+  ]
+    \addplot[color=tdc5, line width=0.71pt, no marks, domain=-6.2832:6.2832, samples=100, forget plot] {sin(deg(x))};
+    \addplot[color=tdc6, line width=0.71pt, dashed, no marks, domain=-6.2832:6.2832, samples=100, forget plot] {cos(deg(x))};
+  \end{axis}
+  \node[font=\small\bfseries, text=tdc1] at (12.5,-9.25) {QUANTUM CIRCUITS};
+  \node[font=\large] at (12.79,-11.32) {\pgfinterruptpicture%
+  \begin{quantikz}
+  \lstick{\ket{0}} & \gate{H} & \ctrl{1} & \meter{} \\
+  \lstick{\ket{0}} & & \targ{} & \meter{}
+  \end{quantikz}%
+  \endpgfinterruptpicture};
+  \node[font=\small\bfseries, text=tdc1] at (19.25,-9.25) {COMMUTATIVE DIAGRAMS};
+  \node at (19.29,-11.19) {\pgfinterruptpicture%
+  \begin{tikzcd}
+    A \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
+    C \arrow[r, "k"']                  & D
+  \end{tikzcd}%
+  \endpgfinterruptpicture};
+  \node[font=\small, text=tdc7] at (11,-15.5) {On the canvas, double-click the circuit or the quantum circuit to open its editor.};
+\end{tikzpicture}
+}
+\end{center}
+
+\begin{center}
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % diagramtex-data: W3sidHlwZSI6InRleHQiLCJ4IjoxNzAsInkiOjMwLCJ0ZXh0IjoiUEhZU0lDUyIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOnRydWUsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzZiNmI2YiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InN5bSIsImtpbmQiOiJwLWdyb3VuZCIsIngiOjQwLCJ5IjoxNzAsInciOjI2MCwiaCI6MTAsInJvdCI6MCwiZngiOmZhbHNlLCJmeSI6ZmFsc2UsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwiaGF0Y2giOjcsImFuZ2xlIjowLCJza2V3IjowfSx7InR5cGUiOiJzeW0iLCJraW5kIjoicC1jYXJ0IiwieCI6NTAsInkiOjExOSwidyI6ODAsImgiOjUwLCJyb3QiOjAsImZ4IjpmYWxzZSwiZnkiOmZhbHNlLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsImZpbGwiOm51bGwsImFuZ2xlIjowLCJza2V3IjowLCJ0ZXh0IjoiIiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJsaW5lIiwieDEiOjEzMSwieTEiOjE0NCwieDIiOjE4OCwieTIiOjE0NCwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIiwibWlkVGlwIjoibm9uZSIsInNoYWZ0Ijoic2luZ2xlIiwiY3Jvc3MiOiJub25lIiwibGFiZWwiOiIkXFx2ZWMgRiQiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0Iiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJzeW0iLCJraW5kIjoicC1wZW5kdWx1bSIsIngiOjIxMiwieSI6NDYsInciOjgwLCJoIjoxMjAsInJvdCI6MCwiZngiOmZhbHNlLCJmeSI6ZmFsc2UsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwiaGF0Y2giOjcsIm1vdW50Ijp0cnVlLCJtYXJrIjp0cnVlLCJsYmwiOiJcXHRoZXRhIiwiYW5nbGUiOjAsInNrZXciOjB9LHsidHlwZSI6InRleHQiLCJ4Ijo1MDAsInkiOjMwLCJ0ZXh0IjoiT1BUSUNTIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoibGluZSIsIngxIjozNzIsInkxIjoxMTAsIngyIjo2MzIsInkyIjoxMTAsInN0cm9rZSI6IiM2YjZiNmIiLCJ3aWR0aCI6MSwiZGFzaCI6ImRhc2hlZCIsIm9wYWNpdHkiOjEsInN0YXJ0VGlwIjoibm9uZSIsImVuZFRpcCI6Im5vbmUiLCJtaWRUaXAiOiJub25lIiwic2hhZnQiOiJzaW5nbGUiLCJjcm9zcyI6Im5vbmUiLCJsYWJlbCI6IiIsImxhYmVsUG9zIjowLjUsImxhYmVsU2lkZSI6ImxlZnQiLCJzaXplIjoibm9ybWFsc2l6ZSIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6ZmFsc2UsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6InN5bSIsImtpbmQiOiJwLXNvdXJjZSIsIngiOjM4MCwieSI6OTIsInciOjM2LCJoIjozNiwicm90IjowLCJmeCI6ZmFsc2UsImZ5IjpmYWxzZSwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJhbmdsZSI6MCwic2tldyI6MH0seyJ0eXBlIjoic3ltIiwia2luZCI6InAtY29udmV4IiwieCI6NDkwLCJ5Ijo1NSwidyI6MjQsImgiOjExMCwicm90IjowLCJmeCI6ZmFsc2UsImZ5IjpmYWxzZSwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJmaWxsIjpudWxsLCJhbmdsZSI6MCwic2tldyI6MH0seyJ0eXBlIjoic3ltIiwia2luZCI6InAtc2NyZWVuIiwieCI6NjEwLCJ5Ijo1NSwidyI6MTAsImgiOjExMCwicm90IjowLCJmeCI6ZmFsc2UsImZ5IjpmYWxzZSwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJoYXRjaCI6NywiYW5nbGUiOjAsInNrZXciOjB9LHsidHlwZSI6ImxpbmUiLCJ4MSI6NDA2LCJ5MSI6MTEwLCJ4MiI6NTAyLCJ5MiI6NjQsInN0cm9rZSI6IiNjMDM5MmIiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoibm9uZSIsIm1pZFRpcCI6Im5vbmUiLCJzaGFmdCI6InNpbmdsZSIsImNyb3NzIjoibm9uZSIsImxhYmVsIjoiIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsInNpemUiOiJub3JtYWxzaXplIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjpmYWxzZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoibGluZSIsIngxIjo1MDIsInkxIjo2NCwieDIiOjYxMCwieTIiOjExMCwic3Ryb2tlIjoiI2MwMzkyYiIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIiwibWlkVGlwIjoibm9uZSIsInNoYWZ0Ijoic2luZ2xlIiwiY3Jvc3MiOiJub25lIiwibGFiZWwiOiIiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0Iiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJsaW5lIiwieDEiOjQwNiwieTEiOjExMCwieDIiOjUwMiwieTIiOjE1Niwic3Ryb2tlIjoiI2MwMzkyYiIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJub25lIiwibWlkVGlwIjoibm9uZSIsInNoYWZ0Ijoic2luZ2xlIiwiY3Jvc3MiOiJub25lIiwibGFiZWwiOiIiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0Iiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJsaW5lIiwieDEiOjUwMiwieTEiOjE1NiwieDIiOjYxMCwieTIiOjExMCwic3Ryb2tlIjoiI2MwMzkyYiIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIiwibWlkVGlwIjoibm9uZSIsInNoYWZ0Ijoic2luZ2xlIiwiY3Jvc3MiOiJub25lIiwibGFiZWwiOiIiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0Iiwic2l6ZSI6Im5vcm1hbHNpemUiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJ0ZXh0IiwieCI6NzkwLCJ5IjozMCwidGV4dCI6IldBVkVGT1JNUyIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOnRydWUsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzZiNmI2YiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InN5bSIsImtpbmQiOiJlLXNpbmUiLCJ4Ijo3MjIsInkiOjU4LCJ3IjoxMzUsImgiOjQwLCJyb3QiOjAsImZ4IjpmYWxzZSwiZnkiOmZhbHNlLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsIndsIjo0NSwicGhhc2UiOjAsImFuZ2xlIjowLCJza2V3IjowfSx7InR5cGUiOiJzeW0iLCJraW5kIjoiZS1zcXVhcmUiLCJ4Ijo3MjIsInkiOjEyMiwidyI6MTM1LCJoIjo0MCwicm90IjowLCJmeCI6ZmFsc2UsImZ5IjpmYWxzZSwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJ3bCI6NDUsInBoYXNlIjowLCJkdXR5Ijo1MCwiYW5nbGUiOjAsInNrZXciOjB9LHsidHlwZSI6InRleHQiLCJ4IjoxNzAsInkiOjIzMCwidGV4dCI6IjNEIFBMT1RTIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoicGxvdCIsIngiOjY2LCJ5IjoyNTIsInciOjIzMCwiaCI6MjAwLCJkaW0iOjMsInRpdGxlIjoiIiwieGxhYmVsIjoiJHgkIiwieWxhYmVsIjoiJHkkIiwiemxhYmVsIjoiJHokIiwiYXhpc0xpbmVzIjoiYm94IiwiZ3JpZCI6dHJ1ZSwieG1pbiI6IiIsInhtYXgiOiIiLCJ5bWluIjoiIiwieW1heCI6IiIsInptaW4iOiIiLCJ6bWF4IjoiIiwidmlldyI6WzI1LDMwXSwiY29sb3JtYXAiOiJ2aXJpZGlzIiwiY29sb3JiYXIiOmZhbHNlLCJsZWdlbmRQb3MiOiJub3J0aCBlYXN0Iiwic2VyaWVzIjpbeyJraW5kIjoic3VyZmFjZSIsInNvdXJjZSI6ImV4cHIiLCJleHByIjoiZXhwKC0oeF4yK3leMikpIiwiZGF0YSI6IiIsImRvbWFpbiI6WyItMiIsIjIiXSwieWRvbWFpbiI6WyItMiIsIjIiXSwic2FtcGxlcyI6MjUsImNvbG9yIjoiIzFlNWJkNiIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJtYXJrIjoibm9uZSIsImxlZ2VuZCI6IiIsImxldmVscyI6OCwiYmFyV2lkdGgiOjEyLCJvcGFjaXR5IjoxfV19LHsidHlwZSI6InRleHQiLCJ4Ijo1MDAsInkiOjIzMCwidGV4dCI6IlNPTElEUyBPRiBSRVZPTFVUSU9OIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoicmV2b2x2ZSIsIngiOjM2MiwieSI6MjQ4LCJ3IjoyNzYsImgiOjIxMCwiZiI6IjIgLSAoeC0xLjUpXjIvMi4yNSoxLjIiLCJnIjoiMC41IiwiYSI6IjAiLCJiIjoiMyIsImF4aXMiOiJ4Iiwic3dlZXAiOiIyNzAiLCJ2aWV3IjpbMzAsMjBdLCJheGVzIjp0cnVlLCJ6YXhpcyI6ZmFsc2UsInhsYWJlbCI6IiR4JCIsInlsYWJlbCI6IiR5JCIsInpsYWJlbCI6IiR6JCIsImhpZGRlbkVkZ2VzIjp0cnVlLCJzaG93U2xpY2UiOmZhbHNlLCJ4MCI6IiIsImR4IjoiIiwic2hvd0N1cnZlIjpmYWxzZSwiY3VydmVMYWJlbCI6IiIsInNsaWNlTGFiZWwiOiIiLCJzb2xpZENvbG9yIjoiIzJmN2ZjMSIsInJlZ2lvbkNvbG9yIjoiI2U4NzAzYSIsInNsaWNlQ29sb3IiOiIjZTg3MDNhIn0seyJ0eXBlIjoidGV4dCIsIngiOjc5MCwieSI6MjMwLCJ0ZXh0IjoiM0QgU09MSURTIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoicHJpbTNkIiwieCI6NzIwLCJ5IjoyNDgsInciOjE1MCwiaCI6MjEwLCJraW5kIjoiY29uZSIsInN0eWxlIjoic2hhZGVkIiwiYSI6IjEiLCJiIjoiMS41IiwiYyI6IjIiLCJyMiI6IjAuNiIsIm4iOiI2IiwicjEiOiIwLjgiLCJ0MSI6IjAiLCJ0MiI6IjcwIiwicDEiOiIyMCIsInAyIjoiNjAiLCJ2aWV3IjpbMzAsMjBdLCJheGVzIjpmYWxzZSwiYXhlc05lZyI6dHJ1ZSwieGxhYmVsIjoiJHgkIiwieWxhYmVsIjoiJHkkIiwiemxhYmVsIjoiJHokIiwiaGlkZGVuRWRnZXMiOnRydWUsInNvbGlkQ29sb3IiOiIjMmY3ZmMxOTkiLCJsYSI6IiRyJCIsImxiIjoiIiwibGMiOiIkaCQiLCJuYW1lIjoiIn0seyJ0eXBlIjoidGV4dCIsIngiOjE1MCwieSI6NTAwLCJ0ZXh0IjoiRkVZTk1BTiBESUFHUkFNUyIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOnRydWUsIml0YWxpYyI6ZmFsc2UsImNvbG9yIjoiIzZiNmI2YiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6ImZleW5tYW4iLCJ4Ijo1MiwieSI6NTM2LCJzcmMiOiJcXGJlZ2lue2ZleW5tYW59XG4gIFxcdmVydGV4IChpMSkgYXQgKDAsMSkge1xcKGVeLVxcKX07XG4gIFxcdmVydGV4IChpMikgYXQgKDAsLTEpIHtcXChlXitcXCl9O1xuICBcXHZlcnRleCAoYSkgYXQgKDEuMjUsMCk7XG4gIFxcdmVydGV4IChiKSBhdCAoMy4yNSwwKTtcbiAgXFx2ZXJ0ZXggKGYxKSBhdCAoNC41LDEpIHtcXChcXG11Xi1cXCl9O1xuICBcXHZlcnRleCAoZjIpIGF0ICg0LjUsLTEpIHtcXChcXG11XitcXCl9O1xuICBcXGRpYWdyYW0qIHtcbiAgICAoaTEpIC0tIFtmZXJtaW9uXSAoYSkgLS0gW2Zlcm1pb25dIChpMiksXG4gICAgKGEpIC0tIFtwaG90b24sIGVkZ2UgbGFiZWw9XFwoXFxnYW1tYVxcKSwgbW9tZW50dW0nPVxcKHFcXCldIChiKSxcbiAgICAoZjIpIC0tIFtmZXJtaW9uXSAoYikgLS0gW2Zlcm1pb25dIChmMSksXG4gIH07XG5cXGVuZHtmZXlubWFufSIsImNvbG9yIjoiIzAwMDAwMCJ9LHsidHlwZSI6InRleHQiLCJ4Ijo0MjAsInkiOjUwMCwidGV4dCI6IlRSRUVTIiwidHciOjAsInNpemUiOiJzbWFsbCIsImZvbnQiOiJkZWZhdWx0IiwiYm9sZCI6dHJ1ZSwiaXRhbGljIjpmYWxzZSwiY29sb3IiOiIjNmI2YjZiIiwib3BhY2l0eSI6MX0seyJ0eXBlIjoiZm9yZXN0IiwieCI6MzM2LCJ5Ijo1MzIsInNyYyI6IlxcYmVnaW57Zm9yZXN0fVxuICBmb3IgdHJlZT17ZHJhdywgcm91bmRlZCBjb3JuZXJzfVxuICBbUm9vdFxuICAgIFtCcmFuY2ggW0xlYWZdIFtMZWFmXV1cbiAgICBbQnJhbmNoIFtMZWFmXV1cbiAgXVxuXFxlbmR7Zm9yZXN0fSIsInNpemUiOiJsYXJnZSIsImZvbnQiOiJkZWZhdWx0IiwiY29sb3IiOiIjMDAwMDAwIn0seyJ0eXBlIjoidGV4dCIsIngiOjYyMCwieSI6NTAwLCJ0ZXh0IjoiWlgtQ0FMQ1VMVVMiLCJ0dyI6MCwic2l6ZSI6InNtYWxsIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjp0cnVlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiM2YjZiNmIiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJ6eCIsIngiOjU2MCwieSI6NTcyLCJzcmMiOiJcXGJlZ2lue1pYfVxuXFx6eE57fSBcXHJhciAmW1xcenh3Q29sXSBcXHp4WntcXGFscGhhfSBcXGFyW3IsbycsSF0gXFxhcltyLG8uXSAmW1xcenhIQ29sXSBcXHp4WC17XFxiZXRhfSBcXHJhciAmW1xcenh3Q29sXSBcXHp4Tnt9XG5cXGVuZHtaWH0iLCJjb2xvciI6IiMwMDAwMDAifSx7InR5cGUiOiJ0ZXh0IiwieCI6ODAwLCJ5Ijo1MDAsInRleHQiOiJCTE9DSCBTUEhFUkUiLCJ0dyI6MCwic2l6ZSI6InNtYWxsIiwiZm9udCI6ImRlZmF1bHQiLCJib2xkIjp0cnVlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiM2YjZiNmIiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJibG9jaCIsIngiOjc0MCwieSI6NTI0LCJzcmMiOiJcXGJlZ2lue2Jsb2Noc3BoZXJlfVtyYWRpdXM9MS41Y20sIHRpbHQ9MTUsIHJvdGF0aW9uPS0yMF1cbiAgXFxkcmF3QmFsbEdyaWRbc3R5bGU9e29wYWNpdHk9MC4zfV17MzB9ezMwfVxuICBcXGRyYXdBeGlzW3NjYWxlPTEuMywgYXhpc2Fycm93PXstPn1dezB9ezB9XG4gIFxcbGFiZWxQb2xhcltzY2FsZT0xLjQ1XXt6fXswfXswfVxuICBcXG5vZGUgYXQgKHopIHskeiR9O1xuICBcXGRyYXdTdGF0ZVBvbGFye3BzaX17NTB9ezcwfVxuICBcXG5vZGVbYWJvdmUgcmlnaHRdIGF0IChwc2kpIHskXFxwc2kkfTtcblxcZW5ke2Jsb2Noc3BoZXJlfSJ9LHsidHlwZSI6InRleHQiLCJ4Ijo0NzAsInkiOjcyMCwidGV4dCI6IkRvdWJsZS1jbGljayBhbnkgYmxvY2sgdG8gb3BlbiBpdHMgZWRpdG9yLiBTZWxlY3QgYSAzRCBmaWd1cmUgdG8gdHVybiBpdCBvciBjaGFuZ2UgaXQgaW4gdGhlIHBhbmVsLiIsInR3IjowLCJzaXplIjoic21hbGwiLCJmb250IjoiZGVmYXVsdCIsImJvbGQiOmZhbHNlLCJpdGFsaWMiOmZhbHNlLCJjb2xvciI6IiMxZTYzYzQiLCJvcGFjaXR5IjoxfV0=
+  \node[font=\small\bfseries, text=tdc1] at (4.25,-0.75) {PHYSICS};
+  \draw[line width=0.71pt, line join=round] (1,-4.25) -- (7.5,-4.25) (1,-4.34) -- (1.09,-4.25) (1.01,-4.5) -- (1.26,-4.25) (1.19,-4.5) -- (1.44,-4.25) (1.36,-4.5) -- (1.61,-4.25) (1.54,-4.5) -- (1.79,-4.25) (1.71,-4.5) -- (1.96,-4.25) (1.89,-4.5) -- (2.14,-4.25) (2.06,-4.5) -- (2.31,-4.25) (2.24,-4.5) -- (2.49,-4.25) (2.41,-4.5) -- (2.66,-4.25) (2.59,-4.5) -- (2.84,-4.25) (2.76,-4.5) -- (3.01,-4.25) (2.94,-4.5) -- (3.19,-4.25) (3.11,-4.5) -- (3.36,-4.25) (3.29,-4.5) -- (3.54,-4.25) (3.46,-4.5) -- (3.71,-4.25) (3.64,-4.5) -- (3.89,-4.25) (3.81,-4.5) -- (4.06,-4.25) (3.99,-4.5) -- (4.24,-4.25) (4.16,-4.5) -- (4.41,-4.25) (4.34,-4.5) -- (4.59,-4.25) (4.51,-4.5) -- (4.76,-4.25) (4.69,-4.5) -- (4.94,-4.25) (4.86,-4.5) -- (5.11,-4.25) (5.04,-4.5) -- (5.29,-4.25) (5.21,-4.5) -- (5.46,-4.25) (5.39,-4.5) -- (5.64,-4.25) (5.56,-4.5) -- (5.81,-4.25) (5.74,-4.5) -- (5.99,-4.25) (5.91,-4.5) -- (6.16,-4.25) (6.09,-4.5) -- (6.34,-4.25) (6.26,-4.5) -- (6.51,-4.25) (6.44,-4.5) -- (6.69,-4.25) (6.61,-4.5) -- (6.86,-4.25) (6.79,-4.5) -- (7.04,-4.25) (6.96,-4.5) -- (7.21,-4.25) (7.14,-4.5) -- (7.39,-4.25) (7.31,-4.5) -- (7.5,-4.31);
+  \draw[line width=0.71pt, line join=round] (1.25,-2.97) -- (3.25,-2.97) -- (3.25,-3.76) -- (1.25,-3.76) -- (1.25,-2.97) -- cycle (1.97,-4) .. controls (1.97,-3.88) and (1.87,-3.78) .. (1.75,-3.78) .. controls (1.63,-3.78) and (1.53,-3.88) .. (1.53,-4) .. controls (1.53,-4.13) and (1.63,-4.22) .. (1.75,-4.22) .. controls (1.87,-4.22) and (1.97,-4.13) .. (1.97,-4) -- cycle (2.97,-4) .. controls (2.97,-3.88) and (2.87,-3.78) .. (2.75,-3.78) .. controls (2.63,-3.78) and (2.53,-3.88) .. (2.53,-4) .. controls (2.53,-4.13) and (2.63,-4.22) .. (2.75,-4.22) .. controls (2.87,-4.22) and (2.97,-4.13) .. (2.97,-4) -- cycle;
+  \draw[line width=0.71pt, -{Stealth}] (3.28,-3.6) -- node[auto, pos=0.5] {$\vec F$} (4.7,-3.6);
+  \draw[line width=0.71pt, line join=round] (5.35,-1.35) -- (6.45,-1.35) (5.35,-1.24) -- (5.44,-1.15) (5.41,-1.35) -- (5.61,-1.15) (5.59,-1.35) -- (5.79,-1.15) (5.76,-1.35) -- (5.96,-1.15) (5.94,-1.35) -- (6.14,-1.15) (6.11,-1.35) -- (6.31,-1.15) (6.29,-1.35) -- (6.45,-1.19) (5.9,-1.35) -- (7,-3.76) (5.9,-1.35) -- (5.9,-1.45) (5.9,-1.52) -- (5.9,-1.62) (5.9,-1.7) -- (5.9,-1.8) (5.9,-1.87) -- (5.9,-1.97) (5.9,-2.05) -- (5.9,-2.15) (5.9,-2.22) -- (5.9,-2.33) (5.9,-2.4) -- (5.9,-2.5) (5.9,-2.57) -- (5.9,-2.67) (5.9,-2.75) -- (5.9,-2.85) (5.9,-2.92) -- (5.9,-3.02) (5.9,-3.1) -- (5.9,-3.2) (5.9,-3.27) -- (5.9,-3.37) (5.9,-3.45) -- (5.9,-3.55) (5.9,-3.62) -- (5.9,-3.72) (5.9,-3.8) -- (5.9,-3.9) (5.9,-3.97) -- (5.9,-4.07) (5.9,-4.15) -- (5.9,-4.2) (5.9,-2.05) .. controls (6,-2.05) and (6.1,-2.03) .. (6.19,-1.99);
+  \fill[black] (7.29,-3.94) .. controls (7.29,-3.83) and (7.2,-3.74) .. (7.09,-3.74) .. controls (6.98,-3.74) and (6.89,-3.83) .. (6.89,-3.94) .. controls (6.89,-4.05) and (6.98,-4.14) .. (7.09,-4.14) .. controls (7.2,-4.14) and (7.29,-4.05) .. (7.29,-3.94) -- cycle;
+  \node[font=\scriptsize] at (6.1,-2.25) {$\theta$};
+  \node[font=\small\bfseries, text=tdc1] at (12.5,-0.75) {OPTICS};
+  \draw[draw=tdc1, line width=0.71pt, dashed] (9.3,-2.75) -- (15.8,-2.75);
+  \draw[line width=0.71pt, line join=round] (10.12,-2.75) -- (10.4,-2.75) (10.07,-2.87) -- (10.27,-3.07) (9.95,-2.92) -- (9.95,-3.2) (9.83,-2.87) -- (9.63,-3.07) (9.78,-2.75) -- (9.5,-2.75) (9.83,-2.63) -- (9.63,-2.43) (9.95,-2.58) -- (9.95,-2.3) (10.07,-2.63) -- (10.27,-2.43);
+  \fill[black] (10.03,-2.75) .. controls (10.03,-2.71) and (9.99,-2.67) .. (9.95,-2.67) .. controls (9.91,-2.67) and (9.88,-2.71) .. (9.88,-2.75) .. controls (9.88,-2.79) and (9.91,-2.82) .. (9.95,-2.82) .. controls (9.99,-2.82) and (10.03,-2.79) .. (10.03,-2.75) -- cycle;
+  \draw[line width=0.71pt, line join=round] (12.55,-1.37) -- (12.55,-1.37) .. controls (12.95,-2.25) and (12.95,-3.25) .. (12.55,-4.12) -- (12.55,-4.12) .. controls (12.15,-3.25) and (12.15,-2.25) .. (12.55,-1.37) -- cycle;
+  \draw[line width=0.71pt, line join=round] (15.25,-1.37) -- (15.5,-1.37) -- (15.5,-4.12) -- (15.25,-4.12) -- (15.25,-1.37) -- cycle (15.25,-1.46) -- (15.34,-1.37) (15.25,-1.64) -- (15.5,-1.39) (15.25,-1.81) -- (15.5,-1.56) (15.25,-1.99) -- (15.5,-1.74) (15.25,-2.16) -- (15.5,-1.91) (15.25,-2.34) -- (15.5,-2.09) (15.25,-2.51) -- (15.5,-2.26) (15.25,-2.69) -- (15.5,-2.44) (15.25,-2.86) -- (15.5,-2.61) (15.25,-3.04) -- (15.5,-2.79) (15.25,-3.21) -- (15.5,-2.96) (15.25,-3.39) -- (15.5,-3.14) (15.25,-3.56) -- (15.5,-3.31) (15.25,-3.74) -- (15.5,-3.49) (15.25,-3.91) -- (15.5,-3.66) (15.25,-4.09) -- (15.5,-3.84) (15.39,-4.12) -- (15.5,-4.01);
+  \draw[draw=tdc8, line width=0.71pt] (10.15,-2.75) -- (12.55,-1.6);
+  \draw[draw=tdc8, line width=0.71pt, -{Stealth}] (12.55,-1.6) -- (15.25,-2.75);
+  \draw[draw=tdc8, line width=0.71pt] (10.15,-2.75) -- (12.55,-3.9);
+  \draw[draw=tdc8, line width=0.71pt, -{Stealth}] (12.55,-3.9) -- (15.25,-2.75);
+  \node[font=\small\bfseries, text=tdc1] at (19.75,-0.75) {WAVEFORMS};
+  \draw[line width=0.71pt, line join=round] (18.05,-1.95) .. controls (18.1,-1.82) and (18.14,-1.69) .. (18.19,-1.6) .. controls (18.24,-1.5) and (18.28,-1.45) .. (18.33,-1.45) .. controls (18.38,-1.45) and (18.43,-1.5) .. (18.47,-1.6) .. controls (18.52,-1.69) and (18.57,-1.82) .. (18.61,-1.95) .. controls (18.66,-2.08) and (18.71,-2.21) .. (18.75,-2.3) .. controls (18.8,-2.4) and (18.85,-2.45) .. (18.89,-2.45) .. controls (18.94,-2.45) and (18.99,-2.4) .. (19.03,-2.3) .. controls (19.08,-2.21) and (19.13,-2.08) .. (19.18,-1.95) .. controls (19.22,-1.82) and (19.27,-1.69) .. (19.32,-1.6) .. controls (19.36,-1.5) and (19.41,-1.45) .. (19.46,-1.45) .. controls (19.5,-1.45) and (19.55,-1.5) .. (19.6,-1.6) .. controls (19.64,-1.69) and (19.69,-1.82) .. (19.74,-1.95) .. controls (19.78,-2.08) and (19.83,-2.21) .. (19.88,-2.3) .. controls (19.93,-2.4) and (19.97,-2.45) .. (20.02,-2.45) .. controls (20.07,-2.45) and (20.11,-2.4) .. (20.16,-2.3) .. controls (20.21,-2.21) and (20.25,-2.08) .. (20.3,-1.95) .. controls (20.35,-1.82) and (20.39,-1.69) .. (20.44,-1.6) .. controls (20.49,-1.5) and (20.53,-1.45) .. (20.58,-1.45) .. controls (20.63,-1.45) and (20.68,-1.5) .. (20.72,-1.6) .. controls (20.77,-1.69) and (20.82,-1.82) .. (20.86,-1.95) .. controls (20.91,-2.08) and (20.96,-2.21) .. (21,-2.3) .. controls (21.05,-2.4) and (21.1,-2.45) .. (21.14,-2.45) .. controls (21.19,-2.45) and (21.24,-2.4) .. (21.28,-2.3) .. controls (21.33,-2.21) and (21.38,-2.08) .. (21.43,-1.95);
+  \draw[line width=0.71pt, line join=round] (18.05,-3.05) -- (18.61,-3.05) -- (18.61,-4.05) -- (19.18,-4.05) -- (19.18,-3.05) -- (19.74,-3.05) -- (19.74,-4.05) -- (20.3,-4.05) -- (20.3,-3.05) -- (20.86,-3.05) -- (20.86,-4.05) -- (21.43,-4.05);
+  \node[font=\small\bfseries, text=tdc1] at (4.25,-5.75) {3D PLOTS};
+  \begin{axis}[
+    at={(1.65cm,-11.3cm)},
+    anchor=south west,
+    scale only axis,
+    width=5.75cm,
+    height=5cm,
+    xmin=-2,
+    xmax=2,
+    ymin=-2,
+    ymax=2,
+    zmin=0.0003,
+    zmax=1,
+    view={25}{30},
+    xtick={-2,-1,0,1,2},
+    ytick={-2,-1,0,1,2},
+    ztick={0.2,0.4,0.6,0.8,1},
+    grid=major,
+    xlabel={$x$},
+    ylabel={$y$},
+    zlabel={$z$},
+    colormap={tdmap}{rgb255(0cm)=(68,1,84); rgb255(1cm)=(59,82,139); rgb255(2cm)=(33,145,140); rgb255(3cm)=(94,201,98); rgb255(4cm)=(253,231,37)},
+    point meta min=0.0003,
+    point meta max=1
+  ]
+    \addplot3[surf, shader=faceted, domain=-2:2, y domain=-2:2, samples=25, forget plot] {exp((-((x)^(2)+(y)^(2))))};
+  \end{axis}
+  \node[font=\small\bfseries, text=tdc1] at (12.5,-5.75) {SOLIDS OF REVOLUTION};
+  \draw[line width=0.6pt, -{Stealth[length=4pt]}, line join=round] (10.79,-8.96) -- (14.31,-9.65);
+  \node at (14.55,-9.7) {$x$};
+  \draw[line width=0.6pt, -{Stealth[length=4pt]}, line join=round] (11.03,-11.02) -- (11.03,-6.55);
+  \node at (11.03,-6.25) {$y$};
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (11.24,-9.09) -- (11.38,-9.12) -- (11.39,-9.04) -- (11.26,-9.01) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.26,-9.01) -- (11.24,-9.09);
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.22,-9.17) -- (11.35,-9.19) -- (11.38,-9.12) -- (11.24,-9.09) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.24,-9.09) -- (11.22,-9.17);
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (11.26,-9.01) -- (11.39,-9.04) -- (11.4,-8.96) -- (11.27,-8.93) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.27,-8.93) -- (11.26,-9.01);
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (11.19,-9.24) -- (11.33,-9.27) -- (11.35,-9.19) -- (11.22,-9.17) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.22,-9.17) -- (11.19,-9.24);
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (11.27,-8.93) -- (11.4,-8.96) -- (11.4,-8.88) -- (11.27,-8.85) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.27,-8.85) -- (11.27,-8.93);
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (11.27,-8.85) -- (11.4,-8.88) -- (11.4,-8.81) -- (11.26,-8.78) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.26,-8.78) -- (11.27,-8.85);
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.16,-9.3) -- (11.29,-9.33) -- (11.33,-9.27) -- (11.19,-9.24) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.19,-9.24) -- (11.16,-9.3);
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (11.38,-9.12) -- (11.51,-9.14) -- (11.53,-9.06) -- (11.39,-9.04) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.35,-9.19) -- (11.49,-9.22) -- (11.51,-9.14) -- (11.38,-9.12) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (11.39,-9.04) -- (11.53,-9.06) -- (11.54,-8.98) -- (11.4,-8.96) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (11.26,-8.78) -- (11.4,-8.81) -- (11.39,-8.74) -- (11.25,-8.71) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.25,-8.71) -- (11.26,-8.78);
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (11.12,-9.36) -- (11.26,-9.39) -- (11.29,-9.33) -- (11.16,-9.3) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.16,-9.3) -- (11.12,-9.36);
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (11.33,-9.27) -- (11.46,-9.29) -- (11.49,-9.22) -- (11.35,-9.19) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (11.4,-8.96) -- (11.54,-8.98) -- (11.54,-8.9) -- (11.4,-8.88) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (11.4,-8.88) -- (11.54,-8.9) -- (11.53,-8.83) -- (11.4,-8.81) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.29,-9.33) -- (11.43,-9.36) -- (11.46,-9.29) -- (11.33,-9.27) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (11.51,-9.14) -- (11.65,-9.17) -- (11.66,-9.09) -- (11.53,-9.06) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (11.25,-8.71) -- (11.39,-8.74) -- (11.37,-8.68) -- (11.23,-8.66) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.23,-8.66) -- (11.25,-8.71);
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (11.08,-9.41) -- (11.22,-9.43) -- (11.26,-9.39) -- (11.12,-9.36) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.12,-9.36) -- (11.08,-9.41);
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (11.53,-9.06) -- (11.66,-9.09) -- (11.67,-9.01) -- (11.54,-8.98) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.49,-9.22) -- (11.62,-9.25) -- (11.65,-9.17) -- (11.51,-9.14) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (11.4,-8.81) -- (11.53,-8.83) -- (11.52,-8.77) -- (11.39,-8.74) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (11.26,-9.39) -- (11.39,-9.41) -- (11.43,-9.36) -- (11.29,-9.33) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (11.54,-8.98) -- (11.67,-9.01) -- (11.67,-8.93) -- (11.54,-8.9) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (11.46,-9.29) -- (11.6,-9.32) -- (11.62,-9.25) -- (11.49,-9.22) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (11.54,-8.9) -- (11.67,-8.93) -- (11.67,-8.86) -- (11.53,-8.83) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.43,-9.36) -- (11.56,-9.38) -- (11.6,-9.32) -- (11.46,-9.29) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (11.23,-8.66) -- (11.37,-8.68) -- (11.34,-8.64) -- (11.21,-8.61) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.21,-8.61) -- (11.23,-8.66);
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.04,-9.44) -- (11.18,-9.47) -- (11.22,-9.43) -- (11.08,-9.41) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.08,-9.41) -- (11.04,-9.44);
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (11.65,-9.17) -- (11.78,-9.2) -- (11.8,-9.12) -- (11.66,-9.09) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (11.39,-8.74) -- (11.52,-8.77) -- (11.5,-8.71) -- (11.37,-8.68) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (11.22,-9.43) -- (11.35,-9.46) -- (11.39,-9.41) -- (11.26,-9.39) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (11.66,-9.09) -- (11.8,-9.12) -- (11.81,-9.04) -- (11.67,-9.01) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.62,-9.25) -- (11.76,-9.27) -- (11.78,-9.2) -- (11.65,-9.17) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (11.53,-8.83) -- (11.67,-8.86) -- (11.66,-8.79) -- (11.52,-8.77) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (11.39,-9.41) -- (11.53,-9.44) -- (11.56,-9.38) -- (11.43,-9.36) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (11.67,-9.01) -- (11.81,-9.04) -- (11.81,-8.96) -- (11.67,-8.93) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (11.6,-9.32) -- (11.73,-9.35) -- (11.76,-9.27) -- (11.62,-9.25) -- cycle;
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (11.21,-8.61) -- (11.34,-8.64) -- (11.31,-8.6) -- (11.18,-8.57) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.18,-8.57) -- (11.21,-8.61);
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11,-9.46) -- (11.14,-9.49) -- (11.18,-9.47) -- (11.04,-9.44) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.04,-9.44) -- (11,-9.46);
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (11.67,-8.93) -- (11.81,-8.96) -- (11.8,-8.88) -- (11.67,-8.86) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.56,-9.38) -- (11.7,-9.41) -- (11.73,-9.35) -- (11.6,-9.32) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (11.37,-8.68) -- (11.5,-8.71) -- (11.48,-8.66) -- (11.34,-8.64) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.18,-9.47) -- (11.31,-9.49) -- (11.35,-9.46) -- (11.22,-9.43) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (11.78,-9.2) -- (11.92,-9.22) -- (11.93,-9.14) -- (11.8,-9.12) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (11.52,-8.77) -- (11.66,-8.79) -- (11.64,-8.74) -- (11.5,-8.71) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (11.35,-9.46) -- (11.49,-9.49) -- (11.53,-9.44) -- (11.39,-9.41) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (11.8,-9.12) -- (11.93,-9.14) -- (11.94,-9.06) -- (11.81,-9.04) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.76,-9.27) -- (11.89,-9.3) -- (11.92,-9.22) -- (11.78,-9.2) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (11.67,-8.86) -- (11.8,-8.88) -- (11.79,-8.82) -- (11.66,-8.79) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (11.53,-9.44) -- (11.66,-9.47) -- (11.7,-9.41) -- (11.56,-9.38) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (11.81,-9.04) -- (11.94,-9.06) -- (11.94,-8.98) -- (11.81,-8.96) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (11.73,-9.35) -- (11.87,-9.37) -- (11.89,-9.3) -- (11.76,-9.27) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (11.18,-8.57) -- (11.31,-8.6) -- (11.28,-8.58) -- (11.14,-8.55) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.28,-8.58) -- (11.14,-8.55);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.14,-8.55) -- (11.18,-8.57);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (10.96,-9.47) -- (11.1,-9.49) -- (11.14,-9.49) -- (11,-9.46) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.1,-9.49) -- (10.96,-9.47);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11,-9.46) -- (10.96,-9.47);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (11.34,-8.64) -- (11.48,-8.66) -- (11.45,-8.63) -- (11.31,-8.6) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11.14,-9.49) -- (11.27,-9.51) -- (11.31,-9.49) -- (11.18,-9.47) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (11.81,-8.96) -- (11.94,-8.98) -- (11.94,-8.91) -- (11.8,-8.88) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.7,-9.41) -- (11.83,-9.44) -- (11.87,-9.37) -- (11.73,-9.35) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (11.5,-8.71) -- (11.64,-8.74) -- (11.61,-8.69) -- (11.48,-8.66) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.31,-9.49) -- (11.45,-9.52) -- (11.49,-9.49) -- (11.35,-9.46) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (11.92,-9.22) -- (12.05,-9.25) -- (12.07,-9.17) -- (11.93,-9.14) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (11.66,-8.79) -- (11.79,-8.82) -- (11.77,-8.76) -- (11.64,-8.74) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (11.49,-9.49) -- (11.62,-9.51) -- (11.66,-9.47) -- (11.53,-9.44) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (11.93,-9.14) -- (12.07,-9.17) -- (12.08,-9.09) -- (11.94,-9.06) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.89,-9.3) -- (12.03,-9.33) -- (12.05,-9.25) -- (11.92,-9.22) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (11.8,-8.88) -- (11.94,-8.91) -- (11.93,-8.85) -- (11.79,-8.82) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (11.66,-9.47) -- (11.8,-9.49) -- (11.83,-9.44) -- (11.7,-9.41) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (11.94,-9.06) -- (12.08,-9.09) -- (12.08,-9.01) -- (11.94,-8.98) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (11.87,-9.37) -- (12,-9.4) -- (12.03,-9.33) -- (11.89,-9.3) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (11.31,-8.6) -- (11.45,-8.63) -- (11.41,-8.61) -- (11.28,-8.58) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.41,-8.61) -- (11.28,-8.58);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (11.1,-9.49) -- (11.23,-9.52) -- (11.27,-9.51) -- (11.14,-9.49) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.23,-9.52) -- (11.1,-9.49);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (11.48,-8.66) -- (11.61,-8.69) -- (11.58,-8.65) -- (11.45,-8.63) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11.27,-9.51) -- (11.41,-9.54) -- (11.45,-9.52) -- (11.31,-9.49) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (11.94,-8.98) -- (12.08,-9.01) -- (12.07,-8.94) -- (11.94,-8.91) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.83,-9.44) -- (11.97,-9.46) -- (12,-9.4) -- (11.87,-9.37) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (11.64,-8.74) -- (11.77,-8.76) -- (11.75,-8.72) -- (11.61,-8.69) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.45,-9.52) -- (11.58,-9.55) -- (11.62,-9.51) -- (11.49,-9.49) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.05,-9.25) -- (12.19,-9.28) -- (12.2,-9.2) -- (12.07,-9.17) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (11.79,-8.82) -- (11.93,-8.85) -- (11.91,-8.79) -- (11.77,-8.76) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (11.62,-9.51) -- (11.76,-9.54) -- (11.8,-9.49) -- (11.66,-9.47) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.07,-9.17) -- (12.2,-9.2) -- (12.21,-9.12) -- (12.08,-9.09) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.03,-9.33) -- (12.16,-9.35) -- (12.19,-9.28) -- (12.05,-9.25) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (11.94,-8.91) -- (12.07,-8.94) -- (12.06,-8.87) -- (11.93,-8.85) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (11.8,-9.49) -- (11.93,-9.52) -- (11.97,-9.46) -- (11.83,-9.44) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.08,-9.09) -- (12.21,-9.12) -- (12.21,-9.04) -- (12.08,-9.01) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12,-9.4) -- (12.14,-9.43) -- (12.16,-9.35) -- (12.03,-9.33) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (11.45,-8.63) -- (11.58,-8.65) -- (11.55,-8.63) -- (11.41,-8.61) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.55,-8.63) -- (11.41,-8.61);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (11.23,-9.52) -- (11.37,-9.55) -- (11.41,-9.54) -- (11.27,-9.51) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.37,-9.55) -- (11.23,-9.52);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (11.61,-8.69) -- (11.75,-8.72) -- (11.72,-8.68) -- (11.58,-8.65) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11.41,-9.54) -- (11.54,-9.57) -- (11.58,-9.55) -- (11.45,-9.52) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.08,-9.01) -- (12.21,-9.04) -- (12.21,-8.96) -- (12.07,-8.94) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (11.97,-9.46) -- (12.1,-9.49) -- (12.14,-9.43) -- (12,-9.4) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (11.77,-8.76) -- (11.91,-8.79) -- (11.88,-8.74) -- (11.75,-8.72) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.58,-9.55) -- (11.72,-9.57) -- (11.76,-9.54) -- (11.62,-9.51) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.19,-9.28) -- (12.32,-9.3) -- (12.34,-9.22) -- (12.2,-9.2) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (11.93,-8.85) -- (12.06,-8.87) -- (12.04,-8.82) -- (11.91,-8.79) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (11.76,-9.54) -- (11.89,-9.57) -- (11.93,-9.52) -- (11.8,-9.49) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.2,-9.2) -- (12.34,-9.22) -- (12.34,-9.14) -- (12.21,-9.12) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.16,-9.35) -- (12.3,-9.38) -- (12.32,-9.3) -- (12.19,-9.28) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.07,-8.94) -- (12.21,-8.96) -- (12.19,-8.9) -- (12.06,-8.87) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (11.93,-9.52) -- (12.07,-9.55) -- (12.1,-9.49) -- (11.97,-9.46) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.21,-9.12) -- (12.34,-9.14) -- (12.35,-9.06) -- (12.21,-9.04) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12.14,-9.43) -- (12.27,-9.45) -- (12.3,-9.38) -- (12.16,-9.35) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (11.58,-8.65) -- (11.72,-8.68) -- (11.68,-8.66) -- (11.55,-8.63) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.68,-8.66) -- (11.55,-8.63);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (11.37,-9.55) -- (11.5,-9.57) -- (11.54,-9.57) -- (11.41,-9.54) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.5,-9.57) -- (11.37,-9.55);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (11.75,-8.72) -- (11.88,-8.74) -- (11.85,-8.71) -- (11.72,-8.68) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11.54,-9.57) -- (11.68,-9.59) -- (11.72,-9.57) -- (11.58,-9.55) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.21,-9.04) -- (12.35,-9.06) -- (12.34,-8.99) -- (12.21,-8.96) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.1,-9.49) -- (12.24,-9.52) -- (12.27,-9.45) -- (12.14,-9.43) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (11.91,-8.79) -- (12.04,-8.82) -- (12.02,-8.77) -- (11.88,-8.74) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.72,-9.57) -- (11.85,-9.6) -- (11.89,-9.57) -- (11.76,-9.54) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.32,-9.3) -- (12.45,-9.33) -- (12.47,-9.25) -- (12.34,-9.22) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (12.06,-8.87) -- (12.19,-8.9) -- (12.18,-8.84) -- (12.04,-8.82) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (11.89,-9.57) -- (12.03,-9.59) -- (12.07,-9.55) -- (11.93,-9.52) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.34,-9.22) -- (12.47,-9.25) -- (12.48,-9.17) -- (12.34,-9.14) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.3,-9.38) -- (12.43,-9.41) -- (12.45,-9.33) -- (12.32,-9.3) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.21,-8.96) -- (12.34,-8.99) -- (12.33,-8.93) -- (12.19,-8.9) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (12.07,-9.55) -- (12.2,-9.57) -- (12.24,-9.52) -- (12.1,-9.49) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12.27,-9.45) -- (12.41,-9.48) -- (12.43,-9.41) -- (12.3,-9.38) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.34,-9.14) -- (12.48,-9.17) -- (12.48,-9.09) -- (12.35,-9.06) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (11.72,-8.68) -- (11.85,-8.71) -- (11.82,-8.69) -- (11.68,-8.66) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.82,-8.69) -- (11.68,-8.66);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (11.5,-9.57) -- (11.64,-9.6) -- (11.68,-9.59) -- (11.54,-9.57) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.64,-9.6) -- (11.5,-9.57);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (11.88,-8.74) -- (12.02,-8.77) -- (11.99,-8.73) -- (11.85,-8.71) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11.68,-9.59) -- (11.81,-9.62) -- (11.85,-9.6) -- (11.72,-9.57) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.35,-9.06) -- (12.48,-9.09) -- (12.48,-9.02) -- (12.34,-8.99) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.24,-9.52) -- (12.37,-9.54) -- (12.41,-9.48) -- (12.27,-9.45) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.04,-8.82) -- (12.18,-8.84) -- (12.15,-8.8) -- (12.02,-8.77) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.85,-9.6) -- (11.99,-9.63) -- (12.03,-9.59) -- (11.89,-9.57) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.45,-9.33) -- (12.59,-9.36) -- (12.61,-9.28) -- (12.47,-9.25) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (12.19,-8.9) -- (12.33,-8.93) -- (12.31,-8.87) -- (12.18,-8.84) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.03,-9.59) -- (12.16,-9.62) -- (12.2,-9.57) -- (12.07,-9.55) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.43,-9.41) -- (12.57,-9.43) -- (12.59,-9.36) -- (12.45,-9.33) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.47,-9.25) -- (12.61,-9.28) -- (12.61,-9.2) -- (12.48,-9.17) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.34,-8.99) -- (12.48,-9.02) -- (12.46,-8.95) -- (12.33,-8.93) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (12.2,-9.57) -- (12.34,-9.6) -- (12.37,-9.54) -- (12.24,-9.52) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12.41,-9.48) -- (12.54,-9.5) -- (12.57,-9.43) -- (12.43,-9.41) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.48,-9.17) -- (12.61,-9.2) -- (12.62,-9.12) -- (12.48,-9.09) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (11.85,-8.71) -- (11.99,-8.73) -- (11.95,-8.71) -- (11.82,-8.69) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.95,-8.71) -- (11.82,-8.69);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (11.64,-9.6) -- (11.77,-9.63) -- (11.81,-9.62) -- (11.68,-9.59) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.77,-9.63) -- (11.64,-9.6);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.02,-8.77) -- (12.15,-8.8) -- (12.12,-8.76) -- (11.99,-8.73) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11.81,-9.62) -- (11.95,-9.65) -- (11.99,-9.63) -- (11.85,-9.6) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.48,-9.09) -- (12.62,-9.12) -- (12.61,-9.04) -- (12.48,-9.02) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.37,-9.54) -- (12.51,-9.57) -- (12.54,-9.5) -- (12.41,-9.48) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.18,-8.84) -- (12.31,-8.87) -- (12.29,-8.82) -- (12.15,-8.8) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.99,-9.63) -- (12.12,-9.65) -- (12.16,-9.62) -- (12.03,-9.59) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.59,-9.36) -- (12.72,-9.38) -- (12.74,-9.3) -- (12.61,-9.28) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (12.33,-8.93) -- (12.46,-8.95) -- (12.45,-8.9) -- (12.31,-8.87) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.16,-9.62) -- (12.3,-9.65) -- (12.34,-9.6) -- (12.2,-9.57) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.57,-9.43) -- (12.7,-9.46) -- (12.72,-9.38) -- (12.59,-9.36) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.61,-9.28) -- (12.74,-9.3) -- (12.75,-9.22) -- (12.61,-9.2) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.48,-9.02) -- (12.61,-9.04) -- (12.6,-8.98) -- (12.46,-8.95) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (12.34,-9.6) -- (12.47,-9.63) -- (12.51,-9.57) -- (12.37,-9.54) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12.54,-9.5) -- (12.67,-9.53) -- (12.7,-9.46) -- (12.57,-9.43) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.61,-9.2) -- (12.75,-9.22) -- (12.75,-9.14) -- (12.62,-9.12) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (11.99,-8.73) -- (12.12,-8.76) -- (12.09,-8.74) -- (11.95,-8.71) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.09,-8.74) -- (11.95,-8.71);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (11.77,-9.63) -- (11.91,-9.65) -- (11.95,-9.65) -- (11.81,-9.62) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.91,-9.65) -- (11.77,-9.63);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.15,-8.8) -- (12.29,-8.82) -- (12.26,-8.79) -- (12.12,-8.76) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (11.95,-9.65) -- (12.08,-9.67) -- (12.12,-9.65) -- (11.99,-9.63) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.62,-9.12) -- (12.75,-9.14) -- (12.75,-9.07) -- (12.61,-9.04) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.51,-9.57) -- (12.64,-9.6) -- (12.67,-9.53) -- (12.54,-9.5) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.31,-8.87) -- (12.45,-8.9) -- (12.42,-8.85) -- (12.29,-8.82) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.12,-9.65) -- (12.26,-9.68) -- (12.3,-9.65) -- (12.16,-9.62) -- cycle;
+  \filldraw[fill=tdc9!87!black, draw=tdc9!87!black, line width=0.2pt, line join=round] (13.64,-8.38) -- (13.57,-8.24) -- (13.49,-8.08) -- (13.56,-8.24) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.57,-8.24) -- (13.64,-8.38);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.57,-8.24) -- (13.49,-8.08);
+  \filldraw[fill=tdc9!71!black, draw=tdc9!71!black, line width=0.2pt, line join=round] (13.08,-10.68) -- (12.95,-10.79) -- (13.08,-10.68) -- (13.2,-10.58) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.95,-10.79) -- (13.08,-10.68);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.08,-10.68) -- (13.2,-10.58);
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.72,-9.38) -- (12.86,-9.41) -- (12.88,-9.33) -- (12.74,-9.3) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (12.46,-8.95) -- (12.6,-8.98) -- (12.58,-8.92) -- (12.45,-8.9) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.3,-9.65) -- (12.43,-9.67) -- (12.47,-9.63) -- (12.34,-9.6) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.7,-9.46) -- (12.84,-9.49) -- (12.86,-9.41) -- (12.72,-9.38) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.74,-9.3) -- (12.88,-9.33) -- (12.88,-9.25) -- (12.75,-9.22) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.61,-9.04) -- (12.75,-9.07) -- (12.73,-9.01) -- (12.6,-8.98) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (12.47,-9.63) -- (12.61,-9.65) -- (12.64,-9.6) -- (12.51,-9.57) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.75,-9.22) -- (12.88,-9.25) -- (12.89,-9.17) -- (12.75,-9.14) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12.67,-9.53) -- (12.81,-9.56) -- (12.84,-9.49) -- (12.7,-9.46) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.12,-8.76) -- (12.26,-8.79) -- (12.22,-8.77) -- (12.09,-8.74) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.22,-8.77) -- (12.09,-8.74);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (11.91,-9.65) -- (12.04,-9.68) -- (12.08,-9.67) -- (11.95,-9.65) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.04,-9.68) -- (11.91,-9.65);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.29,-8.82) -- (12.42,-8.85) -- (12.39,-8.81) -- (12.26,-8.79) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (12.08,-9.67) -- (12.22,-9.7) -- (12.26,-9.68) -- (12.12,-9.65) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.75,-9.14) -- (12.89,-9.17) -- (12.88,-9.1) -- (12.75,-9.07) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.64,-9.6) -- (12.78,-9.62) -- (12.81,-9.56) -- (12.67,-9.53) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.45,-8.9) -- (12.58,-8.92) -- (12.56,-8.88) -- (12.42,-8.85) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.26,-9.68) -- (12.39,-9.71) -- (12.43,-9.67) -- (12.3,-9.65) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.86,-9.41) -- (12.99,-9.43) -- (13.01,-9.36) -- (12.88,-9.33) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.43,-9.67) -- (12.57,-9.7) -- (12.61,-9.65) -- (12.47,-9.63) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (12.6,-8.98) -- (12.73,-9.01) -- (12.72,-8.95) -- (12.58,-8.92) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.84,-9.49) -- (12.97,-9.51) -- (12.99,-9.43) -- (12.86,-9.41) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.88,-9.33) -- (13.01,-9.36) -- (13.02,-9.28) -- (12.88,-9.25) -- cycle;
+  \filldraw[fill=tdc9!93!black, draw=tdc9!93!black, line width=0.2pt, line join=round] (13.49,-8.08) -- (13.4,-7.95) -- (13.29,-7.83) -- (13.39,-7.97) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.4,-7.95) -- (13.49,-8.08);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.4,-7.95) -- (13.29,-7.83);
+  \filldraw[fill=tdc9!74!black, draw=tdc9!74!black, line width=0.2pt, line join=round] (12.82,-10.86) -- (12.68,-10.95) -- (12.82,-10.88) -- (12.95,-10.79) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.68,-10.95) -- (12.82,-10.88);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.82,-10.88) -- (12.95,-10.79);
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.75,-9.07) -- (12.88,-9.1) -- (12.87,-9.03) -- (12.73,-9.01) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (12.61,-9.65) -- (12.74,-9.68) -- (12.78,-9.62) -- (12.64,-9.6) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.88,-9.25) -- (13.02,-9.28) -- (13.02,-9.2) -- (12.89,-9.17) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12.81,-9.56) -- (12.94,-9.58) -- (12.97,-9.51) -- (12.84,-9.49) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.26,-8.79) -- (12.39,-8.81) -- (12.36,-8.79) -- (12.22,-8.77) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.36,-8.79) -- (12.22,-8.77);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.04,-9.68) -- (12.18,-9.71) -- (12.22,-9.7) -- (12.08,-9.67) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.18,-9.71) -- (12.04,-9.68);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.42,-8.85) -- (12.56,-8.88) -- (12.53,-8.84) -- (12.39,-8.81) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (12.22,-9.7) -- (12.35,-9.73) -- (12.39,-9.71) -- (12.26,-9.68) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.89,-9.17) -- (13.02,-9.2) -- (13.02,-9.12) -- (12.88,-9.1) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.78,-9.62) -- (12.91,-9.65) -- (12.94,-9.58) -- (12.81,-9.56) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.58,-8.92) -- (12.72,-8.95) -- (12.69,-8.9) -- (12.56,-8.88) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.39,-9.71) -- (12.53,-9.73) -- (12.57,-9.7) -- (12.43,-9.67) -- cycle;
+  \filldraw[fill=tdc9!98!white, draw=tdc9!98!white, line width=0.2pt, line join=round] (13.19,-7.71) -- (13.07,-7.62) -- (12.94,-7.54) -- (13.06,-7.64) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.07,-7.62) -- (13.19,-7.71);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.07,-7.62) -- (12.94,-7.54);
+  \filldraw[fill=tdc9!78!black, draw=tdc9!78!black, line width=0.2pt, line join=round] (12.39,-11.04) -- (12.24,-11.09) -- (12.39,-11.06) -- (12.53,-11.02) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.24,-11.09) -- (12.39,-11.06);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.39,-11.06) -- (12.53,-11.02);
+  \filldraw[fill=tdc9!87!black, draw=tdc9!87!black, line width=0.2pt, line join=round] (13.7,-8.54) -- (13.64,-8.38) -- (13.56,-8.24) -- (13.63,-8.42) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.64,-8.38) -- (13.7,-8.54);
+  \filldraw[fill=tdc9!73!black, draw=tdc9!73!black, line width=0.2pt, line join=round] (13.22,-10.54) -- (13.08,-10.68) -- (13.2,-10.58) -- (13.32,-10.45) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.2,-10.58) -- (13.32,-10.45);
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (12.99,-9.43) -- (13.13,-9.46) -- (13.14,-9.38) -- (13.01,-9.36) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (12.73,-9.01) -- (12.87,-9.03) -- (12.85,-8.97) -- (12.72,-8.95) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.57,-9.7) -- (12.7,-9.73) -- (12.74,-9.68) -- (12.61,-9.65) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (13.01,-9.36) -- (13.14,-9.38) -- (13.15,-9.3) -- (13.02,-9.28) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.97,-9.51) -- (13.11,-9.54) -- (13.13,-9.46) -- (12.99,-9.43) -- cycle;
+  \filldraw[fill=tdc9!83!black, draw=tdc9!83!black, line width=0.2pt, line join=round] (13.78,-8.84) -- (13.74,-8.68) -- (13.7,-8.54) -- (13.74,-8.72) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.74,-8.68) -- (13.78,-8.84);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.74,-8.68) -- (13.7,-8.54);
+  \filldraw[fill=tdc9!71!black, draw=tdc9!71!black, line width=0.2pt, line join=round] (13.43,-10.3) -- (13.32,-10.45) -- (13.42,-10.33) -- (13.51,-10.2) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.32,-10.45) -- (13.42,-10.33);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.42,-10.33) -- (13.51,-10.2);
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.88,-9.1) -- (13.02,-9.12) -- (13,-9.06) -- (12.87,-9.03) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (12.74,-9.68) -- (12.88,-9.71) -- (12.91,-9.65) -- (12.78,-9.62) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (12.94,-9.58) -- (13.08,-9.61) -- (13.11,-9.54) -- (12.97,-9.51) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (13.02,-9.28) -- (13.15,-9.3) -- (13.16,-9.22) -- (13.02,-9.2) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.39,-8.81) -- (12.53,-8.84) -- (12.49,-8.82) -- (12.36,-8.79) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.49,-8.82) -- (12.36,-8.79);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.18,-9.71) -- (12.31,-9.73) -- (12.35,-9.73) -- (12.22,-9.7) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.31,-9.73) -- (12.18,-9.71);
+  \filldraw[fill=tdc9!92!black, draw=tdc9!92!black, line width=0.2pt, line join=round] (13.56,-8.24) -- (13.49,-8.08) -- (13.39,-7.97) -- (13.48,-8.14) -- cycle;
+  \filldraw[fill=tdc9!75!black, draw=tdc9!75!black, line width=0.2pt, line join=round] (12.96,-10.74) -- (12.82,-10.86) -- (12.95,-10.79) -- (13.08,-10.68) -- cycle;
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.56,-8.88) -- (12.69,-8.9) -- (12.66,-8.87) -- (12.53,-8.84) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (12.35,-9.73) -- (12.49,-9.75) -- (12.53,-9.73) -- (12.39,-9.71) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (13.02,-9.2) -- (13.16,-9.22) -- (13.15,-9.15) -- (13.02,-9.12) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (12.91,-9.65) -- (13.05,-9.68) -- (13.08,-9.61) -- (12.94,-9.58) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.72,-8.95) -- (12.85,-8.97) -- (12.83,-8.93) -- (12.69,-8.9) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.53,-9.73) -- (12.66,-9.76) -- (12.7,-9.73) -- (12.57,-9.7) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (13.13,-9.46) -- (13.26,-9.49) -- (13.28,-9.41) -- (13.14,-9.38) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (12.87,-9.03) -- (13,-9.06) -- (12.99,-9) -- (12.85,-8.97) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.7,-9.73) -- (12.84,-9.75) -- (12.88,-9.71) -- (12.74,-9.68) -- cycle;
+  \filldraw[fill=tdc9, draw=tdc9, line width=0.2pt, line join=round] (13.29,-7.83) -- (13.19,-7.71) -- (13.06,-7.64) -- (13.17,-7.76) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.19,-7.71) -- (13.29,-7.83);
+  \filldraw[fill=tdc9!78!black, draw=tdc9!78!black, line width=0.2pt, line join=round] (12.54,-10.98) -- (12.39,-11.04) -- (12.53,-11.02) -- (12.68,-10.95) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.53,-11.02) -- (12.68,-10.95);
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (13.14,-9.38) -- (13.28,-9.41) -- (13.29,-9.33) -- (13.15,-9.3) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.11,-9.54) -- (13.24,-9.57) -- (13.26,-9.49) -- (13.13,-9.46) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (13.02,-9.12) -- (13.15,-9.15) -- (13.14,-9.09) -- (13,-9.06) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (12.88,-9.71) -- (13.01,-9.73) -- (13.05,-9.68) -- (12.91,-9.65) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (13.08,-9.61) -- (13.21,-9.64) -- (13.24,-9.57) -- (13.11,-9.54) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (13.15,-9.3) -- (13.29,-9.33) -- (13.29,-9.25) -- (13.16,-9.22) -- cycle;
+  \filldraw[fill=tdc9!77!white, draw=tdc9!77!white, line width=0.2pt, line join=round] (12.82,-7.47) -- (12.68,-7.43) -- (12.53,-7.41) -- (12.67,-7.45) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.68,-7.43) -- (12.82,-7.47);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.68,-7.43) -- (12.53,-7.41);
+  \filldraw[fill=tdc9!86!black, draw=tdc9!86!black, line width=0.2pt, line join=round] (11.95,-11.07) -- (11.81,-11.06) -- (11.96,-11.09) -- (12.1,-11.1) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.81,-11.06) -- (11.96,-11.09);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.96,-11.09) -- (12.1,-11.1);
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.53,-8.84) -- (12.66,-8.87) -- (12.63,-8.85) -- (12.49,-8.82) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.63,-8.85) -- (12.49,-8.82);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.31,-9.73) -- (12.45,-9.76) -- (12.49,-9.75) -- (12.35,-9.73) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.45,-9.76) -- (12.31,-9.73);
+  \filldraw[fill=tdc9!80!black, draw=tdc9!80!black, line width=0.2pt, line join=round] (13.83,-9.12) -- (13.81,-8.98) -- (13.78,-8.84) -- (13.81,-9.02) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.81,-8.98) -- (13.83,-9.12);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.81,-8.98) -- (13.78,-8.84);
+  \filldraw[fill=tdc9!71!black, draw=tdc9!71!black, line width=0.2pt, line join=round] (13.6,-10.05) -- (13.51,-10.2) -- (13.59,-10.09) -- (13.66,-9.96) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.51,-10.2) -- (13.59,-10.09);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.59,-10.09) -- (13.66,-9.96);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.69,-8.9) -- (12.83,-8.93) -- (12.8,-8.89) -- (12.66,-8.87) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (12.49,-9.75) -- (12.62,-9.78) -- (12.66,-9.76) -- (12.53,-9.73) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (13.16,-9.22) -- (13.29,-9.25) -- (13.29,-9.18) -- (13.15,-9.15) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.05,-9.68) -- (13.18,-9.7) -- (13.21,-9.64) -- (13.08,-9.61) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.85,-8.97) -- (12.99,-9) -- (12.96,-8.96) -- (12.83,-8.93) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.66,-9.76) -- (12.8,-9.79) -- (12.84,-9.75) -- (12.7,-9.73) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (13.26,-9.49) -- (13.4,-9.51) -- (13.41,-9.43) -- (13.28,-9.41) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.84,-9.75) -- (12.97,-9.78) -- (13.01,-9.73) -- (12.88,-9.71) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (13,-9.06) -- (13.14,-9.09) -- (13.12,-9.03) -- (12.99,-9) -- cycle;
+  \filldraw[fill=tdc9!87!black, draw=tdc9!87!black, line width=0.2pt, line join=round] (13.74,-8.72) -- (13.7,-8.54) -- (13.63,-8.42) -- (13.69,-8.62) -- cycle;
+  \filldraw[fill=tdc9!74!black, draw=tdc9!74!black, line width=0.2pt, line join=round] (13.35,-10.37) -- (13.22,-10.54) -- (13.32,-10.45) -- (13.43,-10.3) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (13.28,-9.41) -- (13.41,-9.43) -- (13.42,-9.35) -- (13.29,-9.33) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.24,-9.57) -- (13.38,-9.59) -- (13.4,-9.51) -- (13.26,-9.49) -- cycle;
+  \filldraw[fill=tdc9!98!black, draw=tdc9!98!black, line width=0.2pt, line join=round] (13.39,-7.97) -- (13.29,-7.83) -- (13.17,-7.76) -- (13.28,-7.9) -- cycle;
+  \filldraw[fill=tdc9!79!black, draw=tdc9!79!black, line width=0.2pt, line join=round] (12.69,-10.88) -- (12.54,-10.98) -- (12.68,-10.95) -- (12.82,-10.86) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (13.15,-9.15) -- (13.29,-9.18) -- (13.27,-9.11) -- (13.14,-9.09) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (13.01,-9.73) -- (13.15,-9.76) -- (13.18,-9.7) -- (13.05,-9.68) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (13.21,-9.64) -- (13.35,-9.66) -- (13.38,-9.59) -- (13.24,-9.57) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (13.29,-9.33) -- (13.42,-9.35) -- (13.43,-9.28) -- (13.29,-9.25) -- cycle;
+  \filldraw[fill=tdc9!92!black, draw=tdc9!92!black, line width=0.2pt, line join=round] (13.63,-8.42) -- (13.56,-8.24) -- (13.48,-8.14) -- (13.56,-8.33) -- cycle;
+  \filldraw[fill=tdc9!76!black, draw=tdc9!76!black, line width=0.2pt, line join=round] (13.11,-10.59) -- (12.96,-10.74) -- (13.08,-10.68) -- (13.22,-10.54) -- cycle;
+  \filldraw[fill=tdc9!81!white, draw=tdc9!81!white, line width=0.2pt, line join=round] (12.94,-7.54) -- (12.82,-7.47) -- (12.67,-7.45) -- (12.79,-7.51) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.82,-7.47) -- (12.94,-7.54);
+  \filldraw[fill=tdc9!85!black, draw=tdc9!85!black, line width=0.2pt, line join=round] (12.1,-11.06) -- (11.95,-11.07) -- (12.1,-11.1) -- (12.24,-11.09) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.1,-11.1) -- (12.24,-11.09);
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.66,-8.87) -- (12.8,-8.89) -- (12.76,-8.87) -- (12.63,-8.85) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.76,-8.87) -- (12.63,-8.85);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.45,-9.76) -- (12.58,-9.79) -- (12.62,-9.78) -- (12.49,-9.75) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.58,-9.79) -- (12.45,-9.76);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.83,-8.93) -- (12.96,-8.96) -- (12.93,-8.92) -- (12.8,-8.89) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (12.62,-9.78) -- (12.76,-9.81) -- (12.8,-9.79) -- (12.66,-9.76) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (13.29,-9.25) -- (13.43,-9.28) -- (13.42,-9.2) -- (13.29,-9.18) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.18,-9.7) -- (13.32,-9.73) -- (13.35,-9.66) -- (13.21,-9.64) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (12.99,-9) -- (13.12,-9.03) -- (13.1,-8.98) -- (12.96,-8.96) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.8,-9.79) -- (12.93,-9.81) -- (12.97,-9.78) -- (12.84,-9.75) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.67,-9.57) -- (13.79,-9.62) -- (13.82,-9.49) -- (13.68,-9.49) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.79,-9.62) -- (13.82,-9.49);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.65,-9.65) -- (13.76,-9.74) -- (13.79,-9.62) -- (13.67,-9.57) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.76,-9.74) -- (13.79,-9.62);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.68,-9.49) -- (13.82,-9.49) -- (13.83,-9.36) -- (13.69,-9.41) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.82,-9.49) -- (13.83,-9.36);
+  \filldraw[fill=tdc9!83!black, draw=tdc9!83!black, line width=0.2pt, line join=round] (13.81,-9.02) -- (13.78,-8.84) -- (13.74,-8.72) -- (13.78,-8.92) -- cycle;
+  \filldraw[fill=tdc9!73!black, draw=tdc9!73!black, line width=0.2pt, line join=round] (13.54,-10.13) -- (13.43,-10.3) -- (13.51,-10.2) -- (13.6,-10.05) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (13.4,-9.51) -- (13.53,-9.54) -- (13.55,-9.46) -- (13.41,-9.43) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (12.97,-9.78) -- (13.11,-9.81) -- (13.15,-9.76) -- (13.01,-9.73) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (13.14,-9.09) -- (13.27,-9.11) -- (13.25,-9.05) -- (13.12,-9.03) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (13.41,-9.43) -- (13.55,-9.46) -- (13.56,-9.38) -- (13.42,-9.35) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.38,-9.59) -- (13.51,-9.62) -- (13.53,-9.54) -- (13.4,-9.51) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.62,-9.72) -- (13.71,-9.86) -- (13.76,-9.74) -- (13.65,-9.65) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.71,-9.86) -- (13.76,-9.74);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.69,-9.41) -- (13.83,-9.36) -- (13.84,-9.24) -- (13.7,-9.33) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.83,-9.36) -- (13.84,-9.24);
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (13.29,-9.18) -- (13.42,-9.2) -- (13.41,-9.14) -- (13.27,-9.11) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (13.15,-9.76) -- (13.28,-9.79) -- (13.32,-9.73) -- (13.18,-9.7) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (13.35,-9.66) -- (13.48,-9.69) -- (13.51,-9.62) -- (13.38,-9.59) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (13.42,-9.35) -- (13.56,-9.38) -- (13.56,-9.3) -- (13.43,-9.28) -- cycle;
+  \filldraw[fill=tdc9!59!white, draw=tdc9!59!white, line width=0.2pt, line join=round] (12.4,-7.39) -- (12.26,-7.41) -- (12.1,-7.43) -- (12.24,-7.42) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.26,-7.41) -- (12.4,-7.39);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.26,-7.41) -- (12.1,-7.43);
+  \filldraw[fill=tdc9!97!black, draw=tdc9!97!black, line width=0.2pt, line join=round] (11.55,-10.93) -- (11.42,-10.87) -- (11.56,-10.95) -- (11.68,-11.02) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.42,-10.87) -- (11.56,-10.95);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.56,-10.95) -- (11.68,-11.02);
+  \filldraw[fill=tdc9!97!black, draw=tdc9!97!black, line width=0.2pt, line join=round] (13.48,-8.14) -- (13.39,-7.97) -- (13.28,-7.9) -- (13.38,-8.08) -- cycle;
+  \filldraw[fill=tdc9!79!black, draw=tdc9!79!black, line width=0.2pt, line join=round] (12.85,-10.76) -- (12.69,-10.88) -- (12.82,-10.86) -- (12.96,-10.74) -- cycle;
+  \filldraw[fill=tdc9!86!white, draw=tdc9!86!white, line width=0.2pt, line join=round] (13.06,-7.64) -- (12.94,-7.54) -- (12.79,-7.51) -- (12.92,-7.61) -- cycle;
+  \filldraw[fill=tdc9!84!black, draw=tdc9!84!black, line width=0.2pt, line join=round] (12.25,-11.02) -- (12.1,-11.06) -- (12.24,-11.09) -- (12.39,-11.04) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.8,-8.89) -- (12.93,-8.92) -- (12.9,-8.9) -- (12.76,-8.87) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.9,-8.9) -- (12.76,-8.87);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.58,-9.79) -- (12.72,-9.81) -- (12.76,-9.81) -- (12.62,-9.78) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.72,-9.81) -- (12.58,-9.79);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.96,-8.96) -- (13.1,-8.98) -- (13.07,-8.95) -- (12.93,-8.92) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (12.76,-9.81) -- (12.89,-9.83) -- (12.93,-9.81) -- (12.8,-9.79) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (13.43,-9.28) -- (13.56,-9.3) -- (13.56,-9.23) -- (13.42,-9.2) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.32,-9.73) -- (13.45,-9.76) -- (13.48,-9.69) -- (13.35,-9.66) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.7,-9.33) -- (13.84,-9.24) -- (13.83,-9.12) -- (13.69,-9.26) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.84,-9.24) -- (13.83,-9.12);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.59,-9.78) -- (13.66,-9.96) -- (13.71,-9.86) -- (13.62,-9.72) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.66,-9.96) -- (13.71,-9.86);
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (13.12,-9.03) -- (13.25,-9.05) -- (13.23,-9.01) -- (13.1,-8.98) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.93,-9.81) -- (13.07,-9.84) -- (13.11,-9.81) -- (12.97,-9.78) -- cycle;
+  \filldraw[fill=tdc9!28!white, draw=tdc9!28!white, line width=0.2pt, line join=round] (13.53,-9.54) -- (13.67,-9.57) -- (13.68,-9.49) -- (13.55,-9.46) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.67,-9.57) -- (13.68,-9.49);
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (13.11,-9.81) -- (13.24,-9.83) -- (13.28,-9.79) -- (13.15,-9.76) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (13.27,-9.11) -- (13.41,-9.14) -- (13.39,-9.08) -- (13.25,-9.05) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (13.55,-9.46) -- (13.68,-9.49) -- (13.69,-9.41) -- (13.56,-9.38) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.68,-9.49) -- (13.69,-9.41);
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.51,-9.62) -- (13.65,-9.65) -- (13.67,-9.57) -- (13.53,-9.54) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.65,-9.65) -- (13.67,-9.57);
+  \filldraw[fill=tdc9!91!black, draw=tdc9!91!black, line width=0.2pt, line join=round] (13.69,-8.62) -- (13.63,-8.42) -- (13.56,-8.33) -- (13.63,-8.55) -- cycle;
+  \filldraw[fill=tdc9!77!black, draw=tdc9!77!black, line width=0.2pt, line join=round] (13.26,-10.41) -- (13.11,-10.59) -- (13.22,-10.54) -- (13.35,-10.37) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (13.42,-9.2) -- (13.56,-9.23) -- (13.54,-9.17) -- (13.41,-9.14) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (13.28,-9.79) -- (13.42,-9.81) -- (13.45,-9.76) -- (13.32,-9.73) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (13.48,-9.69) -- (13.62,-9.72) -- (13.65,-9.65) -- (13.51,-9.62) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.62,-9.72) -- (13.65,-9.65);
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (13.56,-9.38) -- (13.69,-9.41) -- (13.7,-9.33) -- (13.56,-9.3) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.69,-9.41) -- (13.7,-9.33);
+  \filldraw[fill=tdc9!87!black, draw=tdc9!87!black, line width=0.2pt, line join=round] (13.78,-8.92) -- (13.74,-8.72) -- (13.69,-8.62) -- (13.74,-8.85) -- cycle;
+  \filldraw[fill=tdc9!75!black, draw=tdc9!75!black, line width=0.2pt, line join=round] (13.48,-10.18) -- (13.35,-10.37) -- (13.43,-10.3) -- (13.54,-10.13) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (12.53,-7.41) -- (12.4,-7.39) -- (12.24,-7.42) -- (12.37,-7.43) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.4,-7.39) -- (12.53,-7.41);
+  \filldraw[fill=tdc9!95!black, draw=tdc9!95!black, line width=0.2pt, line join=round] (11.68,-10.97) -- (11.55,-10.93) -- (11.68,-11.02) -- (11.81,-11.06) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.68,-11.02) -- (11.81,-11.06);
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (11.29,-7.91) -- (11.18,-8.04) -- (11.08,-8.16) -- (11.18,-8.05) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.18,-8.04) -- (11.29,-7.91);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.18,-8.04) -- (11.08,-8.16);
+  \filldraw[fill=tdc9!66!white, draw=tdc9!66!white, line width=0.2pt, line join=round] (10.8,-9.95) -- (10.75,-9.81) -- (10.8,-9.95) -- (10.86,-10.12) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.75,-9.81) -- (10.8,-9.95);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.8,-9.95) -- (10.86,-10.12);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.69,-9.26) -- (13.83,-9.12) -- (13.81,-9.02) -- (13.68,-9.19) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.83,-9.12) -- (13.81,-9.02);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.55,-9.84) -- (13.6,-10.05) -- (13.66,-9.96) -- (13.59,-9.78) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.6,-10.05) -- (13.66,-9.96);
+  \filldraw[fill=tdc9!48!white, draw=tdc9!48!white, line width=0.2pt, line join=round] (11.96,-7.47) -- (11.82,-7.54) -- (11.68,-7.61) -- (11.81,-7.55) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.82,-7.54) -- (11.96,-7.47);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.82,-7.54) -- (11.68,-7.61);
+  \filldraw[fill=tdc9!88!white, draw=tdc9!88!white, line width=0.2pt, line join=round] (11.2,-10.65) -- (11.1,-10.54) -- (11.2,-10.66) -- (11.31,-10.78) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.1,-10.54) -- (11.2,-10.66);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.2,-10.66) -- (11.31,-10.78);
+  \filldraw[fill=tdc9!90!white, draw=tdc9!90!white, line width=0.2pt, line join=round] (13.17,-7.76) -- (13.06,-7.64) -- (12.92,-7.61) -- (13.04,-7.73) -- cycle;
+  \filldraw[fill=tdc9!84!black, draw=tdc9!84!black, line width=0.2pt, line join=round] (12.4,-10.95) -- (12.25,-11.02) -- (12.39,-11.04) -- (12.54,-10.98) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.93,-8.92) -- (13.07,-8.95) -- (13.03,-8.93) -- (12.9,-8.9) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.03,-8.93) -- (12.9,-8.9);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.72,-9.81) -- (12.85,-9.84) -- (12.89,-9.83) -- (12.76,-9.81) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.85,-9.84) -- (12.72,-9.81);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (13.1,-8.98) -- (13.23,-9.01) -- (13.2,-8.97) -- (13.07,-8.95) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (12.89,-9.83) -- (13.03,-9.86) -- (13.07,-9.84) -- (12.93,-9.81) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (13.56,-9.3) -- (13.7,-9.33) -- (13.69,-9.26) -- (13.56,-9.23) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.7,-9.33) -- (13.69,-9.26);
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (13.45,-9.76) -- (13.59,-9.78) -- (13.62,-9.72) -- (13.48,-9.69) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.59,-9.78) -- (13.62,-9.72);
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (13.25,-9.05) -- (13.39,-9.08) -- (13.37,-9.04) -- (13.23,-9.01) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (13.07,-9.84) -- (13.2,-9.87) -- (13.24,-9.83) -- (13.11,-9.81) -- cycle;
+  \filldraw[fill=tdc9!96!black, draw=tdc9!96!black, line width=0.2pt, line join=round] (13.56,-8.33) -- (13.48,-8.14) -- (13.38,-8.08) -- (13.47,-8.28) -- cycle;
+  \filldraw[fill=tdc9!80!black, draw=tdc9!80!black, line width=0.2pt, line join=round] (13.01,-10.61) -- (12.85,-10.76) -- (12.96,-10.74) -- (13.11,-10.59) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (13.24,-9.83) -- (13.38,-9.86) -- (13.42,-9.81) -- (13.28,-9.79) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (13.41,-9.14) -- (13.54,-9.17) -- (13.52,-9.11) -- (13.39,-9.08) -- cycle;
+  \filldraw[fill=tdc9!61!white, draw=tdc9!61!white, line width=0.2pt, line join=round] (13.56,-9.23) -- (13.69,-9.26) -- (13.68,-9.19) -- (13.54,-9.17) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.69,-9.26) -- (13.68,-9.19);
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (13.42,-9.81) -- (13.55,-9.84) -- (13.59,-9.78) -- (13.45,-9.76) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.55,-9.84) -- (13.59,-9.78);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.68,-9.19) -- (13.81,-9.02) -- (13.78,-8.92) -- (13.66,-9.13) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.81,-9.02) -- (13.78,-8.92);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.51,-9.89) -- (13.54,-10.13) -- (13.6,-10.05) -- (13.55,-9.84) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.54,-10.13) -- (13.6,-10.05);
+  \filldraw[fill=tdc9!65!white, draw=tdc9!65!white, line width=0.2pt, line join=round] (12.67,-7.45) -- (12.53,-7.41) -- (12.37,-7.43) -- (12.51,-7.47) -- cycle;
+  \filldraw[fill=tdc9!93!black, draw=tdc9!93!black, line width=0.2pt, line join=round] (11.81,-10.99) -- (11.68,-10.97) -- (11.81,-11.06) -- (11.95,-11.07) -- cycle;
+  \filldraw[fill=tdc9!94!white, draw=tdc9!94!white, line width=0.2pt, line join=round] (13.28,-7.9) -- (13.17,-7.76) -- (13.04,-7.73) -- (13.16,-7.88) -- cycle;
+  \filldraw[fill=tdc9!83!black, draw=tdc9!83!black, line width=0.2pt, line join=round] (12.57,-10.86) -- (12.4,-10.95) -- (12.54,-10.98) -- (12.69,-10.88) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (13.07,-8.95) -- (13.2,-8.97) -- (13.17,-8.95) -- (13.03,-8.93) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.17,-8.95) -- (13.03,-8.93);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.85,-9.84) -- (12.99,-9.87) -- (13.03,-9.86) -- (12.89,-9.83) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.99,-9.87) -- (12.85,-9.84);
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (13.03,-9.86) -- (13.16,-9.89) -- (13.2,-9.87) -- (13.07,-9.84) -- cycle;
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (13.23,-9.01) -- (13.37,-9.04) -- (13.34,-9) -- (13.2,-8.97) -- cycle;
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (13.39,-9.08) -- (13.52,-9.11) -- (13.5,-9.06) -- (13.37,-9.04) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (13.2,-9.87) -- (13.34,-9.89) -- (13.38,-9.86) -- (13.24,-9.83) -- cycle;
+  \filldraw[fill=tdc9!48!white, draw=tdc9!48!white, line width=0.2pt, line join=round] (12.1,-7.43) -- (11.96,-7.47) -- (11.81,-7.55) -- (11.94,-7.51) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.96,-7.47) -- (12.1,-7.43);
+  \filldraw[fill=tdc9!90!white, draw=tdc9!90!white, line width=0.2pt, line join=round] (11.31,-10.74) -- (11.2,-10.65) -- (11.31,-10.78) -- (11.42,-10.87) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.31,-10.78) -- (11.42,-10.87);
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (13.38,-9.86) -- (13.51,-9.89) -- (13.55,-9.84) -- (13.42,-9.81) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.51,-9.89) -- (13.55,-9.84);
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (13.54,-9.17) -- (13.68,-9.19) -- (13.66,-9.13) -- (13.52,-9.11) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.68,-9.19) -- (13.66,-9.13);
+  \filldraw[fill=tdc9!91!black, draw=tdc9!91!black, line width=0.2pt, line join=round] (13.74,-8.85) -- (13.69,-8.62) -- (13.63,-8.55) -- (13.69,-8.8) -- cycle;
+  \filldraw[fill=tdc9!78!black, draw=tdc9!78!black, line width=0.2pt, line join=round] (13.41,-10.21) -- (13.26,-10.41) -- (13.35,-10.37) -- (13.48,-10.18) -- cycle;
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (11.68,-7.61) -- (11.54,-7.7) -- (11.41,-7.81) -- (11.53,-7.73) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.54,-7.7) -- (11.68,-7.61);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.54,-7.7) -- (11.41,-7.81);
+  \filldraw[fill=tdc9!76!white, draw=tdc9!76!white, line width=0.2pt, line join=round] (11.01,-10.38) -- (10.93,-10.26) -- (11.01,-10.41) -- (11.1,-10.54) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.93,-10.26) -- (11.01,-10.41);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.01,-10.41) -- (11.1,-10.54);
+  \filldraw[fill=tdc9!95!black, draw=tdc9!95!black, line width=0.2pt, line join=round] (13.63,-8.55) -- (13.56,-8.33) -- (13.47,-8.28) -- (13.56,-8.51) -- cycle;
+  \filldraw[fill=tdc9!80!black, draw=tdc9!80!black, line width=0.2pt, line join=round] (13.18,-10.43) -- (13.01,-10.61) -- (13.11,-10.59) -- (13.26,-10.41) -- cycle;
+  \filldraw[fill=tdc9!70!white, draw=tdc9!70!white, line width=0.2pt, line join=round] (12.79,-7.51) -- (12.67,-7.45) -- (12.51,-7.47) -- (12.64,-7.54) -- cycle;
+  \filldraw[fill=tdc9!91!black, draw=tdc9!91!black, line width=0.2pt, line join=round] (11.96,-10.97) -- (11.81,-10.99) -- (11.95,-11.07) -- (12.1,-11.06) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.66,-9.13) -- (13.78,-8.92) -- (13.74,-8.85) -- (13.63,-9.09) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.78,-8.92) -- (13.74,-8.85);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.47,-9.92) -- (13.48,-10.18) -- (13.54,-10.13) -- (13.51,-9.89) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.48,-10.18) -- (13.54,-10.13);
+  \filldraw[fill=tdc9!97!white, draw=tdc9!97!white, line width=0.2pt, line join=round] (13.38,-8.08) -- (13.28,-7.9) -- (13.16,-7.88) -- (13.27,-8.06) -- cycle;
+  \filldraw[fill=tdc9!83!black, draw=tdc9!83!black, line width=0.2pt, line join=round] (12.74,-10.73) -- (12.57,-10.86) -- (12.69,-10.88) -- (12.85,-10.76) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (13.2,-8.97) -- (13.34,-9) -- (13.3,-8.98) -- (13.17,-8.95) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.3,-8.98) -- (13.17,-8.95);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (12.99,-9.87) -- (13.12,-9.89) -- (13.16,-9.89) -- (13.03,-9.86) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.12,-9.89) -- (12.99,-9.87);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (13.37,-9.04) -- (13.5,-9.06) -- (13.47,-9.03) -- (13.34,-9) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (13.16,-9.89) -- (13.3,-9.91) -- (13.34,-9.89) -- (13.2,-9.87) -- cycle;
+  \filldraw[fill=tdc9!39!white, draw=tdc9!39!white, line width=0.2pt, line join=round] (11.41,-7.81) -- (11.29,-7.91) -- (11.18,-8.05) -- (11.29,-7.96) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.29,-7.91) -- (11.41,-7.81);
+  \filldraw[fill=tdc9!66!white, draw=tdc9!66!white, line width=0.2pt, line join=round] (10.87,-10.07) -- (10.8,-9.95) -- (10.86,-10.12) -- (10.93,-10.26) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.86,-10.12) -- (10.93,-10.26);
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (13.52,-9.11) -- (13.66,-9.13) -- (13.63,-9.09) -- (13.5,-9.06) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.66,-9.13) -- (13.63,-9.09);
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (13.34,-9.89) -- (13.47,-9.92) -- (13.51,-9.89) -- (13.38,-9.86) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.47,-9.92) -- (13.51,-9.89);
+  \filldraw[fill=tdc9!48!white, draw=tdc9!48!white, line width=0.2pt, line join=round] (12.24,-7.42) -- (12.1,-7.43) -- (11.94,-7.51) -- (12.08,-7.5) -- cycle;
+  \filldraw[fill=tdc9!93!white, draw=tdc9!93!white, line width=0.2pt, line join=round] (11.43,-10.8) -- (11.31,-10.74) -- (11.42,-10.87) -- (11.55,-10.93) -- cycle;
+  \filldraw[fill=tdc9!75!white, draw=tdc9!75!white, line width=0.2pt, line join=round] (12.92,-7.61) -- (12.79,-7.51) -- (12.64,-7.54) -- (12.77,-7.63) -- cycle;
+  \filldraw[fill=tdc9!90!black, draw=tdc9!90!black, line width=0.2pt, line join=round] (12.12,-10.94) -- (11.96,-10.97) -- (12.1,-11.06) -- (12.25,-11.02) -- cycle;
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (13.47,-8.28) -- (13.38,-8.08) -- (13.27,-8.06) -- (13.37,-8.26) -- cycle;
+  \filldraw[fill=tdc9!84!black, draw=tdc9!84!black, line width=0.2pt, line join=round] (12.91,-10.59) -- (12.74,-10.73) -- (12.85,-10.76) -- (13.01,-10.61) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.63,-9.09) -- (13.74,-8.85) -- (13.69,-8.8) -- (13.6,-9.05) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.74,-8.85) -- (13.69,-8.8);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.43,-9.94) -- (13.41,-10.21) -- (13.48,-10.18) -- (13.47,-9.92) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.41,-10.21) -- (13.48,-10.18);
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (13.34,-9) -- (13.47,-9.03) -- (13.44,-9.01) -- (13.3,-8.98) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.44,-9.01) -- (13.3,-8.98);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (13.12,-9.89) -- (13.26,-9.92) -- (13.3,-9.91) -- (13.16,-9.89) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.26,-9.92) -- (13.12,-9.89);
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (13.3,-9.91) -- (13.43,-9.94) -- (13.47,-9.92) -- (13.34,-9.89) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.43,-9.94) -- (13.47,-9.92);
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (13.5,-9.06) -- (13.63,-9.09) -- (13.6,-9.05) -- (13.47,-9.03) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.63,-9.09) -- (13.6,-9.05);
+  \filldraw[fill=tdc9!40!white, draw=tdc9!40!white, line width=0.2pt, line join=round] (11.81,-7.55) -- (11.68,-7.61) -- (11.53,-7.73) -- (11.66,-7.67) -- cycle;
+  \filldraw[fill=tdc9!77!white, draw=tdc9!77!white, line width=0.2pt, line join=round] (11.11,-10.48) -- (11.01,-10.38) -- (11.1,-10.54) -- (11.2,-10.65) -- cycle;
+  \filldraw[fill=tdc9!95!black, draw=tdc9!95!black, line width=0.2pt, line join=round] (13.69,-8.8) -- (13.63,-8.55) -- (13.56,-8.51) -- (13.64,-8.76) -- cycle;
+  \filldraw[fill=tdc9!81!black, draw=tdc9!81!black, line width=0.2pt, line join=round] (13.35,-10.22) -- (13.18,-10.43) -- (13.26,-10.41) -- (13.41,-10.21) -- cycle;
+  \filldraw[fill=tdc9!79!white, draw=tdc9!79!white, line width=0.2pt, line join=round] (13.04,-7.73) -- (12.92,-7.61) -- (12.77,-7.63) -- (12.9,-7.75) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (12.28,-10.87) -- (12.12,-10.94) -- (12.25,-11.02) -- (12.4,-10.95) -- cycle;
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.37,-7.43) -- (12.24,-7.42) -- (12.08,-7.5) -- (12.21,-7.51) -- cycle;
+  \filldraw[fill=tdc9!97!white, draw=tdc9!97!white, line width=0.2pt, line join=round] (11.56,-10.84) -- (11.43,-10.8) -- (11.55,-10.93) -- (11.68,-10.97) -- cycle;
+  \filldraw[fill=tdc9!99!black, draw=tdc9!99!black, line width=0.2pt, line join=round] (13.56,-8.51) -- (13.47,-8.28) -- (13.37,-8.26) -- (13.48,-8.49) -- cycle;
+  \filldraw[fill=tdc9!84!black, draw=tdc9!84!black, line width=0.2pt, line join=round] (13.1,-10.41) -- (12.91,-10.59) -- (13.01,-10.61) -- (13.18,-10.43) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (13.47,-9.03) -- (13.6,-9.05) -- (13.57,-9.03) -- (13.44,-9.01) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.57,-9.03) -- (13.44,-9.01);
+  \filldraw[fill=tdc9!63!white, draw=tdc9!63!white, line width=0.2pt, line join=round] (13.26,-9.92) -- (13.39,-9.95) -- (13.43,-9.94) -- (13.3,-9.91) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.39,-9.95) -- (13.26,-9.92);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.6,-9.05) -- (13.69,-8.8) -- (13.64,-8.76) -- (13.57,-9.03) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.6,-9.05) -- (13.57,-9.03);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.69,-8.8) -- (13.64,-8.76);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.39,-9.95) -- (13.35,-10.22) -- (13.41,-10.21) -- (13.43,-9.94) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.39,-9.95) -- (13.43,-9.94);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.35,-10.22) -- (13.41,-10.21);
+  \filldraw[fill=tdc9!36!white, draw=tdc9!36!white, line width=0.2pt, line join=round] (11.53,-7.73) -- (11.41,-7.81) -- (11.29,-7.96) -- (11.4,-7.89) -- cycle;
+  \filldraw[fill=tdc9!66!white, draw=tdc9!66!white, line width=0.2pt, line join=round] (10.95,-10.18) -- (10.87,-10.07) -- (10.93,-10.26) -- (11.01,-10.38) -- cycle;
+  \filldraw[fill=tdc9!84!white, draw=tdc9!84!white, line width=0.2pt, line join=round] (13.16,-7.88) -- (13.04,-7.73) -- (12.9,-7.75) -- (13.03,-7.9) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (12.46,-10.79) -- (12.28,-10.87) -- (12.4,-10.95) -- (12.57,-10.86) -- cycle;
+  \filldraw[fill=tdc9!54!white, draw=tdc9!54!white, line width=0.2pt, line join=round] (12.51,-7.47) -- (12.37,-7.43) -- (12.21,-7.51) -- (12.35,-7.55) -- cycle;
+  \filldraw[fill=tdc9, draw=tdc9, line width=0.2pt, line join=round] (11.7,-10.85) -- (11.56,-10.84) -- (11.68,-10.97) -- (11.81,-10.99) -- cycle;
+  \filldraw[fill=tdc9!39!white, draw=tdc9!39!white, line width=0.2pt, line join=round] (11.94,-7.51) -- (11.81,-7.55) -- (11.66,-7.67) -- (11.79,-7.64) -- cycle;
+  \filldraw[fill=tdc9!78!white, draw=tdc9!78!white, line width=0.2pt, line join=round] (11.21,-10.56) -- (11.11,-10.48) -- (11.2,-10.65) -- (11.31,-10.74) -- cycle;
+  \filldraw[fill=tdc10!55!white, draw=tdc10!55!white, line width=0.2pt, line join=round] (10.95,-8.65) -- (11.08,-8.68) -- (11.22,-8.71) -- (11.35,-8.73) -- (11.49,-8.76) -- (11.62,-8.79) -- (11.76,-8.81) -- (11.89,-8.84) -- (12.03,-8.87) -- (12.16,-8.89) -- (12.29,-8.92) -- (12.43,-8.95) -- (12.56,-8.97) -- (12.7,-9) -- (12.83,-9.03) -- (12.97,-9.05) -- (13.1,-9.08) -- (13.24,-9.11) -- (13.37,-9.13) -- (13.32,-8.92) -- (13.14,-8.71) -- (12.97,-8.53) -- (12.8,-8.37) -- (12.63,-8.23) -- (12.48,-8.1) -- (12.32,-8) -- (12.18,-7.92) -- (12.03,-7.87) -- (11.9,-7.83) -- (11.76,-7.81) -- (11.64,-7.82) -- (11.51,-7.84) -- (11.4,-7.89) -- (11.29,-7.96) -- (11.18,-8.05) -- (11.08,-8.16) -- (10.98,-8.29) -- (10.89,-8.44) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.08,-8.68) -- (10.95,-8.65);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.22,-8.71) -- (11.08,-8.68);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.35,-8.73) -- (11.22,-8.71);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.49,-8.76) -- (11.35,-8.73);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.62,-8.79) -- (11.49,-8.76);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.76,-8.81) -- (11.62,-8.79);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.89,-8.84) -- (11.76,-8.81);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.03,-8.87) -- (11.89,-8.84);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.16,-8.89) -- (12.03,-8.87);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.29,-8.92) -- (12.16,-8.89);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.43,-8.95) -- (12.29,-8.92);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.56,-8.97) -- (12.43,-8.95);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.7,-9) -- (12.56,-8.97);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.83,-9.03) -- (12.7,-9);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.97,-9.05) -- (12.83,-9.03);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.1,-9.08) -- (12.97,-9.05);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.24,-9.11) -- (13.1,-9.08);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.37,-9.13) -- (13.24,-9.11);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.29,-7.96) -- (11.4,-7.89);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.18,-8.05) -- (11.29,-7.96);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.08,-8.16) -- (11.18,-8.05);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.98,-8.29) -- (11.08,-8.16);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.89,-8.44) -- (10.98,-8.29);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.95,-8.65) -- (10.89,-8.44);
+  \filldraw[fill=tdc10!55!white, draw=tdc10!55!white, line width=0.2pt, line join=round] (10.69,-9.48) -- (10.71,-9.65) -- (10.75,-9.81) -- (10.8,-9.95) -- (10.87,-10.07) -- (10.95,-10.18) -- (11.04,-10.26) -- (11.14,-10.33) -- (11.25,-10.39) -- (11.38,-10.42) -- (11.52,-10.44) -- (11.68,-10.44) -- (11.85,-10.42) -- (12.03,-10.39) -- (12.22,-10.34) -- (12.42,-10.27) -- (12.64,-10.18) -- (12.87,-10.08) -- (13.12,-9.96) -- (13.25,-9.78) -- (13.11,-9.75) -- (12.98,-9.73) -- (12.84,-9.7) -- (12.71,-9.67) -- (12.57,-9.65) -- (12.44,-9.62) -- (12.3,-9.59) -- (12.17,-9.57) -- (12.03,-9.54) -- (11.9,-9.51) -- (11.76,-9.49) -- (11.63,-9.46) -- (11.49,-9.43) -- (11.36,-9.41) -- (11.22,-9.38) -- (11.09,-9.35) -- (10.95,-9.33) -- (10.82,-9.3) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.82,-9.3) -- (10.95,-9.33);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.95,-9.33) -- (11.09,-9.35);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.09,-9.35) -- (11.22,-9.38);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.22,-9.38) -- (11.36,-9.41);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.36,-9.41) -- (11.49,-9.43);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.49,-9.43) -- (11.63,-9.46);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.63,-9.46) -- (11.76,-9.49);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.76,-9.49) -- (11.9,-9.51);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.9,-9.51) -- (12.03,-9.54);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.03,-9.54) -- (12.17,-9.57);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.17,-9.57) -- (12.3,-9.59);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.3,-9.59) -- (12.44,-9.62);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.44,-9.62) -- (12.57,-9.65);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.57,-9.65) -- (12.71,-9.67);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.71,-9.67) -- (12.84,-9.7);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.84,-9.7) -- (12.98,-9.73);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.98,-9.73) -- (13.11,-9.75);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.11,-9.75) -- (13.25,-9.78);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.95,-10.18) -- (10.87,-10.07);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.87,-10.07) -- (10.8,-9.95);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.8,-9.95) -- (10.75,-9.81);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.75,-9.81) -- (10.71,-9.65);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.71,-9.65) -- (10.69,-9.48);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (10.69,-9.48) -- (10.82,-9.3);
+  \filldraw[fill=tdc9!98!black, draw=tdc9!98!black, line width=0.2pt, line join=round] (13.64,-8.76) -- (13.56,-8.51) -- (13.48,-8.49) -- (13.58,-8.75) -- cycle;
+  \filldraw[fill=tdc9!84!black, draw=tdc9!84!black, line width=0.2pt, line join=round] (13.29,-10.21) -- (13.1,-10.41) -- (13.18,-10.43) -- (13.35,-10.22) -- cycle;
+  \filldraw[fill=tdc9!88!white, draw=tdc9!88!white, line width=0.2pt, line join=round] (13.27,-8.06) -- (13.16,-7.88) -- (13.03,-7.9) -- (13.15,-8.08) -- cycle;
+  \filldraw[fill=tdc9!88!black, draw=tdc9!88!black, line width=0.2pt, line join=round] (12.64,-10.67) -- (12.46,-10.79) -- (12.57,-10.86) -- (12.74,-10.73) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.57,-9.03) -- (13.64,-8.76) -- (13.58,-8.75) -- (13.53,-9.03) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.57,-9.03) -- (13.53,-9.03);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.64,-8.76) -- (13.58,-8.75);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.35,-9.94) -- (13.29,-10.21) -- (13.35,-10.22) -- (13.39,-9.95) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.35,-9.94) -- (13.39,-9.95);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.29,-10.21) -- (13.35,-10.22);
+  \filldraw[fill=tdc9!59!white, draw=tdc9!59!white, line width=0.2pt, line join=round] (12.64,-7.54) -- (12.51,-7.47) -- (12.35,-7.55) -- (12.48,-7.62) -- cycle;
+  \filldraw[fill=tdc9!98!black, draw=tdc9!98!black, line width=0.2pt, line join=round] (11.85,-10.84) -- (11.7,-10.85) -- (11.81,-10.99) -- (11.96,-10.97) -- cycle;
+  \filldraw[fill=tdc9!91!white, draw=tdc9!91!white, line width=0.2pt, line join=round] (13.37,-8.26) -- (13.27,-8.06) -- (13.15,-8.08) -- (13.27,-8.28) -- cycle;
+  \filldraw[fill=tdc9!88!black, draw=tdc9!88!black, line width=0.2pt, line join=round] (12.83,-10.53) -- (12.64,-10.67) -- (12.74,-10.73) -- (12.91,-10.59) -- cycle;
+  \filldraw[fill=tdc9!39!white, draw=tdc9!39!white, line width=0.2pt, line join=round] (12.08,-7.5) -- (11.94,-7.51) -- (11.79,-7.64) -- (11.92,-7.63) -- cycle;
+  \filldraw[fill=tdc9!81!white, draw=tdc9!81!white, line width=0.2pt, line join=round] (11.33,-10.61) -- (11.21,-10.56) -- (11.31,-10.74) -- (11.43,-10.8) -- cycle;
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (11.66,-7.67) -- (11.53,-7.73) -- (11.4,-7.89) -- (11.51,-7.84) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.4,-7.89) -- (11.51,-7.84);
+  \filldraw[fill=tdc9!66!white, draw=tdc9!66!white, line width=0.2pt, line join=round] (11.04,-10.26) -- (10.95,-10.18) -- (11.01,-10.38) -- (11.11,-10.48) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.04,-10.26) -- (10.95,-10.18);
+  \filldraw[fill=tdc9!94!white, draw=tdc9!94!white, line width=0.2pt, line join=round] (13.48,-8.49) -- (13.37,-8.26) -- (13.27,-8.28) -- (13.39,-8.5) -- cycle;
+  \filldraw[fill=tdc9!88!black, draw=tdc9!88!black, line width=0.2pt, line join=round] (13.03,-10.37) -- (12.83,-10.53) -- (12.91,-10.59) -- (13.1,-10.41) -- cycle;
+  \filldraw[fill=tdc9!64!white, draw=tdc9!64!white, line width=0.2pt, line join=round] (12.77,-7.63) -- (12.64,-7.54) -- (12.48,-7.62) -- (12.62,-7.71) -- cycle;
+  \filldraw[fill=tdc9!96!black, draw=tdc9!96!black, line width=0.2pt, line join=round] (12.01,-10.81) -- (11.85,-10.84) -- (11.96,-10.97) -- (12.12,-10.94) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.53,-9.03) -- (13.58,-8.75) -- (13.51,-8.76) -- (13.49,-9.03) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.53,-9.03) -- (13.49,-9.03);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.32,-9.92) -- (13.23,-10.18) -- (13.29,-10.21) -- (13.35,-9.94) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.32,-9.92) -- (13.35,-9.94);
+  \filldraw[fill=tdc9!97!white, draw=tdc9!97!white, line width=0.2pt, line join=round] (13.58,-8.75) -- (13.48,-8.49) -- (13.39,-8.5) -- (13.51,-8.76) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.58,-8.75) -- (13.51,-8.76);
+  \filldraw[fill=tdc9!88!black, draw=tdc9!88!black, line width=0.2pt, line join=round] (13.23,-10.18) -- (13.03,-10.37) -- (13.1,-10.41) -- (13.29,-10.21) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.23,-10.18) -- (13.29,-10.21);
+  \filldraw[fill=tdc9!70!white, draw=tdc9!70!white, line width=0.2pt, line join=round] (12.9,-7.75) -- (12.77,-7.63) -- (12.62,-7.71) -- (12.76,-7.82) -- cycle;
+  \filldraw[fill=tdc9!95!black, draw=tdc9!95!black, line width=0.2pt, line join=round] (12.18,-10.75) -- (12.01,-10.81) -- (12.12,-10.94) -- (12.28,-10.87) -- cycle;
+  \filldraw[fill=tdc9!41!white, draw=tdc9!41!white, line width=0.2pt, line join=round] (12.21,-7.51) -- (12.08,-7.5) -- (11.92,-7.63) -- (12.05,-7.65) -- cycle;
+  \filldraw[fill=tdc9!84!white, draw=tdc9!84!white, line width=0.2pt, line join=round] (11.46,-10.65) -- (11.33,-10.61) -- (11.43,-10.8) -- (11.56,-10.84) -- cycle;
+  \filldraw[fill=tdc9!75!white, draw=tdc9!75!white, line width=0.2pt, line join=round] (13.03,-7.9) -- (12.9,-7.75) -- (12.76,-7.82) -- (12.89,-7.97) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (12.36,-10.67) -- (12.18,-10.75) -- (12.28,-10.87) -- (12.46,-10.79) -- cycle;
+  \filldraw[fill=tdc9!32!white, draw=tdc9!32!white, line width=0.2pt, line join=round] (11.79,-7.64) -- (11.66,-7.67) -- (11.51,-7.84) -- (11.64,-7.82) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.51,-7.84) -- (11.64,-7.82);
+  \filldraw[fill=tdc9!67!white, draw=tdc9!67!white, line width=0.2pt, line join=round] (11.14,-10.33) -- (11.04,-10.26) -- (11.11,-10.48) -- (11.21,-10.56) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.14,-10.33) -- (11.04,-10.26);
+  \filldraw[fill=tdc9!80!white, draw=tdc9!80!white, line width=0.2pt, line join=round] (13.15,-8.08) -- (13.03,-7.9) -- (12.89,-7.97) -- (13.03,-8.13) -- cycle;
+  \filldraw[fill=tdc9!93!black, draw=tdc9!93!black, line width=0.2pt, line join=round] (12.55,-10.57) -- (12.36,-10.67) -- (12.46,-10.79) -- (12.64,-10.67) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.49,-9.03) -- (13.51,-8.76) -- (13.45,-8.79) -- (13.45,-9.05) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.49,-9.03) -- (13.45,-9.05);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.29,-9.88) -- (13.19,-10.12) -- (13.23,-10.18) -- (13.32,-9.92) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.29,-9.88) -- (13.32,-9.92);
+  \filldraw[fill=tdc9!44!white, draw=tdc9!44!white, line width=0.2pt, line join=round] (12.35,-7.55) -- (12.21,-7.51) -- (12.05,-7.65) -- (12.19,-7.69) -- cycle;
+  \filldraw[fill=tdc9!87!white, draw=tdc9!87!white, line width=0.2pt, line join=round] (11.6,-10.67) -- (11.46,-10.65) -- (11.56,-10.84) -- (11.7,-10.85) -- cycle;
+  \filldraw[fill=tdc9!84!white, draw=tdc9!84!white, line width=0.2pt, line join=round] (13.27,-8.28) -- (13.15,-8.08) -- (13.03,-8.13) -- (13.17,-8.33) -- cycle;
+  \filldraw[fill=tdc9!92!black, draw=tdc9!92!black, line width=0.2pt, line join=round] (12.75,-10.45) -- (12.55,-10.57) -- (12.64,-10.67) -- (12.83,-10.53) -- cycle;
+  \filldraw[fill=tdc9!88!white, draw=tdc9!88!white, line width=0.2pt, line join=round] (13.39,-8.5) -- (13.27,-8.28) -- (13.17,-8.33) -- (13.31,-8.55) -- cycle;
+  \filldraw[fill=tdc9!92!black, draw=tdc9!92!black, line width=0.2pt, line join=round] (12.96,-10.3) -- (12.75,-10.45) -- (12.83,-10.53) -- (13.03,-10.37) -- cycle;
+  \filldraw[fill=tdc9!91!white, draw=tdc9!91!white, line width=0.2pt, line join=round] (13.51,-8.76) -- (13.39,-8.5) -- (13.31,-8.55) -- (13.45,-8.79) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.51,-8.76) -- (13.45,-8.79);
+  \filldraw[fill=tdc9!92!black, draw=tdc9!92!black, line width=0.2pt, line join=round] (13.19,-10.12) -- (12.96,-10.3) -- (13.03,-10.37) -- (13.23,-10.18) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.19,-10.12) -- (13.23,-10.18);
+  \filldraw[fill=tdc9!50!white, draw=tdc9!50!white, line width=0.2pt, line join=round] (12.48,-7.62) -- (12.35,-7.55) -- (12.19,-7.69) -- (12.33,-7.75) -- cycle;
+  \filldraw[fill=tdc9!91!white, draw=tdc9!91!white, line width=0.2pt, line join=round] (11.75,-10.66) -- (11.6,-10.67) -- (11.7,-10.85) -- (11.85,-10.84) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.45,-9.05) -- (13.45,-8.79) -- (13.38,-8.85) -- (13.41,-9.09) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.45,-9.05) -- (13.41,-9.09);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.26,-9.84) -- (13.15,-10.05) -- (13.19,-10.12) -- (13.29,-9.88) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.26,-9.84) -- (13.29,-9.88);
+  \filldraw[fill=tdc9!31!white, draw=tdc9!31!white, line width=0.2pt, line join=round] (11.92,-7.63) -- (11.79,-7.64) -- (11.64,-7.82) -- (11.76,-7.81) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.64,-7.82) -- (11.76,-7.81);
+  \filldraw[fill=tdc9!68!white, draw=tdc9!68!white, line width=0.2pt, line join=round] (11.25,-10.39) -- (11.14,-10.33) -- (11.21,-10.56) -- (11.33,-10.61) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.25,-10.39) -- (11.14,-10.33);
+  \filldraw[fill=tdc9!56!white, draw=tdc9!56!white, line width=0.2pt, line join=round] (12.62,-7.71) -- (12.48,-7.62) -- (12.33,-7.75) -- (12.47,-7.83) -- cycle;
+  \filldraw[fill=tdc9!95!white, draw=tdc9!95!white, line width=0.2pt, line join=round] (11.91,-10.64) -- (11.75,-10.66) -- (11.85,-10.84) -- (12.01,-10.81) -- cycle;
+  \filldraw[fill=tdc9!62!white, draw=tdc9!62!white, line width=0.2pt, line join=round] (12.76,-7.82) -- (12.62,-7.71) -- (12.47,-7.83) -- (12.61,-7.94) -- cycle;
+  \filldraw[fill=tdc9!99!white, draw=tdc9!99!white, line width=0.2pt, line join=round] (12.09,-10.59) -- (11.91,-10.64) -- (12.01,-10.81) -- (12.18,-10.75) -- cycle;
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.41,-9.09) -- (13.38,-8.85) -- (13.32,-8.92) -- (13.37,-9.13) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.41,-9.09) -- (13.37,-9.13);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.32,-8.92) -- (13.37,-9.13);
+  \filldraw[fill=tdc9!89!black, draw=tdc9!89!black, line width=0.2pt, line join=round] (13.25,-9.78) -- (13.12,-9.96) -- (13.15,-10.05) -- (13.26,-9.84) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.25,-9.78) -- (13.26,-9.84);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.25,-9.78) -- (13.12,-9.96);
+  \filldraw[fill=tdc9!85!white, draw=tdc9!85!white, line width=0.2pt, line join=round] (13.45,-8.79) -- (13.31,-8.55) -- (13.22,-8.62) -- (13.38,-8.85) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.45,-8.79) -- (13.38,-8.85);
+  \filldraw[fill=tdc9!95!black, draw=tdc9!95!black, line width=0.2pt, line join=round] (13.15,-10.05) -- (12.91,-10.2) -- (12.96,-10.3) -- (13.19,-10.12) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.15,-10.05) -- (13.19,-10.12);
+  \filldraw[fill=tdc9!33!white, draw=tdc9!33!white, line width=0.2pt, line join=round] (12.05,-7.65) -- (11.92,-7.63) -- (11.76,-7.81) -- (11.9,-7.83) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.76,-7.81) -- (11.9,-7.83);
+  \filldraw[fill=tdc9!71!white, draw=tdc9!71!white, line width=0.2pt, line join=round] (11.38,-10.42) -- (11.25,-10.39) -- (11.33,-10.61) -- (11.46,-10.65) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.38,-10.42) -- (11.25,-10.39);
+  \filldraw[fill=tdc9!68!white, draw=tdc9!68!white, line width=0.2pt, line join=round] (12.89,-7.97) -- (12.76,-7.82) -- (12.61,-7.94) -- (12.76,-8.08) -- cycle;
+  \filldraw[fill=tdc9!99!black, draw=tdc9!99!black, line width=0.2pt, line join=round] (12.28,-10.52) -- (12.09,-10.59) -- (12.18,-10.75) -- (12.36,-10.67) -- cycle;
+  \filldraw[fill=tdc9!82!white, draw=tdc9!82!white, line width=0.2pt, line join=round] (13.31,-8.55) -- (13.17,-8.33) -- (13.07,-8.41) -- (13.22,-8.62) -- cycle;
+  \filldraw[fill=tdc9!96!black, draw=tdc9!96!black, line width=0.2pt, line join=round] (12.91,-10.2) -- (12.69,-10.33) -- (12.75,-10.45) -- (12.96,-10.3) -- cycle;
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (13.03,-8.13) -- (12.89,-7.97) -- (12.76,-8.08) -- (12.91,-8.23) -- cycle;
+  \filldraw[fill=tdc9!98!black, draw=tdc9!98!black, line width=0.2pt, line join=round] (12.48,-10.44) -- (12.28,-10.52) -- (12.36,-10.67) -- (12.55,-10.57) -- cycle;
+  \filldraw[fill=tdc9!78!white, draw=tdc9!78!white, line width=0.2pt, line join=round] (13.17,-8.33) -- (13.03,-8.13) -- (12.91,-8.23) -- (13.07,-8.41) -- cycle;
+  \filldraw[fill=tdc9!97!black, draw=tdc9!97!black, line width=0.2pt, line join=round] (12.69,-10.33) -- (12.48,-10.44) -- (12.55,-10.57) -- (12.75,-10.45) -- cycle;
+  \filldraw[fill=tdc9!37!white, draw=tdc9!37!white, line width=0.2pt, line join=round] (12.19,-7.69) -- (12.05,-7.65) -- (11.9,-7.83) -- (12.03,-7.87) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.9,-7.83) -- (12.03,-7.87);
+  \filldraw[fill=tdc9!75!white, draw=tdc9!75!white, line width=0.2pt, line join=round] (11.52,-10.44) -- (11.38,-10.42) -- (11.46,-10.65) -- (11.6,-10.67) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.52,-10.44) -- (11.38,-10.42);
+  \filldraw[fill=tdc9!81!white, draw=tdc9!81!white, line width=0.2pt, line join=round] (13.38,-8.85) -- (13.22,-8.62) -- (13.14,-8.71) -- (13.32,-8.92) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.38,-8.85) -- (13.32,-8.92);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.14,-8.71) -- (13.32,-8.92);
+  \filldraw[fill=tdc9!99!black, draw=tdc9!99!black, line width=0.2pt, line join=round] (13.12,-9.96) -- (12.87,-10.08) -- (12.91,-10.2) -- (13.15,-10.05) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.12,-9.96) -- (13.15,-10.05);
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (13.12,-9.96) -- (12.87,-10.08);
+  \filldraw[fill=tdc9!42!white, draw=tdc9!42!white, line width=0.2pt, line join=round] (12.33,-7.75) -- (12.19,-7.69) -- (12.03,-7.87) -- (12.18,-7.92) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.03,-7.87) -- (12.18,-7.92);
+  \filldraw[fill=tdc9!79!white, draw=tdc9!79!white, line width=0.2pt, line join=round] (11.68,-10.44) -- (11.52,-10.44) -- (11.6,-10.67) -- (11.75,-10.66) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.68,-10.44) -- (11.52,-10.44);
+  \filldraw[fill=tdc9!77!white, draw=tdc9!77!white, line width=0.2pt, line join=round] (13.22,-8.62) -- (13.07,-8.41) -- (12.97,-8.53) -- (13.14,-8.71) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.97,-8.53) -- (13.14,-8.71);
+  \filldraw[fill=tdc9, draw=tdc9, line width=0.2pt, line join=round] (12.87,-10.08) -- (12.64,-10.18) -- (12.69,-10.33) -- (12.91,-10.2) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.87,-10.08) -- (12.64,-10.18);
+  \filldraw[fill=tdc9!49!white, draw=tdc9!49!white, line width=0.2pt, line join=round] (12.47,-7.83) -- (12.33,-7.75) -- (12.18,-7.92) -- (12.32,-8) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.18,-7.92) -- (12.32,-8);
+  \filldraw[fill=tdc9!83!white, draw=tdc9!83!white, line width=0.2pt, line join=round] (11.85,-10.42) -- (11.68,-10.44) -- (11.75,-10.66) -- (11.91,-10.64) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (11.85,-10.42) -- (11.68,-10.44);
+  \filldraw[fill=tdc9!73!white, draw=tdc9!73!white, line width=0.2pt, line join=round] (13.07,-8.41) -- (12.91,-8.23) -- (12.8,-8.37) -- (12.97,-8.53) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.8,-8.37) -- (12.97,-8.53);
+  \filldraw[fill=tdc9!98!white, draw=tdc9!98!white, line width=0.2pt, line join=round] (12.64,-10.18) -- (12.42,-10.27) -- (12.48,-10.44) -- (12.69,-10.33) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.64,-10.18) -- (12.42,-10.27);
+  \filldraw[fill=tdc9!55!white, draw=tdc9!55!white, line width=0.2pt, line join=round] (12.61,-7.94) -- (12.47,-7.83) -- (12.32,-8) -- (12.48,-8.1) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.32,-8) -- (12.48,-8.1);
+  \filldraw[fill=tdc9!88!white, draw=tdc9!88!white, line width=0.2pt, line join=round] (12.03,-10.39) -- (11.85,-10.42) -- (11.91,-10.64) -- (12.09,-10.59) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.03,-10.39) -- (11.85,-10.42);
+  \filldraw[fill=tdc9!95!white, draw=tdc9!95!white, line width=0.2pt, line join=round] (12.42,-10.27) -- (12.22,-10.34) -- (12.28,-10.52) -- (12.48,-10.44) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.42,-10.27) -- (12.22,-10.34);
+  \filldraw[fill=tdc9!68!white, draw=tdc9!68!white, line width=0.2pt, line join=round] (12.91,-8.23) -- (12.76,-8.08) -- (12.63,-8.23) -- (12.8,-8.37) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.63,-8.23) -- (12.8,-8.37);
+  \filldraw[fill=tdc9!62!white, draw=tdc9!62!white, line width=0.2pt, line join=round] (12.76,-8.08) -- (12.61,-7.94) -- (12.48,-8.1) -- (12.63,-8.23) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.48,-8.1) -- (12.63,-8.23);
+  \filldraw[fill=tdc9!91!white, draw=tdc9!91!white, line width=0.2pt, line join=round] (12.22,-10.34) -- (12.03,-10.39) -- (12.09,-10.59) -- (12.28,-10.52) -- cycle;
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (12.22,-10.34) -- (12.03,-10.39);
+  \draw[tdc9!70!black, line width=0.8pt, dashed, line join=round] (10.96,-9.47) -- (10.93,-9.46) -- (10.89,-9.44) -- (10.86,-9.4) -- (10.84,-9.36) -- (10.82,-9.3);
+  \draw[tdc9!70!black, line width=0.8pt, dashed, line join=round] (10.95,-8.65) -- (10.99,-8.61) -- (11.03,-8.57) -- (11.07,-8.55) -- (11.11,-8.55) -- (11.14,-8.55);
+  \draw[tdc9!70!black, line width=0.8pt, dashed, line join=round] (10.69,-9.48) -- (10.72,-9.57) -- (10.76,-9.64) -- (10.81,-9.7) -- (10.86,-9.73) -- (10.92,-9.74) -- (10.98,-9.73) -- (11.05,-9.7) -- (11.11,-9.65) -- (11.18,-9.57) -- (11.23,-9.48) -- (11.29,-9.38) -- (11.33,-9.26) -- (11.37,-9.14) -- (11.39,-9.01) -- (11.4,-8.88) -- (11.41,-8.76) -- (11.4,-8.64) -- (11.38,-8.54) -- (11.35,-8.44) -- (11.31,-8.37) -- (11.26,-8.32) -- (11.21,-8.28) -- (11.15,-8.27) -- (11.09,-8.28) -- (11.02,-8.31) -- (10.96,-8.37) -- (10.89,-8.44);
+  \node[font=\small\bfseries, text=tdc1] at (19.75,-5.75) {3D SOLIDS};
+  \begin{scope}[transparency group, opacity=0.6]
+  \filldraw[fill=tdc9!43!white, draw=tdc9!43!white, line width=0.2pt, line join=round] (18.39,-9.88) -- (18.36,-9.93) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!88!black, draw=tdc9!88!black, line width=0.2pt, line join=round] (21.4,-9.96) -- (21.38,-9.91) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!39!white, draw=tdc9!39!white, line width=0.2pt, line join=round] (18.36,-9.93) -- (18.35,-9.98) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!90!black, draw=tdc9!90!black, line width=0.2pt, line join=round] (21.4,-10.02) -- (21.4,-9.96) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (18.35,-9.98) -- (18.35,-10.03) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!92!black, draw=tdc9!92!black, line width=0.2pt, line join=round] (21.39,-10.07) -- (21.4,-10.02) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!32!white, draw=tdc9!32!white, line width=0.2pt, line join=round] (18.35,-10.03) -- (18.37,-10.08) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!94!black, draw=tdc9!94!black, line width=0.2pt, line join=round] (21.36,-10.12) -- (21.39,-10.07) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!29!white, draw=tdc9!29!white, line width=0.2pt, line join=round] (18.37,-10.08) -- (18.4,-10.13) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!96!black, draw=tdc9!96!black, line width=0.2pt, line join=round] (21.32,-10.17) -- (21.36,-10.12) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!27!white, draw=tdc9!27!white, line width=0.2pt, line join=round] (18.4,-10.13) -- (18.45,-10.18) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!98!black, draw=tdc9!98!black, line width=0.2pt, line join=round] (21.26,-10.21) -- (21.32,-10.17) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (18.45,-10.18) -- (18.51,-10.23) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!98!white, draw=tdc9!98!white, line width=0.2pt, line join=round] (21.2,-10.26) -- (21.26,-10.21) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (18.51,-10.23) -- (18.58,-10.27) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!93!white, draw=tdc9!93!white, line width=0.2pt, line join=round] (21.12,-10.3) -- (21.2,-10.26) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!23!white, draw=tdc9!23!white, line width=0.2pt, line join=round] (18.58,-10.27) -- (18.66,-10.32) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!88!white, draw=tdc9!88!white, line width=0.2pt, line join=round] (21.02,-10.34) -- (21.12,-10.3) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!23!white, draw=tdc9!23!white, line width=0.2pt, line join=round] (18.66,-10.32) -- (18.76,-10.35) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!83!white, draw=tdc9!83!white, line width=0.2pt, line join=round] (20.92,-10.38) -- (21.02,-10.34) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!23!white, draw=tdc9!23!white, line width=0.2pt, line join=round] (18.76,-10.35) -- (18.87,-10.39) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!78!white, draw=tdc9!78!white, line width=0.2pt, line join=round] (20.8,-10.41) -- (20.92,-10.38) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!24!white, draw=tdc9!24!white, line width=0.2pt, line join=round] (18.87,-10.39) -- (18.99,-10.42) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!72!white, draw=tdc9!72!white, line width=0.2pt, line join=round] (20.68,-10.44) -- (20.8,-10.41) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!25!white, draw=tdc9!25!white, line width=0.2pt, line join=round] (18.99,-10.42) -- (19.11,-10.45) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!67!white, draw=tdc9!67!white, line width=0.2pt, line join=round] (20.55,-10.47) -- (20.68,-10.44) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!27!white, draw=tdc9!27!white, line width=0.2pt, line join=round] (19.11,-10.45) -- (19.25,-10.47) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!62!white, draw=tdc9!62!white, line width=0.2pt, line join=round] (20.41,-10.49) -- (20.55,-10.47) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!30!white, draw=tdc9!30!white, line width=0.2pt, line join=round] (19.25,-10.47) -- (19.38,-10.49) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!57!white, draw=tdc9!57!white, line width=0.2pt, line join=round] (20.27,-10.5) -- (20.41,-10.49) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!32!white, draw=tdc9!32!white, line width=0.2pt, line join=round] (19.38,-10.49) -- (19.53,-10.51) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!52!white, draw=tdc9!52!white, line width=0.2pt, line join=round] (20.12,-10.51) -- (20.27,-10.5) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!35!white, draw=tdc9!35!white, line width=0.2pt, line join=round] (19.53,-10.51) -- (19.68,-10.52) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!47!white, draw=tdc9!47!white, line width=0.2pt, line join=round] (19.97,-10.52) -- (20.12,-10.51) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!39!white, draw=tdc9!39!white, line width=0.2pt, line join=round] (19.68,-10.52) -- (19.83,-10.52) -- (19.88,-7.13) -- cycle;
+  \filldraw[fill=tdc9!43!white, draw=tdc9!43!white, line width=0.2pt, line join=round] (19.83,-10.52) -- (19.97,-10.52) -- (19.88,-7.13) -- cycle;
+  \end{scope}
+  \draw[tdc9!70!black, line width=0.8pt, line join=round] (21.2,-10.26) -- (21.26,-10.21) -- (21.32,-10.17) -- (21.36,-10.12) -- (21.39,-10.07) -- (21.4,-10.02) -- (21.4,-9.96) -- (21.38,-9.91) -- (19.88,-7.13) -- (18.39,-9.88) -- (18.36,-9.93) -- (18.35,-9.98) -- (18.35,-10.03) -- (18.37,-10.08) -- (18.4,-10.13) -- (18.45,-10.18) -- (18.51,-10.23) -- (18.58,-10.27) -- (18.66,-10.32) -- (18.76,-10.35) -- (18.87,-10.39) -- (18.99,-10.42) -- (19.11,-10.45) -- (19.25,-10.47) -- (19.38,-10.49) -- (19.53,-10.51) -- (19.68,-10.52) -- (19.83,-10.52) -- (19.97,-10.52) -- (20.12,-10.51) -- (20.27,-10.5) -- (20.41,-10.49) -- (20.55,-10.47) -- (20.68,-10.44) -- (20.8,-10.41) -- (20.92,-10.38) -- (21.02,-10.34) -- (21.12,-10.3) -- (21.2,-10.26);
+  \draw[tdc9!70!black, line width=0.8pt, dashed, line join=round] (21.38,-9.91) -- (21.35,-9.86) -- (21.3,-9.81) -- (21.24,-9.77) -- (21.17,-9.72) -- (21.09,-9.68) -- (20.99,-9.64) -- (20.88,-9.61) -- (20.76,-9.57) -- (20.64,-9.55) -- (20.5,-9.52) -- (20.37,-9.5) -- (20.22,-9.49) -- (20.07,-9.48) -- (19.92,-9.48) -- (19.78,-9.48) -- (19.63,-9.48) -- (19.48,-9.49) -- (19.34,-9.51) -- (19.2,-9.53) -- (19.07,-9.55) -- (18.95,-9.58) -- (18.83,-9.62) -- (18.73,-9.65) -- (18.63,-9.69) -- (18.55,-9.74) -- (18.49,-9.78) -- (18.43,-9.83) -- (18.39,-9.88);
+  \draw[tdc9!70!black, line width=0.6pt, dashed, line join=round] (19.88,-10) -- (21.2,-10.26);
+  \node at (20.6,-9.82) {$r$};
+  \draw[tdc9!70!black, line width=0.6pt, dashed, line join=round] (19.88,-10) -- (19.88,-7.13);
+  \node at (20.08,-8.85) {$h$};
+  \node[font=\small\bfseries, text=tdc1] at (3.75,-12.5) {FEYNMAN DIAGRAMS};
+  \begin{scope}[shift={(1.51,-14.62)}]
+  \begin{feynman}
+    \vertex (i1) at (0,1) {\(e^-\)};
+    \vertex (i2) at (0,-1) {\(e^+\)};
+    \vertex (a) at (1.25,0);
+    \vertex (b) at (3.25,0);
+    \vertex (f1) at (4.5,1) {\(\mu^-\)};
+    \vertex (f2) at (4.5,-1) {\(\mu^+\)};
+    \diagram* {
+      (i1) -- [fermion] (a) -- [fermion] (i2),
+      (a) -- [photon, edge label=\(\gamma\), momentum'=\(q\)] (b),
+      (f2) -- [fermion] (b) -- [fermion] (f1),
+    };
+  \end{feynman}
+  \end{scope}
+  \node[font=\small\bfseries, text=tdc1] at (10.5,-12.5) {TREES};
+  \node[font=\large] at (10.42,-14.73) {\pgfinterruptpicture%
+  \begin{forest}
+    for tree={draw, rounded corners}
+    [Root
+      [Branch [Leaf] [Leaf]]
+      [Branch [Leaf]]
+    ]
+  \end{forest}%
+  \endpgfinterruptpicture};
+  \node[font=\small\bfseries, text=tdc1] at (15.5,-12.5) {ZX-CALCULUS};
+  \node at (14.84,-14.56) {\pgfinterruptpicture%
+  \begin{ZX}
+  \zxN{} \rar &[\zxwCol] \zxZ{\alpha} \ar[r,o',H] \ar[r,o.] &[\zxHCol] \zxX-{\beta} \rar &[\zxwCol] \zxN{}
+  \end{ZX}%
+  \endpgfinterruptpicture};
+  \node[font=\small\bfseries, text=tdc1] at (20,-12.5) {BLOCH SPHERE};
+  \node[inner sep=0pt] at (20.02,-15.18) {\pgfinterruptpicture%
+  \begin{blochsphere}[radius=1.5cm, tilt=15, rotation=-20]
+    \drawBallGrid[style={opacity=0.3}]{30}{30}
+    \drawAxis[scale=1.3, axisarrow={->}]{0}{0}
+    \labelPolar[scale=1.45]{z}{0}{0}
+    \node at (z) {$z$};
+    \drawStatePolar{psi}{50}{70}
+    \node[above right] at (psi) {$\psi$};
+  \end{blochsphere}%
+  \endpgfinterruptpicture};
+  \node[font=\small, text=tdc7] at (11.75,-18) {Double-click any block to open its editor. Select a 3D figure to turn it or change it in the panel.};
+\end{tikzpicture}
+}
+\end{center}
+
+\section*{How to use}
+\subsection*{Draw}
+\begin{enumerate}
+  \item Pick a tool from the rail on the left. A button with a small corner mark opens a menu when you rest on it: lines, shapes, electrical, physics, \textbf{2D plots}, \textbf{3D} and \textbf{Blocks}.
+  \item Click on the canvas to place the object, or drag to set its size. Hold \texttt{Shift} to keep angles and squares, \texttt{Alt} to place it off the grid.
+  \item Choose the arrow tool (\texttt{V}) to select. The panel on the right edits what is selected: colours, line style, arrow heads, text size and exact position.
+\end{enumerate}
+\begin{itemize}
+  \item Shortcuts for the common tools: \texttt{L} line, \texttt{A} arrow, \texttt{C} curve, \texttt{P} polyline, \texttt{R} rectangle, \texttt{E} ellipse, \texttt{T} text.
+\end{itemize}
+
+\subsection*{Text and maths}
+\begin{itemize}
+  \item Write maths between \$ signs, as in \LaTeX, for example $\int_0^1 x^2\,dx = \tfrac13$. Use \$\$ for a displayed formula.
+  \item Double-click any text or label to edit it in place. Under \textbf{Text input} in the sidebar, choose \LaTeX\ source or the visual MathLive editor.
+\end{itemize}
+
+\subsection*{Blocks}
+\begin{itemize}
+  \item Circuits, quantum circuits, commutative diagrams, trees, ZX and Feynman diagrams, Bloch spheres, 3D geometry, timing diagrams, state machines, Karnaugh maps and chemistry are each drawn from their own \LaTeX\ package.
+  \item Double-click a block, or select it and press \texttt{Enter}, to open its editor. The drawing and the code beside it stay in step, both ways.
+\end{itemize}
+
+\subsection*{Arrange}
+\begin{itemize}
+  \item Right-click an object for its actions. \texttt{Cmd+D} duplicates, \texttt{Cmd+G} groups, \texttt{Cmd+R} turns by 90 degrees, and the arrow keys nudge.
+  \item Hold \texttt{Space} and drag to pan, or \texttt{Cmd} and scroll to zoom. \texttt{G} shows or hides the grid. \texttt{Cmd+Z} undoes.
+\end{itemize}
+
+\subsection*{Write the document}
+\begin{itemize}
+  \item In Classic, switch between \textbf{Document} and \textbf{Diagram} at the top, or double-click a diagram to draw in it.
+  \item In a text block, start a line with \texttt{\#} for a section, \texttt{-} for a bullet or \texttt{1.} for a numbered list.
+  \item Your work saves in this browser as you go. \texttt{Cmd+S} saves a \texttt{.diagramtex} file to keep or share, and \texttt{Cmd+O} opens one. \textbf{Import} reads TikZ or \LaTeX\ back in.
+\end{itemize}
+
+\subsection*{Get the LaTeX out}
+\begin{itemize}
+  \item In Diagram view, \textbf{Code} (\texttt{Cmd+E}) shows the TikZ for the diagram, ready to paste into your paper. It lists the packages your preamble needs.
+  \item \textbf{LaTeX} (\texttt{Cmd+Shift+E}) downloads the whole document as a \texttt{.tex} file.
+  \item \textbf{Export} saves a PNG, SVG or PDF. \texttt{Cmd+P} prints.
+\end{itemize}
+
+\end{document}

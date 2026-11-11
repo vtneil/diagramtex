@@ -349,6 +349,9 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 #content .hitfill { fill: transparent; stroke: none; pointer-events: all; }
 #content path:not(.hit):not(.hitfill), #content circle:not(.hitfill), #content ellipse, #content rect:not(.hitfill), #content foreignObject { pointer-events: none; }
 #content [data-id] { cursor: move; }
+/* kept TikZ code (rawtikz.js): the frame and tag keep their size on screen at any zoom */
+#content .rawtikz-frame { fill: none; stroke: var(--graphite); stroke-width: calc(0.8px / var(--zoom, 1)); stroke-dasharray: calc(3px / var(--zoom, 1)) calc(2px / var(--zoom, 1)); }
+#content .rawtikz-tag { fill: var(--graphite); font-family: var(--font-mono); font-size: calc(10px / var(--zoom, 1)); transform: translateY(calc(-3px / var(--zoom, 1))); }
 #content > g.mv { transform: translate(var(--mx, 0), var(--my, 0)); } /* a large selection while it is dragged (app.js fastMove) */
 .tx { font-family: var(--font-tex); line-height: 1.2; white-space: pre; text-align: center; display: inline-block; pointer-events: none; }
 .tx .katex { font-size: 1em; }
@@ -682,6 +685,17 @@ textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); r
 #tikzOut, #impText { flex: 1; border: 0; border-radius: 0; padding: 16px; font: 12px/1.6 var(--font-mono); resize: none; outline: none; color: var(--ink); background: var(--sheet); }
 .modal-foot { padding: 8px 16px; min-height: 32px; color: var(--redpen); font-size: 12px; border-top: 1px solid var(--rule); }
 .modal-foot:empty { display: none; }
+/* the import report: what stays TikZ code, and why */
+.modal-foot.report { color: var(--graphite); max-height: 168px; overflow: auto; }
+.modal-foot.report ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: auto auto 1fr; gap: 2px 12px; }
+.modal-foot.report li { display: contents; }
+.modal-foot.report .ln { font-family: var(--font-mono); white-space: nowrap; }
+.modal-foot.report code { font-family: var(--font-mono); color: var(--ink); white-space: nowrap; }
+.modal-foot.report .warn { color: var(--redpen); }
+/* TD.lint rows (texlint.js): problems in red pen, notes in graphite */
+.lint { color: var(--graphite); }
+.lint.error, .lint.warn { color: var(--redpen); }
+.lint .ln { font-family: var(--font-mono); margin-right: 8px; }
 
 /* ---------- document view: the typeset page on the desk ---------- */
 #docview { display: none; flex: 1; overflow: auto; scrollbar-gutter: stable; background: var(--paper); padding: 28px 16px 80px; position: relative; order: 2; }

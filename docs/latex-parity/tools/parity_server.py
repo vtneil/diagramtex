@@ -24,7 +24,11 @@ class H(http.server.SimpleHTTPRequestHandler):
         name = safe(s.path[14:]); dpi = s.headers.get('X-Dpi', '254')
         eng = s.headers.get('X-Engine', 'pdflatex')
         open(os.path.join(OUT, name + '.tex'), 'wb').write(s._body())
-        r = subprocess.run([eng, '-no-shell-escape', '-interaction=nonstopmode', '-halt-on-error', name + '.tex'], cwd=OUT, capture_output=True, timeout=180)
+        body = open(os.path.join(OUT, name + '.tex'), 'rb').read()
+        # remember picture (\chemmove, overlays) needs a second run to find the marked points
+        for _ in range(2 if b'chemmove' in body or b'remember picture' in body else 1):
+            r = subprocess.run([eng, '-no-shell-escape', '-interaction=nonstopmode', '-halt-on-error', name + '.tex'], cwd=OUT, capture_output=True, timeout=180)
+            if r.returncode: break
         ok = r.returncode == 0
         log = r.stdout.decode('utf8', 'replace')[-3000:]
         if ok:

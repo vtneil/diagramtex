@@ -1,0 +1,16 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{forest}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[font=\large] at (2.13,-2.48) {\pgfinterruptpicture%
+  \begin{forest}
+    for tree={circle, draw, minimum size=2em}
+    [8
+      [3 [1] [6 [4] [7]]]
+      [10 [, phantom] [14 [13] [, phantom]]]
+    ]
+  \end{forest}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

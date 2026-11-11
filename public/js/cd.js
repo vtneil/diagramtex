@@ -249,6 +249,21 @@
       if (name === 'sharp corners') { A.rc = 0; continue; }
       if (name === 'to path') { A.toPath = unbrace(arg || ''); continue; }
       if (name === 'execute at begin to' || name === 'from' || name === 'to') continue;
+      // quiver's own keys (\usepackage{quiver})
+      if (name === 'curve') {
+        A.qcurve = { h: 0, pos: 0.35 };
+        for (const o of Z.opts(unbrace(arg)).list) { const q = Z.styleOf(o), l = q.name === 'height' ? length(unbrace(q.arg)) : null; if (l != null) A.qcurve.h = l; else if (q.name === 'pos') A.qcurve.pos = parseFloat(q.arg) || 0; }
+        continue;
+      }
+      if (name === 'between') { const m = /^\s*\{([^}]*)\}\s*\{([^}]*)\}\s*$/.exec(arg || ''); if (m) { A.between = [parseFloat(m[1]) || 0, parseFloat(m[2])]; if (!isFinite(A.between[1])) A.between[1] = 1; continue; } }
+      if (name === 'tail reversed') { A.tail = 'to'; continue; }
+      if (name === '2tail') { A.tail = 'implies<'; continue; }
+      if (name === '2tail reversed') { A.tail = 'implies'; continue; }
+      if (name === 'no body') { A.nobody = true; continue; }
+      if (name === 'loop') { A.loop = true; continue; }
+      if (name === 'distance') { const l = length(unbrace(arg), PX); if (l != null) { A.dist = l; continue; } }
+      if (name === 'scaling nfold') { const n = parseInt(unbrace(arg), 10); if (n > 2) warn(`The ${n}-fold arrow is drawn double here (it is kept in the code)`); continue; }
+      if (name === 'nfold') { const n = arg == null ? 2 : parseInt(unbrace(arg), 10); if (n === 1) A.dbl = false; else if (n > 2) warn(`The ${n}-fold arrow is drawn double here (it is kept in the code)`); continue; }
       if (HEADS[name] && arg == null) { Object.assign(A, HEADS[name]); continue; }
       if (name === 'dashed') { A.dash = 'dashed'; continue; }
       if (name === 'dotted' || name === 'densely dotted' || name === 'loosely dotted') { A.dash = 'dotted'; continue; }
@@ -285,9 +300,10 @@
       if (name === 'very thick') { A.lw = 1.2 * PT; continue; }
       if (name === 'thin') { A.lw = LW; continue; }
       if (name === 'line width') { const l = length(arg); if (l != null) { A.lw = l; continue; } }
-      if (name === 'color' || name === 'draw') { const k = TD.tikzColor && TD.tikzColor(arg); if (k) { A.color = k; continue; } if (arg === 'none') { A.phantom = true; continue; } }
+      // draw= colours the line only; color= (or a colour's name) the line and its labels
+      if (name === 'color' || name === 'draw') { const v = unbrace(arg).trim(), k = TD.tikzColor && TD.tikzColor(v); if (k) { A.color = k; if (name === 'color') A.lcolor = k; continue; } if (v === 'none') { A.phantom = true; continue; } }
       const k = arg == null && TD.tikzColor && TD.tikzColor(name);
-      if (k) { A.color = k; continue; }
+      if (k) { A.color = A.lcolor = k; continue; }
       warn(`The arrow option "${it}" isn't drawn here (it is kept in the code)`);
     }
     return A;
@@ -409,26 +425,69 @@
 
     const arrows = [], labels = [], later = [], names = {};
     const base = every.length ? style(every, warn) : null;
+    const named = []; // arrows to or from a named label (quiver's 2-cells): drawn once the names are known
+    const inside = (a, b) => a >= 0 && a < R && b >= 0 && b < C;
     for (let r = 0; r < R; r++) for (let c = 0; c < cells[r].length; c++) cells[r][c].arrows.forEach((ar, ai) => {
-      // from=ul / to=dr: the arrow written in the cell at its other end
-      let dirs = ar.dirs, back = false;
-      if (!dirs) { const k = ar.items.map((x) => /^(from|to)\s*=\s*([rlud]+)\s*$/.exec(x)).find(Boolean); if (k) { dirs = k[2]; back = k[1] === 'from'; } }
-      if (!dirs) { warn('An arrow with no direction (like \\arrow[r]) is skipped'); return; }
-      const [dr, dc] = delta(dirs);
-      const r1 = back ? r + dr : r, c1 = back ? c + dc : c, r2_ = back ? r : r + dr, c2 = back ? c : c + dc;
-      const inside = (a, b) => a >= 0 && a < R && b >= 0 && b < C;
-      if (!inside(r1, c1) || !inside(r2_, c2) || (!dr && !dc)) { warn(`An arrow from row ${r + 1}, column ${c + 1} points outside the diagram`); return; }
+      // the ends: the arrow's own cell, moved by a direction (r, from=ul, to=dr), a cell (from=1-2) or a name (to=0)
+      let from = { cell: [r, c] }, to = null;
+      if (ar.dirs) { const [dr, dc] = delta(ar.dirs); to = { cell: [r + dr, c + dc] }; }
+      for (const x of ar.items) {
+        const m = /^(from|to)\s*=\s*([\s\S]+)$/.exec(x.trim());
+        if (!m) continue;
+        const v = unbrace(m[2]).trim(), k = /^(\d+)\s*-\s*(\d+)$/.exec(v);
+        let e;
+        if (/^[rlud]+$/.test(v)) { const [dr, dc] = delta(v); e = { cell: [r + dr, c + dc] }; }
+        else if (k) e = { cell: [+k[1] - 1, +k[2] - 1] };
+        else e = { name: v };
+        if (m[1] === 'from') from = e; else to = e;
+      }
+      if (!to) to = { cell: [r, c] };
+      if (from.cell && to.cell && from.cell[0] === to.cell[0] && from.cell[1] === to.cell[1] && !ar.items.some((x) => /^loop\b/.test(x.trim()))) { warn('An arrow with no direction (like \\arrow[r]) is skipped'); return; }
+      if ((from.cell && !inside(...from.cell)) || (to.cell && !inside(...to.cell))) { warn(`An arrow from row ${r + 1}, column ${c + 1} points outside the diagram`); return; }
       const A = style(every.concat(ar.items), warn, PR);
       void base;
+      if (from.name || to.name) { named.push({ A, from, to, src: [r, c, ai] }); return; }
+      const [r1, c1] = from.cell, [r2_, c2] = to.cell;
       const S = nodeAt(r1, c1), T = nodeAt(r2_, c2);
-      if (A.toPath) { later.push({ A, S, T, src: [r, c, ai], to: [r2_, c2] }); return; }
+      arrowAt(A, S, T, [r, c, ai], [r2_, c2], r1, c1);
+    });
+    // the arrows that end at a name: at the label's point (an empty label with inner sep=0 is a point)
+    // (a 2-cell between 2-cells ends at a name another named arrow gives: go round until nothing more resolves)
+    const end = (e) => { if (e.cell) return nodeAt(...e.cell); const p = names[e.name]; return p ? { x: p.x, y: p.y, oy: 0, w: 0, h: 0 } : null; };
+    for (let todo = named, again = true; todo.length && again;) {
+      const rest = [];
+      again = false;
+      for (const it of todo) {
+        const S = end(it.from), T = end(it.to);
+        if (!S || !T) { rest.push(it); continue; }
+        arrowAt(it.A, S, T, it.src, it.to.cell || null);
+        again = true;
+      }
+      todo = rest;
+      if (!again) for (const it of rest) warn(`An arrow to "${(it.from.name && !names[it.from.name] ? it.from : it.to).name}", a name not given to any label, is skipped`);
+    }
+    function arrowAt(A, S, T, src, toCell, r1, c1) {
+      const [r, c, ai] = src, r2_ = toCell && toCell[0], c2 = toCell && toCell[1];
+      if (A.toPath) { later.push({ A, S, T, src: [r, c, ai], to: toCell }); return; }
       if (A.turns && A.turns.length) {
         const g = xyTurns(A, S, T, r1, c1);
-        if (g) { arrows.push({ seg: g.seg, route: g.els, A, src: [r, c, ai], to: [r2_, c2] }); g.pieces.forEach((pc, i) => (A.turns[i].labels || []).forEach((L, li) => placeLabel(PR.label(L), A, pc, [r, c, ai, 100 + i * 10 + li]))); A.labels.forEach((L, li) => placeLabel(L, A, g.seg, [r, c, ai, li])); return; }
+        if (g) { arrows.push({ seg: g.seg, route: g.els, A, src: [r, c, ai], to: toCell }); g.pieces.forEach((pc, i) => (A.turns[i].labels || []).forEach((L, li) => placeLabel(PR.label(L), A, pc, [r, c, ai, 100 + i * 10 + li]))); A.labels.forEach((L, li) => placeLabel(L, A, g.seg, [r, c, ai, li])); return; }
       }
       const d = { x: T.x - S.x, y: T.y - S.y }, dl = Math.hypot(d.x, d.y) || 1, u = { x: d.x / dl, y: d.y / dl };
       let seg;
-      if (A.curve != null && A.bend != null) {
+      if (A.loop) {
+        // TikZ's loop: out of the node at out, back in at in, the controls `distance` away along each
+        const outA = A.outA != null ? A.outA : 105, inA = A.inA != null ? A.inA : 75, k = A.dist != null ? A.dist : 0.5 * PX;
+        const U = (a) => { a = (a * Math.PI) / 180; return { x: Math.cos(a), y: -Math.sin(a) }; };
+        const p = ray(S, outA), q = ray(T, inA), uo = U(outA), ui = U(inA);
+        seg = bez(p, { x: p.x + k * uo.x, y: p.y + k * uo.y }, { x: q.x + k * ui.x, y: q.y + k * ui.y }, q);
+      } else if (A.qcurve) {
+        // quiver's curve={height=h, pos=p}: controls at p and 1-p of the way, h to the right of the line (TikZ's 270°),
+        // from the start's border towards the first control to the target's towards the second
+        const { h, pos } = A.qcurve, nr = { x: -u.y, y: u.x };
+        const c1 = { x: S.x + d.x * pos + nr.x * h, y: S.y + d.y * pos + nr.y * h }, c2 = { x: S.x + d.x * (1 - pos) + nr.x * h, y: S.y + d.y * (1 - pos) + nr.y * h };
+        seg = bez(exit(S, S, unitV(S, c1)), c1, c2, exit(T, T, unitV(T, c2)));
+      } else if (A.curve != null && A.bend != null) {
         // xy's @/^d/: a curve whose middle sits d off the straight line, to the left (^) or right (_)
         const p = (A.sa && compass(S, A.sa)) || S, q = (A.ea && compass(T, A.ea)) || T;
         const nl = { x: u.y, y: -u.x }, h = (Math.sign(A.bend) * A.curve) / 0.75;
@@ -456,23 +515,32 @@
         seg = line(p, q);
       }
       if (A.sh0 || A.sh1) { const t0 = A.sh0 ? tAt(seg, A.sh0) : 0, t1 = A.sh1 ? tAt(seg, -A.sh1) : 1; if (t1 > t0) seg = sub(seg, t0, t1); }
-      arrows.push({ seg, A, src: [r, c, ai], to: [r2_, c2] });
+      // quiver's between={a}{b}: only that part of the path is drawn (spath3 splits it after the labels are placed)
+      const drawn = A.between && A.between[1] > A.between[0] ? sub(seg, A.between[0], A.between[1]) : seg;
+      arrows.push({ seg: drawn, A, src: [r, c, ai], to: toCell });
       A.ends = { S, T };
       A.labels.forEach((L, li) => placeLabel(L, A, seg, [r, c, ai, li]));
-    });
+    }
     // labels: at the middle (or pos), on the left of the arrow (auto), ' puts them on the right; name= keeps the point
     function placeLabel(L, A, seg, src) {
       {
         let named = null, coord = false;
         for (const o of L.opts) { const { name, arg } = Z.styleOf(o); if (name === 'name') named = unbrace(arg); else if (name === 'shape' && unbrace(arg) === 'coordinate') coord = true; }
         if (!L.t && !named) return;
-        let pos = A.pos != null ? A.pos : 0.5, swap = A.swap !== L.swap, desc = A.desc || A.phantom, fill = A.desc;
+        let pos = A.pos != null ? A.pos : 0.5, swap = A.swap !== L.swap, desc = A.desc || A.phantom, fill = A.desc, lcol = A.lcolor || null, rot = 0;
         for (const o of L.opts) {
           const { name, arg } = Z.styleOf(o);
           if (name in POS) pos = POS[name];
           else if (name === 'pos') pos = parseFloat(arg) || 0;
           else if (name === 'description') { desc = true; fill = true; }
           else if (name === 'marking') desc = true;
+          // anchor=center: the label sits on the line (quiver's pullback corners)
+          else if (name === 'anchor' && unbrace(arg).trim() === 'center') desc = true;
+          else if (name === 'rotate') rot = parseFloat(unbrace(arg)) || 0;
+          else if (name === 'allow upside down' || name === 'inner sep') continue;
+          else if (name === 'text' && /background color/.test(arg || '')) lcol = 'paper';
+          else if ((name === 'text' || name === 'color') && TD.tikzColor && TD.tikzColor(unbrace(arg).trim())) lcol = TD.tikzColor(unbrace(arg).trim());
+          else if (arg == null && TD.tikzColor && TD.tikzColor(name)) lcol = TD.tikzColor(name);
           else if (name === 'swap') swap = !swap;
           else if (PR && PR.at && name === 'xy at') {
             const v = PR.at(arg);
@@ -484,7 +552,7 @@
               const len = segLen(seg), dist = d0 + v.f * (len - d0 - d1) + v.slide; pos = tAt(seg, Math.max(1e-6, Math.min(len - 1e-6, dist))); }
           }
           else if (name === 'name' || name === 'shape') continue;
-          else if (/^(above|below|left|right|anchor|inner sep|outer sep|near|sloped|font|text|fill|color|red|blue)/.test(name)) warn(`The label option "${o}" isn't drawn here (it is kept in the code)`);
+          else if (L.t && /^(above|below|left|right|anchor|inner sep|outer sep|near|sloped|font|text|fill|color|red|blue)/.test(name)) warn(`The label option "${o}" isn't drawn here (it is kept in the code)`);
         }
         const P0 = at(seg, pos), tu = tan(seg, pos);
         if (coord || !L.t) { if (named) names[named] = P0; return; }
@@ -499,7 +567,7 @@
           x += (sx * w) / 2; y += (sy * h) / 2;
         }
         if (named) names[named] = { x, y };
-        labels.push({ t: mathOf(L.t), x, y, w, h, b, fill, color: A.color, src });
+        labels.push({ t: mathOf(L.t), x, y, w, h, b, fill, color: lcol, rot, src });
       }
     }
     // arrows drawn along a to path, once every named point is known
@@ -676,6 +744,8 @@
       return { svg: t1.svg + t2.svg, back: t1.back };
     }
     if (kind === 'tail') return TD.cmArrow(P, u, w, col, 6.2 * w, 0, -1);
+    // quiver's 2tail: an Implies turned round at the start (its point inward, its back on the end)
+    if (kind === 'implies<') { const a = 0.225 * EX, l = 2.06 * a + 0.5 * w, t = tipSvg('implies', { x: P.x - u.x * l, y: P.y - u.y * l }, { x: -u.x, y: -u.y }, w, col); return { svg: t.svg, back: 0 }; }
     if (kind === "harpoon'") return TD.tip('harpoonr', P, u, w, col);
     return TD.tip(kind, P, u, w, col);
   }
@@ -713,7 +783,8 @@
     const dash = PR && PR.dash && A.dash ? PR.dash(A.dash, w) : A.dash === 'dashed' ? ` stroke-dasharray="${r2(7 * w)} ${r2(4 * w)}"` : A.dash === 'dotted' ? ` stroke-dasharray="${r2(w)} ${r2(2 * PT)}" stroke-linecap="round"` : '';
     let out = '';
     if (A.cross) out += `<path d="${full}" fill="none" stroke="${paper}" stroke-width="${r2(1.5 * EX)}"/>`;
-    if (A.dbl) {
+    if (A.nobody) { /* quiver's no body: the tips alone */ }
+    else if (A.dbl) {
       const gap = PR && PR.dblGap != null ? PR.dblGap : 1.6 * PT;
       out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${r2(gap + 2 * w)}"${dash}/><path d="${d}" fill="none" stroke="${paper}" stroke-width="${r2(gap)}"/>`;
     } else out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${r2(w)}"${dash} stroke-linejoin="round"/>`;
@@ -732,7 +803,9 @@
       for (const n of Lo.nodes) out += TD.textSvg(n.t, NORMAL, s.color || '#000000', n.x, n.y + TXT_DY, ctx);
       for (const l of Lo.labels) {
         if (l.fill) out += `<rect x="${r2(l.x - l.w / 2)}" y="${r2(l.y - l.h / 2)}" width="${r2(l.w)}" height="${r2(l.h)}" fill="${paper}"/>`;
-        out += TD.textSvg(l.t, l.font || LABEL, l.color || s.color || '#000000', l.x, l.y, ctx);
+        const tx = TD.textSvg(l.t, l.font || LABEL, l.color === 'paper' ? paper : l.color || s.color || '#000000', l.x, l.y, ctx);
+        // TikZ turns anticlockwise, SVG clockwise
+        out += l.rot ? `<g transform="rotate(${r2(-l.rot)} ${r2(l.x)} ${r2(l.y)})">${tx}</g>` : tx;
       }
     }
     const bb = Lo.bb;
@@ -807,6 +880,8 @@
     // tikz-cd is a picture of its own: it sits in a plain node with the outer picture interrupted
     tikz(s, X) {
       X.pkgs.add('tikz-cd');
+      // code from quiver (q.uiver.app) uses the styles of its package
+      if (/\b(curve\s*=|between\s*=|nfold|tail reversed|2tail|no body|coil|multimap)/.test(s.src)) X.pkgs.add('quiver');
       if (/squig/.test(s.src)) X.libs.add('decorations.pathmorphing');
       const b = layout(s).bb;
       return `\\node at ${X.c(s.x + b.w / 2, s.y + b.h / 2)} {\\pgfinterruptpicture%\n${fullCode(s.src)}%\n\\endpgfinterruptpicture};`;

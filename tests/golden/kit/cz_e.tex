@@ -1,0 +1,20 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[ground] at (0,0) {$G$};
+    \node[nground] at (2,0) {$N$};
+    \node[pground] at (4,0) {$P$};
+    \node[cground] at (6,0) {$C$};
+    \node[sground] at (8,0) {$S$};
+    \node[eground] at (10,0) {$E$};
+    \node[vcc] at (0,3) {$V_{cc}$};
+    \node[vee] at (3,3) {$V_{ee}$};
+    \node[npn] at (6,3) {$Q_1$};
+    \node[nmos] at (9,3) {$M$};
+    \node[op amp] at (13,3) {$A$};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

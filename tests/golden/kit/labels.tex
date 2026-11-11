@@ -1,0 +1,18 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \draw[line width=0.71pt, -{Stealth}] (0.96,-2.22) -- node[auto, pos=0.5] {$\alpha_0$} (3.54,-1.28);
+  \draw[line width=0.71pt, -{Stealth}] (5.92,-3) -- node[auto, swap, pos=0.5] {$\alpha_1$} (7.08,-0.5);
+  \draw[line width=0.71pt, -{Stealth}] (11.22,-3.04) -- node[auto, pos=0.5] {$\alpha_2$} (10.28,-0.46);
+  \draw[line width=0.71pt, -{Stealth}] (16.25,-2.33) -- node[auto, swap, pos=0.5] {$\alpha_3$} (13.75,-1.17);
+  \draw[line width=0.71pt, -{Stealth}] (3.54,-5.28) -- node[auto, pos=0.5] {$\alpha_4$} (0.96,-6.22);
+  \draw[line width=0.71pt, -{Stealth}] (7.08,-4.5) -- node[auto, swap, pos=0.5] {$\alpha_5$} (5.92,-7);
+  \draw[line width=0.71pt, -{Stealth}] (10.28,-4.46) -- node[auto, pos=0.5] {$\alpha_6$} (11.22,-7.04);
+  \draw[line width=0.71pt, -{Stealth}] (13.75,-5.17) -- node[auto, swap, pos=0.5] {$\alpha_7$} (16.25,-6.33);
+  \draw[line width=0.71pt] (0.5,-8.25) -- node[fill=white, inner sep=1pt, pos=0.5] {on the line} (5,-8.25);
+  \draw[line width=0.71pt] (6.5,-7.5) -- node[auto, pos=0.5] {vertical} (6.5,-9.5);
+  \draw[line width=0.71pt, -{Latex}] (8.5,-9) .. controls (9.5,-7) and (12,-10) .. node[auto, pos=0.35] {$\gamma(t)$} (14,-8);
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,11 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, decorations.pathreplacing}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \draw[line width=0.71pt, -{Stealth}, postaction={draw, -, solid, decorate, decoration={ticks, segment length=6pt, amplitude=3pt}}] (0,0) -- (3.75,0);
+  \draw[line width=0.71pt, {Latex}-{To}, postaction={draw, -, solid, decorate, decoration={ticks, segment length=6pt, amplitude=3pt}}] (0,-0.75) -- (3.68,-0.75);
+  \draw[line width=0.71pt, postaction={draw, -, solid, decorate, decoration={ticks, segment length=6pt, amplitude=3pt}}] (0,-1.5) -- (3.75,-1.5);
+  \draw[line width=0.71pt, -{Latex}, postaction={draw, -, solid, decorate, decoration={ticks, segment length=6pt, amplitude=3pt}}] (0,-2.5) .. controls (1,-1.75) and (2.25,-3.25) .. (3.75,-2.5);
+\end{tikzpicture}
+\end{document}

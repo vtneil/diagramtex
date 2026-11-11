@@ -1,0 +1,21 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[jump crossing] at (0,0) {};
+    \node[plain crossing] at (4,0) {};
+    \node[currarrow] at (8,0) {};
+    \node[inputarrow] at (12,0) {};
+    \node[trarrow] at (0,-4) {};
+    \node[flowarrow] at (4,-4) {};
+    \node[diamondpole] at (8,-4) {};
+    \node[odiamondpole] at (12,-4) {};
+    \node[squarepole] at (0,-8) {};
+    \node[osquarepole] at (4,-8) {};
+    \node[iecplugL] at (12,-8) {};
+    \draw (7,-8) to[iecconn] (9,-8);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

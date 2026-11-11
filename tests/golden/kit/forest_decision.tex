@@ -1,0 +1,18 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usepackage{forest}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[font=\large] at (1.84,-1.9) {\pgfinterruptpicture%
+  \begin{forest}
+    for tree={draw, edge={->}, s sep=8mm, l sep=8mm}
+    [{$x_1 \le 3$?}
+      [{$x_2 \le 1$?}, edge label={node[midway, left]{yes}}
+        [A, ellipse] [B, ellipse]]
+      [C, ellipse, edge label={node[midway, right]{no}}]
+    ]
+  \end{forest}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

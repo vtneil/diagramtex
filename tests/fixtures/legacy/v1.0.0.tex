@@ -1,0 +1,49 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+\definecolor{tdc1}{HTML}{A05A5A}
+\definecolor{tdc2}{HTML}{E53935}
+\definecolor{tdc3}{HTML}{7E57C2}
+
+\title{Electrostatics (sample)}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % texdiagram-data: W3sidHlwZSI6ImxpbmUiLCJ4MSI6NDAsInkxIjoyMDAsIngyIjoyNDAsInkyIjo4MCwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoiZGFzaGVkIiwib3BhY2l0eSI6MSwic2l6ZSI6Im5vcm1hbHNpemUiLCJjb2xvciI6IiMwMDAwMDAiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0IiwibGFiZWwiOiIiLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJub25lIn0seyJ0eXBlIjoibGluZSIsIngxIjoyMCwieTEiOjE3MCwieDIiOjIyMCwieTIiOjUwLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsImxhYmVsIjoiJHIkIiwic3RhcnRUaXAiOiJzdGVhbHRoIiwiZW5kVGlwIjoic3RlYWx0aCJ9LHsidHlwZSI6ImxpbmUiLCJ4MSI6NDAsInkxIjoyMDAsIngyIjoyNSwieTIiOjE3NSwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjowLjc1LCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJzaXplIjoibm9ybWFsc2l6ZSIsImNvbG9yIjoiIzAwMDAwMCIsImxhYmVsUG9zIjowLjUsImxhYmVsU2lkZSI6ImxlZnQiLCJsYWJlbCI6IiIsInN0YXJ0VGlwIjoibm9uZSIsImVuZFRpcCI6Im5vbmUifSx7InR5cGUiOiJsaW5lIiwieDEiOjI0MCwieTEiOjgwLCJ4MiI6MjI1LCJ5MiI6NTUsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MC43NSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwic2l6ZSI6Im5vcm1hbHNpemUiLCJjb2xvciI6IiMwMDAwMDAiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0IiwibGFiZWwiOiIiLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJub25lIn0seyJ0eXBlIjoibGluZSIsIngxIjo0MCwieTEiOjIwMCwieDIiOjgwLCJ5MiI6MTc2LCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjIsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoicmlnaHQiLCJsYWJlbCI6IiRcXGhhdHtyfSQiLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIn0seyJ0eXBlIjoiYmFsbCIsImN4Ijo0MCwiY3kiOjIwMCwiciI6MTgsImJhbGxDb2xvciI6IiNhMDVhNWEiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJiYWxsIiwiY3giOjI0MCwiY3kiOjgwLCJyIjoxOCwiYmFsbENvbG9yIjoiI2EwNWE1YSIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4Ijo0MCwieSI6MjM2LCJ0ZXh0IjoiJHFfMSQiLCJzaXplIjoibm9ybWFsc2l6ZSIsImNvbG9yIjoiIzAwMDAwMCIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4IjoyNzAsInkiOjEwMCwidGV4dCI6IiRxXzIkIiwic2l6ZSI6Im5vcm1hbHNpemUiLCJjb2xvciI6IiMwMDAwMDAiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJ0ZXh0IiwieCI6MTYwLCJ5IjoyNTAsInRleHQiOiIkXFx2ZWMgRiA9IGtcXGRmcmFje3FfMSBxXzJ9e3JeMn1cXCxcXGhhdCByJCIsInNpemUiOiJsYXJnZSIsImNvbG9yIjoiIzAwMDAwMCIsIm9wYWNpdHkiOjF9LHsidHlwZSI6ImVsbGlwc2UiLCJjeCI6NDgwLCJjeSI6MTUwLCJyeCI6NjAsInJ5Ijo2MCwic3Ryb2tlIjoiI2U1MzkzNSIsIndpZHRoIjowLjc1LCJkYXNoIjoic29saWQiLCJmaWxsIjpudWxsLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJlbGxpcHNlIiwiY3giOjQ4MCwiY3kiOjE1MCwicngiOjEwMCwicnkiOjEwMCwic3Ryb2tlIjoiI2U1MzkzNSIsIndpZHRoIjowLjc1LCJkYXNoIjoic29saWQiLCJmaWxsIjpudWxsLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJsaW5lIiwieDEiOjYxMCwieTEiOjE1MCwieDIiOjUzMCwieTIiOjE1MCwic3Ryb2tlIjoiIzAwMDAwMCIsIndpZHRoIjoxLCJkYXNoIjoic29saWQiLCJvcGFjaXR5IjoxLCJzaXplIjoibm9ybWFsc2l6ZSIsImNvbG9yIjoiIzAwMDAwMCIsImxhYmVsUG9zIjowLjUsImxhYmVsU2lkZSI6ImxlZnQiLCJsYWJlbCI6IiIsInN0YXJ0VGlwIjoibm9uZSIsImVuZFRpcCI6InN0ZWFsdGgifSx7InR5cGUiOiJsaW5lIiwieDEiOjU3MS45MjM4ODE1NTQyNTEyLCJ5MSI6MjQxLjkyMzg4MTU1NDI1MTE4LCJ4MiI6NTE1LjM1NTMzOTA1OTMyNzQsInkyIjoxODUuMzU1MzM5MDU5MzI3MzgsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwic2l6ZSI6Im5vcm1hbHNpemUiLCJjb2xvciI6IiMwMDAwMDAiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0IiwibGFiZWwiOiIiLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIn0seyJ0eXBlIjoibGluZSIsIngxIjo0ODAsInkxIjoyODAsIngyIjo0ODAsInkyIjoyMDAsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwic2l6ZSI6Im5vcm1hbHNpemUiLCJjb2xvciI6IiMwMDAwMDAiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0IiwibGFiZWwiOiIiLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIn0seyJ0eXBlIjoibGluZSIsIngxIjozODguMDc2MTE4NDQ1NzQ4OCwieTEiOjI0MS45MjM4ODE1NTQyNTExOCwieDIiOjQ0NC42NDQ2NjA5NDA2NzI2LCJ5MiI6MTg1LjM1NTMzOTA1OTMyNzM4LCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsImxhYmVsIjoiIiwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoic3RlYWx0aCJ9LHsidHlwZSI6ImxpbmUiLCJ4MSI6MzUwLCJ5MSI6MTUwLjAwMDAwMDAwMDAwMDAzLCJ4MiI6NDMwLCJ5MiI6MTUwLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsImxhYmVsIjoiIiwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoic3RlYWx0aCJ9LHsidHlwZSI6ImxpbmUiLCJ4MSI6Mzg4LjA3NjExODQ0NTc0ODgsInkxIjo1OC4wNzYxMTg0NDU3NDg4MywieDIiOjQ0NC42NDQ2NjA5NDA2NzI2LCJ5MiI6MTE0LjY0NDY2MDk0MDY3MjYyLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsImxhYmVsIjoiIiwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoic3RlYWx0aCJ9LHsidHlwZSI6ImxpbmUiLCJ4MSI6NDgwLCJ5MSI6MjAsIngyIjo0ODAsInkyIjoxMDAsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MSwiZGFzaCI6InNvbGlkIiwib3BhY2l0eSI6MSwic2l6ZSI6Im5vcm1hbHNpemUiLCJjb2xvciI6IiMwMDAwMDAiLCJsYWJlbFBvcyI6MC41LCJsYWJlbFNpZGUiOiJsZWZ0IiwibGFiZWwiOiIiLCJzdGFydFRpcCI6Im5vbmUiLCJlbmRUaXAiOiJzdGVhbHRoIn0seyJ0eXBlIjoibGluZSIsIngxIjo1NzEuOTIzODgxNTU0MjUxMSwieTEiOjU4LjA3NjExODQ0NTc0ODgwNCwieDIiOjUxNS4zNTUzMzkwNTkzMjczLCJ5MiI6MTE0LjY0NDY2MDk0MDY3MjYyLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsImxhYmVsIjoiIiwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoic3RlYWx0aCJ9LHsidHlwZSI6ImJhbGwiLCJjeCI6NDgwLCJjeSI6MTUwLCJyIjo0MCwiYmFsbENvbG9yIjoiIzdlNTdjMiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4Ijo0ODAsInkiOjE2MCwidGV4dCI6IiRNJCIsInNpemUiOiJMYXJnZSIsImNvbG9yIjoiI2ZmZmZmZiIsIm9wYWNpdHkiOjF9LHsidHlwZSI6InRleHQiLCJ4Ijo1NzAsInkiOjIwLCJ0ZXh0IjoiR3Jhdml0eSBmaWVsZCAkXFx2ZWMgZyQiLCJzaXplIjoibGFyZ2UiLCJjb2xvciI6IiNlNTM5MzUiLCJvcGFjaXR5IjoxfSx7InR5cGUiOiJhcmMiLCJjeCI6NDAsImN5IjoyMDAsInIiOjUwLCJhMSI6MCwiYTIiOjMxLCJzdHJva2UiOiIjMDAwMDAwIiwid2lkdGgiOjEsImRhc2giOiJzb2xpZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsImxhYmVsIjoiIiwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoibm9uZSJ9LHsidHlwZSI6ImxpbmUiLCJ4MSI6NDAsInkxIjoyMDAsIngyIjoxMTAsInkyIjoyMDAsInN0cm9rZSI6IiMwMDAwMDAiLCJ3aWR0aCI6MC43NSwiZGFzaCI6ImRvdHRlZCIsIm9wYWNpdHkiOjEsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwibGFiZWxQb3MiOjAuNSwibGFiZWxTaWRlIjoibGVmdCIsImxhYmVsIjoiIiwic3RhcnRUaXAiOiJub25lIiwiZW5kVGlwIjoibm9uZSJ9LHsidHlwZSI6InRleHQiLCJ4IjoxMDIsInkiOjE4NiwidGV4dCI6IiRcXHRoZXRhJCIsInNpemUiOiJub3JtYWxzaXplIiwiY29sb3IiOiIjMDAwMDAwIiwib3BhY2l0eSI6MX1d
+  \draw[line width=0.71pt, dashed] (1,-5) -- (6,-2);
+  \draw[line width=0.71pt, {Stealth}-{Stealth}] (0.5,-4.25) -- node[auto, pos=0.5] {$r$} (5.5,-1.25);
+  \draw[line width=0.53pt] (1,-5) -- (0.63,-4.37);
+  \draw[line width=0.53pt] (6,-2) -- (5.63,-1.37);
+  \draw[line width=1.42pt, -{Stealth}] (1,-5) -- node[auto, swap, pos=0.5] {$\hat{r}$} (2,-4.4);
+  \shade[ball color=tdc1] (1,-5) circle (0.45);
+  \shade[ball color=tdc1] (6,-2) circle (0.45);
+  \node at (1,-5.9) {$q_1$};
+  \node at (6.75,-2.5) {$q_2$};
+  \node[font=\large] at (4,-6.25) {$\vec F = k\dfrac{q_1 q_2}{r^2}\,\hat r$};
+  \draw[draw=tdc2, line width=0.53pt] (12,-3.75) circle (1.5);
+  \draw[draw=tdc2, line width=0.53pt] (12,-3.75) circle (2.5);
+  \draw[line width=0.71pt, -{Stealth}] (15.25,-3.75) -- (13.25,-3.75);
+  \draw[line width=0.71pt, -{Stealth}] (14.3,-6.05) -- (12.88,-4.63);
+  \draw[line width=0.71pt, -{Stealth}] (12,-7) -- (12,-5);
+  \draw[line width=0.71pt, -{Stealth}] (9.7,-6.05) -- (11.12,-4.63);
+  \draw[line width=0.71pt, -{Stealth}] (8.75,-3.75) -- (10.75,-3.75);
+  \draw[line width=0.71pt, -{Stealth}] (9.7,-1.45) -- (11.12,-2.87);
+  \draw[line width=0.71pt, -{Stealth}] (12,-0.5) -- (12,-2.5);
+  \draw[line width=0.71pt, -{Stealth}] (14.3,-1.45) -- (12.88,-2.87);
+  \shade[ball color=tdc3] (12,-3.75) circle (1);
+  \node[font=\Large, text=white] at (12,-4) {$M$};
+  \node[font=\large, text=tdc2] at (14.25,-0.5) {Gravity field $\vec g$};
+  \draw[line width=0.71pt] (2.25,-5) arc[start angle=0, end angle=31, radius=1.25];
+  \draw[line width=0.53pt, dotted] (1,-5) -- (2.75,-5);
+  \node at (2.55,-4.65) {$\theta$};
+\end{tikzpicture}
+\end{center}
+
+\end{document}

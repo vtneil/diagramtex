@@ -1,0 +1,21 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \draw (-1,0) to[full triac] (1,0);
+    \draw (3,0) to[full thyristor] (5,0);
+    \draw (7,0) to[full put] (9,0);
+    \draw (11,0) to[full gto] (13,0);
+    \draw (-1,-4) to[full gtobar] (1,-4);
+    \draw (3,-4) to[full agtobar] (5,-4);
+    \draw (7,-4) to[stroke diode] (9,-4);
+    \draw (11,-4) to[stroke Schottky diode] (13,-4);
+    \draw (-1,-8) to[stroke Zener diode] (1,-8);
+    \draw (3,-8) to[stroke ZZener diode] (5,-8);
+    \draw (7,-8) to[stroke tunnel diode] (9,-8);
+    \draw (11,-8) to[stroke photodiode] (13,-8);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

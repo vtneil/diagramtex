@@ -1,0 +1,12 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \ctikzset{voltage=american}
+    \draw (0,0) to[european resistor, v=$u$] (3,0);
+    \draw (0,2) to[capacitor, v<=$u$] (3,2);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

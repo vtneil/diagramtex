@@ -1,0 +1,10 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage[all]{xy}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (2.04,-1.25) {\pgfinterruptpicture%
+  $\xymatrix@C=3pc{ A \ar[r]^{f} \ar@{^{(}->}[d]_{g} \ar@/^1.5pc/[rr]^{h} & B \ar@{->>}[d]^(.3){p} \ar@<.5ex>[r] \ar@<-.5ex>[r]_{q} & C \\ D \ar@{=>}[r] & E \ar@{-->}[ur] \ar@{}[r]|{\circ} & F \ar@{|->}[u] }$%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

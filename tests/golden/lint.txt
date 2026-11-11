@@ -1,0 +1,33 @@
+brace:
+  error@1: a { that is never closed
+extra brace:
+  error@1: a } with no { before it
+env mismatch:
+  error@2: \begin{scope} is never ended (\end{tikzpicture} on line 3 comes first)
+escaped braces are fine:
+  (nothing)
+comment brace is fine:
+  (nothing)
+positioning:
+  warn@4: needs \usetikzlibrary{positioning}
+arrows.meta:
+  warn@4: needs \usetikzlibrary{arrows.meta}
+libs loaded:
+  (nothing)
+pgfplots:
+  warn@4: needs \usepackage{pgfplots}
+no tikz:
+  error@4: TikZ is used but no package loads it: \usepackage{tikz}
+standalone tikz option:
+  (nothing)
+quantikz2 + tikz-cd:
+  warn@2: quantikz2 changes how tikz-cd diagrams look: export from DiagramTeX to get the lines that keep them apart
+lualatex:
+  error@1: graph drawing (\usegdlibrary) needs LuaLaTeX (DiagramTeX exports for pdfLaTeX)
+snippet libs:
+  warn@1: needs \usetikzlibrary{positioning}
+preview:
+  info@1: \R is not drawn by the preview (LaTeX output is unaffected if it is defined)
+  info@1: \foo is not drawn by the preview (LaTeX output is unaffected if it is defined)
+defined macro:
+  (nothing)

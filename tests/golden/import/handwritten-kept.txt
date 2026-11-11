@@ -1,0 +1,13 @@
+tikz defs: \definecolor{accent}{RGB}{200,60,40}
+tikz code: \coordinate (O) at (0,0);  [a named point: kept so the code that uses its name still works]
+tikz code: \coordinate (A) at (3,0);  [a named point: kept so the code that uses its name still works]
+line
+line
+tikz code: \node[box] (n1) at (0,2) {Input $\R$};  [options the text does not hold: box]
+tikz code: \node[box, right=1cm of n1] (n2) {Output};  [placed right of (n1) with the positioning library; options the text does not hold: box]
+tikz code: \draw[->] (n1) -- (n2);  [node (n1) as an end (TikZ stops at its border); (n2) is placed approximately]
+tikz code: \foreach \i in {0,...,3}  [\foreach is kept as code]
+rect
+text
+tikz code: \begin{axis}[at={(0,-6cm)}, width=5cm, height=4cm]  [\begin{axis} is kept as code]
+line

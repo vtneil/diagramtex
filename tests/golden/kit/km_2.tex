@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{karnaugh-map}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[inner sep=0pt] at (2.11,-2.11) {\pgfinterruptpicture%
+  \begin{karnaugh-map}[2][2][1][$B$][$A$]
+    \minterms{1,3}
+    \implicant{1}{3}
+  \end{karnaugh-map}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

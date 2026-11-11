@@ -1,0 +1,18 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[wilkinson] at (0,0) {};
+    \node[splitter] at (4,0) {};
+    \node[genericsplitter] at (8,0) {};
+    \node[gridnode] at (12,0) {};
+    \node[mzm] at (0,-4) {};
+    \node[fourport] at (4,-4) {};
+    \node[coupler] at (8,-4) {};
+    \node[coupler2] at (12,-4) {};
+    \node[double bipole] at (0,-8) {};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

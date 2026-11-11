@@ -1,0 +1,21 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[cute spdt up] at (0,0) {};
+    \node[cute spdt mid] at (4,0) {};
+    \node[cute spdt down] at (8,0) {};
+    \node[cute spdt up arrow] at (12,0) {};
+    \node[cute spdt mid arrow] at (0,-4) {};
+    \node[cute spdt down arrow] at (4,-4) {};
+    \node[proximeter] at (8,-4) {};
+    \draw (11,-4) to[ncs] (13,-4);
+    \draw (-1,-8) to[oncs] (1,-8);
+    \draw (3,-8) to[cncs] (5,-8);
+    \draw (7,-8) to[onos] (9,-8);
+    \draw (11,-8) to[cnos] (13,-8);
+  \end{scope}
+\end{tikzpicture}
+\end{document}

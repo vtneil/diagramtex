@@ -214,12 +214,27 @@
 
   // ---------------------------------------------------------------- schemes
   const T = (raw) => ({ t: 'text', raw });
-  const newMol = (code) => ({ t: 'mol', head: '\\chemfig', chain: C.parseChain(code, () => {}), raw: `\\chemfig{${code}}`, dirty: false });
+  const newMol = (code) => ({ t: 'mol', head: '\\chemfig', chain: C.parseChain(code, () => {}, E.M.segs.defs), raw: `\\chemfig{${code}}`, dirty: false });
   const copyMol = (m) => newMol(m ? C.writeChain(m.chain) : 'A');
   const lastMol = (segs) => { for (let i = segs.length - 1; i >= 0; i--) { const g = segs[i]; if (g.t === 'mol') return g; if (g.t === 'name') { const m = lastMol(g.inner); if (m) return m; } } return null; };
   function topOf(seg) { return seg.owner || seg; }
+  // inside \hreac … \endhreac, arrows are > and + is a bare +: added before \endhreac or after the selection
+  function addInHreac(seg, after) {
+    const segs = E.M.segs, hi = segs.findIndex((g) => g.t === 'hstart');
+    let ho = segs.findIndex((g) => g.t === 'hstop');
+    if (ho < 0) { segs.push(T('\n'), { t: 'hstop', raw: '\\endhreac' }); ho = segs.length - 1; }
+    let at = ho;
+    if (after) { const i = segs.indexOf(topOf(after)); if (i > hi && i < ho) at = i + 1; }
+    while (at > hi + 1 && segs[at - 1].t === 'text' && !segs[at - 1].raw.trim()) at--;
+    const m = copyMol(after || lastMol(segs.slice(hi, at)));
+    segs.splice(at, 0, T('\n  '), seg, T('\n  '), m);
+    E.M.dirty = true;
+    return m;
+  }
+  const inHreac = () => E.M.segs.some((g) => g.t === 'hstart');
   function addArrow(type, after) {
     const segs = E.M.segs;
+    if (inHreac()) { addInHreac({ t: 'harrow', raw: type === '->' ? '>' : `>{${type}}`, type, labels: [] }, after); return null; }
     let si = segs.findIndex((g) => g.t === 'start');
     if (si < 0) {
       // the drawing becomes the first compound of a scheme
@@ -250,6 +265,7 @@
   }
   function addPlus(after) {
     const segs = E.M.segs;
+    if (inHreac()) return addInHreac({ t: 'plus', raw: '+' }, after);
     const src = after || lastMol(segs);
     const m = copyMol(src);
     if (!src) { segs.push(T(' '), { t: 'plus', raw: '\\+' }, T(' '), m); E.M.dirty = true; return m; }
@@ -456,6 +472,7 @@
     const [x, y] = pos(e);
     let best = null, bd = Infinity;
     for (const v of lay().verts) {
+      if (v.sub) continue; // drawn from a \definesubmol: edited in its definition, not here
       const [X, Y] = S(v.X, v.Y), d = Math.hypot(X - x, Y - y);
       if (d <= Math.max(px, vRadius(v)) && d < bd) { bd = d; best = v; }
     }
@@ -466,7 +483,7 @@
     const [x, y] = pos(e);
     let best = null, bd = px;
     for (const b of lay().bonds) {
-      if (b.hook) continue;
+      if (b.hook || b.sub) continue;
       const [ax, ay] = S(b.X0, b.Y0), [bx, by] = S(b.X1, b.Y1), d = segDist(x, y, ax, ay, bx, by);
       if (d < bd) { bd = d; best = b; }
     }
@@ -476,6 +493,7 @@
     const [x, y] = pos(e);
     let best = null, bd = px;
     for (const a of lay().arrows) {
+      if (a.seg.t === 'harrow') continue; // \hreac's > is edited in the code
       const [ax, ay] = S(a.x1, a.y1), [bx, by] = S(a.x2, a.y2);
       let d = segDist(x, y, ax, ay, bx, by);
       for (const l of a.labs) { const [lx, ly] = S(l.bx, l.by); if (Math.abs(lx - x) < (l.bw / 2) * E.view.k && Math.abs(ly - y) < (l.bh / 2 + 2) * E.view.k) d = 0; }

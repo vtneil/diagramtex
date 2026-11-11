@@ -1,0 +1,21 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[ieeestd and port] at (0,0) {};
+    \node[ieeestd nand port] at (4,0) {};
+    \node[ieeestd or port] at (8,0) {};
+    \node[ieeestd nor port] at (12,0) {};
+    \node[ieeestd xor port] at (0,-4) {};
+    \node[ieeestd xnor port] at (4,-4) {};
+    \node[ieeestd buffer port] at (8,-4) {};
+    \node[ieeestd not port] at (12,-4) {};
+    \node[ieeestd schmitt port] at (0,-8) {};
+    \node[ieeestd invschmitt port] at (4,-8) {};
+    \node[ieee tgate] at (8,-8) {};
+    \node[ieee double tgate] at (12,-8) {};
+  \end{scope}
+\end{tikzpicture}
+\end{document}

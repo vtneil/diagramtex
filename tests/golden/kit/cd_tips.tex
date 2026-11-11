@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{tikz-cd}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (1.26,-0.97) {\pgfinterruptpicture%
+  \begin{tikzcd}[row sep=large, column sep=large]
+    G \arrow[r, two heads] \arrow[d, tail] & H \arrow[d, Rightarrow] \\
+    K \arrow[r, "\phi" above, mapsto] & L \arrow[u, equal, "e" near start]
+  \end{tikzcd}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

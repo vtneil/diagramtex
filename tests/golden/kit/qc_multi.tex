@@ -1,0 +1,14 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{quantikz2}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[font=\large] at (2.2,-1.26) {\pgfinterruptpicture%
+  \begin{quantikz}
+  \lstick{$q_0$} & \gate[3]{U} & \ctrl{1} & \qw & \rstick{out} \\
+  \lstick{$q_1$} & & \ctrl{1} & \swap{1} & \qw \\
+  \lstick{$q_2$} & & \targ{} & \targX{} & \qw
+  \end{quantikz}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,21 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{circuitikz}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0,0)}, font=\large]
+    \node[antenna] at (0,0) {};
+    \node[rxantenna] at (4,0) {};
+    \node[txantenna] at (8,0) {};
+    \node[bareRXantenna] at (12,0) {};
+    \node[bareTXantenna] at (0,-4) {};
+    \node[harmonics] at (4,-4) {};
+    \node[match] at (8,-4) {};
+    \node[mixer] at (12,-4) {};
+    \node[adder] at (0,-8) {};
+    \node[oscillator] at (4,-8) {};
+    \node[circulator] at (12,-8) {};
+    \draw (7,-8) to[vco] (9,-8);
+  \end{scope}
+\end{tikzpicture}
+\end{document}
