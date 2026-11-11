@@ -55,3 +55,22 @@ T.test('import macros: the export defines svgnames colours and compiles', () => 
   T.ok(/\\definecolor\{DarkBlue\}\{HTML\}\{00008B\}/.test(tex), 'DarkBlue defined');
   T.tex('import macros loop', tex);
 });
+
+T.test('import editable: picture-wide width, path colour on labels, shorten', () => {
+  const prev = TD.importLatex(LOOP).blocks[0].shapes.flatMap((s) => (s.type === 'tikz' ? s.prev || [] : [s]));
+  const loop = prev.find((p) => p.type === 'ellipse');
+  T.ok(near(loop.width, 1.2 / TD.PT_PER_PX, 0.01) && loop.width > prev.find((p) => p.type === 'arc').width, 'very thick on the loop, semithick (q0) on the arc');
+  T.ok(prev.filter((p) => p.type === 'text' && p.text === '$q_0$').every((t) => t.color.toLowerCase() === '#00008b'), 'q0 labels take DarkBlue from their path');
+  const l = prev.find((p) => p.type === 'line' && p.stroke === '#00008b' && p.x1 < 0);
+  T.ok(l && l.x1 > -3 * CM && l.x2 < -1.5 * CM, 'shorten pulls both ends in: ' + (l && [l.x1, l.x2]));
+});
+
+T.test('import editable: kept code becomes shapes, written from the shapes, and compiles', () => {
+  const sh = TD.importLatex(LOOP, { editable: true }).blocks[0].shapes;
+  T.ok(!sh.some((x) => x.type === 'tikz'), 'no code objects: ' + sh.map((x) => x.type).join(','));
+  T.ok(!sh.some((x) => x.tex), 'no source records');
+  T.ok(sh.some((x) => x.type === 'ellipse') && sh.filter((x) => x.type === 'text').length === 3 && sh.filter((x) => x.label === '$q_0$').length === 2 && sh.some((x) => x.type === 'arc'), 'loop, three labels, two labelled lines, arc');
+  const tex = TD.toTikz(sh, { standalone: true });
+  T.ok(!/\\radius/.test(tex), 'written from shapes, not the source');
+  T.tex('import editable loop', tex);
+});

@@ -2688,6 +2688,17 @@
     state.doc.shapes = dir === 'front' ? rest.concat(sel) : sel.concat(rest);
     commit(); render();
   }
+  // Document view: blocks go in after the active diagram (at the end when there is none), the first new
+  // diagram becomes the active one, and the page scrolls to them.
+  function insertBlocks(blocks) {
+    if (!blocks.length) return;
+    const d = state.doc, at = d.blocks[d.active] ? d.active + 1 : d.blocks.length;
+    d.blocks.splice(at, 0, ...blocks);
+    const k = blocks.findIndex((b) => b.type === 'diagram');
+    if (k >= 0) setActiveBlock(at + k); else scheduleSave();
+    if (TD.docview) TD.docview.render();
+    requestAnimationFrame(() => document.querySelector(`#docview .blk[data-i="${at}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+  }
   function pasteShapes(list, dx, dy = dx) {
     begin();
     state.sel.clear();
@@ -2751,7 +2762,13 @@
     pasteTimer = 0;
     const c = clip();
     if (!c) return;
-    const r = stageSize(), v = state.view, G = TD.GRID;
+    if (state.mode === 'document') {
+      const gmap = new Map(), idmap = new Map(), made = c.shapes.map((o) => { const x = clone(o); x.id = uid(); idmap.set(o.id, x.id); if (x.g) { if (!gmap.has(x.g)) gmap.set(x.g, uid()); x.g = gmap.get(x.g); } return x; });
+      remapLinks(made, idmap);
+      insertBlocks([{ type: 'diagram', shapes: made }]);
+      return;
+    }
+    const r = fitArea(), v = state.view, G = TD.GRID; // the clear space left of the panel column
     const cx = v.x + r.w / 2 / v.zoom, cy = v.y + r.h / 2 / v.zoom;
     const at = `${Math.round(cx / G)},${Math.round(cy / G)}`;
     if (c.at !== at) { c.at = at; c.n = 0; }
@@ -3690,7 +3707,8 @@
       if (k0 === 'p') { e.preventDefault(); runCmd('print'); return; }
     }
     if (isTyping(e.target)) return;
-    if (state.mode === 'document') return;
+    if (state.mode === 'document') { if (mod && !e.altKey && e.key.toLowerCase() === 'v') pasteSoon(); return; } // a new diagram block
+
     const k = e.key.toLowerCase();
     if (mod) {
       if (k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
@@ -4206,22 +4224,31 @@
     $('#impText').focus();
   }
   function closeImport() { imp.hidden = true; }
+  // what statements that can't be read exactly become: TikZ code as written (grouped), or editable shapes
+  let impHow = store.get('diagramtex.importHow', 'code') === 'shapes' ? 'shapes' : 'code';
+  const markHow = () => document.querySelectorAll('#impHow [data-how]').forEach((b) => b.classList.toggle('on', b.dataset.how === impHow));
+  markHow();
+  document.querySelectorAll('#impHow [data-how]').forEach((b) => (b.onclick = () => { impHow = b.dataset.how; store.set('diagramtex.importHow', impHow); markHow(); importReport(); }));
+  const importAs = (src) => TD.importLatex(src, { editable: impHow === 'shapes' });
   // as the code is typed or pasted: what will become shapes and what stays TikZ code, and why (with its line)
   function importReport() {
     const msg = $('#impMsg'), src = $('#impText').value;
     msg.classList.remove('report'); msg.textContent = '';
     if (!src.trim()) return;
-    let res;
-    try { res = TD.importLatex(src); } catch (err) { msg.textContent = 'Could not parse: ' + err.message; return; }
+    let res, conv = [];
+    try { res = TD.importLatex(src); if (impHow === 'shapes') { conv = (res.kept || []).filter((k) => k.preview); res = importAs(src); } } catch (err) { msg.textContent = 'Could not parse: ' + err.message; return; }
     const shapes = res.blocks.flatMap((b) => b.shapes || []);
-    const n = shapes.filter((x) => x.type !== 'tikz').length, kept = res.kept || [];
+    const n = shapes.filter((x) => x.type !== 'tikz').length, kept = [...conv.map((k) => ({ ...k, conv: true })), ...(res.kept || [])].sort((a, b) => (a.line || 0) - (b.line || 0));
+    const nConv = conv.length, nCode = kept.length - nConv;
     if (!kept.length && !res.warnings.length && !(TD.lint && TD.lint(src).length)) return;
     const first = (c) => { const l = String(c).split('\n').find((x) => x.trim() && !/^\s*%/.test(x)) || ''; return l.trim().length > 60 ? l.trim().slice(0, 59) + '…' : l.trim(); };
     const rows = kept.slice(0, 40).map((k) => `<li><span class="ln">${k.line ? 'line ' + k.line : ''}</span><code>${esc(first(k.code))}</code><span class="why">${esc(k.issues.join('; '))}</span></li>`);
     msg.classList.add('report');
     const lint = TD.lint ? TD.lint(src) : [];
     if (lint.length) msg.classList.add('report');
-    msg.innerHTML = (lint.length ? TD.lint.html(lint, 8) : '') + `<div>${n} shape${n === 1 ? '' : 's'}${kept.length ? ` · ${kept.length} statement${kept.length === 1 ? '' : 's'} kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame` : ''}</div>`
+    msg.innerHTML = (lint.length ? TD.lint.html(lint, 8) : '') + `<div>${n} shape${n === 1 ? '' : 's'}`
+      + (nConv ? ` · ${nConv} statement${nConv === 1 ? '' : 's'} converted to shapes as drawn: what isn't read below is left out` : '')
+      + (nCode ? ` · ${nCode} statement${nCode === 1 ? '' : 's'} kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame` : '') + '</div>'
       + (rows.length ? `<ul>${rows.join('')}${kept.length > 40 ? `<li>… ${kept.length - 40} more</li>` : ''}</ul>` : '')
       + res.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('');
   }
@@ -4230,7 +4257,9 @@
   function runImport(asNew) {
     const src = $('#impText').value;
     let res;
-    try { res = TD.importLatex(src); } catch (err) { $('#impMsg').textContent = 'Could not parse: ' + err.message; return; }
+    try { res = importAs(src); } catch (err) { $('#impMsg').textContent = 'Could not parse: ' + err.message; return; }
+    // each picture comes in as one group, so it moves as one and its pieces don't scatter
+    for (const b of res.blocks) if (b.type === 'diagram' && b.shapes.length > 1) { const g = uid(); for (const x of b.shapes) { x.g = g; delete x.gname; } }
     const nShapes = res.blocks.reduce((a, b) => a + (b.shapes ? b.shapes.length : 0), 0);
     if (!nShapes && !res.blocks.some((b) => b.type === 'text')) { $('#impMsg').textContent = 'Nothing recognised in this code.' + (res.warnings.length ? ' ' + res.warnings.join(' ') : ''); return; }
     if (asNew && state.doc.kind === 'board') { newDoc(res.title || 'Imported', null, null, res.blocks, res.page, 'board'); zoomFit(); }
@@ -4238,12 +4267,19 @@
       newDoc(res.title || 'Imported', null, null, res.blocks, res.page);
       if (res.blocks.filter((b) => b.type === 'diagram').length > 1 || res.blocks.some((b) => b.type === 'text')) setMode('document');
       else zoomFit();
+    } else if (state.mode === 'document') {
+      // the document gets the code as new blocks after the active one, a diagram for each picture
+      insertBlocks(res.blocks.filter((b) => b.type !== 'diagram' || b.shapes.length));
     } else {
+      // lands in the middle of the visible canvas, moved by whole grid steps so it stays on the grid
+      const list = res.blocks.flatMap((b) => (b.type === 'diagram' ? b.shapes : []));
+      const r = fitArea(), v = state.view, G = TD.GRID, cx = v.x + r.w / 2 / v.zoom, cy = v.y + r.h / 2 / v.zoom;
+      const bb = list.length ? TD.bboxOf(list.flatMap((x) => { const q = TD.bbox(x); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; })) : null;
+      const dx = bb ? Math.round((cx - bb.x - bb.w / 2) / G) * G : 0, dy = bb ? Math.round((cy - bb.y - bb.h / 2) / G) * G : 0;
       begin();
       state.sel.clear();
-      for (const b of res.blocks) if (b.type === 'diagram') for (const sh of b.shapes) { sh.id = uid(); addShape(sh); state.sel.add(sh.id); }
+      for (const sh of list) { sh.id = uid(); if (dx || dy) TD.translate(sh, dx, dy); addShape(sh); state.sel.add(sh.id); }
       commit();
-      if (state.mode === 'document') setMode('diagram');
       render(); renderProps();
     }
     closeImport();

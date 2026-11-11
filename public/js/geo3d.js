@@ -473,7 +473,7 @@
     // what moves a drawn path as a whole, by statement: its literal points (handles) and the named points it uses
     const movers = new Map();
     const moverOf = (si) => { if (!movers.has(si)) movers.set(si, { ok: true, hs: [], names: new Set() }); return movers.get(si); };
-    const items = [], handles = [], rings = [], links = [], warnings = [], names = new Map(), env = new Map(), macros = new Map();
+    const items = [], handles = [], rings = [], links = [], pics = [], warnings = [], names = new Map(), env = new Map(), macros = new Map();
     const trimSpan = (sp) => { let a = sp.s, b = sp.e; while (a < b && /[\s{]/.test(src[a])) a++; while (b > a && /[\s}]/.test(src[b - 1])) b--; return { s: a, e: b }; };
     // a radius is dragged when it is a number, a number in cm or mm, or a macro holding a number
     const radiusWritable = (sp) => /^(\d+\.?\d*|\.\d+)\s*(cm|mm)$/.test(src.slice(sp.s, sp.e).trim()) || writable(sp);
@@ -726,10 +726,12 @@
       // the label: "text" among the options, or pic text=…
       const q = O.find((x) => x.t[0] === '"');
       let lt = q ? q.t.slice(1, q.t.indexOf('"', 1) > 0 ? q.t.indexOf('"', 1) : undefined) : g('pic text');
+      const k2 = m[1] === 'right angle' ? Math.SQRT2 : 1, mid = (a0 + a1) / 2;
+      // for the editor: the corner, a point on the mark (its size) and where the label sits (its eccentricity)
+      pics.push({ si, B, r, ecc, k2, rim: at(a0, r), mid: at(mid, r), lab: at(mid, ecc * r * k2), label: !!lt, right: m[1] === 'right angle' });
       if (lt) {
         lt = unbrace(lt);
-        const d = ecc * r * (m[1] === 'right angle' ? Math.SQRT2 : 1);
-        items.push({ k: 'text', at: at((a0 + a1) / 2, d), text: nums(lt), color: sty.text || sty.color ? V3.col(sty.text || sty.color) : undefined, si });
+        items.push({ k: 'text', at: at(mid, ecc * r * k2), text: nums(lt), color: sty.text || sty.color ? V3.col(sty.text || sty.color) : undefined, si });
       }
     }
 
@@ -920,7 +922,7 @@
       for (const nm of mv.names) { const h = handles.find((x) => x.kind === 'coord' && x.name === nm); if (h && h.writable) hs.push(h); else mv.ok = false; }
       if (mv.ok && hs.length) moves.set(si, hs);
     }
-    return { src, S, items, handles, rings, links, moves, warnings, names, macros, env, view: vw, scale, k: PX * scale, main, begin, end };
+    return { src, S, items, handles, rings, links, pics, moves, warnings, names, macros, env, view: vw, scale, k: PX * scale, main, begin, end };
   }
   // bounds in px at the picture's scale, origin at the projected (0, 0)
   function bounds(L) {

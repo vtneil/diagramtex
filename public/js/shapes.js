@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.27.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.28.5'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -1263,10 +1263,11 @@
     pts: [['x', 'y']],
     create: (p, d) => ({ type: 'text', x: p.x, y: p.y, text: '', tw: 0, valign: d.valign || 'top', size: d.size || 'normalsize', font: d.font || 'default', bold: false, italic: false, color: d.color || '#000000', opacity: 1 }),
     valid: (s) => s.text.trim().length > 0,
-    // paragraph box: eight frame handles; point text: a right-edge handle that sets a wrapping width
+    // paragraph box: eight frame handles; point text: an edge handle that sets a wrapping width, on the right
+    // edge, or on the left one for right-aligned text (whose right edge holds still)
     handles(s) {
       if (isPara(s)) return boxHandles(paraFrame(s));
-      const b = textBox(s.text || ' ', s); return [{ k: 'tw', x: s.x + b.w / 2, y: s.y }];
+      const b = textBox(s.text || ' ', s); return [{ k: 'tw', x: s.align === 'right' ? s.x - b.w / 2 : s.x + b.w / 2, y: s.y }];
     },
     setHandle(s, k, q, e, o) {
       if (isPara(o) && k !== 'tw') {
@@ -1277,16 +1278,26 @@
         s.tw = nb.w; s.th = nb.h; s.x = nb.x + nb.w / 2; s.y = nb.y + nb.h / 2;
         return;
       }
-      const ob = textBox(o.text || ' ', o), left = o.x - ob.w / 2;
-      const w = Math.max(20, q.x - left);
-      s.tw = w; s.x = left + w / 2;
+      const ob = textBox(o.text || ' ', o);
+      if (o.align === 'right') { const right = o.x + ob.w / 2, w = Math.max(20, right - q.x); s.tw = w; s.x = right - w / 2; }
+      else { const left = o.x - ob.w / 2, w = Math.max(20, q.x - left); s.tw = w; s.x = left + w / 2; }
       if (!s.align) s.align = 'left';
       // keep the top edge fixed while the height changes with wrapping (the bottom one for bottom-aligned
       // text, the centre for middle-aligned)
       const nb = textBox(s.text || ' ', s), v = o.valign || 'top';
       s.y = v === 'bottom' ? o.y + ob.h / 2 - nb.h / 2 : v === 'middle' ? o.y : o.y - ob.h / 2 + nb.h / 2;
     },
-    anchors: (s) => (isPara(s) ? boxHandles(paraFrame(s)).map((h) => ({ x: h.x, y: h.y })).concat([{ x: s.x, y: s.y }]) : [{ x: s.x, y: s.y }]),
+    // the first anchor is the point the alignment names (left + top → the top-left corner): a moved text
+    // box snaps to the grid by it, so left-aligned text lines up on a grid line
+    anchors(s) {
+      const al = s.align || (s.tw > 0 ? 'left' : 'center'), va = s.valign || (isPara(s) ? 'top' : 'middle');
+      let b;
+      if (isPara(s)) b = paraFrame(s);
+      else { const t = textBox(s.text || ' ', s), p = s.boxed ? textPad(s) : 0; b = { x: s.x - t.w / 2 - p, y: s.y - t.h / 2 - p, w: t.w + 2 * p, h: t.h + 2 * p }; }
+      const a = { x: al === 'left' ? b.x : al === 'right' ? b.x + b.w : b.x + b.w / 2, y: va === 'top' ? b.y : va === 'bottom' ? b.y + b.h : b.y + b.h / 2 };
+      const rest = isPara(s) ? boxHandles(b).map((h) => ({ x: h.x, y: h.y })).concat([{ x: s.x, y: s.y }]) : [{ x: s.x, y: s.y }];
+      return [a, ...rest.filter((r) => Math.abs(r.x - a.x) > 1e-6 || Math.abs(r.y - a.y) > 1e-6)];
+    },
     samples(s) {
       if (isPara(s)) { const L = paraLayout(s); return [{ x: L.f.x, y: L.f.y }, { x: L.f.x + L.f.w, y: L.bottom }]; }
       const b = textBox(s.text || ' ', s), p = s.boxed ? textPad(s) : 0;

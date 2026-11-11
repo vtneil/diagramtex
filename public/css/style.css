@@ -53,7 +53,7 @@
   --r-sm: 4px;               /* swatches, kbd, segments inside a track */
   --r: 6px;                  /* buttons, inputs, segmented tracks, menu rows */
   --r-lg: 10px;              /* popovers, menus, cards */
-  --r-xl: 12px;              /* modals */
+  --r-xl: 18px;              /* modals: the head's 6px buttons sit 12px in, so 6 + 12 */
   --files-w: 200px;
   --props-w: 280px;
   --font-ui: "Inter Display", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -383,6 +383,8 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 .marquee.cross { fill: var(--marker-wash); stroke: var(--marker); stroke-width: 1.5; }
 /* the frame being dragged out with the Text tool: a paragraph box, drawn in the blue pen */
 .marquee.tf { fill: none; stroke: var(--bluepen); }
+/* the corner an angle mark will go on, while the Angle mark tool waits for a click */
+.anglepick { fill: none; stroke: var(--bluepen); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
 .snap-ind { fill: none; stroke: var(--bluepen); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
 /* attached connectors: the shape an end will stick to, and ends that are stuck (filled) */
 .link-hint { fill: none; stroke: var(--bluepen); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .55; }

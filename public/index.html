@@ -372,10 +372,14 @@
     <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="impTitle">
       <div class="modal-head">
         <strong id="impTitle">Import LaTeX or TikZ</strong>
+        <div class="seg" id="impHow" role="group" aria-label="What TikZ that can't be read exactly becomes">
+          <button data-how="code" class="toggle on" title="Keep it as written: exported exactly as it is, drawn as an approximation, and grouped so it moves as one">As Written</button>
+          <button data-how="shapes" class="toggle" title="Turn it into ordinary shapes you can edit: drawn and exported from the shapes, so some details may change">Editable Shapes</button>
+        </div>
         <div class="spacer"></div>
         <button id="impFile">Choose File…</button>
-        <button id="impInsert" title="Add the shapes to the current diagram">Insert into Diagram</button>
-        <button id="impNew" class="primary" title="Create a new document from the code">Import as New Document</button>
+        <button id="impNew" title="Create a new document from the code">Import as New Document</button>
+        <button id="impInsert" class="primary" title="Add the shapes to the current diagram, in the middle of the view">Insert into Diagram</button>
         <button id="impClose" class="icon flat" title="Close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button>
       </div>
       <textarea id="impText" spellcheck="false" placeholder="Paste a tikzpicture, a bare list of \draw / \node commands, or a whole LaTeX document.

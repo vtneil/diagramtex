@@ -58,7 +58,7 @@ valid. The packages named are references for the output, not constraints on how 
       crossing over or under; strands take colours and labels; closing a braid gives a knot or link diagram.
       Moves keep the topology (the braid relations are offered as moves), and the only edit that changes it
       is an explicit crossing change.
-- [ ] **Bitfield** (`bytefield`): protocol headers and register layouts in rows of a fixed bit width (8, 16,
+- [x] **Bitfield** (`bytefield`): protocol headers and register layouts in rows of a fixed bit width (8, 16,
       32 or 64). Each field has a name and a width in bits; dragging a boundary resizes it and the fields after
       it reflow across rows, splitting and rejoining fields that span a row end. Bit numbers (either order),
       byte offsets and a bit ruler are generated, variable-length and elided fields are drawn as such, and a

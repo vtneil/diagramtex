@@ -160,6 +160,7 @@
   }
   // style from options
   function style(C, opts, cmd) {
+    if (C.base && C.base.length) opts = [...C.base, ...opts]; // the picture's own line width, dash and colour come first
     const st = { stroke: cmd === 'fill' || cmd === 'shade' || cmd === 'path' ? null : '#000000', fill: cmd === 'fill' || cmd === 'filldraw' ? '#000000' : null, width: 0.4 / K, dash: 'solid', opacity: 1, startTip: 'none', endTip: 'none' };
     let strokeOpacity = 1, fillOpacity = 1, colorAll = null;
     const W = { 'ultra thin': 0.1, 'very thin': 0.2, thin: 0.4, semithick: 0.6, thick: 0.8, 'very thick': 1.2, 'ultra thick': 1.6 };
@@ -178,6 +179,8 @@
         case 'fill': st.fill = color(C, v) ?? null; break;
         case 'color': colorAll = color(C, v) ?? null; break;
         case 'line width': st.width = len(v, 'pt'); break;
+        case 'shorten >': st.shEnd = len(v, 'pt'); break;
+        case 'shorten <': st.shStart = len(v, 'pt'); break;
         case 'opacity': st.opacity = parseFloat(v); break;
         case 'draw opacity': strokeOpacity = parseFloat(v); break;
         case 'fill opacity': fillOpacity = parseFloat(v); break;
@@ -442,7 +445,7 @@
             if (simple && !st.fill) {
               let A1 = a1, A2 = a2;
               if (A2 < A1) [A1, A2] = [A2, A1];
-              out.push({ type: 'arc', cx: c.x, cy: c.y, r, a1: A1, a2: A2, ...lineStyle, stroke: st.stroke || '#000000', startTip: a2 < a1 ? st.endTip : st.startTip, endTip: a2 < a1 ? st.startTip : st.endTip });
+              out.push({ type: 'arc', cx: c.x, cy: c.y, r, a1: A1, a2: A2, _rev: a2 < a1, ...lineStyle, stroke: st.stroke || '#000000', startTip: a2 < a1 ? st.endTip : st.startTip, endTip: a2 < a1 ? st.startTip : st.endTip });
             } else {
               const n = Math.max(4, Math.ceil(Math.abs(a2 - a1) / 6)), pts = [cur];
               for (let k = 1; k <= n; k++) { const a = ((a1 + ((a2 - a1) * k) / n) * Math.PI) / 180; pts.push({ x: c.x + r * Math.cos(a), y: c.y - r * Math.sin(a) }); }
@@ -459,34 +462,46 @@
       if (tk.t === 'node') {
         const no = parseOpts(tk.opts), ns = style(C, no, 'node');
         const fs = fontStyle(ns.font);
-        const lab = { label: tk.text, labelSide: no.some((o) => o.k === 'swap' || o.k === "'") ? 'right' : no.some((o) => o.k === 'fill') ? 'on' : 'left', labelPos: isFinite(ns.pos) ? ns.pos : no.some((o) => o.k === 'near start') ? 0.25 : no.some((o) => o.k === 'near end') ? 0.75 : 0.5, ...fs, color: ns.color || '#000000' };
+        const lab = { label: tk.text, labelSide: no.some((o) => o.k === 'swap' || o.k === "'") ? 'right' : no.some((o) => o.k === 'fill') ? 'on' : 'left', labelPos: isFinite(ns.pos) ? ns.pos : no.some((o) => o.k === 'near start') ? 0.25 : no.some((o) => o.k === 'near end') ? 0.75 : 0.5, ...fs, color: ns.color || st.color || '#000000' };
         if (pendingOp === '--' || pendingOp === 'to') { lastSegLabel = lab; continue; }
         const along = no.some((o) => ['midway', 'near start', 'near end', 'pos', 'sloped', 'auto', 'swap'].includes(o.k));
         if (along && segs.length && segs[segs.length - 1].k === 'L' && segs.length === 1) { segs[0].label = lab; continue; }
         // midway (or pos=) on the arc just drawn: the point that far round it
         if (along && lastArc && lastArc.end === cur) {
           const A = lastArc, a = ((A.a1 + (A.a2 - A.a1) * lab.labelPos) * Math.PI) / 180;
-          if (tk.text.trim()) out.push(textShape(C, tk.text, no, { x: A.c.x + A.r * Math.cos(a), y: A.c.y - A.r * Math.sin(a) }));
+          if (tk.text.trim()) out.push(textShape(C, tk.text, no, { x: A.c.x + A.r * Math.cos(a), y: A.c.y - A.r * Math.sin(a) }, st.color));
           continue;
         }
         // node at the current point (e.g. after a coordinate): emit as a text shape
-        if (cur && tk.text.trim()) out.push(textShape(C, tk.text, no, cur));
+        if (cur && tk.text.trim()) out.push(textShape(C, tk.text, no, cur, st.color));
         if (tk.name && cur) C.names[tk.name] = { ...cur };
         continue;
       }
     }
     flush();
+    // shorten < and > pull the path's first and last ends in (a line by its length, an arc round its circle)
+    const ends = out.filter((x) => x.type === 'line' || x.type === 'arc');
+    const pull = (x, atStart, d) => {
+      if (!(d > 0)) return;
+      if (x.type === 'arc') { const da = (d / x.r) * (180 / Math.PI); if (atStart !== x._rev) x.a1 += da; else x.a2 -= da; return; }
+      const [ax, ay, bx, by] = atStart ? [x.x1, x.y1, x.x2, x.y2] : [x.x2, x.y2, x.x1, x.y1], L = Math.hypot(bx - ax, by - ay);
+      if (!(L > d)) return;
+      const nx = ax + ((bx - ax) * d) / L, ny = ay + ((by - ay) * d) / L;
+      if (atStart) { x.x1 = nx; x.y1 = ny; } else { x.x2 = nx; x.y2 = ny; }
+    };
+    if (ends.length) { pull(ends[0], true, st.shStart); pull(ends[ends.length - 1], false, st.shEnd); }
+    for (const x of out) delete x._rev;
     if (st.bend) for (const s of out) if (s.type === 'line') {
       // `to[bend]` handled above for single segments; nothing else to do
     }
     return out;
   }
 
-  function textShape(C, text, opts, P) {
+  function textShape(C, text, opts, P, inherit) {
     const st = style(C, opts, 'node');
     const fs = fontStyle(st.font);
     text = text.replace(/\$\s*\\displaystyle\b\s*([^$]*)\$/g, (m, x) => `$$${x.trim()}$$`);
-    const s = { type: 'text', x: P.x, y: P.y, text: text.replace(/\s*\\\\\s*/g, '\n').trim(), ...fs, color: st.color || '#000000', opacity: st.opacity ?? 1 };
+    const s = { type: 'text', x: P.x, y: P.y, text: text.replace(/\s*\\\\\s*/g, '\n').trim(), ...fs, color: st.color || inherit || '#000000', opacity: st.opacity ?? 1 };
     // placement keys: shift by half the box + inner sep
     const keys = opts.map((o) => o.k);
     const b = TD.textBox(s.text || ' ', s);
@@ -1006,7 +1021,10 @@
     }
     return shapes;
   }
+  // options of a picture or scope that set how every path in it looks (very thick, dashed, DarkBlue, line width=…)
+  const baseOpt = (C, o) => (o.v === null ? W_KEYS.includes(o.k) || color(C, o.k) !== undefined : ['line width', 'color'].includes(o.k));
   function pictureOpts(C, o) {
+    C.base = [...(C.base || []), ...parseOpts(o).filter((x) => baseOpt(C, x))];
     for (const { k, v } of parseOpts(o)) {
       if (k === 'x' && v) C.sx = len(v);
       else if (k === 'y' && v) C.sy = len(v);
@@ -1026,7 +1044,7 @@
   // comments and scope lines come along), cut (where its own text starts in src), ctx (the scopes around it),
   // nm (names it defines). The picture's first statement holds open and N (statements), the last one tail.
   function importPicture(C, s, o, open) {
-    C.sx = PX; C.sy = PX; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.picIssue = null; C.nodeDist = undefined; C.boxes = {}; gtTip = null;
+    C.sx = PX; C.sy = PX; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.picIssue = null; C.base = []; C.nodeDist = undefined; C.boxes = {}; gtTip = null;
     const optM = open && /^\\begin\{tikzpicture\}\s*\[([\s\S]*)\]\s*$/.exec(blankComments(open));
     const optStr = optM ? optM[1] : '';
     if (optStr) pictureOpts(C, optStr);
@@ -1046,7 +1064,7 @@
     // >=Tip only sets what `>` means: shapes written from the model name their tips, so it stays on the picture
     const safe = keep.filter((x) => (keyOf(x) === '>' && gtTip) || own(x)), rest = keep.filter((x) => !safe.includes(x));
     const odd = rest.map(keyOf).filter((k) => !['x', 'y', 'scale'].includes(k));
-    if (odd.length) C.picIssue = 'picture options not drawn: ' + odd.join(', ');
+    if (odd.length) C.picIssue = 'picture options the shapes do not hold: ' + odd.join(', ');
     const picCtx = rest.length ? [rest.join(', ')] : [];
     const shapes = parseStatements(C, s, o).map((x) => ({ ...x, id: uid8() }));
     const byShape = new Map();
@@ -1174,7 +1192,7 @@
     return pg;
   }
 
-  TD.importLatex = function (src) {
+  TD.importLatex = function (src, opt = {}) {
     const C = makeCtx();
     const o = String(src);
     // positions in s are positions in o: comments and the wrappers round wide pictures become spaces
@@ -1241,6 +1259,14 @@
     } else {
       const after = latexToText(bodyS.slice(last));
       if (after && docM) blocks.push({ type: 'text', text: after });
+    }
+    // editable: each statement kept as code becomes the shapes its preview draws (approximate where the preview is),
+    // and nothing remembers the source, so the export is written from the shapes. Code with nothing to draw stays.
+    if (opt.editable) for (const b of blocks) if (b.type === 'diagram') {
+      const out = b.shapes.flatMap((x) => (x.type !== 'tikz' || !x.tex ? [x] : x.prev && x.prev.length ? x.prev.map((p) => ({ ...p, id: uid8() })) : [x]));
+      const code = out.some((x) => x.type === 'tikz' && x.kind !== 'defs');
+      b.shapes = out.filter((x) => code || !(x.type === 'tikz' && x.kind === 'defs'));
+      for (const x of b.shapes) if (x.type !== 'tikz') delete x.tex;
     }
     // what was kept as code, in source order, with the line its statement starts on
     let from = 0;
