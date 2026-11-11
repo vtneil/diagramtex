@@ -10,6 +10,8 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 
 **[Open DiagramTeX: diagramtex.igniting.space](https://diagramtex.igniting.space/)**
 
+![DiagramTeX editing a diagram: formulae, a flowchart, an op-amp circuit, a plot and a QFT quantum circuit on one canvas, with the plot's properties open on the right](docs/screenshots/01-diagram.png)
+
 ## Why DiagramTeX
 
 - **Visual TikZ editor:** draw instead of guessing coordinates, and get readable `tikzpicture` code with the packages and libraries listed for you.
@@ -43,12 +45,29 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 - **Flowcharts and block diagrams:** 28 flowchart symbols, 33 basic shapes and 27 block arrows.
 - **Whole pages and documents:** lay out text, maths and figures on A4 or Letter pages and export a complete LaTeX `article`.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Gallery of physics, optics, waveforms, a 3D surface plot, a solid of revolution, 3D solids, a Feynman diagram, a tree, a ZX diagram and a Bloch sphere](docs/screenshots/02-gallery.png) | ![The same gallery in dark mode](docs/screenshots/03-gallery-dark.png) |
+| **Gallery:** physics, optics, plots, 3D solids, Feynman, forest, ZX and Bloch blocks on one canvas | **Dark mode** follows the system, or pick it from the top bar |
+| ![Document view: text, headings and diagram blocks laid out as one LaTeX document](docs/screenshots/04-document.png) | ![Quantum circuit editor showing a three-qubit QFT with a dashed gate group](docs/screenshots/05-quantum.png) |
+| **Document view:** write text and maths around your figures, then export one `article` | **Quantum circuits** (`quantikz`): a three-qubit QFT with a gate group |
+| ![Circuit editor in dark mode showing an inverting op-amp stage with resistors, a capacitor and grounds](docs/screenshots/06-circuit-dark.png) | ![Timing diagram editor with a clock, data and output rows and setup, hold and delay arrows](docs/screenshots/07-timing.png) |
+| **Circuits** (`circuitikz`): drag parts from the library, with the code live beside them | **Timing diagrams** (`tikz-timing`): paint values onto rows and mark setup, hold and delay |
+| ![Chemistry editor showing the structure of aspirin and its chemfig code](docs/screenshots/08-chem.png) | |
+| **Chemistry** (`chemfig`): aspirin, drawn from the formula on the right | |
+
+How close does the exported LaTeX come to what you see? See [PARITY.md](PARITY.md).
+
 ## Quick start
 
 1. Open **[diagramtex.igniting.space](https://diagramtex.igniting.space/)**.
 2. Pick a tool from the left rail and draw. Type `$…$` in a label for maths.
 3. Press **Ctrl/⌘+E** to open the TikZ code and copy it, or **Ctrl/⌘+Shift+E** to download the whole document as `.tex`.
 4. Paste the code into your LaTeX document and compile.
+
+The full user guide (every tool, block, mode, export and shortcut) is at **[diagramtex.igniting.space/guide/](https://diagramtex.igniting.space/guide/)**, and in the app behind the book icon at the bottom of the document list.
 
 A new browser opens with a welcome file, a Classic document: what the app does, a list of everything you can draw and its four modes (Classic, Page, Whiteboard and Quick) on top, then a diagram with one example of each kind of object (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram), a second gallery (physics, optics, waveforms, a 3D surface plot, a solid of revolution, a 3D solid, a Feynman diagram, a tree, a ZX diagram and a Bloch sphere), then a short manual: drawing, text and maths, blocks, arranging, writing the document and getting the LaTeX out. Its shortcuts read Cmd on a Mac and Ctrl elsewhere.
 
@@ -66,13 +85,21 @@ Then open http://localhost:5173.
 
 ### Self-host on Cloudflare Workers
 
-`wrangler.toml` publishes a static-assets-only Worker (no server code). Before each deploy, wrangler runs `scripts/build.js`, which copies `public/` to `dist/` with the JS and CSS minified by esbuild, and serves `dist/`:
+`wrangler.toml` publishes a static-assets-only Worker (no server code). Before each deploy, wrangler runs `scripts/build.js`, which copies `public/` to `dist/` with the JS and CSS minified by esbuild, and serves `dist/`. To keep the number of requests low, the build also joins the app's scripts into `js/bundle.js` and its stylesheets into `css/app.css` (in the order `index.html` loads them), and writes the service worker's precache list from the files in `dist/`. `public/` is never changed, so local development still serves one file per script:
 
 ```bash
 npx wrangler deploy
 ```
 
 `npx wrangler dev` previews it locally first.
+
+To share a version before it goes live, upload a Preview. It is built the same way, gets its own workers.dev link, and leaves the production site alone. It is named after the current git branch unless you pass `--name`:
+
+```bash
+npx wrangler preview
+```
+
+`wrangler.toml` turns on Preview URLs (`preview_urls = true`) and holds an empty `[previews]` block, which wrangler requires. The app has no bindings or secrets to override. Preview URLs are switched on for the Worker by the next `npx wrangler deploy`. `npx wrangler preview delete` removes a Preview.
 
 ## Feature reference
 
@@ -360,7 +387,7 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` for commut
 - `public/sw.js`, `public/manifest.webmanifest`: offline cache and install manifest
 - `design/logo/`: logo kit and usage guide
 - `wrangler.toml`: Cloudflare Workers deployment (builds and serves `dist/`)
-- `scripts/build.js`: copies `public/` to `dist/`, minifying JS and CSS (run by wrangler before deploy)
+- `scripts/build.js`: copies `public/` to `dist/`, minifying JS and CSS, joining the app's scripts and stylesheets into one file each and writing the precache list (run by wrangler before deploy)
 - `scripts/gen-texcommands.js`: regenerates `public/js/texcommands.js`
 - `scripts/cz-sheet.js`: draws every circuitikz part with its pins on one SVG sheet, for checking part drawings by eye
 - `.interface-design/system.md`: design direction, tokens and measurements for the UI ("drafting table")

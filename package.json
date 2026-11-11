@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build.js",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "preview": "wrangler preview"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"

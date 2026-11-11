@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DiagramTeX Guide</title>
+  <meta name="description" content="How to use DiagramTeX: drawing, LaTeX maths, circuits, quantum circuits, plots, 3D, chemistry and the other blocks, documents and pages, and getting TikZ and LaTeX out.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <link rel="canonical" href="https://diagramtex.igniting.space/guide/">
+  <link rel="icon" href="../icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../icons/favicon-32.png" sizes="32x32" type="image/png">
+  <meta name="theme-color" content="#fffdf8">
+  <script>
+    // Same appearance as the app: its Light / Dark choice, or the system's. Runs before the styles, so no flash.
+    (function () {
+      var pick = null, mq = matchMedia('(prefers-color-scheme: dark)');
+      try { pick = localStorage.getItem('diagramtex.theme'); } catch (e) { /* storage blocked */ }
+      function apply() {
+        var t = pick === 'light' || pick === 'dark' ? pick : mq.matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = t;
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.content = t === 'dark' ? '#242320' : '#fffdf8';
+      }
+      apply();
+      mq.addEventListener('change', apply);
+      addEventListener('storage', function (e) { if (e.key === 'diagramtex.theme') { pick = e.newValue; apply(); } });
+    })();
+  </script>
+  <style>
+    @font-face { font-family: 'Inter Display'; font-weight: 400 500; font-display: swap; src: url('../fonts/InterDisplay-Medium.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter Display'; font-weight: 600; font-display: swap; src: url('../fonts/InterDisplay-SemiBold.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter Display'; font-weight: 700; font-display: swap; src: url('../fonts/InterDisplay-Bold.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter Display'; font-style: italic; font-weight: 400; font-display: swap; src: url('../fonts/InterDisplay-Italic.woff2') format('woff2'); }
+
+    /* the app's tokens (css/style.css), so the guide reads as part of it */
+    :root {
+      color-scheme: light;
+      --paper: #f4f2ec; --sheet: #fffdf8; --sheet-raised: #ffffff; --well: #f3f0e8;
+      --ink: #1c1b19; --graphite: #5d5b55; --pencil: #6f6c64; --faint: #bab7ae;
+      --rule: rgba(28, 27, 25, .12); --rule-soft: rgba(28, 27, 25, .07); --rule-strong: rgba(28, 27, 25, .24);
+      --wash: rgba(28, 27, 25, .045); --wash-strong: rgba(28, 27, 25, .085);
+      --redpen: #c8361d; --bluepen: #2459a6; --mathpen: #1f7a3a; --marker-wash: rgba(232, 180, 20, .10);
+      --logo-k: #23205A;
+      --r-sm: 4px; --r: 6px; --r-lg: 10px; --r-xl: 12px; --ctl: 28px;
+      --font-ui: "Inter Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    :root[data-theme=dark] {
+      color-scheme: dark;
+      --paper: #1c1b19; --sheet: #242320; --sheet-raised: #2e2d2a; --well: #1a1917;
+      --ink: #ecebe6; --graphite: #b4b1a9; --pencil: #95928a; --faint: #5c5a55;
+      --rule: rgba(236, 235, 230, .13); --rule-soft: rgba(236, 235, 230, .07); --rule-strong: rgba(236, 235, 230, .24);
+      --wash: rgba(236, 235, 230, .06); --wash-strong: rgba(236, 235, 230, .11);
+      --redpen: #e8674c; --bluepen: #6c9de3; --mathpen: #7cc58f; --marker-wash: rgba(240, 197, 60, .10);
+      --logo-k: #F1EFFF;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 64px; -webkit-text-size-adjust: 100%; }
+    @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 500 15px/1.6 var(--font-ui); font-feature-settings: "cv11", "ss03"; }
+    a { color: var(--bluepen); text-decoration: none; }
+    a:hover { text-decoration: underline; text-underline-offset: 2px; }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: var(--r-sm); }
+
+    /* top bar */
+    .top { position: sticky; top: 0; z-index: 5; height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px;
+      background: var(--sheet); border-bottom: 1px solid var(--rule); }
+    .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; font-size: 14px; }
+    .brand:hover { text-decoration: none; }
+    .brand svg { width: 20px; height: 20px; }
+    .brand .k { fill: var(--logo-k); }
+    .brand small { color: var(--pencil); font-weight: 500; font-size: 14px; }
+    .top .sp { flex: 1; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl); padding: 0 12px; border-radius: var(--r);
+      border: 1px solid var(--rule-strong); color: var(--ink); font: 500 13px var(--font-ui); white-space: nowrap; }
+    .btn:hover { background: var(--wash); text-decoration: none; }
+    .btn svg { width: 14px; height: 14px; }
+
+    /* layout: contents on the left, one reading column */
+    .wrap { display: grid; grid-template-columns: 232px minmax(0, 760px); gap: 48px; max-width: 1104px; margin: 0 auto; padding: 32px 24px 96px; }
+    nav.toc { position: sticky; top: 72px; align-self: start; max-height: calc(100vh - 96px); overflow: auto; font-size: 13px; }
+    nav.toc .h { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pencil); margin: 0 0 8px 8px; }
+    nav.toc ol { list-style: none; margin: 0; padding: 0; }
+    nav.toc li a { display: block; padding: 4px 8px; border-radius: var(--r); color: var(--graphite); }
+    nav.toc li a:hover { background: var(--wash); color: var(--ink); text-decoration: none; }
+    nav.toc li a.on { color: var(--ink); background: var(--wash-strong); }
+    nav.toc ol ol a { padding-left: 20px; font-size: 12.5px; }
+    .toc-m { display: none; }
+
+    main { min-width: 0; }
+    .hero { padding: 8px 0 24px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+    .eyebrow { font-size: 12px; font-weight: 600; color: var(--pencil); letter-spacing: .02em; }
+    h1 { font-size: 36px; line-height: 1.15; letter-spacing: -.02em; font-weight: 700; margin: 4px 0 12px; }
+    .lede { font-size: 17px; color: var(--graphite); margin: 0 0 16px; max-width: 640px; }
+    .facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .facts li { font-size: 12px; color: var(--graphite); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; background: var(--sheet); }
+    h2 { font-size: 24px; line-height: 1.25; letter-spacing: -.01em; font-weight: 700; margin: 48px 0 12px; }
+    h3 { font-size: 17px; line-height: 1.3; font-weight: 600; margin: 28px 0 8px; }
+    h2 + p, h3 + p { margin-top: 0; }
+    p, ul, ol { margin: 0 0 12px; }
+    ul, ol { padding-left: 20px; }
+    li { margin: 3px 0; }
+    li::marker { color: var(--pencil); }
+    b, strong { font-weight: 600; }
+    .muted { color: var(--pencil); }
+    code { font: 13px var(--font-mono); background: var(--wash); border-radius: var(--r-sm); padding: 1px 4px; overflow-wrap: anywhere; }
+    pre { font: 13px/1.5 var(--font-mono); background: var(--well); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 12px 16px; overflow-x: auto; margin: 0 0 16px; }
+    pre code { background: none; padding: 0; }
+    kbd { font: 11.5px var(--font-mono); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-bottom-width: 2px; border-radius: var(--r-sm); padding: 0 5px; color: var(--ink); white-space: nowrap; }
+
+    figure { margin: 16px 0 24px; }
+    figure img { display: block; width: 100%; height: auto; border-radius: var(--r-lg); border: 1px solid var(--rule); background: var(--sheet); }
+    figcaption { font-size: 13px; color: var(--pencil); margin-top: 8px; }
+
+    .steps { counter-reset: s; list-style: none; padding: 0; display: grid; gap: 8px; }
+    .steps li { counter-increment: s; position: relative; padding: 12px 16px 12px 52px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); margin: 0; }
+    .steps li::before { content: counter(s); position: absolute; left: 16px; top: 12px; width: 24px; height: 24px; border-radius: 50%;
+      background: var(--ink); color: var(--sheet); font: 600 12px/24px var(--font-ui); text-align: center; }
+
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 16px; }
+    .card { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 12px 16px; }
+    .card h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    .card p { margin: 0; font-size: 13.5px; color: var(--graphite); }
+
+    .note { border-left: 3px solid var(--bluepen); background: var(--sheet); border-radius: 0 var(--r) var(--r) 0; padding: 10px 14px; margin: 0 0 16px; font-size: 14px; }
+    .note.warn { border-left-color: var(--redpen); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 0 0 16px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); overflow: hidden; display: block; overflow-x: auto; }
+    table > tbody, table > thead { display: table; width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--rule-soft); }
+    th { font-size: 12px; font-weight: 600; color: var(--pencil); background: var(--wash); }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { white-space: nowrap; }
+    .rate { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; }
+
+    details.block { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); margin: 0 0 8px; }
+    details.block > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; padding: 10px 16px; font-weight: 600; }
+    details.block > summary::-webkit-details-marker { display: none; }
+    details.block > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--pencil); border-bottom: 1.5px solid var(--pencil);
+      transform: rotate(-45deg); transition: transform 220ms var(--ease); flex: none; align-self: center; }
+    details.block[open] > summary::before { transform: rotate(45deg); }
+    details.block > summary code { font-weight: 500; }
+    details.block > summary .muted { font-weight: 500; font-size: 13px; margin-left: auto; }
+    details.block > div { padding: 0 16px 8px 30px; font-size: 14.5px; }
+    @media (prefers-reduced-motion: reduce) { details.block > summary::before { transition: none; } }
+
+    footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--pencil); }
+
+    @media (max-width: 900px) {
+      .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 16px 16px 64px; }
+      nav.toc { display: none; }
+      .toc-m { display: block; margin: 0 0 16px; }
+      .toc-m nav.toc { display: block; position: static; max-height: none; padding: 0 8px 8px; }
+      h1 { font-size: 30px; }
+      .cards { grid-template-columns: minmax(0, 1fr); }
+      .brand small { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="../" title="Open DiagramTeX">
+      <svg viewBox="0 0 256 256" aria-hidden="true"><path class="k" d="M84.14 55.86L200.14 171.86L171.86 200.14L55.86 84.14Z"/><circle cx="70" cy="70" r="54" fill="#FF5A3C"/><rect x="132" y="132" width="108" height="108" rx="16" fill="#2F7BFF"/></svg>
+      DiagramTeX <small>Guide</small>
+    </a>
+    <span class="sp"></span>
+    <a class="btn" href="../">Open DiagramTeX
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+  </header>
+
+  <div class="wrap">
+    <nav class="toc" id="toc" aria-label="Contents">
+      <div class="h">Contents</div>
+      <ol>
+        <li><a href="#start">Get started</a></li>
+        <li><a href="#window">The window</a></li>
+        <li><a href="#modes">Four modes</a></li>
+        <li><a href="#drawing">Drawing</a>
+          <ol>
+            <li><a href="#tools">Tools</a></li>
+            <li><a href="#precision">Snapping and precision</a></li>
+            <li><a href="#arrange">Arranging</a></li>
+            <li><a href="#style">Style</a></li>
+          </ol>
+        </li>
+        <li><a href="#maths">Text and maths</a></li>
+        <li><a href="#plots">Plots and 3D</a></li>
+        <li><a href="#blocks">Blocks</a></li>
+        <li><a href="#documents">Documents and pages</a></li>
+        <li><a href="#export">Getting LaTeX out</a></li>
+        <li><a href="#import">Bringing TikZ in</a></li>
+        <li><a href="#files">Files and saving</a></li>
+        <li><a href="#parity">How close to LaTeX</a></li>
+        <li><a href="#keys">Keyboard shortcuts</a></li>
+        <li><a href="#privacy">Offline and privacy</a></li>
+        <li><a href="#faq">Questions</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <details class="block toc-m"><summary>Contents</summary></details>
+
+      <section class="hero">
+        <div class="eyebrow">User guide</div>
+        <h1>Draw it, then paste the LaTeX.</h1>
+        <p class="lede">DiagramTeX is a diagram editor that writes TikZ. You draw with the mouse, type labels in LaTeX maths, and copy clean code into Overleaf or any LaTeX document. This guide covers everything it does, from the first line to a whole typeset document.</p>
+        <ul class="facts">
+          <li>Free and open source</li><li>Works offline</li><li>No account</li><li>Nothing leaves your browser</li>
+        </ul>
+      </section>
+
+      <section id="start">
+        <h2>Get started</h2>
+        <ol class="steps">
+          <li><b>Pick a tool and draw.</b> The rail on the left holds every tool; press <kbd>L</kbd> for a line, <kbd>R</kbd> for a rectangle, <kbd>T</kbd> for text.</li>
+          <li><b>Type maths in labels.</b> Anything between <code>$…$</code> is LaTeX maths and renders as you type: <code>$\vec F = m\vec a$</code>.</li>
+          <li><b>Copy the TikZ.</b> Press <kbd class="mod">Ctrl</kbd><kbd>E</kbd> to open the code. The comment at the top lists the packages it needs.</li>
+          <li><b>Paste and compile.</b> Put the code in your document, load the listed packages, and build with pdfLaTeX.</li>
+        </ol>
+        <p>The first time you open DiagramTeX it shows a <b>Welcome</b> file: an introduction, two diagrams with one example of almost everything it can draw, and a short manual. Open any of its objects to see how it was made. To keep DiagramTeX on your computer, install it from the browser (the install icon in the address bar, or <b>Add to Home Screen</b>); it then runs without a connection.</p>
+      </section>
+
+      <section id="window">
+        <h2>The window</h2>
+        <figure>
+          <img src="img/01-diagram.png" width="1920" height="1080" alt="The DiagramTeX window: the file list on the left, the tool rail beside it, the canvas with formulae, a flowchart, a circuit, a plot and a quantum circuit, and the properties panel on the right" loading="lazy">
+          <figcaption>A Classic diagram with the plot selected: its settings fill the panel on the right.</figcaption>
+        </figure>
+        <div class="cards">
+          <div class="card"><h4>Top bar</h4><p>New, Open, Save and Import on the left; the mode switch; the file name and autosave state; undo and redo; grid and snap; Print, Export, Code and LaTeX on the right.</p></div>
+          <div class="card"><h4>File list</h4><p>Your files of the current kind. Right-click a file to rename, duplicate or delete it. The button at the far left folds the list away. Underneath: the text input mode and the maths engine.</p></div>
+          <div class="card"><h4>Tool rail</h4><p>Every tool. A button with a small corner triangle opens a flyout of related tools when you hover it.</p></div>
+          <div class="card"><h4>Properties panel</h4><p>Floats over the top right of the canvas. With nothing selected it sets the default style for new shapes and lists the shortcuts; click its heading to fold it.</p></div>
+          <div class="card"><h4>Layers</h4><p>Under the properties panel, top first. Click to select, drag to restack, the eye hides, the lock stops picking. Double-click a name to rename it.</p></div>
+          <div class="card"><h4>Rulers and status bar</h4><p>Centimetre rulers in TikZ coordinates (y up) show the selection in red. The status bar shows the cursor, the selection size, grid, snap and zoom, with <b>1:1</b>, <b>Fit</b> and <b>Fit Width</b>.</p></div>
+        </div>
+        <p>1 cm in TikZ is 40 px on the canvas at 100%. Canvas y points down and TikZ y points up; the faint cross on the canvas marks the TikZ origin. The app follows your system's light or dark appearance, or the choice at the right end of the top bar. The drawing sheet stays light in both, so colours look as they will on paper.</p>
+      </section>
+
+      <section id="modes">
+        <h2>Four modes</h2>
+        <p>The top bar's main switch is <b>Classic | Page | Whiteboard | Quick</b>. Each of the first three is its own kind of file; the sidebar lists only files of the current kind, and <b>New</b> makes one of that kind.</p>
+        <div class="cards">
+          <div class="card"><h4>Classic</h4><p>Diagrams plus a document that arranges them with text, as in Mathcha. A second switch, <b>Document | Diagram</b>, flips between writing and drawing.</p></div>
+          <div class="card"><h4>Page</h4><p>A free-form sheet of paper. Place text, maths, shapes, plots and images anywhere on A4 or Letter pages, and export a full <code>article</code> that keeps every position.</p></div>
+          <div class="card"><h4>Whiteboard</h4><p>One endless canvas with no edges. Scroll to move, pinch or <kbd class="mod">Ctrl</kbd>+scroll to zoom (3% to 800%), and <kbd>H</kbd> or <kbd>Space</kbd>-drag to grab the board.</p></div>
+          <div class="card"><h4>Quick</h4><p>One formula as a picture. Type LaTeX, then <b>Copy PNG</b> (<kbd class="mod">Ctrl</kbd><kbd>Enter</kbd>) to paste it into slides or chats, or copy the SVG. Your open file stays open.</p></div>
+        </div>
+      </section>
+
+      <section id="drawing">
+        <h2>Drawing</h2>
+        <h3 id="tools">Tools</h3>
+        <ul>
+          <li><b>Select</b> (<kbd>V</kbd>), <b>Maths</b> (<kbd>M</kbd>, a text object that starts in <code>$…$</code>) and <b>Text</b> (<kbd>T</kbd>; drag for a paragraph box).</li>
+          <li><b>Lines:</b> line, curve, arrow, curved arrow, polyline, smooth closed blob, arc (an angle mark) and spring. Click a polyline point to pick it, drag a <b>+</b> to add one, double-click to remove one.</li>
+          <li><b>Shapes:</b> rectangles (plain, rounded, snipped), 33 basic shapes and 28 flowchart symbols. Library symbols export as exact TikZ paths and can hold centred text.</li>
+          <li><b>Electrical:</b> the circuit editor, common symbols (resistor, capacitor, sources, diode, transistor, logic gates, ground) and waveforms (sine, square, pulse, triangle, sawtooth, rectified, chopped…).</li>
+          <li><b>Physics:</b> mechanics (ground, wall, block, incline, cart, pulley, pendulum) and optics (lenses, mirrors, prism, screen, slits, rays, source, eye).</li>
+          <li><b>Misc:</b> axes, wave, brace, ruler, grid, ball and dot; <b>Arrows:</b> 27 block arrows; <b>Image</b> (<kbd>I</kbd>) and <b>Pencil</b> (<kbd>N</kbd>, freehand, smoothed into Bézier curves).</li>
+        </ul>
+        <p>Detailed shapes keep their detail size when you resize them: stretching a wave adds periods, a spring or coil adds loops, a ruler adds ticks. The panel holds the detail sizes (period, loop pitch, tick spacing, cell size).</p>
+
+        <h3 id="precision">Snapping and precision</h3>
+        <ul>
+          <li>The grid is 0.25 cm. Shapes snap to it and to other shapes' points; hold <kbd class="alt">Alt</kbd> to place freely.</li>
+          <li>Hold <kbd class="shift">Shift</kbd> to keep angles to 15° steps and to draw squares and circles.</li>
+          <li>Arrow keys nudge the selection. The panel shows every coordinate in TikZ centimetres, ready to type.</li>
+          <li><b>Rotate</b> by hovering just outside a corner of the selection until the cursor turns, then drag (<kbd class="shift">Shift</kbd> for 15°). <kbd class="mod">Ctrl</kbd><kbd>R</kbd> turns 90°.</li>
+        </ul>
+
+        <h3 id="arrange">Arranging</h3>
+        <ul>
+          <li><b>Right-click</b> any object for copy (also as TikZ), cut, paste, duplicate, delete, group, and the Combine, Arrange, Rotate, Align and Distribute menus.</li>
+          <li><b>Groups</b> (<kbd class="mod">Ctrl</kbd><kbd>G</kbd>; add <kbd class="shift">Shift</kbd> to ungroup) select and align as one piece.</li>
+          <li><b>Combine</b> two or more closed shapes: Unite, Intersect, Subtract, Exclude or Divide. The result is a Region, which can have holes, exported with <code>even odd rule</code>.</li>
+          <li><b>Stacking:</b> <kbd class="mod">Ctrl</kbd><kbd>]</kbd> and <kbd class="mod">Ctrl</kbd><kbd>[</kbd> move forward and backward, or drag rows in Layers.</li>
+        </ul>
+
+        <h3 id="style">Style</h3>
+        <ul>
+          <li><b>Colour</b> with presets, alpha and “No colour”. <b>Fill</b> is a colour, a <b>gradient</b> (linear or radial, with draggable stops; exported as pgf shadings) or a <b>pattern</b> (lines, grid, crosshatch, bricks, dots; exported with <code>patterns.meta</code>).</li>
+          <li><b>Lines:</b> width, dash presets or a custom <code>on off</code> pattern, 27 arrow tips, double, wavy and ticked shafts, opacity.</li>
+          <li><b>Text:</b> font family, bold and italic, size from <code>\tiny</code> to <code>\Huge</code> or a custom size, and a wrap width with left, centre, right or justified alignment.</li>
+          <li>With nothing selected, the panel sets the <b>default style</b> that new shapes start with.</li>
+        </ul>
+      </section>
+
+      <section id="maths">
+        <h2>Text and maths</h2>
+        <ul>
+          <li><code>$…$</code> is inline maths. <code>$$…$$</code> or <code>\[…\]</code> is display style (full-size fractions and limits), exported as <code>$\displaystyle …$</code>. <b>Math style</b> in the panel switches every formula in the selection at once.</li>
+          <li><b>Command suggestions:</b> type <code>\</code> and matching commands appear with a rendered preview, about 250 common ones first. <kbd>↑</kbd> <kbd>↓</kbd> to choose, <kbd>Enter</kbd> or <kbd>Tab</kbd> to insert, <kbd>Esc</kbd> to close.</li>
+          <li><b>Text input</b> (left sidebar): <b>LaTeX</b> to type source, or <b>MathLive</b> to edit maths visually. Double-clicking a label edits it in the mode you chose.</li>
+          <li><b>LaTeX engine</b> (left sidebar) changes only the preview: <b>KaTeX</b> looks the same in every browser; <b>Temml</b> covers more LaTeX and looks closer to TeX. The exported code is the same.</li>
+          <li>Labels on lines and curves use TikZ's <code>auto</code> and <code>swap</code> placement, so they sit where LaTeX puts them.</li>
+        </ul>
+        <p class="note">Maths inside LaTeX source fields is shown in green, so you can see at a glance which part is maths.</p>
+      </section>
+
+      <section id="plots">
+        <h2>Plots and 3D</h2>
+        <h3>2D plots (pgfplots)</h3>
+        <p>Click the plot button to place one, or drag out a box. Each plot holds several series, written as expressions such as <code>sin(x)*exp(-x/4)</code> or as data. Kinds: function, line, scatter, area, bar, contour, heatmap, and pie chart (one <code>label value [#color]</code> per line). A function series can also be an inequality (shaded, dashed edge when strict), a region between two curves, <i>x</i> in terms of <i>y</i>, parametric, polar, implicit <code>F(x, y) = 0</code>, points, vectors, a vector field or a phase portrait. Define variables once (<code>a = 2, b = 0.5</code>) and use them in every series. Axis labels, ranges, grid, legend, colour maps and a colour bar are in the panel; expression errors show both there and on the canvas.</p>
+        <h3>3D</h3>
+        <p>The 3D menu has eight tools; each one's variants are chosen in its panel.</p>
+        <ul>
+          <li><b>3D plots</b> (pgfplots): surface <code>z = f(x, y)</code> (or a mesh), parametric surface, space curve and 3D scatter, with pgfplots' <code>view={az}{el}</code> angles.</li>
+          <li><b>3D figures in plain TikZ</b>, for calculus: solid regions over an ellipse, rectangle, polar curve or polar rectangle (with Riemann columns), solids of revolution (disks, washers, shells, cut open, with a highlighted slice) and basic solids (box, cylinder, cone, frustum, sphere, prism, pyramid, spherical wedge). Hidden edges are dashed; lower a colour's alpha to see through.</li>
+          <li><b>3D Geometry</b> (<code>tikz-3dplot</code>): a picture you turn by dragging, with points, vectors, projections, planes, surfaces, spheres and angle arcs. See <a href="#blocks">Blocks</a>.</li>
+        </ul>
+      </section>
+
+      <section id="blocks">
+        <h2>Blocks</h2>
+        <p>A block is a whole figure written in one LaTeX package, edited in its own editor. Add one from the <b>Blocks</b> menu (the cube on the tool rail). Placing a block only selects it; <b>double-click</b> it, press <kbd>Enter</kbd> or use the <b>Edit…</b> button in the panel to open its editor.</p>
+        <figure>
+          <img src="img/05-quantum.png" width="1920" height="1080" alt="The quantum circuit editor: a palette of gates on the left, a three-qubit QFT circuit with a dashed gate group in the middle, and its quantikz code on the right" loading="lazy">
+          <figcaption>Every block editor has the same shape: palette on the left, the drawing in the middle, the panel and the code on the right.</figcaption>
+        </figure>
+        <p><b>All editors work the same way:</b></p>
+        <ul>
+          <li><b>Palette</b> on the left: click an item and click the grid, or drag it in. Single keys place the common items.</li>
+          <li><b>Code on the right, live both ways.</b> The code follows the drawing, and typing in it updates the drawing after a short pause. Parts you didn't touch keep the code you wrote, and commands the editor can't draw are kept and exported as written (it tells you which).</li>
+          <li><b>Right-click</b> an item for its actions: insert, delete, reverse, bend, edit label. Double-click a label to edit it in place.</li>
+          <li><b>Done</b> (<kbd class="mod">Ctrl</kbd><kbd>Enter</kbd>) writes the block back and closes; <kbd class="mod">Ctrl</kbd><kbd>S</kbd> writes it back and keeps the editor open. <b>Cancel</b> or <kbd>Esc</kbd> asks before discarding changes.</li>
+        </ul>
+
+        <details class="block"><summary>Circuit <code>circuitikz</code><span class="muted">266 parts</span></summary><div>
+          <ul>
+            <li>Parts come in searchable categories. Click a part and click the grid, or drag from start to end to set a two-terminal part's length.</li>
+            <li><b>Wires</b> (<kbd>W</kbd>) snap to pins and stay attached when parts move. Transistors, op amps and ICs are named for you (<code>Q1</code>, <code>U1</code>), so wires export as <code>(Q1.B)</code>.</li>
+            <li>The panel sets the label (maths welcome: <code>$R_1$</code>), annotation, voltage and current arrows, open and closed ends, rotation and mirroring.</li>
+            <li>Exported as a <code>scope</code> with <code>\usepackage{circuitikz}</code>; <b>Copy circuitikz Code</b> gives a standalone environment.</li>
+          </ul>
+          <figure><img src="img/06-circuit-dark.png" width="1920" height="1080" alt="The circuit editor in dark mode: an op-amp stage with R1, Rf, Cf and RL, and the circuitikz code beside it" loading="lazy"></figure>
+        </div></details>
+
+        <details class="block"><summary>Quantum circuit <code>quantikz</code></summary><div>
+          <ul>
+            <li>The circuit is a grid of wires × steps. Keys place gates and step right: <kbd>H</kbd> <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd> <kbd>S</kbd> <kbd>T</kbd> <kbd>U</kbd>, <kbd>C</kbd> control, <kbd>O</kbd> open control, <kbd>+</kbd> target, <kbd>M</kbd> meter.</li>
+            <li>Drop on the dashed row or column to add a wire or step. Right-click a cell or a range to insert or delete wires and steps, or clear cells.</li>
+            <li>Controls link to the nearest gate in their step; drag the blue handle to link another wire. Drag a gate's top or bottom bar to span several wires, or its corner handle to set a minimum size.</li>
+            <li>The panel edits labels, spans, wire types (quantum, classical, bundle), slices and gate groups. Exported in <code>\begin{quantikz}</code> with <code>\usetikzlibrary{quantikz2}</code>.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Commutative diagram <code>tikz-cd</code></summary><div>
+          <ul>
+            <li>Select a cell and type its object, or drop one from the palette. Drag from cell to cell to draw an arrow in the palette's style (maps to, inclusion, onto, dashed, implies, equal, harpoon, squiggly…).</li>
+            <li>The panel sets an arrow's label and side, head, line, crossing gap, bend and shift; <b>Reverse</b> swaps its ends.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Tree <code>forest</code></summary><div>
+          <ul>
+            <li>For syntax trees, org charts, directory trees, decision and probability trees. Start from a template, then add, move and restyle nodes by keyboard or by dragging.</li>
+            <li>Tree-direction buttons follow the tree's growth; the code is live beside it.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>ZX diagram <code>zx-calculus</code></summary><div>
+          <ul>
+            <li>Drop Z and X spiders, Hadamard boxes, points and loops onto cells, or type <kbd>Z</kbd> <kbd>X</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>L</kbd>.</li>
+            <li>Drag a node's blue handle to another cell to wire them. Click a wire to choose its shape from pictures, add a marker, or make it classical, bold or dashed.</li>
+            <li>The panel sets a spider's colour, phase (plain or a fraction) and where the phase goes.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Feynman diagram <code>tikz-feynman</code></summary><div>
+          <ul>
+            <li>Place vertices (dot, blob, crossed dot, particle) on a centimetre grid; drag the blue handle from one vertex to another to draw a propagator: fermion, photon, gluon, scalar, ghost, Majorana, boson and more (keys <kbd>F</kbd> <kbd>P</kbd> <kbd>G</kbd> <kbd>S</kbd> <kbd>M</kbd> <kbd>B</kbd> <kbd>L</kbd>).</li>
+            <li>A line has a label, a momentum arrow, a bend or half circle and an insertion; right-click to reverse it.</li>
+            <li>Exported with <code>\usepackage[compat=1.1.0]{tikz-feynman}</code> and builds with pdfLaTeX, because every vertex has a position.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>3D geometry <code>tikz-3dplot</code></summary><div>
+          <ul>
+            <li>Drag empty space to turn the view; arrow keys turn it by 5° (<kbd class="shift">Shift</kbd> 15°). Drag a point to move it level; hold <kbd class="shift">Shift</kbd> to move it up and down.</li>
+            <li>Add axes, rotated frames, points by (x, y, z) or (r, θ, φ), vectors, segments, projections, planes <i>ax + by + cz = d</i>, surfaces, triangles, circles, spheres, boxes, curves and angle arcs (keys <kbd>A</kbd> <kbd>R</kbd> <kbd>P</kbd> <kbd>T</kbd> <kbd>V</kbd> <kbd>S</kbd> <kbd>L</kbd> <kbd>C</kbd> <kbd>B</kbd>).</li>
+            <li>The code is the figure: <code>\foreach</code> loops, <code>\def</code> values and scopes are read and drawn. Moving a point defined by <code>\def</code> values writes the new values there.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Timing diagram <code>tikz-timing</code></summary><div>
+          <ul>
+            <li>Pick a value (High, Low, High-Z, Unknown, Data, Clock, Toggle, Metastable, Glitch, Gap, Hatched; keys <kbd>H</kbd> <kbd>L</kbd> <kbd>Z</kbd> <kbd>X</kbd> <kbd>D</kbd> <kbd>U</kbd> <kbd>C</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>G</kbd> <kbd>S</kbd> <kbd>W</kbd>) and drag along a row to paint it.</li>
+            <li>Drag an edge to move a transition; with <kbd class="shift">Shift</kbd> the rest of the row moves too. Data cells can be filled in a colour or hatched.</li>
+            <li><b>Interval</b> and <b>Delay</b> draw labelled arrows between edges (setup, hold, clock-to-output); <b>Break</b> (<kbd>B</kbd>) puts <code>//</code> marks across every row.</li>
+            <li>Text you type is escaped so it can't break the table; write <code>$x_1$</code> for a subscript.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>State machine TikZ <code>automata</code></summary><div>
+          <ul>
+            <li>Place states (State, Initial, Final, Both); drag a state's blue handle to another state for a transition, or back onto itself for a loop. <kbd>I</kbd>, <kbd>A</kbd> and <kbd>L</kbd> toggle initial, accepting and add a loop.</li>
+            <li><b>Auto layout</b> places every state in layers or on a circle, bending transitions just enough to clear other states.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Karnaugh map <code>karnaugh-map</code><span class="muted">2 to 6 variables</span></summary><div>
+          <ul>
+            <li>Click a cell to step it through 0, 1 and don't care, or paint with <kbd>1</kbd> <kbd>0</kbd> <kbd>D</kbd> <kbd>E</kbd>. Rows and columns are in Gray code.</li>
+            <li>Drag across cells to group them; past an edge, a group wraps round. The panel checks each group, writes out the simplified function, and <b>Find Groups</b> finds a smallest cover.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Chemistry <code>chemfig</code></summary><div>
+          <ul>
+            <li>Pick an atom and drag its blue handle to grow a bond (snaps to 15°). Type <kbd>C</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>O</kbd>… to relabel it, or double-click to type any label such as <code>NH_2</code>. Double-click a bond to step it single, double, triple.</li>
+            <li>The palette adds rings (benzene, aromatic, 3 to 7 sides, fused onto a picked side), groups (OH, COOH, NO₂…), charges and lone pairs.</li>
+            <li><b>Reactions:</b> an arrow turns the drawing into a <code>\schemestart … \schemestop</code> scheme with a copy of the molecule to change into the product.</li>
+            <li>Drawn by chemfig's own rules, so the canvas matches the PDF.</li>
+          </ul>
+        </div></details>
+
+        <details class="block"><summary>Bloch sphere <code>blochsphere</code></summary><div>
+          <ul>
+            <li>Set the radius, tilt and rotation, the ball style (shaded, outline, none) and colours in the panel, and list states by their label, θ and φ.</li>
+            <li>The code below is editable too; commands the panel doesn't cover are kept.</li>
+          </ul>
+        </div></details>
+      </section>
+
+      <section id="documents">
+        <h2>Documents and pages</h2>
+        <figure>
+          <img src="img/04-document.png" width="1920" height="1080" alt="Document view: a page with headings, text and maths, and diagram blocks between them, with the page setup on the right" loading="lazy">
+          <figcaption>Document view lays out text and diagrams on true-to-scale pages.</figcaption>
+        </figure>
+        <h3>Classic documents</h3>
+        <ul>
+          <li>A Classic file is a <b>document</b> of text blocks and diagram blocks. Text blocks take <code># Heading</code>, <code>$inline$</code> and <code>$$display$$</code> maths, <code>\textbf{}</code> and <code>\emph{}</code>.</li>
+          <li>Double-click a diagram block, or press <b>Edit</b>, to draw it on the canvas. In Diagram view, the selector in the top bar picks between diagrams.</li>
+          <li><b>Page setup</b> (right panel): paper (A4, A5, B5, US Letter, US Legal or custom), orientation, margins, font size and title. The preview marks approximate page breaks.</li>
+          <li>Diagrams wider than the text are scaled down to fit, on screen and in the export (<code>\resizebox{\linewidth}{!}{…}</code>).</li>
+        </ul>
+        <h3>Page mode</h3>
+        <ul>
+          <li>Place anything anywhere on the paper. Margins are blue dashed guides; corners, margins and centre lines are snap points.</li>
+          <li>Several pages stack down the canvas. With nothing selected, the panel lists every page to reorder, duplicate, insert or delete; an object belongs to the page under its centre and moves with it. <kbd>PgUp</kbd> / <kbd>PgDn</kbd> move between pages.</li>
+          <li>The LaTeX export writes one <code>tikzpicture[remember picture, overlay]</code> per page, anchored to the page corner, so positions are exact. <b>Compile twice.</b></li>
+        </ul>
+      </section>
+
+      <section id="export">
+        <h2>Getting LaTeX out</h2>
+        <table>
+          <thead><tr><th>Command</th><th>What you get</th></tr></thead>
+          <tbody>
+            <tr><td><b>Code</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>A <code>tikzpicture</code> snippet or a <code>standalone</code> document, for everything or only the selection. The header comment lists the packages and libraries to load.</td></tr>
+            <tr><td><b>LaTeX</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>The whole document as an <code>article</code> with <code>geometry</code> page settings and each diagram in a <code>tikzpicture</code>. Each picture carries a <code>% diagramtex-data:</code> comment, so it re-imports exactly.</td></tr>
+            <tr><td><b>Export</b></td><td><b>PNG</b> at any DPI from 24 to 2400 (written into the file, so it opens at true size, optionally transparent), <b>SVG</b> (vector, maths fonts embedded) or <b>PDF</b> (pictures at the chosen DPI).</td></tr>
+            <tr><td><b>Print</b> <kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>Pages at true size; choose Save as PDF for a vector PDF.</td></tr>
+            <tr><td><b>Right-click → Copy TikZ</b></td><td>Just the selected objects' code, straight to the clipboard.</td></tr>
+          </tbody>
+        </table>
+        <p><b>Save to</b> (Chrome, Edge and other Chromium browsers): choose a folder for a file's exports once, such as your paper's <code>figures/</code> folder, and every later export overwrites its copy there.</p>
+        <p>A typical snippet looks like this:</p>
+<pre><code>% Requires: \usepackage{tikz} \usetikzlibrary{arrows.meta}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \draw[line width=0.71pt, -{Stealth}] (0,0) -- (3,0) node[midway, above] {$\vec v$};
+  \draw[line width=0.71pt] (4,0) circle (0.5);
+\end{tikzpicture}</code></pre>
+        <p><b>Packages by block:</b> TikZ always; <code>circuitikz</code>, <code>pgfplots</code>, <code>tikz-cd</code>, the <code>quantikz2</code> library, <code>forest</code>, <code>zx-calculus</code>, <code>tikz-feynman</code>, <code>tikz-3dplot</code>, <code>tikz-timing</code>, the <code>automata</code> library, <code>karnaugh-map</code>, <code>chemfig</code> and <code>blochsphere</code> as used. All of them are in TeX Live and on Overleaf.</p>
+        <p class="note warn">quantikz2 restyles every <code>tikz-cd</code> diagram in the same document. When a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own.</p>
+      </section>
+
+      <section id="import">
+        <h2>Bringing TikZ in</h2>
+        <p><b>Import LaTeX/TikZ</b> (top bar) takes pasted code or a <code>.tex</code> file and turns it into objects you can edit.</p>
+        <ul>
+          <li>Commands: <code>\draw</code>, <code>\fill</code>, <code>\filldraw</code>, <code>\node</code>, <code>\coordinate</code>.</li>
+          <li>Paths: <code>--</code>, <code>..controls..</code>, <code>|-</code>, <code>rectangle</code>, <code>circle</code>, <code>ellipse</code>, <code>arc</code>, <code>to[bend]</code>, <code>grid</code> and inline nodes.</li>
+          <li>Options: colours (including <code>red!50</code>), widths, dashes, arrows, <code>scale</code>, polar and relative coordinates; <code>rotate</code>, <code>shift</code>, <code>xshift</code>, <code>yshift</code> on paths, nodes and nested scopes.</li>
+          <li><code>ZX</code>, <code>feynman</code> and <code>tikztimingtable</code> environments come back as blocks you can edit. Document text becomes text blocks, and <code>\documentclass</code> and <code>geometry</code> options become the page setup.</li>
+          <li>Hand-written <code>axis</code> and <code>tikzcd</code> environments are skipped, with a warning. Files DiagramTeX exported re-import exactly, plots included.</li>
+        </ul>
+      </section>
+
+      <section id="files">
+        <h2>Files and saving</h2>
+        <ul>
+          <li><b>Autosave:</b> every change is saved in your browser (IndexedDB) as you work. Nothing is uploaded.</li>
+          <li><b>Save</b> (<kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd>) writes a <code>.diagramtex</code> file (JSON inside); <b>Open</b> (<kbd class="mod">Ctrl</kbd><kbd>O</kbd>) loads it back in the right mode.</li>
+          <li><b>Linked files</b> (Chromium browsers): after the first Save, the file stays linked, so <kbd class="mod">Ctrl</kbd><kbd>S</kbd> writes straight to it. An amber dot by the name means unsaved changes. Safari and Firefox download a copy each time instead.</li>
+          <li>The installed app can open <code>.diagramtex</code>, <code>.tex</code> and <code>.tikz</code> files from Finder or Explorer (Open With).</li>
+        </ul>
+        <p class="note">Browser storage can be cleared by the browser or by you. Keep a <code>.diagramtex</code> copy of anything you care about.</p>
+      </section>
+
+      <section id="parity">
+        <h2>How close to LaTeX</h2>
+        <p>The canvas is drawn with each package's own geometry, so what you see is what <code>pdflatex</code> makes, within a millimetre or so for most figures. The main differences you may notice:</p>
+        <ul>
+          <li><b>Fonts:</b> the preview uses KaTeX or Temml, which are close to Computer Modern but not identical; line breaks in wrapped text can fall slightly differently.</li>
+          <li><b>Small offsets:</b> circuit labels sit about 1 mm higher on the canvas, quantum gate boxes are a touch wider, and forest trees come out a little taller in LaTeX.</li>
+          <li><b>Code the editor keeps but doesn't draw</b> (an unusual option, a chemfig submolecule) appears only in the PDF. Each editor lists such lines.</li>
+        </ul>
+        <p>The full report, with side-by-side images and a match rate for every kind of figure, is <a href="https://gitlab.com/igniting-space/diagramtex/-/blob/main/PARITY.md" target="_blank" rel="noopener">PARITY.md</a>.</p>
+      </section>
+
+      <section id="keys">
+        <h2>Keyboard shortcuts</h2>
+        <table>
+          <thead><tr><th>Keys</th><th>Action</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>V</kbd> <kbd>L</kbd> <kbd>A</kbd> <kbd>C</kbd> <kbd>P</kbd></td><td>Select, line, arrow, curve, polyline</td></tr>
+            <tr><td><kbd>O</kbd> <kbd>S</kbd> <kbd>R</kbd> <kbd>E</kbd></td><td>Arc, spring, rectangle, ellipse</td></tr>
+            <tr><td><kbd>B</kbd> <kbd>D</kbd> <kbd>T</kbd> <kbd>M</kbd></td><td>Ball, dot, text, maths</td></tr>
+            <tr><td><kbd>I</kbd> <kbd>N</kbd> <kbd>H</kbd></td><td>Image, pencil, hand (Whiteboard)</td></tr>
+            <tr><td><kbd class="shift">Shift</kbd></td><td>Constrain angle to 15°, square, circle</td></tr>
+            <tr><td><kbd class="alt">Alt</kbd></td><td>Drag without snapping</td></tr>
+            <tr><td><kbd>Space</kbd>+drag</td><td>Pan (or the middle mouse button)</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd>+scroll</td><td>Zoom</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>Z</kbd> / <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>Z</kbd></td><td>Undo, redo</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>D</kbd></td><td>Duplicate</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>G</kbd></td><td>Group (add <kbd class="shift">Shift</kbd> to ungroup)</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>R</kbd></td><td>Rotate 90°</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>]</kbd> / <kbd>[</kbd></td><td>Bring forward, send backward</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Open the selected block's editor</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>Enter</kbd></td><td>Done (in an editor); Copy PNG (in Quick)</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>S</kbd></td><td>Save (in an editor: write back and stay open)</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd></td><td>Save as a file</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>O</kbd></td><td>Open a file</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>TikZ code</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>Export the whole document as LaTeX</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>Print or PDF</td></tr>
+            <tr><td>Right-click</td><td>Object menu</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="privacy">
+        <h2>Offline and privacy</h2>
+        <ul>
+          <li><b>Your work never leaves your device.</b> Files and settings live in your browser; there is no server-side storage.</li>
+          <li><b>No account, no tracking:</b> no sign-up, analytics, cookies, ads or third-party scripts.</li>
+          <li><b>Offline:</b> after the first visit, the app, both maths engines, MathLive and every font are stored by the browser, so everything works without a connection.</li>
+          <li><b>No requests to other sites,</b> even from your exports: SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them.</li>
+          <li><b>Open source</b> under the MIT License; you can host it yourself as plain static files.</li>
+        </ul>
+      </section>
+
+      <section id="faq">
+        <h2>Questions</h2>
+        <h3>Can I use the output in Overleaf?</h3>
+        <p>Yes. Press <kbd class="mod">Ctrl</kbd><kbd>E</kbd>, copy the code and paste it into your project; load the packages listed in the comment at the top.</p>
+        <h3>Does it work on phones and tablets?</h3>
+        <p>Tablets, yes, and a phone turned sideways. A phone held upright asks you to continue on a bigger screen: the editor needs the room.</p>
+        <h3>How large can a drawing get?</h3>
+        <p>Tens of thousands of objects. Only what is near the view is drawn, so editing stays smooth at 20,000 objects.</p>
+        <h3>Where are my diagrams stored?</h3>
+        <p>In your browser's IndexedDB. Use <b>Save</b> to keep a <code>.diagramtex</code> copy as a file.</p>
+        <h3>Something the editor can't draw?</h3>
+        <p>Type it in the editor's code. It is kept and exported as written, and the editor tells you which lines it couldn't draw.</p>
+      </section>
+
+      <footer>
+        DiagramTeX is free and open source under the MIT License. Source, issues and releases: <a href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener">gitlab.com/igniting-space/diagramtex</a>.
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    // Shortcuts read ⌘ ⌥ ⇧ on a Mac, Ctrl / Alt / Shift elsewhere (as in the app)
+    (function () {
+      if (!/Mac|iPhone|iPad/.test(navigator.platform)) return;
+      var map = { mod: '⌘', alt: '⌥', shift: '⇧' };
+      document.querySelectorAll('kbd.mod, kbd.alt, kbd.shift').forEach(function (k) { k.textContent = map[k.className]; });
+    })();
+    // the phone-width contents: the same list, in a fold at the top
+    (function () {
+      var m = document.querySelector('.toc-m'), t = document.getElementById('toc');
+      m.appendChild(t.cloneNode(true)).removeAttribute('id');
+      m.addEventListener('click', function (e) { if (e.target.closest('a')) m.open = false; });
+    })();
+    // mark the section being read in the contents
+    (function () {
+      var links = [].slice.call(document.querySelectorAll('#toc a'));
+      var byId = {}; links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+      var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+      function update() {
+        var cur = targets[0];
+        for (var i = 0; i < targets.length; i++) if (targets[i].getBoundingClientRect().top < 120) cur = targets[i];
+        links.forEach(function (a) { a.classList.toggle('on', a === byId[cur.id]); });
+      }
+      addEventListener('scroll', update, { passive: true }); update();
+    })();
+  </script>
+</body>
+</html>

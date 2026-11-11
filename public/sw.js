@@ -4,11 +4,16 @@
 // both maths engines and their fonts work offline from the first visit. Cross-origin requests (the CDN
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate.
-const CACHE = 'diagramtex-v27';
+const CACHE = 'diagramtex-v28';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
     'manifest.webmanifest',
+    'guide/',
+    'guide/img/01-diagram.png',
+    'guide/img/04-document.png',
+    'guide/img/05-quantum.png',
+    'guide/img/06-circuit-dark.png',
     'css/style.css',
     'css/kmap.css',
     'fonts/InterDisplay-Medium.woff2',

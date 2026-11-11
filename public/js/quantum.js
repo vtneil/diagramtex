@@ -276,7 +276,8 @@
     for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) for (const it of at(r, c)) {
       if (it.name !== 'gategroup') continue;
       const o = opts(it.o[0] || '');
-      const k = Math.max(1, intArg(o.map.wires, 1)), m = Math.max(1, intArg(o.map.steps, 1));
+      // wires as `wires=3` or as the bare first option `[3,steps=2]` (quantikz takes both)
+      const k = Math.max(1, intArg(o.map.wires, 0) || +(o.list.find((x) => /^\d+$/.test(x)) || 1)), m = Math.max(1, intArg(o.map.steps, 1));
       const r2_ = clampRow(r + k - 1), c2 = Math.min(C - 1, c + m - 1);
       const x1 = colL[c] - gpad, x2 = colR(c2) + gpad, y1 = rowT[r] - gpad, y2 = rowT[r2_] + rowH[r2_] + gpad;
       const below = /below/.test(o.map['label style'] || ''), gs = o.map.style || '';

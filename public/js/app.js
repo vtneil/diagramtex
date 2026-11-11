@@ -391,7 +391,7 @@
     ul.innerHTML = index().filter((d) => (d.kind || 'classic') === kind).map((d) => `<li data-doc="${d.id}" class="${d.id === state.docId ? 'active' : ''}">
       ${kind === 'page' ? '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5h9v13h-9z" fill="none" stroke="currentColor"/><path d="M6 5h4M6 7.5h2.5" fill="none" stroke="currentColor"/></svg>'
         : kind === 'board' ? '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor"/><path d="M4 9.5c1.5-3 3-3 4 0s2.5 3 4 0" fill="none" stroke="currentColor"/></svg>'
-        : '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 1.5h5l3 3v10H4z" fill="none" stroke="currentColor"/></svg>'}
+        : '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5H10l3.5 3.5v9.5h-10zM10 1.5V5h3.5" fill="none" stroke="currentColor" stroke-linejoin="miter"/></svg>'}
       <span class="nm">${esc(d.name)}</span><button class="del" data-del="${d.id}" title="Delete">×</button></li>`).join('');
   }
 
