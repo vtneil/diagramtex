@@ -487,11 +487,10 @@
   // ---- colours. The package takes colour names (and xcolor mixes such as red!60!black), not hex: statecolor
   // goes straight into \arrow[…]. Ball → color, lines → style (the environment's and each drawing command's
   // own, which replaces it), states → statecolor, labels → each \node.
-  const CNAMES = ['black', 'darkgray', 'gray', 'lightgray', 'white', 'red', 'orange', 'yellow', 'lime', 'green', 'olive', 'teal', 'cyan', 'blue', 'violet', 'purple', 'magenta', 'pink', 'brown'];
   const itemKey = (it) => { const i = it.indexOf('='); return (i < 0 ? it : it.slice(0, i)).trim(); };
   const isColorItem = (it) => { const i = it.indexOf('='), k = itemKey(it); return i < 0 ? !!(TD.tikzColor && TD.tikzColor(k)) : /^(color|text|draw)$/.test(k); };
   const colorOfList = (list) => { const it = list.find(isColorItem); if (!it) return ''; const i = it.indexOf('='); return unbrace(i < 0 ? it : it.slice(i + 1)); };
-  const recolor = (list, c, dflt) => { const l = list.filter((x) => !isColorItem(x)); if (c && c !== dflt) l.unshift(c); return l; };
+  const recolor = (list, c, dflt) => { const l = list.filter((x) => !isColorItem(x)); if (c && c !== dflt) l.unshift(/[,;]/.test(c) ? `color={${c}}` : c); return l; };
   // rewrite the option list of every command matching re (its [ is the match's end); a command with none gets one if add says so
   function eachOpts(t, re, fn, add) {
     const hits = [];
@@ -532,8 +531,8 @@
   }
   function setColor(src, which, c) {
     let t = String(src || '');
-    if (which === 'ball') return setEnvKey(t, 'color', c === 'white' ? null : c);
-    if (which === 'states') return setEnvKey(t, 'statecolor', c === 'black' ? null : c);
+    if (which === 'ball') return setEnvKey(t, 'color', c === 'white' ? null : TD.texColor.wrap(c));
+    if (which === 'states') return setEnvKey(t, 'statecolor', c === 'black' ? null : TD.texColor.wrap(c));
     if (which === 'lines') {
       const st = recolor(styleOf(envOpts(t)) || [], c, 'black');
       t = setEnvKey(t, 'style', st.length ? `{${st.join(', ')}}` : null);
@@ -614,7 +613,7 @@
         <div class="row"><label>Ball</label><div class="ctl seg-ctl txt">${ballOpts.map(([v, n]) => `<button data-act="ball:${v}" class="${ballV === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>
         </div>
         <div class="sec"><div class="sec-title">Colours</div>
-        ${(() => { const C = colorsOf(s.src); return [['ball', 'Ball'], ['lines', 'Lines'], ['states', 'States'], ['labels', 'Labels']].map(([k, n]) => { const v = C[k], opts = CNAMES.includes(v) ? CNAMES : CNAMES.concat([v]); const sw = (c) => TD.css(TD.tikzColor(c) || '#000000'); return `<div class="row"><label>${n}</label><div class="ctl swsel"><span class="sw" style="background:${sw(v)}"></span><select data-bc="${k}" aria-label="${n} colour">${opts.map((c) => `<option value="${esc(c)}" data-swatch="${sw(c)}"${c === v ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></div></div>`; }).join(''); })()}
+        ${(() => { const C = colorsOf(s.src); return [['ball', 'Ball'], ['lines', 'Lines'], ['states', 'States'], ['labels', 'Labels']].map(([k, n]) => { return `<div class="row"><label>${n}</label>${TD.texColor.field(`data-bc="${k}"`, C[k], { title: `${n} colour` })}</div>`; }).join(''); })()}
         </div>
         <div class="sec"><div class="sec-title">States</div>
         ${S.length ? `<div class="bloch-st"><span>Label</span><span>θ</span><span>φ</span><span></span>${S.map((x, i) => `<input type="text" class="mono" data-sl="${i}" value="${esc(x.label ? x.label.math : '')}" placeholder="${esc(x.name)}" spellcheck="false" aria-label="Label of ${esc(x.name)}"><input type="number" data-st="${i}:t" value="${esc(x.theta)}" step="5" title="θ" aria-label="θ"><input type="number" data-st="${i}:p" value="${esc(x.phi)}" step="5" title="φ" aria-label="φ"><button class="flat st-del" data-act="delstate:${i}" title="Delete state" aria-label="Delete ${esc(x.name)}"><svg viewBox="0 0 20 20"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/></svg></button>`).join('')}</div>` : '<div class="help">No states yet.</div>'}

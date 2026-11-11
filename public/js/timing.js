@@ -526,8 +526,7 @@
     for (const it of opts(st)) {
       const { k, v } = kv(it);
       if (k === 'pattern' && v) pattern = v.trim();
-      else if (k === 'pattern color' && v && TD.tikzColor) color = TD.tikzColor(v) || color;
-      else if (k === 'fill' && v && TD.tikzColor) color = TD.tikzColor(v) || color;
+      else if ((k === 'pattern color' || k === 'fill') && v && TD.tikzColor) color = TD.tikzColor(v.trim().replace(/^\{([^{}]*)\}$/, '$1')) || color; // {rgb,255:red,…} comes braced
     }
     if (pattern) return { pattern, color }; // no pattern color: black, as in TikZ
     return color ? { color } : null;

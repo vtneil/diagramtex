@@ -7,6 +7,9 @@
     '#5b8ede', '#7adfc5', '#c5e897', '#000000', '#4a4a4a', '#9e9e9e', '#808080', '#ffffff'];
   let presets;
   try { presets = JSON.parse(localStorage.getItem(LS)) || DEFAULT_PRESETS.slice(); } catch (e) { presets = DEFAULT_PRESETS.slice(); }
+  const TEX_PRESETS = ['red', 'orange', 'yellow', 'green', 'teal', 'cyan', 'blue', 'violet',
+    'red!20', 'orange!20', 'yellow!20', 'green!20', 'teal!20', 'cyan!20', 'blue!20', 'violet!20',
+    'magenta', 'pink', 'brown', 'olive', 'black', 'darkgray', 'gray', 'white'];
   const savePresets = () => { try { localStorage.setItem(LS, JSON.stringify(presets)); } catch (e) { /* ignore */ } };
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -105,7 +108,7 @@
       const i = e.target.dataset.i;
       if (i == null) return;
       if (cur.editing) { presets[i] = value(); savePresets(); renderPresets(); return; }
-      const p = parse(presets[i]);
+      const p = parse(shown()[i]);
       setRGB(p.r, p.g, p.b, p.a);
       cur.none = false;
       emit(true);
@@ -141,8 +144,11 @@
     const [r, g, b] = hsv2rgb(cur.h, cur.s, cur.v);
     return toStr(r, g, b, cur.a);
   }
+  // the swatches: the user's presets, or (tex) xcolor's named colours, which a block editor writes by name
+  const shown = () => (cur && cur.tex ? TEX_PRESETS.map((n) => TD.tikzColor(n) || '#000000') : presets);
   function renderPresets() {
-    el.querySelector('.cp-presets').innerHTML = presets.map((c, i) => `<button type="button" data-i="${i}" style="background:${TD.css(c)}" title="${c}"></button>`).join('');
+    el.querySelector('.cp-presets').innerHTML = shown().map((c, i) => `<button type="button" data-i="${i}" style="background:${TD.css(c)}" title="${cur && cur.tex ? TEX_PRESETS[i] : c}"></button>`).join('');
+    el.querySelector('.cp-edit').hidden = !!(cur && cur.tex);
   }
   function sync() {
     const [r, g, b] = hsv2rgb(cur.h, cur.s, cur.v);
@@ -180,7 +186,7 @@
   }
   TD.colorPresets = () => presets.slice();
 
-  // opts: { value, nullable, fills (show Gradient / Pattern tabs), onInput(v), onChange(v), onClose() }
+  // opts: { value, nullable, fills (show Gradient / Pattern tabs), onInput(v), onChange(v), onClose(), noneLabel ("Default" in tex mode) }
   TD.openColorPicker = function (anchor, opts) {
     if (!el) build();
     if (cur) close();
@@ -192,6 +198,7 @@
     el.classList.remove('editing');
     el.querySelector('.cp-edit').textContent = 'Change Preset Colors';
     el.querySelector('.cp-none').style.display = opts.nullable ? '' : 'none';
+    el.querySelector('.cp-none').textContent = opts.noneLabel || (opts.tex ? 'Default' : 'No Color');
     renderPresets();
     sync();
     el.style.display = 'block';
@@ -199,4 +206,60 @@
     showTab(rich && opts.fills ? (opts.value.g ? 'grad' : 'pat') : 'basic');
   };
   TD.closeColorPicker = close;
+
+  // ---------------------------------------------------------------- LaTeX colours in the block editors
+  // A colour field is this picker's button, its value (an xcolor spec) and a hidden input carrying the field's own
+  // data-* attributes. Picking fires focusin / input / change / focusout on that input, as a select would, so each
+  // editor's own handlers read it unchanged.
+  const XBASE = ['red', 'green', 'blue', 'cyan', 'magenta', 'yellow', 'black', 'white', 'gray', 'darkgray', 'lightgray', 'brown', 'lime', 'olive', 'orange', 'pink', 'purple', 'teal', 'violet'];
+  const escA = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  let byHex = null;
+  // a picked #rrggbb → xcolor's name when it is one (a preset), else the rgb,255 expression
+  function spec(hex) {
+    const h = String(hex || '').toLowerCase().slice(0, 7);
+    if (!/^#[0-9a-f]{6}$/.test(h)) return null;
+    if (!byHex) { byHex = {}; for (const n of TEX_PRESETS.concat(XBASE)) { const x = TD.tikzColor(n); if (x && !byHex[x.toLowerCase()]) byHex[x.toLowerCase()] = n; } }
+    if (byHex[h]) return byHex[h];
+    const n = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    return `rgb,255:red,${n[0]};green,${n[1]};blue,${n[2]}`;
+  }
+  const label = (v, dflt) => (!v ? dflt || 'Default' : v.replace(/^\{?rgb,\s*255\s*:\s*red,\s*(\d+);\s*green,\s*(\d+);\s*blue,\s*(\d+)\}?$/, 'RGB $1, $2, $3'));
+  const swatch = (v, dflt) => { const x = v && TD.tikzColor(v); return x ? TD.css(x) : dflt || 'transparent'; };
+  // attrs: the field's data-* attributes (as the select had them); o: { nullable, dflt (label), dfltSw (swatch css), title }
+  function field(attrs, v, o = {}) {
+    v = v || '';
+    const none = !v && !o.dfltSw;
+    return `<div class="ctl tc"><button type="button" class="cbtn${none ? ' none' : ''}" data-tc="${o.nullable ? 'n' : ''}" title="${escA(o.title || 'Colour')}"${o.dfltSw ? ` data-dsw="${escA(o.dfltSw)}"` : ''}${o.dflt ? ` data-dl="${escA(o.dflt)}"` : ''}><span style="background:${swatch(v, o.dfltSw)}"></span></button><span class="cval">${escA(label(v, o.dflt))}</span><input type="hidden" ${attrs} value="${escA(v)}"></div>`;
+  }
+  // a braced spec when it has commas (rgb,255:…), for key=value lists
+  const wrap = (v) => (v && /[,;]/.test(v) && !/^\{.*\}$/.test(v) ? `{${v}}` : v);
+  const unwrap = (v) => String(v || '').trim().replace(/^\{([^{}]*)\}$/, '$1');
+  TD.texColor = { spec, label, swatch, field, wrap, unwrap, PRESETS: TEX_PRESETS };
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-tc]');
+    if (!btn || btn.disabled) return;
+    const inp = btn.parentElement.querySelector('input[type=hidden]');
+    if (!inp) return;
+    // the panel may be redrawn while the picker is open: find the field again by its attributes
+    const sel = 'input[type=hidden]' + [...inp.attributes].filter((a) => a.name.startsWith('data-')).map((a) => `[${a.name}="${CSS.escape(a.value)}"]`).join('');
+    const root = btn.closest('.cz-props, #props, [data-panel]') || document;
+    const live = () => (inp.isConnected ? inp : (root.isConnected ? root : document).querySelector(sel) || inp);
+    const fire = (type) => live().dispatchEvent(new Event(type, { bubbles: true }));
+    const show = (v) => {
+      const i = live(), b = i.parentElement.querySelector('button[data-tc]'), c = i.parentElement.querySelector('.cval');
+      if (b) { b.classList.toggle('none', !v && !b.dataset.dsw); b.querySelector('span').style.background = swatch(v, b.dataset.dsw); }
+      if (c) c.textContent = label(v, b && b.dataset.dl);
+    };
+    let last = inp.value;
+    const set = (final) => (hex) => {
+      const v = hex ? spec(hex) : '';
+      if (hex && !v) return;
+      if (v !== last) { live().value = v; last = v; show(v); fire('input'); }
+      if (final) fire('change');
+    };
+    fire('focusin');
+    TD.openColorPicker(btn, { value: (inp.value && TD.tikzColor(inp.value)) || null, nullable: btn.dataset.tc === 'n', noneLabel: btn.dataset.dl || 'Default', tex: true,
+      onInput: set(false), onChange: set(true), onClose() { fire('focusout'); } });
+  });
 })();

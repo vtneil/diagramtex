@@ -3,6 +3,19 @@
   const TD = window.TD;
   const { TYPES, util } = TD;
   { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; v.title = `DiagramTeX ${TD.VERSION}: this release on GitLab`; v.href = `https://gitlab.com/igniting-space/diagramtex/-/tags/v${TD.VERSION}`; } }
+  // a newer release on this host (dist/version.json, written by the build): a marker dot by the version, and
+  // a click reloads into it. Asked once per load, past every cache; no answer (dev, offline) changes nothing.
+  {
+    const newer = (a, b) => { const p = (x) => String(x).split('.').map((n) => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+    fetch('version.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      const v = document.getElementById('appVer'), n = j && j.version;
+      if (!v || !n || !newer(n, TD.VERSION)) return;
+      v.classList.add('update');
+      v.title = `DiagramTeX ${n} is out (this is ${TD.VERSION}): click to reload`;
+      v.removeAttribute('target'); v.href = location.href;
+      v.addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
+    }).catch(() => {});
+  }
   const { r2, esc, dist } = util;
   const $ = (s) => document.querySelector(s);
   const svg = $('#canvas'), content = $('#content'), overlay = $('#overlay');
@@ -1037,7 +1050,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1061,12 +1074,12 @@
   $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
   $('#fly-phys').innerHTML = sec('Mechanics', symBtns('mech')) + sec('Optics', symBtns('optics'));
   // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
-  $('#fly-elec').innerHTML = `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: about 250 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>Circuit…</button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`
-    + sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'));
+  $('#fly-elec').innerHTML = sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'))
+    + `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: 415 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>Advanced Circuit Block (<code>circuitikz</code>)</span></button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`;
   function flyOf(t) {
     if (/^(solid|prim3d|revolve|sketch3d|geo3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|chemfig)$/.test(t)) return 'blocks';
+    if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
@@ -1232,7 +1245,7 @@
   // ---------------- rotate by dragging just outside a corner (like Photoshop) ----------------
   // the frame is the shape's own (rotated) box for one shape, else the selection's bounding box
   // blocks whose content never turns: rotating one alone does nothing, so it gets no rotate zone, hint or menu item
-  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig', 'tikz']);
+  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz']);
   const rotatable = (sel = selected()) => sel.length > 1 || (sel.length === 1 && !FIXED.has(sel[0].type));
   function rotFrame() {
     const sel = selected();
@@ -1419,6 +1432,7 @@
         if (s.type === 'timing') { state.sel = new Set([hitId]); render(); renderProps(); openTiming(hitId); return; }
         if (s.type === 'automata') { state.sel = new Set([hitId]); render(); renderProps(); openFSM(hitId); return; }
         if (s.type === 'kmap') { state.sel = new Set([hitId]); render(); renderProps(); openKmap(hitId); return; }
+        if (s.type === 'bytefield') { state.sel = new Set([hitId]); render(); renderProps(); openBytefield(hitId); return; }
         if (s.type === 'chemfig') { state.sel = new Set([hitId]); render(); renderProps(); openChem(hitId); return; }
         if (s.type === 'cd') { state.sel = new Set([hitId]); render(); renderProps(); openCD(hitId); return; }
         if (s.type === 'xy') { state.sel = new Set([hitId]); render(); renderProps(); openXY(hitId); return; }
@@ -1869,6 +1883,23 @@
     });
   }
   TD.kmapOpen = openKmap;
+  // bit fields (bfeditor.js): the same, for bytefield code; the field's own box stays put
+  function openBytefield(id) {
+    finishEdit();
+    const s = byId(id);
+    if (!s || !TD.bytefieldEditor) return;
+    TD.bytefieldEditor.open(s, (res) => {
+      const t = byId(id);
+      if (!t) return;
+      const was = TD.bytefield.layout(t);
+      begin(); t.src = res.src;
+      const now = TD.bytefield.layout(t);
+      t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y;
+      commit();
+      render(); renderProps();
+    });
+  }
+  TD.bytefieldOpen = openBytefield;
   // chemistry (cfeditor.js): the same, for chemfig code
   function openChem(id) {
     finishEdit();
@@ -2098,6 +2129,7 @@
     timing: [['x', 'x'], ['y', 'y']],
     automata: [['x', 'x'], ['y', 'y']],
     kmap: [['x', 'x'], ['y', 'y']],
+    bytefield: [['x', 'x'], ['y', 'y']],
     chemfig: [['x', 'x'], ['y', 'y']],
     bloch: [['x', 'x'], ['y', 'y']],
     tikz: [['x', 'x'], ['y', 'y']],
@@ -3570,7 +3602,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } if (s.type === 'xy') { openXY(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'bytefield') { openBytefield(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } if (s.type === 'xy') { openXY(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3654,7 +3686,7 @@
     if (e.key === ' ') { spaceDown = true; svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'bytefield') openBytefield(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');

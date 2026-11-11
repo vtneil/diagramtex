@@ -4,7 +4,7 @@
 // both maths engines and their fonts work offline from the first visit. Cross-origin requests (the CDN
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate.
-const CACHE = 'diagramtex-v35';
+const CACHE = 'diagramtex-v37';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
@@ -16,6 +16,7 @@ const PRECACHE = [
     'guide/img/06-circuit-dark.png',
     'css/style.css',
     'css/kmap.css',
+    'css/bytefield.css',
     'fonts/InterDisplay-Medium.woff2',
     'fonts/InterDisplay-SemiBold.woff2',
     'fonts/InterDisplay-Bold.woff2',
@@ -46,6 +47,7 @@ const PRECACHE = [
     'js/timing.js',
     'js/automata.js',
     'js/kmap.js',
+    'js/bytefield.js',
     'js/chemfig.js',
     'js/czcore.js',
     'js/czparts-wires.js',
@@ -64,6 +66,7 @@ const PRECACHE = [
     'js/tmeditor.js',
     'js/fsmeditor.js',
     'js/kmeditor.js',
+    'js/bfeditor.js',
     'js/cfeditor.js',
     'js/cdeditor.js',
     'js/colorpicker.js',

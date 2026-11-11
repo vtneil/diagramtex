@@ -549,7 +549,7 @@
     }
     // the delete gutters left of the rows and above the columns
     E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
-    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : h, ['row', 'column']);
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, ['row', 'column']);
     // what is being dragged, under the pointer
     const mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if ((E.ghost && E.ghost.k) || mv) {
@@ -599,8 +599,9 @@
     if (!d) {
       const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : cellAt(e), n = dz ? null : nodeAt(e, 14);
       const kn = n || (e.target.closest('.ze-knob') ? E.knobAt : null);
-      const ch = JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
-      E.hover = h; E.knobAt = kn; E.del = dz;
+      const nr = dz ? null : TD.gridDel.near(E.gut, sx, sy);
+      const ch = JSON.stringify(nr) !== JSON.stringify(E.near) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
+      E.hover = h; E.knobAt = kn; E.del = dz; E.near = nr;
       svg.style.cursor = dz || (!n && arrowAt(e)) ? 'pointer' : '';
       if (ch) draw();
       return;
@@ -640,7 +641,7 @@
     }
     draw();
   });
-  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.del)) { E.hover = null; E.knobAt = null; E.del = null; draw(); } });
+  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.del || E.near)) { E.hover = null; E.knobAt = null; E.del = null; E.near = null; draw(); } });
   // a click on a delete gutter: that row or column goes, as one undo step
   function delLine(dz) {
     closePop(); E.del = null; E.hover = null; E.knobAt = null; E.sel = null; E.arrow = null; svg.style.cursor = '';
@@ -745,6 +746,72 @@
   const nameOf = (x) => Z.styleOf(x).name;
   const find = (a, re) => a.items.find((x) => re.test(nameOf(x)));
   function setItem(a, re, item) { a.items = a.items.filter((x) => !re.test(nameOf(x))); if (item) a.items.push(item); }
+  // ---- colours: kept in the code as written (a name, a mix, rgb,255:…); a pick writes xcolor's name or rgb,255 expression
+  const isLabelCol = (o) => { const c = D.colorOpt(o); return !!c && c.key !== 'draw'; };
+  // the arrow's own colour (its line; with color= or a name, its labels too): { key, spec, i } or null
+  function arrowColor(a) { let r = null; a.items.forEach((x, i) => { if (D.label(x)) return; const o = D.colorOpt(x); if (o && o.key !== 'text') r = { ...o, i }; }); return r; }
+  function setArrowColor(a, spec) {
+    const old = arrowColor(a);
+    const rest = a.items.filter((x) => { if (D.label(x)) return true; const o = D.colorOpt(x); return !o || o.key === 'text'; });
+    if (spec) {
+      // the key the code used stays (quiver's draw= colours the line only); new ones: tikz-cd's colour, xy's @[…] (a line colour)
+      const key = old ? old.key : E.X ? 'draw' : 'color';
+      const it = D.colorItem(spec, key || 'color');
+      rest.splice(old ? Math.min(old.i, rest.length) : rest.length, 0, it);
+    }
+    a.items = rest;
+  }
+  // a label's colour: its options' (text=, color=, a name) or a \textcolor round its text
+  function labelColor(a) {
+    const f = firstLabel(a);
+    if (!f) return null;
+    const o = f.L.opts.filter(isLabelCol).pop();
+    return o ? D.colorOpt(o).spec : D.splitColor(f.L.t).spec;
+  }
+  function setLabelColor(a, spec) {
+    setLabel(a, (L) => {
+      const w = D.splitColor(L.t), had = L.opts.some(isLabelCol);
+      L.opts = L.opts.filter((o) => !isLabelCol(o));
+      if (w.spec && !had) L.t = D.joinColor(spec, w.body);
+      else if (spec) L.opts.push(D.colorItem(spec));
+    });
+  }
+  // an object's colour: |[red]| (tikz-cd) or \textcolor{red}{…} round it (written for xymatrix, and kept where the code has it)
+  const objColor = (cell) => { const n = D.nodeColor(cell.node); return n ? n.spec : D.splitColor(cell.t).spec; };
+  function setObjColor(cell, spec) {
+    const w = D.splitColor(cell.t), n = D.nodeColor(cell.node);
+    if (E.X || (w.spec && !n) || (!spec && !n)) cell.t = D.joinColor(spec, w.body);
+    if (!E.X && (n || (spec && !w.spec))) {
+      const l = Z.opts(cell.node || '').list.filter((x) => { const c = D.colorOpt(x); return !c || c.key === 'draw'; });
+      if (spec) l.push(D.colorItem(spec));
+      cell.node = l.length ? l.join(', ') : null;
+    }
+    touch(cell);
+  }
+  const colLabel = (spec) => (!spec ? 'Default' : spec.replace(/^rgb,\s*255\s*:\s*red,\s*(\d+);\s*green,\s*(\d+);\s*blue,\s*(\d+)$/, 'RGB $1, $2, $3'));
+  const swatchCss = (spec) => { const h = spec && TD.tikzColor(spec); return h ? TD.fillCss(h) : 'transparent'; };
+  const colorRow = (label, k, spec, off) => row(label, `<div class="ctl"><button type="button" class="cbtn${spec ? '' : ' none'}" data-cc="${k}"${off ? ` disabled title="${esc(off)}"` : ` title="${esc(spec || 'Default colour')}"`}><span style="background:${swatchCss(spec)}"></span></button><span class="cval">${esc(colLabel(spec))}</span></div>`);
+  function openColor(btn) {
+    const k = btn.dataset.cc, s = single();
+    const a = k !== 'obj' && E.arrow ? arrowOf(E.arrow) : null, cell = k === 'obj' ? s && at(s.r1, s.c1) : E.arrow && at(E.arrow[0], E.arrow[1]);
+    if (!cell || (k !== 'obj' && !a)) return;
+    const get = () => (k === 'obj' ? objColor(cell) : k === 'label' ? labelColor(a) : (arrowColor(a) || {}).spec || null);
+    let started = false;
+    const set = (v) => {
+      const spec = v ? D.colorSpec(v) : null;
+      if (v && !spec) return;
+      if (!started) { begin(); started = true; }
+      if (k === 'obj') setObjColor(cell, spec);
+      else { if (k === 'label') setLabelColor(a, spec); else setArrowColor(a, spec); touch(cell); }
+      btn.classList.toggle('none', !spec);
+      btn.querySelector('span').style.background = swatchCss(spec);
+      const cv = btn.parentElement.querySelector('.cval');
+      if (cv) cv.textContent = colLabel(spec);
+      draw();
+    };
+    const cur = get();
+    TD.openColorPicker(btn, { value: (cur && TD.tikzColor(cur)) || null, nullable: true, onInput: set, onChange: set, onClose() { commit(); renderProps(); } });
+  }
   const POSN = [['near start', 'Start'], ['', 'Middle'], ['near end', 'End']];
   const POS_RE = /^(at start|very near start|near start|midway|near end|very near end|at end|pos)$/;
   // env options
@@ -776,7 +843,9 @@
       const sk = headKey(a.items), lk = lineOf(a.items), noLabel = !L.t;
       const pics = HEAD_STYLES.map(([k, n, o]) => `<button class="ze-shape${sk === k ? ' on' : ''}" data-cs="style" data-v="${esc(k)}" title="${esc(n)}">${styleMini(o)}</button>`).join('');
       TD.morph(props, `<div class="sec"><div class="sec-title">Arrow <small>row ${E.arrow[0] + 1}, col ${E.arrow[1] + 1} → row ${E.arrow[0] + dr + 1}, col ${E.arrow[1] + dc + 1}</small></div>
-        ${field('Label', 'label', L.t, ' data-tx="math" placeholder="none"')}
+        ${field('Label', 'label', D.splitColor(L.t).body, ' data-tx="math" placeholder="none"')}
+        ${colorRow('Colour', 'arrow', (arrowColor(a) || {}).spec || null)}
+        ${colorRow('Label colour', 'label', labelColor(a), noLabel && 'Add a label first')}
         ${row('Side', seg('side', side, [['left', 'Left'], ['right', 'Right', "Swapped (')"], ['on', 'On line', 'description']], noLabel))}
         ${row('At', seg('pos', p, POSN, noLabel))}
         <div class="ze-shapes">${pics}</div>
@@ -806,7 +875,8 @@
     }
     const cell = at(b.r1, b.c1);
     let h = `<div class="sec"><div class="sec-title">${cell.t ? 'Object' : 'Empty cell'} <small>row ${b.r1 + 1} · column ${b.c1 + 1}</small></div>`;
-    h += field('Object', 't', cell.t, ' data-tx="math" placeholder="empty"');
+    h += field('Object', 't', D.splitColor(cell.t).body, ' data-tx="math" placeholder="empty"');
+    h += colorRow('Colour', 'obj', objColor(cell), !cell.t && 'Type an object first');
     h += '</div>';
     if (cell.arrows.length) {
       h += `<div class="sec"><div class="sec-title">Arrows from here</div><div class="ze-wires">${cell.arrows.map((a, i) => {
@@ -832,7 +902,7 @@
       const cell = at(E.arrow[0], E.arrow[1]), a = arrowOf(E.arrow);
       if (!a) return;
       if (f === 'items') { const l = Z.opts(t.value).list; const d = l.findIndex((x) => /^[rlud]+$/.test(x)); if (d >= 0) l.splice(d, 1); a.items = l; }
-      else if (f === 'label') setLabel(a, (L) => { L.t = t.value; });
+      else if (f === 'label') setLabel(a, (L) => { L.t = D.joinColor(D.splitColor(L.t).spec, t.value); });
       else if (f === 'bendA') { const bnd = find(a, /^bend (left|right)$/); if (bnd) setItem(a, /^bend (left|right)$/, `${nameOf(bnd)}=${Math.max(0, parseFloat(t.value) || 0)}`); }
       touch(cell); draw();
       return;
@@ -841,13 +911,15 @@
     if (!s) return;
     const cell = at(s.r1, s.c1);
     if (f === 'code') { const v = E.X ? E.X.cellToCd(t.value) : t.value; Object.assign(cell, parseCell(v, cell.sep)); cell.text = v.trim(); }
-    else if (f === 't') { cell.t = t.value; touch(cell); }
+    else if (f === 't') { cell.t = D.joinColor(D.splitColor(cell.t).spec, t.value); touch(cell); }
     draw();
   });
   // the panel follows each keystroke: the other fields show what this one changed (TD.morph keeps this one as typed)
   props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });
   props.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) e.target.blur(); });
   props.addEventListener('click', (e) => {
+    const cc = e.target.closest('[data-cc]');
+    if (cc && E && !cc.disabled) { openColor(cc); return; }
     const bt = e.target.closest('[data-cs]');
     if (!bt || !E || !E.arrow) return;
     const f = bt.dataset.cs, v = bt.dataset.v;
@@ -927,6 +999,7 @@
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if (e.target.closest && e.target.closest('.td-pop-ta, .td-pop-ml')) return;
     if (document.querySelector('.td-dialog')) return;
+    if (document.querySelector('.cp[style*="display: block"]')) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); TD.closeColorPicker(); } return; } // the colour picker's keys
     const mod = e.metaKey || e.ctrlKey, inField = !!(e.target.closest && e.target.closest('input, textarea, select'));
     e.stopPropagation();
     if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }

@@ -2,7 +2,7 @@
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () {
   const TD = (window.TD = window.TD || {});
-  TD.VERSION = '1.25.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.26.1'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -369,7 +369,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'chemfig', 'tikz'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -1428,7 +1428,7 @@
     if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
     // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
     const forest = [...X.pkgs].filter((p) => /^forest\b/.test(p));
-    for (const p of X.pkgs) if (p !== 'pgfplots' && !/^forest\b/.test(p)) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? '\\usepackage[all]{xy}' : `\\usepackage{${p}}`);
+    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p)) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : `\\usepackage{${p}}`);
     if (forest.length) {
       const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
       pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);

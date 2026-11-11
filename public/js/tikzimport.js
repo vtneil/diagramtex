@@ -671,6 +671,8 @@
     { re: /\\begin\{ZX\}[\s\S]*\\end\{ZX\}/, type: 'zx', bb: (q) => TD.zxLayout(q).bb },
     { re: /\\begin\{tikzcd\}[\s\S]*\\end\{tikzcd\}/, type: 'cd', bb: (q) => TD.cdLayout(q).bb },
     { re: /\\begin\{karnaugh-map\}[\s\S]*\\end\{karnaugh-map\}/, type: 'kmap', bb: (q) => TD.kmap.layout(q).bb },
+    // \bytefieldsetup lines before the environment go with it; the node sits at the centre of the field's TeX box
+    { re: /(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*\\end\{bytefield\}/, type: 'bytefield', dedent: true, place: (q, at) => { const L = TD.bytefield.layout(q), b = L.bb, t = L.tbox; q.x = at.x - (t.x - b.x + t.w / 2); q.y = at.y - (t.y - b.y + t.h / 2); } },
     { re: /\\begin\{blochsphere\}[\s\S]*\\end\{blochsphere\}/, type: 'bloch', bb: (q) => TD.bloch.layout(q).bb },
     { re: /\\xymatrix[^{]*\{[\s\S]*\}/, type: 'xy', place: (q, at) => { const L = TD.xy.layout(q), b = L.bb, e = L.ebox || b; q.x = at.x - (e.x - b.x + e.w / 2); q.y = at.y - (e.y - b.y + e.h / 2); } },
     { re: /\\chemfig[\s\S]*/, type: 'chemfig', place: (q, at) => { q.x = at.x; q.y = at.y; }, opts: ['anchor', 'inner sep', 'text'] },
@@ -1156,13 +1158,13 @@
     }
     const base = docM ? docM.index + docM[0].indexOf(docM[1]) : 0;
     const bodyS = docM ? docM[1] : s, bodyO = o.slice(base, base + bodyS.length);
-    // pictures, and bare quantikz / forest / ZX / tikz-timing environments (each becomes a picture holding the block)
+    // pictures, and bare quantikz / forest / ZX / tikz-timing / bytefield environments (each becomes a picture holding the block)
     const found = [];
     const re = /\\begin\{tikzpicture\}(\s*\[[^\]]*(?:\[[^\]]*\][^\]]*)*\])?([\s\S]*?)\\end\{tikzpicture\}/g;
     let m;
     while ((m = re.exec(bodyS))) found.push({ at: m.index, end: re.lastIndex, open: m.index, inner: m.index + m[0].length - m[2].length - 17, len: m[2].length });
     const inPic = (i) => found.some((f) => i >= f.at && i < f.end);
-    for (const b of bodyS.matchAll(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}/g))
+    for (const b of bodyS.matchAll(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
       if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, bare: bodyO.slice(b.index, b.index + b[0].length) });
     found.sort((a, b) => a.at - b.at);
     const blocks = [];
@@ -1207,7 +1209,7 @@
     return { blocks, warnings: [...new Set(C.warnings)], kept: report, title, page };
   };
   // packages a picture's code may need (others in a preamble are the document's own)
-  const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'blochsphere',
+  const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'blochsphere',
     'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',
     'amsmath', 'amssymb', 'amsfonts', 'mathrsfs', 'stmaryrd', 'upgreek', 'esint', 'dsfont', 'bbm']);
   // the preamble's definitions go with each picture, as a code object that exports them to the preamble

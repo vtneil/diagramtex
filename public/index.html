@@ -30,7 +30,7 @@
         "@type": "WebApplication",
         "name": "DiagramTeX",
         "url": "https://diagramtex.igniting.space/",
-        "description": "Diagram editor for physics and maths that exports LaTeX/TikZ: circuits, quantum circuits, commutative diagrams, Bloch spheres, trees, ZX diagrams, Feynman diagrams, 3D geometry, timing diagrams, state machines, Karnaugh maps, chemical structures and plots, with maths typeset as you type.",
+        "description": "Diagram editor for physics and maths that exports LaTeX/TikZ: circuits, quantum circuits, commutative diagrams, Bloch spheres, trees, ZX diagrams, Feynman diagrams, 3D geometry, timing diagrams, state machines, Karnaugh maps, bit fields, chemical structures and plots, with maths typeset as you type.",
         "applicationCategory": "DesignApplication",
         "operatingSystem": "Any (runs in a web browser)",
         "browserRequirements": "Requires JavaScript. Works offline once installed.",
@@ -116,6 +116,7 @@
   <link rel="preload" href="fonts/InterDisplay-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/kmap.css">
+  <link rel="stylesheet" href="css/bytefield.css">
 </head>
 <body>
   <!-- Phones held upright: what DiagramTeX is, and that the editor needs a wider screen. Shown by CSS (#phoneWall),
@@ -204,7 +205,7 @@
       <button data-fly="arrows" title="Block arrows"><svg viewBox="0 0 20 20"><path d="M2.5 7.5h8.5V4l6.5 6-6.5 6v-3.5H2.5z"/></svg><i class="more"></i></button>
       <button data-fly="insertPop" id="btnInsert" title="2D plots and charts: function, line, scatter, area, bar, pie, contour, heatmap"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
       <button data-fly="plots3d" id="btnPlots3d" title="3D: surfaces, parametric surfaces, space curves, solid regions, solids of revolution, basic solids, 3D geometry"><svg viewBox="0 0 20 20"><path d="M6.5 13.5V2.5M6.5 13.5H18M6.5 13.5l-4 4"/><path d="M9 7.5c2.2-2.4 4.2.6 8.5-2l-1.5 3.8c-4.3 2.6-6.3-.4-8.5 2z"/></svg><i class="more"></i></button>
-      <button data-fly="blocks" id="btnBlocks" title="Blocks (experimental; some inputs might not be rendered correctly): commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman, timing, state machine, Karnaugh map, chemistry"><svg viewBox="0 0 20 20"><path d="M10 2l4 2.3v4.6L10 11.2 6 8.9V4.3zM6 4.3l4 2.3 4-2.3M10 6.6v4.6M6 8.9l4 2.3v4.6L6 18.1 2 15.8v-4.6zM2 11.2l4 2.3 4-2.3M6 13.5v4.6M14 8.9l4 2.3v4.6L14 18.1 10 15.8v-4.6zM10 11.2l4 2.3 4-2.3M14 13.5v4.6"/></svg><i class="more"></i></button>
+      <button data-fly="blocks" id="btnBlocks" title="Blocks (experimental; some inputs might not be rendered correctly): commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman, timing, state machine, Karnaugh map, bit field, chemistry"><svg viewBox="0 0 20 20"><path d="M10 2l4 2.3v4.6L10 11.2 6 8.9V4.3zM6 4.3l4 2.3 4-2.3M10 6.6v4.6M6 8.9l4 2.3v4.6L6 18.1 2 15.8v-4.6zM2 11.2l4 2.3 4-2.3M6 13.5v4.6M14 8.9l4 2.3v4.6L14 18.1 10 15.8v-4.6zM10 11.2l4 2.3 4-2.3M14 13.5v4.6"/></svg><i class="more"></i></button>
       <div class="sep"></div>
       <button data-tool="image" title="Image (I) — inserted with \includegraphics"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12"/><circle cx="7" cy="8" r="1.5"/><path d="M3 15l5-5 3.5 3.5 2-2L17 15"/></svg></button>
       <button data-tool="pencil" title="Pencil (N) — freehand, smoothed"><svg viewBox="0 0 20 20"><path d="M4 16l1-4 8.5-8.5 3 3L8 15z M12 5l3 3"/></svg></button>
@@ -259,6 +260,7 @@
         <button data-insert="timing" title="Timing diagram, written for tikz-timing"><svg viewBox="0 0 32 24"><path d="M2 9h4V3h6v6h6V3h6v6h6"/><path d="M2 17l2-3h10l2 3-2 3H4z"/><path d="M16 17l2-3h10M16 17l2 3h10"/></svg>Timing</button>
         <button data-insert="automata" title="State machine, written with the TikZ automata library"><svg viewBox="0 0 32 24"><circle cx="9" cy="14" r="4.5"/><circle cx="24" cy="14" r="4.5" class="a1"/><circle cx="24" cy="14" r="2.6"/><path d="M13.5 14h6M17.5 12l2 2-2 2"/><path d="M1 14h3.5M2.8 12.2l1.8 1.8-1.8 1.8"/><path d="M7.4 9.8C5.5 3.5 12.5 3.5 10.6 9.8"/></svg>Automaton</button>
         <button data-insert="kmap" title="Karnaugh map, written for karnaugh-map: 2 to 6 variables"><svg viewBox="0 0 32 24"><path d="M6 4h20v16H6zM11 4v16M16 4v16M21 4v16M6 12h20"/><rect x="12.5" y="5.5" width="7" height="13" rx="2.5"/></svg>K-map</button>
+        <button data-insert="bytefield" title="Bit field: packet headers and register layouts, written for bytefield"><svg viewBox="0 0 32 24"><path d="M3 9h26v12H3zM10 9v12M15 9v12M22 9v12"/><path d="M3 5.5v1M10 5.5v1M15 5.5v1M22 5.5v1M29 5.5v1" class="a1"/></svg>Bit field</button>
         <button data-insert="chemfig" title="Chemistry: structural formulas and reaction schemes, written for chemfig"><svg viewBox="0 0 32 24"><path d="M9 4.5l6 3.5v7l-6 3.5-6-3.5V8z"/><path d="M11 7.4l2.4 1.4M5 9.5v4.2"/><path d="M15 15l5 3"/><path d="M21 12h8M26 9.5l3 2.5-3 2.5"/></svg>Chemistry</button>
       </div>
     </div>
@@ -315,7 +317,7 @@
         <div class="eh-diagram">
           <div class="eh-title">Empty diagram</div>
           <div>Pick a tool on the left, or press <kbd>L</kbd> line · <kbd>R</kbd> rectangle · <kbd>T</kbd> text (drag for a paragraph box).</div>
-          <div>Plots and charts are under the <b>Plots</b> button; commutative diagrams, Bloch spheres, quantum circuits, circuits, trees, ZX and Feynman diagrams, timing diagrams, state machines, Karnaugh maps and chemistry under <b>Blocks</b>; surfaces, solids and 3D geometry under <b>3D</b>. Right-click objects for more.</div>
+          <div>Plots and charts are under the <b>Plots</b> button; commutative diagrams, Bloch spheres, quantum circuits, circuits, trees, ZX and Feynman diagrams, timing diagrams, state machines, Karnaugh maps, bit fields and chemistry under <b>Blocks</b>; surfaces, solids and 3D geometry under <b>3D</b>. Right-click objects for more.</div>
         </div>
         <div class="eh-board">
           <div class="eh-title">Empty whiteboard</div>
@@ -401,6 +403,7 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/timing.js"></script>
   <script src="js/automata.js"></script>
   <script src="js/kmap.js"></script>
+  <script src="js/bytefield.js"></script>
   <script src="js/chemfig.js"></script>
   <script src="js/cd.js"></script>
   <script src="js/xy.js"></script>
@@ -423,6 +426,7 @@ A full document is split into text and diagram blocks."></textarea>
   <script src="js/tmeditor.js"></script>
   <script src="js/fsmeditor.js"></script>
   <script src="js/kmeditor.js"></script>
+  <script src="js/bfeditor.js"></script>
   <script src="js/cfeditor.js"></script>
   <script src="js/cdeditor.js"></script>
   <script src="js/symbols.js"></script>

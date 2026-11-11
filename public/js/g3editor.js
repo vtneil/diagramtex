@@ -552,9 +552,8 @@
   const row = (label, ctl) => `<div class="row"><label>${label}</label>${ctl}</div>`;
   const field = (label, f, value, extra = '') => row(label, `<div class="ctl"><input type="text" data-f="${f}" value="${esc(value)}" spellcheck="false"${extra}></div>`);
   const seg = (f, cur, opts) => `<div class="ctl seg-ctl">${opts.map(([v, n, t]) => `<button data-fs="${f}" data-v="${esc(String(v))}" class="${String(cur) === String(v) ? 'on' : ''}"${t ? ` title="${esc(t)}"` : ''}>${n}</button>`).join('')}</div>`;
-  const CNAMES = ['black', 'darkgray', 'gray', 'lightgray', 'white', 'red', 'orange', 'yellow', 'lime', 'green', 'olive', 'teal', 'cyan', 'blue', 'violet', 'purple', 'magenta', 'pink', 'brown'];
-  const sw = (c) => TD.css(TD.tikzColor(c) || '#000000');
-  const colorSel = (f, v, none) => { const opts = (none ? ['none'] : []).concat(CNAMES.includes(v) || (none && v === 'none') ? CNAMES : CNAMES.concat([v])); return `<div class="ctl swsel"><span class="sw" style="background:${v === 'none' ? 'transparent' : sw(v)}"></span><select data-f="${f}" aria-label="Colour">${opts.map((c) => `<option value="${esc(c)}"${c === 'none' ? '' : ` data-swatch="${sw(c)}"`}${c === v ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></div>`; };
+  // a colour field (the colour picker, written as an xcolor spec); a fill can be none
+  const colorSel = (f, v, none) => TD.texColor.field(`data-f="${f}"`, v === 'none' ? '' : TD.texColor.unwrap(v), none ? { nullable: true, dflt: 'none', title: 'Fill' } : { title: 'Colour' });
   const NUMRE = /^-?(\d+\.?\d*|\.\d+)$/;
   // a value field: numbers type straight in; an expression or macro is typed as code
   const valField = (label, f, sp) => field(label, f, text(sp).trim(), ' class="mono"');
@@ -683,12 +682,13 @@
       return c ? G.edits(src, sp(c)) : null;
     }
     const opt = (match, txt) => G.edits(src, G.setOpt(Lx, st, match, txt));
-    if (f === 'color' || f === 'tcolor') return opt((o) => (o.k === 'color' && o.v != null) || COLORK(o), val === 'black' ? null : f === 'tcolor' ? `text=${val}` : val);
+    if (f === 'color' || f === 'tcolor') return opt((o) => (o.k === 'color' && o.v != null) || COLORK(o), val === 'black' || !val ? null : f === 'tcolor' ? `text=${TD.texColor.wrap(val)}` : /[,;]/.test(val) ? `color=${TD.texColor.wrap(val)}` : val);
     if (f === 'fill') {
       if (st.k !== 'path') return null;
-      let s2 = opt((o) => o.k === 'fill', val === 'none' ? null : `fill=${val}`);
+      const fv = val || 'none';
+      let s2 = opt((o) => o.k === 'fill', fv === 'none' ? null : `fill=${TD.texColor.wrap(fv)}`);
       // \fill with no fill is just a \draw; a \draw that gains a fill keeps its outline
-      if (val === 'none' && st.cmd === 'fill') s2 = s2.slice(0, st.s) + '\\draw' + s2.slice(st.s + 5);
+      if (fv === 'none' && st.cmd === 'fill') s2 = s2.slice(0, st.s) + '\\draw' + s2.slice(st.s + 5);
       return s2;
     }
     if (f === 'opacity') { const n = parseFloat(v); if (!isFinite(n)) return null; return opt((o) => o.k === 'fill opacity' || o.k === 'opacity', n >= 1 ? null : `${st.cmd === 'shade' ? 'opacity' : 'fill opacity'}=${fmt(n, 2)}`); }

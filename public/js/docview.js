@@ -10,7 +10,7 @@
   // Text blocks are LaTeX-flavoured: $math$, $$display$$, # headings, - / 1. / - [ ] lists and a
   // handful of inline commands (\textbf, \textit, \underline, \sout, \textcolor, \colorbox, \href…).
   const katex = (src, display) => TD.math.render(src, { display });
-  const colorCss = (opt, v) => (opt === 'HTML' && /^[0-9a-f]{6}$/i.test(v.trim()) ? '#' + v.trim() : /^[a-z]+$/i.test(v.trim()) ? v.trim() : '#000');
+  const colorCss = (opt, v) => { v = v.trim(); if (opt === 'HTML') return /^[0-9a-f]{6}$/i.test(v) ? '#' + v : '#000'; let c; try { c = TD.tikzColor && TD.tikzColor(v); } catch { c = null; } return c ? TD.css(c) : /^[a-z]+$/i.test(v) ? v : '#000'; };
   const safeUrl = (u) => (/^(https?:|mailto:|#)/i.test(u.trim()) ? u.trim() : '#');
   const FMT = {
     textbf: [1, (a) => `<b>${inl(a[0])}</b>`],
@@ -363,8 +363,8 @@
       <span class="sep"></span>
       <button data-fmt="b" title="Bold (⌘B) — \\textbf"><b>B</b></button><button data-fmt="i" title="Italic (⌘I) — \\textit"><i>I</i></button>
       <button data-fmt="u" title="Underline (⌘U) — \\underline"><u>U</u></button><button data-fmt="s" title="Strikethrough — \\sout"><s>S</s></button>
-      <label class="fmt-col" title="Text colour — \\textcolor"><span class="glyph" style="border-bottom-color:${esc(fmtColor)}">A</span><input type="color" data-fmt="color" value="${esc(fmtColor)}"></label>
-      <label class="fmt-col" title="Highlight — \\colorbox"><span class="glyph hl" style="background:${esc(fmtHl)}">ab</span><input type="color" data-fmt="hl" value="${esc(fmtHl)}"></label>
+      <button type="button" class="fmt-col" data-fpick="color" title="Text colour — \\textcolor"><span class="glyph" style="border-bottom-color:${esc(TD.texColor.swatch(fmtColor))}">A</span></button>
+      <button type="button" class="fmt-col" data-fpick="hl" title="Highlight — \\colorbox"><span class="glyph hl" style="background:${esc(TD.texColor.swatch(fmtHl))}">ab</span></button>
       <button data-fmt="link" title="Link — \\href">${ic(I.link)}</button><button data-fmt="math" title="Inline maths $…$">${ic(I.math)}</button>
       <span class="sep"></span>
       <button data-fmt="ul" title="Bulleted list (- item)">${ic(I.ul)}</button><button data-fmt="ol" title="Numbered list (1. item)">${ic(I.ol)}</button><button data-fmt="chk" title="Checklist (- [ ] item)">${ic(I.chk)}</button>
@@ -402,7 +402,7 @@
       return `<td>${editing ? `<input class="cell" data-r="${ri}" data-c="${ci}" value="${esc(v)}" spellcheck="false">` : inl(v) || '&nbsp;'}</td>`;
     }).join('')}</tr>`).join('')}</table>`;
   };
-  let fmtColor = '#c0392b', fmtHl = '#fff3a3';
+  let fmtColor = 'red', fmtHl = 'yellow!20'; // xcolor specs, as the picker gives them
   let zoomMode = 'fit'; // 'fit', or a zoom factor (1 = 100%)
   let curZoom = 1; // the zoom last applied
   const ZMIN = 0.25, ZMAX = 4;
@@ -663,8 +663,12 @@
     else if (f === 'u') wrapSel(ta, '\\underline{', '}');
     else if (f === 's') wrapSel(ta, '\\sout{', '}');
     else if (f === 'math') wrapSel(ta, '$', '$', 'x');
-    else if (f === 'color') { fmtColor = val; wrapSel(ta, `\\textcolor[HTML]{${hexOf(val)}}{`, '}'); }
-    else if (f === 'hl') { fmtHl = val; wrapSel(ta, `\\colorbox[HTML]{${hexOf(val)}}{`, '}'); }
+    else if (f === 'color' || f === 'hl') {
+      if (f === 'color') fmtColor = val; else fmtHl = val;
+      // a preset is written by name; anything else as [HTML]
+      const cmd = f === 'color' ? 'textcolor' : 'colorbox', rgb = /^rgb/.test(val), hex = rgb && TD.tikzColor(val);
+      wrapSel(ta, rgb && hex ? `\\${cmd}[HTML]{${hexOf(hex)}}{` : `\\${cmd}{${val}}{`, '}');
+    }
     else if (f === 'link') {
       const s0 = ta.selectionStart, s1 = ta.selectionEnd, sel = ta.value.slice(s0, s1);
       TD.prompt('Link Address', /^https?:\/\//.test(sel) ? sel : 'https://', { ok: 'Add Link' }).then((url) => {
@@ -749,6 +753,17 @@
       return;
     }
     if (e.target.closest('a[href]') && editingIdx !== i) return; // follow links in the preview
+    const fp = e.target.closest('button[data-fpick]');
+    if (fp) {
+      // the shared picker with xcolor's names; the chosen colour wraps the selection when the picker closes
+      const f = fp.dataset.fpick, ta = blk.querySelector('.blk-ed'), glyph = fp.querySelector('.glyph');
+      let picked = null;
+      const show = (v) => { const c = TD.texColor.swatch(v); if (f === 'color') glyph.style.borderBottomColor = c; else glyph.style.background = c; };
+      TD.openColorPicker(fp, { value: TD.tikzColor(f === 'color' ? fmtColor : fmtHl), tex: true,
+        onInput: (v) => show(TD.texColor.spec(v)), onChange: (v) => { picked = TD.texColor.spec(v); show(picked); },
+        onClose: () => { if (picked) fmtAction(ta, f, picked); } });
+      return;
+    }
     const fb = e.target.closest('[data-fmt]');
     if (fb && fb.tagName === 'BUTTON') { fmtAction(blk.querySelector('.blk-ed'), fb.dataset.fmt); return; }
     const tb = e.target.closest('button[data-tb]');

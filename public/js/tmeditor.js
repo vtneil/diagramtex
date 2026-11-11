@@ -804,17 +804,21 @@
   const seg_ = (f, cur, opts, off) => `<div class="ctl seg-ctl">${opts.map(([v, n, t]) => `<button data-fs="${f}" data-v="${esc(String(v))}" class="${!off && String(cur) === String(v) ? 'on' : ''}"${t ? ` title="${esc(t)}"` : ''}${off ? ' disabled' : ''}>${n}</button>`).join('')}</div>`;
   const select = (f, cur, opts) => `<div class="ctl"><select data-f="${f}">${opts.map(([v, n]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>`;
   // a data cell's background (tikz-timing's timing/d/background or timing/u/background, kept to the cell)
-  const FILLS = [['', 'Default'], ['fill=yellow!40', 'Yellow'], ['fill=orange!40', 'Orange'], ['fill=cyan!25', 'Blue'], ['fill=green!25', 'Green'], ['fill=red!25', 'Red'], ['fill=violet!25', 'Purple'], ['fill=gray!30', 'Grey'], ['pattern=north east lines', 'Hatched']];
-  const HATCH_SW = 'repeating-linear-gradient(135deg, #1c1b19 0 1px, #fffdf8 1px 4px)';
-  function fillSw(st, c) {
-    if (!st) return c === 'U' ? '#808080' : '#ffffff';
-    const b = T.bgOf(st);
-    return !b ? 'transparent' : b.pattern ? HATCH_SW : b.color;
+  // a data cell's background (tikz-timing's timing/d/background or timing/u/background, kept to the cell): a colour
+  // from the colour picker (fill=…), or hatched (pattern=…, with that colour as its pattern color)
+  const HATCH = 'north east lines';
+  function bgParts(bg) {
+    let c = '', hatch = false;
+    for (const it of T.opts(bg || '')) { const { k, v } = T.kv(it); if (k === 'pattern') hatch = true; else if ((k === 'fill' || k === 'pattern color') && v) c = TD.texColor.unwrap(v); }
+    return { c, hatch };
   }
+  const bgCode = (c, hatch) => (hatch ? `pattern=${HATCH}${c ? `, pattern color=${TD.texColor.wrap(c)}` : ''}` : c ? `fill=${TD.texColor.wrap(c)}` : null);
   function fillSel(sg) {
-    const cur = sg.bg || '', opts = FILLS.some(([v]) => v === cur) ? FILLS : FILLS.concat([[cur, cur]]);
-    return `<div class="ctl swsel"><span class="sw" style="background:${fillSw(cur, sg.c)}"></span><select data-f="bg" aria-label="Fill">${opts.map(([v, n]) => `<option value="${esc(v)}" data-swatch="${esc(fillSw(v, sg.c))}"${v === cur ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>`;
+    const p = bgParts(sg.bg);
+    return row_('Fill', TD.texColor.field('data-f="bg"', p.c, { nullable: true, dfltSw: p.hatch ? '#000000' : sg.c === 'U' ? '#808080' : '', title: 'Fill' }))
+      + row_('Pattern', seg_('bgpat', p.hatch ? '1' : '0', [['0', 'Solid'], ['1', 'Hatched']]));
   }
+
   function renderProps() {
     if (!E) return;
     const M = E.M, sg = selSeg(), row = selRow(), an = selAnn(), mk = selMark();
@@ -827,7 +831,7 @@
         ${numField(clock ? 'Step width' : 'Width', 'w', sg.w, 'periods', 0.5, sg.c === 'G' ? ' disabled' : ' min="0.05"')}
         ${clock ? numField('Clock width', 'cw', clockW, 'periods', 0.5, ' min="0.25"') : ''}
         ${sg.c === 'D' ? field('Text', 't', sg.t || '', ' placeholder="none"') : ''}
-        ${band ? row_('Fill', fillSel(sg)) : ''}
+        ${band ? fillSel(sg) : ''}
         ${sg.c === 'D' ? row_('Starts', seg_('newv', sg.t == null ? 0 : 1, [[1, 'New value', 'A crossing where it starts: D{…}'], [0, 'Continues', 'No crossing: the value before goes on']], sg.t != null && sg.t !== '')) : ''}
         <div class="help">${clock ? `Clock width sets every step of this ${sg.c === 'C' ? 'clock' : 'toggle'} (${run.b - run.a + 1} steps, each a high or a low) and keeps about the same length: 2 writes <code>2C</code>. Step width changes only this step. ` : ''}Drag its edges along the row; <kbd>⇧</kbd> moves the rest of the row with an edge. Drag the segment to move it between its neighbours.</div></div>`);
       return;
@@ -892,7 +896,7 @@
         E.sel.i = setClockWidth(E.sel.r, E.sel.i, round(n), E.cwSpan);
       }
       else if (f === 't') sg.t = t.value;
-      else if (f === 'bg') sg.bg = t.value || null;
+      else if (f === 'bg') sg.bg = bgCode(t.value, bgParts(sg.bg).hatch);
       touch(r);
     } else if (row) {
       if (f === 'name') row.name = t.value;
@@ -941,7 +945,8 @@
     if (!bt || !E) return;
     const f = bt.dataset.fs, v = bt.dataset.v, sg = selSeg(), an = selAnn(), mk = selMark();
     edit(() => {
-      if (sg && f === 'newv') { sg.t = v === '1' ? '' : null; touch(E.M.rows[E.sel.r]); }
+      if (sg && f === 'bgpat') { sg.bg = bgCode(bgParts(sg.bg).c, v === '1'); touch(E.M.rows[E.sel.r]); }
+      else if (sg && f === 'newv') { sg.t = v === '1' ? '' : null; touch(E.M.rows[E.sel.r]); }
       else if (an && f === 'tips') { setTip(an, v); xdirty(an); }
       else if (an && f === 'side') { setSide(an, v); xdirty(an); }
       else if (an && f === 'dash') { setDashed(an, v === '1'); xdirty(an); }

@@ -118,6 +118,48 @@
     return `"${t}"${L.swap ? "'" : ''}${o.length ? (o.length === 1 && /^[a-z ]+$/.test(o[0]) ? ` ${o[0]}` : `{${o.join(', ')}}`) : ''}`;
   }
 
+  // ---------------------------------------------------------------- colours
+  // A colour in the code is a spec kept as written (red, blue!20, red!30!black, rgb,255:red,92;green,214;blue,92,
+  // or a name the document defines); TD.tikzColor reads it as #rrggbb (undefined: not known here, null: none).
+  const known = (v) => !!(TD.tikzColor && TD.tikzColor(v));
+  const XNAMES = { '#ff0000': 'red', '#00ff00': 'green', '#0000ff': 'blue', '#00ffff': 'cyan', '#ff00ff': 'magenta', '#ffff00': 'yellow', '#000000': 'black', '#ffffff': 'white', '#808080': 'gray', '#404040': 'darkgray', '#bfbfbf': 'lightgray', '#bf8040': 'brown', '#bfff00': 'lime', '#808000': 'olive', '#ff8000': 'orange', '#ffbfbf': 'pink', '#bf0040': 'purple', '#008080': 'teal', '#800080': 'violet' };
+  // a picked #rrggbb → a spec: xcolor's own name when it is one, else xcolor's rgb,255 expression (as quiver writes)
+  function colorSpec(hex) {
+    const h = String(hex || '').toLowerCase().slice(0, 7);
+    if (!/^#[0-9a-f]{6}$/.test(h)) return null;
+    if (XNAMES[h]) return XNAMES[h];
+    const n = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    return `rgb,255:red,${n[0]};green,${n[1]};blue,${n[2]}`;
+  }
+  // an option that is a colour: { key: '' (a bare name or mix) | 'color' | 'draw' | 'text', spec } or null.
+  // A key=value always counts (the spec may be one only the document defines); a bare word only when it reads as one.
+  function colorOpt(item) {
+    const { name, arg } = Z.styleOf(item);
+    if (/^(color|draw|text)$/.test(name) && arg != null) { const v = unbrace(arg).trim(); return v && v !== 'none' && !/background color/.test(v) ? { key: name, spec: v } : null; }
+    if (arg == null && !TD.CD_HEADS[name] && known(name)) return { key: '', spec: name };
+    return null;
+  }
+  // the option for a spec: a bare word when it is a plain name or mix, else key={spec}
+  const colorItem = (spec, key = 'color') => ((!key || key === 'color') && /^[A-Za-z][\w!.]*$/.test(spec) && known(spec) ? spec : `${key || 'color'}={${spec}}`);
+  // \textcolor{spec}{body} around a whole text → { spec, body }; otherwise { spec: null, body: t }
+  function splitColor(t) {
+    const s = String(t == null ? '' : t), m = /^\s*\\textcolor\s*\{/.exec(s);
+    if (m) {
+      const i = m[0].length - 1, j = Z.close(s, i);
+      if (j > 0) { const k = skipWs(s, j + 1); if (s[k] === '{') { const e = Z.close(s, k); if (e > 0 && !s.slice(e + 1).trim()) return { spec: s.slice(i + 1, j).trim(), body: s.slice(k + 1, e) }; } }
+    }
+    return { spec: null, body: s };
+  }
+  const joinColor = (spec, body) => (spec ? `\\textcolor{${spec}}{${body}}` : body);
+  // a cell's colour from its |[options]|: the last colour among them (color=, text= or a name; draw= is its border)
+  function nodeColor(node) {
+    let c = null;
+    for (const it of Z.opts(node || '').list) { const o = colorOpt(it); if (o && o.key !== 'draw') c = o; }
+    return c;
+  }
+  // \textcolor{…} and \color{…} specs the maths renderers don't read (mixes, xcolor's own shades of its names) → #rrggbb
+  const texColors = (t) => (/\\(text)?color\s*\{/.test(t) ? t.replace(/\\(textcolor|color)\s*\{([^{}]*)\}/g, (all, c, v) => { const h = /^\s*#/.test(v) ? null : TD.tikzColor && TD.tikzColor(v); return h ? `\\${c}{${h}}` : all; }) : t);
+
   // ---------------------------------------------------------------- lengths
   function length(v, unitless = PT) {
     v = String(v || '').trim().replace(/^\+/, '');
@@ -302,6 +344,8 @@
       if (name === 'line width') { const l = length(arg); if (l != null) { A.lw = l; continue; } }
       // draw= colours the line only; color= (or a colour's name) the line and its labels
       if (name === 'color' || name === 'draw') { const v = unbrace(arg).trim(), k = TD.tikzColor && TD.tikzColor(v); if (k) { A.color = k; if (name === 'color') A.lcolor = k; continue; } if (v === 'none') { A.phantom = true; continue; } }
+      // text= colours the labels only
+      if (name === 'text' && arg != null) { const k2 = TD.tikzColor && TD.tikzColor(unbrace(arg).trim()); if (k2) { A.lcolor = k2; continue; } }
       const k = arg == null && TD.tikzColor && TD.tikzColor(name);
       if (k) { A.color = A.lcolor = k; continue; }
       warn(`The arrow option "${it}" isn't drawn here (it is kept in the code)`);
@@ -318,7 +362,7 @@
   // axis, where tikz-cd's asymmetrical rectangle puts its centre (A: 8pt above the axis, 6.2pt below).
   const TXT_DY = 1.4, BB_DY = 0.2, LAB_PAD = 1.2; // text lower, drawing within TeX's picture box (whose label nodes keep their inner sep)
   const strutH = (b) => { const m = /katex-strut" style="height:([\d.]+)em/.exec(b.html || ''); return m ? +m[1] * b.px : HK * b.h; };
-  const mathOf = (t) => (/\$/.test(t) ? t : `$${t}$`);
+  const mathOf = (t) => { t = texColors(String(t)); return /\$/.test(t) ? t : `$${t}$`; };
   const cache = new Map();
   function layout(s) {
     if (s.arrows) upgrade(s);
@@ -409,7 +453,7 @@
     }
     const nodeAt = (r, c) => { const m = look[r] && look[r][c]; return { x: cx[c], y: cy[r], oy: m ? (m.down - m.up) / 2 : 0, w: m ? m.w : 0, h: m ? m.h : 0 }; };
     const nodes = [];
-    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) { const m = look[r][c]; if (m) nodes.push({ x: cx[c], y: cy[r], oy: (m.down - m.up) / 2, w: m.w, h: m.h, t: mathOf(cells[r][c].t), b: m.b, cell: [r, c] }); }
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) { const m = look[r][c]; if (m) { const nc = nodeColor(cells[r][c].node); nodes.push({ x: cx[c], y: cy[r], oy: (m.down - m.up) / 2, w: m.w, h: m.h, t: mathOf(cells[r][c].t), b: m.b, cell: [r, c], color: (nc && TD.tikzColor(nc.spec)) || null }); } }
 
     // a point on a node's border: from p along u (leaving the box), or in a direction (TikZ degrees)
     const exit = (n, p, u) => {
@@ -800,7 +844,7 @@
       if (!ctx.export) out += TD.textSvg('Empty diagram', { size: 'small', font: 'default' }, '#888888', o.w / 2, o.h / 2, ctx);
     } else {
       for (const a of Lo.arrows) out += arrowSvg(a, ink, paper, Lo.PR);
-      for (const n of Lo.nodes) out += TD.textSvg(n.t, NORMAL, s.color || '#000000', n.x, n.y + TXT_DY, ctx);
+      for (const n of Lo.nodes) out += TD.textSvg(n.t, NORMAL, n.color || s.color || '#000000', n.x, n.y + TXT_DY, ctx);
       for (const l of Lo.labels) {
         if (l.fill) out += `<rect x="${r2(l.x - l.w / 2)}" y="${r2(l.y - l.h / 2)}" width="${r2(l.w)}" height="${r2(l.h)}" fill="${paper}"/>`;
         const tx = TD.textSvg(l.t, l.font || LABEL, l.color === 'paper' ? paper : l.color || s.color || '#000000', l.x, l.y, ctx);
@@ -910,5 +954,5 @@
   };
   TD.cdLayout = layout;
   // for the visual editor (js/cdeditor.js)
-  TD.cd = { unwrap, cell, parse, label, labelCode, layout, build, draw, fullCode, delta, style, styleDefs, SEPS, HEADS, tan, at, curveD, length, LW, PT, EX, EM, D8, DIAG };
+  TD.cd = { colorSpec, colorOpt, colorItem, splitColor, joinColor, nodeColor, texColors, unwrap, cell, parse, label, labelCode, layout, build, draw, fullCode, delta, style, styleDefs, SEPS, HEADS, tan, at, curveD, length, LW, PT, EX, EM, D8, DIAG };
 })();

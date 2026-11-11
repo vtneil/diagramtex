@@ -276,6 +276,12 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
   #saveState.err::after { content: "Not saved"; font-size: 11px; }
 }
 .files-foot .app-ver { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* a newer release is deployed: a marker dot (as on a linked file with unsaved changes), pulsing twice when it appears */
+.files-foot .app-ver.update { color: var(--graphite); }
+.files-foot .app-ver.update::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; background: var(--marker);
+  animation: verPing 1.2s var(--ease) 2; }
+@keyframes verPing { 0% { box-shadow: 0 0 0 0 var(--marker); } 100% { box-shadow: 0 0 0 6px transparent; } }
+@media (prefers-reduced-motion: reduce) { .files-foot .app-ver.update::before { animation: none; } }
 .files-foot a { color: inherit; text-decoration: none; white-space: nowrap; border-radius: var(--r-sm); }
 .files-foot a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
 .files-foot a:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
@@ -782,7 +788,6 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .fmt-bar .sep { width: 1px; height: 16px; background: var(--rule); margin: 0 3px; }
 .fmt-bar .fmt-col { position: relative; height: var(--ctl); min-width: 26px; border-radius: var(--r); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .fmt-bar .fmt-col:hover { background: var(--wash); }
-.fmt-bar .fmt-col input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
 .fmt-bar .glyph { font: 600 14px var(--font-tex); border-bottom: 3px solid; line-height: 1.1; padding: 0 2px; }
 .fmt-bar .glyph.hl { border: 0; padding: 1px 3px; border-radius: 2px; }
 .fmt-bar .rng { display: inline-flex; align-items: center; gap: 8px; padding: 0 4px; color: var(--graphite); font-weight: 500; }
@@ -1153,6 +1158,8 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-props input[type=text], .cz-props input[type=number], .cz-props select { width: 100%; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); min-width: 0; font: inherit; }
 .cz-props input[type=number] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 .cz-props .ctl.unit span { color: var(--pencil); font-size: 12px; }
+.cz-props .cval { font: 11px var(--font-mono); color: var(--pencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.cz-props .cbtn:disabled { opacity: .4; cursor: default; }
 .cz-props input.mono { font-family: var(--font-mono); font-size: 12px; }
 .cz-props input[type]:disabled, .cz-props select:disabled { background: var(--well); color: var(--pencil); cursor: default; }
 .cz-props input:focus, .cz-props select:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
@@ -1178,6 +1185,8 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-msg:empty { display: none; }
 .cz-entry { grid-template-columns: 1fr; }
 .cz-entry button { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 8px 12px; font-size: 13px; color: var(--ink); }
+.cz-entry { margin-top: 8px; }
+.cz-entry code { font-family: var(--font-mono); font-size: 12px; }
 .cz-entry .help { color: var(--graphite); font-size: 12px; line-height: 1.45; }
 @media (max-width: 1100px) { .cz-body { grid-template-columns: 200px 1fr 300px; } }
 @media (max-width: 800px) { .cz-body { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } .cz-pal { display: none; } .cz-side { border-left: 0; border-top: 1px solid var(--rule); } }

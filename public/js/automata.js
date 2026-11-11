@@ -289,9 +289,9 @@
       if (k === 'initial where' && v && DIRS[v] != null) { S.initWhere = v; continue; }
       if (k === 'initial distance' && v != null) { S.initDist = (cm(v) * PX) || INIT_DIST; continue; }
       if (k === 'every state/.style' || k === 'every state/.append style') { const T = { ...S }; applyNodeOpts(T, opts(unbrace(v)), null); S.stateFill = T.stateFill; S.stateDraw = T.stateDraw; S.stateMin = T.stateMin; S.textColor = T.textColor; continue; }
-      if (k === 'text' && v != null && TD.tikzColor) { const c = TD.tikzColor(v); if (c) { S.textColor = c; continue; } }
+      if (k === 'text' && v != null && TD.tikzColor) { const c = TD.tikzColor(unbrace(v)); if (c) { S.textColor = c; continue; } }
       const col = (k === 'draw' || k === 'color') && v != null ? v : v == null ? k : null;
-      if (col && TD.tikzColor) { const c = TD.tikzColor(col); if (c) { S.color = c; continue; } }
+      if (col && TD.tikzColor) { const c = TD.tikzColor(unbrace(col)); if (c) { S.color = c; continue; } }
       if (/^(sloped|font|inner sep|outer sep|anchor|fill|text width|align|scale|transform shape|every .*|semithick|>=|initial|accepting|state|rounded corners|opacity|draw opacity|text opacity|double|double distance|align)$/.test(k) || /\/\.(style|append style|code)$/.test(k)) continue;
       if (unknown) unknown.push(it);
     }
@@ -309,9 +309,9 @@
       if (k === 'initial text') { S.initText = unbrace(v || ''); continue; }
       if (k === 'initial distance' && v != null) { S.initDist = (cm(v) * PX) || INIT_DIST; continue; }
       if (k === 'accepting' || k === 'accepting by double') { S.accepting = true; continue; }
-      if (k === 'fill' && v != null) { const c = TD.tikzColor && TD.tikzColor(v); if (c) S.stateFill = c; else if (v === 'none') S.stateFill = null; continue; }
-      if ((k === 'draw' || k === 'color') && v != null) { const c = TD.tikzColor && TD.tikzColor(v); if (c) { if (k === 'draw') S.stateDraw = c; else { S.stateDraw = c; S.textColor = c; } continue; } }
-      if (k === 'text' && v != null) { const c = TD.tikzColor && TD.tikzColor(v); if (c) { S.textColor = c; continue; } }
+      if (k === 'fill' && v != null) { const c = TD.tikzColor && TD.tikzColor(unbrace(v)); if (c) S.stateFill = c; else if (v === 'none') S.stateFill = null; continue; }
+      if ((k === 'draw' || k === 'color') && v != null) { const c = TD.tikzColor && TD.tikzColor(unbrace(v)); if (c) { if (k === 'draw') S.stateDraw = c; else { S.stateDraw = c; S.textColor = c; } continue; } }
+      if (k === 'text' && v != null) { const c = TD.tikzColor && TD.tikzColor(unbrace(v)); if (c) { S.textColor = c; continue; } }
       if (k === 'minimum size' && v != null) { const n = cm(v); if (isFinite(n)) S.stateMin = n * PX; continue; }
       if (WIDTHS[k] != null && v == null) { S.lw = WIDTHS[k] * PT; continue; }
       if (k === 'line width' && v != null) { const w = cm(v); if (isFinite(w)) S.lw = w * PX; continue; }

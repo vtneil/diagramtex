@@ -1,0 +1,13 @@
+/* Bit field editor (js/bfeditor.js): the frame, panel and palette pieces come from the cz-* and qe-* rules */
+#bfModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+/* palette: fields and groups drawn in the package's lines */
+.bf-mini path { fill: none; stroke: currentColor; stroke-width: 1; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.bf-mini text { fill: currentColor; font: 9px var(--font-tex); text-anchor: middle; }
+/* canvas: the bit columns (construction lines, darker every eight bits), the field under the pointer,
+   the selection and a ⇧-click range of rows, the resize handle */
+.bf-grid { fill: none; stroke: color-mix(in srgb, var(--bluepen) 10%, transparent); stroke-width: 1; pointer-events: none; }
+.bf-grid8 { fill: none; stroke: color-mix(in srgb, var(--bluepen) 24%, transparent); stroke-width: 1; pointer-events: none; }
+.bf-hov { fill: color-mix(in srgb, var(--bluepen) 9%, transparent); pointer-events: none; }
+.bf-range { fill: color-mix(in srgb, var(--redpen) 6%, transparent); pointer-events: none; }
+.bf-sel { fill: none; stroke: color-mix(in srgb, var(--redpen) 55%, transparent); stroke-width: 2; pointer-events: none; }
+.bf-handle { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; }

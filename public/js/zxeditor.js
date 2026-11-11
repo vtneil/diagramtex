@@ -505,7 +505,7 @@
     }
     // the delete gutters left of the rows and above the columns
     E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
-    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : h, ['row', 'column']);
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, ['row', 'column']);
     // what is being dragged, under the pointer
     const mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if ((E.ghost && E.ghost.k) || mv) {
@@ -554,8 +554,9 @@
     if (!d) {
       const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : cellAt(e), n = dz ? null : nodeAt(e, 14);
       const kn = n && at(n.r, n.c) && at(n.r, n.c).node ? n : e.target.closest('.ze-knob') ? E.knobAt : null;
-      const ch = JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
-      E.hover = h; E.knobAt = kn; E.del = dz;
+      const nr = dz ? null : TD.gridDel.near(E.gut, sx, sy);
+      const ch = JSON.stringify(nr) !== JSON.stringify(E.near) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
+      E.hover = h; E.knobAt = kn; E.del = dz; E.near = nr;
       svg.style.cursor = dz || (!n && wireAt(e)) ? 'pointer' : '';
       if (ch) draw();
       return;
@@ -595,7 +596,7 @@
     }
     draw();
   });
-  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.del)) { E.hover = null; E.knobAt = null; E.del = null; draw(); } });
+  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.del || E.near)) { E.hover = null; E.knobAt = null; E.del = null; E.near = null; draw(); } });
   // a click on a delete gutter: that row or column goes, as one undo step
   function delLine(dz) {
     closeLabel(); E.del = null; E.hover = null; E.knobAt = null; E.sel = null; E.wire = null; svg.style.cursor = '';

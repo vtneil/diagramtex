@@ -75,8 +75,13 @@ bundle(scripts.files, 'js', 'js/bundle.js', '\n;\n');
 bundle(styles.files, 'css', 'css/app.css', '\n');
 write('index.html', html);
 
-// ---- sw.js: precache every file the app can load, as it is in dist/
-const SKIP = /^(index\.html|sw\.js|robots\.txt|sitemap\.xml|404\.html)$|LICENSE|\.txt$|^icons\/og-image\./;
+// ---- version.json: the release this build is, read by the app once on load to spot a newer deploy
+const VERSION = (/TD\.VERSION = '([^']+)'/.exec(read('js/shapes.js')) || [])[1];
+if (!VERSION) throw new Error('js/shapes.js: TD.VERSION not found');
+write('version.json', JSON.stringify({ version: VERSION }) + '\n');
+
+// ---- sw.js: precache every file the app can load, as it is in dist/ (not version.json: it must come from the network)
+const SKIP = /^(index\.html|sw\.js|version\.json|robots\.txt|sitemap\.xml|404\.html)$|LICENSE|\.txt$|^icons\/og-image\./;
 const files = [];
 (function list(rel) {
   for (const ent of fs.readdirSync(path.join(OUT, rel), { withFileTypes: true })) {

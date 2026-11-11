@@ -12,16 +12,24 @@
 
   // Delete gutters, shared by the grid editors (Quantum, ZX, CD): a strip left of the rows and one above the
   // columns. Pointing at a row (column) there shows its bin and marks the whole line; a click deletes it.
-  // While a cell is hovered, its row's and column's bins show faintly so the gutters can be found.
+  // While the pointer is in a row or column (a cell or the gutter beside it), that line's bin shows faintly.
   // g: { sx, sy, R, C, left, top } in stage px — sx / sy are the cell edges, left / top the paper's edges.
   const GUT = 22;
   TD.gridDel = {
     at(g, x, y) {
       if (!g || !g.R || !g.C) return null;
-      const find = (a, n, v) => { for (let i = 0; i < n; i++) if (v >= a[i] && v < a[i + 1]) return i; return -1; };
-      if (x >= g.left - GUT - 4 && x < g.left) { const i = find(g.sy, g.R, y); if (i >= 0) return { kind: 'row', i }; }
-      if (y >= g.top - GUT - 4 && y < g.top) { const i = find(g.sx, g.C, x); if (i >= 0) return { kind: 'col', i }; }
+      // only the round button itself (radius 9) counts, not the gutter around it
+      const rx = g.left - GUT / 2 - 2, cy = g.top - GUT / 2 - 2, R2 = 10 * 10;
+      for (let i = 0; i < g.R; i++) { const y0 = (g.sy[i] + g.sy[i + 1]) / 2; if ((x - rx) ** 2 + (y - y0) ** 2 <= R2) return { kind: 'row', i }; }
+      for (let i = 0; i < g.C; i++) { const x0 = (g.sx[i] + g.sx[i + 1]) / 2; if ((x - x0) ** 2 + (y - cy) ** 2 <= R2) return { kind: 'col', i }; }
       return null;
+    },
+    // the row and column the pointer is in, counting the gutters: their bins show faintly while it is there
+    near(g, x, y) {
+      if (!g || !g.R || !g.C) return null;
+      const { sx, sy, R, C } = g, band = (v, e, n) => { for (let i = 0; i < n; i++) if (v >= e[i] && v < e[i + 1]) return i; return -1; };
+      const r = x >= g.left - GUT - 4 && x <= sx[C] ? band(y, sy, R) : -1, c = y >= g.top - GUT - 4 && y <= sy[R] ? band(x, sx, C) : -1;
+      return r < 0 && c < 0 ? null : { r, c };
     },
     svg(g, del, hover, names) {
       if (!g || !g.R || !g.C) return '';
@@ -35,19 +43,22 @@
           : `<rect class="qe-delband" x="${r2(sx[del.i])}" y="${r2(sy[0])}" width="${r2(sx[del.i + 1] - sx[del.i])}" height="${r2(sy[R] - sy[0])}"/>`;
         return band + (del.kind === 'row' ? row(del.i, true) : col(del.i, true));
       }
-      return hover && hover.r < R && hover.c < C ? row(hover.r, false) + col(hover.c, false) : '';
+      if (!hover) return '';
+      return (hover.r >= 0 && hover.r < R ? row(hover.r, false) : '') + (hover.c >= 0 && hover.c < C ? col(hover.c, false) : '');
     },
   };
 
   // ---------------------------------------------------------------- elements
   // main: one per cell (dropping another replaces it); extras (slices, groups, wire types) stack on it.
-  const MAIN = new Set(['gate', 'meter', 'meterD', 'measuretab', 'measure', 'ctrl', 'octrl', 'control', 'ocontrol', 'targ', 'targX', 'swap', 'phase', 'push', 'midstick', 'lstick', 'rstick', 'ground', 'qwbundle']);
+  const MAIN = new Set(['gate', 'meter', 'metercw', 'meterD', 'inputD', 'measuretab', 'measure', 'ctrl', 'octrl', 'control', 'ocontrol', 'targ', 'targX', 'swap', 'phase', 'push', 'midstick', 'lstick', 'rstick', 'ground', 'trash', 'qwbundle', 'permute', 'makeebit', 'phantomgate', 'hphantomgate', 'linethrough']);
   const LINKS = new Set(['ctrl', 'octrl', 'swap', 'vqw', 'vcw', 'cwbend']); // {n}: a line to the wire n below
-  const SPANS = new Set(['gate', 'lstick', 'rstick']); // [wires=n] / [n]
+  const SPANS = new Set(['gate', 'meter', 'lstick', 'rstick', 'midstick']); // [wires=n] / [n]
   const NAMES = {
     gate: 'Gate', meter: 'Meter', meterD: 'Measurement (D)', measuretab: 'Measurement tab', measure: 'Measurement', ctrl: 'Control', octrl: 'Open control',
     control: 'Control (no line)', ocontrol: 'Open control (no line)', targ: 'Target', targX: 'Swap end', swap: 'Swap', phase: 'Phase', push: 'Text', midstick: 'Middle label',
     lstick: 'Input label', rstick: 'Output label', ground: 'Ground', qwbundle: 'Bundle', slice: 'Slice', gategroup: 'Group', setwiretype: 'Wire type',
+    metercw: 'Meter to classical', inputD: 'Input (D)', trash: 'Discard', permute: 'Permutation', makeebit: 'Entangled pair', phantomgate: 'Space', hphantomgate: 'Space',
+    linethrough: 'Line through', ghost: 'Height of', gateinput: 'Gate input', gateoutput: 'Gate output', wave: 'Wave', wireoverride: 'Wire override',
   };
   // palette: [key, name, cells: [[row offset, code]], shortcut]
   const PAL = [
@@ -56,6 +67,7 @@
       ['s', 'S', [[0, '\\gate{S}']], 'S'], ['t', 'T', [[0, '\\gate{T}']], 'T'], ['sd', 'S†', [[0, '\\gate{S^\\dagger}']]], ['td', 'T†', [[0, '\\gate{T^\\dagger}']]],
       ['sx', '√X', [[0, '\\gate{\\sqrt{X}}']]], ['rx', 'Rx(θ)', [[0, '\\gate{R_x(\\theta)}']]], ['ry', 'Ry(θ)', [[0, '\\gate{R_y(\\theta)}']]], ['rz', 'Rz(θ)', [[0, '\\gate{R_z(\\theta)}']]],
       ['u', 'Gate U', [[0, '\\gate{U}']], 'U'], ['u2', 'Two-wire gate', [[0, '\\gate[2]{U}'], [1, '']]],
+      ['swapg', 'Swap gate', [[0, '\\gate[2,swap]{}'], [1, '']]], ['perm', 'Permutation', [[0, '\\permute{2,1}'], [1, '']]],
     ]],
     ['Controls', [
       ['cnot', 'CNOT', [[0, '\\ctrl{1}'], [1, '\\targ{}']]], ['cz', 'Controlled Z', [[0, '\\ctrl{1}'], [1, '\\control{}']]], ['cu', 'Controlled U', [[0, '\\ctrl{1}'], [1, '\\gate{U}']]], ['swap2', 'SWAP', [[0, '\\swap{1}'], [1, '\\targX{}']]],
@@ -64,14 +76,17 @@
     ]],
     ['Measure', [
       ['meter', 'Meter', [[0, '\\meter{}']], 'M'], ['meterD', 'Measurement (D)', [[0, '\\meterD{\\ket{0}}']]], ['mtab', 'Measurement tab', [[0, '\\measuretab{0}']]], ['ground', 'Ground', [[0, '\\ground{}']]],
+      ['metercw', 'Meter to classical', [[0, '\\metercw{}']]], ['measure', 'Measurement', [[0, '\\measure{x}']]], ['trash', 'Discard', [[0, '\\trash{}']]],
     ]],
     ['Labels', [
       ['ket0', 'Input |0⟩', [[0, '\\lstick{\\ket{0}}']]], ['lstick', 'Input label', [[0, '\\lstick{\\ket{\\psi}}']]], ['rstick', 'Output label', [[0, '\\rstick{\\ket{\\psi}}']]],
       ['mid', 'Middle label', [[0, '\\midstick{\\ket{0}}']]], ['push', 'Text', [[0, '\\push{a}']]],
+      ['inputD', 'Input (D)', [[0, '\\inputD{0}']], null, '\\inputD{0} & &'], ['ebit', 'Entangled pair', [[0, '\\makeebit{}'], [1, '']], null, '\\makeebit{} & & \\\\ & &'],
     ]],
     ['Wires', [
       ['wc', 'Classical from here', [[0, '\\setwiretype{c}']], null, '& & \\setwiretype{c} & &'], ['wq', 'Quantum from here', [[0, '\\setwiretype{q}']], null, '\\setwiretype{c} & & \\setwiretype{q} & &'], ['wn', 'No wire from here', [[0, '\\setwiretype{n}']], null, '& & \\setwiretype{n} & &'],
       ['bundle', 'Bundle', [[0, '\\qwbundle{n}']]], ['vqw', 'Wire down', [[0, '\\vqw{1}']], null, '& \\gate{U} \\vqw{1} & \\\\ & \\gate{V} &'], ['vcw', 'Classical wire down', [[0, '\\vcw{1}']], null, '& \\meter{} \\vcw{1} & \\\\ & \\gate{V} &'],
+      ['wave', 'Wave', [[0, '\\wave']], null, '\\wave & & &'],
     ]],
     ['Annotations', [
       ['slice', 'Slice', [[0, '\\slice{}']]], ['group', 'Group', [[0, '\\gategroup[2,steps=2,style={dashed,rounded corners}]{}']]],
@@ -93,7 +108,7 @@
   // rows of cells; a cell keeps its text and, unless it holds commands this editor doesn't know
   // (opaque), its items { name, o: [options], a: [arguments] }. dirty cells are written from items.
   function parseCell(text) {
-    let unknown = /\\ghost\b/.test(text);
+    let unknown = false;
     const items = Q.cell(text, () => (unknown = true));
     return { text: text.trim(), items, opaque: unknown, dirty: false };
   }
@@ -332,7 +347,7 @@
   function link(r, c) {
     const M = E.M, cell = M.rows[r][c], m = mainOf(cell);
     if (!m) return;
-    const kinds = (x) => x && !['lstick', 'rstick', 'push', 'midstick', 'qwbundle', 'ground'].includes(x.name);
+    const kinds = (x) => x && !['lstick', 'rstick', 'push', 'midstick', 'qwbundle', 'ground', 'trash', 'permute', 'makeebit', 'phantomgate', 'hphantomgate', 'linethrough', 'inputD'].includes(x.name);
     if ((m.name === 'ctrl' || m.name === 'octrl' || m.name === 'swap') && !intArg(m.a[0])) {
       let best = null;
       for (let i = 0; i < nR(M); i++) {
@@ -351,8 +366,40 @@
     }
   }
   // move (or copy) a cell's contents; within a column, links keep pointing at the same wires
+  // the rows of column c tied to row r by vertical links (a swap and its end, a control and its target)
+  function linkGroup(r, c) {
+    const M = E.M, rows = new Set([r]), target = (i) => {
+      const cell = M.rows[i] && M.rows[i][c];
+      if (!cell || cell.opaque) return [];
+      return cell.items.filter((it) => LINKS.has(it.name) && intArg(it.a[0])).map((it) => i + intArg(it.a[0]));
+    };
+    for (let grew = true; grew;) {
+      grew = false;
+      for (let i = 0; i < nR(M); i++) {
+        const ts = target(i).filter((t) => t >= 0 && t < nR(M));
+        if (rows.has(i)) { for (const t of ts) if (!rows.has(t)) { rows.add(t); grew = true; } }
+        else if (ts.some((t) => rows.has(t))) { rows.add(i); grew = true; }
+      }
+    }
+    return [...rows].sort((a, b) => a - b);
+  }
   function moveCell(r1, c1, r2, c2, copy) {
     const M = E.M;
+    // into another step: a linked group (swap and its end, controls and their target) moves as one,
+    // when the cells it lands on are free
+    if (c1 !== c2) {
+      const g = linkGroup(r1, c1), dr = r2 - r1;
+      if (g.length > 1 && g[0] + dr >= 0) {
+        ensure(M, g[g.length - 1] + dr + 1, c2 + 1);
+        if (g.every((i) => wireOnly(M.rows[i + dr][c2]))) {
+          for (const i of g) {
+            M.rows[i + dr][c2] = JSON.parse(JSON.stringify(M.rows[i][c1]));
+            if (!copy) M.rows[i][c1] = emptyCell();
+          }
+          return;
+        }
+      }
+    }
     ensure(M, r2 + 1, c2 + 1);
     const src = M.rows[r1][c1], dst = M.rows[r2][c2];
     const moved = JSON.parse(JSON.stringify(src));
@@ -404,7 +451,7 @@
   search.addEventListener('input', buildPalette);
   search.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
+    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) choose(b.dataset.item); search.blur(); }
   });
   // click: into the selected cell (then step right), or arm it for clicking cells; drag: drop on a cell
   let palDrag = null;
@@ -422,12 +469,12 @@
   list.addEventListener('pointerup', (e) => {
     if (!palDrag) return;
     const d = palDrag; palDrag = null; E.ghost = null;
-    if (!d.moved) { pick(d.k); return; }
+    if (!d.moved) { choose(d.k); return; }
     const h = overStage(e) && cellAt(e);
     if (h) { edit(() => place(d.k, h.r, h.c)); E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c }; renderProps(); }
     E.hover = null; draw();
   });
-  function pick(k) {
+  function choose(k) {
     const s = single();
     if (s && !E.arm) { put(k, s.r1, s.c1, true); return; }
     E.arm = E.arm === k ? null : k;
@@ -548,7 +595,7 @@
     }
     // the delete gutters left of the wires and above the steps
     E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
-    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : h, ['wire', 'step']);
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, ['wire', 'step']);
     // what is being dragged, under the pointer
     const dragKey = E.ghost && E.ghost.k, mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if (dragKey || mv) {
@@ -611,7 +658,8 @@
     if (!d) {
       const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : E.arm ? cellAt(e) : pick(e);
       svg.style.cursor = dz ? 'pointer' : '';
-      if (JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(dz) !== JSON.stringify(E.del)) { E.hover = h; E.del = dz; draw(); }
+      const nr = dz ? null : TD.gridDel.near(E.gut, sx, sy);
+      if (JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(nr) !== JSON.stringify(E.near)) { E.hover = h; E.del = dz; E.near = nr; draw(); }
       return;
     }
     if (d.mode === 'pan') { E.view.ox = d.ox + sx - d.sx; E.view.oy = d.oy + sy - d.sy; draw(); return; }
@@ -711,7 +759,7 @@
   });
   root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !e.target.closest('.qe-ctx')) closeMenu(); }, true);
   svg.addEventListener('wheel', closeMenu, { passive: true });
-  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.del)) { E.hover = null; E.del = null; draw(); } });
+  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.del || E.near)) { E.hover = null; E.del = null; E.near = null; draw(); } });
   // a click on a delete gutter: that wire or step goes, as one undo step
   function delLine(dz) {
     closeLabel(); E.del = null; E.hover = null; E.sel = null; svg.style.cursor = '';
@@ -720,7 +768,7 @@
   // double-click: a sized gate goes back to its fitted size; anything else opens its first field
   // double-click on a gate or another element with a label: edit the label in place
   // elements with a typeable label, and the name of its field in the panel
-  const LABEL = { gate: 'Label', phase: 'Angle', meter: 'Label', meterD: 'Label', measuretab: 'Label', measure: 'Label', lstick: 'Label', rstick: 'Label', push: 'Text', midstick: 'Label', qwbundle: 'Label' };
+  const LABEL = { gate: 'Label', phase: 'Angle', meter: 'Label', metercw: 'Label', inputD: 'Label', trash: 'Label', makeebit: 'Label', permute: 'Order', phantomgate: 'Width of', hphantomgate: 'Width of', meterD: 'Label', measuretab: 'Label', measure: 'Label', lstick: 'Label', rstick: 'Label', push: 'Text', midstick: 'Label', qwbundle: 'Label' };
   function onDouble(e) {
     const s = single(), h = pick(e);
     if (!s || !h || h.r !== s.r1 || h.c !== s.c1) return false;
@@ -760,6 +808,24 @@
   const field = (label, f, value, extra = '') => `<div class="row"><label>${label}</label><div class="ctl"><input type="text" data-f="${f}" value="${esc(value)}" spellcheck="false"${extra}></div></div>`;
   const dec = (label, f, value) => `<div class="row"><label>${label}</label><div class="ctl unit"><input type="number" data-f="${f}" value="${value || ''}" min="0" step="0.1" placeholder="auto"><span>cm</span></div></div>`;
   const num = (label, f, value, min = 1) => `<div class="row"><label>${label}</label><div class="ctl"><input type="number" data-f="${f}" value="${value}" min="${min}" step="1"></div></div>`;
+  // colours, as quantikz takes them: style={fill=…, draw=…} in the element's options
+  const FILLED = new Set(['gate', 'meter', 'metercw', 'meterD', 'inputD', 'measure', 'measuretab']);
+  const COLOURED = new Set([...FILLED, 'ctrl', 'octrl', 'control', 'ocontrol', 'targ', 'targX', 'swap', 'phase', 'ground', 'trash', 'permute', 'qwbundle']); // sticks, \push and \makeebit draw no colour
+  function styleOf(m) {
+    const o = Q.opts(m.o[0] || '');
+    return Q.opts(o.map.style || '').map;
+  }
+  function setStyle(m, key, val) {
+    const o = Q.opts(m.o[0] || ''), st = Q.opts(o.map.style || '');
+    let list = st.list.filter((e) => !new RegExp(`^${key}\\s*=`).test(e));
+    if (val) list.push(`${key}=${val}`);
+    const rest = o.list.filter((e) => !/^style\s*=/.test(e));
+    if (list.length) rest.push(`style={${list.join(',')}}`);
+    const head = rest.join(',');
+    m.o = head || m.o.length > 1 ? [head, ...m.o.slice(1)] : [];
+  }
+  // a colour field (the colour picker, written as an xcolor spec); Default leaves it to quantikz
+  const hueSel = (label, f, cur, fill) => `<div class="row"><label>${label}</label>${TD.texColor.field(`data-f="${f}"`, TD.texColor.unwrap(cur), { nullable: true, dfltSw: fill ? '' : TD.css(INK), title: label })}</div>`;
   function renderProps() {
     if (!E) return;
     const b = selBox();
@@ -776,6 +842,11 @@
       const label = LABEL[m.name];
       if (label) h += field(label, 'arg', m.plain ? m.a[0] : m.a[0] || '', MATH_LABEL.has(m.name) ? ' data-tx="math"' : ' data-tx="text"');
       if (SPANS.has(m.name)) h += num('Wires', 'span', spanOf(m));
+      if (COLOURED.has(m.name)) {
+        const st = styleOf(m);
+        if (FILLED.has(m.name)) h += hueSel('Fill', 'cfill', st.fill || '', true);
+        h += hueSel(FILLED.has(m.name) ? 'Line' : 'Colour', 'cdraw', st.draw || st.color || '', false);
+      }
       if (m.name === 'gate') { const z = gateSize(m); h += dec('Min width', 'gw', z.w) + (spanOf(m) > 1 ? '' : dec('Min height', 'gh', z.h)); }
       if (LINKS.has(m.name)) {
         const n = intArg(m.a[0]), opts = [`<option value="0"${n ? '' : ' selected'}>None</option>`];
@@ -785,8 +856,8 @@
     } else if (!cell.opaque && !cell.items.length) h += `<div class="help">Pick an element on the left, or type <kbd>H</kbd> <kbd>X</kbd> <kbd>Z</kbd> <kbd>C</kbd> <kbd>M</kbd>…</div>`;
     h += '</div>';
     if (!cell.opaque) cell.items.forEach((it, i) => {
-      if (it.name === 'slice') h += `<div class="sec"><div class="sec-title">Slice <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div>${field('Label', 'x' + i, it.a[0] || '', ' data-tx="text"')}</div>`;
-      else if (it.name === 'gategroup') { const d = groupDims(it); h += `<div class="sec"><div class="sec-title">Group <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div>${field('Label', 'x' + i, it.a[0] || '', ' data-tx="text"')}${num('Wires', 'gw' + i, d.wires)}${num('Steps', 'gs' + i, d.steps)}</div>`; }
+      if (it.name === 'slice') h += `<div class="sec"><div class="sec-title">Slice <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div>${field('Label', 'x' + i, it.a[0] || '', ' data-tx="text"')}${hueSel('Colour', 'cd' + i, styleOf(it).draw || styleOf(it).color || '', false)}</div>`;
+      else if (it.name === 'gategroup') { const d = groupDims(it), st = styleOf(it); h += `<div class="sec"><div class="sec-title">Group <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div>${field('Label', 'x' + i, it.a[0] || '', ' data-tx="text"')}${num('Wires', 'gw' + i, d.wires)}${num('Steps', 'gs' + i, d.steps)}${hueSel('Fill', 'cf' + i, st.fill || '', true)}${hueSel('Line', 'cd' + i, st.draw || st.color || '', false)}</div>`; }
       else if (it.name === 'setwiretype') {
         const t = (it.a[0] || 'q').trim();
         h += `<div class="sec"><div class="sec-title">Wire from here <button class="flat qe-x" data-qe="drop" data-i="${i}" title="Remove">×</button></div><div class="row"><div class="ctl seg-ctl">${[['q', 'Quantum'], ['c', 'Classical'], ['n', 'None']].map(([v, n]) => `<button data-qe="wt" data-i="${i}" data-v="${v}" class="${t === v ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>`;
@@ -808,11 +879,20 @@
       else if (f === 'gw' || f === 'gh') { const z = gateSize(m), v = Math.max(0, parseFloat(t.value) || 0); setGateSize(m, f === 'gw' ? v : z.w, f === 'gh' ? v : z.h); cell.dirty = true; }
       else if (f === 'span') { setSpan(m, Math.max(1, intArg(t.value) || 1)); cell.dirty = true; clearUnder(s.r1, s.c1); }
       else if (f === 'link') { const n = intArg(t.value); m.a[0] = n ? String(n) : ''; cell.dirty = true; }
+      else if (f === 'cfill' || f === 'cdraw') { if (f === 'cdraw') setStyle(m, 'color', ''); setStyle(m, f === 'cfill' ? 'fill' : 'draw', TD.texColor.wrap(t.value)); cell.dirty = true; }
+      else if (/^c[fd]\d+$/.test(f)) {
+        // a group or slice's colour; a filled group goes behind the circuit (background), or its fill hides the gates
+        const it = cell.items[+f.slice(2)];
+        if (f[1] === 'd') setStyle(it, 'color', '');
+        setStyle(it, f[1] === 'f' ? 'fill' : 'draw', TD.texColor.wrap(t.value));
+        if (f[1] === 'f' && t.value) { const o = Q.opts(it.o[0] || ''); if (!o.list.includes('background')) it.o = [[...o.list, 'background'].join(','), ...it.o.slice(1)]; }
+        cell.dirty = true;
+      }
       else if (/^x\d+$/.test(f)) { cell.items[+f.slice(1)].a[0] = t.value; cell.dirty = true; }
       else if (/^g[ws]\d+$/.test(f)) { const it = cell.items[+f.slice(2)], d = groupDims(it), v = Math.max(1, intArg(t.value) || 1); setGroupDims(it, f[1] === 'w' ? v : d.wires, f[1] === 's' ? v : d.steps); cell.dirty = true; }
     }
     draw();
-    if (f === 'link') { commit(); begin(); }
+    if (f === 'link' || f === 'cfill' || f === 'cdraw' || /^c[fd]\d+$/.test(f)) { commit(); begin(); }
   });
   // the panel follows each keystroke: the other fields show what this one changed (TD.morph keeps this one as typed)
   props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });

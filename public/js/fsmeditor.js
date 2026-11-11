@@ -654,13 +654,24 @@
   const field = (label, f, value, extra = '') => row(label, `<div class="ctl"><input type="text" data-f="${f}" value="${esc(value)}" spellcheck="false"${extra}></div>`);
   const numField = (label, f, value) => row(label, `<div class="ctl unit"><input type="number" data-f="${f}" value="${value == null ? '' : F.num(value)}" step="0.25"><span>cm</span></div>`);
   const seg = (f, cur, opts, off) => `<div class="ctl seg-ctl">${opts.map(([v, n, t]) => `<button data-fs="${f}" data-v="${esc(String(v))}" class="${!off && String(cur) === String(v) ? 'on' : ''}"${t ? ` title="${esc(t)}"` : ''}${off ? ' disabled' : ''}>${n}</button>`).join('')}</div>`;
+  // colour options get a picker each; the rest stay in Options
+  const COLK = { sfill: 'fill', sdraw: 'draw', stext: 'text', ecol: 'color', etext: 'text' };
+  const isCol = (keys) => (it) => { const { k, v } = kv(it); return v != null && keys.includes(k); };
+  const isSCol = isCol(['fill', 'draw', 'text']), isECol = isCol(['color', 'text']);
+  const getOpt = (o, k) => { const it = o.find((x) => kv(x).k === k && kv(x).v != null); return it ? F.unbrace(kv(it).v) : ''; };
+  function setOpt(o, k, v) {
+    const i = o.findIndex((x) => kv(x).k === k && kv(x).v != null), it = v ? `${k}=${TD.texColor.wrap(v)}` : null, r = o.slice();
+    if (i < 0) { if (it) r.push(it); } else if (it) r[i] = it; else r.splice(i, 1);
+    return r;
+  }
+  const colorRow = (label, f, v, o) => row(label, TD.texColor.field(`data-f="${f}"`, v, { nullable: true, title: label, ...o }));
   function renderProps() {
     if (!E) return;
     const M = E.M, s = selS(), e = selE();
     if (s) {
       const L = lay(), n = L.nodes.get(s.name), f = flags(s);
       const x = s.x != null ? s.x : n ? n.x / PX : null, y = s.y != null ? s.y : n ? -n.y / PX : null;
-      const rest = s.o.filter((it) => !isFlag(it));
+      const rest = s.o.filter((it) => !isFlag(it) && !isSCol(it));
       const outs = M.edges.filter((ed) => ed.a === s.name).length;
       const kind = f.initial && f.accepting ? 'Initial, accepting state' : f.initial ? 'Initial state' : f.accepting ? 'Accepting state' : f.state ? 'State' : 'Node';
       const side = /\s/.test(f.side) ? '' : f.side;
@@ -673,19 +684,24 @@
         ${row('Accepting', seg('acc', f.accepting ? 1 : 0, [[0, 'No'], [1, 'Yes', 'accepting: drawn with a double line']]))}
         ${numField('x', 'x', x)}${numField('y', 'y', y)}
         ${s.x == null ? `<div class="help">${s.rel ? `Placed ${esc(s.rel.dir)} of ${esc(s.rel.of)}. Moving it writes its position.` : 'No position in the code: moving it writes one.'}</div>` : ''}
-        ${field('Options', 'sopts', rest.join(', '), ' class="mono" placeholder="e.g. fill=blue!10"')}
+        ${colorRow('Fill', 'sfill', getOpt(s.o, 'fill'), { dflt: 'None' })}
+        ${colorRow('Line', 'sdraw', getOpt(s.o, 'draw'), { dfltSw: TD.css('#000000') })}
+        ${colorRow('Text', 'stext', getOpt(s.o, 'text'), { dfltSw: TD.css('#000000') })}
+        ${field('Options', 'sopts', rest.join(', '), ' class="mono" placeholder="e.g. thick"')}
         <div class="row"><button class="danger" data-fe="sdel">Delete State</button></div></div>`);
       return;
     }
     if (e) {
       const b = bendOf(e), side = sideOf(e), lp = e.loop ? loopOf(e) : '';
-      const rest = e.o.filter((it) => !isBend(it) && !isLoop(it) && !isSwap(it));
+      const rest = e.o.filter((it) => !isBend(it) && !isLoop(it) && !isSwap(it) && !isECol(it));
       TD.morph(props, `<div class="sec"><div class="sec-title">${e.loop ? 'Loop' : 'Transition'} <small>${e.loop ? `at ${esc(e.a)}` : `${esc(e.a)} → ${esc(e.b)}`}</small></div>
         ${field('Label', 'label', mathOf(e.t || ''), ' data-tx="math" placeholder="none"')}
         ${row('Label side', seg('side', side, [[1, 'Left', 'Left of the arrow’s direction'], [-1, 'Right', 'swap: right of the arrow’s direction']], !e.t))}
         ${e.loop ? row('Loop', seg('loop', lp, [['above', 'Above'], ['below', 'Below'], ['left', 'Left'], ['right', 'Right']]))
           : row('Bend', seg('bend', b.kind === 'custom' ? '' : b.kind, [['', 'Straight'], ['left', 'Left'], ['right', 'Right']]))}
         ${e.loop ? '' : row('Angle', `<div class="ctl unit"><input type="number" data-f="angle" value="${b.kind === 'left' || b.kind === 'right' ? F.num(b.a) : ''}" min="5" max="90" step="5"${b.kind === 'left' || b.kind === 'right' ? '' : ' disabled'}><span>°</span></div>`)}
+        ${colorRow('Colour', 'ecol', getOpt(e.o, 'color'), { dfltSw: TD.css('#000000') })}
+        ${colorRow('Label colour', 'etext', getOpt(e.o, 'text'), { dfltSw: TD.css('#000000'), dflt: 'Same' })}
         ${field('Options', 'eopts', rest.join(', '), ' class="mono" placeholder="e.g. dashed"')}
         <div class="row">${e.loop ? '' : '<button data-fe="rev">Reverse Direction</button>'}<button class="danger" data-fe="edel">${e.loop ? 'Delete Loop' : 'Delete Transition'}</button></div></div>`);
       return;
@@ -707,11 +723,13 @@
       else if (f === 'text') s.text = wrapMath(t.value);
       else if (f === 'itext') setInitText(s, t.value);
       else if (f === 'x' || f === 'y') { const n = parseFloat(t.value); if (!isFinite(n)) return; pin([s.name, ...dependents(s.name)]); s[f] = n; s.rel = null; }
-      else if (f === 'sopts') { s.o = s.o.filter(isFlag).concat(F.opts(t.value)); }
+      else if (f === 'sopts') { s.o = s.o.filter((it) => isFlag(it) || isSCol(it)).concat(F.opts(t.value)); }
+      else if (COLK[f]) s.o = setOpt(s.o, COLK[f], t.value);
     } else if (e) {
       if (f === 'label') setLabel(e, t.value);
       else if (f === 'angle') { const n = parseFloat(t.value); if (!isFinite(n)) return; setBend(e, bendOf(e).kind, n); }
-      else if (f === 'eopts') { const keep = e.o.filter((it) => isBend(it) || isLoop(it) || isSwap(it)); e.o = keep.concat(F.opts(t.value)); }
+      else if (f === 'eopts') { const keep = e.o.filter((it) => isBend(it) || isLoop(it) || isSwap(it) || isECol(it)); e.o = keep.concat(F.opts(t.value)); }
+      else if (COLK[f]) e.o = setOpt(e.o, COLK[f], t.value);
     } else return;
     E.M.dirty = true; draw();
   });

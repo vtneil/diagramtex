@@ -208,7 +208,10 @@
     else if (m) opts.push(`xy at={${L.place}}`);
     else if (rest && rest !== '-') opts.push(`xy at={${rest}}`);
     if (L.side === '|') opts.push('description');
-    return D.labelCode({ t: L.t, swap: L.side === '_', opts });
+    // ^{\textcolor{red}{f}}: the label's colour, as tikz-cd's text= (arrowXy writes it back as it was)
+    const sc = D.splitColor(L.t);
+    if (sc.spec) opts.push(D.colorItem(sc.spec, 'text'));
+    return D.labelCode({ t: sc.spec ? sc.body : L.t, swap: L.side === '_', opts });
   }
   function arrowItems(a) {
     const items = [];
@@ -230,7 +233,12 @@
       } else if (m.k === 'shift') {
         const v = m.v.trim(), neg = v[0] === '-';
         items.push(`${neg ? 'shift right' : 'shift left'}=${neg ? v.slice(1) : v}`);
-      } else if (m.k === 'raw') items.push(`xy={${m.raw}}`);
+      } else if (m.k === 'raw') {
+        // @[red] (xy's color option): the arrow's colour; a spec not known here stays xy's own part
+        const c = /^@\[([\s\S]*)\]$/.exec(m.raw);
+        if (c && TD.tikzColor && TD.tikzColor(c[1])) items.push(D.colorItem(c[1].trim(), 'draw'));
+        else items.push(`xy={${m.raw}}`);
+      }
     }
     if (a.turns) items.push(`xy turns={${a.turnsRaw}}`);
     if (a.target) items.push(`xy target={${a.target}}`);
@@ -283,23 +291,30 @@
       else if (name === 'swap' || name === "'") every.swap = true;
       else if (name in POS) every.pos = POS[name];
       else if (name === 'pos') every.pos = parseFloat(arg);
+      else if (D.colorOpt(it)) {
+        // xy's @[colour] draws the line (and tips) only; a tikz-cd colour that also colours the labels wraps them
+        const o = D.colorOpt(it);
+        if (o.key !== 'text') mods.push(`@[${o.spec}]`);
+        if (o.key !== 'draw') every.lcol = o.spec;
+      }
       else if (TD.CD_HEADS[name] || LINE.test(name) || name === 'phantom') styleIt.push(it);
     }
     let style = every.raw || '';
     if (!style && styleIt.length) { const sp = specOf(styleIt); if (sp !== '->') style = `@{${sp}}`; }
     const head = `\\ar${style}${curve ? `@/${curve}${amt}/` : ''}${mods.join('')}${turns ? ` ${turns} ` : ''}${target || `[${a.dirs}]`}`;
     const lab = labs.map((L) => {
-      let side = L.swap !== !!every.swap ? '_' : '^', place = '', pos = every.pos;
+      let side = L.swap !== !!every.swap ? '_' : '^', place = '', pos = every.pos, lcol = every.lcol || null;
       for (const o of L.opts) {
-        const { name, arg } = Z.styleOf(o);
-        if (name === 'description') side = '|';
+        const { name, arg } = Z.styleOf(o), co = D.colorOpt(o);
+        if (co) { if (co.key !== 'draw') lcol = co.spec; }
+        else if (name === 'description') side = '|';
         else if (name === 'xy at') place = unbrace(arg);
         else if (name in POS) pos = POS[name];
         else if (name === 'pos') pos = parseFloat(arg);
       }
       if (every.desc) side = '|';
       if (!place && pos != null && isFinite(pos) && pos !== 0.5) place = pos === 0 ? '<' : pos === 1 ? '>' : `<>(${f(pos).replace(/^0\./, '.')})`;
-      return `${side}${place}{${L.t}}`;
+      return `${side}${place}{${D.joinColor(lcol, L.t)}}`;
     }).join('');
     return head + lab;
   }
@@ -701,7 +716,14 @@
     })));
     const rows = outCells.map((row) => row.map(({ cl, arrows }) => {
       let t = cl.t;
-      if (cl.node != null) { const o = nodeToObj(cl.node, warn); if (o) t = `${o}{${cl.t}}`; }
+      if (cl.node != null) {
+        // |[red]| colours the object: \textcolor{red}{…} in xymatrix
+        let col = null;
+        const rest = Z.opts(cl.node).list.filter((x) => { const c = D.colorOpt(x); if (c && c.key !== 'draw') { col = c.spec; return false; } return true; });
+        if (col && !D.splitColor(t).spec) t = D.joinColor(col, t);
+        const o = rest.length ? nodeToObj(rest.join(', '), warn) : null;
+        if (o) t = `${o}{${t}}`;
+      }
       return [t, ...arrows.filter(Boolean).map((a) => arrowXy(a))].filter(Boolean).join(' ');
     }));
     const code = `\\xymatrix${xs}${xe}{\n${rows.length && rows.some((p) => p.some(Boolean)) ? rowsText(rows, true).join('\n') + '\n' : ''}}`;
@@ -720,7 +742,7 @@
           const { name } = unq(x);
           if (name === 'at start') o.push('xy at={<}');
           else if (name === 'at end') o.push('xy at={>}');
-          else if (name === 'description' || name === 'pos' || name in POS) o.push(x);
+          else if (name === 'description' || name === 'pos' || name in POS || D.colorOpt(x)) o.push(x);
           else warn(`The label option "${x}" has no xymatrix counterpart`);
         }
         out.push(D.labelCode({ t: lab.t, swap: lab.swap, opts: o }));
@@ -736,7 +758,7 @@
       if (name === 'sharp corners' || name === 'execute at begin to') continue;
       if (name === 'draw' && /^none$/.test(unbrace(arg))) { out.push('phantom'); continue; }
       if (name === 'shift left' || name === 'shift right') { out.push(arg == null ? `${name}=.56ex` : it); continue; }
-      if (TD.CD_HEADS[name] || LINE.test(name) || /^(phantom|description|swap|'|pos)$/.test(name) || name in POS) { out.push(it); continue; }
+      if (TD.CD_HEADS[name] || LINE.test(name) || /^(phantom|description|swap|'|pos)$/.test(name) || name in POS || D.colorOpt(it)) { out.push(it); continue; }
       warn(`The arrow option "${it}" has no xymatrix counterpart`);
     }
     if (bend && !toPath) {
@@ -863,6 +885,8 @@
     // xy draws its own picture: in a plain node, with the outer picture interrupted
     tikz(s, X) {
       X.pkgs.add('xy');
+      // a coloured arrow (\ar@[red]) needs xy's color option; \textcolor comes with xcolor, which TikZ loads
+      if ([...String(s.src).matchAll(/@\[([^\]]*)\]/g)].some((m) => TD.tikzColor && TD.tikzColor(m[1]))) X.pkgs.add('xy:color');
       // xymatrix's box holds only its entries (curves and labels may stick out), so centre the node on them
       const L = layout(s), b = L.bb, e = L.ebox || b;
       return `\\node at ${X.c(s.x + e.x - b.x + e.w / 2, s.y + e.y - b.y + e.h / 2)} {\\pgfinterruptpicture%\n$${fullCode(s.src)}$%\n\\endpgfinterruptpicture};`;

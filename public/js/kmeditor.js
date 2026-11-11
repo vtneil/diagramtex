@@ -434,7 +434,7 @@
 
   // right-click: the cell's values, and the group's delete
   const MI = { del: TRASH, check: '<path d="M4 10.5l4 4 8-9"/>' };
-  const mItem = (act, label, icon, key, danger) => `<button class="ctx-item${danger ? ' danger' : ''}" data-km="${act}">${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="qe-ic"></span>'}<span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act, label, icon, key, danger) => `<button class="ctx-item${danger ? ' danger' : ''}" data-km="${act}">${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="ic"></span>'}<span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
