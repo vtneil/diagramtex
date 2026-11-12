@@ -915,4 +915,12 @@
   };
   // the editor's dialect (cdeditor.js): its model stays tikz-cd code
   TD.xy = { toTikzcd, fromTikzcd, convert, switchType, unwrap, cell, toCd, fromCd, cellToCd, cellFromCd, arrowXy, layout, layoutCd, draw, fullCode, specItems, specOf, XY };
+  // Application integration belongs to the block, alongside its model and panel.
+  TD.blocks.register("xy", {
+    menu: { order: 1, label: "XyMatrix", title: "Commutative diagram, written for XyMatrix (the xy package)", icon: "<svg viewBox=\"0 0 32 24\"><text x=\"3\" y=\"8\" font-size=\"7\" font-style=\"italic\">X</text><text x=\"24\" y=\"8\" font-size=\"7\" font-style=\"italic\">Y</text><text x=\"13.6\" y=\"22\" font-size=\"7\" font-style=\"italic\">Z</text><path d=\"M9 6h12M7.5 10l5 7M24.5 10l-5 7\"/></svg>" },
+    nodeImport: { re: /\\xymatrix[^{]*\{[\s\S]*\}/, order: 8, place: (q, at) => { const L = TD.xy.layout(q), b = L.bb, e = L.ebox || b; q.x = at.x - (e.x - b.x + e.w / 2); q.y = at.y - (e.y - b.y + e.h / 2); } },
+    fixed: true,
+    geometry: [['x', 'x'], ['y', 'y']],
+    editor: { get: () => TD.cdEditor, alias: "xyOpen", available: () => !!TD.xy, options: () => TD.xy }
+  });
 })();

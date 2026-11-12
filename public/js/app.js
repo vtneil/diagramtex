@@ -31,7 +31,7 @@
   // block at a time; state.doc.shapes always points at that block's shapes.
   // Three kinds of file: 'classic' (diagram blocks + document view), 'page' (one free-form sheet) and
   // 'board' (a whiteboard: one diagram on an endless canvas, stored like a Classic file with one block).
-  const normKind = (k) => (k === 'page' || k === 'board' ? k : 'classic');
+  const normKind = TD.projectFiles.normKind;
   // ids for shapes that have none; older shapes brought up to date (XyMatrix → tikz-cd)
   function fixShape(sh) { if (!sh.id) sh.id = uid(); const t = TD.TYPES[sh.type]; if (t && t.upgrade) t.upgrade(sh); }
   function makeDoc(name, blocks, active, page, sheet, kind) {
@@ -391,31 +391,257 @@
     openDoc(id);
     return id;
   }
-  async function deleteDoc(id) {
-    const it = index().find((d) => d.id === id);
-    if (!(await TD.confirm(`Delete "${it ? it.name : 'this file'}"?`, 'It is removed from this browser and cannot be undone.', { ok: 'Delete', danger: true }))) return;
-    store.del(LS_DOC + id);
-    TD.files.forget(id);
-    const idx = index().filter((d) => d.id !== id);
+  // Deleting moves a file to the Recycle Bin: it leaves the list but keeps its data, so it can be put back.
+  // Whatever has been in the bin for 30 days is removed for good the next time the app starts or the bin opens.
+  const LS_BIN = 'diagramtex.bin', BIN_DAYS = 30, DAY = 864e5;
+  const bin = () => store.get(LS_BIN, []);
+  function purgeBin() {
+    const now = Date.now(), keep = [];
+    for (const x of bin()) {
+      if (now - x.deleted < BIN_DAYS * DAY) keep.push(x);
+      else { store.del(LS_DOC + x.id); TD.files.forget(x.id); }
+    }
+    if (keep.length !== bin().length) store.set(LS_BIN, keep);
+    return keep;
+  }
+  // take files out of the list into the bin; `folder` groups the files of a deleted folder
+  function binDocs(ids, folder) {
+    if (ids.includes(state.docId)) saveNow();
+    const all = index(), out = all.filter((d) => ids.includes(d.id)), when = Date.now(), batch = folder ? uid() : null;
+    store.set(LS_BIN, [...bin(), ...out.map((d) => ({ id: d.id, name: d.name, kind: d.kind || 'classic', deleted: when, ...(folder ? { folder, batch } : {}) }))]);
+    const idx = all.filter((d) => !ids.includes(d.id));
     store.set(LS_INDEX, idx);
-    if (id === state.docId) {
+    if (ids.includes(state.docId)) {
       const kind = state.doc.kind;
       state.docId = null;
       const same = idx.filter((d) => (d.kind || 'classic') === kind);
       if (same.length) openDoc(same[same.length - 1].id); else newDoc(null, null, null, null, null, kind);
     }
+    renderDocList(); renderBinRow();
+  }
+  function deleteDoc(id) {
+    const it = docEntry(id);
+    if (!it) return;
+    binDocs([id]);
+    showHint(`Moved "${leafOf(it.name)}" to the Recycle Bin`, 1600);
+  }
+  // A folder goes to the bin with everything in it (files of the kind on show, and the folders inside).
+  async function deleteFolder(path) {
+    const kind = state.doc.kind, pre = path + '/';
+    const ids = index().filter((d) => (d.kind || 'classic') === kind && pathOf(d.name).join('/').startsWith(pre)).map((d) => d.id);
+    if (!ids.length) return;
+    if (!(await TD.confirm(`Delete the folder "${leafOf(path)}"?`, `${ids.length === 1 ? 'The file' : `All ${ids.length} files`} in it ${ids.length === 1 ? 'goes' : 'go'} to the Recycle Bin, where you can restore ${ids.length === 1 ? 'it' : 'them'} for ${BIN_DAYS} days.`, { ok: 'Delete Folder', danger: true }))) return;
+    binDocs(ids, path);
+    for (const k of [...folded]) if (k === foldKey(path) || k.startsWith(foldKey(pre))) folded.delete(k);
+    store.set(LS_FOLDED, [...folded]);
+    showHint(`Moved "${leafOf(path)}" to the Recycle Bin`, 1600);
+  }
+  // Put files back under their old names (a name taken since gets "copy"); the first one opens.
+  function restoreFromBin(ids) {
+    const items = bin().filter((x) => ids.includes(x.id) && store.get(LS_DOC + x.id, null));
+    if (!items.length) return;
+    const idx = index();
+    for (const x of items) {
+      const name = idx.some((d) => d.name === x.name) ? copyName(x.name) : x.name;
+      if (name !== x.name) { const d = store.get(LS_DOC + x.id, null); store.set(LS_DOC + x.id, { ...d, name }); }
+      idx.push({ id: x.id, name, kind: x.kind, updated: Date.now() });
+      store.set(LS_INDEX, idx);
+    }
+    store.set(LS_BIN, bin().filter((x) => !ids.includes(x.id)));
+    openDoc(items[0].id);
+    renderBinRow();
+    showHint(items.length === 1 ? `Restored "${leafOf(items[0].name)}"` : `Restored ${items.length} files`, 1600);
+  }
+  function eraseFromBin(ids) {
+    for (const id of ids) { store.del(LS_DOC + id); TD.files.forget(id); }
+    store.set(LS_BIN, bin().filter((x) => !ids.includes(x.id)));
+    renderBinRow();
+  }
+  function renderBinRow() {
+    const b = $('#binRow');
+    if (!b) return;
+    const n = bin().length;
+    b.querySelector('.bin-n').textContent = n ? n : '';
+    b.classList.toggle('full', n > 0);
+  }
+  const ago = (t) => { const d = Math.floor((Date.now() - t) / DAY); return d < 1 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
+  const left = (t) => { const d = Math.max(0, Math.ceil((t + BIN_DAYS * DAY - Date.now()) / DAY)); return d <= 1 ? 'removed within a day' : `removed in ${d} days`; };
+  // The bin: one row per file, or per folder deleted as a whole (restored or removed together).
+  function openBin() {
+    if ($('#binDlg')) return;
+    const prev = document.activeElement;
+    const root = document.createElement('div');
+    root.className = 'td-dialog'; root.id = 'binDlg';
+    root.innerHTML = `<div class="tdd-box bin-box" role="dialog" aria-modal="true" aria-labelledby="binTitle">
+      <h2 id="binTitle">Recycle Bin</h2><p class="bin-sub">Deleted files and folders stay here for ${BIN_DAYS} days, then they are removed for good.</p>
+      <ul class="bin-list" role="list"></ul>
+      <div class="tdd-btns"><button type="button" class="bin-empty danger-text">Empty Bin…</button><span class="sp"></span><button type="button" class="primary bin-done">Done</button></div></div>`;
+    document.body.appendChild(root);
+    const list = root.querySelector('.bin-list');
+    const KIND_WORD = { page: 'Page', board: 'Whiteboard', classic: 'Classic' };
+    const draw = () => {
+      const items = purgeBin().slice().sort((a, b) => b.deleted - a.deleted), rows = [], seen = new Set();
+      for (const x of items) {
+        if (x.batch) {
+          if (seen.has(x.batch)) continue;
+          seen.add(x.batch);
+          const g = items.filter((y) => y.batch === x.batch);
+          rows.push({ ids: g.map((y) => y.id), ic: FOLDER_IC, name: leafOf(x.folder), detail: `${g.length} file${g.length === 1 ? '' : 's'} · ${KIND_WORD[x.kind]}${folderOf(x.folder) ? ' · in ' + folderOf(x.folder) : ''}`, t: x.deleted });
+        } else rows.push({ ids: [x.id], ic: KIND_IC[x.kind] || KIND_IC.classic, name: leafOf(x.name), detail: `${KIND_WORD[x.kind]}${folderOf(x.name) ? ' · in ' + folderOf(x.name) : ''}`, t: x.deleted });
+      }
+      list.innerHTML = rows.length ? rows.map((r) => `<li data-ids="${r.ids.join(',')}"><span class="bin-ic">${r.ic}</span><span class="bin-nm"><b>${esc(r.name)}</b><small>${esc(r.detail)} · deleted ${ago(r.t)}, ${left(r.t)}</small></span>
+        <button type="button" class="bin-restore">Restore</button><button type="button" class="icon flat bin-erase" title="Delete for good" aria-label="Delete ${esc(r.name)} for good"><svg viewBox="0 0 20 20">${IC.del}</svg></button></li>`).join('')
+        : '<li class="bin-none">The Recycle Bin is empty.</li>';
+      root.querySelector('.bin-empty').disabled = !rows.length;
+    };
+    const close = () => { root.remove(); if (prev && prev.isConnected && prev.focus) prev.focus({ preventScroll: true }); };
+    draw();
+    root.addEventListener('click', async (e) => {
+      const li = e.target.closest('li[data-ids]'), ids = li ? li.dataset.ids.split(',') : [];
+      if (e.target.closest('.bin-done')) close();
+      else if (e.target.closest('.bin-restore')) { close(); restoreFromBin(ids); }
+      else if (e.target.closest('.bin-erase')) {
+        const name = li.querySelector('b').textContent;
+        root.hidden = true;
+        const yes = await TD.confirm(`Delete "${name}" for good?`, ids.length > 1 ? `Its ${ids.length} files are removed from this browser. This can't be undone.` : "It is removed from this browser. This can't be undone.", { ok: 'Delete', danger: true });
+        root.hidden = false;
+        if (yes) { eraseFromBin(ids); draw(); }
+        (root.querySelector('.bin-restore') || root.querySelector('.bin-done')).focus();
+      } else if (e.target.closest('.bin-empty')) {
+        const n = bin().length;
+        root.hidden = true;
+        const yes = await TD.confirm('Empty the Recycle Bin?', `${n} file${n === 1 ? ' is' : 's are'} removed from this browser. This can't be undone.`, { ok: 'Empty Bin', danger: true });
+        root.hidden = false;
+        if (yes) { eraseFromBin(bin().map((x) => x.id)); draw(); }
+        root.querySelector('.bin-done').focus();
+      }
+    });
+    for (const t of ['pointerdown', 'mousedown']) root.addEventListener(t, (e) => { e.stopPropagation(); if (e.target === root) { e.preventDefault(); close(); } });
+    root.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'Tab') {
+        const f = [...root.querySelectorAll('button:not([disabled])')], i = f.indexOf(document.activeElement), n = f.length;
+        e.preventDefault(); f[(i + (e.shiftKey ? n - 1 : 1)) % n].focus();
+      }
+    });
+    requestAnimationFrame(() => (root.querySelector('.bin-restore') || root.querySelector('.bin-done')).focus());
+  }
+  // Folders are only a way of showing names: a file named "Physics/Lab 1" is listed as "Lab 1" inside a
+  // folder "Physics" (like a path in cloud storage). A folder exists while a file is in it; folded folders
+  // are remembered (an app preference).
+  const pathOf = (n) => String(n || '').split('/').map((s) => s.trim()).filter(Boolean);
+  const leafOf = (n) => { const p = pathOf(n); return p.length ? p[p.length - 1] : String(n || ''); };
+  const folderOf = (n) => pathOf(n).slice(0, -1).join('/');
+  const joinPath = (folder, leaf) => (folder ? folder + '/' : '') + leaf;
+  TD.leafName = leafOf;
+  const LS_FOLDED = 'diagramtex.folded';
+  let folded = new Set(store.get(LS_FOLDED, [])), listShows = null;
+  const foldKey = (path) => state.doc.kind + ':' + path;
+  function setFolded(path, on) {
+    if (on) folded.add(foldKey(path)); else folded.delete(foldKey(path));
+    store.set(LS_FOLDED, [...folded]);
     renderDocList();
   }
-  // The sidebar lists only files of the current kind.
+  const KIND_IC = {
+    page: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5h9v13h-9z" fill="none" stroke="currentColor"/><path d="M6 5h4M6 7.5h2.5" fill="none" stroke="currentColor"/></svg>',
+    board: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor"/><path d="M4 9.5c1.5-3 3-3 4 0s2.5 3 4 0" fill="none" stroke="currentColor"/></svg>',
+    classic: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5H10l3.5 3.5v9.5h-10zM10 1.5V5h3.5" fill="none" stroke="currentColor" stroke-linejoin="miter"/></svg>',
+  };
+  const FOLDER_IC = '<svg class="fic" viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 3.5h4.5l1.5 1.5h7v8h-13z" fill="none" stroke="currentColor" stroke-linejoin="round"/></svg>';
+  const CHEV_IC = '<svg class="chev" viewBox="0 0 16 16" width="12" height="12"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // The sidebar lists only files of the current kind: folders first (A to Z), then the files, in list order.
   function renderDocList() {
     const ul = $('#docList'), kind = state.doc.kind;
     $('#filesTitle').textContent = { page: 'Pages', board: 'Whiteboards', classic: 'Classic documents' }[kind];
     $('#btnNewDoc').title = { page: 'New page', board: 'New whiteboard', classic: 'New classic document' }[kind];
-    ul.innerHTML = index().filter((d) => (d.kind || 'classic') === kind).map((d) => `<li data-doc="${d.id}" class="${d.id === state.docId ? 'active' : ''}">
-      ${kind === 'page' ? '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5h9v13h-9z" fill="none" stroke="currentColor"/><path d="M6 5h4M6 7.5h2.5" fill="none" stroke="currentColor"/></svg>'
-        : kind === 'board' ? '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 3.5h13v9h-13z" fill="none" stroke="currentColor"/><path d="M4 9.5c1.5-3 3-3 4 0s2.5 3 4 0" fill="none" stroke="currentColor"/></svg>'
-        : '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5H10l3.5 3.5v9.5h-10zM10 1.5V5h3.5" fill="none" stroke="currentColor" stroke-linejoin="miter"/></svg>'}
-      <span class="nm">${esc(d.name)}</span><button class="del" data-del="${d.id}" title="Delete">×</button></li>`).join('');
+    const docs = index().filter((d) => (d.kind || 'classic') === kind);
+    // a file just opened is shown: the folders around it unfold
+    if (state.docId && listShows !== state.docId) {
+      listShows = state.docId;
+      const cur = docs.find((d) => d.id === state.docId), p = cur ? pathOf(cur.name).slice(0, -1) : [];
+      let changed = false;
+      for (let i = 1; i <= p.length; i++) { const k = foldKey(p.slice(0, i).join('/')); if (folded.delete(k)) changed = true; }
+      if (changed) store.set(LS_FOLDED, [...folded]);
+    }
+    const root = { dirs: new Map(), files: [] };
+    for (const d of docs) {
+      const p = pathOf(d.name);
+      let node = root;
+      for (const seg of p.slice(0, -1)) { if (!node.dirs.has(seg)) node.dirs.set(seg, { dirs: new Map(), files: [] }); node = node.dirs.get(seg); }
+      node.files.push(d);
+    }
+    const count = (n) => n.files.length + [...n.dirs.values()].reduce((a, c) => a + count(c), 0);
+    const holds = (n) => n.files.some((d) => d.id === state.docId) || [...n.dirs.values()].some(holds);
+    const out = [];
+    const walk = (node, path, depth) => {
+      for (const [name, sub] of [...node.dirs].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' }))) {
+        const fp = joinPath(path, name), shut = folded.has(foldKey(fp));
+        out.push(`<li class="folder${shut ? ' shut' : ''}${shut && holds(sub) ? ' has-active' : ''}" data-folder="${esc(fp)}" style="--depth:${depth}" aria-expanded="${!shut}" title="${esc(fp)} (${count(sub)} file${count(sub) === 1 ? '' : 's'})">${CHEV_IC}${FOLDER_IC}<span class="nm">${esc(name)}</span><button class="del" data-delfolder="${esc(fp)}" title="Delete folder" aria-label="Delete folder ${esc(name)}">×</button></li>`);
+        if (!shut) walk(sub, fp, depth + 1);
+      }
+      for (const d of node.files) {
+        out.push(`<li data-doc="${d.id}" class="${d.id === state.docId ? 'active' : ''}" style="--depth:${depth}" draggable="true">
+      ${KIND_IC[kind] || KIND_IC.classic}<span class="nm">${esc(leafOf(d.name))}</span><button class="del" data-del="${d.id}" title="Delete">×</button></li>`);
+      }
+    };
+    walk(root, '', 0);
+    ul.innerHTML = out.join('');
+  }
+  // Move a file into a folder ('' is the top level), keeping its own name; a name taken there gets "copy".
+  function moveToFolder(id, folder) {
+    const it = docEntry(id);
+    if (!it) return;
+    folder = pathOf(folder).join('/');
+    if (folderOf(it.name) === folder) return;
+    let name = joinPath(folder, leafOf(it.name));
+    const taken = new Set(index().filter((d) => d.id !== id).map((d) => d.name));
+    if (taken.has(name)) { let k = 1; const b = name; name = `${b} copy`; while (taken.has(name)) name = `${b} copy ${++k}`; }
+    renameDoc(id, name);
+    renderDocList();
+    showHint(folder ? `Moved "${leafOf(name)}" to ${folder}` : `Moved "${leafOf(name)}" out of its folder`, 1400);
+  }
+  // Rename a folder: every file of this kind inside it (and in folders inside it) changes its path.
+  function renameFolder(path, to) {
+    to = pathOf(to).join('/');
+    if (!to || to === path) return;
+    const kind = state.doc.kind, pre = path + '/';
+    const wasShut = folded.has(foldKey(path));
+    for (const d of index().filter((x) => (x.kind || 'classic') === kind && pathOf(x.name).join('/').startsWith(pre)))
+      renameDoc(d.id, to + '/' + pathOf(d.name).join('/').slice(pre.length));
+    for (const k of [...folded]) if (k === foldKey(path) || k.startsWith(foldKey(pre))) { folded.delete(k); folded.add(foldKey(to) + k.slice(foldKey(path).length)); }
+    if (wasShut) folded.add(foldKey(to));
+    store.set(LS_FOLDED, [...folded]);
+    renderDocList();
+  }
+  function renameFolderInList(path) {
+    const li = $(`#docList li[data-folder="${CSS.escape(path)}"]`), nm = li && li.querySelector('.nm');
+    if (!nm) return;
+    const parent = pathOf(path).slice(0, -1).join('/'), old = leafOf(path);
+    const inp = document.createElement('input');
+    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', 'Folder name'); inp.spellcheck = false;
+    nm.replaceWith(inp);
+    li.classList.add('renaming');
+    let done = false;
+    const finish = (keep) => {
+      if (done) return; done = true;
+      const v = inp.value.trim();
+      if (keep && v && v !== old) renameFolder(path, joinPath(parent, v)); else renderDocList();
+    };
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    inp.addEventListener('blur', () => finish(true));
+    inp.addEventListener('click', (e) => e.stopPropagation());
+    inp.focus(); inp.select();
+  }
+  async function newFolder(parent) {
+    const name = await TD.prompt('New Folder', '', { ok: 'Create', placeholder: 'Folder name' });
+    if (name == null || !pathOf(name).length) return;
+    const folder = joinPath(parent || '', pathOf(name).join('/'));
+    newDoc(joinPath(folder, NEW_NAME[state.doc.kind]), null, null, null, null, state.doc.kind);
   }
 
   // ---------------- view ----------------
@@ -1074,9 +1300,11 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|solid|prim3d|revolve|geo3d|geo2d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : (TD.blocks.get(t) || /^(plot|pie|solid|prim3d|revolve)/.test(t)) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
+
+  TD.blocks.renderMenu(document.querySelector('#fly-blocks .pop-grid'));
 
   // ---------------- tool flyouts (lines / shapes / misc / arrows / plots) ----------------
   const LINE_TOOLS = [
@@ -1104,7 +1332,7 @@
   function flyOf(t) {
     if (/^(solid|prim3d|revolve)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
-    if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig|geo2d|geo3d)$/.test(t)) return 'blocks';
+    if (TD.blocks.get(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
@@ -1363,8 +1591,8 @@
   // ---------------- rotate by dragging just outside a corner (like Photoshop) ----------------
   // the frame is the shape's own (rotated) box for one shape, else the selection's bounding box
   // blocks whose content never turns: rotating one alone does nothing, so it gets no rotate zone, hint or menu item
-  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'geo3d', 'geo2d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz']);
-  const rotatable = (sel = selected()) => sel.length > 1 || (sel.length === 1 && !FIXED.has(sel[0].type));
+  const fixedContent = (type) => !!(TD.blocks.get(type) || {}).fixed || ['plot', 'solid', 'prim3d', 'revolve', 'tikz'].includes(type);
+  const rotatable = (sel = selected()) => sel.length > 1 || (sel.length === 1 && !fixedContent(sel[0].type));
   function rotFrame() {
     const sel = selected();
     if (!sel.length || state.tool !== 'select' || !rotatable(sel)) return null;
@@ -1542,20 +1770,11 @@
         if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) { startEdit(hitId, 'text'); return; }
         if (s.type === 'line' || s.type === 'curve') { startEdit(hitId, 'label'); return; }
         if (BOXED.has(s.type) && (s.type !== 'poly' || s.closed)) { labelInside(s); return; }
-        if (s.type === 'qc') { state.sel = new Set([hitId]); openQuantum(hitId); return; }
-        if (s.type === 'cz') { state.sel = new Set([hitId]); render(); renderProps(); openCircuit(hitId); return; }
-        if (s.type === 'forest') { state.sel = new Set([hitId]); render(); renderProps(); openTree(hitId); return; }
-        if (s.type === 'zx') { state.sel = new Set([hitId]); render(); renderProps(); openZX(hitId); return; }
-        if (s.type === 'feynman') { state.sel = new Set([hitId]); render(); renderProps(); openFeyn(hitId); return; }
-        if (s.type === 'geo3d') { state.sel = new Set([hitId]); render(); renderProps(); openGeo3d(hitId); return; }
-        if (s.type === 'geo2d') { state.sel = new Set([hitId]); render(); renderProps(); openGeo2d(hitId); return; }
-        if (s.type === 'timing') { state.sel = new Set([hitId]); render(); renderProps(); openTiming(hitId); return; }
-        if (s.type === 'automata') { state.sel = new Set([hitId]); render(); renderProps(); openFSM(hitId); return; }
-        if (s.type === 'kmap') { state.sel = new Set([hitId]); render(); renderProps(); openKmap(hitId); return; }
-        if (s.type === 'bytefield') { state.sel = new Set([hitId]); render(); renderProps(); openBytefield(hitId); return; }
-        if (s.type === 'chemfig') { state.sel = new Set([hitId]); render(); renderProps(); openChem(hitId); return; }
-        if (s.type === 'cd') { state.sel = new Set([hitId]); render(); renderProps(); openCD(hitId); return; }
-        if (s.type === 'xy') { state.sel = new Set([hitId]); render(); renderProps(); openXY(hitId); return; }
+        if (TD.blocks.editable(s.type)) {
+          state.sel = new Set([hitId]);
+          if (TD.blocks.get(s.type).refreshOnDoubleClick !== false) { render(); renderProps(); }
+          openBlock(hitId); return;
+        }
       }
       // Groups select as one on the first click. A second click (without dragging) on a member of the selected
       // group selects that member alone; while inside a group, a click on another member selects just it.
@@ -1889,223 +2108,19 @@
     ed.style.height = 'auto';
     ed.style.height = Math.min(Math.max(ed.scrollHeight + 2, ed.classList.contains('para') ? 120 : 76), 260) + 'px';
   }
-  // Circuit blocks open their own editor (czeditor.js); Done writes the circuit back as one undo step
-  function openCircuit(id) {
-    finishEdit();
+  // All editor entry points share the same transaction and block-owned placement rules.
+  function openBlock(id) {
     const s = byId(id);
-    if (!s || !TD.czEditor) return;
-    TD.czEditor.open(s, (res) => {
+    if (!s || !TD.blocks.editable(s.type)) return false;
+    finishEdit();
+    return TD.blocks.open(s, (apply) => {
       const t = byId(id);
       if (!t) return;
-      begin(); t.items = res.items; t.raw = res.raw; commit();
+      begin(); apply(t); commit();
       render(); renderProps();
     });
   }
-  TD.czOpen = openCircuit;
-  // Quantum blocks too (qceditor.js): Done writes the quantikz code back as one undo step
-  function openQuantum(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.qcEditor) return;
-    TD.qcEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      begin(); t.src = res.src; commit();
-      render(); renderProps();
-    });
-  }
-  TD.qcOpen = openQuantum;
-  // Tree blocks too (fteditor.js): Done writes the forest code back as one undo step
-  function openTree(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.ftEditor) return;
-    TD.ftEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      begin(); t.src = res.src; commit();
-      render(); renderProps();
-    });
-  }
-  TD.ftOpen = openTree;
-  // ZX diagrams (zxeditor.js): Done writes the ZX code back as one undo step
-  function openZX(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.zxEditor) return;
-    TD.zxEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      begin(); t.src = res.src; commit();
-      render(); renderProps();
-    });
-  }
-  TD.zxOpen = openZX;
-  // Feynman diagrams (fyeditor.js): the same, for tikz-feynman code
-  function openFeyn(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.feynEditor) return;
-    TD.feynEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      // the drawing stays where it was: the block moves by as much as its bounds grew to the left or up
-      const was = TD.feyn.layout(t);
-      begin(); t.src = res.src;
-      const now = TD.feyn.layout(t);
-      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
-      commit();
-      render(); renderProps();
-    });
-  }
-  TD.feynOpen = openFeyn;
-  // 3D geometry (g3editor.js): the same, for tikz-3dplot code; the drawing stays where it was
-  function openGeo3d(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.geo3dEditor) return;
-    TD.geo3dEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      const was = TD.geo3d.layout(t.src);
-      begin(); t.src = res.src;
-      const now = TD.geo3d.layout(t.src);
-      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
-      commit();
-      render(); renderProps();
-    });
-  }
-  TD.geo3dOpen = openGeo3d;
-  // 2D geometry: the same editor, flat; the drawing stays where it was
-  function openGeo2d(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.geo3dEditor) return;
-    TD.geo3dEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      const was = TD.geo3d.layout(t.src, true);
-      begin(); t.src = res.src;
-      const now = TD.geo3d.layout(t.src, true);
-      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
-      commit();
-      render(); renderProps();
-    }, { flat: true });
-  }
-  TD.geo2dOpen = openGeo2d;
-  // timing diagrams (tmeditor.js): the same, for tikz-timing code
-  function openTiming(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.timingEditor) return;
-    TD.timingEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      const was = TD.timing.layout(t);
-      begin(); t.src = res.src;
-      const now = TD.timing.layout(t);
-      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
-      commit();
-      render(); renderProps();
-    });
-  }
-  TD.timingOpen = openTiming;
-  // state machines (fsmeditor.js): the same, for TikZ automata code
-  function openFSM(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.fsmEditor) return;
-    TD.fsmEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      const was = TD.fsm.layout(t);
-      begin(); t.src = res.src;
-      const now = TD.fsm.layout(t);
-      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
-      commit();
-      render(); renderProps();
-    });
-  }
-  TD.fsmOpen = openFSM;
-  // Karnaugh maps (kmeditor.js): the same, for karnaugh-map code
-  function openKmap(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.kmapEditor) return;
-    TD.kmapEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      // the map stays where it was: the block moves by as much as its bounds grew to the left or up
-      const was = TD.kmap.layout(t);
-      begin(); t.src = res.src;
-      const now = TD.kmap.layout(t);
-      t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y;
-      commit();
-      render(); renderProps();
-    });
-  }
-  TD.kmapOpen = openKmap;
-  // bit fields (bfeditor.js): the same, for bytefield code; the field's own box stays put
-  function openBytefield(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.bytefieldEditor) return;
-    TD.bytefieldEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      const was = TD.bytefield.layout(t);
-      begin(); t.src = res.src;
-      const now = TD.bytefield.layout(t);
-      t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y;
-      commit();
-      render(); renderProps();
-    });
-  }
-  TD.bytefieldOpen = openBytefield;
-  // chemistry (cfeditor.js): the same, for chemfig code
-  function openChem(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.chemEditor) return;
-    TD.chemEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      const was = TD.chem.layout(t);
-      begin(); t.src = res.src;
-      const now = TD.chem.layout(t);
-      if (!was.empty && !now.empty) { t.x += now.bb.x - was.bb.x; t.y += now.bb.y - was.bb.y; }
-      commit();
-      render(); renderProps();
-    });
-  }
-  TD.chemOpen = openChem;
-  // commutative diagrams (cdeditor.js): the same, for tikz-cd code
-  function openCD(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.cdEditor) return;
-    if (s.arrows && TD.TYPES.cd.upgrade) TD.TYPES.cd.upgrade(s);
-    TD.cdEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      begin(); t.src = res.src; commit();
-      render(); renderProps();
-    });
-  }
-  TD.cdOpen = openCD;
-  // XyMatrix (xy.js): the same editor, reading and writing xymatrix code
-  function openXY(id) {
-    finishEdit();
-    const s = byId(id);
-    if (!s || !TD.cdEditor || !TD.xy) return;
-    TD.cdEditor.open(s, (res) => {
-      const t = byId(id);
-      if (!t) return;
-      begin(); t.src = res.src; commit();
-      render(); renderProps();
-    }, TD.xy);
-  }
-  TD.xyOpen = openXY;
+  TD.blocks.bindOpen(openBlock); // retains the public aliases used by existing panels
   function startEdit(id, field, init) {
     const s = byId(id);
     if (!s) return;
@@ -2280,25 +2295,12 @@
     prim3d: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     revolve: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     pie: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
-    cd: [['x', 'x'], ['y', 'y']],
-    xy: [['x', 'x'], ['y', 'y']],
-    qc: [['x', 'x'], ['y', 'y']],
-    forest: [['x', 'x'], ['y', 'y']],
-    zx: [['x', 'x'], ['y', 'y']],
-    feynman: [['x', 'x'], ['y', 'y']],
-    geo3d: [['x', 'x'], ['y', 'y']],
-    geo2d: [['x', 'x'], ['y', 'y']],
-    timing: [['x', 'x'], ['y', 'y']],
-    automata: [['x', 'x'], ['y', 'y']],
-    kmap: [['x', 'x'], ['y', 'y']],
-    bytefield: [['x', 'x'], ['y', 'y']],
-    chemfig: [['x', 'x'], ['y', 'y']],
-    bloch: [['x', 'x'], ['y', 'y']],
     tikz: [['x', 'x'], ['y', 'y']],
     coord: [['x', 'x'], ['y', 'y']],
     sym: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     image: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
   };
+  for (const [type, block] of TD.blocks.entries()) if (block.geometry) GEOM[type] = block.geometry;
   TD.GEOM = GEOM;
   const toUnit = (v, k) => (k === 'deg' ? r2(v) : k === 'y' ? r2(-v / PX) : r2(v / PX));
   function propsEl0() { return $('#props'); }
@@ -3395,7 +3397,7 @@
         Object.assign(s, { x: Math.min(ax, bx), y: Math.min(ay, by), w: Math.abs(bx - ax), h: Math.abs(by - ay) });
         continue;
       }
-      if (FIXED.has(s.type)) {
+      if (fixedContent(s.type)) {
         // content is not rotated: move the object so its centre follows the transform
         const bb = TD.bbox(s), [nx, ny] = P(bb.x + bb.w / 2, bb.y + bb.h / 2);
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
@@ -3507,15 +3509,18 @@
     exp: '<path d="M10 12V3M6.5 6.5L10 3l3.5 3.5"/><path d="M3.5 10v6.5h13V10"/>',
     rename: '<path d="M3 6h9M3 10h6M3 14h5"/><path d="M11 17l.6-2.6L16 10l2 2-4.4 4.4z"/>',
     newdoc: '<path d="M5 2.5h6.5l3.5 3.5v11.5H5z"/><path d="M10 8.5v6M7 11.5h6"/>',
+    folder: '<path d="M2.5 4.5h5l1.5 2h8.5v9.5h-15z"/>',
+    fold: '<path d="M6 8l4 4 4-4"/>',
+    link: '<path d="M8.5 11.5l3-3"/><path d="M7 9.5l-2 2a2.5 2.5 0 003.5 3.5l2-2M13 10.5l2-2A2.5 2.5 0 0011.5 5l-2 2"/>',
     eye: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/>',
     eyeoff: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><path d="M3.5 16.5l13-13"/>',
     lock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 016 0V9"/>',
     unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 015.8-1.1"/>',
   };
   const icon = (n) => (n ? `<svg viewBox="0 0 20 20">${IC[n]}</svg>` : '<span class="ic"></span>');
-  function item(label, act, { ic, key, dis, sub } = {}) {
+  function item(label, act, { ic, key, dis, sub, danger } = {}) {
     if (sub) return `<div class="ctx-item has-sub${dis ? ' dis' : ''}">${icon(ic)}<span class="lb">${label}</span><span class="arr">›</span><div class="ctx sub">${sub}</div></div>`;
-    return `<button class="ctx-item" data-ctx="${act}"${dis ? ' disabled' : ''}>${icon(ic)}<span class="lb">${label}</span>${key ? `<kbd>${kb(key)}</kbd>` : ''}</button>`;
+    return `<button class="ctx-item${danger ? ' danger' : ''}" data-ctx="${act}"${dis ? ' disabled' : ''}>${icon(ic)}<span class="lb">${label}</span>${key ? `<kbd>${kb(key)}</kbd>` : ''}</button>`;
   }
   const hr = '<hr>';
   // layer: { key, ids } when opened on a row of the Layers window; its Rename / Hide / Lock come first, and a
@@ -3576,14 +3581,77 @@
   const docEntry = (id) => index().find((d) => d.id === id);
   // project-file JSON for a stored file (the same format Save writes)
   // Project file: { app, version: 3, kind: 'page' | 'classic' | 'board', name, page, sheet | blocks }.
-  function projectJson(d) {
-    return JSON.stringify({ app: 'diagramtex', version: 3, kind: normKind(d.kind), name: d.name, page: d.page,
-      ...(d.kind === 'page' ? { sheet: d.sheet } : { blocks: d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }] }) }, null, 1);
-  }
+  const projectJson = TD.projectFiles.stringify;
   function docJson(id) {
     const d = docData(id);
     return d ? projectJson(d) : null;
   }
+  // ---------- share links ----------
+  // A small file can travel in a link: its project JSON, deflated and base64url-encoded, after "#share=".
+  // The part after "#" never leaves the browser (it isn't sent to the server), and opening the link adds a
+  // copy to the files of whoever opens it. Links longer than SHARE_MAX are refused: many chat apps, mail
+  // clients, proxies and firewalls cut or reject long URLs, so a larger file is shared as a file.
+  const SHARE_MAX = 8000, SHARE_KEY = 'share=';
+  const b64u = (bytes) => { let t = ''; for (let i = 0; i < bytes.length; i += 0x8000) t += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+  const unb64u = (s) => { const t = atob(s.replace(/-/g, '+').replace(/_/g, '/')); const b = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) b[i] = t.charCodeAt(i); return b; };
+  const viaStream = async (bytes, S) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new S('deflate-raw'))).arrayBuffer());
+  // "1." + deflated text, or "0." + the text as it is where the browser can't compress
+  async function packShare(text) {
+    const raw = new TextEncoder().encode(text);
+    if (typeof CompressionStream === 'function') { try { return '1.' + b64u(await viaStream(raw, CompressionStream)); } catch (e) { /* fall through */ } }
+    return '0.' + b64u(raw);
+  }
+  async function unpackShare(code) {
+    const m = /^([01])\.([\w-]+)$/.exec(code);
+    if (!m) throw new Error('the link is incomplete');
+    let bytes = unb64u(m[2]);
+    if (m[1] === '1') {
+      if (typeof DecompressionStream !== 'function') throw new Error('this browser cannot read compressed links');
+      bytes = await viaStream(bytes, DecompressionStream);
+    }
+    return new TextDecoder().decode(bytes);
+  }
+  const shareBase = () => location.origin + location.pathname;
+  async function shareLink(id) {
+    finishEdit(); commit();
+    const it = docEntry(id), json = docJson(id);
+    if (!it || !json) return;
+    // the link carries the file without its folder: the folder is how the sender files it
+    const p = JSON.parse(json); p.name = leafOf(p.name);
+    const url = shareBase() + '#' + SHARE_KEY + (await packShare(JSON.stringify(p)));
+    if (url.length > SHARE_MAX) {
+      TD.alert('Too large to share as a link', `"${leafOf(it.name)}" needs a link of ${Math.ceil(url.length / 1000)}k characters; links are kept under ${SHARE_MAX / 1000}k so browsers, chat apps and firewalls don't cut them off. Save it to a .diagramtex file and send the file instead.`);
+      return;
+    }
+    try { await navigator.clipboard.writeText(url); showHint(`Share link copied (${url.length.toLocaleString()} characters). Whoever opens it gets their own copy of "${leafOf(it.name)}".`, 3200); }
+    catch (e) { TD.prompt('Share Link', url, { ok: 'Done', cancel: null }); }
+  }
+  // Open the file in a share link as a new file. The same link opened again opens the copy made the
+  // first time, if it is still here unchanged.
+  async function openShared() {
+    const h = location.hash.slice(1);
+    if (!h.startsWith(SHARE_KEY)) return false;
+    history.replaceState(null, '', location.pathname + location.search); // a reload doesn't add it again
+    let p;
+    try {
+      const text = await unpackShare(h.slice(SHARE_KEY.length));
+      p = parseProject(text, 'Shared');
+      if (!p) throw new Error('it holds no DiagramTeX file');
+    } catch (e) { TD.alert('Couldn\'t open the shared file', `This share link is damaged or cut short (${e.message}). Ask for the link again, or for the .diagramtex file.`); return true; }
+    const same = projectJson(p);
+    for (const x of index()) {
+      if (leafOf(x.name) !== p.name) continue;
+      const d = store.get(LS_DOC + x.id, null);
+      let q = null; try { q = d && parseProject(projectJson({ ...d, name: p.name })); } catch (e) { q = null; }
+      if (q && projectJson(q) === same) { openDoc(x.id); showHint(`"${p.name}" is already here`, 1600); return true; }
+    }
+    const name = index().some((x) => x.name === p.name) ? copyName(p.name) : p.name;
+    if (p.kind === 'page') newDoc(name, null, null, null, p.page, 'page', p.sheet);
+    else { newDoc(name, null, null, p.blocks, p.page, p.kind); zoomFit(); }
+    showHint(`Opened the shared file "${name}". It is now saved in this browser.`, 3000);
+    return true;
+  }
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#' + SHARE_KEY)) { setQuick(false); openShared(); } });
   // store a copy of a file under a new name, listed right after `afterId`; returns the new id
   function storeCopy(d, name, afterId) {
     const id = uid(), kind = normKind(d.kind);
@@ -3597,20 +3665,7 @@
   // A project file's contents: { kind, name, page, sheet } or { kind, name, page, blocks }; false if the text
   // isn't JSON, and an error if it is JSON but not a DiagramTeX file.
   function parseProject(text, fallbackName) {
-    let d; try { d = JSON.parse(text); } catch { return false; }
-    if (!d || typeof d !== 'object') return false;
-    const name = d.name || fallbackName || 'Untitled';
-    retiredHint(dropRetiredDoc(d));
-    if (d.kind === 'page') {
-      if (!d.sheet || !validShapes(d.sheet.shapes)) throw new Error('not a DiagramTeX page file');
-      return { kind: 'page', name, page: d.page, sheet: { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes, ...(d.sheet.vars ? { vars: d.sheet.vars } : {}) } };
-    }
-    let blocks = d.blocks || (Array.isArray(d.shapes) ? [{ type: 'diagram', shapes: d.shapes }] : null);
-    if (!blocks || blocks.some((b) => b.type === 'diagram' && !validShapes(b.shapes))) throw new Error('not a DiagramTeX file');
-    const kind = d.kind === 'board' ? 'board' : 'classic';
-    // a whiteboard holds one diagram: imported blocks are merged onto it
-    if (kind === 'board') blocks = [{ type: 'diagram', shapes: blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes || []) }];
-    return { kind, name, page: d.page, blocks };
+    return TD.projectFiles.parse(text, fallbackName, retiredHint);
   }
   // Open a project file's text (from a file or the clipboard) as a new file. Returns false if it isn't one.
   function openProjectText(text, fallbackName, unique) {
@@ -3704,10 +3759,12 @@
     if (it) {
       h = (id !== state.docId ? item('Open', d('open'), { ic: 'open' }) + hr : '') +
         item('Rename…', d('rename'), { ic: 'rename' }) +
+        item('Move to Folder…', d('move'), { ic: 'folder' }) +
         item('Duplicate', d('dup'), { ic: 'dup' }) +
         item('Save a Copy…', d('saveas'), { ic: 'dup' }) + hr +
         item('Copy', d('copy'), { ic: 'copy' }) +
-        item('Paste', d('paste'), { ic: 'paste' }) + hr +
+        item('Paste', d('paste'), { ic: 'paste' }) +
+        item('Copy Share Link', d('share'), { ic: 'link' }) + hr +
         (!TD.files.can ? item('Download (.diagramtex)', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })
           : (lf ? item(`Save to ${lf.name}`, d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+S' : '' })
             : item('Save to File…', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })) +
@@ -3719,15 +3776,28 @@
           item('Web Page (.html)', d('html')) +
           item('Image (PNG, SVG, PDF)…', d('image')) + hr +
           item('Print or Save as PDF…', d('print'), { key: id === state.docId ? 'Ctrl+P' : '' }) }) + hr +
-        item('Delete', d('del'), { ic: 'del' });
+        item('Move to Recycle Bin', d('del'), { ic: 'del' });
     } else {
       h = item(page ? 'New Page' : 'New Document', d('new'), { ic: 'newdoc' }) +
+        item('New Folder…', d('newfolder'), { ic: 'folder' }) +
         item('Open File…', d('openfile'), { ic: 'open', key: 'Ctrl+O' }) + hr +
         item('Paste', d('paste'), { ic: 'paste' }) + hr +
-        item('Export All Files…', d('exportall'), { ic: 'save' });
+        item('Export All Files…', d('exportall'), { ic: 'save' }) +
+        item('Recycle Bin…', d('bin'), { ic: 'del' });
     }
     ctx.innerHTML = h;
     ctx.dataset.doc = id || '';
+    placeCtx(x, y);
+  }
+  function openFolderCtx(path, x, y) {
+    const d = (k) => 'doc:' + k, shut = folded.has(foldKey(path));
+    ctx.innerHTML = item(state.doc.kind === 'page' ? 'New Page Here' : state.doc.kind === 'board' ? 'New Whiteboard Here' : 'New Document Here', d('newin'), { ic: 'newdoc' }) +
+      item('New Folder Inside…', d('newfolderin'), { ic: 'folder' }) + hr +
+      item('Rename Folder…', d('renamefolder'), { ic: 'rename' }) +
+      item(shut ? 'Unfold' : 'Fold', d('fold'), { ic: 'fold' }) + hr +
+      item('Delete Folder…', d('delfolder'), { ic: 'del', danger: true });
+    ctx.dataset.doc = '';
+    ctx.dataset.folder = path;
     placeCtx(x, y);
   }
   // Rename in place: the row's name becomes a field. Enter or leaving keeps it, Esc cancels; the file stays closed.
@@ -3744,7 +3814,7 @@
       if (id !== state.docId) openDoc(id);
       const n = $('#docName'); n.focus(); n.select(); return;
     }
-    const old = docEntry(id)?.name || nm.textContent;
+    const full = docEntry(id)?.name || nm.textContent, old = leafOf(full);
     const inp = document.createElement('input');
     inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', 'File name'); inp.spellcheck = false;
     nm.replaceWith(inp);
@@ -3753,7 +3823,7 @@
     const finish = (keep) => {
       if (done) return; done = true;
       const v = inp.value.trim();
-      if (keep && v && v !== old) renameDoc(id, v);
+      if (keep && v && v !== old) renameDoc(id, joinPath(folderOf(full), v)); // a "/" typed here makes a folder inside this one
       renderDocList();
     };
     inp.addEventListener('keydown', (e) => {
@@ -3771,6 +3841,19 @@
     switch (a) {
       case 'open': openFirst(); break;
       case 'new': newDoc(null, null, null, null, null, state.doc.kind); break;
+      case 'newfolder': newFolder(''); break;
+      case 'newin': newDoc(joinPath(ctx.dataset.folder, NEW_NAME[state.doc.kind]), null, null, null, null, state.doc.kind); break;
+      case 'newfolderin': newFolder(ctx.dataset.folder); break;
+      case 'renamefolder': renameFolderInList(ctx.dataset.folder); break;
+      case 'delfolder': deleteFolder(ctx.dataset.folder); break;
+      case 'bin': openBin(); break;
+      case 'fold': setFolded(ctx.dataset.folder, !folded.has(foldKey(ctx.dataset.folder))); break;
+      case 'move': {
+        if (!it) break;
+        TD.prompt('Move to Folder', folderOf(it.name), { ok: 'Move', placeholder: 'Folder, e.g. Physics/Labs (empty: top level)' }).then((f) => { if (f != null) moveToFolder(id, f); });
+        break;
+      }
+      case 'share': shareLink(id); break;
       case 'openfile': openFile(); break;
       case 'rename': renameInList(id); break;
       case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(`Duplicated as "${n}"`, 1200); } break; }
@@ -3807,6 +3890,8 @@
     e.preventDefault();
     if (editing) finishEdit();
     pop.hidden = true;
+    const fo = e.target.closest('[data-folder]');
+    if (fo) { openFolderCtx(fo.dataset.folder, e.clientX, e.clientY); return; }
     const li = e.target.closest('[data-doc]');
     openDocCtx(li ? li.dataset.doc : null, e.clientX, e.clientY);
   });
@@ -3838,7 +3923,7 @@
     closeCtx();
     const [a, arg] = b.dataset.ctx.split(':');
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'edit') { const s = selected()[0]; if (s.type === 'cz') { openCircuit(s.id); return; } if (s.type === 'qc') { openQuantum(s.id); return; } if (s.type === 'forest') { openTree(s.id); return; } if (s.type === 'zx') { openZX(s.id); return; } if (s.type === 'feynman') { openFeyn(s.id); return; } if (s.type === 'geo3d') { openGeo3d(s.id); return; } if (s.type === 'geo2d') { openGeo2d(s.id); return; } if (s.type === 'timing') { openTiming(s.id); return; } if (s.type === 'automata') { openFSM(s.id); return; } if (s.type === 'kmap') { openKmap(s.id); return; } if (s.type === 'bytefield') { openBytefield(s.id); return; } if (s.type === 'chemfig') { openChem(s.id); return; } if (s.type === 'cd') { openCD(s.id); return; } if (s.type === 'xy') { openXY(s.id); return; } startEdit(s.id, s.type === 'text' ? 'text' : s.type === 'qc' ? 'src' : 'label'); }
+    if (a === 'edit') { const s = selected()[0]; if (!openBlock(s.id)) startEdit(s.id, s.type === 'text' ? 'text' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
     if (a === 'copytext') {
@@ -3923,7 +4008,7 @@
     if (e.key === ' ') { if (!spaceDown) { spaceDown = true; markTools(); } svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (s.type === 'qc') openQuantum(s.id); else if (s.type === 'cz') openCircuit(s.id); else if (s.type === 'forest') openTree(s.id); else if (s.type === 'zx') openZX(s.id); else if (s.type === 'feynman') openFeyn(s.id); else if (s.type === 'geo3d') openGeo3d(s.id); else if (s.type === 'geo2d') openGeo2d(s.id); else if (s.type === 'timing') openTiming(s.id); else if (s.type === 'automata') openFSM(s.id); else if (s.type === 'kmap') openKmap(s.id); else if (s.type === 'bytefield') openBytefield(s.id); else if (s.type === 'chemfig') openChem(s.id); else if (s.type === 'cd') openCD(s.id); else if (s.type === 'xy') openXY(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
+    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (TD.blocks.editable(s.type)) openBlock(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -4035,14 +4120,50 @@
   $('#docName').addEventListener('input', (e) => { state.doc.name = e.target.value || 'Untitled'; scheduleSave(); });
   $('#docName').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
   $('#btnNewDoc').onclick = () => newDoc(null, null, null, null, null, state.doc.kind);
+  $('#binRow').onclick = openBin;
   $('#docList').addEventListener('click', (e) => {
     const del = e.target.closest('[data-del]');
     if (del) { e.stopPropagation(); deleteDoc(del.dataset.del); return; }
+    const delF = e.target.closest('[data-delfolder]');
+    if (delF) { e.stopPropagation(); deleteFolder(delF.dataset.delfolder); return; }
+    const fo = e.target.closest('[data-folder]');
+    if (fo) { setFolded(fo.dataset.folder, !fo.classList.contains('shut')); return; }
     const li = e.target.closest('[data-doc]');
     if (li && li.dataset.doc !== state.docId) openDoc(li.dataset.doc);
   });
+  // Drag a file onto a folder to move it there, or onto the list's empty part to take it out of its folder.
+  {
+    const ul = $('#docList');
+    let dragId = null;
+    const target = (e) => e.target.closest('[data-folder]') || (e.target === ul ? ul : null);
+    const clear = () => ul.querySelectorAll('.drop-into').forEach((el) => el.classList.remove('drop-into'));
+    ul.addEventListener('dragstart', (e) => {
+      const li = e.target.closest('[data-doc]');
+      if (!li || li.classList.contains('renaming')) { e.preventDefault(); return; }
+      dragId = li.dataset.doc;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', leafOf(docEntry(dragId)?.name || ''));
+    });
+    ul.addEventListener('dragover', (e) => {
+      if (!dragId) return;
+      const t = target(e);
+      clear();
+      if (!t) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      t.classList.add('drop-into');
+    });
+    ul.addEventListener('dragleave', (e) => { if (!ul.contains(e.relatedTarget)) clear(); });
+    ul.addEventListener('drop', (e) => {
+      const t = target(e), id = dragId;
+      clear(); dragId = null;
+      if (!t || !id) return;
+      e.preventDefault();
+      moveToFolder(id, t === ul ? '' : t.dataset.folder);
+    });
+    ul.addEventListener('dragend', () => { clear(); dragId = null; });
+  }
 
-  const slug = () => (state.doc.name || 'diagram').replace(/[^\w\-]+/g, '_');
+  const slug = () => (leafOf(state.doc.name) || 'diagram').replace(/[^\w\-]+/g, '_');
   function download(name, text, type) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type }));
@@ -4070,22 +4191,7 @@
     }
     if (id === state.docId) showSaveState();
   }
-  const validShapes = (a) => Array.isArray(a) && a.every((s) => s && TYPES[s.type]);
-  // object types that were taken out of the app: dropped when a file or copy holding one opens
-  const RETIRED = { sketch3d: '3D sketch' };
-  function dropRetired(shapes) {
-    if (!Array.isArray(shapes)) return { shapes, gone: 0 };
-    const kept = shapes.filter((s) => !(s && RETIRED[s.type]));
-    return { shapes: kept, gone: shapes.length - kept.length };
-  }
-  // the same over a stored or opened file ({ shapes } / { blocks } / { sheet }); returns how many went
-  function dropRetiredDoc(d) {
-    let gone = 0;
-    const take = (o, k) => { if (o && Array.isArray(o[k])) { const r = dropRetired(o[k]); o[k] = r.shapes; gone += r.gone; } };
-    take(d, 'shapes'); take(d && d.sheet, 'shapes');
-    for (const b of (d && d.blocks) || []) take(b, 'shapes');
-    return gone;
-  }
+  const { validShapes, dropRetired, dropRetiredDoc } = TD.projectFiles;
   const retiredHint = (n) => n && showHint(`Removed ${n} 3D sketch${n > 1 ? 'es' : ''}: no longer supported. Use 3D Geometry instead.`, 5000);
   const baseName = (n) => n.replace(/(\.diagramtex|(\.page|\.board)?\.json)$/i, '');
   // Open a file from disk: a project file opens as a file of the app (linked to the file on disk when the
@@ -4930,8 +5036,12 @@
     migrateKinds();
     const idx = index();
     const last = store.get('diagramtex.last', null);
+    purgeBin(); renderBinRow();
+    const shared = location.hash.startsWith('#' + SHARE_KEY);
     if (idx.length) openDoc(idx.find((d) => d.id === last) ? last : idx[idx.length - 1].id);
-    else { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); }
+    else if (!shared) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); }
+    if (shared) await openShared();
+    if (!state.docId) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); } // a broken link and no files
     setTool('select');
     updateTopbar();
     // KaTeX fonts change metrics once loaded: re-measure.
@@ -4969,6 +5079,14 @@
       return pngWithDpi(await rasterise({ vb: [b.x, b.y, b.w, b.h], inner }, transparent, dpi), dpi);
     },
     downloadBlob: (name, blob) => downloadBlob(name, blob),
+    // for the command search (palette.js)
+    cmd: {
+      runCmd, setMode, setQuick, inQuick, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
+      toggleSnap: () => { state.snap = !state.snap; savePrefs(); updateTopbar(); },
+      addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
+      docAction, shareLink, newFolder, openBin, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
+      canUndo: () => state.undo.length > 0, canRedo: () => state.redo.length > 0,
+    },
   };
   // the files are read from IndexedDB first; the loading screen stays up until they are open
   TD.ready = init().catch((e) => { console.error(e); }).then(() => {

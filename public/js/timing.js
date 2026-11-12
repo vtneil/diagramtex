@@ -820,4 +820,12 @@
   };
   // for the visual editor (js/tmeditor.js)
   TD.timing = { parse, write, layout, draw, drawRow, config, charsCode, rowCode, readChars, kv, opts, num, shown, list, fullCode, bgOf, VALUES, VALUE_NAMES, U, LW, DEF };
+  // Application integration belongs to the block, alongside its model and panel.
+  TD.blocks.register("timing", {
+    menu: { order: 8, label: "Timing", title: "Timing diagram, written for tikz-timing", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M2 9h4V3h6v6h6V3h6v6h6\"/><path d=\"M2 17l2-3h10l2 3-2 3H4z\"/><path d=\"M16 17l2-3h10M16 17l2 3h10\"/></svg>" },
+    nodeImport: { re: /\\begin\{tikztimingtable\}[\s\S]*\\end\{tikztimingtable\}/, order: 1, bb: (q) => TD.timing.layout(q).bb, dedent: true },
+    fixed: true,
+    geometry: [['x', 'x'], ['y', 'y']],
+    editor: { get: () => TD.timingEditor, alias: "timingOpen", layout: (s) => TD.timing.layout(s) }
+  });
 })();

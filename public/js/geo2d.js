@@ -117,4 +117,11 @@
   };
 
   TD.geo2d = { layout, draw, sliders, libsOf, DEFAULT };
+  // Application integration belongs to the block, alongside its model and panel.
+  TD.blocks.register("geo2d", {
+    menu: { order: 13, label: "2D Geometry", title: "2D geometry in plain TikZ: points, vectors, projections, angle marks, function and polar plots, and labels that print computed values, edited visually", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M4 20h25M6 22V3\"/><path d=\"M6 20l15-13\" class=\"c1\"/><path d=\"M21 7v13\" stroke-dasharray=\"1.6 1.4\"/><path d=\"M12 20a6 6 0 00-1.5-4\"/></svg>" },
+    fixed: true,
+    geometry: [['x', 'x'], ['y', 'y']],
+    editor: { get: () => TD.geo3dEditor, alias: "geo2dOpen", options: () => ({ flat: true }), layout: (s) => TD.geo3d.layout(s.src, true) }
+  });
 })();

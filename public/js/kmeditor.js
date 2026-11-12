@@ -101,18 +101,11 @@
   //   undo, redo, pending, start, done, drag, hover: cell | null, codeAt, codeTimer }
   let E = null;
   const snapCode = () => codeOf(E.M);
-  function begin() { if (E.pending == null) E.pending = snapCode(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snapCode();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-  }
+  const { begin, commit, undo, redo } = TD.editorSession.history({
+    state: () => E, snapshot: snapCode, restore, updateTools,
+  });
   function edit(fn) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   function restore(code) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); }
   function clampSel() { if (E.sel && !E.M.groups[E.sel.g]) E.sel = null; }
   const selG = () => (E.sel ? E.M.groups[E.sel.g] || null : null);
   const lay = () => F.layout({ src: snapCode() });
@@ -642,29 +635,10 @@
 
   // ---------------------------------------------------------------- open / close
   // ⌘S: write the map back to the page (one undo step there) and keep editing
-  function save() {
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = snapCode();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
-  }
-  // reloading or closing the tab asks first while this holds edits not yet applied (app.js, beforeunload)
-  TD.unsaved.push(() => !!E && snapCode() !== E.start);
-  async function finish(ok) {
-    if (!E) return;
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) document.activeElement.blur();
-    commit();
-    const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this map?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
-    const done = E.done;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  const { save, finish } = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { E = null; }, snapshot: snapCode, commit,
+    root, code: codeTa, readCode, setTip, tip, discardTitle: 'Discard changes to this map?',
+  });
   function open(block, done) {
     const M = load(block.src);
     // groups of 0s only: check them as a product of sums

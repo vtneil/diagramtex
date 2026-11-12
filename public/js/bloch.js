@@ -682,4 +682,11 @@
     },
   };
   TD.bloch = { layout, draw, unwrap, commands, setEnvKey, states, projector, circleArcs };
+  // Application integration belongs to the block, alongside its model and panel.
+  TD.blocks.register("bloch", {
+    menu: { order: 2, label: "Bloch", title: "Bloch sphere, written with the blochsphere package", icon: "<svg viewBox=\"0 0 32 24\"><circle cx=\"16\" cy=\"12\" r=\"10\"/><ellipse cx=\"16\" cy=\"12\" rx=\"10\" ry=\"3\" stroke-dasharray=\"2 1.5\"/><path d=\"M16 12l5-7\"/><circle cx=\"21\" cy=\"5\" r=\"1.2\" fill=\"currentColor\"/></svg>" },
+    nodeImport: { re: /\\begin\{blochsphere\}[\s\S]*\\end\{blochsphere\}/, order: 7, bb: (q) => TD.bloch.layout(q).bb },
+    fixed: true,
+    geometry: [['x', 'x'], ['y', 'y']]
+  });
 })();

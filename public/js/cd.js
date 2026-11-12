@@ -953,4 +953,12 @@
   TD.cdLayout = layout;
   // for the visual editor (js/cdeditor.js)
   TD.cd = { colorSpec, colorOpt, colorItem, splitColor, joinColor, nodeColor, texColors, unwrap, cell, parse, label, labelCode, layout, build, draw, fullCode, delta, style, styleDefs, SEPS, HEADS, tan, at, curveD, length, LW, PT, EX, EM, D8, DIAG };
+  // Application integration belongs to the block, alongside its model and panel.
+  TD.blocks.register("cd", {
+    menu: { order: 0, label: "CD", title: "Commutative diagram, written in tikz-cd", icon: "<svg viewBox=\"0 0 32 24\"><text x=\"3\" y=\"8\" font-size=\"7\" font-style=\"italic\">A</text><text x=\"24\" y=\"8\" font-size=\"7\" font-style=\"italic\">B</text><text x=\"3\" y=\"22\" font-size=\"7\" font-style=\"italic\">C</text><text x=\"24\" y=\"22\" font-size=\"7\" font-style=\"italic\">D</text><path d=\"M9 6h12M6 10v7M27 10v7M9 20h12\"/></svg>" },
+    nodeImport: { re: /\\begin\{tikzcd\}[\s\S]*\\end\{tikzcd\}/, order: 4, bb: (q) => TD.cdLayout(q).bb },
+    fixed: true,
+    geometry: [['x', 'x'], ['y', 'y']],
+    editor: { get: () => TD.cdEditor, alias: "cdOpen", prepare: (s) => { if (s.arrows && TD.TYPES.cd.upgrade) TD.TYPES.cd.upgrade(s); } }
+  });
 })();

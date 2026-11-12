@@ -3,7 +3,7 @@
 (function () {
   const TD = (window.TD = window.TD || {});
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.33.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.34.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;

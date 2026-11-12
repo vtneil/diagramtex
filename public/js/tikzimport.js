@@ -718,26 +718,13 @@
   }
 
   // blocks inside a node: the environment, the block type, and where the node puts the block
-  const NODE_BLOCKS = [
-    { re: /\\begin\{quantikz\}[\s\S]*\\end\{quantikz\}/, type: 'qc', bb: (q) => TD.qcLayout(q).bb, dedent: true },
-    { re: /\\begin\{tikztimingtable\}[\s\S]*\\end\{tikztimingtable\}/, type: 'timing', bb: (q) => TD.timing.layout(q).bb, dedent: true },
-    { re: /\\begin\{forest\}[\s\S]*\\end\{forest\}/, type: 'forest', bb: (q) => TD.ftLayout(q).bb },
-    { re: /\\begin\{ZX\}[\s\S]*\\end\{ZX\}/, type: 'zx', bb: (q) => TD.zxLayout(q).bb },
-    { re: /\\begin\{tikzcd\}[\s\S]*\\end\{tikzcd\}/, type: 'cd', bb: (q) => TD.cdLayout(q).bb },
-    { re: /\\begin\{karnaugh-map\}[\s\S]*\\end\{karnaugh-map\}/, type: 'kmap', bb: (q) => TD.kmap.layout(q).bb },
-    // \bytefieldsetup lines before the environment go with it; the node sits at the centre of the field's TeX box
-    { re: /(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*\\end\{bytefield\}/, type: 'bytefield', dedent: true, place: (q, at) => { const L = TD.bytefield.layout(q), b = L.bb, t = L.tbox; q.x = at.x - (t.x - b.x + t.w / 2); q.y = at.y - (t.y - b.y + t.h / 2); } },
-    { re: /\\begin\{blochsphere\}[\s\S]*\\end\{blochsphere\}/, type: 'bloch', bb: (q) => TD.bloch.layout(q).bb },
-    { re: /\\xymatrix[^{]*\{[\s\S]*\}/, type: 'xy', place: (q, at) => { const L = TD.xy.layout(q), b = L.bb, e = L.ebox || b; q.x = at.x - (e.x - b.x + e.w / 2); q.y = at.y - (e.y - b.y + e.h / 2); } },
-    { re: /\\chemfig[\s\S]*/, type: 'chemfig', place: (q, at) => { q.x = at.x; q.y = at.y; }, opts: ['anchor', 'inner sep', 'text'] },
-  ];
   const dedentLines = (src) => {
     const ind = Math.min(...src.split('\n').slice(1).filter((l) => l.trim()).map((l) => /^[ \t]*/.exec(l)[0].length));
     return ind > 0 && isFinite(ind) ? src.split('\n').map((l, i) => (i ? l.slice(Math.min(ind, /^[ \t]*/.exec(l)[0].length)) : l)).join('\n') : src;
   };
   function nodeBlock(C, node, at) {
     const text = node.text.replace(/^\s*\\pgfinterruptpicture%?\s*|\s*%?\s*\\endpgfinterruptpicture\s*$/g, '').replace(/^\$\s*([\s\S]*?)\s*\$$/, '$1').trim();
-    for (const B of NODE_BLOCKS) {
+    for (const B of TD.blocks.nodeImports()) {
       if (!TD.TYPES[B.type]) continue;
       const m = B.re.exec(text);
       if (!m) continue;

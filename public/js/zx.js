@@ -669,4 +669,12 @@
   TD.zxLayout = layout;
   // for the visual editor (js/zxeditor.js)
   TD.zx = { at, midpoint, ARROWS, unwrap, grid, cell, opts, close, parse, draw, layout, fullCode, styleOf, phaseText, BZ, ARC, BEND, FILL, LENGTHS, expandShortcuts };
+  // Application integration belongs to the block, alongside its model and panel.
+  TD.blocks.register("zx", {
+    menu: { order: 6, label: "ZX", title: "ZX-calculus diagram, written for zx-calculus", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M2 12h3.5M14.5 12h3M26.5 12h3.5M10 7.5C10 3 22 3 22 7.5\"/><circle cx=\"10\" cy=\"12\" r=\"4.5\" class=\"a1\"/><circle cx=\"22\" cy=\"12\" r=\"4.5\"/><rect x=\"14\" y=\"1.5\" width=\"4\" height=\"4\" class=\"a1\"/></svg>" },
+    nodeImport: { re: /\\begin\{ZX\}[\s\S]*\\end\{ZX\}/, order: 3, bb: (q) => TD.zxLayout(q).bb },
+    fixed: true,
+    geometry: [['x', 'x'], ['y', 'y']],
+    editor: { get: () => TD.zxEditor, alias: "zxOpen" }
+  });
 })();

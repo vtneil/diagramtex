@@ -1,6 +1,8 @@
 // Document view: a page of text blocks (LaTeX-flavoured, $math$) with embedded diagrams,
 // plus whole-document LaTeX export.
 (function () {
+  // a file's own name, without the folders in front of it ("Physics/Lab 1" → "Lab 1")
+  const leafName = (n) => { const p = String(n || '').split('/').map((x) => x.trim()).filter(Boolean); return p.length ? p[p.length - 1] : ''; };
   const TD = window.TD;
   const app = TD.app;
   const { esc } = TD.util;
@@ -277,7 +279,7 @@
       ...X.preDefs,
       ...(spread !== 1 ? [`\\linespread{${spread}}`] : []),
       '',
-      ...(P.title ? [`\\title{${textToLatex(doc.name || 'Untitled')}}`, '\\date{}', ''] : []),
+      ...(P.title ? [`\\title{${textToLatex(leafName(doc.name) || 'Untitled')}}`, '\\date{}', ''] : []),
       '\\begin{document}',
       ...(P.title ? ['\\maketitle'] : []),
       '',
@@ -317,7 +319,7 @@
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
     if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
     return [
-      `% ${doc.name || 'Untitled'}: free-form page from DiagramTeX ${TD.VERSION}.`,
+      `% ${leafName(doc.name) || 'Untitled'}: free-form page from DiagramTeX ${TD.VERSION}.`,
       '% Coordinates are measured from the top-left corner of the paper (x right, y up, so y is negative on the page).',
       '% Compile twice: the pictures use "remember picture" to find the page corner.',
       '\\documentclass[10pt]{article}',

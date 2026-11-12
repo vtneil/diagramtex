@@ -10,14 +10,14 @@
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let open = null; // { finish } of the dialog on screen; a new one cancels it
 
-  function dialog({ title, message = '', input = null, multiline = false, ok = 'OK', cancel = 'Cancel', danger = false, readonly = false }) {
+  function dialog({ title, message = '', input = null, multiline = false, ok = 'OK', cancel = 'Cancel', danger = false, readonly = false, placeholder = '' }) {
     if (open) open.finish(false);
     const prev = document.activeElement;
     const root = document.createElement('div');
     root.className = 'td-dialog';
     const field = input == null ? ''
       : multiline ? `<textarea class="tdd-in" rows="8" spellcheck="false"${readonly ? ' readonly' : ''}>${esc(input)}</textarea>`
-        : `<input class="tdd-in" type="text" value="${esc(input)}" spellcheck="false" autocomplete="off">`;
+        : `<input class="tdd-in" type="text" value="${esc(input)}" spellcheck="false" autocomplete="off"${placeholder ? ` placeholder="${esc(placeholder)}"` : ''}>`;
     root.innerHTML = `<div class="tdd-box" role="${danger ? 'alertdialog' : 'dialog'}" aria-modal="true" aria-labelledby="tddTitle" aria-describedby="tddMsg">
       <h2 id="tddTitle">${esc(title)}</h2>${message ? `<p id="tddMsg">${esc(message)}</p>` : ''}${field}
       <div class="tdd-btns">${cancel ? `<button type="button" data-r="0">${esc(cancel)}</button>` : ''}<button type="button" data-r="1" class="${danger ? 'danger' : 'primary'}">${esc(ok)}</button></div></div>`;

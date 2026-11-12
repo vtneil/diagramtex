@@ -1332,4 +1332,12 @@
   };
   // for the visual editor (js/cfeditor.js)
   TD.chem = { build, parseDoc, writeDoc, parseChain, writeChain, splitAtoms, layout, draw, angleOf, norm360, split, unbrace, close, markDirty, counts, TEXT, DEF, PT, EM };
+  // Application integration belongs to the block, alongside its model and panel.
+  TD.blocks.register("chemfig", {
+    menu: { order: 12, label: "Chemistry", title: "Chemistry: structural formulas and reaction schemes, written for chemfig", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M9 4.5l6 3.5v7l-6 3.5-6-3.5V8z\"/><path d=\"M11 7.4l2.4 1.4M5 9.5v4.2\"/><path d=\"M15 15l5 3\"/><path d=\"M21 12h8M26 9.5l3 2.5-3 2.5\"/></svg>" },
+    nodeImport: { re: /\\chemfig[\s\S]*/, order: 9, place: (q, at) => { q.x = at.x; q.y = at.y; }, opts: ['anchor', 'inner sep', 'text'] },
+    fixed: true,
+    geometry: [['x', 'x'], ['y', 'y']],
+    editor: { get: () => TD.chemEditor, alias: "chemOpen", layout: (s) => TD.chem.layout(s) }
+  });
 })();

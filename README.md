@@ -316,6 +316,10 @@ npx wrangler preview
   - new, open (Ctrl+O, `.diagramtex` / `.tex`), save file (Ctrl+Shift+S), import LaTeX/TikZ
   - print / PDF (Ctrl+P), **Export** (PNG / SVG / PDF), **TikZ** (Ctrl+E), **LaTeX** (Ctrl+Shift+E), HTML
 - The ◧ button at the far left hides the document list.
+- **Folders**: a slash in a name files it in a folder, as in cloud storage: `Physics/Lab 1` shows as *Lab 1* inside *Physics*. Drag a file onto a folder (or the empty part of the list) to move it; right-click a folder to add to it, rename, fold or delete it.
+- **Recycle Bin** (under the file list): deleting a file or a folder moves it there. Restore it, or delete it for good; anything in the bin for 30 days is removed automatically.
+- **Share links**: right-click a file → **Copy Share Link**. A small file travels inside the link itself (compressed, after `#`, so it never reaches a server); whoever opens it gets their own copy. A file too large for a link (over about 8,000 characters) has to be sent as a `.diagramtex` file.
+- **Search** (`/`): one field for every tool and shape, the commands (Save, Export, Add Page…), the modes and your files. ↑↓ choose, Enter runs, Esc closes.
 
 ### Export and import
 - **Export** button (top bar, Page and Classic diagram views) opens a small menu:
