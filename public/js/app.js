@@ -3499,6 +3499,36 @@
     catch (e) { openTikz(); }
   }
 
+  // The selection as a picture, from the right-click menu: copied (PNG, or SVG as image and text) or saved
+  // like an export (into the file's export folder, else downloaded). PNG uses the Export menu's DPI and
+  // transparency; a saved SVG carries its maths fonts.
+  async function selImage(what) {
+    const list = selected().filter((s) => !s.hidden);
+    if (!list.length) { showHint('Nothing visible is selected', 1200); return; }
+    const name = slug() + '-selection';
+    const png = () => TD.app.pngOf(list, expOpts.dpi, expOpts.transparent);
+    try {
+      if (what === 'copy-png') {
+        // the item is made during the click with the picture still to come: Safari allows a copy only then
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png() })]);
+        showHint(`Copied as PNG at ${expOpts.dpi} DPI`, 1400);
+      } else if (what === 'copy-svg') {
+        const svg = TD.app.svgOf(list), item = { 'text/plain': new Blob([svg], { type: 'text/plain' }) };
+        if (ClipboardItem.supports && ClipboardItem.supports('image/svg+xml')) item['image/svg+xml'] = new Blob([svg], { type: 'image/svg+xml' });
+        await navigator.clipboard.write([new ClipboardItem(item)]);
+        showHint('Copied as SVG', 1200);
+      } else if (what === 'save-png') {
+        await askDir();
+        await out(name + '.png', await png());
+      } else if (what === 'save-svg') {
+        await askDir();
+        await out(name + '.svg', await svgWithFonts(TD.app.svgOf(list)), 'image/svg+xml');
+      }
+    } catch (e) {
+      showHint(`Couldn't ${what.startsWith('copy') ? 'copy' : 'save'} the picture (${e.message || e})`, 3000);
+    }
+  }
+
   // ---------- context menu ----------
   const ctx = document.createElement('div');
   ctx.id = 'ctxMenu'; ctx.className = 'ctx'; ctx.hidden = true;
@@ -3536,6 +3566,7 @@
     saveas: '<path d="M8 3v8M5 8l3 3 3-3"/><path d="M3.5 12v4.5h9"/><path d="M15 11v6M12 14h6"/>',
     unlink: '<path d="M8.5 11.5l-2 2a2.5 2.5 0 01-3.5-3.5l2-2M11.5 8.5l2-2a2.5 2.5 0 00-3.5-3.5l-2 2"/><path d="M13 13l3.5 3.5M3.5 3.5L7 7"/>',
     exp: '<path d="M10 12V3M6.5 6.5L10 3l3.5 3.5"/><path d="M3.5 10v6.5h13V10"/>',
+    image: '<rect x="3" y="4" width="14" height="12" rx="1.5"/><circle cx="7.5" cy="8.5" r="1.5"/><path d="M3.5 15l4.5-4.5 3 3 2-2 3.5 3.5"/>',
     rename: '<path d="M3 6h9M3 10h6M3 14h5"/><path d="M11 17l.6-2.6L16 10l2 2-4.4 4.4z"/>',
     newdoc: '<path d="M5 2.5h6.5l3.5 3.5v11.5H5z"/><path d="M10 8.5v6M7 11.5h6"/>',
     folder: '<path d="M2.5 4.5h5l1.5 2h8.5v9.5h-15z"/>',
@@ -3573,6 +3604,8 @@
       if (one && (one.type === 'text' || one.label !== undefined)) h += item(one.type === 'text' ? 'Edit Text' : 'Edit Label', 'edit', { ic: 'edit', key: 'Enter' }) + hr;
       h += item('Copy', 'copy', { ic: 'copy', key: 'Ctrl+C' }) +
         item('Copy TikZ Code', 'copytikz', { ic: 'tikz' }) +
+        item('Copy as Image', '', { ic: 'image', sub: item('PNG', 'img:copy-png') + item('SVG', 'img:copy-svg') }) +
+        item('Save as Image', '', { ic: 'exp', sub: item('PNG', 'img:save-png') + item('SVG', 'img:save-svg') }) +
         (sel.some((s) => (s.text || s.label || '').trim()) ? item('Copy Text', 'copytext', { ic: 'copy' }) : '') +
         item('Cut', 'cut', { ic: 'cut', key: 'Ctrl+X' }) +
         item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
@@ -3955,6 +3988,7 @@
     if (a === 'edit') { const s = selected()[0]; if (!openBlock(s.id)) startEdit(s.id, s.type === 'text' ? 'text' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
+    if (a === 'img') selImage(arg);
     if (a === 'copytext') {
       const t = selected().map((s) => (s.text || s.label || '').trim()).filter(Boolean).join('\n');
       navigator.clipboard.writeText(t).then(() => showHint('Text copied', 1000), () => showHint('Clipboard not available', 1400));

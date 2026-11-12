@@ -58,6 +58,9 @@ valid. The packages named are references for the output, not constraints on how 
       crossing over or under; strands take colours and labels; closing a braid gives a knot or link diagram.
       Moves keep the topology (the braid relations are offered as moves), and the only edit that changes it
       is an explicit crossing change.
+- [ ] **UML diagram** (TikZ, after `tikz-uml`): class diagrams first (classes with attribute and operation
+      compartments, and inheritance, association, aggregation and composition links), then sequence and
+      state diagrams.
 - [x] **Bitfield** (`bytefield`): protocol headers and register layouts in rows of a fixed bit width (8, 16,
       32 or 64). Each field has a name and a width in bits; dragging a boundary resizes it and the fields after
       it reflow across rows, splitting and rejoining fields that span a row end. Bit numbers (either order),
