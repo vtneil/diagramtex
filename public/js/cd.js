@@ -861,7 +861,6 @@
     const t = String(src || '').trim();
     return /\\begin\{tikzcd\}/.test(t) ? t : `\\begin{tikzcd}\n${t}\n\\end{tikzcd}`;
   }
-  TD.cdCode = fullCode;
 
   // a small drawing of a snippet (palette previews)
   TD.cdMini = (src, maxH = 30) => {
@@ -908,7 +907,6 @@
     if (L.geo) { s.x = x0 - (L.geo.cx[0] - L.bb.x); s.y = y0 - (L.geo.cy[0] - L.bb.y); }
     return s;
   }
-  TD.cdToTikzcd = (s) => (s.arrows ? legacyCode(s) : fullCode(s.src));
 
   TD.TYPES.cd = {
     name: 'Commutative diagram',

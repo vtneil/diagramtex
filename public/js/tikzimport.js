@@ -435,20 +435,21 @@
           }
           case 'arc': {
             const nx = toks[i + 1];
-            let a1, a2, r;
-            if (nx && nx.t === 'opts') { const so = style(C, parseOpts(nx.v), cmd); a1 = so.a1; a2 = so.a2 ?? (so.da != null ? a1 + so.da : undefined); r = so.r ?? so.rx; i++; }
-            else if (nx && nx.t === 'coord') { const q = nx.raw.split(':'); a1 = TD.evalNumber(expandMac(q[0]), NaN); a2 = TD.evalNumber(expandMac(q[1]), NaN); r = len(q[2]); i++; }
+            let a1, a2, r, ry;
+            if (nx && nx.t === 'opts') { const so = style(C, parseOpts(nx.v), cmd); a1 = so.a1; a2 = so.a2 ?? (so.da != null ? a1 + so.da : undefined); r = so.r ?? so.rx; ry = so.r != null ? r : so.ry ?? r; i++; }
+            else if (nx && nx.t === 'coord') { const q = nx.raw.split(':'); a1 = TD.evalNumber(expandMac(q[0]), NaN); a2 = TD.evalNumber(expandMac(q[1]), NaN); const rr = (q[2] || '').split(/\s+and\s+/); r = len(rr[0]); ry = rr[1] != null ? len(rr[1]) : r; i++; }
             if (![a1, a2, r].every(isFinite) || !cur) { C.warnings.push('arc not understood'); break; }
-            const c = { x: cur.x - r * Math.cos((a1 * Math.PI) / 180), y: cur.y + r * Math.sin((a1 * Math.PI) / 180) };
-            const end = { x: c.x + r * Math.cos((a2 * Math.PI) / 180), y: c.y - r * Math.sin((a2 * Math.PI) / 180) };
+            if (!isFinite(ry) || !(ry > 0)) ry = r;
+            const c = { x: cur.x - r * Math.cos((a1 * Math.PI) / 180), y: cur.y + ry * Math.sin((a1 * Math.PI) / 180) };
+            const end = { x: c.x + r * Math.cos((a2 * Math.PI) / 180), y: c.y - ry * Math.sin((a2 * Math.PI) / 180) };
             const simple = !segs.length && !(toks.slice(i + 1).some((t) => t.t === 'op' && t.v !== 'node'));
             if (simple && !st.fill) {
               let A1 = a1, A2 = a2;
               if (A2 < A1) [A1, A2] = [A2, A1];
-              out.push({ type: 'arc', cx: c.x, cy: c.y, r, a1: A1, a2: A2, _rev: a2 < a1, ...lineStyle, stroke: st.stroke || '#000000', startTip: a2 < a1 ? st.endTip : st.startTip, endTip: a2 < a1 ? st.startTip : st.endTip });
+              out.push({ type: 'arc', cx: c.x, cy: c.y, r, ...(Math.abs(ry - r) > 1e-6 ? { ry } : {}), a1: A1, a2: A2, _rev: a2 < a1, ...lineStyle, stroke: st.stroke || '#000000', startTip: a2 < a1 ? st.endTip : st.startTip, endTip: a2 < a1 ? st.startTip : st.endTip });
             } else {
               const n = Math.max(4, Math.ceil(Math.abs(a2 - a1) / 6)), pts = [cur];
-              for (let k = 1; k <= n; k++) { const a = ((a1 + ((a2 - a1) * k) / n) * Math.PI) / 180; pts.push({ x: c.x + r * Math.cos(a), y: c.y - r * Math.sin(a) }); }
+              for (let k = 1; k <= n; k++) { const a = ((a1 + ((a2 - a1) * k) / n) * Math.PI) / 180; pts.push({ x: c.x + r * Math.cos(a), y: c.y - ry * Math.sin(a) }); }
               segs.push({ k: 'A', pts });
             }
             cur = end; lastArc = { c, r, a1, a2, end };

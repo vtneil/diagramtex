@@ -712,7 +712,6 @@
     const t = String(src || '').trim();
     return /\\begin\{quantikz\}/.test(t) ? t : `\\begin{quantikz}\n${t}\n\\end{quantikz}`;
   }
-  TD.qcCode = fullCode;
 
   // A small drawing of a snippet, for the command suggestions: in the UI's ink, on its surface colour.
   TD.qcMini = (src, maxH = 30, paper = 'var(--qc-paper, var(--sheet-raised))') => {

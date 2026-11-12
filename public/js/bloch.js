@@ -463,12 +463,6 @@
     const t = String(src || '').trim();
     return /\\begin\{blochsphere\}/.test(t) ? t : `\\begin{blochsphere}\n${t}\n\\end{blochsphere}`;
   }
-  // a small picture of a sphere for menus
-  TD.blochMini = (src, maxH = 40) => {
-    const s = { type: 'bloch', x: 0, y: 0, src, id: 'mini' };
-    const L = layout(s), b = L.bb, k = Math.min(1, maxH / b.h);
-    return `<svg class="zxmini" viewBox="0 0 ${r2(b.w)} ${r2(b.h)}" width="${r2(b.w * k)}" height="${r2(b.h * k)}">${draw(s, { export: true })}</svg>`;
-  };
 
   // ---------------------------------------------------------------- editing the code from the panel
   // the environment's options, one key rewritten (null drops it)

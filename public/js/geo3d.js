@@ -1069,7 +1069,6 @@
   \\tdplotsetthetaplanecoords{\\phivec}
   \\tdplotdrawarc[tdplot_rotated_coords]{(0,0,0)}{0.5}{0}{\\thetavec}{anchor=south west}{$\\theta$}
 \\end{tikzpicture}`;
-  TD.GEO3D_DEFAULT = DEFAULT;
 
   TD.TYPES.geo3d = {
     name: '3D geometry',

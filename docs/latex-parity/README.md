@@ -63,7 +63,6 @@ posted TeX), `harness.js` (`P.run(name, shapes)`, `P.zoom(...)`) and `scenes.js`
 | 3D solids (box, cylinder, cone, frustum, sphere, prism, pyramid, spherical wedge) | minor drift | matches | sphere: TikZ `ball color` still darkens a little sooner at the rim |
 | Solids of revolution (disk, washer, shell, slice) | minor drift (arrowheads) | matches | none |
 | Solid region (region, wedge, columns) | minor drift (arrowheads) | matches | none |
-| 3D sketch (vectors, cylindrical, spherical, plane, curve) | minor drift: canvas arrowheads about 2× too big | matches | none |
 | Circuit (circuitikz) | **wrong**: labels at normalsize in LaTeX, `\large` on the canvas | minor drift | labels 0.13 cm higher on the canvas than circuitikz puts them |
 | Quantum circuit (quantikz) | **wrong**: text size not exported | minor drift | gate boxes about 0.08 cm wider on the canvas |
 | Commutative diagram (tikz-cd) | matches | matches | none |
@@ -172,9 +171,6 @@ above.
 ![solids b](prim3d_b.png)
 ![revolution](revolve.png)
 ![solid region](solid.png)
-![sketch a](sketch3d_a.png)
-![sketch b](sketch3d_b.png)
-![3D arrowheads](zoom-sketch3d_a.vec.png)
 
 ### Blocks
 ![circuit](blk_cz.png)

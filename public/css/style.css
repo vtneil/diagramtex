@@ -389,6 +389,7 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 .marquee.tf { fill: none; stroke: var(--bluepen); }
 /* the corner an angle mark will go on, while the Angle mark tool waits for a click */
 .anglepick { fill: none; stroke: var(--bluepen); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.arc-pt { fill: var(--bluepen); stroke: none; pointer-events: none; }
 .snap-ind { fill: none; stroke: var(--bluepen); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
 /* attached connectors: the shape an end will stick to, and ends that are stuck (filled) */
 .link-hint { fill: none; stroke: var(--bluepen); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; opacity: .55; }
@@ -871,7 +872,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 .pop-title .pop-warn { display: block; font-weight: 500; color: var(--redpen); }
 .flyout .pop-title:first-child { margin-top: 2px; }
 .sym-grid { display: grid; grid-template-columns: repeat(10, 36px); gap: 2px; }
-#fly-lines .sym-grid { grid-template-columns: repeat(8, 36px); }
+#fly-lines .sym-grid { grid-template-columns: repeat(9, 36px); }
 .sym-grid button { width: 36px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--r); background: transparent; color: var(--graphite); }
 .sym-grid button:hover { background: var(--wash-strong); color: var(--ink); }
 .sym-grid button svg { width: 34px; height: 24px; stroke-width: 1.2; }

@@ -11,9 +11,6 @@
   const K = TD.PT_PER_PX;
 
   const isObj = (v) => !!v && typeof v === 'object';
-  TD.isRichFill = isObj;
-  TD.isGradient = (v) => isObj(v) && !!v.g;
-  TD.isPattern = (v) => isObj(v) && !!v.p;
   // A representative solid colour (for previews, the Basic tab and anything that needs one colour).
   TD.fillColor = (v) => (!isObj(v) ? v : v.g ? ((v.stops && v.stops[0]) || [0, '#000000'])[1] : v.color || '#000000');
 

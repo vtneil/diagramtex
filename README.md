@@ -108,7 +108,8 @@ npx wrangler preview
 ### Drawing
 - **Tool rail** (Mathcha-style; buttons with a small corner triangle open a flyout):
   - select, maths (`M`, a text object that starts in `$…$`), text (`T`)
-  - **Lines:** line, curve, arrow, curved arrow, polyline, smooth closed blob, arc (angle mark), spring
+  - **Lines:** line, curve, arrow, curved arrow, polyline, smooth closed blob, arc by centre, arc through three points, spring
+  - **Arc by centre** (`O`): click the centre, then where the arc starts (that sets the radius), then where it ends. The arc follows the way you turn round the centre, so it can go either way and past 180°; Shift snaps the angles to 15°. **Arc through three points**: click both ends, then a point the arc passes through. Either tool's first step can be a drag instead of two clicks, guides show the points so far, and Esc cancels. Once drawn, the round handles on the arc (its two ends and its middle) and the square edge handles on its box are all you need: the two end handles change only the start and end angles (θ₁, θ₂), the handle halfway along the arc changes the radius, two edge handles on its box stretch it across or up and down into an elliptical arc (exported with `x radius` and `y radius`; Shift makes it round again), and the centre handle or the arc itself moves it. It rotates like any shape, by the zones outside its box or the Rotation field; an elliptical arc turns its axes (exported with `rotate around`).
   - **Shapes:** rectangle variants (rounded, snipped), 33 basic shapes and 28 flowchart symbols
   - **Electrical:** the common electrical symbols (resistor, capacitor, inductor, sources, diode, transistor, logic gates, ground…), a Waveforms group (sine, square, pulse, negative pulse, triangle, sawtooth, trapezoid, rectified and half-wave rectified sine, chopped). Waveforms repeat as you widen them; set the wavelength, start position, duty cycle (square, pulses) or firing angle (chopped) in the panel; and, at the bottom, Advanced Circuit Block (`circuitikz`), the circuit editor below
   - **Physics:** Mechanics (ground, ceiling, wall, block, incline, cart, pulley, pendulum) and Optics (convex and concave lenses, converging and diverging lens symbols, plane, concave and convex mirrors, prism, screen, slits, ray, parallel rays, point source, eye). Hatching, axles, bobs and angle marks keep their size when resized; the panel sets **Hatch spacing**, **Mount** (pulley, pendulum), **Angle mark** and **Angle label** (incline, pendulum; maths without `$`), and the number of **Slits**. A block starts holding `$m$`
@@ -126,7 +127,7 @@ npx wrangler preview
 - **3D menu** (the button with three axes, below 2D plots): eight tools, one for each kind of 3D object. Its variants are picked in its panel, not in the menu.
   - **3D plots:** Surface `z = f(x, y)` (set Type to Mesh for a wireframe), Parametric (x(u, v), y(u, v), z(u, v)), Space curve (x(t), y(t), z(t)) and Scatter 3D. The view angles follow pgfplots `view={az}{el}`.
   - **3D figures:** Solid region (Shape picks an ellipse, rectangle, polar curve or polar rectangle (a cylindrical wedge); Riemann columns turns it into boxes), Revolution (Lower g(x) makes washers, Turn about y-axis makes shells, Sweep cuts it open, Show a slice highlights Δx), Solid (Shape picks box, cylinder, cone, frustum, sphere, prism, pyramid or spherical wedge) and 3D Geometry.
-  - Files with a 3D sketch from earlier versions still open, draw and export as before; new figures with points, vectors and planes use 3D Geometry.
+  - The 3D sketch from earlier test versions has been removed; a file that still holds one opens without it and says so. Points, vectors and planes in space use 3D Geometry.
 - **Blocks menu** (the cube button below 3D, marked experimental): CD, XyMatrix, Bloch, Quantum, Circuit, Tree, ZX, Feynman, Timing, Automaton, K-map, Bit field and Chemistry. A new block starts with `large` labels, whatever the default text size is.
 - **Grid editors** (Quantum, ZX, CD): point just left of a row or just above a column and a bin appears; click it to delete that row or column. Every field in an editor's panel updates the others as you type (a label and its code, an option and its buttons).
 - **Plots:** each plot can have several series, given as expressions (`sin(x)*exp(-x/4)`, `x^2+y^2`, …) or as data. You can set axis labels, ranges, grid, legend, colormaps (hot, viridis, jet, cool, gray) and a colour bar. Expression errors show in the panel and on the canvas.
@@ -426,7 +427,7 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` fo
 - `public/js/mathengine.js`: the maths renderer (`TD.math.render`), switching between KaTeX and Temml
 - `public/js/plots.js`: expression parser, 2D/3D plot and pie rendering, pgfplots export
 - `public/js/view3d.js`: the shared 3D engine: projection, shaded meshes with hidden edges, fitting into the box, SVG and plain TikZ output
-- `public/js/solid3d.js`, `public/js/figures3d.js`, `public/js/sketch3d.js`: solid regions, basic solids and solids of revolution, and the 3D sketch (kept so older files open; no longer in the menu)
+- `public/js/solid3d.js`, `public/js/figures3d.js`: solid regions, basic solids and solids of revolution
 - `public/js/cd.js`: commutative diagrams: tikz-cd parser, layout, canvas drawing and export
 - `public/js/cdeditor.js`: the overlay CD editor (palette, cell grid, arrows, live tikz-cd or xymatrix code)
 - `public/js/xy.js`: the XyMatrix block: xymatrix to tikz-cd and back, xy's geometry, export

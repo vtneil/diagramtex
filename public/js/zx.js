@@ -620,7 +620,6 @@
     const t = String(src || '').trim();
     return /\\begin\{ZX\}/.test(t) ? t : `\\begin{ZX}\n${t}\n\\end{ZX}`;
   }
-  TD.zxCode = fullCode;
 
   // a small drawing of a snippet (palette previews)
   TD.zxMini = (src, maxH = 30) => {

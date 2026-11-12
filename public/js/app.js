@@ -24,7 +24,7 @@
 
   const hasHand = (m) => m === 'board' || m === 'page'; // modes with a Hand tool
   const isDrawTool = (t) => !['select', 'hand', 'text', 'math', 'image'].includes(t);
-  const toolType = (t) => ({ arrow: 'line', curvearrow: 'curve', blob: 'poly', pencil: 'poly', math: 'text' })[t] || t.split(':')[0];
+  const toolType = (t) => ({ arc3: 'arc', arrow: 'line', curvearrow: 'curve', blob: 'poly', pencil: 'poly', math: 'text' })[t] || t.split(':')[0];
   const TOOL_KEYS = { v: 'select', h: 'hand', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
 
   // A document is a list of blocks (text paragraphs and diagrams). The canvas edits one diagram
@@ -67,6 +67,7 @@
   state.doc = makeDoc('Untitled');
   let drag = null;       // active pointer interaction
   let polyDraft = null;  // id of polyline being drawn
+  let arcDraft = null;   // arc being drawn click by click: { tool, id, pts, a0, sweep, last, down }
   let snapHint = null;   // point to show snap indicator
   let marquee = null;
   let spaceDown = false;
@@ -324,6 +325,7 @@
     if (state.docId) saveNow();
     const d = store.get(LS_DOC + id, null);
     if (!d) return;
+    const gone = dropRetiredDoc(d);
     state.docId = id;
     const kind = normKind(d.kind);
     state.doc = makeDoc(d.name, d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }], d.active ?? 0, d.page, d.sheet, kind);
@@ -335,6 +337,7 @@
     store.set('diagramtex.last.' + kind, id);
     applyMode(kind === 'page' || kind === 'board' ? kind : (d.mode === 'diagram' ? 'diagram' : 'document'), fit);
     render(); renderProps(); renderDocList(); updateTopbar(); showSaveState();
+    if (gone) { saveNow(); retiredHint(gone); }
   }
   // Switch the canvas to another diagram block of the current document.
   function setActiveBlock(i) {
@@ -547,6 +550,8 @@
   const HANDLE_DIR = { e: 0, ne: 45, n: 90, nw: 135, w: 180, sw: 225, s: 270, se: 315, tw: 0, r: 0 };
   const RESIZE_CUR = ['ew-resize', 'nesw-resize', 'ns-resize', 'nwse-resize'];
   function handleCursor(s, k) {
+    if (s.type === 'arc' && k === 'rad') { const m = ((s.a1 + s.a2) / 2) * Math.PI / 180, a = Math.atan2((s.ry > 0 ? s.ry : s.r) * Math.sin(m), s.r * Math.cos(m)) * 180 / Math.PI + (+s.angle || 0); return RESIZE_CUR[Math.round(((a % 180) + 180) % 180 / 45) % 4]; } // along the radius
+    if (s.type === 'arc' && (k === 'rx' || k === 'ry')) return RESIZE_CUR[Math.round(((((k === 'rx' ? 0 : 90) + (+s.angle || 0)) % 180) + 180) % 180 / 45) % 4];
     if (!(k in HANDLE_DIR)) return 'move';
     const a = (((HANDLE_DIR[k] + (s.angle || 0)) % 180) + 180) % 180;
     return RESIZE_CUR[Math.round(a / 45) % 4];
@@ -923,6 +928,12 @@
     for (const s of sel) {
       const b = TD.bbox(s);
       if (pb && (b.x > pb.x2 || b.x + b.w < pb.x1 || b.y > pb.y2 || b.y + b.h < pb.y1)) continue; // off screen
+      if (s.type === 'arc' && +s.angle) { // a turned arc: its own box, turned with it
+        const C = TD.rotFrame(s), cx = (C[0][0] + C[2][0]) / 2, cy = (C[0][1] + C[2][1]) / 2;
+        const g = (p) => { const d = Math.hypot(p[0] - cx, p[1] - cy) || 1, k = 3 * Math.SQRT2 / z / d; return `${p[0] + (p[0] - cx) * k},${p[1] + (p[1] - cy) * k}`; };
+        out.push(`<polygon class="sel-box" points="${C.map(g).join(' ')}"/>`);
+        continue;
+      }
       out.push(`<rect class="sel-box" x="${b.x - 3 / z}" y="${b.y - 3 / z}" width="${b.w + 6 / z}" height="${b.h + 6 / z}"/>`);
     }
     const groups = new Map();
@@ -931,7 +942,13 @@
       const b = unionBox(m);
       out.push(`<rect class="grp-box" x="${b.x - 7 / z}" y="${b.y - 7 / z}" width="${b.w + 14 / z}" height="${b.h + 14 / z}"/>`);
     }
-    if (sel.length === 1 && !polyDraft) {
+    if (arcDraft) {
+      const d = arcDraft, c = d.cur, P = d.pts, L = (a, b) => out.push(`<line class="guide" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`);
+      if (d.tool === 'arc') { if (P.length === 1) L(P[0], c); else { L(P[0], P[1]); L(P[0], c); } }
+      else if (P.length === 1) L(P[0], c); else L(P[0], P[1]);
+      for (const q of P) out.push(`<circle class="arc-pt" cx="${q.x}" cy="${q.y}" r="${3 / z}"/>`);
+    }
+    if (sel.length === 1 && !polyDraft && !arcDraft) {
       const s = sel[0], t = TYPES[s.type];
       if (t.guides) for (const g of t.guides(s)) out.push(`<line class="guide" x1="${g[0]}" y1="${g[1]}" x2="${g[2]}" y2="${g[3]}"/>`);
       if (s.type === 'poly') {
@@ -943,9 +960,10 @@
           out.push(`<g class="addpt" data-addpt="${i}" data-hid="${s.id}"><circle cx="${mx}" cy="${my}" r="${5 / z}"/><path d="M${mx - 2.6 / z} ${my}h${5.2 / z}M${mx} ${my - 2.6 / z}v${5.2 / z}"/></g>`);
         }
       }
-      for (const h of t.handles(s)) {
+      for (const h of t.handles(s, z)) {
         const cur = handleCursor(s, h.k);
-        if (h.ctrl) out.push(`<circle class="handle ctrl" data-handle="${h.k}" data-hid="${s.id}" cx="${h.x}" cy="${h.y}" r="${4 / z}" style="cursor:${cur}"/>`);
+        if (h.round) out.push(`<circle class="handle" data-handle="${h.k}" data-hid="${s.id}" cx="${h.x}" cy="${h.y}" r="${4.25 / z}" style="cursor:${cur}"/>`);
+        else if (h.ctrl) out.push(`<circle class="handle ctrl" data-handle="${h.k}" data-hid="${s.id}" cx="${h.x}" cy="${h.y}" r="${4 / z}" style="cursor:${cur}"/>`);
         else {
           const q = 3.75 / z, on = s.type === 'poly' && state.vertex && state.vertex.id === s.id && 'v' + state.vertex.i === h.k;
           const lk = CONNECT.has(s.type) && END[h.k] && s[END[h.k][0]];
@@ -1051,11 +1069,12 @@
     $('#emptyHint').hidden = shapes().length > 0 || t !== 'select';
     snapHint = null;
     const sym = t.startsWith('sym:') && TD.SYMS[t.slice(4)];
+    if (t === 'arc' || t === 'arc3') { arcHint(); renderOverlay(); return; }
     showHint(t === 'poly' ? 'Click to add points · double-click / Enter to finish · click first point to close'
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : /^(plot|pie|solid|prim3d|revolve|sketch3d|geo3d|geo2d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
+      : /^(plot|pie|solid|prim3d|revolve|geo3d|geo2d|cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig)/.test(t) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1064,7 +1083,8 @@
     ['line', 'Line (L)', '<path d="M4 12h26"/>'], ['curve', 'Bézier curve (C)', '<path d="M4 16C10 2 20 22 30 8"/>'],
     ['arrow', 'Arrow (A)', '<path d="M4 12h24M23 7l6 5-6 5"/>'], ['curvearrow', 'Curved arrow', '<path d="M4 16C10 4 18 20 27 9M22 8l6 0-1 6"/>'],
     ['poly', 'Polyline / polygon (P)', '<path d="M5 19l5-14 9 10 9-11"/>'], ['blob', 'Smooth closed curve', '<path d="M8 6c6-4 18-3 20 4s-4 10-10 9-15 0-14-6 1-5 4-7z"/>'],
-    ['arc', 'Arc / angle (O)', '<path d="M5 19h24M5 19l14-13M14 19a9 9 0 00-2.7-6.4"/>'], ['spring', 'Spring (S)', '<path d="M2 12h5l2-6 4 12 4-12 4 12 4-12 2 6h5"/>'],
+    ['arc', 'Arc by centre (O) — click the centre, the start, then the end', '<path d="M7 18h20M27 18a20 20 0 0 0-6.5-14.8"/><path d="M7 18L20.5 3.2" stroke-dasharray="2 2"/><circle cx="7" cy="18" r="1.8" class="f"/>'],
+    ['arc3', 'Arc through three points — click both ends, then a point on the arc', '<path d="M5 19A13 13 0 0 1 29 19"/><circle cx="5" cy="19" r="1.8" class="f"/><circle cx="29" cy="19" r="1.8" class="f"/><circle cx="17" cy="11" r="1.8" class="f"/>'], ['spring', 'Spring (S)', '<path d="M2 12h5l2-6 4 12 4-12 4 12 4-12 2 6h5"/>'],
   ];
   const MISC_EXTRA = [
     ['ball', 'Shaded ball (B)', '<circle cx="17" cy="12" r="7" class="ballic"/>'], ['dot', 'Dot (D)', '<circle cx="17" cy="12" r="3" class="f"/>'],
@@ -1082,7 +1102,7 @@
   $('#fly-elec').innerHTML = sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'))
     + `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: 415 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>Advanced Circuit Block (<code>circuitikz</code>)</span></button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`;
   function flyOf(t) {
-    if (/^(solid|prim3d|revolve|sketch3d)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
+    if (/^(solid|prim3d|revolve)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
     if (/^(cd|xy|qc|cz|forest|zx|bloch|feynman|timing|automata|kmap|bytefield|chemfig|geo2d|geo3d)$/.test(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
@@ -1231,6 +1251,7 @@
   }
 
   function finishPoly(e) {
+    if (arcDraft) arcCancel();
     if (!polyDraft) return;
     const s = byId(polyDraft);
     polyDraft = null;
@@ -1247,16 +1268,108 @@
     render(); renderProps();
   }
 
+  // ---------------- arcs, click by click ----------------
+  // Arc by centre ('arc'): the centre, then the start (radius and start angle), then the end. The arc follows
+  // the way the pointer turns round the centre, so it goes either way and past 180°; Shift snaps to 15°.
+  // Arc through three points ('arc3'): both ends, then a point the arc passes through.
+  // The first step can also be a drag: press at the centre (or the first end) and let go at the next point.
+  const angDeg = (c, q) => (Math.atan2(-(q.y - c.y), q.x - c.x) * 180) / Math.PI;
+  const mod360 = (a) => ((a % 360) + 360) % 360;
+  function circumcircle(A, B, C) {
+    const d = 2 * (A.x * (B.y - C.y) + B.x * (C.y - A.y) + C.x * (A.y - B.y));
+    if (Math.abs(d) < 1e-9) return null;
+    const a = A.x * A.x + A.y * A.y, b = B.x * B.x + B.y * B.y, c = C.x * C.x + C.y * C.y;
+    const x = (a * (B.y - C.y) + b * (C.y - A.y) + c * (A.y - B.y)) / d, y = (a * (C.x - B.x) + b * (A.x - C.x) + c * (B.x - A.x)) / d;
+    const r = Math.hypot(A.x - x, A.y - y);
+    return r > 50 * dist(A, B) ? null : { x, y, r }; // nearly straight: no arc yet
+  }
+  function arcHint() {
+    const d = arcDraft, n = d ? d.pts.length : 0;
+    showHint(state.tool === 'arc3'
+      ? (n === 0 ? 'Click one end of the arc' : n === 1 ? 'Click the other end' : 'Click a point the arc passes through · Esc cancels')
+      : (n === 0 ? 'Click the centre of the arc' : n === 1 ? 'Click where the arc starts (sets the radius) · Shift snaps to 15°' : 'Turn round the centre and click where the arc ends · Shift snaps to 15° · Esc cancels'));
+  }
+  function arcMove(q, e) {
+    const d = arcDraft, s = byId(d.id);
+    d.cur = q;
+    if (d.tool === 'arc') {
+      if (d.pts.length < 2) return;
+      let ang = angDeg(d.pts[0], q);
+      ang = e.shiftKey ? Math.round(ang / 15) * 15 : Math.round(ang * 10) / 10;
+      d.sweep = Math.max(-360, Math.min(360, d.sweep + mod360(ang - d.last + 180) - 180));
+      d.last = ang;
+      if (d.sweep >= 0) { s.a1 = d.a0; s.a2 = d.a0 + d.sweep; } else { s.a1 = d.a0 + d.sweep; s.a2 = d.a0; }
+      return;
+    }
+    if (d.pts.length < 2) return;
+    const [P1, P2] = d.pts, C = circumcircle(P1, P2, q);
+    if (!C) { s.r = 0; return; }
+    const A1 = angDeg(C, P1), A2 = angDeg(C, P2), Aq = angDeg(C, q);
+    Object.assign(s, { cx: C.x, cy: C.y, r: C.r });
+    if (mod360(Aq - A1) < mod360(A2 - A1)) { s.a1 = A1; s.a2 = A1 + mod360(A2 - A1); }
+    else { s.a1 = A2; s.a2 = A2 + mod360(A1 - A2); }
+  }
+  function arcStep(q, e) {
+    const d = arcDraft, s = byId(d.id), far = (a, b) => dist(a, b) * state.view.zoom >= 4;
+    if (d.pts.length === 1) {
+      if (!far(d.pts[0], q)) return;
+      d.pts.push(q);
+      if (d.tool === 'arc') {
+        let a0 = angDeg(d.pts[0], q);
+        a0 = e.shiftKey ? Math.round(a0 / 15) * 15 : Math.round(a0 * 10) / 10;
+        Object.assign(d, { a0, sweep: 0, last: a0 });
+        Object.assign(s, { r: dist(d.pts[0], q), a1: a0, a2: a0 });
+      }
+      arcHint();
+      return;
+    }
+    arcMove(q, e);
+    if (d.tool === 'arc' ? Math.abs(d.sweep) < 0.5 : !(s.r > 0) || !far(d.pts[0], q) || !far(d.pts[1], q)) return;
+    arcDraft = null;
+    if (s.a1 < 0 || s.a1 >= 360) { const k = Math.floor(s.a1 / 360) * 360; s.a1 -= k; s.a2 -= k; }
+    if (!TYPES.arc.valid(s)) removeShape(s.id);
+    snapHint = null;
+    commit();
+    setTool('select');
+    render(); renderProps();
+  }
+  function arcCancel() {
+    const s = byId(arcDraft.id);
+    arcDraft = null;
+    if (s) removeShape(s.id);
+    snapHint = null;
+    commit(); render(); renderProps();
+  }
+  function arcDown(p, e) {
+    const q = snapPoint(p, e, arcDraft ? new Set([arcDraft.id]) : null);
+    if (!arcDraft) {
+      begin();
+      const s = addShape(TYPES.arc.create(q, state.defaults));
+      state.sel = new Set([s.id]);
+      arcDraft = { tool: state.tool, id: s.id, pts: [q], cur: q };
+    } else arcStep(q, e);
+    if (arcDraft) { arcDraft.down = { x: e.clientX, y: e.clientY }; arcHint(); }
+    render();
+  }
+  // letting go after a drag sets the next point; a plain click waits for the next click
+  svg.addEventListener('pointerup', (e) => {
+    const d = arcDraft;
+    if (!d || !d.down) return;
+    const moved = Math.hypot(e.clientX - d.down.x, e.clientY - d.down.y) > 6;
+    d.down = null;
+    if (moved && d.pts.length === 1) { arcStep(snapPoint(toWorld(e), e, new Set([d.id])), e); render(); }
+  });
+
   // ---------------- rotate by dragging just outside a corner (like Photoshop) ----------------
   // the frame is the shape's own (rotated) box for one shape, else the selection's bounding box
   // blocks whose content never turns: rotating one alone does nothing, so it gets no rotate zone, hint or menu item
-  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'geo2d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz']);
+  const FIXED = new Set(['plot', 'solid', 'prim3d', 'revolve', 'geo3d', 'geo2d', 'cd', 'xy', 'qc', 'cz', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz']);
   const rotatable = (sel = selected()) => sel.length > 1 || (sel.length === 1 && !FIXED.has(sel[0].type));
   function rotFrame() {
     const sel = selected();
     if (!sel.length || state.tool !== 'select' || !rotatable(sel)) return null;
     let C = null;
-    if (sel.length === 1 && (TD.ROT_TYPES.has(sel[0].type) || sel[0].type === 'sym')) C = TD.rotFrame(sel[0]);
+    if (sel.length === 1 && (TD.ROT_TYPES.has(sel[0].type) || sel[0].type === 'sym' || sel[0].type === 'arc')) C = TD.rotFrame(sel[0]);
     if (!C) { const b = unionBox(sel); C = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]; }
     const cx = (C[0][0] + C[2][0]) / 2, cy = (C[0][1] + C[2][1]) / 2;
     const H = sel.length === 1 ? TYPES[sel[0].type].handles(sel[0]) : []; // the resize handles actually drawn
@@ -1342,6 +1455,7 @@
       render();
       return;
     }
+    if (state.tool === 'arc' || state.tool === 'arc3') { arcDown(p, e); return; }
     if (state.tool === 'poly' || state.tool === 'blob') {
       const q = snapPoint(p, e, polyDraft ? new Set([polyDraft]) : null);
       if (!polyDraft) {
@@ -1409,7 +1523,7 @@
       begin();
       const hs0 = byId(h.dataset.hid);
       if (CONNECT.has(hs0.type) && END[h.dataset.handle]) delete hs0[END[h.dataset.handle][0]]; // re-attached where it's dropped
-      drag = { mode: 'handle', id: h.dataset.hid, key: h.dataset.handle, orig: clone(hs0) };
+      drag = { mode: 'handle', id: h.dataset.hid, key: h.dataset.handle, orig: clone(hs0), p0: p };
       svg.style.setProperty('--drag-cur', h.style.cursor || 'move'); svg.classList.add('drag-cur'); // keep it while the pointer outruns the handle
       return;
     }
@@ -1473,6 +1587,13 @@
     $('#cursorPos').textContent = `x ${fx(p.x / PX)} · y ${fx(-p.y / PX)} cm`;
     cursorW = p; drawRulers();
     if (!drag) {
+      if (arcDraft) {
+        const q = snapPoint(p, e, new Set([arcDraft.id]));
+        arcMove(q, e);
+        snapHint = q;
+        render();
+        return;
+      }
       if (polyDraft) {
         const s = byId(polyDraft);
         let q = snapPoint(p, e, new Set([polyDraft]));
@@ -1577,7 +1698,7 @@
         if (lk) q = { ...linkPoint(lk), anchor: true };
         drag.lk = lk || null; linkHint = lk ? lk.id : null;
         snapHint = q.anchor ? q : null;
-        TYPES[s.type].setHandle(s, drag.key, q, e, drag.orig);
+        TYPES[s.type].setHandle(s, drag.key, q, e, drag.orig, drag.p0);
         render(); renderGeom();
         break;
       }
@@ -1723,7 +1844,7 @@
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
   svg.addEventListener('pointerleave', () => { cursorW = null; drawRulers(); });
-  svg.addEventListener('pointerleave', () => { if (!drag && state.tool !== 'select' && !polyDraft) { snapHint = null; renderOverlay(); } });
+  svg.addEventListener('pointerleave', () => { if (!drag && state.tool !== 'select' && !polyDraft && !arcDraft) { snapHint = null; renderOverlay(); } });
 
   svg.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -2152,13 +2273,12 @@
     ellipse: [['cx', 'x'], ['cy', 'y'], ['rx', 'len'], ['ry', 'len']],
     ball: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
     dot: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
-    arc: [['cx', 'x'], ['cy', 'y'], ['r', 'len'], ['a1', 'deg'], ['a2', 'deg']],
+    arc: [['cx', 'x'], ['cy', 'y'], ['r', 'len'], ['ry', 'len'], ['a1', 'deg'], ['a2', 'deg']],
     text: [['x', 'x'], ['y', 'y'], ['tw', 'len'], ['th', 'len']],
     plot: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     solid: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     prim3d: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     revolve: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
-    sketch3d: [['x', 'x'], ['y', 'y'], ['w', 'len'], ['h', 'len']],
     pie: [['cx', 'x'], ['cy', 'y'], ['r', 'len']],
     cd: [['x', 'x'], ['y', 'y']],
     xy: [['x', 'x'], ['y', 'y']],
@@ -2246,7 +2366,7 @@
   // keys a shape has, counting the line extras older files lack
   const SYM_XF = new Set(['angle', 'skew']), TICK_KEYS = { tick: 6 / TD.PT_PER_PX, ticksz: 6 / TD.PT_PER_PX };
   const symParams = (s) => (s.type === 'sym' && TD.SYMS[s.kind] && TD.SYMS[s.kind].params) || null;
-  const hasKey = (s, k) => s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && TD.ROT_TYPES.has(s.type)) ||
+  const hasKey = (s, k) => s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && (TD.ROT_TYPES.has(s.type) || s.type === 'arc')) ||
     (s.type === 'sym' && (SYM_XF.has(k) || !!(symParams(s) && k in symParams(s)))) || (TD.LINEISH.has(s.type) && k in TICK_KEYS && keyVal(s, 'shaft') === 'ticks');
   // text with no alignment set: centred lines, or left in a wrapping box
   const keyVal = (s, k) => s[k] ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
@@ -2435,10 +2555,11 @@
     sec.innerHTML = `<div class="sec-title">Geometry (TikZ ${GEOM[s.type].some((g) => g[1] === 'deg') ? 'cm / °' : 'cm'})</div>` +
       GEOM[s.type].map(([k, kind]) => {
         const e = ex[k] != null ? paramErr.get(s.id + ':' + k) : null;
-        const tip = ex[k] != null ? (e ? e : `= ${toUnit(s[k] ?? 0, kind)}${kind === 'deg' ? '°' : ' cm'}`)
+        const gv = (s.type === 'arc' && k === 'ry' ? s.ry || s.r : s[k]) ?? 0; // an arc without ry is round
+        const tip = ex[k] != null ? (e ? e : `= ${toUnit(gv, kind)}${kind === 'deg' ? '°' : ' cm'}`)
           : k === 'tw' ? 'Wrap width in cm (0 = no wrapping)' : k === 'th' ? 'Paragraph box height in cm (0 = grows with the text). Needs a wrap width.' : '';
-        return `<div class="row"><label>${k === 'tw' ? 'wrap width' : k === 'th' ? 'box height' : k}</label><div class="ctl"><input type="text" inputmode="decimal" spellcheck="false" autocomplete="off" data-geom="${k}" data-kind="${kind}" data-step="${kind === 'deg' ? 5 : 0.05}"`
-          + ` class="geomin${ex[k] != null ? ' ex' : ''}${e ? ' bad' : ''}" value="${esc(ex[k] != null ? ex[k] : String(toUnit(s[k] ?? 0, kind)))}"${tip ? ` title="${esc(tip)}"` : ''}></div></div>`;
+        return `<div class="row"><label>${k === 'tw' ? 'wrap width' : k === 'th' ? 'box height' : s.type === 'arc' && k === 'r' ? 'rx' : k}</label><div class="ctl"><input type="text" inputmode="decimal" spellcheck="false" autocomplete="off" data-geom="${k}" data-kind="${kind}" data-step="${kind === 'deg' ? 5 : 0.05}"`
+          + ` class="geomin${ex[k] != null ? ' ex' : ''}${e ? ' bad' : ''}" value="${esc(ex[k] != null ? ex[k] : String(toUnit(gv, kind)))}"${tip ? ` title="${esc(tip)}"` : ''}></div></div>`;
       }).join('');
   }
   // Variables of the diagram (shown with nothing selected): a name and an expression each
@@ -2742,7 +2863,7 @@
   // the latest copy made in any window
   function clip() {
     const c = store.get(LS_CLIP, null);
-    if (c && validShapes(c.shapes) && (!clipboard || c.t > clipboard.t)) clipboard = { shapes: c.shapes, n: 0, t: c.t };
+    if (c && validShapes(dropRetired(c.shapes).shapes) && (!clipboard || c.t > clipboard.t)) clipboard = { shapes: dropRetired(c.shapes).shapes, n: 0, t: c.t };
     return clipboard;
   }
   // Paste lands centred in the visible canvas, moved by whole grid steps so it stays on the grid.
@@ -3282,12 +3403,14 @@
       }
       for (const [kx, ky] of t.pts) [s[kx], s[ky]] = P(s[kx], s[ky]);
       if (s.type === 'ellipse' && quarter) [s.rx, s.ry] = [s.ry, s.rx];
+      if (s.type === 'arc' && quarter && s.ry > 0) [s.r, s.ry] = [s.ry, s.r];
       if (s.type === 'arc') {
         const [a1, a2] = [s.a1, s.a2];
         if (how === 'cw') { s.a1 = a1 - 90; s.a2 = a2 - 90; }
         else if (how === 'ccw') { s.a1 = a1 + 90; s.a2 = a2 + 90; }
         else if (how === 'fliph') { s.a1 = 180 - a2; s.a2 = 180 - a1; }
         else { s.a1 = -a2; s.a2 = -a1; }
+        if (!quarter && +s.angle) s.angle = -s.angle; // a mirror turns the axes the other way
         const n = Math.floor(s.a1 / 360) * 360; s.a1 -= n; s.a2 -= n;
       }
       // mirroring swaps which side a path label sits on
@@ -3477,6 +3600,7 @@
     let d; try { d = JSON.parse(text); } catch { return false; }
     if (!d || typeof d !== 'object') return false;
     const name = d.name || fallbackName || 'Untitled';
+    retiredHint(dropRetiredDoc(d));
     if (d.kind === 'page') {
       if (!d.sheet || !validShapes(d.sheet.shapes)) throw new Error('not a DiagramTeX page file');
       return { kind: 'page', name, page: d.page, sheet: { pages: Math.max(1, d.sheet.pages | 0), shapes: d.sheet.shapes, ...(d.sheet.vars ? { vars: d.sheet.vars } : {}) } };
@@ -3947,6 +4071,22 @@
     if (id === state.docId) showSaveState();
   }
   const validShapes = (a) => Array.isArray(a) && a.every((s) => s && TYPES[s.type]);
+  // object types that were taken out of the app: dropped when a file or copy holding one opens
+  const RETIRED = { sketch3d: '3D sketch' };
+  function dropRetired(shapes) {
+    if (!Array.isArray(shapes)) return { shapes, gone: 0 };
+    const kept = shapes.filter((s) => !(s && RETIRED[s.type]));
+    return { shapes: kept, gone: shapes.length - kept.length };
+  }
+  // the same over a stored or opened file ({ shapes } / { blocks } / { sheet }); returns how many went
+  function dropRetiredDoc(d) {
+    let gone = 0;
+    const take = (o, k) => { if (o && Array.isArray(o[k])) { const r = dropRetired(o[k]); o[k] = r.shapes; gone += r.gone; } };
+    take(d, 'shapes'); take(d && d.sheet, 'shapes');
+    for (const b of (d && d.blocks) || []) take(b, 'shapes');
+    return gone;
+  }
+  const retiredHint = (n) => n && showHint(`Removed ${n} 3D sketch${n > 1 ? 'es' : ''}: no longer supported. Use 3D Geometry instead.`, 5000);
   const baseName = (n) => n.replace(/(\.diagramtex|(\.page|\.board)?\.json)$/i, '');
   // Open a file from disk: a project file opens as a file of the app (linked to the file on disk when the
   // browser hands over a handle), anything else goes to the LaTeX import.

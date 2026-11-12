@@ -131,8 +131,6 @@ prim3d_a: 11/138 modelled · regenerated differs from line 3 (prim3d → text,ti
 prim3d_b: 11/482 modelled · regenerated differs from line 2 (prim3d → ball,ellipse,text,tikz)
 solid: 16/501 modelled · regenerated differs from line 4 (solid → text,tikz)
 revolve: 9/1741 modelled · regenerated differs from line 4 (revolve → text,tikz)
-sketch3d_a: 24/46 modelled · regenerated differs from line 3 (sketch3d → dot,text,tikz)
-sketch3d_b: 16/27 modelled · regenerated differs from line 5 (sketch3d → dot,poly,text,tikz)
 blk_xy: 1/1 modelled · regenerated differs from line 4 (xy → xy)
 xy_long: 1/1 modelled · regenerated same
 xy_tips: 1/1 modelled · regenerated same

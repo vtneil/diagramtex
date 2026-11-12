@@ -184,7 +184,6 @@
     wedge: { base: 'sector', cx: '0', cy: '0', r1: '0.8', r2: '2', t1: '10', t2: '80', u1: '0', u2: '1.6', view: [120, 25], dropLines: false, showBase: false, solidLabel: '', baseLabel: '', topLabel: '', bottomLabel: '' },
     columns: { base: 'rect', cx: '1.5', cy: '1.5', a: '1.2', b: '1.2', u1: '0', u2: '1.2 + 0.6*exp(-((x-1.5)^2+(y-1.5)^2))', columns: true, nx: '5', ny: '5', view: [120, 25], dropLines: false, showBase: false, solidLabel: '', baseLabel: '', topLabel: '$z = f(x, y)$', bottomLabel: '' },
   };
-  TD.SOLID_DEFAULT = DEFAULT;
   T.solid = V3.blockType('Solid region', DEFAULT, figure, PRESETS);
 
   const { sec, row, inp, chk, sel, color, err, help, view } = V3.ui;

@@ -1,4 +1,4 @@
-// Shared 3D engine for the 3D figure blocks (solid region, basic solids, solids of revolution, 3D sketch).
+// Shared 3D engine for the 3D figure blocks (solid region, basic solids, solids of revolution).
 // Figures are built in 3D, projected with the pgfplots view={az}{el} projection, and turned into a flat list
 // of drawing items in projected units (y up). The items are fitted into the block's box and drawn as SVG on
 // the canvas, or written as plain TikZ with the projected coordinates, so the LaTeX needs no extra package.

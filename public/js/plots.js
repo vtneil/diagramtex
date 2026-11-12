@@ -199,7 +199,6 @@
     param3d: { expr: '(2 + cos(v))*cos(u)', expr2: '(2 + cos(v))*sin(u)', expr3: 'sin(v)', domain: ['0', '2*pi'], ydomain: ['0', '2*pi'], samples: 25 },
     curve3d: { expr: 'cos(t)', expr2: 'sin(t)', expr3: 't/(2*pi)', domain: ['0', '4*pi'], samples: 200 },
   };
-  TD.PLOT_KIND_DEF = KIND_DEF;
   const KINDS3 = [['surface', 'Surface'], ['mesh', 'Mesh'], ['param3d', 'Parametric surface'], ['curve3d', 'Space curve'], ['scatter3d', 'Scatter 3D']];
   const PARAM3 = ['param3d', 'curve3d'];
   const GRID_KINDS = ['contour', 'heatmap', 'surface', 'mesh'];
@@ -222,7 +221,6 @@
     }
     return { ...ser, expr: sub(ser.expr, vals), expr2: sub(ser.expr2, vals), expr3: sub(ser.expr3, vals), domain: (ser.domain || []).map((d) => sub(d, vals)), ydomain: (ser.ydomain || []).map((d) => sub(d, vals)) };
   }
-  TD.plotWithVars = withVars;
   const SERIES_COLORS = ['#1e5bd6', '#d62728', '#2ca02c', '#ff7f0e', '#9467bd', '#8c564b', '#e377c2'];
 
   // Evaluate a series to concrete geometry (memoised).
@@ -1021,7 +1019,6 @@
       series: [newSeries({ kind: 'scatter3d', source: 'data', mark: '*', color: SERIES_COLORS[1], data: Array.from({ length: 30 }, (_, i) => { const t = i / 4; return `${f(Math.cos(t))} ${f(Math.sin(t))} ${f(t / 7.5)}`; }).join('\n') })],
     },
   };
-  TD.PLOT_PRESETS = PRESETS;
 
   T.plot = {
     name: 'Plot',
@@ -1269,5 +1266,4 @@
     },
   };
 
-  TD.plotInternals = { parseExpr, toPgf, ticks, cmap, limits, evalSeries, contour };
 })();

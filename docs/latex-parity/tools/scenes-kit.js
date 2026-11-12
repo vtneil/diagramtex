@@ -388,8 +388,6 @@ KIT.prim3d_a = () => SC.fig3d('prim3d', ['box', 'cylinder', 'cone', 'frustum']);
 KIT.prim3d_b = () => SC.fig3d('prim3d', ['sphere', 'prism', 'pyramid', 'swedge']);
 KIT.solid = () => SC.fig3d('solid', ['region', 'wedge', 'columns']);
 KIT.revolve = () => SC.fig3d('revolve', ['disk', 'washer', 'shell']);
-KIT.sketch3d_a = () => SC.fig3d('sketch3d', ['vectors', 'cylindrical', 'spherical']);
-KIT.sketch3d_b = () => SC.fig3d('sketch3d', ['plane', 'curve']);
 
 // ---- xy_* : xymatrix blocks
 const xyS = (src) => () => SC.block('xy', { src });

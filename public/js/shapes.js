@@ -3,7 +3,7 @@
 (function () {
   const TD = (window.TD = window.TD || {});
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.32.2'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.33.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -370,7 +370,7 @@
   function hopsFor(s, P, scene) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'sketch3d', 'geo3d', 'geo2d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o) => o !== s && T[o.type] && T[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'geo3d', 'geo2d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz'].includes(o.type));
     const polys = below.map((o) => {
       const q = T[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -1130,9 +1130,27 @@
   };
 
   // Arc: angles in degrees, TikZ convention (counter-clockwise, y up). a2 in (a1, a1+360].
+  // r is the x radius; ry, when set, makes it an elliptical arc and the angles are then TikZ's parametric
+  // ones: the point at θ is (r cos θ, ry sin θ). angle, when set, turns those axes (degrees, counter-clockwise).
   const rad = (d) => (d * Math.PI) / 180;
-  const arcPt = (s, a) => ({ x: s.cx + s.r * Math.cos(rad(a)), y: s.cy - s.r * Math.sin(rad(a)) });
+  const arcRy = (s) => (s.ry > 0 ? s.ry : s.r);
+  // a vector in the arc's own frame (x along its first axis, y up) → on screen, and back
+  const arcW = (s, x, y) => { const a = rad(+s.angle || 0), c = Math.cos(a), n = Math.sin(a); return { x: c * x - n * y, y: -(n * x + c * y) }; };
+  const arcL = (s, dx, dy) => { const a = rad(+s.angle || 0), c = Math.cos(a), n = Math.sin(a); return { x: c * dx - n * dy, y: -(n * dx + c * dy) }; }; // (inverse: R(-a) of (dx, -dy))
+  const arcPt = (s, a) => { const v = arcW(s, s.r * Math.cos(rad(a)), arcRy(s) * Math.sin(rad(a))); return { x: s.cx + v.x, y: s.cy + v.y }; };
+  // the direction the arc runs at θ (screen coordinates), and its speed there (length per radian)
+  const arcDir = (s, a) => { const v = arcW(s, -s.r * Math.sin(rad(a)), arcRy(s) * Math.cos(rad(a))), l = Math.hypot(v.x, v.y) || 1; return { x: v.x / l, y: v.y / l, l }; };
+  const arcAng = (s, q) => { const L = arcL(s, q.x - s.cx, q.y - s.cy); return (Math.atan2(L.y / (arcRy(s) || 1), L.x / (s.r || 1)) * 180) / Math.PI; };
   const angOf = (c, q) => (Math.atan2(-(q.y - c.y), q.x - c.x) * 180) / Math.PI;
+  // the arc's bounding box as fractions of its radii: cos θ and sin θ over [a1, a2]
+  const arcBox = (s) => {
+    const has = (t) => { const d = ((((t - s.a1) % 360) + 360) % 360); return d <= s.a2 - s.a1 + 1e-9; };
+    const c = [Math.cos(rad(s.a1)), Math.cos(rad(s.a2))], n = [Math.sin(rad(s.a1)), Math.sin(rad(s.a2))];
+    const cMax = has(0) ? 1 : Math.max(...c), cMin = has(180) ? -1 : Math.min(...c), sMax = has(90) ? 1 : Math.max(...n), sMin = has(270) ? -1 : Math.min(...n);
+    // the edge handle goes on the side of the box furthest from the centre: that side moves as the radius changes
+    const sx = cMax >= -cMin ? 1 : -1, sy = sMax >= -sMin ? 1 : -1;
+    return { sx, sy, kx: Math.max(0.05, sx > 0 ? cMax : -cMin), ky: Math.max(0.05, sy > 0 ? sMax : -sMin), cMid: (cMax + cMin) / 2, sMid: (sMax + sMin) / 2 };
+  };
   const normA2 = (s) => { let d = (((s.a2 - s.a1) % 360) + 360) % 360; if (d < 0.5) d = 360; s.a2 = s.a1 + d; };
   T.arc = {
     name: 'Arc',
@@ -1145,40 +1163,81 @@
       s.a1 = Math.round(ang * 10) / 10; s.a2 = s.a1 + 90;
     },
     valid: (s) => s.r > 2,
-    handles: (s) => [{ k: 'a1', ...arcPt(s, s.a1) }, { k: 'a2', ...arcPt(s, s.a2) }, { k: 'c', x: s.cx, y: s.cy, ctrl: true }],
-    setHandle(s, k, q, e) {
+    // the end handles set only θ1 and θ2; the radius has its own handle, on the arc halfway between them, and
+    // two edge handles (on the side of the centre the arc bulges to) stretch it across or up and down
+    // the edge handles sit on the middle of the far sides of its bounding box (z, the zoom, when drawn: one that
+    // would sit on another handle is set just outside)
+    handles: (s, z) => {
+      const m = (s.a1 + s.a2) / 2, ry = arcRy(s), B = arcBox(s);
+      const H = [{ k: 'a1', ...arcPt(s, s.a1) }, { k: 'a2', ...arcPt(s, s.a2) }, { k: 'rad', ...arcPt(s, m) }];
+      const at = (k, x, y) => { const v = arcW(s, x, y); return { k, x: s.cx + v.x, y: s.cy + v.y }; };
+      const o = z ? 14 / z : 0, near = (h) => z && H.some((p) => Math.hypot(p.x - h.x, p.y - h.y) < 10 / z);
+      let ex = at('rx', B.sx * B.kx * s.r, B.sMid * ry), ey = at('ry', B.cMid * s.r, B.sy * B.ky * ry);
+      if (near(ex)) ex = at('rx', B.sx * (B.kx * s.r + o), B.sMid * ry);
+      if (near(ey)) ey = at('ry', B.cMid * s.r, B.sy * (B.ky * ry + o));
+      for (const h of H) h.round = true; // on the circumference: round handles
+      return [...H, ex, ey, { k: 'c', x: s.cx, y: s.cy, ctrl: true }];
+    },
+    setHandle(s, k, q, e, orig, p0) {
       if (k === 'c') { s.cx = q.x; s.cy = q.y; return; }
-      let ang = angOf({ x: s.cx, y: s.cy }, q);
+      const R = (v) => Math.max(2, Math.round(v * 100) / 100);
+      if (k === 'rx' || k === 'ry') { // by how far the pointer has moved, so a handle set outside doesn't jump
+        const o = orig || s, B = arcBox(o), ry0 = arcRy(o);
+        const g = p0 || (() => { const v = arcW(o, k === 'rx' ? B.sx * B.kx * o.r : 0, k === 'ry' ? B.sy * B.ky * ry0 : 0); return { x: o.cx + v.x, y: o.cy + v.y }; })();
+        const d = arcL(o, q.x - g.x, q.y - g.y); // the pointer's move in the arc's own frame
+        if (k === 'rx') { s.r = R(o.r + (B.sx * d.x) / B.kx); s.ry = ry0; } else s.ry = R(ry0 + (B.sy * d.y) / B.ky);
+        if (e.shiftKey) { if (k === 'rx') s.ry = s.r; else s.r = s.ry; } // Shift: back to a circle
+        if (Math.abs(s.ry - s.r) < 1e-9) { // round again: a turn is just a shift of the angles
+          delete s.ry;
+          if (+s.angle) { s.a1 += +s.angle; s.a2 += +s.angle; delete s.angle; }
+        }
+        return;
+      }
+      if (k === 'rad') { // scales both radii together, keeping the shape
+        const P = arcPt(s, (s.a1 + s.a2) / 2), d0 = dist({ x: s.cx, y: s.cy }, P) || 1, f = dist({ x: s.cx, y: s.cy }, q) / d0;
+        const ry = arcRy(s); s.r = R(s.r * f); if (s.ry > 0) s.ry = R(ry * f);
+        return;
+      }
+      let ang = arcAng(s, q);
       if (e.shiftKey) ang = Math.round(ang / 15) * 15;
       ang = Math.round(ang * 10) / 10;
-      if (k === 'a1') { const span = s.a2 - s.a1; s.r = Math.max(2, dist({ x: s.cx, y: s.cy }, q)); s.a1 = ang; s.a2 = ang + span; }
+      if (k === 'a1') { const a2 = s.a2; s.a1 = ang; s.a2 = a2; normA2(s); }
       else { s.a2 = ang; normA2(s); }
+    },
+    // its own bounding box, turned with it (nw, ne, se, sw on screen when unturned)
+    frame(s) {
+      const B = arcBox(s), ry = arcRy(s), x0 = B.cMid * s.r, y0 = B.sMid * ry;
+      const hw = ((B.sx > 0 ? B.kx : -B.kx) * s.r - x0) * B.sx, hh = ((B.sy > 0 ? B.ky : -B.ky) * ry - y0) * B.sy;
+      return [[-hw, hh], [hw, hh], [hw, -hh], [-hw, -hh]].map(([x, y]) => { const v = arcW(s, x0 + x, y0 + y); return [s.cx + v.x, s.cy + v.y]; });
     },
     anchors: (s) => [{ x: s.cx, y: s.cy }, arcPt(s, s.a1), arcPt(s, s.a2)],
     samples(s) { const a = []; for (let i = 0; i <= 32; i++) a.push(arcPt(s, s.a1 + ((s.a2 - s.a1) * i) / 32)); return a; },
     svg(s, ctx) {
       const col = css(s.stroke || '#000');
       const S = arcPt(s, s.a1), E = arcPt(s, s.a2);
-      const ue = { x: -Math.sin(rad(s.a2)), y: -Math.cos(rad(s.a2)) };
-      const us = { x: Math.sin(rad(s.a1)), y: Math.cos(rad(s.a1)) };
+      const D2 = arcDir(s, s.a2), D1 = arcDir(s, s.a1);
+      const ue = { x: D2.x, y: D2.y };
+      const us = { x: -D1.x, y: -D1.y };
       const te = tip(s.endTip, E, ue, s.width, col), ts = tip(s.startTip, S, us, s.width, col);
       const dOf = (b1, b2) => {
-        const r = Math.max(s.r, 0.01);
-        const a1 = s.a1 + ((b1 / r) * 180) / Math.PI, a2 = s.a2 - ((b2 / r) * 180) / Math.PI;
+        const r = Math.max(s.r, 0.01), ry = Math.max(arcRy(s), 0.01), R = `${r2(r)},${r2(ry)} ${r2(-(+s.angle || 0))}`;
+        const a1 = s.a1 + ((b1 / Math.max(D1.l, 0.01)) * 180) / Math.PI, a2 = s.a2 - ((b2 / Math.max(D2.l, 0.01)) * 180) / Math.PI;
         const sw = a2 - a1;
         if (sw <= 0) return '';
         if (sw >= 359.9) { // full circle: two halves
           const m = arcPt(s, a1 + 180);
-          return `M${pt(arcPt(s, a1))}A${r2(r)},${r2(r)} 0 0,0 ${pt(m)}A${r2(r)},${r2(r)} 0 0,0 ${pt(arcPt(s, a1 + 359.99))}`;
+          return `M${pt(arcPt(s, a1))}A${R} 0,0 ${pt(m)}A${R} 0,0 ${pt(arcPt(s, a1 + 359.99))}`;
         }
-        return `M${pt(arcPt(s, a1))}A${r2(r)},${r2(r)} 0 ${sw > 180 ? 1 : 0},0 ${pt(arcPt(s, a2))}`;
+        return `M${pt(arcPt(s, a1))}A${R} ${sw > 180 ? 1 : 0},0 ${pt(arcPt(s, a2))}`;
       };
       return wrap(s, strokeSvg(s, dOf(ts.back, te.back), dOf(0, 0)) + ts.svg + te.svg) + hit(dOf(0, 0), ctx);
     },
     tikz(s, X) {
       if (!s.stroke) return '';
-      const S = arcPt(s, s.a1);
-      return `\\draw${opts(styleOpts(s, X, { arrows: true }))} ${X.c(S.x, S.y)} arc[start angle=${f(s.a1)}, end angle=${f(s.a2)}, radius=${X.len(s.r)}];`;
+      // a turned arc is drawn unturned from its start, inside rotate around its centre
+      const S = arcPt({ ...s, angle: 0 }, s.a1), o = styleOpts(s, X, { arrows: true });
+      if (+s.angle) o.push(`rotate around={${f(+s.angle)}:${X.c(s.cx, s.cy)}}`);
+      return `\\draw${opts(o)} ${X.c(S.x, S.y)} arc[start angle=${f(s.a1)}, end angle=${f(s.a2)}, ${s.ry > 0 ? `x radius=${X.len(s.r)}, y radius=${X.len(s.ry)}` : `radius=${X.len(s.r)}`}];`;
     },
   };
 
@@ -1732,7 +1791,6 @@
   };
 
   const notesOf = (X) => [...(X.notes || [])].map((n) => '% Note: ' + n);
-  TD.tikzNotes = notesOf;
   // Full TikZ document generation.
   TD.toTikz = function (shapes, { standalone = false } = {}) {
     const X = makeX();

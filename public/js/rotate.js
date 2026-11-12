@@ -33,6 +33,7 @@
       const f = TD.symXf(s);
       return [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]].map(([x, y]) => f(x, y));
     }
+    if (t.frame) return t.frame(s);
     if (!t._samples) return null;
     const b = rawBox(t, s), f = TD.rotOf(s);
     return [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]].map(([x, y]) => f(x, y));
@@ -115,7 +116,11 @@
     }
     if (s.type === 'poly') { s.pts = s.pts.map(([x, y]) => P(x, y)); return; }
     if (s.type === 'region') { s.rings = s.rings.map((r) => r.map(([x, y]) => P(x, y))); return; }
-    if (s.type === 'arc') { [s.cx, s.cy] = P(s.cx, s.cy); s.a1 -= deg; s.a2 -= deg; return; }
+    if (s.type === 'arc') { // a round arc just shifts its angles; an elliptical one turns its axes
+      [s.cx, s.cy] = P(s.cx, s.cy);
+      if (s.ry > 0 || +s.angle) s.angle = normDeg((+s.angle || 0) - deg); else { s.a1 -= deg; s.a2 -= deg; }
+      return;
+    }
     if (['line', 'curve', 'spring'].includes(s.type) && t.pts) {
       for (const [kx, ky] of t.pts) [s[kx], s[ky]] = P(s[kx], s[ky]);
       return;

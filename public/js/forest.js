@@ -155,7 +155,6 @@
     const t = String(src || '').trim();
     return /\\begin\{forest\}/.test(t) ? t : `\\begin{forest}\n${t}\n\\end{forest}`;
   }
-  TD.ftCode = fullCode;
 
   // ---------------------------------------------------------------- style
   const SHAPES = new Set(['circle', 'ellipse', 'rectangle']);

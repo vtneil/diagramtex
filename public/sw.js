@@ -4,7 +4,7 @@
 // both maths engines and their fonts work offline from the first visit. Cross-origin requests (the CDN
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate.
-const CACHE = 'diagramtex-v59';
+const CACHE = 'diagramtex-v60';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
@@ -79,7 +79,6 @@ const PRECACHE = [
     'js/view3d.js',
     'js/solid3d.js',
     'js/figures3d.js',
-    'js/sketch3d.js',
     'js/geo3d.js',
     'js/geo2d.js',
     'js/g3editor.js',
