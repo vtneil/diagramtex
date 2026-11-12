@@ -15,7 +15,7 @@
    */
   /**
    * @typedef {Object} BlockDefinition
-   * @property {{order: number, label: string, title: string, icon: string}} menu
+   * @property {{order: number, label: string, title: string, icon: string, flyout?: string}} menu
    * @property {boolean} fixed Keep content upright during selection transforms.
    * @property {string[][]} [geometry]
    * @property {boolean} [refreshOnDoubleClick]
@@ -39,7 +39,8 @@
       .map(([type, b]) => ({ type, ...b.nodeImport })).sort((a, b) => a.order - b.order),
     bindOpen(fn) { openById = fn; },
     renderMenu(container) {
-      const buttons = [...definitions].sort((a, b) => a[1].menu.order - b[1].menu.order).map(([type, { menu }]) => {
+      // a block with its own toolbar menu (menu.flyout) is listed there instead
+      const buttons = [...definitions].filter(([, b]) => !b.menu.flyout).sort((a, b) => a[1].menu.order - b[1].menu.order).map(([type, { menu }]) => {
         const button = document.createElement('button');
         button.dataset.insert = type;
         button.title = menu.title;

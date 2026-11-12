@@ -52,7 +52,7 @@ T.test('architecture: every block editor opens through Enter, panel alias and co
 });
 
 for (const [type, editorName, modalId, action] of [
-  ['kmap', 'kmapEditor', 'kmModal', 'ke'], ['bytefield', 'bytefieldEditor', 'bfModal', 'be'],
+  ['kmap', 'kmapEditor', 'kmModal', 'ke'], ['bytefield', 'bytefieldEditor', 'bfModal', 'be'], ['physics', 'physicsEditor', 'phyModal', 'pe'],
 ]) T.test(`architecture: ${type} editor history, save, cancel and reopen keep their lifecycle`, async () => {
   const block = T.make(type), saves = [], originalConfirm = TD.confirm;
   const root = document.getElementById(modalId), code = root.querySelector('.cz-code textarea');

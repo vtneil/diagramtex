@@ -24,7 +24,14 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 
 ## What you can draw
 
-- **Physics diagrams:** springs, waves, balls, axes, rulers, vectors, fields and force diagrams.
+- **Physics figures that are computed, not just drawn** (the **Physics** menu in the toolbar): pick a domain and the figure works out its own physics, with a visual editor and the results listed beside it, each marked exact, ideal, approx or schematic:
+  - **Mechanics:** blocks on inclines with friction, applied forces, Atwood machines, springs, pendulums, projectiles, four-bar linkages and slider–cranks.
+  - **Optics:** ray tracing through lenses, mirrors, prisms, slabs, interfaces (refraction and total internal reflection), polarisers, phase plates and beam splitters, with images and interferometers (Michelson, Mach–Zehnder).
+  - **Fields:** electric field lines, equipotentials and null points of point charges, and magnetic field lines of currents.
+  - **Waves:** two-source interference, single and double slits and gratings, superposition and beats, standing waves on strings and in pipes.
+  - **Spacetime:** Minkowski diagrams with moving frames, events, world lines, light cones, simultaneity, intervals and invariant hyperbolas.
+  - **Energy levels:** level diagrams, hydrogen-like levels, transitions and line spectra.
+- **Physics symbols:** springs, waves, balls, axes, rulers, vectors, fields and force diagrams, in the same menu.
 - **Circuit diagrams:** a drag-and-drop circuit editor with 415 `circuitikz` components (resistors, capacitors, inductors, sources, meters, diodes, transistors, op-amps and amplifiers, switches, logic gates including IEEE ones, flip-flops, ICs, vacuum tubes, antennas, block-diagram parts) that exports `circuitikz` code, plus 35 quick electrical symbols and waveforms.
 - **Function plots and charts:** 2D and 3D pgfplots (functions, parametric, polar, implicit, inequalities, vector fields, contour, heatmap, bar, scatter) and pie charts.
 - **3D figures for calculus, in plain TikZ:** all shaded or drawn as lines, with hidden edges dashed, turned with the view angles, and exported as plain TikZ with no extra package. Lower a solid colour's alpha in the colour picker to make the solid see-through.
@@ -280,6 +287,14 @@ npx wrangler preview
 - **Panel:** radius; **Tilt** and **Rotation** sliders (click the degree value to type one); the ball as Shaded, Outline or None; **Colours** for the ball, lines (grid and axes), states and labels, written as the package's own `color`, `style`, `statecolor` and each label's `\node` colour (named xcolor colours, since the package does not take hex); and a **States** table with each state's label (maths), θ and φ, a bin to delete it and **Add State**. The code below is editable too; commands the panel doesn't cover are kept as written.
 - Exported with `\usepackage{blochsphere}`.
 
+### Physics figures
+- **Physics** (experimental: check the results) in the toolbar opens a menu with one entry per domain (Mechanics, Optics, Fields, Waves, Spacetime, Energy levels) above the mechanics and optics symbols. Click an entry, then the canvas, to place a figure of that domain (it starts from an example). Double-click it, press Enter or use **Edit Physics…** in the panel to open the Physics editor.
+- **Editor:** the palette on the left lists the domain's objects by group, with its examples below (an example replaces the figure; ⌘Z brings it back). Click an object, then the grid, to place it; Esc when done. Select an object to change it on the right, or drag its handles: a square moves, a circle turns, a diamond sets a size or focal length (⌥ turns snapping off). Arrows nudge by 0.25 cm (⇧ for 1 cm), Tab walks the objects, ⌘D duplicates, ⌫ deletes, 0 fits the view. With nothing selected, the right side lists every result. The domain is the one chosen from the menu.
+- **Drawing in a figure:** below the physics objects, the palette has the main editor's drawing tools: text and maths, lines, arrows, curves, polylines, the pencil, rectangles, ellipses, basic and flowchart shapes, block arrows and the mechanics, optics, electrical and waveform symbols (no blocks or plots). They draw, reshape and style as on the main canvas, and export with the figure. Drag on an empty spot for a marquee (left to right takes what is wholly inside, right to left what it touches; ⇧ adds), ⇧-click to add or remove one, ⌘A for all; the selection moves, nudges, duplicates and deletes together. Space-drag, the middle button or the trackpad moves the view.
+- **Results:** each computed value is tagged **exact** (from the model as stated), **ideal** (exact for a stated idealisation, such as a thin lens or a massless string), **approx** (an approximation, such as small angles) or **schematic** (drawn, not computed). Hover a result for its model. Impossible setups (a linkage that cannot close, β ≥ 1, a ray that never reaches a lens) are warnings, not silent errors.
+- **Source:** the figure is a short source, one object per line (`\lens[f=2](3)`), live beside the editor in both directions. Values take units (`500nm`, `30deg`, `2kg`, `5nC`); a plain number is in the unit the field shows. Comments, options and lines it does not know, plain TikZ included, are kept as written. This is DiagramTeX's own syntax, not LaTeX: it does not compile on its own. Export, or **Copy TikZ Code** in the panel, gives the LaTeX. A drawn shape is a `\shape{…}` line holding the shape as JSON.
+- **Export:** plain TikZ with `arrows.meta`, the same drawing as the canvas. The models, their assumptions and limits, and what is left out are in [docs/physics.md](docs/physics.md).
+
 ### Three kinds of file
 - The top bar's main switch is **Classic | Page | Whiteboard | Quick**. Hover it to see every name. **Table** sits greyed out after Whiteboard: it is coming soon and can't be chosen yet. Likewise the Blocks menu shows Tensor network, String diagram and Braid as greyed-out, dashed tiles for blocks still to come.
 - **Page** files: one free-form sheet, described below.
@@ -408,6 +423,9 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` fo
 - `public/js/zxeditor.js`: the overlay ZX editor (palette, cell grid, wire handles and shapes, live zx-calculus code)
 - `public/js/feynman.js`: Feynman diagrams: tikz-feynman parser and writer, layout, canvas drawing and export
 - `public/js/fyeditor.js`: the overlay Feynman editor (palette, centimetre grid, vertex handles, properties and live code)
+- `public/js/physics.js`: physics figures: source model that keeps unknown lines, units, the scene shared by preview and TikZ export, results and warnings
+- `public/js/phys-optics.js`, `phys-fields.js`, `phys-waves.js`, `phys-spacetime.js`, `phys-levels.js`, `phys-mechanics.js`: one physics domain each (objects, solver, drawing, handles, examples)
+- `public/js/phyeditor.js`: the overlay Physics editor (palette by domain, handles, inspector with results, keyboard, live code)
 - `public/js/geo2d.js`: the 2D geometry block: plain TikZ read by geo3d.js seen straight on, its panel sliders and export
 - `public/js/geo3d.js`: 3D geometry: tikz-3dplot reader (statements with their spans), projection, canvas drawing, code edits and export
 - `public/js/g3editor.js`: the overlay 3D geometry editor (palette, orbiting view, draggable points, properties and live code); it also edits 2D geometry in a flat mode with its own palette

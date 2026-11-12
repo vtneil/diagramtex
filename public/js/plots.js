@@ -538,8 +538,10 @@
     }
     return out;
   }
-  function colorbarSvg(s, L, ctx) {
-    const x = s.x + s.w + 14, w = 0.5 * PX, n = 24; // pgfplots' colorbar is 0.5cm wide
+  // pgfplots' colorbar is 0.5cm wide, 0.3cm right of the axis and everything it puts beside it (tick labels, a
+  // middle x label): at={(parent axis.right of north east)}, xshift=0.3cm
+  function colorbarSvg(s, L, ctx, right = s.x + s.w + 2) {
+    const x = right + 0.3 * PX, w = 0.5 * PX, n = 24;
     let out = '';
     for (let i = 0; i < n; i++) {
       const y0 = s.y + s.h - ((i + 1) * s.h) / n;
@@ -658,12 +660,16 @@
       front += ah + av;
     }
     const skip0 = lines === 'middle';
+    let right = s.x + s.w; // the axis' right side with its descriptions, where the colour bar starts
     for (const v of xt) {
       const X = mx(v);
       if (lines === 'middle' && Math.abs(v) < 1e-12) continue;
       front += `<path d="M${r2(X)},${r2(xAxisY)}v${lines === 'middle' ? -tk / 2 : -tk}${lines === 'middle' ? 'v' + tk : ''}" stroke="#000" stroke-width="${aw}"/>`;
       if (lines === 'box') front += `<path d="M${r2(X)},${s.y}v${tk}" stroke="#000" stroke-width="${aw}"/>`;
-      if (!(skip0 && Math.abs(v) < 1e-12)) front += txt(tickTex(v), X, xAxisY + (lines === 'middle' ? 7.5 : 2), ctx, NORMAL, 'north');
+      if (!(skip0 && Math.abs(v) < 1e-12)) {
+        front += txt(tickTex(v), X, xAxisY + (lines === 'middle' ? 7.5 : 2), ctx, NORMAL, 'north');
+        right = Math.max(right, X + TD.textBox(tickTex(v), NORMAL).w / 2 + 4); // with the node's inner sep
+      }
     }
     let maxYW = 0;
     for (const v of yt) {
@@ -674,9 +680,13 @@
       maxYW = Math.max(maxYW, TD.textBox(tickTex(v), NORMAL).w);
       front += txt(tickTex(v), yAxisX - (lines === 'middle' ? 8 : 4), Y + 0.4, ctx, NORMAL, 'east');
     }
+    let titleY = s.y - 6;
     if (lines === 'middle') {
       front += txt(s.xlabel, s.x + s.w + 4, xAxisY, ctx, NORMAL, 'west');
       front += txt(s.ylabel, yAxisX, s.y - 1.2, ctx, NORMAL, 'south');
+      if (s.xlabel) right = Math.max(right, s.x + s.w + 4 + TD.textBox(s.xlabel, NORMAL).w + 4);
+      // the y label sits on top of the axis, where the title goes: the title moves up over it (as the export says)
+      if (s.ylabel) titleY = Math.min(titleY, s.y - 1.2 - TD.textBox(s.ylabel, NORMAL).h);
     } else {
       const th = TD.textBox('$0$', NORMAL).h;
       front += txt(s.xlabel, s.x + s.w / 2, s.y + s.h + 4 + th + 1.4, ctx, NORMAL, 'north');
@@ -686,9 +696,9 @@
         front += `<g transform="rotate(-90 ${r2(cx)} ${r2(cy)})">${txt(s.ylabel, cx, cy, ctx, NORMAL)}</g>`;
       }
     }
-    front += txt(s.title, s.x + s.w / 2, s.y - 6, ctx, NORMAL, 'south');
+    front += txt(s.title, s.x + s.w / 2, titleY, ctx, NORMAL, 'south');
     front += legendSvg(s, ctx, entries);
-    if (s.colorbar) front += colorbarSvg(s, L, ctx);
+    if (s.colorbar) front += colorbarSvg(s, L, ctx, right);
     const errs = L.ev.map((r, i) => (r.error ? `Series ${i + 1}: ${r.error}` : '')).filter(Boolean);
     if (errs.length && !ctx.export) front += `<text x="${s.x + 6}" y="${s.y + 16}" font-size="11" fill="#c62828" font-family="sans-serif">${esc(errs[0])}</text>`;
     return `<defs><clipPath id="${cid}"><rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/></clipPath></defs>` +
@@ -852,7 +862,9 @@
         X.libs.add('arrows.meta');
       }
       if (s.axisLines === 'middle') {
-        o.push('every axis x label/.style={at={(current axis.right of origin)}, anchor=west}', 'every axis y label/.style={at={(current axis.above origin)}, anchor=south}');
+        o.push('every axis x label/.style={at={(current axis.right of origin)}, anchor=west}', `every axis y label/.style={at={(current axis.above origin)}, anchor=south${s.ylabel && s.title ? ', name=ylabel' : ''}}`);
+        // the y label is on top of the axis, where the title would go: the title goes above it
+        if (s.ylabel && s.title) o.push('every axis title shift=0pt', 'title style={at={(ylabel.north -| current axis.north)}}');
       }
     }
     if (s.grid) o.push('grid=major');
@@ -1040,7 +1052,10 @@
     handles: (s) => TD.box.handles(s),
     setHandle(s, k, q, e, o) { const b = TD.box.resize(o, k, q, e); if (b.w >= 40 && b.h >= 40) Object.assign(s, b); },
     anchors: (s) => TD.box.handles(s).map((h) => ({ x: h.x, y: h.y })),
-    samples: (s) => [{ x: s.x - 50, y: s.y - (s.title ? 24 : 8) }, { x: s.x + s.w + (s.colorbar ? 60 : 8), y: s.y + s.h + 40 }],
+    samples: (s) => {
+      const mid = s.dim !== 3 && s.axisLines === 'middle', xl = mid && s.xlabel ? TD.textBox(s.xlabel, NORMAL).w + 4 : 0;
+      return [{ x: s.x - 50, y: s.y - (s.title ? (mid && s.ylabel ? 44 : 24) : 8) }, { x: s.x + s.w + xl + (s.colorbar ? 60 : 8), y: s.y + s.h + 40 }];
+    },
     svg(s, ctx) {
       const inner = s.dim === 3 ? render3d(s, ctx) : render2d(s, ctx);
       const hit = ctx.export ? '' : `<rect class="hitfill" x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}"/>`;

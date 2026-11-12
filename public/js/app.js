@@ -1300,7 +1300,7 @@
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
-      : (TD.blocks.get(t) || /^(plot|pie|solid|prim3d|revolve)/.test(t)) ? 'Click to place, or drag to set the size' : '');
+      : (TD.blocks.get(toolType(t)) || /^(plot|pie|solid|prim3d|revolve)/.test(t)) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
 
@@ -1325,13 +1325,42 @@
   $('#fly-shapes').innerHTML = sec('Rectangles', symBtns('rect')) + sec('Basic shapes', symBtns('basic')) + sec('Flowchart', symBtns('flow'));
   $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('')) ;
   $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
-  $('#fly-phys').innerHTML = sec('Mechanics', symBtns('mech')) + sec('Optics', symBtns('optics'));
+  // Physics: computed figures (the physics block, one entry per domain), then the drawn symbols
+  const PHYS_DOMAINS = [
+    ['mechanics', 'Forces on blocks and inclines, pulleys, springs, pendulums, projectiles and linkages', '<path d="M3 20h25V6z"/><path d="M11 15.5l5.2-2.9-2-3.5L9 12z" class="a1"/>'],
+    ['optics', 'Ray optics: lenses, mirrors, prisms, refraction, polarisers and interferometers', '<path d="M2 12h28"/><path d="M15 3c2 3 2 15 0 18M15 3c-2 3-2 15 0 18"/><path d="M3 7h12l12 10" class="c1"/>'],
+    ['fields', 'Electric and magnetic fields: charges, wires, field lines, equipotentials and probes', '<path d="M9 12h14M9 12c4-7 10-7 14 0M9 12c4 7 10 7 14 0" class="c1"/><circle cx="8" cy="12" r="2.6"/><circle cx="24" cy="12" r="2.6"/>'],
+    ['waves', 'Waves: interference, slits and gratings, superposition and standing waves', '<path d="M2 12h28"/><path d="M3 12c3-8 6-8 8.5 0s6 8 8.5 0 6-8 8.5 0" class="c1"/>'],
+    ['spacetime', 'Minkowski diagrams: moving frames, events, world lines, light cones and intervals', '<path d="M6 21V3M6 21h22"/><path d="M6 21L24 3" stroke-dasharray="2 2"/><path d="M6 21l6-15M6 21l15-6" class="c1"/>'],
+    ['levels', 'Energy levels: atomic levels, transitions and line spectra', '<path d="M5 20h22M5 11h22M5 7.5h22M5 5.5h22"/><path d="M15 7.5V19M13 17l2 2 2-2" class="c1"/>'],
+  ];
+  const physDomains = () => `<div class="pop-grid phy-domains">${PHYS_DOMAINS.map(([k, title, d]) => {
+    const D = TD.physics && TD.physics.domains[k];
+    return `<button data-insert="physics:${k}" title="${esc(title)}: computed, with an editor"><svg viewBox="0 0 32 24">${d}</svg>${esc(D ? D.label : k)}</button>`;
+  }).join('')}</div>`;
+  $('#fly-phys').innerHTML = '<div class="pop-title">Physics figures (experimental)<span class="pop-warn">Results and drawings might not be correct.</span></div>' + physDomains() + sec('Mechanics symbols', symBtns('mech')) + sec('Optics symbols', symBtns('optics'));
+  // the same drawing tools, for block editors that hold plain shapes too (the Physics editor): every tool but
+  // images, plots, 3D and blocks. Items are [tool, title, icon svg]; TD.toolType gives the shape type of a tool.
+  const railIcon = (t) => { const b = document.querySelector(`#tools [data-tool="${t}"] svg`); return b ? b.outerHTML : ''; };
+  const symItems = (cat) => TD.SYM_CATS[cat].map((k) => ['sym:' + k, TD.SYMS[k].name, TD.symIcon(k)]);
+  const ic34 = (d) => `<svg viewBox="0 0 34 24">${d}</svg>`;
+  TD.toolType = toolType;
+  TD.drawTools = () => [
+    ['Text', [['text', 'Text: click to place, then type. Use $…$ for maths', railIcon('text')], ['math', 'Maths: a text that starts in $…$', railIcon('math')]]],
+    ['Lines', [...LINE_TOOLS.map(([t, n, d]) => [t, n, ic34(d)]), ['pencil', 'Pencil: freehand, smoothed', railIcon('pencil')]]],
+    ['Shapes', [...MISC_EXTRA.filter((x) => x[0] === 'rect' || x[0] === 'ellipse').map(([t, n, d]) => [t, n, ic34(d)]), ...symItems('rect')]],
+    ['Basic shapes', symItems('basic')], ['Flowchart', symItems('flow')],
+    ['Misc', [...symItems('misc'), ...MISC_EXTRA.filter((x) => x[0] === 'ball' || x[0] === 'dot').map(([t, n, d]) => [t, n, ic34(d)])]],
+    ['Block arrows', symItems('arrow')], ['Mechanics symbols', symItems('mech')], ['Optics symbols', symItems('optics')],
+    ['Electrical symbols', symItems('elec')], ['Waveforms', symItems('wave')],
+  ];
   // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
   $('#fly-elec').innerHTML = sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'))
     + `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: 415 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>Advanced Circuit Block (<code>circuitikz</code>)</span></button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`;
   function flyOf(t) {
     if (/^(solid|prim3d|revolve)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
+    if (/^physics\b/.test(t)) return 'phys';
     if (TD.blocks.get(t)) return 'blocks';
     if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';

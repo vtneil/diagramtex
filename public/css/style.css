@@ -341,6 +341,8 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 #canvas.tool-text { cursor: text; }
 #canvas.pan-ready, #canvas.pan-ready * { cursor: grab !important; }
 #canvas.panning, #canvas.panning * { cursor: grabbing !important; }
+.phy-svg.pan-ready, .phy-svg.pan-ready * { cursor: grab !important; }
+.phy-svg.panning, .phy-svg.panning * { cursor: grabbing !important; }
 #canvas.drag-cur, #canvas.drag-cur * { cursor: var(--drag-cur) !important; }
 #paper { fill: var(--canvas); }
 .grid-minor { stroke: var(--grid-minor); stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -606,7 +608,7 @@ body.mode-doc #layersWin { display: none; }
 #props button.mini:hover { color: var(--redpen); border-color: var(--rule); }
 #props button.wide { width: 100%; }
 #props button.wide + button.wide { margin-top: 8px; }
-#props .err { color: var(--redpen); font-size: 12px; margin: 0 0 4px; }
+#props .err, .cz-props .err { color: var(--redpen); font-size: 12px; margin: 0 0 4px; }
 #props code { font: 11px var(--font-mono); background: var(--well); padding: 0 4px; border-radius: var(--r-sm); }
 #props .ser { background: var(--wash); }
 #props .cval { font: 11px var(--font-mono); color: var(--pencil); }
@@ -898,6 +900,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
    (6 + 8 = 14). Section titles are inset 4px so their text lines up with the drawings in the buttons. */
 .popover.flyout { width: auto; max-width: 420px; padding: 8px; border-radius: calc(var(--r) + 8px); }
 #insertPop.flyout, #fly-plots3d.flyout, #fly-blocks.flyout { width: 324px; }
+#fly-phys .phy-domains { grid-template-columns: repeat(3, 1fr); }
 /* a long menu scrolls inside the window; the track stops short of the rounded corners */
 .popover.flyout { max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; }
 .popover.flyout::-webkit-scrollbar { width: 10px; }
@@ -1229,6 +1232,12 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-code-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 16px; font-size: 13px; font-weight: 600; color: var(--ink); }
 .cz-code-head small { flex: 1; font-size: 11px; font-weight: 400; color: var(--pencil); font-variant-numeric: tabular-nums; }
 .cz-code-head button { height: 26px; padding: 0 10px; font-size: 12px; }
+.cz-code-note { padding: 0 16px 8px; font-size: 11px; line-height: 1.4; color: var(--pencil); }
+.phy-tools { grid-template-columns: repeat(auto-fill, 36px); }
+.phy-tools button.on { color: var(--sheet); background: var(--ink); }
+.phy-sel.phy-box, .phy-hov.phy-box { stroke-width: 1.5; stroke-linecap: butt; }
+.phy-sel.phy-box { stroke: var(--redpen); stroke-dasharray: 4 3; }
+.phy-hov.phy-box { stroke: color-mix(in srgb, var(--bluepen) 60%, transparent); }
 .cz-code textarea { flex: 1; min-height: 0; border: 0; border-top: 1px solid var(--rule-soft); border-radius: 0; padding: 12px 16px; font: 12px/1.6 var(--font-mono); resize: none; outline: none; color: var(--ink); background: var(--sheet-raised); tab-size: 2; white-space: pre; overflow: auto; }
 .cz-code textarea:focus { background: var(--sheet-raised); box-shadow: inset 2px 0 0 var(--bluepen); }
 #cfModal .cz-code textarea { white-space: pre-wrap; overflow-wrap: anywhere; } /* chemfig lines run long */
@@ -1305,10 +1314,28 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .fe-sw i.none { background: linear-gradient(to top right, transparent calc(50% - .75px), var(--redpen) calc(50% - .75px), var(--redpen) calc(50% + .75px), transparent calc(50% + .75px)) !important; }
 
 /* ZX editor (js/zxeditor.js): the cell grid and props come from the quantum editor's qe-* rules */
-#zxModal .cz-box, #cdModal .cz-box, #fyModal .cz-box, #g3Modal .cz-box, #tmModal .cz-box, #cfModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+#zxModal .cz-box, #cdModal .cz-box, #fyModal .cz-box, #g3Modal .cz-box, #tmModal .cz-box, #cfModal .cz-box, #phyModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
 .qe-item .zxmini { flex: none; max-width: 100%; color: var(--ink); }
 .ze-sel { fill: color-mix(in srgb, var(--redpen) 7%, transparent); }
 .ze-wsel { fill: none; stroke: color-mix(in srgb, var(--redpen) 30%, transparent); stroke-linecap: round; pointer-events: none; }
+/* Physics editor: palette rows show the command beside its name; handles by kind (square: move, round: turn, diamond: size); results tagged by how they were found */
+.phy-part code { flex: none; min-width: 74px; font: 11px/1 var(--font-mono); color: var(--pencil); }
+.phy-part[data-ex] { padding-left: 8px; }
+.phy-sel { fill: none; stroke: color-mix(in srgb, var(--redpen) 26%, transparent); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.phy-hov { fill: none; stroke: color-mix(in srgb, var(--bluepen) 18%, transparent); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.phy-bad { fill: none; stroke: var(--redpen); stroke-width: 1.2; stroke-dasharray: 4 3; pointer-events: none; }
+.phy-h { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; }
+.phy-h.on { fill: var(--redpen); }
+.phy-res { display: grid; gap: 2px; }
+.phy-r { display: grid; grid-template-columns: minmax(5.5em, auto) minmax(0, 1fr) auto; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 12px; border-bottom: 1px solid var(--rule); }
+.phy-r:last-child { border-bottom: 0; }
+.phy-l { color: var(--pencil); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.phy-v { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink); text-align: right; }
+.phy-k { font-size: 10px; padding: 1px 5px; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); color: var(--pencil); white-space: nowrap; }
+.phy-exact { color: var(--ink); border-color: var(--ink); }
+.phy-ideal { color: var(--ink); }
+.phy-approx { border-style: dashed; }
+.phy-schematic { border-style: dotted; color: var(--pencil); }
 .ze-draft { stroke: var(--bluepen); stroke-width: 1.5; stroke-dasharray: 4 3; fill: none; pointer-events: none; }
 .ze-knob { cursor: crosshair; }
 .ze-knob.ze-ahead, .ze-knob.ze-mctl { cursor: move; }

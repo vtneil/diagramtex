@@ -4,7 +4,7 @@
 // both maths engines and their fonts work offline from the first visit. Cross-origin requests (the CDN
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate.
-const CACHE = 'diagramtex-v64';
+const CACHE = 'diagramtex-v65';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
@@ -59,6 +59,14 @@ const PRECACHE = [
     'js/czparts-blocks.js',
     'js/czparts-gen.js',
     'js/circuit.js',
+    'js/physics.js',
+    'js/phys-optics.js',
+    'js/phys-fields.js',
+    'js/phys-waves.js',
+    'js/phys-spacetime.js',
+    'js/phys-levels.js',
+    'js/phys-mechanics.js',
+    'js/phyeditor.js',
     'js/czeditor.js',
     'js/qceditor.js',
     'js/fteditor.js',
