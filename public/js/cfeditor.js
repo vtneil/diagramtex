@@ -38,7 +38,7 @@
     ['Rings', [['r:benzene', 'Benzene', `\\chemfig{${RINGS.benzene}}`], ['r:arom', 'Aromatic', `\\chemfig{${RINGS.arom}}`], ['r:3', 'Cyclopropane', `\\chemfig{${RINGS[3]}}`], ['r:4', 'Cyclobutane', `\\chemfig{${RINGS[4]}}`], ['r:5', 'Cyclopentane', `\\chemfig{${RINGS[5]}}`], ['r:6', 'Cyclohexane', `\\chemfig{${RINGS[6]}}`], ['r:7', 'Cycloheptane', `\\chemfig{${RINGS[7]}}`]]],
     ['Groups', Object.keys(GROUPS).map((k) => [`g:${k}`, { NH2: 'NH₂', CH3: 'CH₃', OCH3: 'OCH₃', NO2: 'NO₂' }[k] || k, `\\chemfig{-[0]${GROUPS[k](0)}}`])],
     ['Charges', Object.entries(CHARGES).map(([k, [n, mini]]) => [`c:${k}`, n, mini])],
-    ['Reactions', [['s:->', 'Arrow', '\\schemestart\\arrow{->}\\schemestop'], ['s:<=>', 'Equilibrium', '\\schemestart\\arrow{<=>}\\schemestop'], ['s:<->', 'Resonance', '\\schemestart\\arrow{<->}\\schemestop'], ['s:-/>', 'No reaction', '\\schemestart\\arrow{-/>}\\schemestop'], ['s:+', 'Plus', '\\schemestart\\chemfig{A}\\+\\chemfig{B}\\schemestop']]],
+    ['Reactions', [['s:->', 'Arrow', '\\schemestart\\arrow{->}\\schemestop'], ['s:<=>', 'Equilibrium', '\\schemestart\\arrow{<=>}\\schemestop'], ['s:<->', 'Resonance', '\\schemestart\\arrow{<->}\\schemestop'], ['s:-/>', 'No reaction', '\\schemestart\\arrow{-/>}\\schemestop'], ['s:+', 'Plus', '\\schemestart\\chemfig{A}\\+\\chemfig{B}\\schemestop'], ['s:merge', 'Merge', '\\schemestart\\chemfig{A}\\arrow{0}[-90,0.5]\\chemfig{B}\\merge>(c1)(c2)--()\\chemfig{C}\\schemestop'], ['s:move', 'Curved arrow', '\\chemfig{@{a}A-@{b}B}\\chemmove{\\draw[-stealth](a)..controls +(90:4mm) and +(90:4mm)..(b);}']]],
   ];
   const ITEM = {}, KEYS = {};
   for (const [, items] of PAL) for (const [k, name, mini, key] of items) { ITEM[k] = { k, name, mini, key }; if (key) KEYS[key.toLowerCase()] = k; }
@@ -105,6 +105,8 @@
     return bond;
   }
   function chainOf(item) { return item.parent; }
+  // a bond's name for \chemmove, -[@{name}…]: kept when its angle changes
+  const bondName = (arg0) => (/^\s*@\{[^}]*\}/.exec(arg0 || '') || [''])[0];
   // cut a chain from item on; an emptied branch goes, an emptied molecule goes
   function cutFrom(item, mol) {
     const ch = chainOf(item);
@@ -124,8 +126,25 @@
     while (!c.items.length && c.owner) { const p = c.owner; p.chain.items.splice(p.chain.items.indexOf(p.item), 1); c = p.chain; }
     if (!mol.chain.items.length) deleteMol(mol);
   }
-  // segments of the document, with the list each sits in
-  function listOf(seg) { return seg.owner ? seg.owner.inner : E.M.segs; }
+  // where a segment sits: its list, and the container holding it (\subscheme, brackets, \chemname, \charge)
+  function parentOf(seg, Ls = E.M.segs, own = null) {
+    for (const g of Ls) { if (g === seg) return { list: Ls, own }; if (g.inner) { const r = parentOf(seg, g.inner, g); if (r) return r; } }
+    return null;
+  }
+  function listOf(seg) { const p = parentOf(seg); return p ? p.list : E.M.segs; }
+  // the compound a molecule belongs to, out of names, brackets and charges: its piece in a scheme's list
+  function compOf(seg) {
+    let c = seg, p = parentOf(c);
+    while (p && p.own && p.own.t !== 'sub') { c = p.own; p = parentOf(c); }
+    return { seg: c, list: p ? p.list : E.M.segs, sub: p ? p.own : null };
+  }
+  // the brackets nearest round a molecule, inside its compound
+  function lrOf(seg) { let p = parentOf(seg); while (p && p.own && p.own.t !== 'sub') { if (p.own.t === 'lr') return p.own; p = parentOf(p.own); } return null; }
+  const isStep = (g) => g.t === 'arrow' || g.t === 'merge';
+  const blank = (g) => g && g.t === 'text' && !g.raw.trim();
+  // an arrow between two compounds already placed: \arrow(@c1--@c2)
+  const isDirect = (A) => A.t === 'arrow' && /^\(\s*@[\s\S]*--\s*@/.test(A.names || '');
+  const inScheme = () => E.M.segs.some((g) => g.t === 'start');
   function deleteMol(mol) {
     let seg = mol;
     if (mol.owner && mol.owner.inner.filter((g) => g.t === 'mol').length === 1) seg = mol.owner;
@@ -133,7 +152,6 @@
     if (i < 0) return;
     // a + sign next to it goes too
     let a = i, b = i;
-    const blank = (g) => g && g.t === 'text' && !g.raw.trim();
     if (blank(list[b + 1]) && list[b + 2] && list[b + 2].t === 'plus') b += 2;
     else if (list[b + 1] && list[b + 1].t === 'plus') b += 1;
     else if (blank(list[a - 1]) && list[a - 2] && list[a - 2].t === 'plus') a -= 2;
@@ -165,11 +183,13 @@
   // the vertex's main atom (the one bonds arrive at), as atom pieces to edit
   function atomsOf(v) {
     const raw = v.g ? v.g.raw : '';
-    if (/[?@]/.test(raw)) return null;
+    if (/\?/.test(raw)) return null;
     const sp = C.splitAtoms(raw);
     return sp.atoms;
   }
-  function writeAtoms(v, atoms) { setLabel(v, atoms.map((a) => a.raw).join('')); }
+  // names for \chemmove (@{name}) stay in front of their atoms
+  function writeAtoms(v, atoms) { setLabel(v, atoms.map((a) => (a.name ? `@{${a.name}}` : '') + a.raw).join('')); }
+  const namesIn = (raw) => (String(raw || '').match(/@\{[^}]*\}/g) || []).join('');
   function chargesOf(a) { return a && a.charges ? a.charges : []; }
   function setAtomCharges(a, list) {
     const inner = a.inner != null ? a.inner : a.raw;
@@ -247,19 +267,27 @@
     }
     let so = segs.findIndex((g) => g.t === 'stop');
     if (so < 0) { segs.push(T('\n'), { t: 'stop', raw: '\\schemestop' }); so = segs.length - 1; }
-    // after the compound holding the selection, or at the end
+    // after the compound holding the selection (in its \subscheme, if it is in one), or at the end
+    const A = { t: 'arrow', names: '', type, labels: [], opt: [], dirty: true, raw: '' };
+    const c = after ? compOf(after) : null;
+    if (c && c.list !== segs) {
+      const Ls = c.list;
+      let i = Ls.indexOf(c.seg) + 1;
+      while (i < Ls.length && !isStep(Ls[i])) i++;
+      while (blank(Ls[i - 1])) i--;
+      Ls.splice(i, 0, T('\n  '), A, T('\n  '), copyMol(after));
+      E.M.dirty = true;
+      return A;
+    }
     let at = so;
-    if (after) {
-      const top = topOf(after);
-      let i = segs.indexOf(top);
-      if (i >= 0) { i++; while (i < so && segs[i].t !== 'arrow') i++; at = i; }
+    if (c) {
+      let i = segs.indexOf(c.seg);
+      if (i >= 0) { i++; while (i < so && !isStep(segs[i])) i++; at = i; }
     }
     // back over blanks before the stop
-    while (at > si + 1 && segs[at - 1].t === 'text' && !segs[at - 1].raw.trim()) at--;
+    while (at > si + 1 && blank(segs[at - 1])) at--;
     const src = after || lastMol(segs.slice(si, at));
-    const A = { t: 'arrow', names: '', type, labels: [], opt: [], dirty: true, raw: '' };
-    const m = copyMol(src);
-    segs.splice(at, 0, T('\n  '), A, T('\n  '), m);
+    segs.splice(at, 0, T('\n  '), A, T('\n  '), copyMol(src));
     E.M.dirty = true;
     return A;
   }
@@ -269,27 +297,203 @@
     const src = after || lastMol(segs);
     const m = copyMol(src);
     if (!src) { segs.push(T(' '), { t: 'plus', raw: '\\+' }, T(' '), m); E.M.dirty = true; return m; }
-    const top = topOf(src), list = listOf(top), i = list.indexOf(top);
-    list.splice(i + 1, 0, T(' '), { t: 'plus', raw: '\\+' }, T(' '), m);
+    const c = compOf(src), i = c.list.indexOf(c.seg);
+    c.list.splice(i + 1, 0, T(' '), { t: 'plus', raw: '\\+' }, T(' '), m);
     E.M.dirty = true;
     return m;
   }
+  // an arrow (or \merge) goes with the compound after it; an arrow between placed compounds goes alone.
+  // \chemmove and settings in the way are kept
   function deleteArrow(A) {
-    const segs = E.M.segs, i = segs.indexOf(A);
+    const Ls = listOf(A), i = Ls.indexOf(A);
     if (i < 0) return;
     let j = i + 1;
-    while (j < segs.length && segs[j].t !== 'arrow' && segs[j].t !== 'stop') j++;
+    if (!isDirect(A)) while (j < Ls.length && !isStep(Ls[j]) && Ls[j].t !== 'stop') j++;
     let a = i;
-    while (a > 0 && segs[a - 1].t === 'text' && !segs[a - 1].raw.trim()) a--;
-    segs.splice(a, j - a);
+    while (a > 0 && blank(Ls[a - 1])) a--;
+    const gone = Ls.splice(a, j - a);
+    Ls.splice(a, 0, ...gone.filter((g) => ['move', 'set', 'submol', 'nameinit'].includes(g.t)));
     E.M.dirty = true;
   }
+  // \merge from the last two compounds to a new one
+  function addMerge() {
+    const segs = E.M.segs, comps = lay().comps || [];
+    const lv = Math.min(...comps.map((x) => x.level)), named = comps.filter((x) => x.name);
+    let top = named.filter((x) => x.level === lv);
+    if (top.length < 2) top = named;
+    if (!inScheme() || inHreac() || top.length < 2) return null;
+    const so = segs.findIndex((g) => g.t === 'stop');
+    let at = so < 0 ? segs.length : so;
+    while (at > 1 && blank(segs[at - 1])) at--;
+    const M = { t: 'merge', dir: 'v', labels: [], srcs: top.slice(-2).map((x) => x.name), target: '', opt: [], dirty: true, raw: '' };
+    segs.splice(at, 0, T('\n  '), M, T('\n  '), copyMol(lastMol(segs.slice(0, at))));
+    E.M.dirty = true;
+    return M;
+  }
+  // brackets round a molecule: \chemleft[ … \chemright]
+  const BRK = { '[': ']', '(': ')', '\\{': '\\}' };
+  function setBrackets(mol, k) {
+    const lr = lrOf(mol);
+    if (lr) {
+      if (!k) { const p = parentOf(lr); p.list.splice(p.list.indexOf(lr), 1, ...lr.inner); if (p.own && p.own.t === 'name') for (const x of lr.inner) x.owner = p.own; }
+      else { lr.l = k; lr.r = BRK[k]; lr.pre = `\\chemleft${k}`; lr.post = `\\chemright${BRK[k]}`; }
+    } else if (k) {
+      const p = parentOf(mol);
+      const w = { t: 'lr', l: k, r: BRK[k], inner: [mol], pre: `\\chemleft${k}`, post: `\\chemright${BRK[k]}`, raw: '' };
+      if (p.own && p.own.t === 'name') w.owner = p.own;
+      p.list.splice(p.list.indexOf(mol), 1, w);
+    }
+    E.M.dirty = true;
+  }
+  // \subscheme{compound \arrow compound}: what the next arrow leads to, grouped with this compound
+  function nextStep(mol) {
+    const c = compOf(mol), Ls = c.list;
+    let j = Ls.indexOf(c.seg) + 1;
+    while (j < Ls.length && !isStep(Ls[j]) && Ls[j].t !== 'stop') j++;
+    return j < Ls.length && isStep(Ls[j]) && !isDirect(Ls[j]) ? { c, j } : null;
+  }
+  function groupNext(mol) {
+    const n = nextStep(mol);
+    if (!n) return false;
+    const Ls = n.c.list, i = Ls.indexOf(n.c.seg);
+    let k = n.j + 1;
+    while (k < Ls.length && !isStep(Ls[k]) && Ls[k].t !== 'stop') k++;
+    while (k > n.j + 1 && blank(Ls[k - 1])) k--;
+    const sub = { t: 'sub', opt: '', inner: Ls.slice(i, k), pre: '\\subscheme{', post: '}', raw: '' };
+    Ls.splice(i, k - i, sub);
+    E.M.dirty = true;
+    return true;
+  }
+  function ungroup(sub) { const p = parentOf(sub); if (p) { p.list.splice(p.list.indexOf(sub), 1, ...sub.inner); E.M.dirty = true; } }
+  function setSubAngle(sub, v) { sub.opt = String(v).trim(); sub.pre = sub.opt ? `\\subscheme[${sub.opt}]{` : '\\subscheme{'; E.M.dirty = true; }
+
+  // ---------------------------------------------------------------- curved arrows (\chemmove)
+  // Each \draw in a \chemmove body is one curved arrow; the editor rewrites the k-th one in place.
+  const DRAW_RE = /\\(draw|path)\s*(\[[^\]]*\])?([^;]*);/g;
+  function drawsOf(seg) {
+    const out = [], re = new RegExp(DRAW_RE.source, 'g');
+    let m;
+    while ((m = re.exec(seg.body))) out.push({ i: m.index, e: re.lastIndex, cmd: m[1], opt: m[2] ? m[2].slice(1, -1) : '', path: m[3] });
+    return out;
+  }
+  const moveRaw = (seg) => `\\chemmove${seg.opt ? `[${seg.opt}]` : ''}{${seg.body}}`;
+  function setDraw(seg, k, d) {
+    const D0 = drawsOf(seg)[k];
+    if (!D0) return;
+    const x = { ...D0, ...d };
+    seg.body = seg.body.slice(0, D0.i) + `\\${x.cmd}${x.opt ? `[${x.opt}]` : ''}${x.path};` + seg.body.slice(D0.e);
+    seg.raw = moveRaw(seg); E.M.dirty = true;
+  }
+  function deleteDraw(seg, k) {
+    const D0 = drawsOf(seg)[k];
+    if (!D0) return;
+    seg.body = seg.body.slice(0, D0.i) + seg.body.slice(D0.e);
+    seg.raw = moveRaw(seg);
+    if (!drawsOf(seg).length) {
+      const Ls = listOf(seg), i = Ls.indexOf(seg);
+      let a = i;
+      if (blank(Ls[a - 1])) a--;
+      Ls.splice(a, i - a + 1);
+    }
+    E.M.dirty = true;
+  }
+  // the simple form the handles edit: (a)..controls +(α:r) and +(β:s)..(b)
+  // TikZ's named directions in a polar coordinate: +(up:1cm), +(north west:5mm)
+  const DIRS = { right: 0, east: 0, up: 90, north: 90, left: 180, west: 180, down: 270, south: 270, 'north east': 45, 'north west': 135, 'south west': 225, 'south east': 315 };
+  const ANG = '(-?[\\d.]+|[a-z]+(?:\\s+[a-z]+)?)';
+  const SIMPLE = new RegExp(`^\\s*\\(([^()]*)\\)\\s*\\.\\.\\s*controls\\s*\\+\\(\\s*${ANG}\\s*:\\s*(-?[\\d.]+)\\s*(cm|mm|pt)?\\s*\\)\\s*and\\s*\\+\\(\\s*${ANG}\\s*:\\s*(-?[\\d.]+)\\s*(cm|mm|pt)?\\s*\\)\\s*\\.\\.\\s*\\(([^()]*)\\)\\s*$`);
+  const UNIT = { cm: 1, mm: 0.1, pt: 2.54 / 72.27, '': 1 };
+  const angOf = (a) => (a in DIRS ? DIRS[a] : /^-?[\d.]+$/.test(a) ? +a : NaN);
+  function simpleOf(path) {
+    const m = SIMPLE.exec(path || '');
+    if (!m) return null;
+    const out = angOf(m[2]), inn = angOf(m[5]);
+    return isNaN(out) || isNaN(inn) ? null : { a: m[1], out, r1: +m[3] * UNIT[m[4] || ''], in: inn, r2: +m[6] * UNIT[m[7] || ''], b: m[8] };
+  }
+  const cm = (n) => `${+n.toFixed(2)}cm`;
+  const simplePath = (q) => `(${q.a})..controls +(${+q.out.toFixed(1)}:${cm(q.r1)}) and +(${+q.in.toFixed(1)}:${cm(q.r2)})..(${q.b})`;
+  // options of a \draw, by what they set: tips, line, colour
+  const TIP_RE = /^([<>]?|CF|stealth|latex|to)?-([<>]?|CF|stealth|latex|to)?$/;
+  const isColour = (o) => { const q = /^(?:color\s*=\s*|draw\s*=\s*)?([a-zA-Z]+(?:![\d.]+(?:![a-zA-Z]+)?)?)$/.exec(o); return !!(q && !/^(dashed|dotted|solid|thin|thick|semithick|overlay)$/.test(q[1]) && TD.tikzColor && TD.tikzColor(q[1])); };
+  function setDrawOpt(seg, k, what, val) {
+    const D0 = drawsOf(seg)[k];
+    if (!D0) return;
+    const drop = what === 'tips' ? (o) => TIP_RE.test(o) : what === 'line' ? (o) => /^(dashed|dotted|solid|dash pattern\s*=)/.test(o) : isColour;
+    const opts = D0.opt.split(',').map((o) => o.trim()).filter((o) => o && !drop(o));
+    if (val) opts.unshift(val);
+    setDraw(seg, k, { opt: opts.join(',') });
+  }
+  // a name for what a curved arrow starts or ends at: @{e1} before the atom, or -[@{e1}] on the bond
+  function freshName() {
+    const code = codeOf(E.M);
+    let i = 1;
+    while (new RegExp(`@\\{\\s*e${i}\\s*[},]`).test(code)) i++;
+    return `e${i}`;
+  }
+  function nameFor(t) {
+    if (t.v) {
+      const v = findV(t.v), atoms = v && atomsOf(v);
+      if (!atoms || !atoms.length) return null;
+      const a = atoms[Math.min(v.k, atoms.length - 1)];
+      if (a.name) return a.name;
+      a.name = freshName();
+      writeAtoms(v, atoms); L = null;
+      return a.name;
+    }
+    const b = lay().bonds.find((x) => x.item === t.b);
+    if (!b) return null;
+    const arg = (b.item.arg || []).slice(), m = /^\s*@\{([^},]*)/.exec(arg[0] || '');
+    if (m) return m[1].trim();
+    const n = freshName();
+    arg[0] = `@{${n}}${arg[0] || ''}`;
+    b.item.arg = arg; b.item.dirty = true; touch(b.mol); L = null;
+    return n;
+  }
+  const endPt = (t) => { if (t.v) { const v = findV(t.v); return v && [v.X, v.Y]; } const b = lay().bonds.find((x) => x.item === t.b); return b && [(b.X0 + b.X1) / 2, (b.Y0 + b.Y1) / 2]; };
+  // a new curved arrow from one atom or bond to another, bowed upward
+  function addMove(from, to) {
+    const p1 = endPt(from), p2 = endPt(to);
+    if (!p1 || !p2) return null;
+    const a = nameFor(from), b = nameFor(to);
+    if (!a || !b) return null;
+    const th = (Math.atan2(-(p2[1] - p1[1]), p2[0] - p1[0]) * 180) / Math.PI, up = Math.cos((th * Math.PI) / 180) >= 0 ? 1 : -1;
+    const r = Math.max(0.3, (0.4 * Math.hypot(p2[0] - p1[0], p2[1] - p1[1])) / TD.PX_PER_CM);
+    const q = { a, b, out: C.norm360(Math.round(th + 60 * up)), in: C.norm360(Math.round(th + 180 - 60 * up)), r1: Math.round(r * 20) / 20, r2: Math.round(r * 20) / 20 };
+    const seg = { t: 'move', opt: '-stealth,shorten <=2pt,shorten >=2pt', body: `\\draw${simplePath(q)};` };
+    seg.raw = moveRaw(seg);
+    E.M.segs.push(T('\n'), seg);
+    E.M.dirty = true;
+    return seg;
+  }
+  const selM = () => (E.sel && E.sel.m ? (lay().moves || []).find((x) => x.seg === E.sel.m.seg && x.k === E.sel.m.k) || null : null);
+  // a curved arrow's path, as SVG, and points along it for hit-testing
+  function movePts(mv, n = 16) {
+    const { pts, ops } = mv.segs, out = [pts[0]];
+    ops.forEach((o, i) => {
+      const p0 = pts[i], p3 = pts[i + 1];
+      if (o.k !== 'curve') { out.push(p3); return; }
+      for (let j = 1; j <= n; j++) {
+        const t = j / n, u = 1 - t;
+        out.push([u * u * u * p0[0] + 3 * u * u * t * o.c1[0] + 3 * u * t * t * o.c2[0] + t * t * t * p3[0], u * u * u * p0[1] + 3 * u * u * t * o.c1[1] + 3 * u * t * t * o.c2[1] + t * t * t * p3[1]]);
+      }
+    });
+    return out;
+  }
+  const moveD = (mv) => movePts(mv).map((p, i) => `${i ? 'L' : 'M'}${r2(p[0])},${r2(p[1])}`).join('');
+  // the two control points of a curved arrow in the simple form, and the atoms (or bonds) they hang from
+  function mctls(mv) {
+    const D0 = drawsOf(mv.seg)[mv.k], q = D0 && simpleOf(D0.path), o = mv.segs.ops[0];
+    if (!q || mv.segs.ops.length !== 1 || o.k !== 'curve') return [];
+    const at = (c, a, r) => ({ cx: c[0], cy: c[1], ax: c[0] - r * TD.PX_PER_CM * Math.cos((a * Math.PI) / 180), ay: c[1] + r * TD.PX_PER_CM * Math.sin((a * Math.PI) / 180) });
+    return [{ i: 1, ...at(o.c1, q.out, q.r1) }, { i: 2, ...at(o.c2, q.in, q.r2) }];
+  }
+
   function nameOf(mol) { return mol.owner ? mol.owner.name : ''; }
   function setName(mol, name) {
     name = String(name);
     if (mol.owner) {
       if (name.trim()) { mol.owner.name = name; mol.owner.dirty = true; }
-      else { const o = mol.owner, list = listOf(o), i = list.indexOf(o); list.splice(i, 1, ...o.inner); for (const x of o.inner) delete x.owner; mol.dirty = true; }
+      else { const o = mol.owner, list = listOf(o), i = list.indexOf(o); list.splice(i, 1, ...o.inner); for (const x of o.inner) delete x.owner; delete mol.owner; mol.dirty = true; }
     } else if (name.trim()) {
       const list = listOf(mol), i = list.indexOf(mol);
       const nm = { t: 'name', head: '\\chemname', inner: [mol], mid: '}{', name, raw: '', dirty: true };
@@ -358,7 +562,7 @@
   function restore(code) { E.M = load(code); L = null; E.sel = null; draw(); renderProps(); updateTools(); }
   function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); }
   function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); }
-  function clampSel() { if (E.sel && !selV() && !selB() && !selA()) E.sel = null; }
+  function clampSel() { if (E.sel && !selV() && !selB() && !selA() && !selM()) E.sel = null; }
 
   // ---------------------------------------------------------------- palette
   function sizeMinis(el, maxW, maxH, top) {
@@ -391,6 +595,12 @@
   function pick(k) {
     const kind = k[0], val = k.slice(2);
     if (kind === 'b') { E.bond = val; buildPalette(); }
+    if (kind === 's' && val === 'move') {
+      E.arm = E.arm === k ? null : k; E.mvFrom = null;
+      buildPalette(); draw();
+      setTip(E.arm ? 'Curved arrow: click the atom or bond it starts from. Esc to stop.' : '');
+      return;
+    }
     if (kind === 's') { apply(k, null); return; }
     const v = selV(), b = selB();
     if ((v || b) && apply(k, v ? { v } : { b })) { E.arm = null; buildPalette(); return; }
@@ -405,7 +615,11 @@
     if (kind === 's') {
       const after = selV() ? selV().mol : selB() ? selB().mol : null;
       let A = null, m = null;
-      edit(() => { if (val === '+') m = addPlus(after); else A = addArrow(val, after); });
+      if (val === 'merge') {
+        if (!inScheme() || inHreac() || (lay().comps || []).length < 2) { setTip('A merge joins two compounds of a scheme: add an arrow first'); return false; }
+        edit(() => { A = addMerge(); });
+        if (!A) { setTip('A merge joins two compounds of a scheme: add an arrow first'); return false; }
+      } else edit(() => { if (val === '+') m = addPlus(after); else A = addArrow(val, after); });
       if (A) E.sel = { a: A }; else E.sel = null;
       draw(); renderProps(); keepInView();
       return true;
@@ -433,7 +647,7 @@
       return false;
     }
     if (!v) return false;
-    if (kind === 'a') { edit(() => setLabel(v, val)); reselect(v); return true; }
+    if (kind === 'a') { edit(() => setLabel(v, val ? namesIn(v.g && v.g.raw) + val : val)); reselect(v); return true; }
     if (kind === 'b') { addBondAt(v, freeAngle(v), val); return true; }
     if (kind === 'r') { const a = freeAngle(v); let nb; edit(() => { nb = grow(v, a, E.bond === '-' || !E.bond ? '-' : E.bond, [{ t: 'ring', star: val === 'arom' ? '**' : '*', arc: '', n: val === 'benzene' || val === 'arom' ? 6 : +val, chain: C.parseChain(RINGS[val].replace(/^\*+\d+\(|\)$/g, ''), () => {}) }]); }); E.sel = { b: nb }; draw(); renderProps(); keepInView(); return true; }
     if (kind === 'g') { const a = freeAngle(v); let nb; edit(() => { nb = grow(v, a, '-', C.parseChain(GROUPS[val](a), () => {}).items); }); E.sel = { b: nb }; draw(); renderProps(); keepInView(); return true; }
@@ -501,6 +715,15 @@
     }
     return best;
   }
+  function moveAt(e, px = 6) {
+    const [x, y] = pos(e);
+    let best = null, bd = px;
+    for (const mv of lay().moves || []) {
+      const P = movePts(mv, 12).map((q) => S(q[0], q[1]));
+      for (let i = 1; i < P.length; i++) { const d = segDist(x, y, P[i - 1][0], P[i - 1][1], P[i][0], P[i][1]); if (d < bd) { bd = d; best = mv; } }
+    }
+    return best;
+  }
   function fit() {
     const Lo = lay(), r = rect(), bb = Lo.empty ? { x: -40, y: -30, w: 80, h: 60 } : Lo.bb;
     const k = Math.max(0.5, Math.min(4, Math.min((r.width - 120) / bb.w, (r.height - 120) / bb.h)));
@@ -544,10 +767,14 @@
     for (let j = ys; j <= ye; j++) { const Y = Math.round(v.oy + j * step * k) + 0.5, maj = Math.abs(((j * step) / TD.PX_PER_CM) % 1) < 1e-6; if (maj) major += `M0,${Y}H${W}`; else minor += `M0,${Y}H${W}`; }
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/><path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/>`;
     const Lo = lay();
-    const sb = selB(), sa = selA(), sv = selV();
+    const sb = selB(), sa = selA(), sv = selV(), sm = selM();
     const tr = `transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})"`;
     if (sb) out += `<g ${tr}><path class="ze-wsel" d="M${r2(sb.X0)},${r2(sb.Y0)}L${r2(sb.X1)},${r2(sb.Y1)}" stroke-width="${r2(10 / k)}"/></g>`;
     if (sa) out += `<g ${tr}><path class="ze-wsel" d="M${r2(sa.x1)},${r2(sa.y1)}L${r2(sa.x2)},${r2(sa.y2)}" stroke-width="${r2(12 / k)}"/></g>`;
+    if (sm) out += `<g ${tr}><path class="ze-wsel" d="${moveD(sm)}" stroke-width="${r2(10 / k)}"/></g>`;
+    // a curved arrow's start, picked: marked until its end is picked
+    const mf = E.arm === 's:move' && E.mvFrom;
+    if (mf && mf.b) { const fb = Lo.bonds.find((x) => x.item === mf.b); if (fb) out += `<g ${tr}><path class="ze-wsel" d="M${r2(fb.X0)},${r2(fb.Y0)}L${r2(fb.X1)},${r2(fb.Y1)}" stroke-width="${r2(10 / k)}"/></g>`; }
     if (E.hover && E.hover.b && (!sb || E.hover.b !== sb.item) && !E.drag) { const hb = Lo.bonds.find((b) => b.item === E.hover.b); if (hb) out += `<g ${tr}><path class="cf-bhov" d="M${r2(hb.X0)},${r2(hb.Y0)}L${r2(hb.X1)},${r2(hb.Y1)}" stroke-width="${r2(8 / k)}"/></g>`; }
     if (!Lo.empty) out += `<g ${tr}>${C.draw({ type: 'chemfig', x: Lo.bb.x, y: Lo.bb.y, src: '', color: INK }, { paper: PAPER, export: true }, Lo)}</g>`;
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Pick an atom, a ring or a group on the left to start</text>`;
@@ -555,7 +782,7 @@
     for (const vx of Lo.verts) {
       const [X, Y] = S(vx.X, vx.Y), rr = vRadius(vx);
       const key = vkey(vx);
-      if (sv && vkey(sv) === key) out += `<circle class="fy-vsel" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr + 1)}"/>`;
+      if ((sv && vkey(sv) === key) || (mf && mf.v === key)) out += `<circle class="fy-vsel" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr + 1)}"/>`;
       else if (E.drag && E.drag.mode === 'grow' && E.hover && E.hover.v === key) out += `<circle class="fy-vtarget" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr + 1)}"/>`;
       else if (E.hover && E.hover.v === key && !E.drag) out += `<circle class="fy-vhov" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr)}"/>`;
     }
@@ -563,6 +790,18 @@
     if (E.drag && (E.drag.mode === 'grow' || (E.drag.mode === 'move' && E.drag.moved))) {
       const d = E.drag, [x0, y0] = S(d.fx, d.fy), [x1, y1] = S(d.tx, d.ty);
       out += `<path class="ze-draft" d="M${r2(x0)},${r2(y0)}L${r2(x1)},${r2(y1)}"/><circle class="cz-snap on" cx="${r2(x1)}" cy="${r2(y1)}" r="5"/>`;
+    }
+    // a curved arrow on its way: from its start to the pointer
+    if (mf && E.ptr) { const p = endPt(mf); if (p) { const [x0, y0] = S(p[0], p[1]); out += `<path class="ze-draft" d="M${r2(x0)},${r2(y0)}L${r2(E.ptr[0])},${r2(E.ptr[1])}"/>`; } }
+    // the selected arrow's head: drag it to turn and stretch the arrow
+    if (sa && sa.seg.t === 'arrow' && !isDirect(sa.seg)) {
+      const [hx, hy] = S(sa.x2, sa.y2);
+      out += `<g class="ze-knob ze-ahead"><title>Drag to turn and stretch the arrow</title><circle cx="${r2(hx)}" cy="${r2(hy)}" r="5.5"/></g>`;
+    }
+    // the selected curved arrow's control points, on lines from the atoms they pull away from
+    if (sm) for (const h of mctls(sm)) {
+      const [ax, ay] = S(h.ax, h.ay), [cx, cy] = S(h.cx, h.cy);
+      out += `<path class="ze-draft" d="M${r2(ax)},${r2(ay)}L${r2(cx)},${r2(cy)}"/><g class="ze-knob ze-mctl" data-i="${h.i}"><title>Drag to bend the arrow</title><circle cx="${r2(cx)}" cy="${r2(cy)}" r="5.5"/></g>`;
     }
     // the handle on the selected (or hovered) atom: drag it out for a new bond
     const kvx = !E.drag && !E.arm && (E.knobAt ? findV(E.knobAt) : sv);
@@ -596,9 +835,34 @@
     const [sx, sy] = pos(e);
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
-    const kb = e.target.closest('.ze-knob');
+    const ah = e.target.closest('.ze-ahead'), mc = e.target.closest('.ze-mctl');
+    if (ah && selA()) {
+      const a = selA(), P = lay().P, ux = Math.cos((a.ang * Math.PI) / 180), uy = -Math.sin((a.ang * Math.PI) / 180);
+      E.drag = { mode: 'ahead', A: a.seg, ang0: a.ang, bx: a.x1 - ux * P.aoff, by: a.y1 - uy * P.aoff, sx, sy, moved: false };
+      begin(); return;
+    }
+    if (mc && selM()) {
+      const mv = selM(), h = mctls(mv).find((x) => x.i === +mc.dataset.i);
+      if (h) { E.drag = { mode: 'mctl', i: h.i, seg: mv.seg, k: mv.k, ax: h.ax, ay: h.ay, sx, sy, moved: false }; begin(); return; }
+    }
+    const kb = e.target.closest('.ze-knob:not(.ze-ahead):not(.ze-mctl)');
     if (kb && E.knobPos) { const v = findV(E.knobPos.v); E.drag = { mode: 'grow', v: E.knobPos.v, fx: v.X, fy: v.Y, tx: v.X, ty: v.Y, sx, sy, moved: false, ang: E.knobPos.ang }; E.knobAt = null; return; }
-    const v = vertexAt(e), b = v ? null : bondAt(e), a = v || b ? null : arrowAt(e);
+    const v = vertexAt(e), mv = v ? null : moveAt(e, 5), b = v || mv ? null : bondAt(e), a = v || b || mv ? null : arrowAt(e);
+    if (E.arm === 's:move') {
+      const vb = !mv && v ? v : null, bb = vertexAt(e) ? null : bondAt(e);
+      const t = vb && vb.g && (atomsOf(vb) || []).length ? { v: vkey(vb) } : !vb && bb && !bb.hook && bb.item && bb.item.t === 'bond' ? { b: bb.item } : null;
+      if (!t) { setTip('Curved arrows go from and to a labelled atom or a bond. Esc to stop.'); return; }
+      if (!E.mvFrom) { E.mvFrom = t; setTip('Curved arrow: now click the atom or bond it goes to'); draw(); return; }
+      if ((t.v && t.v === E.mvFrom.v) || (t.b && t.b === E.mvFrom.b)) return;
+      const from = E.mvFrom;
+      let seg = null;
+      E.mvFrom = null; E.arm = null; E.ptr = null;
+      edit(() => { seg = addMove(from, t); });
+      buildPalette(); setTip('');
+      E.sel = seg ? { m: { seg, k: 0 } } : null;
+      draw(); renderProps(); keepInView();
+      return;
+    }
     if (E.arm) {
       if (v || b) { const k = E.arm; apply(k, v ? { v } : { b }); return; }
       if (lay().empty) { apply(E.arm, null); return; }
@@ -612,6 +876,7 @@
       draw(); renderProps(); return;
     }
     if (b) { if (dbl && E.sel && E.sel.b === b.item) { cycleBond(b); return; } E.sel = { b: b.item }; E.drag = null; draw(); renderProps(); return; }
+    if (mv) { E.sel = { m: { seg: mv.seg, k: mv.k } }; E.drag = null; draw(); renderProps(); return; }
     if (a) { if (dbl && E.sel && E.sel.a === a.seg) { editArrowLabel(a, 0); return; } E.sel = { a: a.seg }; E.drag = null; draw(); renderProps(); return; }
     E.sel = null; E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy, idle: true }; draw(); renderProps();
   });
@@ -619,6 +884,7 @@
     if (!E) return;
     const d = E.drag, [sx, sy] = pos(e);
     if (!d) {
+      if (E.arm === 's:move' && E.mvFrom) { E.ptr = [sx, sy]; }
       const v = vertexAt(e, 12), kb = e.target.closest('.ze-knob'), b = v ? null : bondAt(e);
       const kp = E.knobPos, onWay = (() => {
         if (!kp || kp.v !== E.knobAt) return false;
@@ -628,13 +894,36 @@
       const knob = v ? vkey(v) : kb || onWay ? E.knobAt : null;
       const ch = (h && h.v) !== (E.hover && E.hover.v) || (h && h.b) !== (E.hover && E.hover.b) || knob !== E.knobAt;
       E.hover = h; E.knobAt = knob;
-      svg.style.cursor = E.arm ? '' : kb ? 'crosshair' : v ? (v.inBond && !v.inRing ? 'move' : 'default') : b || arrowAt(e) ? 'pointer' : '';
-      if (ch) draw();
+      svg.style.cursor = E.arm ? '' : kb ? (kb.matches('.ze-ahead, .ze-mctl') ? 'move' : 'crosshair') : v ? (v.inBond && !v.inRing ? 'move' : 'default') : b || arrowAt(e) || moveAt(e, 5) ? 'pointer' : '';
+      if (ch || (E.arm === 's:move' && E.mvFrom)) draw();
       return;
     }
     if (d.mode === 'pan') {
       if (d.idle && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
       d.idle = false; E.view.ox = d.ox + sx - d.sx; E.view.oy = d.oy + sy - d.sy; draw(); if (Lb) Lb.pop.place(); return;
+    }
+    if (d.mode === 'ahead') {
+      if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
+      d.moved = true;
+      const P = lay().P, ang = aimAt(d.bx, d.by, e), [x, y] = D(sx, sy);
+      const co = Math.max(0.25, Math.round(((Math.hypot(x - d.bx, y - d.by) + P.aoff) / P.csep) * 4) / 4);
+      const o = d.A.opt.slice();
+      o[0] = !o[0] && Math.abs(C.norm360(ang - d.ang0)) < 1e-9 ? '' : num(ang);
+      o[1] = Math.abs(co - 1) < 1e-9 ? '' : num(co);
+      d.A.opt = o; d.A.dirty = true; E.M.dirty = true; L = null;
+      setTip(`Arrow at ${Math.round(ang)}°, ${num(co)} × compound sep${e.altKey ? '' : ' · ⌥ for any angle'}`);
+      draw(); return;
+    }
+    if (d.mode === 'mctl') {
+      if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
+      d.moved = true;
+      const D0 = drawsOf(d.seg)[d.k], q = D0 && simpleOf(D0.path);
+      if (!q) return;
+      const ang = aimAt(d.ax, d.ay, e), [x, y] = D(sx, sy), r = Math.max(0.05, Math.round((Math.hypot(x - d.ax, y - d.ay) / TD.PX_PER_CM) * 20) / 20);
+      if (d.i === 1) { q.out = ang; q.r1 = r; } else { q.in = ang; q.r2 = r; }
+      setDraw(d.seg, d.k, { path: simplePath(q) }); L = null;
+      setTip(`${d.i === 1 ? 'Leaves' : 'Arrives'} at ${Math.round(ang)}°, pulled ${num(r)} cm${e.altKey ? '' : ' · ⌥ for any angle'}`);
+      draw(); return;
     }
     if (d.mode === 'grow') {
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
@@ -661,6 +950,7 @@
   svg.addEventListener('pointerup', () => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
+    if (d.mode === 'ahead' || d.mode === 'mctl') { setTip(''); commit(); L = null; draw(); renderProps(); return; }
     if (d.mode === 'grow') {
       setTip('');
       const v = findV(d.v);
@@ -672,7 +962,7 @@
       const b = d.bond.item;
       edit(() => {
         const arg = (b.arg || []).slice();
-        arg[0] = fmtA(d.ang);
+        arg[0] = bondName(arg[0]) + fmtA(d.ang);
         arg[1] = Math.abs(d.len - 1) < 1e-9 ? '' : num(d.len);
         b.arg = arg; b.dirty = true; touch(d.bond.mol);
       });
@@ -682,7 +972,7 @@
     draw();
   });
   function reselectKey(key) { L = null; E.sel = findV(key) ? { v: key } : null; draw(); renderProps(); }
-  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt)) { E.hover = null; E.knobAt = null; draw(); } });
+  svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.ptr)) { E.hover = null; E.knobAt = null; E.ptr = null; draw(); } });
   // double-clicking a bond steps it single → double → triple
   function cycleBond(b) { const next = { '-': '=', '=': '~', '~': '-' }[b.item.sym] || '-'; edit(() => { b.item.sym = next; b.item.dirty = true; touch(b.mol); }); }
 
@@ -704,18 +994,21 @@
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (!E) return;
-    const v = vertexAt(e), b = v ? null : bondAt(e), a = v || b ? null : arrowAt(e);
-    const inScheme = E.M.segs.some((g) => g.t === 'start');
-    if (v) {
+    const v = vertexAt(e), mv = v ? null : moveAt(e, 5), b = v || mv ? null : bondAt(e), a = v || b || mv ? null : arrowAt(e);
+    const sch = inScheme();
+    if (mv) {
+      E.sel = { m: { seg: mv.seg, k: mv.k } };
+      menu.innerHTML = mItem('mvdel', 'Delete Curved Arrow', 'del', '⌫');
+    } else if (v) {
       E.sel = { v: vkey(v) };
-      menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + '<hr>' + mItem(v.inRing ? 'rdel' : 'vdel', v.inRing ? 'Delete Ring' : v.inBond ? 'Delete Atom' : 'Delete Molecule', 'del', '⌫') + (inScheme && v.inBond ? mItem('mdel', 'Delete Molecule', 'del') : '');
+      menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + '<hr>' + mItem(v.inRing ? 'rdel' : 'vdel', v.inRing ? 'Delete Ring' : v.inBond ? 'Delete Atom' : 'Delete Molecule', 'del', '⌫') + (sch && v.inBond ? mItem('mdel', 'Delete Molecule', 'del') : '');
     } else if (b) {
       E.sel = { b: b.item };
       menu.innerHTML = mItem('b:-', 'Single', 'one', '1') + mItem('b:=', 'Double', 'two', '2') + mItem('b:~', 'Triple', 'three', '3') + mItem('b:>', 'Wedge', 'wedge') + mItem('b:>:', 'Hashed', 'hash') +
-        (/^[<>]/.test(b.item.sym) ? mItem('bflip', 'Reverse Wedge', 'flip') : '') + '<hr>' + mItem(b.ring ? 'rdel' : 'bdel', b.ring ? 'Delete Ring' : 'Delete Bond', 'del', '⌫') + (inScheme ? mItem('mdel', 'Delete Molecule', 'del') : '');
+        (/^[<>]/.test(b.item.sym) ? mItem('bflip', 'Reverse Wedge', 'flip') : '') + '<hr>' + mItem(b.ring ? 'rdel' : 'bdel', b.ring ? 'Delete Ring' : 'Delete Bond', 'del', '⌫') + (sch ? mItem('mdel', 'Delete Molecule', 'del') : '');
     } else if (a) {
       E.sel = { a: a.seg };
-      menu.innerHTML = mItem('alabel', 'Edit Conditions', 'label', '↩') + '<hr>' + mItem('adel', 'Delete Arrow', 'del', '⌫');
+      menu.innerHTML = mItem('alabel', 'Edit Conditions', 'label', '↩') + '<hr>' + mItem('adel', a.seg.t === 'merge' ? 'Delete Merge' : 'Delete Arrow', 'del', '⌫');
     } else { closeMenu(); return; }
     draw(); renderProps();
     menu.hidden = false;
@@ -784,10 +1077,24 @@
   const field = (label, f, value, extra = '') => row(label, `<div class="ctl"><input type="text" data-f="${f}" value="${esc(value)}" spellcheck="false"${extra}></div>`);
   const numField = (label, f, value, unit, extra = '') => row(label, `<div class="ctl unit"><input type="number" data-f="${f}" value="${value == null ? '' : num(value)}"${extra}><span>${unit}</span></div>`);
   const seg = (f, cur, opts, off) => `<div class="ctl seg-ctl">${opts.map(([v, n, t]) => `<button data-fs="${f}" data-v="${esc(String(v))}" class="${!off && String(cur) === String(v) ? 'on' : ''}"${t ? ` title="${esc(t)}"` : ''}${off ? ' disabled' : ''}>${n}</button>`).join('')}</div>`;
-  const molSec = (mol) => (E.M.segs.some((g) => g.t === 'start') ? `<div class="sec"><div class="sec-title">Molecule</div>${field('Name', 'mname', nameOf(mol), ' placeholder="none, shown under it"')}<div class="row"><button class="danger" data-ce="mdel">Delete Molecule</button></div></div>` : '');
+  const sel = (f, cur, opts) => `<div class="ctl"><select data-f="${f}">${opts.map(([k, n]) => `<option value="${esc(k)}"${k === cur ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>`;
+  // a molecule in a scheme: its name, brackets round it and the \subscheme it is in
+  function molSec(mol) {
+    if (!inScheme()) return '';
+    const lr = lrOf(mol), sub = compOf(mol).sub, bk = lr ? lr.l : '';
+    const opts = [['', 'None'], ['[', '[ ]'], ['(', '( )'], ['\\{', '{ }']];
+    if (bk && !opts.some((o) => o[0] === bk)) opts.push([bk, `${bk} ${lr.r}`]);
+    const grp = sub ? '<button data-ce="ungroup" title="Take its \\subscheme apart">Ungroup</button>'
+      : nextStep(mol) ? '<button data-ce="group" title="Put it, the next arrow and the compound after it in a \\subscheme">Group with Next</button>' : '';
+    return `<div class="sec"><div class="sec-title">Compound${sub ? ' <small>in a subscheme</small>' : ''}</div>
+      ${field('Name', 'mname', nameOf(mol), ' placeholder="none, shown under it"')}
+      ${row('Brackets', sel('brk', bk, opts))}
+      ${sub ? field('Arrows at', 'subang', sub.opt, ' class="mono" placeholder="default, e.g. 90"') : ''}
+      <div class="row">${grp}<button class="danger" data-ce="mdel">Delete Molecule</button></div></div>`;
+  }
   function renderProps() {
     if (!E) return;
-    const Lo = lay(), v = selV(), b = selB(), a = selA();
+    const Lo = lay(), v = selV(), b = selB(), a = selA(), mv = selM();
     if (v) {
       const n = dirsAt(v).length, atoms = atomsOf(v), main = atoms && atoms[Math.min(v.k, atoms.length - 1)];
       const pairs = chargesOf(main).filter((c) => c.what.trim() === '\\:').map((c) => Math.round(c.angle));
@@ -813,27 +1120,62 @@
         <div class="row"><button class="danger" data-ce="${inRing ? 'rdel' : 'bdel'}">${inRing ? 'Delete Ring' : 'Delete Bond'}</button></div></div>${molSec(b.mol)}`);
       return;
     }
+    if (a && a.seg.t === 'merge') {
+      const M = a.seg;
+      TD.morph(props, `<div class="sec"><div class="sec-title">Merge arrow <small>from ${M.srcs.length}</small></div>
+        ${row('Direction', sel('mdir', M.dir, [['>', 'Right'], ['<', 'Left'], ['^', 'Up'], ['v', 'Down']]))}
+        ${field('Above', 'above', C.unbrace(M.labels[0] || ''), ' placeholder="none"')}
+        ${field('Below', 'below', C.unbrace(M.labels[1] || ''), ' placeholder="none"')}
+        ${field('From', 'msrc', M.srcs.join(', '), ' class="mono" placeholder="e.g. c1, c2"')}
+        ${field('To', 'mtgt', M.target, ' class="mono" placeholder="none, or a name for what follows"')}
+        <div class="help">From names the compounds whose lines join: c1 is a scheme's first compound, c2 the next, and so on.</div>
+        <div class="row"><button class="danger" data-ce="adel">Delete Merge</button></div></div>`);
+      return;
+    }
     if (a) {
-      const A = a.seg;
+      const A = a.seg, direct = isDirect(A), dis = direct ? ' disabled' : '';
       TD.morph(props, `<div class="sec"><div class="sec-title">${esc(ARROW_NAMES[A.type] || 'Arrow')} arrow</div>
-        ${row('Type', `<div class="ctl"><select data-f="atype">${Object.entries(ARROW_NAMES).map(([k, nm]) => `<option value="${esc(k)}"${k === A.type ? ' selected' : ''}>${esc(nm)}</option>`).join('')}</select></div>`)}
+        ${row('Type', sel('atype', A.type, Object.entries(ARROW_NAMES)))}
         ${field('Above', 'above', C.unbrace(A.labels[0] || ''), ' placeholder="none, e.g. $\\Delta$"')}
         ${field('Below', 'below', C.unbrace(A.labels[1] || ''), ' placeholder="none, e.g. H$_2$O"')}
-        ${numField('Angle', 'aangle', A.opt[0] ? parseFloat(A.opt[0]) : 0, '°', ' step="45"')}
-        ${numField('Length', 'alen', A.opt[1] ? parseFloat(A.opt[1]) : 1, '×', ' step="0.25" min="0.25"')}
+        ${numField('Angle', 'aangle', direct ? null : A.opt[0] ? parseFloat(A.opt[0]) : a.ang, '°', ' step="15"' + dis)}
+        ${numField('Length', 'alen', direct ? null : A.opt[1] ? parseFloat(A.opt[1]) : 1, '×', ' step="0.25" min="0.25"' + dis)}
+        ${field('Ends', 'aends', A.names ? A.names.slice(1, -1) : '', ' class="mono" placeholder="none, e.g. c1--c2 or @c1--@c3"')}
+        ${field('Style', 'astyle', A.opt.slice(2).filter((x) => x && x.trim()).join(', '), ' class="mono" placeholder="none, e.g. red, thick"')}
+        <div class="help">${direct ? 'It joins two compounds already placed (@ names), so it has no angle or length of its own.' : 'Drag its head to turn and stretch it (15° steps; <kbd>⌥</kbd> for any angle).'}</div>
         <div class="row"><button class="danger" data-ce="adel">Delete Arrow</button></div></div>`);
       return;
     }
+    if (mv) {
+      const D0 = drawsOf(mv.seg)[mv.k], q = D0 && simpleOf(D0.path);
+      const tips = mv.tipS && mv.tipE ? 'stealth-stealth' : mv.tipS ? 'stealth-' : mv.tipE ? '-stealth' : '-';
+      const line = mv.dash === 'dash' ? 'dashed' : mv.dash === 'dot' ? 'dotted' : mv.dash ? 'pattern' : 'solid';
+      const lines = [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']];
+      if (line === 'pattern') lines.push(['pattern', 'Dash pattern']);
+      const col = D0 ? (D0.opt.split(',').map((o) => o.trim()).find(isColour) || '').replace(/^(color|draw)\s*=\s*/, '') : '';
+      TD.morph(props, `<div class="sec"><div class="sec-title">Curved arrow <small>\\chemmove</small></div>
+        ${row('Tips', sel('mvtip', tips, [['-stealth', 'At the end'], ['stealth-', 'At the start'], ['stealth-stealth', 'Both ends'], ['-', 'None']]))}
+        ${row('Line', sel('mvline', line, lines))}
+        ${field('Colour', 'mvcol', col, ' class="mono" placeholder="none, e.g. red"')}
+        ${q ? numField('Leaves at', 'mvout', q.out, '°', ' step="15"') + numField('Pull', 'mvr1', q.r1, 'cm', ' step="0.05" min="0"') + numField('Arrives at', 'mvin', q.in, '°', ' step="15"') + numField('Pull', 'mvr2', q.r2, 'cm', ' step="0.05" min="0"') : ''}
+        ${field('Path', 'mvpath', D0 ? D0.path.trim() : '', ' class="mono"')}
+        <div class="help">${q ? 'Drag the blue handles to bend it.' : 'Its path isn\'t a single curve with two controls, so it is edited as written.'}</div>
+        <div class="row"><button class="danger" data-ce="mvdel">Delete Curved Arrow</button></div></div>`);
+      return;
+    }
     TD.morph(props, `<div class="sec"><div class="sec-title">Chemistry <small>${C.counts(Lo)}</small></div>
-      <div class="help">Pick an atom and drag its blue handle to grow a bond (it snaps to 15°; <kbd>⌥</kbd> for any angle). Drag an atom to turn its bond. Type a letter to relabel the picked atom; double-click to edit its label, or a bond to step it single, double, triple. Rings, groups and charges on the left go onto the picked atom or bond; Reactions add an arrow and a copy of the molecule to change.</div></div>`);
+      <div class="help">Pick an atom and drag its blue handle to grow a bond (it snaps to 15°; <kbd>⌥</kbd> for any angle). Drag an atom to turn its bond. Type a letter to relabel the picked atom; double-click to edit its label, or a bond to step it single, double, triple. Rings, groups and charges on the left go onto the picked atom or bond; Reactions add an arrow and a copy of the molecule to change, a merge, or a curved arrow from one atom or bond to another.</div></div>`);
   }
   props.addEventListener('focusin', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) { commit(); L = null; clampSel(); renderProps(); draw(); } });
   props.addEventListener('input', (ev) => {
     const t = ev.target, f = t.dataset.f;
     if (!f) return;
-    const v = selV(), b = selB(), a = selA();
-    if (v) {
+    const v = selV(), b = selB(), a = selA(), mv = selM(), mol = v ? v.mol : b ? b.mol : null;
+    if (mol && (f === 'brk' || f === 'subang')) {
+      if (f === 'brk') setBrackets(mol, t.value);
+      else { const sub = compOf(mol).sub; if (sub) setSubAngle(sub, t.value); }
+    } else if (v) {
       if (f === 'label') {
         const key = vkey(v);
         setLabel(v, t.value); L = null;
@@ -845,7 +1187,7 @@
       if (f === 'sym') { it.sym = t.value; it.dirty = true; touch(b.mol); }
       else if (f === 'angle' || f === 'len' || f === 'tikz') {
         const arg = (it.arg || []).slice();
-        if (f === 'angle') { const n = parseFloat(t.value); if (!isFinite(n)) return; arg[0] = fmtA(n); }
+        if (f === 'angle') { const n = parseFloat(t.value); if (!isFinite(n)) return; arg[0] = bondName(arg[0]) + fmtA(n); }
         if (f === 'len') { const n = parseFloat(t.value); if (!isFinite(n) || n <= 0) return; arg[1] = Math.abs(n - 1) < 1e-9 ? '' : num(n); }
         if (f === 'tikz') arg[4] = t.value.trim();
         it.arg = arg; it.dirty = true; touch(b.mol);
@@ -853,6 +1195,11 @@
     } else if (a) {
       const A = a.seg;
       if (f === 'atype') A.type = t.value;
+      else if (f === 'mdir') A.dir = t.value;
+      else if (f === 'msrc') A.srcs = t.value.split(',').map((x) => x.trim()).filter(Boolean);
+      else if (f === 'mtgt') A.target = t.value.trim();
+      else if (f === 'aends') { const w = t.value.trim().replace(/^\(|\)$/g, ''); A.names = w ? `(${w})` : ''; }
+      else if (f === 'astyle') { const o = A.opt.slice(0, 2); while (o.length < 2) o.push(''); const st = t.value.trim(); A.opt = st ? [...o, st] : o; }
       else if (f === 'above') { setArrowLabel(A, 0, t.value); }
       else if (f === 'below') { setArrowLabel(A, 1, t.value); }
       else if (f === 'aangle' || f === 'alen') {
@@ -864,9 +1211,22 @@
         A.opt = o;
       }
       A.dirty = true; E.M.dirty = true;
+    } else if (mv) {
+      const D0 = drawsOf(mv.seg)[mv.k];
+      if (!D0) return;
+      if (f === 'mvtip') setDrawOpt(mv.seg, mv.k, 'tips', t.value);
+      else if (f === 'mvline') { if (t.value === 'pattern') return; setDrawOpt(mv.seg, mv.k, 'line', t.value === 'solid' ? (/\b(dashed|dotted|dash pattern)/.test(mv.seg.opt) ? 'solid' : '') : t.value); }
+      else if (f === 'mvcol') setDrawOpt(mv.seg, mv.k, 'colour', t.value.trim());
+      else if (f === 'mvpath') { if (!t.value.trim()) return; setDraw(mv.seg, mv.k, { path: ' ' + t.value.trim() }); }
+      else {
+        const q = simpleOf(D0.path), n = parseFloat(t.value);
+        if (!q || !isFinite(n)) return;
+        if (f === 'mvout') q.out = n; else if (f === 'mvin') q.in = n; else if (f === 'mvr1') q.r1 = Math.max(0, n); else if (f === 'mvr2') q.r2 = Math.max(0, n);
+        setDraw(mv.seg, mv.k, { path: simplePath(q) });
+      }
     } else return;
     E.M.dirty = true; L = null; draw();
-    if (f === 'sym' || f === 'atype') { commit(); renderProps(); begin(); }
+    if (['sym', 'atype', 'mdir', 'brk', 'mvtip', 'mvline'].includes(f)) { commit(); renderProps(); begin(); }
   });
   props.addEventListener('input', () => { if (E && !TD.morph.busy) renderProps(); });
   props.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) e.target.blur(); });
@@ -894,10 +1254,11 @@
     act(b.dataset.ce, b);
   });
   function deleteSel() {
-    const v = selV(), b = selB(), a = selA();
+    const v = selV(), b = selB(), a = selA(), m = selM();
     if (v) edit(() => deleteVertex(v));
     else if (b) edit(() => deleteBond(b));
     else if (a) edit(() => deleteArrow(a.seg));
+    else if (m) edit(() => deleteDraw(m.seg, m.k));
     else return;
     E.sel = null; L = null; draw(); renderProps();
   }
@@ -908,7 +1269,11 @@
     else if (x === 'fit') fit();
     else if (x === 'done') finish(true);
     else if (x === 'cancel') finish(false);
-    else if (x === 'delete' || x === 'vdel' || x === 'bdel' || x === 'adel') deleteSel();
+    else if (x === 'delete' || x === 'vdel' || x === 'bdel' || x === 'adel' || x === 'mvdel') deleteSel();
+    else if (x === 'group' || x === 'ungroup') {
+      const mol = (v || b || {}).mol;
+      if (mol) { edit(() => (x === 'group' ? groupNext(mol) : ungroup(compOf(mol).sub))); renderProps(); }
+    }
     else if (x === 'rdel') { const ring = v ? v.ring : b && b.ring ? b.ring.item : null, mol = (v || b).mol; if (ring) { edit(() => deleteRing(ring, mol)); E.sel = null; L = null; draw(); renderProps(); } }
     else if (x === 'mdel') { const mol = (v || b || {}).mol; if (mol) { edit(() => deleteMol(mol)); E.sel = null; L = null; draw(); renderProps(); } }
     else if (x === 'label') { if (v) editLabel(v); }
@@ -950,7 +1315,7 @@
       e.preventDefault();
       if (inField) { e.target.blur(); return; }
       if (!menu.hidden) { closeMenu(); return; }
-      if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
+      if (E.arm) { E.arm = null; E.mvFrom = null; E.ptr = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
     }

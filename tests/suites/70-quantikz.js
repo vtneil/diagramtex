@@ -116,3 +116,51 @@ T.test('quantikz: the manual\'s examples compile', () => {
     T.tex(`quantikz-${k}`, TD.toTikz([{ ...qc(src), id: 'q' }], { standalone: true }));
   }
 });
+
+T.test('quantikz: row sep and column sep, as a gap or between origins', () => {
+  const body = '& \\gate{H} & \\ctrl{1} & \\meter{} \\\\\n& & \\targ{} & \\gate{X}';
+  const pitch = L(wrap(body, 'row sep={1.5cm,between origins}, column sep={0.9cm,between origins}')).geo;
+  near(pitch.cy[1] - pitch.cy[0], 1.5 * PX, 0.5, 'wire to wire');
+  for (let i = 1; i < pitch.cx.length; i++) near(pitch.cx[i] - pitch.cx[i - 1], 0.9 * PX, 0.5, `step ${i} to step ${i + 1}`);
+  const gap = L(wrap(body, 'row sep=1cm')).geo;
+  near(gap.rowT[1] - gap.rowT[0] - gap.rowH[0], 1 * PX, 0.5, 'the gap between rows');
+});
+
+T.test('quantikz editor: the Circuit spacing fields write row sep / column sep, and switching the measure keeps the look', async () => {
+  const body = '& \\gate{H} & \\ctrl{1} & \\meter{} \\\\\n& & \\targ{} & \\gate{X}';
+  let got = null;
+  TD.qcEditor.open(qc(wrap(body)), (r) => { got = r; });
+  await new Promise((r) => setTimeout(r, 50));
+  let root = document.querySelector('[data-f="Erow"]');
+  while (root && !root.querySelector('[data-qe="done"]')) root = root.parentElement;
+  const q = (s) => root.querySelector(s), head = () => q('.cz-code textarea').value.split('\n')[0];
+  // as a person types: focus opens an undo step, leaving the field closes it (fired by hand: a background page gets no focus events)
+  const type = (f, v) => {
+    const i = q(`[data-f="${f}"]`);
+    i.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    i.value = v; i.dispatchEvent(new Event('input', { bubbles: true }));
+    q(`[data-f="${f}"]`).dispatchEvent(new FocusEvent('focusout', { bubbles: true })); // the panel may have redrawn it
+  };
+  const mode = (axis, v) => q(`[data-qe="sepmode"][data-axis="${axis}"][data-v="${v}"]`).click();
+  try {
+    T.ok(q('[data-f="Erow"]') && q('[data-f="Ecol"]'), 'shown with nothing selected');
+    type('Erow', '1');
+    T.eq(head(), '\\begin{quantikz}[row sep=1cm]');
+    mode('row', 'pitch');
+    const m = /row sep=\{([\d.]+)cm,between origins\}/.exec(head());
+    T.ok(m, 'between origins: ' + head());
+    const before = L(wrap(body, 'row sep=1cm')).geo, after = L(wrap(body, `row sep={${m[1]}cm,between origins}`)).geo;
+    near(after.cy[1] - after.cy[0], before.cy[1] - before.cy[0], 0.05 * PX, 'the wires stay put');
+    mode('row', 'gap');
+    T.eq(head(), '\\begin{quantikz}[row sep=1cm]', 'and back');
+    type('Ecol', '0.3');
+    T.eq(head(), '\\begin{quantikz}[row sep=1cm, column sep=0.3cm]');
+    type('Erow', '');
+    T.eq(head(), '\\begin{quantikz}[column sep=0.3cm]', 'an empty field removes the option');
+    q('[data-qe="undo"]').click();
+    T.eq(head(), '\\begin{quantikz}[row sep=1cm, column sep=0.3cm]', 'undo');
+  } finally {
+    q('[data-qe="done"]').click();
+  }
+  T.ok(got && /column sep=0\.3cm/.test(got.src), 'Done hands the options back');
+});

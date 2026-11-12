@@ -448,7 +448,8 @@
           <ul>
             <li>Pick an atom and drag its blue handle to grow a bond (snaps to 15°). Type <kbd>C</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>O</kbd>… to relabel it, or double-click to type any label such as <code>NH_2</code>. Double-click a bond to step it single, double, triple.</li>
             <li>The palette adds rings (benzene, aromatic, 3 to 7 sides, fused onto a picked side), groups (OH, COOH, NO₂…), charges and lone pairs.</li>
-            <li><b>Reactions:</b> an arrow turns the drawing into a <code>\schemestart … \schemestop</code> scheme with a copy of the molecule to change into the product.</li>
+            <li><b>Reactions:</b> an arrow turns the drawing into a <code>\schemestart … \schemestop</code> scheme with a copy of the molecule to change into the product. Drag an arrow's head to turn and stretch it. <b>Merge</b> joins two compounds into a new one; a picked molecule can be put in brackets or grouped with the next step into a <code>\subscheme</code>.</li>
+            <li><b>Curved arrow:</b> click the atom or bond it starts from, then the one it goes to; the ends get <code>@{name}</code>s and a <code>\chemmove</code> is written. Drag its blue handles to bend it; the panel sets tips, line and colour. ⌫ deletes it.</li>
             <li>Drawn by chemfig's own rules, so the canvas matches the PDF.</li>
             <li>Pasted code can use submolecules (<code>\definesubmol</code>, with arguments), <code>\setchemfig</code>, curved electron-pushing arrows (<code>@{name}</code> and <code>\chemmove</code>) and <code>\hreac … \endhreac</code>: all are drawn. Atoms that come from a submolecule are changed in its <code>\definesubmol</code> line.</li>
           </ul>
@@ -542,7 +543,7 @@
           <li><b>Fonts:</b> the preview uses KaTeX or Temml, which are close to Computer Modern but not identical; line breaks in wrapped text can fall slightly differently.</li>
           <li><b>Fill patterns:</b> LaTeX lines up stripes and dots with the page corner, so they can be shifted inside a shape.</li>
           <li><b>Small offsets:</b> a circuit's curved voltage arrow on parts other than resistors and capacitors, op-amp signs, and 3D plot axis labels at unusual view angles can be up to about 1 mm off.</li>
-          <li><b>Code the editor keeps but doesn't draw</b> (an unusual option, a chemfig <code>\subscheme</code>) appears only in the PDF. Each editor lists such lines.</li>
+          <li><b>Code the editor keeps but doesn't draw</b> (an unusual option, chemfig's <code>-U&gt;</code> arc) appears only in the PDF. Each editor lists such lines.</li>
         </ul>
         <p>The full report, with side-by-side images and a match rate for every kind of figure, is <a href="https://gitlab.com/igniting-space/diagramtex/-/blob/main/PARITY.md" target="_blank" rel="noopener">PARITY.md</a>.</p>
       </section>

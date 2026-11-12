@@ -56,11 +56,16 @@
   add('Symbol', ['infty', 'forall', 'exists', 'nexists', 'emptyset', 'varnothing', 'ell', 'hbar', 'Re', 'Im', 'aleph', 'angle', 'measuredangle', 'triangle',
     'prime', 'degree', 'ldots', 'cdots', 'vdots', 'ddots', 'therefore', 'because', 'square', 'Box', 'dagger', 'checkmark', 'circledR',
     'langle', 'rangle', 'lfloor', 'rfloor', 'lceil', 'rceil', 'lVert', 'rVert', 'vert', 'lbrace', 'rbrace', 'clubsuit', 'heartsuit', 'spadesuit']);
-  add('Font', [['mathbf', '\\mathbf{|}', '\\mathbf{F}'], ['mathbb', '\\mathbb{|}', '\\mathbb{R}'], ['mathcal', '\\mathcal{|}', '\\mathcal{L}'],
-    ['mathrm', '\\mathrm{|}', '\\mathrm{d}x'], ['mathit', '\\mathit{|}', '\\mathit{ab}'], ['mathfrak', '\\mathfrak{|}', '\\mathfrak{g}'],
-    ['mathsf', '\\mathsf{|}', '\\mathsf{A}'], ['boldsymbol', '\\boldsymbol{|}', '\\boldsymbol{\\alpha}'], ['text', '\\text{|}', '\\text{text}'],
-    ['textbf', '\\textbf{|}', '\\textbf{bold}'], ['textit', '\\textit{|}', '\\textit{italic}'], ['emph', '\\emph{|}', '\\textit{emph}'],
-    ['texttt', '\\texttt{|}', '\\texttt{mono}']]);
+  // maths alphabets first, then the text styles; preview samples as in the KaTeX font table (Ab0)
+  const font = (n, sample = 'Ab0') => [n, `\\${n}{|}`, `\\${n}{${sample}}`];
+  add('Font', [font('mathbf'), font('mathbb', 'R'), font('mathcal', 'L'), font('mathscr', 'L'), font('mathrm'), font('mathit'),
+    font('mathbfit'), font('boldsymbol', '\\alpha'), font('bm', '\\alpha'), font('mathfrak', 'g'), font('mathsf'), font('mathsfit'), font('mathtt'),
+    font('mathnormal'), font('mathds', 'R'), font('mathbbm', '1'),
+    ['text', '\\text{|}', '\\text{text}'], font('textbf'), font('textit'), ['emph', '\\emph{|}', '\\emph{Ab0}'], font('textsl'), font('textsc'),
+    font('texttt'), font('textsf'), font('textrm'), font('textup'), font('textmd'), font('textnormal')]);
+  // declarations: the style for the rest of a {group}
+  add('Font', ['bfseries', 'itshape', 'em', 'slshape', 'scshape', 'ttfamily', 'sffamily', 'rmfamily', 'upshape', 'mdseries', 'normalfont']
+    .map((n) => [n, `{\\${n} |}`, `\\text{\\${n} Ab0}`]));
   add('Spacing', [['quad', null, 'a\\quad b'], ['qquad', null, 'a\\qquad b']]);
 
   for (const c of C) {
@@ -170,7 +175,7 @@
     const e = (TD.math && TD.math.engine) || 'katex';
     if (lists[e]) return lists[e];
     const col = ENGINE_COL[e] || 1;
-    const usable = (c) => { const r = support.get(baseName(c.name)); return !r || r[col] >= 0; };
+    const usable = (c) => { const r = support.get(baseName(c.name)); return !r || r[col] >= 0 || TD.math.drawsAs(baseName(c.name)); };
     return (lists[e] = [...C.filter(usable), ...generated.filter(usable)]);
   }
   // Outside $…$ only text commands are offered: a maths command there would not compile.

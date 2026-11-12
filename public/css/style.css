@@ -1311,6 +1311,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .ze-wsel { fill: none; stroke: color-mix(in srgb, var(--redpen) 30%, transparent); stroke-linecap: round; pointer-events: none; }
 .ze-draft { stroke: var(--bluepen); stroke-width: 1.5; stroke-dasharray: 4 3; fill: none; pointer-events: none; }
 .ze-knob { cursor: crosshair; }
+.ze-knob.ze-ahead, .ze-knob.ze-mctl { cursor: move; }
 .ze-knob circle { fill: #fffdf8; stroke: var(--bluepen); stroke-width: 1.5; }
 .ze-knob path { stroke: var(--bluepen); stroke-width: 1.6; fill: none; }
 .ze-knob:hover circle { fill: var(--bluepen); }

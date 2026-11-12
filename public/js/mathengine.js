@@ -48,12 +48,37 @@
       .replace(/\\(textcolor|color|colorbox)\s*\[\s*(rgb|RGB|HTML|gray)\s*\]\s*\{([^{}]*)\}/g, (all, c, model, v) => { const h = modelHex(model, v); return h ? `\\${c}{${h}}` : all; })
       .replace(/\\(textcolor|color|colorbox)\s*\{([^{}]*:[^{}]*)\}/g, (all, c, v) => { const h = xcolorExpr(v); return h ? `\\${c}{${h}}` : all; });
   }
+  // Style commands LaTeX has (with a package, or a definition the export adds: TD.texNeeds) that an engine lacks,
+  // drawn with the nearest one it has. Preview only: the exported LaTeX keeps what was typed. Each engine gets just
+  // the ones it can't already render (Temml has \textsc, KaTeX doesn't).
+  const STAND_INS = {
+    mathbfit: '\\boldsymbol{#1}', // bold italic letters, upright bold digits, as isomath and unicode-math draw them
+    mathds: '\\mathbb{#1}', mathbbm: '\\mathbb{#1}',
+    textsl: '\\textit{#1}', textsc: '\\text{#1}',
+    // text-mode declarations, as typed inside \text{…}
+    bfseries: '\\bf', itshape: '\\it', slshape: '\\it', sl: '\\it', em: '\\it', upshape: '\\rm', rmfamily: '\\rm',
+    sffamily: '\\sf', ttfamily: '\\tt', normalfont: '\\rm', mdseries: '', scshape: '', sc: '',
+  };
+  const macroCache = {};
+  function macros(e) {
+    if (macroCache[e]) return macroCache[e];
+    const L = lib(e), out = {};
+    for (const [k, v] of Object.entries(STAND_INS)) {
+      try { L.renderToString(`\\${k}{A}`, { throwOnError: true }); } catch (err) { out['\\' + k] = v; }
+    }
+    return (macroCache[e] = out);
+  }
+  // \textsc{Small caps} where the engine has no small caps: lowercase letters as smaller capitals
+  const smallCaps = (tex) => tex.replace(/\\textsc\s*\{([^{}\\$]*)\}/g, (all, s) =>
+    `\\text{${s.replace(/[a-z]+/g, (w) => `{\\footnotesize ${w.toUpperCase()}}`)}}`);
   // TeX → HTML string. With throwOnError, a parse error throws; otherwise it is shown in red.
   function render(tex, opts = {}) {
     const L = lib(engine);
     if (!L) return `<i>${esc(tex)}</i>`;
     tex = colors(String(tex));
-    try { return L.renderToString(tex, { displayMode: !!opts.display, throwOnError: !!opts.throwOnError }); }
+    const M = macros(engine);
+    if (M['\\textsc']) tex = smallCaps(tex);
+    try { return L.renderToString(tex, { displayMode: !!opts.display, throwOnError: !!opts.throwOnError, macros: { ...M } }); }
     catch (e) { if (opts.throwOnError) throw e; return `<i>${esc(tex)}</i>`; }
   }
   // Standalone SVG files carry their own stylesheet. No fonts are linked from anywhere: the exports embed the
@@ -93,6 +118,8 @@
   TD.xcolorExpr = xcolorExpr;
   TD.math = {
     render, set, exportStyle, forXml, ENGINES,
+    // a command the engine in use lacks but draws with a stand-in (STAND_INS)
+    drawsAs: (name) => !!macros(engine)['\\' + name],
     get engine() { return engine; },
     onChange(fn) { listeners.push(fn); },
   };

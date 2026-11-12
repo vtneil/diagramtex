@@ -3,7 +3,7 @@
 (function () {
   const TD = (window.TD = window.TD || {});
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.34.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.35.1'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -448,6 +448,13 @@
     underline: 'text-decoration:underline', texttt: 'font-family:"Courier New",Courier,monospace', textsf: 'font-family:Helvetica,Arial,sans-serif',
     textrm: '', textsc: 'font-variant:small-caps', textup: 'font-style:normal', textmd: 'font-weight:normal', textnormal: 'font-weight:normal;font-style:normal',
   };
+  // Declarations switch the style for the rest of their group, {\bfseries bold} or {\em stressed}: drawn as the
+  // command with the same effect, written back as typed.
+  const PROSE_DECLS = {
+    bfseries: 'textbf', bf: 'textbf', mdseries: 'textmd', itshape: 'textit', it: 'textit', em: 'emph', slshape: 'textsl', sl: 'textsl',
+    scshape: 'textsc', sc: 'textsc', upshape: 'textup', ttfamily: 'texttt', tt: 'texttt', sffamily: 'textsf', sf: 'textsf', rmfamily: 'textrm', rm: 'textrm',
+    normalfont: 'textnormal',
+  };
   const PROSE_SYMS = {
     ldots: '…', dots: '…', textbackslash: '\\', textasciicircum: '^', textasciitilde: '~', textdegree: '°', S: '§', P: '¶', copyright: '©',
     textendash: '–', textemdash: '—', textbullet: '•', textbraceleft: '{', textbraceright: '}', textunderscore: '_', textdollar: '$', textbar: '|', textless: '&lt;', textgreater: '&gt;', quad: ' ', qquad: '  ', nbsp: ' ',
@@ -480,6 +487,12 @@
           continue;
         }
         const name = m[1];
+        if (PROSE_DECLS[name]) { // the rest of this group, in that style
+          const sp = /^\s*/.exec(src.slice(i))[0];
+          i += sp.length;
+          push({ cmd: PROSE_DECLS[name], decl: name, sp: sp || ' ', kids: group(inner) });
+          return out;
+        }
         if (PROSE_CMDS[name] !== undefined && /^\s*\{/.test(src.slice(i))) {
           while (src[i] !== '{') i++;
           i++; push({ cmd: name, kids: group(true) }); continue;
@@ -507,10 +520,10 @@
   const mathOnlyCache = new Map();
   function mathOnly(raw) {
     const name = /^\\([A-Za-z]+)/.exec(raw)?.[1];
-    if (!name || TEXT_OK.has(name) || name.startsWith('text') || !window.katex) return false;
+    if (!name || TEXT_OK.has(name) || name.startsWith('text') || !TD.math) return false;
     if (!mathOnlyCache.has(raw)) {
       let ok = false;
-      try { window.katex.renderToString(raw, { throwOnError: true }); ok = true; } catch (e) { /* not maths either */ }
+      try { TD.math.render(raw, { throwOnError: true }); ok = true; } catch (e) { /* not maths either */ }
       mathOnlyCache.set(raw, ok);
     }
     return mathOnlyCache.get(raw);
@@ -522,21 +535,27 @@
     return `<span class="tx-warn" title="${esc(tip)}">${esc(raw)}</span>`;
   }
   const ligatures = (h) => h.replace(/---/g, '—').replace(/--/g, '–').replace(/``/g, '“').replace(/''/g, '”');
-  function proseHtml(nodes) {
-    return nodes.map((n) => (typeof n === 'string' ? ligatures(esc(n))
-      : n.sym ? PROSE_SYMS[n.sym]
-        : n.raw !== undefined ? rawHtml(n.raw)
-          : n.cmd && PROSE_CMDS[n.cmd] ? `<span style='${PROSE_CMDS[n.cmd]}'>${proseHtml(n.kids)}</span>` : proseHtml(n.kids))).join('');
+  // `it`: the text around is italic, so \emph turns it upright, as LaTeX does
+  function proseHtml(nodes, it = false) {
+    return nodes.map((n) => {
+      if (typeof n === 'string') return ligatures(esc(n));
+      if (n.sym) return PROSE_SYMS[n.sym];
+      if (n.raw !== undefined) return rawHtml(n.raw);
+      if (n.cmd === 'emph') return `<span style='font-style:${it ? 'normal' : 'italic'}'>${proseHtml(n.kids, !it)}</span>`;
+      const kit = /^(textit|textsl)$/.test(n.cmd) ? true : /^(textup|textnormal)$/.test(n.cmd) ? false : it;
+      return n.cmd && PROSE_CMDS[n.cmd] ? `<span style='${PROSE_CMDS[n.cmd]}'>${proseHtml(n.kids, kit)}</span>` : proseHtml(n.kids, kit);
+    }).join('');
   }
   // nodes → source, with `escStr` deciding how plain characters are written
   function proseSource(nodes, escStr) {
     return nodes.map((n) => (typeof n === 'string' ? escStr(n)
       : n.sym ? (n.sym === 'nbsp' ? '~' : `\\${n.sym}{}`)
         : n.raw !== undefined ? n.raw
-          : `${n.cmd ? '\\' + n.cmd : ''}{${proseSource(n.kids, escStr)}}`)).join('');
+          : n.decl ? `\\${n.decl}${n.sp}${proseSource(n.kids, escStr)}`
+            : `${n.cmd ? '\\' + n.cmd : ''}{${proseSource(n.kids, escStr)}}`)).join('');
   }
   // Commands that work in prose (outside $…$): the ones the prose renderer knows, \text… and the usual text-mode commands.
-  const textOk = (name) => PROSE_CMDS[name] !== undefined || (PROSE_SYMS[name] !== undefined && name !== 'nbsp') || TEXT_OK.has(name) || name.startsWith('text');
+  const textOk = (name) => PROSE_CMDS[name] !== undefined || PROSE_DECLS[name] !== undefined || (PROSE_SYMS[name] !== undefined && name !== 'nbsp') || TEXT_OK.has(name) || name.startsWith('text');
   TD.prose = { parse: parseProse, html: proseHtml, source: proseSource, CMDS: PROSE_CMDS, textOk };
 
   // TeX for one math segment
@@ -1796,12 +1815,16 @@
     const X = makeX();
     if (standalone) X.preDefs = new Set();
     const pic = TD.tikzPicture(shapes, X);
-    const pre = [...TD.preamble(X), ...(X.preDefs ? X.preDefs : [])];
+    // the maths and text styles in labels: their packages, and definitions for \mathbfit and \mathsfit
+    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(pic) : { pkgs: [], defs: [] };
+    for (const p of need.pkgs) X.pkgs.add(p);
+    const pre = [...TD.preamble(X), ...need.defs, ...(X.preDefs ? X.preDefs : [])];
     if (!standalone) {
       // a snippet: the packages on one comment line, and any compatibility lines (each its own line) to copy
-      const c = TD.preambleCompat(X), extra = [...c.before, ...c.after];
+      const c = TD.preambleCompat(X), extra = [...c.before, ...c.after, ...need.defs];
       const head = '% Requires: ' + pre.filter((l) => !extra.includes(l)).join(' ');
-      const note = c.before.length ? ['% and, in the preamble, these lines (the first block before \\usetikzlibrary{quantikz2}):', ...extra.map((l) => '%   ' + l)] : [];
+      const note = c.before.length ? ['% and, in the preamble, these lines (the first block before \\usetikzlibrary{quantikz2}):', ...extra.map((l) => '%   ' + l)]
+        : extra.length ? ['% and, in the preamble, these lines:', ...extra.map((l) => '%   ' + l)] : [];
       return [head, ...note, ...notesOf(X), pic, ''].join('\n');
     }
     return [

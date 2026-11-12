@@ -175,6 +175,12 @@
       return out.join('\n');
     }).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
+  // the maths and text styles a document's body uses, beyond the amsmath and amssymb every document loads:
+  // \usepackage lines, then the definitions of \mathbfit and \mathsfit (TD.lint.mathNeeds)
+  function mathStyleLines(body, X) {
+    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(body.join('\n')) : { pkgs: [], defs: [] };
+    return [...need.pkgs.filter((p) => p !== 'amsmath' && p !== 'amssymb' && !X.pkgs.has(p)).map((p) => `\\usepackage{${p}}`), ...need.defs];
+  }
   // packages the inline commands in a text need
   function textPkgs(text, set) {
     if (/\\(sout|uline|uwave|xout)\b/.test(text)) set.add('[normalem]{ulem}');
@@ -274,6 +280,7 @@
       ...(needBox ? ['\\newsavebox{\\dtxbox}'] : []),
       ...extra,
       ...pre,
+      ...mathStyleLines(body, X),
       ...(pk.has('{hyperref}') ? ['\\usepackage{hyperref}'] : []), // hyperref goes last
       ...defs,
       ...X.preDefs,
@@ -327,6 +334,7 @@
       '\\usepackage{amsmath, amssymb}',
       '\\usepackage{xcolor}',
       ...pre,
+      ...mathStyleLines(body, X),
       ...defs,
       ...X.preDefs,
       '\\pagestyle{empty}',

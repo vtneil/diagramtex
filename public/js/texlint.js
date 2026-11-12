@@ -54,9 +54,12 @@
     ['xy', /\\xymatrix\b/],
     ['tikz-feynman', /\\feynmandiagram\b|\\begin\{feynman\}/],
     ['tikz-timing', /\\(?:texttiming|tikztiming)\b|\\begin\{tikztimingtable\}/],
-    ['amssymb', /\\(?:mathbb|mathfrak|varnothing|leqslant|geqslant|square|blacksquare|checkmark)\b/],
+    ['amssymb', /\\(?:mathbb|mathfrak|Bbb|frak|bold|varnothing|leqslant|geqslant|square|blacksquare|checkmark)\b/],
     ['amsmath', /\\(?:text|dfrac|tfrac|binom|operatorname|xrightarrow|xleftarrow|boldsymbol)\b|\\begin\{(?:align|aligned|pmatrix|bmatrix|vmatrix|cases|gather|multline)\*?\}/],
     ['siunitx', /\\(?:SI|si|qty|unit|num|ang)\s*[[{]/],
+    ['mathrsfs', /\\mathscr\b/],
+    ['dsfont', /\\mathds\b/],
+    ['bbm', /\\mathbbm\b/],
     ['bm', /\\bm\b/],
     ['physics', /\\(?:ket|bra|braket|dv|pdv|abs|norm)\{/],
   ];
@@ -170,6 +173,19 @@
       if (!pkgs.includes(k) && TD.svgColor(m[1])) pkgs.push(k);
     }
     return { libs, pkgs };
+  };
+  // What the maths and text styles in some code need (labels, text blocks): packages, and the definitions of the
+  // math alphabets no standard package gives pdflatex without side effects (isomath also makes capital Greek
+  // italic): \mathbfit is Computer Modern's bold math italic, \mathsfit its sans-serif italic. A definition is
+  // skipped when the preamble already has the command (unicode-math, isomath).
+  const MATH_PKGS = new Set(['amsmath', 'amssymb', 'mathrsfs', 'dsfont', 'bbm', 'bm']);
+  const MATH_DEFS = [
+    [/\\mathbfit\b/, '\\ifdefined\\mathbfit\\else\\DeclareMathAlphabet{\\mathbfit}{OML}{cmm}{b}{it}\\fi'],
+    [/\\mathsfit\b/, '\\ifdefined\\mathsfit\\else\\DeclareMathAlphabet{\\mathsfit}{OT1}{cmss}{m}{sl}\\fi'],
+  ];
+  lint.mathNeeds = (code) => {
+    const b = blank(String(code || ''));
+    return { pkgs: PKGS.filter(([p, re]) => MATH_PKGS.has(p) && re.test(b)).map(([p]) => p), defs: MATH_DEFS.filter(([re]) => re.test(b)).map(([, d]) => d) };
   };
   TD.lint = lint;
 })();

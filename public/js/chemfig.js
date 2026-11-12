@@ -91,7 +91,7 @@
         if (c === '=' && (s[j] === '^' || s[j] === '_')) { sym += s[j]; j++; }
         let extra = '';
         if (s[j] === '#' && s[j + 1] === '(') { const e = close(s, j + 1); if (e > 0) { extra += s.slice(j, e + 1); j = e + 1; } }
-        if (s[j] === '@' && s[j + 1] === '{') { const e = close(s, j + 1); if (e > 0) { extra += s.slice(j, e + 1); j = e + 1; } }
+        // (-@{name}X names the atom X, not the bond: a bond is named in its argument, -[@{name}])
         let arg = null;
         if (s[j] === '[') { const e = close(s, j); if (e > 0) { arg = split(s.slice(j + 1, e)).map((x) => x.trim()); j = e + 1; } }
         chain.items.push({ t: 'bond', raw: s.slice(i, j), sym, extra, arg });
@@ -259,7 +259,70 @@
         A.raw = s.slice(i, j);
         segs.push(A); i = j; continue;
       }
-      if (at('\\subscheme') || at('\\merge')) warn('Subschemes and \\merge aren\'t drawn here (they are kept in the code)');
+      if (at('\\subscheme')) {
+        flush();
+        let j = i + 10, k = skipWs(s, j), opt = '';
+        if (s[k] === '[') { const e = close(s, k); if (e > 0) { opt = s.slice(k + 1, e); j = e + 1; k = skipWs(s, j); } }
+        const e = s[k] === '{' ? close(s, k) : -1;
+        if (e < 0) { warn('\\subscheme needs { … }'); text += s.slice(i, j); i = j; continue; }
+        segs.push({ t: 'sub', opt, inner: parseDoc(s.slice(k + 1, e), warn, defs), pre: s.slice(i, k + 1), post: '}', raw: s.slice(i, e + 1) });
+        i = e + 1; continue;
+      }
+      if (at('\\chemleft')) {
+        flush();
+        // a delimiter: a {…} group, a command or one character
+        const tok = (p) => {
+          p = skipWs(s, p);
+          if (s[p] === '{') { const e = close(s, p); return e < 0 ? null : { v: s.slice(p + 1, e).trim(), e: e + 1 }; }
+          if (s[p] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(p)); return { v: m[0], e: p + m[0].length }; }
+          return p < s.length ? { v: s[p], e: p + 1 } : null;
+        };
+        const L = tok(i + 9);
+        let p = L ? L.e : s.length, nest = 0, found = -1;
+        while (p < s.length) {
+          const c = s[p];
+          if (c === '%') { const e = s.indexOf('\n', p); p = e < 0 ? s.length : e; continue; }
+          if (c === '{') { const e = close(s, p); if (e < 0) break; p = e + 1; continue; }
+          if (c === '\\') {
+            const m = /^\\([A-Za-z]+|.)/.exec(s.slice(p, p + 40));
+            if (m[1] === 'chemleft') nest++;
+            else if (m[1] === 'chemright') { if (!nest) { found = p; break; } nest--; }
+            p += m[0].length; continue;
+          }
+          p++;
+        }
+        const R = found >= 0 ? tok(found + 10) : null;
+        if (!L || !R) { warn('\\chemleft needs a \\chemright after it'); text += '\\chemleft'; i += 9; continue; }
+        segs.push({ t: 'lr', l: L.v, r: R.v, inner: parseDoc(s.slice(L.e, found), warn, defs), pre: s.slice(i, L.e), post: s.slice(found, R.e), raw: s.slice(i, R.e) });
+        i = R.e; continue;
+      }
+      if (at('\\charge') || at('\\Charge')) {
+        // \charge around more than an atom (outside \chemfig): its marks around the whole box
+        flush();
+        const j = i + 7;
+        let k = skipWs(s, j), opt = '';
+        if (s[k] === '[') { const e = close(s, k); if (e > 0) { opt = s.slice(k + 1, e); k = skipWs(s, e + 1); } }
+        const e1 = s[k] === '{' ? close(s, k) : -1, k2 = e1 > 0 ? skipWs(s, e1 + 1) : -1, e2 = k2 > 0 && s[k2] === '{' ? close(s, k2) : -1;
+        if (e2 < 0) { text += s.slice(i, j); i = j; continue; }
+        segs.push({ t: 'chg', cmd: s[i + 1] === 'C' ? 'Charge' : 'charge', opt, charges: readCharges(s.slice(k + 1, e1)), inner: parseDoc(s.slice(k2 + 1, e2), warn, defs), pre: s.slice(i, k2 + 1), post: '}', raw: s.slice(i, e2 + 1) });
+        i = e2 + 1; continue;
+      }
+      if (at('\\merge')) {
+        flush();
+        let j = i + 6, k = skipWs(s, j), dir = '>';
+        if ('<>^'.includes(s[k]) || (s[k] === 'v' && !/[A-Za-z]/.test(s[k + 1] || ''))) { dir = s[k]; j = k + 1; k = skipWs(s, j); }
+        const labels = [], srcs = [];
+        while (s[k] === '[' && labels.length < 2) { const e = close(s, k); if (e < 0) break; labels.push(s.slice(k + 1, e)); j = e + 1; k = skipWs(s, j); }
+        while (s[k] === '(') { const e = close(s, k); if (e < 0) break; srcs.push(s.slice(k + 1, e).trim()); j = e + 1; k = skipWs(s, j); }
+        let target = null, opt = [];
+        if (s.startsWith('--', k)) { const k2 = skipWs(s, k + 2); if (s[k2] === '(') { const e = close(s, k2); if (e > 0) { target = s.slice(k2 + 1, e).trim(); j = e + 1; k = skipWs(s, j); } } }
+        if (target != null && s[k] === '[') { const e = close(s, k); if (e > 0) { opt = split(s.slice(k + 1, e)).map((x) => x.trim()); j = e + 1; } }
+        if (target == null || !srcs.length) warn('\\merge is written \\merge(c1)(c2)--(c3)');
+        segs.push({ t: 'merge', dir, labels, srcs, target: target || '', opt, raw: s.slice(i, j) });
+        i = j; continue;
+      }
+      if (at('\\chemnameinit')) { flush(); let j = i + 13; const k = skipWs(s, j); if (s[k] === '{') { const e = close(s, k); if (e > 0) j = e + 1; } segs.push({ t: 'nameinit', raw: s.slice(i, j) }); i = j; continue; }
+      if (at('\\par')) { flush(); segs.push({ t: 'par', raw: '\\par' }); i += 4; continue; }
       if (s[i] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(i)); text += m[0]; i += m[0].length; continue; }
       if (s[i] === '{') { const e = close(s, i); if (e > 0) { text += s.slice(i, e + 1); i = e + 1; continue; } }
       text += s[i]; i++;
@@ -287,14 +350,24 @@
     const typ = A.type + labels.map((l) => `[${l}]`).join('');
     return `\\arrow${A.names}${typ !== '->' ? `{${typ}}` : ''}${opt.length ? `[${opt.join(',')}]` : ''}`;
   }
+  function mergeCode(M) {
+    if (!M.dirty) return M.raw;
+    const labels = M.labels.slice();
+    while (labels.length && !labels[labels.length - 1]) labels.pop();
+    const opt = M.opt.slice();
+    while (opt.length && !opt[opt.length - 1]) opt.pop();
+    return `\\merge${M.dir}${labels.map((l) => `[${l}]`).join('')}${M.srcs.map((x) => `(${x})`).join('')}--(${M.target})${opt.length ? `[${opt.join(',')}]` : ''}`;
+  }
   function writeDoc(segs) {
     return segs.map((g) => g.t === 'mol' ? (g.dirty || g.chainDirty ? `${g.head}{${writeChain(g.chain)}}` : g.raw)
       : g.t === 'arrow' ? arrowCode(g)
-        : g.t === 'name' ? (g.dirty ? `${g.head}{${writeDoc(g.inner)}${g.mid}${g.name}}` : g.raw)
-          : g.raw).join('');
+      : g.t === 'merge' ? mergeCode(g)
+        : g.t === 'name' ? `${g.head}{${writeDoc(g.inner)}${g.mid}${g.name}}`
+          : g.inner ? g.pre + writeDoc(g.inner) + g.post
+            : g.raw).join('');
   }
   // a segment holds edited pieces: mark it and the names around it
-  function markDirty(segs) { for (const g of segs) { if (g.t === 'name') { markDirty(g.inner); g.dirty = true; } if (g.t === 'mol') g.dirty = true; } }
+  function markDirty(segs) { for (const g of segs) { if (g.inner) { markDirty(g.inner); g.dirty = true; } if (g.t === 'mol') g.dirty = true; } }
 
   // ---------------------------------------------------------------- atoms
   // An atom group is split into atoms as chemfig does: each starts at a capital letter, a {…} group or a
@@ -467,11 +540,13 @@
       // charges and stacked text
       for (const b of boxes) {
         const a = b.src;
-        if (a && a.charges) for (const c of a.charges) charge(b, { ...c, overlay: !(a.cmd === 'Charge' || /overlay\s*=\s*false/.test(a.copt || '')) });
+        if (a && a.charges) for (const c of a.charges) chargeMarks(b, { ...c, overlay: !(a.cmd === 'Charge' || /overlay\s*=\s*false/.test(a.copt || '')) }, { paths, dots, texts });
         if (a && a.stack) {
-          const tb = TD.textBox(a.stack.text, TEXT), m = vmetrics(a.stack.text);
-          const y0 = a.stack.dir < 0 ? b.base - b.asc - 1.5 * PT - m.desc - m.asc / 2 - m.desc / 2 : b.base + b.desc + 1.5 * PT + m.asc / 2 + m.desc / 2;
-          texts.push({ t: a.stack.text, cx: b.cx, cy: y0, b: tb });
+          // \chemabove{A}{x}: x set as an atom ($\rm x$) 1.5pt over A's box (or under it), centred on A
+          const t = atomTex(a.stack.text), tb = TD.textBox(t, TEXT), m = vmetrics(a.stack.text);
+          const k = /\\scriptscriptstyle/.test(a.stack.text) ? 0.5 : /\\scriptstyle/.test(a.stack.text) ? 0.7 : 1;
+          const base = a.stack.dir < 0 ? b.base - b.asc - 1.5 * PT - m.desc * k : b.base + b.desc + 1.5 * PT + m.asc * k;
+          texts.push({ t, cx: b.cx, cy: base - baseOff(TEXT) + tb.h / 2, b: tb, ink: [base - m.asc * k, base + m.desc * k] });
         }
       }
       // hooks: the first ? remembers the atom, the next one with that name draws a bond to it
@@ -483,22 +558,6 @@
         drawBond({ sym: h.sym, arg: ['', '', '', '', h.tikz], hook: true }, was.v, was.k, v, h.atom, ang, null);
       }
       return v;
-    }
-    function charge(b, c) {
-      // the atom's box with extra sep 1.5pt; the charge's centre on its border at the angle
-      const hw = b.w / 2 + 1.5 * PT, hh = (b.asc + b.desc) / 2 + 1.5 * PT;
-      const ux = Math.cos(rad(c.angle)), uy = -Math.sin(rad(c.angle));
-      const t = Math.min(Math.abs(ux) > 1e-9 ? hw / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-9 ? hh / Math.abs(uy) : Infinity);
-      const x = b.cx + ux * (t + c.off), y = b.cy + uy * (t + c.off);
-      const w = c.what.trim(), rot = rad(90 + c.angle), rx = Math.cos(rot), ry = -Math.sin(rot);
-      if (w === '\\:') { const d = 0.15 * EM; dots.push({ x: x + rx * d, y: y + ry * d, r: 0.15 * EX }, { x: x - rx * d, y: y - ry * d, r: 0.15 * EX }); }
-      else if (w === '\\.') dots.push({ x, y, r: 0.15 * EX });
-      else if (w === '\\|') { const d = 0.75 * EX; paths.push({ d: `M${r2(x + rx * d)},${r2(y + ry * d)}L${r2(x - rx * d)},${r2(y - ry * d)}`, sw: LW, charge: c.overlay !== false }); }
-      else if (w === '\\"') {
-        const d = 0.75 * EX, e = 0.15 * EX, nx = ry, ny = -rx;
-        const p = [[d, e], [-d, e], [-d, -e], [d, -e]].map(([u, v]) => `${r2(x + rx * u + nx * v)},${r2(y + ry * u + ny * v)}`);
-        paths.push({ d: `M${p.join('L')}Z`, sw: LW, charge: c.overlay !== false });
-      } else if (w) texts.push({ t: w, cx: x, cy: y, b: TD.textBox(w, TEXT), charge: c.overlay !== false });
     }
     // a bond from atom a of vertex A to atom b of vertex B
     function drawBond(item, A, ka, B, kb, angle, ring) {
@@ -626,7 +685,7 @@
           if (!st.group) { st.group = place(null, { chain, idx: posOf(idx), first: true }, 0, 0, 0, null); defaults(st.group); st.group.root = true; }
           let angle, L = st.defLen;
           const arg = (it.arg || []).slice();
-          // a name for \chemmove: -[@{name,pos}…] or -@{name,pos}[…]
+          // a name for \chemmove: -[@{name,pos}…]
           const nm = /^\s*@\{([^}]*)\}\s*/.exec(arg[0] || '') || /@\{([^}]*)\}/.exec(it.extra || '');
           if (nm) {
             if (arg[0]) arg[0] = arg[0].replace(/^\s*@\{[^}]*\}\s*/, '');
@@ -703,7 +762,7 @@
       const h = p.fill && !p.sw ? 0 : (p.sw || LW) / 2;
       for (const m of p.d.matchAll(/[MLA](?:[\d.]+,[\d.]+ \d \d,\d )?(-?[\d.]+),(-?[\d.]+)/g)) ext(+m[1] - h, +m[2] - h, +m[1] + h, +m[2] + h);
     }
-    for (const t of texts) if (!t.box && !t.charge) ext(t.cx - (t.b.w - 2) / 2, t.cy - t.b.h / 2, t.cx + (t.b.w - 2) / 2, t.cy + t.b.h / 2);
+    for (const t of texts) if (!t.box && !t.charge) ext(t.cx - (t.b.w - 2) / 2, t.ink ? t.ink[0] : t.cy - t.b.h / 2, t.cx + (t.b.w - 2) / 2, t.ink ? t.ink[1] : t.cy + t.b.h / 2);
     if (!(x2 >= x1)) { x1 = x2 = 0; y1 = y2 = 0; }
     return { verts, bonds, rings, paths, texts, dots, names, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } };
   }
@@ -713,6 +772,24 @@
     const hw = b.w / 2, hh = (b.asc + b.desc) / 2, ux = Math.cos(rad(ang)), uy = -Math.sin(rad(ang));
     const t = Math.min(Math.abs(ux) > 1e-9 ? hw / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-9 ? hh / Math.abs(uy) : Infinity);
     return [b.cx + ux * t, b.cy + uy * t];
+  }
+  // \charge's marks: each centred on the box (with an extra sep of 1.5pt) at its angle, plus its offset.
+  // b: { cx, cy, w, asc, desc }; out: { paths, dots, texts } to add to
+  function chargeMarks(b, c, out) {
+    const hw = b.w / 2 + 1.5 * PT, hh = (b.asc + b.desc) / 2 + 1.5 * PT;
+    const ux = Math.cos(rad(c.angle)), uy = -Math.sin(rad(c.angle));
+    const t = Math.min(Math.abs(ux) > 1e-9 ? hw / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-9 ? hh / Math.abs(uy) : Infinity);
+    const x = b.cx + ux * (t + c.off), y = b.cy + uy * (t + c.off);
+    const w = c.what.replace(/\\[,;!]/g, '').trim(), rot = rad(90 + c.angle), rx = Math.cos(rot), ry = -Math.sin(rot);
+    const ov = c.overlay !== false;
+    if (w === '\\:') { const d = 0.15 * EM; out.dots.push({ x: x + rx * d, y: y + ry * d, r: 0.15 * EX }, { x: x - rx * d, y: y - ry * d, r: 0.15 * EX }); }
+    else if (w === '\\.') out.dots.push({ x, y, r: 0.15 * EX });
+    else if (w === '\\|') { const d = 0.75 * EX; out.paths.push({ d: `M${r2(x + rx * d)},${r2(y + ry * d)}L${r2(x - rx * d)},${r2(y - ry * d)}`, sw: LW, charge: ov }); }
+    else if (w === '\\"') {
+      const d = 0.75 * EX, e = 0.15 * EX, nx = ry, ny = -rx;
+      const p = [[d, e], [-d, e], [-d, -e], [d, -e]].map(([u, v]) => `${r2(x + rx * u + nx * v)},${r2(y + ry * u + ny * v)}`);
+      out.paths.push({ d: `M${p.join('L')}Z`, sw: LW, charge: ov });
+    } else if (w) out.texts.push({ t: printable(w), cx: x, cy: y, b: TD.textBox(printable(w), TEXT), charge: ov });
   }
   function bondStyle(t, warn) {
     const r = { color: null, width: null, dash: null, none: false };
@@ -733,65 +810,403 @@
   }
 
   // ---------------------------------------------------------------- scheme layout
-  // pieces of a compound side by side on the baseline: molecules, + signs, names and text
-  // lead: a top-level line of code, where TeX sets every space (each line break after a \definesubmol…)
-  function layPieces(segs, P, warn, out, lead0) {
-    const pieces = [];
-    let x = 0, pendingSpace = false;
+  // A frag is a piece laid out in its own frame (its baseline at y = 0): molecules, texts, paths, dots,
+  // arrows and child frags at offsets, and its TeX box bb { x1, y1, x2, y2 } (y down). Child frags know
+  // their parent and offset, so a name inside one can be found from any frag around it.
+  const frag = () => ({ paths: [], dots: [], texts: [], mols: [], arrows: [], kids: [], bb: null, parent: null, off: null });
+  function ext(F, x1, y1, x2, y2) {
+    const b = F.bb;
+    if (!b) F.bb = { x1, y1, x2, y2 };
+    else { b.x1 = Math.min(b.x1, x1); b.y1 = Math.min(b.y1, y1); b.x2 = Math.max(b.x2, x2); b.y2 = Math.max(b.y2, y2); }
+  }
+  const attach = (F, C, x, y) => { C.parent = F; C.off = [x, y]; F.kids.push(C); };
+  const toRoot = (F) => { let x = 0, y = 0; for (; F; F = F.parent) if (F.off) { x += F.off[0]; y += F.off[1]; } return [x, y]; };
+  // a named node or point { F, x, y, w, h, base } or { F, pt } as a box in frag T's frame (T null: the root's)
+  function relBox(e, T) {
+    const a = toRoot(e.F), b = toRoot(T), dx = a[0] - b[0], dy = a[1] - b[1];
+    if (e.pt) return { x: e.pt[0] + dx, y: e.pt[1] + dy, w: 0, h: 0, base: e.pt[1] + dy };
+    return { x: e.x + dx, y: e.y + dy, w: e.w, h: e.h, base: e.base + dy };
+  }
+  // \setchemfig keys
+  function applyKV(P, kv, warn) {
+    const map = { 'atom sep': 'sep', 'bond offset': 'boff', 'double bond sep': 'dsep', 'cram width': 'cram', 'compound sep': 'csep', 'arrow offset': 'aoff', 'arrow label sep': 'lsep', 'name sep': 'nameSep' };
+    for (const [k, v] of Object.entries(kv)) {
+      if (map[k]) P[map[k]] = len(v, P[map[k]]);
+      else if (k === 'angle increment') P.inc = parseFloat(v) || 45;
+      else if (k === 'arrow coeff') P.acoeff = parseFloat(v) || 1;
+      else if (k === 'arrow angle') P.aangle = parseFloat(v) || 0;
+      else if (k === 'fixed length') P.fixed = v !== 'false';
+      else if (k === 'harrow minwidth') P.hminw = len(v, P.hminw);
+      else if (k === 'label xsep') P.lxsep = len(v, P.lxsep);
+      else if (k === 'hreac sep') P.hsep = len(v, P.hsep);
+      else warn(`The setting "${k}" isn't drawn here (it is kept in the code)`);
+    }
+  }
+  // (name.anchor[style]) → { n, a, s }
+  function endOf(t) {
+    t = String(t || '').trim();
+    let s = '';
+    const b = t.indexOf('[');
+    if (b >= 0) { const e = close(t, b); s = t.slice(b + 1, e < 0 ? t.length : e).trim(); t = t.slice(0, b).trim(); }
+    const d = t.indexOf('.');
+    return d < 0 ? { n: t, a: '', s } : { n: t.slice(0, d).trim(), a: t.slice(d + 1).trim(), s };
+  }
+  // an arrow's (n1.a1[s1]--n2.a2[s2])
+  function arrowEnds(names) {
+    const t = String(names || '').trim();
+    if (!t) return { n1: '', a1: '', s1: '', n2: '', a2: '', s2: '' };
+    const inner = t.slice(1, -1);
+    let d = 0, k = -1;
+    for (let i = 0; i < inner.length - 1; i++) { const c = inner[i]; if (c === '[' || c === '{') d++; else if (c === ']' || c === '}') d--; else if (!d && c === '-' && inner[i + 1] === '-') { k = i; break; } }
+    const A = endOf(k < 0 ? inner : inner.slice(0, k)), B = endOf(k < 0 ? '' : inner.slice(k + 2));
+    return { n1: A.n, a1: A.a, s1: A.s, n2: B.n, a2: B.a, s2: B.s };
+  }
+  const STY = { left: 'east', right: 'west', above: 'south', below: 'north', 'above left': 'south east', 'above right': 'south west', 'below left': 'north east', 'below right': 'north west' };
+  function styleAnchor(style, dflt, warn) {
+    let a = dflt;
+    for (const it of split(style || '').map((x) => x.trim()).filter(Boolean)) {
+      const m = /^anchor\s*=\s*(.+)$/.exec(it);
+      if (STY[it]) a = STY[it]; else if (m) a = m[1].trim();
+      else warn(`The compound style "${it}" isn't drawn here (it is kept in the code)`);
+    }
+    return a;
+  }
+
+  // Pieces side by side on the baseline: molecules, + signs, names, text, subschemes, delimiters, charges.
+  // lead: a top-level line of code, where TeX sets every space (each line break after a \definesubmol…).
+  // G: what the whole drawing shares: names, the compound counter, \chemname's depth, \chemmove calls.
+  function layPieces(segs, P, warn, G, lead0) {
+    const F = frag();
+    F.pieces = [];
+    let x = 0, pendingSpace = false, asc = 0, desc = 0;
+    const put = (p) => { F.pieces.push(p); asc = Math.max(asc, p.asc); desc = Math.max(desc, p.desc); };
+    const kid = (C, kind, g) => {
+      const b = C.bb || { x1: 0, y1: 0, x2: 0, y2: 0 }, w = b.x2 - b.x1;
+      attach(F, C, x - b.x1, 0);
+      put({ kind, seg: g, x, w, asc: -b.y1, desc: b.y2 });
+      x += w;
+    };
+    const bo = baseOff(TEXT);
     for (const g of segs) {
       if (g.t === 'text') {
         const t = g.raw.replace(/%[^\n]*(\n[ \t]*)?/g, '');
         if (!t.trim()) {
-          if (lead0 && !pieces.length && /\s/.test(t) && g !== segs[0]) x += 3.333 * PT;
-          else if (pieces.length && /\s/.test(t)) pendingSpace = true;
+          if (lead0 && !F.pieces.length && /\s/.test(t) && g !== segs[0]) x += 3.333 * PT;
+          else if (F.pieces.length && /\s/.test(t)) pendingSpace = true;
           continue;
         }
         const lead = /^\s/.test(t), trail = /\s$/.test(t), body = t.trim();
-        if ((lead || pendingSpace) && (pieces.length || (lead0 && g !== segs[0]))) x += 3.333 * PT;
-        const b = TD.textBox(printable(body), TEXT), m = vmetrics(body.replace(/\$/g, ''));
-        pieces.push({ kind: 'text', seg: g, t: printable(body), x, w: b.w - 2, asc: Math.max(m.asc, 0.683 * EM), desc: Math.max(m.desc, /[gjpqy,;]/.test(body) ? 0.194 * EM : 0), b });
+        if ((lead || pendingSpace) && (F.pieces.length || (lead0 && g !== segs[0]))) x += 3.333 * PT;
+        const tt = printable(body), b = TD.textBox(tt, TEXT), m = vmetrics(body.replace(/\$/g, ''));
+        F.texts.push({ t: tt, cx: x + (b.w - 2) / 2, cy: -bo + b.h / 2, b, seg: g });
+        put({ kind: 'text', seg: g, x, w: b.w - 2, asc: Math.max(m.asc, 0.683 * EM), desc: Math.max(m.desc, /[gjpqy,;]/.test(body) ? 0.194 * EM : 0) });
         x += b.w - 2; pendingSpace = trail; continue;
       }
-      if (pendingSpace && pieces.length) x += 3.333 * PT;
+      if (pendingSpace && F.pieces.length) x += 3.333 * PT;
       pendingSpace = false;
       if (g.t === 'mol') {
-        const L = layMol(g, P, warn);
-        pieces.push({ kind: 'mol', seg: g, L, x: x - L.bb.x, w: L.bb.w, asc: -L.bb.y, desc: L.bb.y + L.bb.h });
+        const L = layMol(g, P, warn), mx = x - L.bb.x;
+        F.mols.push({ seg: g, L, x: mx, y: 0 });
+        for (const [n, b] of Object.entries(L.names.atoms)) G.names[n] = { F, x: b.x + mx, y: b.base - b.asc, w: b.w, h: b.asc + b.desc, base: b.base };
+        for (const [n, q] of Object.entries(L.names.bonds)) G.names[n] = { F, pt: [q[0] + mx, q[1]] };
+        put({ kind: 'mol', seg: g, x, w: L.bb.w, asc: -L.bb.y, desc: L.bb.y + L.bb.h });
         x += L.bb.w; continue;
       }
       if (g.t === 'plus') {
         let a = P.plusL, b = P.plusR, vs = 0;
         const m = /^\\\+\s*\{([^}]*)\}/.exec(g.raw);
         if (m) { const f = split(m[1]).map((s) => s.trim()); if (f[0]) a = len(f[0], a); if (f[1]) b = len(f[1], b); if (f[2]) vs = len(f[2], 0); }
-        const pw = 0.778 * EM;
-        pieces.push({ kind: 'plus', seg: g, x, w: a + pw + b, cx: x + a + pw / 2, vs, asc: 0.583 * EM + vs, desc: Math.max(0, 0.083 * EM - vs) });
+        const pw = 0.778 * EM, tb = TD.textBox('$+$', TEXT);
+        F.texts.push({ t: '$+$', cx: x + a + pw / 2, cy: -vs - bo + tb.h / 2, b: tb, seg: g });
+        put({ kind: 'plus', seg: g, x, w: a + pw + b, asc: 0.583 * EM + vs, desc: Math.max(0, 0.083 * EM - vs) });
         x += a + pw + b; continue;
       }
       if (g.t === 'name') {
-        const inner = layPieces(g.inner, P, warn, out);
-        const nm = g.name.split('\\\\').map((s) => s.trim());
-        out.names.push({ inner, nm, x });
-        const nb = nm.map((t) => ({ t, b: TD.textBox(t || ' ', TEXT), m: vmetrics(t.replace(/\$/g, '')) }));
-        pieces.push({ kind: 'name', seg: g, inner, x, w: inner.w, asc: inner.asc, desc: inner.desc, lines: nb });
-        x += inner.w; continue;
+        // \chemname: the name centred under the molecule, its top at the deepest molecule so far (since
+        // \chemnameinit) plus name sep; \chemname* leaves that depth alone
+        const C = layPieces(g.inner, P, warn, G);
+        const star = /^\\chemname\s*\*/.test(g.head);
+        const om = /\[([^\]]*)\]/.exec(g.head), sep = om ? len(om[1].trim(), P.nameSep) : P.nameSep;
+        const dp = star ? C.desc : Math.max(C.desc, G.nameDp);
+        if (!star) G.nameDp = dp;
+        let base = null, d = C.desc;
+        for (const t of g.name.split('\\\\').map((s) => s.trim())) {
+          const tt = printable(t), b = TD.textBox(tt || ' ', TEXT), m = vmetrics(t.replace(/\$/g, ''));
+          base = base == null ? dp + sep + Math.max(m.asc, 0.683 * EM) : base + 12 * PT;
+          if (t) C.texts.push({ t: tt, cx: C.w / 2, cy: base - bo + b.h / 2, b, name: g });
+          d = Math.max(d, base + m.desc);
+        }
+        C.bb.y2 = Math.max(C.bb.y2, d);
+        kid(C, 'name', g); continue;
       }
-      if (g.t === 'set' || g.t === 'submol' || g.t === 'move' || g.t === 'ws') continue;
+      if (g.t === 'sub' || g.t === 'scheme') { kid(layScheme(g.t === 'sub' ? g.inner : g.body, P, warn, G, g.opt), g.t, g); continue; }
+      if (g.t === 'lr') { kid(layLR(g, P, warn, G), 'lr', g); continue; }
+      if (g.t === 'chg') { kid(layCharge(g, P, warn, G), 'chg', g); continue; }
+      // \chemmove draws once everything is placed, with the names known at this point
+      if (g.t === 'move') { G.moves.push({ seg: g, snap: { ...G.names } }); continue; }
+      if (g.t === 'nameinit') { G.nameDp = 0; continue; }
     }
-    // names hang below their molecule, their tops at the deepest name's molecule depth plus name sep
-    let asc = 0, desc = 0;
-    for (const p of pieces) { asc = Math.max(asc, p.asc); desc = Math.max(desc, p.desc); }
-    return { pieces, w: x, asc, desc };
+    F.w = x; F.asc = asc; F.desc = desc;
+    F.bb = { x1: 0, y1: -asc, x2: x, y2: desc };
+    return F;
   }
-  function nameLines(C, P) {
-    // \chemname: name lines centred under the molecule, their first line's top at depth max + name sep
-    const dpmax = Math.max(0, ...C.pieces.filter((p) => p.kind === 'name').map((p) => p.inner.desc));
-    for (const p of C.pieces) {
-      if (p.kind !== 'name') continue;
-      let top = dpmax + P.nameSep;
-      p.lineAt = p.lines.map((l) => { const h = Math.max(l.m.asc, 0.683 * EM), d = Math.max(l.m.desc, 0); const y = top + h; top = y + d + 2 * PT; return { ...l, base: y }; });
-      p.desc = Math.max(p.desc, top - 2 * PT);
-      C.desc = Math.max(C.desc, p.desc);
+  // \chemleft[ … \chemright]: delimiters as tall as the contents (TeX's \left…\right: delimiter factor 901,
+  // shortfall 5pt)
+  function layLR(g, P, warn, G) {
+    const C = layPieces(g.inner, P, warn, G), F = frag();
+    // centred on the maths axis (2.5pt up), reaching past whichever side of the contents is further from it
+    const ax = 2.5 * PT, D = Math.max(C.asc - ax, C.desc + ax), mid = -ax;
+    const H = Math.max(0.901 * 2 * D, 2 * D - 5 * PT), top = mid - H / 2, bot = mid + H / 2;
+    const wl = delim(g.l, F, 0, top, bot, warn, false);
+    attach(F, C, wl, 0);
+    const wr = delim(g.r, F, wl + C.w, top, bot, warn, true);
+    F.bb = { x1: 0, y1: Math.min(-C.asc, top), x2: wl + C.w + wr, y2: Math.max(C.desc, bot) };
+    return F;
+  }
+  // a delimiter drawn into F from x, between top and bot; returns its width
+  function delim(tok, F, x, top, bot, warn, right) {
+    let t = String(tok || '').trim();
+    t = { '\\lbrack': '[', '\\rbrack': ']', '\\lbrace': '\\{', '\\rbrace': '\\}', '\\vert': '|', '\\lvert': '|', '\\rvert': '|' }[t] || t;
+    const H = bot - top, m = (top + bot) / 2, sw = 0.5 * PT;
+    const W = { '[': 0.667, ']': 0.667, '(': 0.75, ')': 0.75, '\\{': 0.889, '\\}': 0.889, '|': 0.278 }[t];
+    if (W == null) { if (t !== '.') warn(`The delimiter "${t}" isn't drawn here`); return 1.2 * PT; }
+    const w = W * EM;
+    // drawn as the left one; a right one is mirrored
+    const mir = t === ']' || t === ')' || t === '\\}';
+    const X = (u) => r2(mir ? x + w - u * EM : x + u * EM), Y = (v) => r2(v);
+    let d;
+    if (t === '[' || t === ']') d = `M${X(0.6)},${Y(top)}L${X(0.2)},${Y(top)}L${X(0.2)},${Y(bot)}L${X(0.6)},${Y(bot)}`;
+    else if (t === '(' || t === ')') d = `M${X(0.6)},${Y(top)}C${X(0.12)},${Y(top + H * 0.3)} ${X(0.12)},${Y(bot - H * 0.3)} ${X(0.6)},${Y(bot)}`;
+    else if (t === '|') d = `M${X(0.139)},${Y(top)}L${X(0.139)},${Y(bot)}`;
+    else {
+      const k = Math.min(0.08 * H, 0.3 * EM);
+      d = `M${X(0.75)},${Y(top)}Q${X(0.42)},${Y(top)} ${X(0.42)},${Y(top + k)}L${X(0.42)},${Y(m - k)}Q${X(0.42)},${Y(m)} ${X(0.1)},${Y(m)}Q${X(0.42)},${Y(m)} ${X(0.42)},${Y(m + k)}L${X(0.42)},${Y(bot - k)}Q${X(0.42)},${Y(bot)} ${X(0.75)},${Y(bot)}`;
     }
+    F.paths.push({ d, sw });
+    return w;
+  }
+  // \charge{…}{…} around a whole box (outside \chemfig)
+  function layCharge(g, P, warn, G) {
+    const C = layPieces(g.inner, P, warn, G), F = frag();
+    attach(F, C, 0, 0);
+    const overlay = !(g.cmd === 'Charge' || /overlay\s*=\s*false/.test(g.opt || ''));
+    for (const c of g.charges) chargeMarks({ cx: C.w / 2, cy: (C.desc - C.asc) / 2, w: C.w, asc: C.asc, desc: C.desc }, { ...c, overlay }, F);
+    F.bb = { x1: 0, y1: -C.asc, x2: C.w, y2: C.desc };
+    if (!overlay) for (const q of F.texts) ext(F, q.cx - (q.b.w - 2) / 2, q.cy - q.b.h / 2, q.cx + (q.b.w - 2) / 2, q.cy + q.b.h / 2);
+    return F;
+  }
+
+  // \schemestart … \schemestop (and \subscheme): chemfig's own reading. A compound is what stands between
+  // arrows; it is set when the next arrow (or \merge, or the end) comes, named c1, c2… (or as the arrow
+  // says), anchored on the point the last arrow ended at by the angle it came from (180 + angle).
+  //   \arrow(n1.a1--n2.a2)     from n1 (the compound just set) at its a1, the next compound named n2 at its a2
+  //   \arrow(@n1--n2)          the arrow leaves from the compound named n1
+  //   \arrow(@n1--@n2)         an arrow between two compounds already placed (drawn at the end)
+  //   \merge>(c1)(c2)--(c3)    lines from compounds to a bar, an arrow from the bar to the next compound
+  function layScheme(body, P0, warn, G, opt) {
+    const P = { ...P0 };
+    const o = String(opt || '').trim();
+    if (o) { if (/^-?[\d.]+$/.test(o)) P.aangle = parseFloat(o); else applyKV(P, readKV(o), warn); }
+    const S = frag();
+    G.level++;
+    if (G.level === 1) G.cnt = 0;
+    const pt = (x, y) => ({ x, y, w: 0, h: 0, base: y });
+    G.names['c' + G.cnt] = { F: S, ...pt(0, 0) };
+    ext(S, 0, 0, 0, 0);
+    let cur = pt(0, 0), nextName = '', nextStyle = '', nextAnchor = G.nextAnchor || 'text', pend = [];
+    const direct = [];
+    const visible = (gs) => gs.some((g) => ['mol', 'name', 'plus', 'sub', 'lr', 'chg'].includes(g.t) || (g.t === 'text' && g.raw.replace(/%[^\n]*/g, '').trim()));
+    const lookup = (n) => { const e = G.names[n]; if (!e) { warn(`No compound is named "${n}"`); return null; } return relBox(e, S); };
+    const ctr = (b) => [b.x + b.w / 2, b.y + b.h / 2];
+    function display(name, style) {
+      const gs = pend;
+      pend = [];
+      if (!visible(gs)) { if (gs.length) layPieces(gs, P, warn, G); return; }
+      G.cnt++;
+      const nm = name || nextName || 'c' + G.cnt;
+      const keep = G.nextAnchor;
+      G.nextAnchor = nextAnchor;
+      const C = layPieces(gs, P, warn, G);
+      G.nextAnchor = keep;
+      const anchor = styleAnchor([nextStyle, style].filter(Boolean).join(','), nextAnchor, warn);
+      const [ax, ay] = anchorPt({ x: 0, y: -C.asc, w: C.w, h: C.asc + C.desc }, 0, anchor);
+      const [cx, cy] = ctr(cur), ox = cx - ax, oy = cy - ay;
+      attach(S, C, ox, oy);
+      cur = { x: ox, y: oy - C.asc, w: C.w, h: C.asc + C.desc, base: oy };
+      ext(S, cur.x, cur.y, cur.x + cur.w, cur.y + cur.h);
+      G.names[nm] = { F: S, ...cur };
+      G.comps.push({ name: nm, entry: G.names[nm], level: G.level, segs: gs });
+      nextName = ''; nextStyle = '';
+    }
+    const num = (v, d) => (v != null && String(v).trim() !== '' && isFinite(parseFloat(v)) ? parseFloat(v) : d);
+    function arrow(A) {
+      const E = arrowEnds(A.names);
+      const ang = num(A.opt[0], P.aangle), coeff = num(A.opt[1], P.acoeff);
+      const style = A.opt.slice(2).filter((x) => x && x.trim()).join(',');
+      if (E.n1.startsWith('@') && E.n2.startsWith('@')) { direct.push({ A, E, style }); return; }
+      if (E.n1.startsWith('@')) { display('', ''); const b = lookup(E.n1.slice(1)); if (b) cur = b; }
+      else display(E.n1, E.s1);
+      const st = anchorPt(cur, cur.base, E.a1 || String(ang));
+      const ux = Math.cos(rad(ang)), uy = -Math.sin(rad(ang)), Lt = coeff * P.csep;
+      const end = [st[0] + ux * Lt, st[1] + uy * Lt];
+      addArrow(S, makeArrow(A, [st[0] + ux * P.aoff, st[1] + uy * P.aoff], [end[0] - ux * P.aoff, end[1] - uy * P.aoff], ang, style, P, warn, G));
+      ext(S, st[0], st[1], st[0], st[1]); ext(S, end[0], end[1], end[0], end[1]);
+      cur = pt(end[0], end[1]);
+      nextName = E.n2.replace(/^@/, ''); nextStyle = E.s2; nextAnchor = E.a2 || String(norm360(180 + ang));
+    }
+    function merge(M) {
+      display('', '');
+      const ang = { '>': 0, '<': 180, '^': 90, v: -90 }[M.dir] ?? 0, horiz = ang === 0 || ang === 180;
+      const ux = Math.cos(rad(ang)), uy = -Math.sin(rad(ang));
+      const from = num(M.opt[0], 0.5), to = num(M.opt[1], 0.5), at = num(M.opt[2], 0.5);
+      const sty = bondStyle(M.opt.slice(3).filter((x) => x && x.trim()).join(','), warn);
+      const pts = [];
+      for (const src of M.srcs) { const q = endOf(src), b = lookup(q.n.replace(/^@/, '')); if (b) pts.push(anchorPt(b, b.base, q.a || String(ang))); }
+      if (!pts.length) return;
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      const X = M.dir === '<' ? Math.min(...xs) - from * P.csep : Math.max(...xs) + from * P.csep;
+      const Y = M.dir === '^' ? Math.min(...ys) - from * P.csep : Math.max(...ys) + from * P.csep;
+      const line = (a, b) => { S.paths.push({ d: `M${r2(a[0])},${r2(a[1])}L${r2(b[0])},${r2(b[1])}`, sw: sty.width || LW, color: sty.color }); ext(S, Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])); };
+      for (const p of pts) line([p[0] + ux * P.aoff, p[1] + uy * P.aoff], horiz ? [X, p[1]] : [p[0], Y]);
+      const lo = horiz ? Math.min(...ys) : Math.min(...xs), hi = horiz ? Math.max(...ys) : Math.max(...xs);
+      line(horiz ? [X, lo] : [lo, Y], horiz ? [X, hi] : [hi, Y]);
+      const mp = horiz ? [X, lo + at * (hi - lo)] : [lo + at * (hi - lo), Y];
+      const Lt = to * P.csep, end = [mp[0] + ux * Lt, mp[1] + uy * Lt];
+      addArrow(S, makeArrow({ ...M, type: '->', names: '' }, mp, [end[0] - ux * P.aoff, end[1] - uy * P.aoff], ang, '', P, warn, G, null, M));
+      ext(S, end[0], end[1], end[0], end[1]);
+      cur = pt(end[0], end[1]);
+      const T = endOf(M.target);
+      nextName = T.n.replace(/^@/, ''); nextStyle = T.s; nextAnchor = T.a || String(norm360(180 + ang));
+    }
+    for (const g of body) {
+      if (g.t === 'arrow') arrow(g);
+      else if (g.t === 'merge') merge(g);
+      else if (g.t === 'start' || g.t === 'stop') continue;
+      else pend.push(g);
+    }
+    display('', '');
+    // arrows between compounds already placed: centre to centre (or anchor to anchor), from border to border
+    for (const { A, E, style } of direct) {
+      const b1 = lookup(E.n1.slice(1)), b2 = lookup(E.n2.slice(1));
+      if (!b1 || !b2) continue;
+      const c1 = E.a1 ? anchorPt(b1, b1.base, E.a1) : ctr(b1), c2 = E.a2 ? anchorPt(b2, b2.base, E.a2) : ctr(b2);
+      const ang = (Math.atan2(-(c2[1] - c1[1]), c2[0] - c1[0]) * 180) / Math.PI;
+      const p1 = E.a1 ? c1 : border(b1, ang), p2 = E.a2 ? c2 : border(b2, ang + 180);
+      const ux = Math.cos(rad(ang)), uy = -Math.sin(rad(ang));
+      addArrow(S, makeArrow(A, [p1[0] + ux * P.aoff, p1[1] + uy * P.aoff], [p2[0] - ux * P.aoff, p2[1] - uy * P.aoff], ang, style, P, warn, G));
+    }
+    G.level--;
+    return S;
+  }
+  // an arrow from p1 to p2: its lines and tips, and its labels. seg: the \arrow (type, labels);
+  // labsGiven: labels already laid out (\hreac's); owner: the segment it belongs to, when not seg
+  const ARROWS = ['->', '<-', '<->', '<=>', '<->>', '<<->', '-/>', '0', '-U>'];
+  function makeArrow(seg, p1, p2, ang, style, P, warn, G, labsGiven, owner) {
+    const type = seg.type || '->';
+    const ux = Math.cos(rad(ang)), uy = -Math.sin(rad(ang)), nx = uy, ny = -ux; // n: left of travel
+    const shift = seg.labels && seg.labels[2] ? len(unbrace(seg.labels[2]), 0) : 0;
+    p1 = [p1[0] + nx * shift, p1[1] + ny * shift]; p2 = [p2[0] + nx * shift, p2[1] + ny * shift];
+    if (!ARROWS.includes(type)) warn(`The arrow "${type}" isn't one chemfig knows: drawn as ->`);
+    const t = ARROWS.includes(type) ? type : '->';
+    const prim = [];
+    const line = (q1, q2, head, harpoon) => { prim.push({ q1, q2, head, harpoon }); };
+    const at = (q, f) => [q[0] + nx * f, q[1] + ny * f];
+    const lerp = (k) => [p1[0] + (p2[0] - p1[0]) * k, p1[1] + (p2[1] - p1[1]) * k];
+    if (t === '->' || t === '-U>') line(p1, p2, 'end');
+    else if (t === '<-') line(p2, p1, 'end');
+    else if (t === '<->') line(p1, p2, 'both');
+    else if (t === '<=>') { line(at(p1, PT), at(p2, PT), 'end', true); line(at(p2, -PT), at(p1, -PT), 'end', true); }
+    else if (t === '<->>') { line(at(p1, PT), at(p2, PT), 'end', true); line(at(lerp(0.8), -PT), at(lerp(0.2), -PT), 'end', true); }
+    else if (t === '<<->') { line(at(lerp(0.2), PT), at(lerp(0.8), PT), 'end', true); line(at(p2, -PT), at(p1, -PT), 'end', true); }
+    else if (t === '-/>') {
+      line(p1, p2, 'end');
+      const m = lerp(0.5);
+      for (const s of [-1, 1]) {
+        const c = [m[0] + ux * s * PT, m[1] + uy * s * PT], d1 = rad(225 + ang), d2 = rad(45 + ang);
+        prim.push({ q1: [c[0] + 5 * PT * Math.cos(d1), c[1] - 5 * PT * Math.sin(d1)], q2: [c[0] + 5 * PT * Math.cos(d2), c[1] - 5 * PT * Math.sin(d2)], head: null });
+      }
+    }
+    if (t === '-U>') warn('The -U> arrow\'s arc isn\'t drawn here');
+    const sty = bondStyle(style, warn);
+    // labels: above at the middle, arrow label sep off, sloped with the arrow and never upside down
+    const mid = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+    let rot = ang;
+    if (Math.cos(rad(rot)) < -1e-9) rot += 180;
+    const labs = labsGiven || [];
+    if (!labsGiven) [seg.labels && seg.labels[0], seg.labels && seg.labels[1]].forEach((lab, j) => {
+      if (lab == null || !String(lab).trim()) return;
+      const l = richLabel(String(lab), j === 0 ? 1 : -1, mid, rot, P, warn, G);
+      if (l) labs.push({ ...l, which: j, seg: owner || seg });
+    });
+    return { seg: owner || seg, prim, labs, x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], ang, type: t, color: sty.color, sw: sty.width, hidden: sty.none };
+  }
+  // a label's contents laid out like a compound (molecules, + and text), in a size (\tiny…) and turned:
+  // along the arrow, or *{θ} at θ, touching the point arrow label sep off the middle on its side (sg)
+  const SIZES = { tiny: 5, scriptsize: 7, footnotesize: 8, small: 9, normalsize: 10, large: 12, Large: 14.4, LARGE: 17.28, huge: 20.74, Huge: 24.88 };
+  function richLabel(txt, sg, mid, rot, P, warn, G) {
+    let t = txt, theta = null, m;
+    const st = /^\s*\*\s*/.exec(t);
+    if (st) {
+      let k = st[0].length;
+      if (t[k] === '{') { const e = close(t, k); theta = parseFloat(t.slice(k + 1, e)); k = e + 1; } else { theta = parseFloat(t[k]); k++; }
+      if (!isFinite(theta)) theta = 0;
+      t = t.slice(k);
+    }
+    let sc = 1;
+    while ((m = /^\s*\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)(?![A-Za-z])\s*/.exec(t))) { sc = SIZES[m[1]] / 10; t = t.slice(m[0].length); }
+    const F = layPieces(parseDoc(unbrace(t), warn, G.defs), P, warn, G);
+    if (!F.pieces.length) return null;
+    const w = F.w * sc, h = (F.asc + F.desc) * sc;
+    const vx = Math.cos(rad(rot + 90)), vy = -Math.sin(rad(rot + 90)); // the label frame's up
+    const S = [mid[0] + vx * P.lsep * sg, mid[1] + vy * P.lsep * sg];
+    let bx, by, R;
+    if (theta == null) { bx = S[0] + (vx * sg * h) / 2; by = S[1] + (vy * sg * h) / 2; R = rot; }
+    else {
+      // the anchor facing the arrow, in the label's own (turned) frame
+      const al = rad(rot - sg * 90 - theta), ax = Math.cos(al), ay = -Math.sin(al);
+      const k = Math.min(Math.abs(ax) > 1e-9 ? w / 2 / Math.abs(ax) : Infinity, Math.abs(ay) > 1e-9 ? h / 2 / Math.abs(ay) : Infinity);
+      const v = [ax * k, ay * k], c = Math.cos(rad(theta)), s = Math.sin(rad(theta));
+      bx = S[0] - (v[0] * c + v[1] * s); by = S[1] - (-v[0] * s + v[1] * c); R = theta;
+    }
+    const sink = newSink();
+    emit(F, 0, 0, sink);
+    return { g: sink, s: sc, fc: [F.w / 2, (F.desc - F.asc) / 2], bx, by, bw: w, bh: h, rot: R };
+  }
+  function addArrow(F, a) {
+    F.arrows.push(a);
+    if (a.type === '0' || a.hidden) ext(F, Math.min(a.x1, a.x2), Math.min(a.y1, a.y2), Math.max(a.x1, a.x2), Math.max(a.y1, a.y2));
+    else for (const p of a.prim) ext(F, Math.min(p.q1[0], p.q2[0]), Math.min(p.q1[1], p.q2[1]), Math.max(p.q1[0], p.q2[0]), Math.max(p.q1[1], p.q2[1]));
+    for (const l of a.labs) {
+      const c = Math.abs(Math.cos(rad(l.rot))), s = Math.abs(Math.sin(rad(l.rot))), hw = (l.bw * c + l.bh * s) / 2, hh = (l.bw * s + l.bh * c) / 2;
+      ext(F, l.bx - hw, l.by - hh, l.bx + hw, l.by + hh);
+    }
+  }
+  // everything drawn, in the block's frame
+  const newSink = () => ({ paths: [], texts: [], dots: [], verts: [], bonds: [], rings: [], mols: [], arrows: [] });
+  function emit(F, ox, oy, K) {
+    for (const p of F.paths) K.paths.push({ ...p, dx: (p.dx || 0) + ox, dy: (p.dy || 0) + oy });
+    for (const d of F.dots) K.dots.push({ ...d, x: d.x + ox, y: d.y + oy });
+    for (const t of F.texts) K.texts.push({ ...t, cx: t.cx + ox, cy: t.cy + oy });
+    for (const m of F.mols) emitMol(m, ox + m.x, oy + m.y, K);
+    for (const a of F.arrows) {
+      const sh = (q) => [q[0] + ox, q[1] + oy];
+      K.arrows.push({ ...a, x1: a.x1 + ox, y1: a.y1 + oy, x2: a.x2 + ox, y2: a.y2 + oy, prim: a.prim.map((p) => ({ ...p, q1: sh(p.q1), q2: sh(p.q2) })), labs: a.labs.map((l) => ({ ...l, bx: l.bx + ox, by: l.by + oy, ...(l.cx != null ? { cx: l.cx + ox, cy: l.cy + oy } : {}) })) });
+    }
+    for (const C of F.kids) emit(C, ox + C.off[0], oy + C.off[1], K);
+  }
+  function emitMol(m, dx, dy, K) {
+    const L = m.L, seg = m.seg;
+    K.mols.push({ seg, L, dx, dy });
+    for (const q of L.paths) K.paths.push({ ...q, dx, dy });
+    for (const d of L.dots) K.dots.push({ ...d, x: d.x + dx, y: d.y + dy });
+    for (const t of L.texts) {
+      if (t.box) { const b = TD.textBox(t.t, TEXT), bo = baseOff(TEXT); K.texts.push({ t: t.t, cx: t.box.cx + dx, cy: t.box.base + dy - bo + b.h / 2, b }); }
+      else K.texts.push({ t: t.t, cx: t.cx + dx, cy: t.cy + dy, b: t.b });
+    }
+    const map = new Map();
+    for (const v of L.verts) { const c = { ...v, X: v.x + dx, Y: v.y + dy, mol: seg, dx, dy }; map.set(v, c); K.verts.push(c); }
+    for (const b of L.bonds) K.bonds.push({ ...b, a: map.get(b.a), b: map.get(b.b), X0: b.p0[0] + dx, Y0: b.p0[1] + dy, X1: b.p1[0] + dx, Y1: b.p1[1] + dy, mol: seg });
+    for (const r of L.rings) K.rings.push({ ...r, X: r.cx + dx, Y: r.cy + dy, mol: seg });
   }
   // \printatom{X} sets X as an atom: upright maths
   const printable = (t) => String(t).replace(/\\printatom\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (m, a) => `$\\mathrm{${a}}$`);
@@ -821,11 +1236,11 @@
   function chemMove(seg, names, warn, out) {
     const body = seg.body.replace(/%[^\n]*/g, '');
     const re = /\\(draw|path)\s*(\[[^\]]*\])?([^;]*);/g;
-    let m, any = false;
+    let m, any = false, k = -1;
     const rest = body.replace(re, '').trim();
     if (rest) warn(`In \\chemmove, "${rest.slice(0, 40)}" isn't drawn here (it is kept in the code)`);
     while ((m = re.exec(body))) {
-      any = true;
+      any = true; k++;
       if (m[1] === 'path') continue;
       const opts = [seg.opt, m[2] ? m[2].slice(1, -1) : ''].join(',').split(',').map((o) => o.trim()).filter(Boolean);
       const st = { tipS: false, tipE: true, sh1: 0, sh2: 0, dash: null, sw: LW, color: null };
@@ -834,15 +1249,18 @@
         if ((q = /^([<>]?|CF|stealth|latex|to)?-([<>]?|CF|stealth|latex|to)?$/.exec(o))) { st.tipS = !!q[1]; st.tipE = !!q[2]; }
         else if ((q = /^shorten\s*([<>])\s*=\s*(.+)$/.exec(o))) { const v = tikzLen(q[2].replace(/(\d)$/, '$1pt')) ?? 0; if (q[1] === '<') st.sh1 = v; else st.sh2 = v; }
         else if (o === 'dashed') st.dash = 'dash';
+        else if (o === 'solid') st.dash = null;
         else if (o === 'dotted') st.dash = 'dot';
+        else if ((q = /^dash pattern\s*=\s*(.+)$/.exec(o))) { const v = []; for (const r of q[1].matchAll(/(on|off)\s+([-\d.]+\s*[a-z]*)/g)) v.push(tikzLen(/\d$/.test(r[2].trim()) ? r[2].trim() + 'pt' : r[2]) || 0); if (v.length) st.dash = v; }
         else if ((q = /^line width\s*=\s*(.+)$/.exec(o))) st.sw = len(q[1], LW);
         else if (o === 'thin') st.sw = LW; else if (o === 'semithick') st.sw = 0.6 * PT; else if (o === 'thick') st.sw = 0.8 * PT; else if (o === 'very thick') st.sw = 1.2 * PT; else if (o === 'ultra thick') st.sw = 1.6 * PT;
-        else if ((q = /^(?:color\s*=\s*|draw\s*=\s*)?([a-zA-Z]+(?:![\d.]+(?:![a-zA-Z]+)?)?)$/.exec(o)) && TD.parseColor && TD.parseColor(q[1])) st.color = q[1];
+        else if ((q = /^(?:color\s*=\s*|draw\s*=\s*)?([a-zA-Z]+(?:![\d.]+(?:![a-zA-Z]+)?)?)$/.exec(o)) && TD.tikzColor && TD.tikzColor(q[1])) st.color = TD.tikzColor(q[1]);
         else if (/^(?:->|overlay|remember picture)$/.test(o)) {}
         else warn(`The \\chemmove option "${o}" isn't drawn here (it is kept in the code)`);
       }
       const segs = readPath(m[3], names, warn);
-      if (segs) out.push({ ...st, segs });
+      // seg and k (the k-th \draw or \path in its body): what the editor rewrites
+      if (segs) out.push({ ...st, segs, seg, k });
     }
     if (!any && body.trim()) warn('\\chemmove has no \\draw to show here (it is kept in the code)');
   }
@@ -863,7 +1281,8 @@
       i = j + 1;
       let q;
       if ((q = /^([^,:]+?)\s*:\s*([^,]+)$/.exec(t))) {
-        const ang = /^(up|down|left|right)$/.test(q[1].trim()) ? { right: 0, up: 90, left: 180, down: 270 }[q[1].trim()] : parseFloat(q[1]);
+        const W = { right: 0, up: 90, left: 180, down: 270, east: 0, 'north east': 45, north: 90, 'north west': 135, west: 180, 'south west': 225, south: 270, 'south east': 315 };
+        const ang = q[1].trim() in W ? W[q[1].trim()] : parseFloat(q[1]);
         const r = unit(q[2]);
         if (r == null || isNaN(ang)) { warn(`The coordinate (${t}) isn't read here`); return null; }
         const v = [r * Math.cos(rad(ang)), -r * Math.sin(rad(ang))];
@@ -892,7 +1311,14 @@
     while (i < p.length) {
       ws();
       if (i >= p.length) break;
-      if (p.startsWith('--', i)) {
+      if (p.startsWith('|-', i) || p.startsWith('-|', i)) {
+        // a corner: vertical then horizontal (|-), or horizontal then vertical (-|)
+        const vf = p[i] === '|';
+        i += 2; const c = coord(); if (!c) return null;
+        const q = take(c, last);
+        pts.push({ pt: vf ? [last[0], q.pt[1]] : [q.pt[0], last[1]] }); ops.push({ k: 'line' });
+        pts.push(q); ops.push({ k: 'line' }); if (c.rel !== 1) last = q.pt;
+      } else if (p.startsWith('--', i)) {
         i += 2; const c = coord(); if (!c) return null;
         const q = take(c, last); pts.push(q); ops.push({ k: 'line' }); if (c.rel !== 1) last = q.pt;
       } else if (p.startsWith('..', i)) {
@@ -953,239 +1379,131 @@
     return [cx + ux * t, cy + uy * t];
   }
 
-  // the whole thing: compounds, arrows, signs
+  // the whole thing: lines of compounds, schemes and text, or an \hreac row
   function build(src, segsIn) {
     const warnings = [], warn = (w) => { if (!warnings.includes(w)) warnings.push(w); };
     const segs = segsIn || parseDoc(src, warn);
     const P = { ...DEF };
-    const setKV = (kv) => {
-      for (const [k, v] of Object.entries(kv)) {
-        const map = { 'atom sep': 'sep', 'bond offset': 'boff', 'double bond sep': 'dsep', 'cram width': 'cram', 'compound sep': 'csep', 'arrow offset': 'aoff', 'arrow label sep': 'lsep', 'name sep': 'nameSep' };
-        if (map[k]) P[map[k]] = len(v, P[map[k]]);
-        else if (k === 'angle increment') P.inc = parseFloat(v) || 45;
-        else if (k === 'arrow coeff') P.acoeff = parseFloat(v) || 1;
-        else if (k === 'arrow angle') P.aangle = parseFloat(v) || 0;
-        else if (k === 'fixed length') P.fixed = v !== 'false';
-        else if (k === 'harrow minwidth') P.hminw = len(v, P.hminw);
-        else if (k === 'label xsep') P.lxsep = len(v, P.lxsep);
-        else if (k === 'hreac sep') P.hsep = len(v, P.hsep);
-        else warn(`The setting "${k}" isn't drawn here (it is kept in the code)`);
-      }
-    };
     // submolecules, wherever they are defined
     P.submols = {};
-    const gather = (L) => { for (const g of L) { if (g.t === 'submol') P.submols[g.name] = { n: g.n, alt: g.alt, body: g.body }; if (g.t === 'name') gather(g.inner); } };
+    const gather = (L) => { for (const g of L) { if (g.t === 'submol') P.submols[g.name] = { n: g.n, alt: g.alt, body: g.body }; if (g.inner) gather(g.inner); } };
     gather(segs);
-    let si = segs.findIndex((g) => g.t === 'start'), so = segs.findIndex((g) => g.t === 'stop');
+    for (const g of segs) if (g.t === 'set') applyKV(P, g.kv, warn);
+    const G = { names: {}, cnt: 0, level: 0, nameDp: 0, moves: [], comps: [], defs: segs.defs || {}, nextAnchor: 'text' };
+    const root = frag();
     const hi = segs.findIndex((g) => g.t === 'hstart'), ho = segs.findIndex((g) => g.t === 'hstop');
+    const si = segs.findIndex((g) => g.t === 'start');
     const hreac = hi >= 0 && (si < 0 || hi < si);
-    if (hreac) { si = -1; so = -1; }
-    for (const g of segs) if (g.t === 'set') setKV(g.kv);
-    if (hreac) setKV(segs[hi].kv);
-    const scheme = si >= 0;
-    // the spaces TeX sets before a scheme: one per line break after a \definesubmol, \setchemfig…
-    const main = hreac ? hi : si;
-    let lead = 0;
-    for (let k = 1; k < main; k++) if (segs[k].t === 'text' && /\s/.test(segs[k].raw.replace(/%[^\n]*(\n[ \t]*)?/g, ''))) lead += 3.333 * PT;
-    if (hreac && ho < 0) warn('\\endhreac is missing');
-    if (hreac) for (const g of segs.slice(0, hi).concat(ho >= 0 ? segs.slice(ho + 1) : [])) if (g.t === 'text' ? g.raw.replace(/%.*$/gm, '').trim() : !['set', 'submol', 'move'].includes(g.t)) warn('Only \\hreac … \\endhreac is drawn: what is outside it is kept in the code');
-    if (scheme && so < 0) warn('\\schemestop is missing');
-    if (!scheme && segs.some((g) => g.t === 'arrow')) warn('Arrows need \\schemestart … \\schemestop around them');
-    if (scheme) {
-      const m = /\[([^\]]*)\]/.exec(segs[si].raw);
-      if (m) { const kv = {}; for (const it of split(m[1])) { const q = /^\s*([^=]+?)\s*=\s*([\s\S]*?)\s*$/.exec(it); if (q) kv[q[1]] = unbrace(q[2]); } setKV(kv); }
-      for (const g of segs.slice(0, si).concat(so >= 0 ? segs.slice(so + 1) : [])) if (g.t === 'text' ? g.raw.replace(/%.*$/gm, '').trim() : !['set', 'submol', 'move', 'hstart', 'hstop', 'harrow'].includes(g.t)) warn('Only \\schemestart … \\schemestop is drawn: what is outside it is kept in the code');
-    }
-    const body = scheme ? segs.slice(si + 1, so < 0 ? segs.length : so) : hreac ? segs.slice(hi + 1, ho < 0 ? segs.length : ho) : segs;
-    const out = { names: [] };
-    const placed = [];
-    const A = [];
+    let scheme = false;
     if (hreac) {
-      // \hreac: nodes in a row, their centres on the centre of a \vphantom{A} at the start, hreac sep apart
-      const nodes = [];
-      let gs = [];
-      for (const g of body) {
-        if (g.t === 'plus') { nodes.push({ k: 'comp', gs }, { k: 'plus', seg: g }); gs = []; }
-        else if (g.t === 'harrow') { nodes.push({ k: 'comp', gs }, { k: 'arrow', seg: g }); gs = []; }
-        else if (g.t === 'name' || g.t === 'arrow') { warn('\\chemname, \\name and \\arrow inside \\hreac aren\'t drawn here (they are kept in the code)'); }
-        else gs.push(g);
+      applyKV(P, segs[hi].kv, warn);
+      if (ho < 0) warn('\\endhreac is missing');
+      for (const g of segs.slice(0, hi).concat(ho >= 0 ? segs.slice(ho + 1) : [])) if (g.t === 'text' ? g.raw.replace(/%.*$/gm, '').trim() : !['set', 'submol', 'move'].includes(g.t)) warn('Only \\hreac … \\endhreac is drawn: what is outside it is kept in the code');
+      // the spaces TeX sets before the row: one per line break after a \definesubmol, \setchemfig…
+      let lead = 0;
+      for (let k = 1; k < hi; k++) if (segs[k].t === 'text' && /\s/.test(segs[k].raw.replace(/%[^\n]*(\n[ \t]*)?/g, ''))) lead += 3.333 * PT;
+      attach(root, layHreac(segs.slice(hi + 1, ho < 0 ? segs.length : ho), lead, P, warn, G), 0, 0);
+      for (const g of segs.slice(0, hi).concat(ho >= 0 ? segs.slice(ho + 1) : [])) if (g.t === 'move') G.moves.push({ seg: g, snap: { ...G.names } });
+    } else {
+      // \schemestart … \schemestop as one piece; lines split at \par and blank lines
+      const items = [];
+      for (let k = 0; k < segs.length; k++) {
+        const g = segs[k];
+        if (g.t === 'start') {
+          scheme = true;
+          let e = k + 1;
+          while (e < segs.length && segs[e].t !== 'stop') e++;
+          if (e >= segs.length) warn('\\schemestop is missing');
+          const m = /^\\schemestart\s*\[([\s\S]*)\]$/.exec(g.raw);
+          items.push({ t: 'scheme', body: segs.slice(k + 1, e), opt: m ? m[1] : '', start: g });
+          k = e; continue;
+        }
+        if (g.t === 'stop') { warn('\\schemestop has no \\schemestart'); continue; }
+        if (g.t === 'arrow' || g.t === 'merge') { warn('Arrows need \\schemestart … \\schemestop around them'); continue; }
+        if (g.t === 'text' && /\n[ \t]*\n/.test(g.raw.replace(/%[^\n]*/g, ''))) {
+          const parts = g.raw.split(/\n[ \t]*\n/);
+          parts.forEach((p, j) => { if (j) items.push({ t: 'par', raw: '' }); if (p) items.push({ t: 'text', raw: p }); });
+          continue;
+        }
+        items.push(g);
       }
-      nodes.push({ k: 'comp', gs });
-      const yc = -0.683 * EM / 2;
-      let x = lead;
-      nodes.forEach((nd, i) => {
-        const left = x + (i === 0 ? 0 : P.hsep);
-        if (nd.k === 'comp') {
-          const C = layPieces(nd.gs, P, warn, out); C.segs = nd.gs;
-          const base = yc + (C.asc - C.desc) / 2;
-          placed.push({ C, x: left, base, box: { x: left, y: base - C.asc, w: C.w, h: C.asc + C.desc }, empty: !C.pieces.length });
-          x = left + C.w; return;
-        }
-        if (nd.k === 'plus') {
-          const pw = 0.778 * EM, C = { pieces: [{ kind: 'plus', seg: nd.seg, x: 0, w: pw, cx: pw / 2, vs: 0, asc: 0.583 * EM, desc: 0.083 * EM }], w: pw, asc: 0.583 * EM, desc: 0.083 * EM };
-          const base = yc + (C.asc - C.desc) / 2;
-          placed.push({ C, x: left, base, box: { x: left, y: base - C.asc, w: pw, h: C.asc + C.desc }, empty: false });
-          x = left + pw; return;
-        }
-        // an arrow: at least harrow minwidth × arrow coeff, or as wide as its labels and 2 label xsep
-        const ar = nd.seg, labs = [];
-        const lines = ar.labels.map((l) => (l == null || !String(l).trim() ? null : printable(unbrace(l))));
-        const boxes = lines.map((t) => (t == null ? null : { t, b: TD.textBox(t, TEXT), m: vmetrics(t.replace(/\$/g, '')) }));
-        let Lh = P.hminw * P.acoeff;
-        for (const q of boxes) if (q) Lh = Math.max(Lh, q.b.w - 2 + 2 * P.lxsep);
-        boxes.forEach((q, j) => {
-          if (!q) return;
-          const asc = Math.max(q.m.asc, 0), desc = q.m.desc;
-          const base = j === 0 ? yc - P.lsep - desc : yc + P.lsep + asc;
-          const bo = baseOff(TEXT);
-          labs.push({ t: q.t, cx: left + Lh / 2, cy: base - bo + q.b.h / 2, bx: left + Lh / 2, by: base - (asc - desc) / 2, bw: Lh - 2 * P.lxsep, bh: asc + desc, b: q.b, rot: 0, which: j, seg: ar });
-        });
-        A.push({ seg: ar, x1: left, y1: yc, x2: left + Lh, y2: yc, ang: 0, labs });
-        x = left + Lh;
+      const lines = [[]];
+      for (const g of items) { if (g.t === 'par') lines.push([]); else lines[lines.length - 1].push(g); }
+      let y = 0, prev = null;
+      lines.forEach((line, j) => {
+        const F = layPieces(line, P, warn, G, j === 0);
+        if (!F.pieces.length) return;
+        // TeX's \baselineskip 12pt, or \lineskip 1pt between the boxes when they would come closer
+        if (prev != null) y += Math.max(12 * PT, prev + F.asc + 1 * PT);
+        attach(root, F, 0, y);
+        ext(root, F.bb.x1, y + F.bb.y1, F.bb.x2, y + F.bb.y2);
+        prev = F.bb.y2;
       });
-      // the \vphantom{A} the row starts from
-      placed.unshift({ C: { pieces: [], w: 0, asc: 0.683 * EM, desc: 0 }, x: lead, base: 0, box: { x: lead, y: -0.683 * EM, w: 0, h: 0.683 * EM }, empty: false, phantom: true });
     }
-    // compounds between arrows
-    const groups = [[]], arrows = [];
-    if (!hreac) for (const g of body) { if (g.t === 'arrow') { arrows.push(g); groups.push([]); } else groups[groups.length - 1].push(g); }
-    const comps = hreac ? [] : groups.map((gs) => { const C = layPieces(gs, P, warn, out, !scheme); nameLines(C, P); C.segs = gs; return C; });
-    // place: the first compound's text anchor (left end of its baseline) at the origin
-    let cur = { x: 0, base: 0 }, curBox = null, curBase = 0;
-    comps.forEach((C, k) => {
-      const empty = !C.pieces.length;
-      if (k === 0) { cur = { x: lead, base: 0 }; }
-      else {
-        const ar = arrows[k - 1];
-        const ang = ar.opt[0] ? parseFloat(ar.opt[0]) || 0 : P.aangle, coeff = ar.opt[1] ? parseFloat(ar.opt[1]) || 1 : P.acoeff;
-        // (name.anchor--name.anchor): the arrow leaves the previous compound at its anchor, the next one sits on the end by its own
-        const nm = /^\(\s*([^.[]*?)\s*(?:\.([^[]*?))?\s*(?:\[[^\]]*\])?\s*--\s*([^.[]*?)\s*(?:\.([^[)]*?))?\s*(?:\[[^\]]*\])?\s*\)$/.exec(ar.names || '');
-        const a1 = nm ? (nm[2] || '').trim() : '', a2 = nm ? (nm[4] || '').trim() : '';
-        if (ar.names && !nm) warn(`The arrow's "${ar.names}" isn't read here: drawn from the compounds' borders`);
-        if (nm && (nm[1].startsWith('@') || nm[3].startsWith('@'))) warn('Arrows between named compounds (@name) are drawn from the previous compound here');
-        const st = curBox ? (a1 ? anchorPt(curBox, curBase, a1) : border(curBox, ang)) : [cur.x, cur.base];
-        const ux = Math.cos(rad(ang)), uy = -Math.sin(rad(ang)), Lt = coeff * P.csep;
-        const end = [st[0] + ux * Lt, st[1] + uy * Lt];
-        A.push({ seg: ar, x1: st[0] + ux * P.aoff, y1: st[1] + uy * P.aoff, x2: st[0] + ux * (Lt - P.aoff), y2: st[1] + uy * (Lt - P.aoff), ang, comp: k - 1 });
-        // the next compound: its border at 180 + angle on the end point
-        const bw = C.w, bh = C.asc + C.desc;
-        const fake = { x: 0, y: 0, w: bw, h: bh };
-        const [bx, by] = a2 ? anchorPt(fake, C.asc, a2) : border(fake, ang + 180);
-        cur = { x: end[0] - bx, base: end[1] - by + C.asc };
-        if (empty) { curBox = { x: end[0], y: end[1], w: 0, h: 0 }; curBase = end[1]; placed.push({ C, x: end[0], base: end[1], box: curBox, empty }); return; }
-      }
-      curBox = { x: cur.x, y: cur.base - C.asc, w: C.w, h: C.asc + C.desc }; curBase = cur.base;
-      placed.push({ C, x: cur.x, base: cur.base, box: curBox, empty });
-    });
-    // drawing primitives in document px
-    const paths = [], texts = [], dots = [], verts = [], bonds = [], rings = [], mols = [];
-    const docNames = { atoms: {}, bonds: {} };
-    for (const pc of placed) {
-      for (const p of pc.C.pieces) emitPiece(p, pc.x, pc.base);
-    }
-    function emitPiece(p, ox, base) {
-      const x0 = ox + p.x;
-      if (p.kind === 'mol') {
-        const L = p.L, dx = x0, dy = base;
-        mols.push({ seg: p.seg, L, dx, dy });
-        for (const q of L.paths) paths.push({ ...q, dx, dy });
-        for (const d of L.dots) dots.push({ ...d, x: d.x + dx, y: d.y + dy });
-        for (const t of L.texts) {
-          if (t.box) { const b = TD.textBox(t.t, TEXT), bo = baseOff(TEXT); texts.push({ t: t.t, cx: t.box.cx + dx, cy: t.box.base + dy - bo + b.h / 2, b }); }
-          else texts.push({ t: t.t, cx: t.cx + dx, cy: t.cy + dy, b: t.b });
-        }
-        for (const [n, b] of Object.entries(L.names.atoms)) docNames.atoms[n] = { x: b.x + dx, y: b.base - b.asc + dy, w: b.w, h: b.asc + b.desc, base: b.base + dy };
-        for (const [n, q] of Object.entries(L.names.bonds)) docNames.bonds[n] = [q[0] + dx, q[1] + dy];
-        const map = new Map();
-        for (const v of L.verts) { const c = { ...v, X: v.x + dx, Y: v.y + dy, mol: p.seg, dx, dy }; map.set(v, c); verts.push(c); }
-        for (const b of L.bonds) bonds.push({ ...b, a: map.get(b.a), b: map.get(b.b), X0: b.p0[0] + dx, Y0: b.p0[1] + dy, X1: b.p1[0] + dx, Y1: b.p1[1] + dy, mol: p.seg });
-        for (const r of L.rings) rings.push({ ...r, X: r.cx + dx, Y: r.cy + dy, mol: p.seg });
-      } else if (p.kind === 'text') {
-        const bo = baseOff(TEXT);
-        texts.push({ t: p.t, cx: x0 + p.w / 2, cy: base - bo + p.b.h / 2, b: p.b, seg: p.seg });
-      } else if (p.kind === 'plus') {
-        const b = TD.textBox('$+$', TEXT), bo = baseOff(TEXT);
-        texts.push({ t: '$+$', cx: ox + p.cx, cy: base - p.vs - bo + b.h / 2, b, seg: p.seg });
-      } else if (p.kind === 'name') {
-        for (const q of p.inner.pieces) emitPiece(q, x0, base);
-        const bo = baseOff(TEXT);
-        for (const l of p.lineAt || []) if (l.t) texts.push({ t: l.t, cx: x0 + p.w / 2, cy: base + l.base - bo + l.b.h / 2, b: l.b, name: p.seg });
-      }
-    }
-    // arrows and their labels
-    const arrowsOut = [];
-    for (const a of A) {
-      const ar = a.seg, type = ar.type;
-      const ux = Math.cos(rad(a.ang)), uy = -Math.sin(rad(a.ang)), nx = uy, ny = -ux; // n: left of travel
-      const shift = ar.labels[2] ? len(ar.labels[2], 0) : 0;
-      const sx = nx * shift, sy = ny * shift;
-      const p1 = [a.x1 + sx, a.y1 + sy], p2 = [a.x2 + sx, a.y2 + sy];
-      const known = ['->', '<-', '<->', '<=>', '<->>', '<<->', '-/>', '0', '-U>'];
-      if (!known.includes(type)) warn(`The arrow "${type}" isn't one chemfig knows: drawn as ->`);
-      const t = known.includes(type) ? type : '->';
-      const prim = [];
-      const line = (q1, q2, head, harpoon) => { prim.push({ q1, q2, head, harpoon }); };
-      const at = (q, f) => [q[0] + nx * f, q[1] + ny * f];
-      const lerp = (k) => [p1[0] + (p2[0] - p1[0]) * k, p1[1] + (p2[1] - p1[1]) * k];
-      if (t === '->' || t === '-U>') line(p1, p2, 'end');
-      else if (t === '<-') line(p2, p1, 'end');
-      else if (t === '<->') line(p1, p2, 'both');
-      else if (t === '<=>') { line(at(p1, 1 * PT), at(p2, 1 * PT), 'end', true); line(at(p2, -1 * PT), at(p1, -1 * PT), 'end', true); }
-      else if (t === '<->>') { line(at(p1, PT), at(p2, PT), 'end', true); line(at(lerp(0.8), -PT), at(lerp(0.2), -PT), 'end', true); }
-      else if (t === '<<->') { line(at(lerp(0.2), PT), at(lerp(0.8), PT), 'end', true); line(at(p2, -PT), at(p1, -PT), 'end', true); }
-      else if (t === '-/>') {
-        line(p1, p2, 'end');
-        const m = lerp(0.5);
-        for (const s of [-1, 1]) {
-          const c = [m[0] + ux * s * PT, m[1] + uy * s * PT];
-          const d1 = rad(225 + a.ang), d2 = rad(45 + a.ang);
-          prim.push({ q1: [c[0] + 5 * PT * Math.cos(d1), c[1] - 5 * PT * Math.sin(d1)], q2: [c[0] + 5 * PT * Math.cos(d2), c[1] - 5 * PT * Math.sin(d2)], head: null });
-        }
-      }
-      if (t === '-U>') warn('The -U> arrow\'s arc isn\'t drawn here');
-      // labels: above at the middle, 3pt off, anchored on their south; below anchored on their north
-      const mid = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
-      let rot = a.ang;
-      const flip = Math.cos(rad(rot)) < -1e-9;
-      if (flip) rot += 180;
-      const vx = Math.cos(rad(rot + 90)), vy = -Math.sin(rad(rot + 90)); // the label frame's up
-      const labs = a.labs ? a.labs.slice() : [];
-      if (!a.labs) [ar.labels[0], ar.labels[1]].forEach((lab, j) => {
-        if (lab == null || !String(lab).trim()) return;
-        let txt = String(lab);
-        let rotLab = rot;
-        if (txt.trim()[0] === '*') { const m = /^\s*\*\{([^}]*)\}([\s\S]*)$/.exec(txt); if (m) { rotLab = parseFloat(m[1]) || 0; txt = m[2]; warn('Rotated arrow labels (*{…}) are drawn upright here'); } }
-        txt = printable(unbrace(txt));
-        const b = TD.textBox(txt, TEXT), m = vmetrics(txt.replace(/\$/g, ''));
-        // TeX's box: above sits on its south 3pt over the arrow, below hangs from its north
-        const base = j === 0 ? P.lsep + m.desc : -(P.lsep + m.asc), up = base + baseOff(TEXT) - b.h / 2;
-        const bc = j === 0 ? P.lsep + (m.asc + m.desc) / 2 : -(P.lsep + (m.asc + m.desc) / 2);
-        labs.push({ t: txt, cx: mid[0] + vx * up, cy: mid[1] + vy * up, bx: mid[0] + vx * bc, by: mid[1] + vy * bc, bw: b.w - 2, bh: m.asc + m.desc, b, rot: -rot, which: j, seg: ar });
-      });
-      arrowsOut.push({ seg: ar, prim, labs, x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], ang: a.ang, type: t });
-    }
-    // \chemmove: curved arrows between named atoms and bonds, drawn over everything (overlay: not in the box)
+    if (hreac) { const H = root.kids[0]; root.bb = H.bb ? { ...H.bb } : null; }
+    const K = newSink();
+    emit(root, 0, 0, K);
+    // \chemmove: curved arrows between named atoms, bonds and compounds, drawn over everything (overlay: not in the box)
     const moves = [];
-    const allSegs = [];
-    const flat = (L) => { for (const g of L) { allSegs.push(g); if (g.t === 'name') flat(g.inner); } };
-    flat(segs);
-    for (const g of allSegs) if (g.t === 'move') chemMove(g, docNames, warn, moves);
-    // bounding box (TeX's: node boxes, arrow paths, label nodes)
-    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
-    const ext = (a, b, c, d) => { x1 = Math.min(x1, a); y1 = Math.min(y1, b); x2 = Math.max(x2, c); y2 = Math.max(y2, d); };
-    for (const pc of placed) if (!pc.empty) ext(pc.box.x, pc.box.y, pc.box.x + pc.box.w, pc.box.y + pc.box.h);
-    if (lead && (scheme || hreac)) ext(0, 0, 0, 0);
-    for (const m of mols) { const b = m.L.bb; ext(b.x + m.dx, b.y + m.dy, b.x + b.w + m.dx, b.y + b.h + m.dy); }
-    for (const a of arrowsOut) {
-      for (const p of a.prim) ext(Math.min(p.q1[0], p.q2[0]), Math.min(p.q1[1], p.q2[1]), Math.max(p.q1[0], p.q2[0]), Math.max(p.q1[1], p.q2[1]));
-      if (a.type === '0') ext(Math.min(a.x1, a.x2), Math.min(a.y1, a.y2), Math.max(a.x1, a.x2), Math.max(a.y1, a.y2));
-      for (const l of a.labs) { const c = Math.abs(Math.cos(rad(l.rot))), s = Math.abs(Math.sin(rad(l.rot))), w = l.bw, h = l.bh; const hw = (w * c + h * s) / 2, hh = (w * s + h * c) / 2; ext(l.bx - hw, l.by - hh, l.bx + hw, l.by + hh); }
+    for (const { seg, snap } of G.moves) {
+      const names = { atoms: {}, bonds: {} };
+      for (const [n, e] of Object.entries(snap)) { const b = relBox(e, null); if (e.pt) names.bonds[n] = [b.x, b.y]; else names.atoms[n] = b; }
+      chemMove(seg, names, warn, moves);
     }
-    const empty = !mols.length && !texts.length && !arrowsOut.length;
-    if (!(x2 >= x1)) { x1 = 0; y1 = -PX; x2 = 2 * PX; y2 = 0; }
+    const empty = !K.mols.length && !K.texts.length && !K.arrows.length && !K.paths.length;
+    let b = root.bb;
+    if (!b || !(b.x2 >= b.x1) || empty) b = { x1: 0, y1: -PX, x2: 2 * PX, y2: 0 };
+    let { x1, y1, x2, y2 } = b;
     if (x2 - x1 < 4) { x1 -= 2; x2 += 2; }
     if (y2 - y1 < 4) { y1 -= 2; y2 += 2; }
-    return { segs, scheme, hreac, P, comps: placed, arrows: arrowsOut, moves, paths, texts, dots, verts, bonds, rings, mols, warnings, empty, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } };
+    // compounds of the schemes, by name, with their boxes (for the editor)
+    const comps = G.comps.map((c) => ({ name: c.name, level: c.level, segs: c.segs, box: relBox(c.entry, null) }));
+    return { segs, scheme, hreac, P, comps, arrows: K.arrows, moves, paths: K.paths, texts: K.texts, dots: K.dots, verts: K.verts, bonds: K.bonds, rings: K.rings, mols: K.mols, warnings, empty, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } };
+  }
+  // \hreac: nodes in a row, their centres on the centre of a \vphantom{A} at the start, hreac sep apart
+  function layHreac(body, lead, P, warn, G) {
+    const H = frag(), nodes = [];
+    let gs = [];
+    for (const g of body) {
+      if (g.t === 'plus') { nodes.push({ k: 'comp', gs }, { k: 'plus', seg: g }); gs = []; }
+      else if (g.t === 'harrow') { nodes.push({ k: 'comp', gs }, { k: 'arrow', seg: g }); gs = []; }
+      else if (g.t === 'arrow' || g.t === 'merge') warn('\\arrow and \\merge inside \\hreac aren\'t drawn here (they are kept in the code)');
+      else gs.push(g);
+    }
+    nodes.push({ k: 'comp', gs });
+    const yc = -0.683 * EM / 2, bo = baseOff(TEXT);
+    ext(H, lead, -0.683 * EM, lead, 0);
+    let x = lead;
+    nodes.forEach((nd, i) => {
+      const left = x + (i === 0 ? 0 : P.hsep);
+      if (nd.k === 'comp') {
+        const C = layPieces(nd.gs, P, warn, G);
+        const base = yc + (C.asc - C.desc) / 2;
+        attach(H, C, left, base);
+        if (C.pieces.length) ext(H, left, base - C.asc, left + C.w, base + C.desc);
+        x = left + C.w; return;
+      }
+      if (nd.k === 'plus') {
+        const pw = 0.778 * EM, tb = TD.textBox('$+$', TEXT), base = yc + (0.583 * EM - 0.083 * EM) / 2;
+        H.texts.push({ t: '$+$', cx: left + pw / 2, cy: base - bo + tb.h / 2, b: tb, seg: nd.seg });
+        ext(H, left, base - 0.583 * EM, left + pw, base + 0.083 * EM);
+        x = left + pw; return;
+      }
+      // an arrow: at least harrow minwidth × arrow coeff, or as wide as its labels and 2 label xsep
+      const ar = nd.seg, labs = [];
+      const boxes = ar.labels.map((l) => { if (l == null || !String(l).trim()) return null; const t = printable(unbrace(l)); return { t, b: TD.textBox(t, TEXT), m: vmetrics(t.replace(/\$/g, '')) }; });
+      let Lh = P.hminw * P.acoeff;
+      for (const q of boxes) if (q) Lh = Math.max(Lh, q.b.w - 2 + 2 * P.lxsep);
+      boxes.forEach((q, j) => {
+        if (!q) return;
+        const asc = Math.max(q.m.asc, 0), desc = q.m.desc;
+        const base = j === 0 ? yc - P.lsep - desc : yc + P.lsep + asc;
+        labs.push({ t: q.t, cx: left + Lh / 2, cy: base - bo + q.b.h / 2, bx: left + Lh / 2, by: base - (asc - desc) / 2, bw: Lh - 2 * P.lxsep, bh: asc + desc, b: q.b, rot: 0, which: j, seg: ar });
+      });
+      addArrow(H, makeArrow(ar, [left, yc], [left + Lh, yc], 0, '', P, warn, G, labs));
+      x = left + Lh;
+    });
+    return H;
   }
 
   const cache = new Map();
@@ -1239,40 +1557,49 @@
     }
     let d = `M${r2(pts[0][0])},${r2(pts[0][1])}`;
     ops.forEach((o, k) => { const q = pts[k + 1]; d += o.k === 'curve' ? `C${r2(o.c1[0])},${r2(o.c1[1])} ${r2(o.c2[0])},${r2(o.c2[1])} ${r2(q[0])},${r2(q[1])}` : `L${r2(q[0])},${r2(q[1])}`; });
-    const dash = mv.dash === 'dash' ? ` stroke-dasharray="${r2(3 * PT)} ${r2(3 * PT)}"` : mv.dash === 'dot' ? ` stroke-dasharray="${r2(0.4 * PT)} ${r2(2 * PT)}"` : '';
+    const dash = dashAttr(mv.dash);
     return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${r2(mv.sw)}"${dash}/>${tips}`;
+  }
+  // dashed, dotted, or dash pattern=on a off b… (an array of lengths)
+  const dashAttr = (d) => (Array.isArray(d) ? ` stroke-dasharray="${d.map(r2).join(' ')}"` : d === 'dash' ? ` stroke-dasharray="${r2(3 * PT)} ${r2(3 * PT)}"` : d === 'dot' ? ` stroke-dasharray="0 ${r2(2 * PT)}" stroke-linecap="round"` : '');
+  // what a frag emitted: paths, dots, arrows with their labels, texts
+  function drawSink(Lo, ink, color, ctx) {
+    let out = '';
+    const T = (p) => (p.dx || p.dy ? ` transform="translate(${r2(p.dx)},${r2(p.dy)})"` : '');
+    for (const p of Lo.paths) {
+      const col = p.color ? TD.css(p.color) : ink;
+      if (p.fill) out += `<path d="${p.d}"${T(p)} fill="${col}" stroke="${p.sw ? col : 'none'}"${p.sw ? ` stroke-width="${r2(p.sw)}" stroke-linejoin="round"` : ''}/>`;
+      else out += `<path d="${p.d}"${T(p)} fill="none" stroke="${col}" stroke-width="${r2(p.sw)}" stroke-linejoin="${p.join || 'round'}"${dashAttr(p.dash)}/>`;
+    }
+    for (const d of Lo.dots) out += `<circle cx="${r2(d.x)}" cy="${r2(d.y)}" r="${r2(d.r)}" fill="${ink}"/>`;
+    for (const a of Lo.arrows) {
+      const col = a.color ? TD.css(a.color) : ink, sw = r2(a.sw || LW);
+      if (!a.hidden) for (const p of a.prim) {
+        if (!p.head) { out += `<path d="M${r2(p.q1[0])},${r2(p.q1[1])}L${r2(p.q2[0])},${r2(p.q2[1])}" fill="none" stroke="${col}" stroke-width="${sw}"/>`; continue; }
+        const e = tip(p.q1, p.q2, p.harpoon);
+        let a1 = p.q1, d2 = '';
+        if (p.head === 'both') { const e2 = tip(p.q2, p.q1, p.harpoon); a1 = e2.shaft[1]; d2 = e2.d; }
+        out += `<path d="M${r2(a1[0])},${r2(a1[1])}L${r2(e.shaft[1][0])},${r2(e.shaft[1][1])}" fill="none" stroke="${col}" stroke-width="${sw}"/><path d="${e.d}${d2}" fill="${col}" stroke="${col}" stroke-width="${r2(LW)}" stroke-linejoin="round"/>`;
+      }
+      for (const l of a.labs) {
+        if (l.g) { out += `<g transform="translate(${r2(l.bx)},${r2(l.by)})${Math.abs(l.rot) > 1e-6 ? ` rotate(${r2(-l.rot)})` : ''}${l.s !== 1 ? ` scale(${r2(l.s)})` : ''} translate(${r2(-l.fc[0])},${r2(-l.fc[1])})">${drawSink(l.g, ink, color, ctx)}</g>`; continue; }
+        const t = TD.textSvg(l.t, TEXT, color, l.cx, l.cy, ctx);
+        out += Math.abs(l.rot) > 1e-6 ? `<g transform="rotate(${r2(-l.rot)} ${r2(l.cx)} ${r2(l.cy)})">${t}</g>` : t;
+      }
+    }
+    for (const t of Lo.texts) out += TD.textSvg(t.t, TEXT, color, t.cx, t.cy, ctx);
+    return out;
   }
   function draw(s, ctx, given) {
     const Lo = given || layout(s);
     const ink = TD.css(s.color || '#000000');
     let out = '';
-    const T = (p) => (p.dx || p.dy ? ` transform="translate(${r2(p.dx)},${r2(p.dy)})"` : '');
     if (Lo.empty) {
       const b = Lo.bb;
       out += `<rect x="${r2(b.x)}" y="${r2(b.y)}" width="${r2(b.w)}" height="${r2(b.h)}" fill="none" stroke="${ink}" stroke-width="${r2(2 * LW)}" stroke-dasharray="${r2(3 * PT)} ${r2(2 * PT)}" rx="4"/>`;
       if (!ctx.export) out += TD.textSvg('Empty chemistry block', { size: 'small', font: 'default' }, '#888888', b.x + b.w / 2, b.y + b.h / 2, ctx);
     }
-    for (const p of Lo.paths) {
-      const col = p.color ? TD.css(p.color) : ink;
-      const dash = p.dash === 'dash' ? ` stroke-dasharray="${r2(3 * PT)} ${r2(3 * PT)}"` : p.dash === 'dot' ? ` stroke-dasharray="0 ${r2(2 * PT)}" stroke-linecap="round"` : '';
-      if (p.fill) out += `<path d="${p.d}"${T(p)} fill="${col}" stroke="${p.sw ? col : 'none'}"${p.sw ? ` stroke-width="${r2(p.sw)}" stroke-linejoin="round"` : ''}/>`;
-      else out += `<path d="${p.d}"${T(p)} fill="none" stroke="${col}" stroke-width="${r2(p.sw)}" stroke-linejoin="${p.join || 'round'}"${dash}/>`;
-    }
-    for (const d of Lo.dots) out += `<circle cx="${r2(d.x)}" cy="${r2(d.y)}" r="${r2(d.r)}" fill="${ink}"/>`;
-    for (const a of Lo.arrows) {
-      for (const p of a.prim) {
-        if (!p.head) { out += `<path d="M${r2(p.q1[0])},${r2(p.q1[1])}L${r2(p.q2[0])},${r2(p.q2[1])}" fill="none" stroke="${ink}" stroke-width="${r2(LW)}"/>`; continue; }
-        const e = tip(p.q1, p.q2, p.harpoon);
-        let a1 = p.q1, d2 = '';
-        if (p.head === 'both') { const e2 = tip(p.q2, p.q1, p.harpoon); a1 = e2.shaft[1]; d2 = e2.d; }
-        out += `<path d="M${r2(a1[0])},${r2(a1[1])}L${r2(e.shaft[1][0])},${r2(e.shaft[1][1])}" fill="none" stroke="${ink}" stroke-width="${r2(LW)}"/><path d="${e.d}${d2}" fill="${ink}" stroke="${ink}" stroke-width="${r2(LW)}" stroke-linejoin="round"/>`;
-      }
-      for (const l of a.labs) {
-        const t = TD.textSvg(l.t, TEXT, s.color || '#000000', l.cx, l.cy, ctx);
-        out += Math.abs(l.rot) > 1e-6 ? `<g transform="rotate(${r2(l.rot)} ${r2(l.cx)} ${r2(l.cy)})">${t}</g>` : t;
-      }
-    }
-    for (const t of Lo.texts) out += TD.textSvg(t.t, TEXT, s.color || '#000000', t.cx, t.cy, ctx);
+    out += drawSink(Lo, ink, s.color || '#000000', ctx);
     for (const mv of Lo.moves || []) out += moveSvg(mv, ink);
     const bb = Lo.bb;
     if (!ctx.export) out += `<rect class="hitfill" x="${r2(bb.x)}" y="${r2(bb.y)}" width="${r2(bb.w)}" height="${r2(bb.h)}"/>`;
@@ -1307,6 +1634,8 @@
       const col = s.color && TD.parseColor(s.color).hex !== '#000000' ? X.col(s.color) : null;
       if (col) o.push(`text=${col}`);
       const src = String(s.src || '').trim();
+      // paragraphs (\par, a blank line) need a node with a text width
+      if (/\\par(?![A-Za-z])|\n[ \t]*\n/.test(src.replace(/%[^\n]*/g, ''))) o.push(`text width=${r2(layout(s).bb.w / PX + 0.05)}cm`, 'align=left');
       return `\\node[${o.join(', ')}] at ${X.c(s.x, s.y)} {${src.includes('\n') ? `%\n${src}%\n` : src}};`;
     },
   };

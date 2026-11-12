@@ -841,8 +841,10 @@
     if (!cover.length) return null;
     return cover.find((x) => x.it === E.gpin) || cover.sort((p, q) => (p.g.r2 - p.g.r + 1) * (p.g.c2 - p.g.c + 1) - (q.g.r2 - q.g.r + 1) * (q.g.c2 - q.g.c + 1))[0];
   }
-  // a group over the selection, framed or (label) with no border; selects its cell and puts the caret in its label
+  // a group over the selection, framed or (label) with no border; selects its cell and puts the caret in its label.
+  // A tall gate in the selection is covered whole: the group reaches down to its last wire
   function addGroup(s, label) {
+    s = shownBox(s);
     const cell = at(s.r1, s.c1);
     if (!cell || cell.opaque) return;
     const w = s.r2 - s.r1 + 1, n = s.c2 - s.c1 + 1;
@@ -857,9 +859,9 @@
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (!E) return;
-    const h = cellAt(e);
+    const h = pick(e);
     if (!h || h.r >= nR(E.M) || h.c >= nC(E.M)) { closeMenu(); return; }
-    const b = selBox();
+    const b = selBox() && shownBox(selBox());
     if (!b || h.r < b.r1 || h.r > b.r2 || h.c < b.c1 || h.c > b.c2) E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c };
     draw(); renderProps();
     const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
@@ -870,7 +872,7 @@
       mItem('rowdel', nr > 1 ? `Delete ${nr} Wires` : 'Delete Wire', 'rowdel') + mItem('coldel', nc > 1 ? `Delete ${nc} Steps` : 'Delete Step', 'coldel') + '<hr>' +
       mItem('delete', nr * nc > 1 ? 'Clear Cells' : 'Clear Cell', 'clear', 'Del');
     // groups: frame or label the selection; delete any group whose box covers the clicked cell
-    const anchor = at(s.r1, s.c1), here = groupsAt(h.r, h.c), many = nr * nc > 1;
+    const gb = shownBox(s), anchor = at(s.r1, s.c1), here = groupsAt(h.r, h.c), many = (gb.r2 - gb.r1 + 1) * nc > 1;
     let gh = mItem('gadd', many ? 'Group Selection' : 'Group Cell', 'group', '', !anchor || anchor.opaque) +
       mItem('glabel', many ? 'Label Above Selection' : 'Label Above', 'glabel', '', !anchor || anchor.opaque);
     here.forEach((g) => {
@@ -1084,10 +1086,50 @@
   }
   const seg = (qe, data, cur, opts) => `<div class="row"><label>Label at</label><div class="ctl seg-ctl">${opts.map(([v, n]) => `<button data-qe="${qe}" ${data} data-v="${v}" class="${cur === v ? 'on' : ''}">${n}</button>`).join('')}</div></div>`;
   const AT = [['top', 'Top'], ['bottom', 'Bottom'], ['both', 'Both']];
+
+  // ---------------------------------------------------------------- circuit-wide spacing
+  // quantikz's row sep / column sep in the environment's options: a gap between rows (steps), or, with
+  // "between origins", the distance from one wire (step) to the next, so every row is the same height whatever
+  // it holds. Shown in cm; a length in other units is converted, em and ex kept until the field is changed.
+  const SEP = { row: 'row sep', col: 'column sep' };
+  const CM = { cm: 1, mm: 0.1, pt: 2.54 / 72.27, bp: 2.54 / 72, in: 2.54 };
+  function sepOf(axis) {
+    const v = Q.opts(E.M.env || '').map[SEP[axis]];
+    if (!v) return { cm: null, between: false, raw: '' };
+    const between = /between origins/.test(v), len = v.replace(/,?\s*between origins\s*,?/, '').trim();
+    const m = /^(-?[\d.]+)\s*(cm|mm|pt|bp|in)?$/.exec(len);
+    return { cm: m ? Math.round(parseFloat(m[1]) * CM[m[2] || 'pt'] * 1000) / 1000 : null, between, raw: len };
+  }
+  // the spacing the circuit has now, in cm: the gap, or the mean wire-to-wire (step-to-step) distance
+  function sepNow(axis, between) {
+    const g = Q.layout({ type: 'qc', x: 0, y: 0, src: snap(), size: E.st.size, font: E.st.font, color: INK }).geo;
+    if (!g) return 0.5;
+    const [mid, lo, size] = axis === 'row' ? [g.cy, g.rowT, g.rowH] : [g.cx, g.colL, g.colW], n = mid ? mid.length : 0;
+    if (n < 2) return between ? 1 : 0.5;
+    let v = 0;
+    for (let i = 1; i < n; i++) v += between ? mid[i] - mid[i - 1] : lo[i] - lo[i - 1] - size[i - 1];
+    return Math.max(0.05, Math.round((v / (n - 1) / TD.PX_PER_CM) * 20) / 20);
+  }
+  function setSep(axis, cm, between) {
+    const key = SEP[axis], o = Q.opts(E.M.env || '');
+    const list = o.list.filter((e) => !new RegExp(`^${key}\\s*=`).test(e));
+    if (cm != null) list.push(between ? `${key}={${cm}cm,between origins}` : `${key}=${cm}cm`);
+    E.M.env = list.join(', ');
+    if (E.M.env) E.M.wrapped = true; // the options need \begin{quantikz}[…] to live in
+  }
+  function circuitProps() {
+    const one = (axis, label, pitch) => {
+      const v = sepOf(axis);
+      return `<div class="row"><label>${label}</label><div class="ctl unit"><input type="number" data-f="E${axis}" value="${v.cm ?? ''}" min="0" step="0.05" placeholder="${v.cm == null && v.raw ? esc(v.raw) : v.between ? '' : '0.5'}"><span>cm</span></div></div>`
+        + `<div class="row"><label>Measured</label><div class="ctl seg-ctl">${[['gap', 'Gap'], ['pitch', pitch]].map(([k, n]) => `<button data-qe="sepmode" data-axis="${axis}" data-v="${k}" class="${(k === 'pitch') === v.between ? 'on' : ''}">${n}</button>`).join('')}</div></div>`;
+    };
+    return `<div class="sec"><div class="sec-title">Circuit</div>${one('row', 'Wire spacing', 'Wire to wire')}${one('col', 'Step spacing', 'Step to step')}`
+      + '<div class="help">Gap: the space between rows, which grow with what they hold. Wire to wire: every wire the same distance from the next.</div></div>';
+  }
   function renderProps() {
     if (!E) return;
     const b = selBox();
-    if (!b) { props.hidden = true; TD.morph(props, ''); return; }
+    if (!b) { props.hidden = false; TD.morph(props, circuitProps()); return; }
     props.hidden = false;
     if (!single()) {
       const n = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1);
@@ -1142,6 +1184,11 @@
   props.addEventListener('focusout', (e) => { if (!TD.morph.busy && e.target.matches('input, select')) { commit(); renderProps(); } });
   props.addEventListener('input', (e) => {
     const t = e.target, f = t.dataset.f, s = single();
+    if (f === 'Erow' || f === 'Ecol') {
+      const axis = f.slice(1).toLowerCase(), v = parseFloat(t.value);
+      setSep(axis, Number.isFinite(v) && v >= 0 ? v : null, sepOf(axis).between);
+      draw(); keepInView(); return;
+    }
     if (!f || !s) return;
     const cell = at(s.r1, s.c1);
     if (f === 'code') { Object.assign(cell, parseCell(t.value)); }
@@ -1205,6 +1252,11 @@
     else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
     else if (a === 'addrow') edit(() => ensure(M, nR(M) + 1, Math.max(nC(M), 1)));
     else if (a === 'addcol') edit(() => ensure(M, Math.max(nR(M), 1), nC(M) + 1));
+    else if (a === 'sepmode') {
+      // switching keeps the circuit as it looks: the new measure starts from the spacing it has now
+      const axis = b.dataset.axis, between = b.dataset.v === 'pitch';
+      if (sepOf(axis).between !== between) edit(() => setSep(axis, sepNow(axis, between), between));
+    }
     else if (!s) return;
     else if (a === 'rowabove') { edit(() => insertRow(M, s.r1)); E.sel = { r1: s.r1, c1: s.c1, r2: s.r1, c2: s.c1 }; draw(); renderProps(); }
     else if (a === 'rowbelow') { edit(() => insertRow(M, s.r2 + 1)); E.sel = { r1: s.r2 + 1, c1: s.c1, r2: s.r2 + 1, c2: s.c1 }; draw(); renderProps(); }
