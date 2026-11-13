@@ -742,7 +742,8 @@ import { runtime as TD } from '../runtime';
       const i = raw.length === plain.length ? plain.indexOf(m[0]) : -1;
       const code = i >= 0 ? raw.slice(i, i + m[0].length) : m[0];
       q.src = B.dedent ? dedentLines(code) : code;
-      if ((B as any).place) (B as any).place(q, at); else { const b = B.bb!(q); q.x = at.x - b.w / 2; q.y = at.y - b.h / 2; }
+      // place() may answer false: the code as written can't stay in a node (a table float), so it is written from the shape
+      if ((B as any).place) { if ((B as any).place(q, at) === false) q._fromShape = true; } else { const b = B.bb!(q); q.x = at.x - b.w / 2; q.y = at.y - b.h / 2; }
       const extra = text.replace(m[0], '').replace(/\\color\{[^}]*\}/g, '').trim();
       const bad = unknownKeys(C, parseOpts(node.opts), new Set(['inner sep', 'anchor', 'text', 'color', 'font']));
       return { shape: q, issues: [...(extra ? [`text beside the ${B.type} block`] : []), ...(bad.length ? [`node options the block does not hold: ${bad.join(', ')}`] : [])] };
@@ -1138,7 +1139,8 @@ import { runtime as TD } from '../runtime';
     }
     // the signature, and one that a move does not change (rounded, with the first shape's corner): a statement
     // whose shapes only moved together is written as it was, in a shift scope
-    for (const x of shapes) if (x.tex) {
+    for (const x of shapes) if (x._fromShape) { delete x._fromShape; x.tex.sig = 'new'; }
+    for (const x of shapes) if (x.tex && x.tex.sig !== 'new') {
       x.tex.sig = TD.texSig(x);
       x.tex.sr = TD.texSig(x, true);
       if (x.tex.i === 0) { const b = TD.bbox(x); if (isFinite(b.x) && isFinite(b.y)) x.tex.b = [b.x, b.y]; }

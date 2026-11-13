@@ -78,6 +78,7 @@ import './platform/filelink.ts';
 import './ui/models/automata.ts';
 import './ui/models/uml.ts';
 import './ui/models/umlsd.ts';
+import './ui/models/table.ts';
 import './ui/models/bloch.ts';
 import './ui/models/bytefield.ts';
 import './ui/models/cd.ts';

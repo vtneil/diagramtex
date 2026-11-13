@@ -25,6 +25,13 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-outbar > * { flex-shrink: 0; }
 .tb-outbar > .spacer, .tb-outbar > .tb-pk { flex-shrink: 1; }
 .tb-bar { flex: none; display: flex; align-items: center; gap: 4px; height: var(--ctl); }
+/* editing a Table block from the diagram: who the table belongs to, and the way back (Cancel, Done) */
+.tb-session { flex: none; display: flex; align-items: center; gap: 8px; min-height: calc(var(--ctl) + 8px); padding: 4px 4px 4px 12px; border-radius: var(--r-lg);
+  background: var(--wash); color: var(--graphite); font-size: 12px; }
+.tb-session b { color: var(--ink); font-weight: 600; }
+.tb-session > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-session > .spacer { flex: 1; }
+.tb-session > button { flex: none; border-radius: var(--r); }
 .tb-grp { display: flex; align-items: center; gap: 2px; flex: none; }
 .tb-grp + .tb-grp { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--rule); }
 .tb-grp.tb-seg + .tb-grp, .tb-grp + .tb-grp.tb-seg { border-left: 0; padding-left: 4px; }

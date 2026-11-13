@@ -52,3 +52,46 @@ T.test('3D solids: the Shape menu is a grid of pictures, without 3D axes', () =>
   const ax = make('axes'); ax.id = 'solidAxes'; TD.state.doc.shapes.push(ax); TD.state.sel = new Set([ax.id]); TD.app.render(); TD.app.renderProps();
   T.eq(document.querySelector('#props select[data-p="kind"]').value, 'axes', 'an existing 3D axes keeps its entry');
 });
+
+// seen from straight above, the base of a prism is its true polygon
+T.test('3D solids: a prism or pyramid base has equal sides, or the sides typed', () => {
+  const top = (k, set) => {
+    const r = TD.TYPES.prim3d.run({ ...make(k), view: [30, 90], hiddenEdges: false, axes: false, ...set });
+    T.ok(!r.error, k + ': ' + r.error);
+    // the largest filled polygon is the top face
+    const polys = r.items.filter((i) => i.pts && i.pts.length >= 3 && i.k !== 'line');
+    const area = (p) => Math.abs(p.reduce((m, q, i) => m + q[0] * p[(i + 1) % p.length][1] - p[(i + 1) % p.length][0] * q[1], 0)) / 2;
+    return polys.sort((a, b) => area(b.pts) - area(a.pts))[0].pts;
+  };
+  const sides = (p) => p.map((q, i) => Math.hypot(q[0] - p[(i + 1) % p.length][0], q[1] - p[(i + 1) % p.length][1]));
+  const equal = (l) => Math.max(...l) - Math.min(...l) < 1e-3 * Math.max(...l);
+  for (const [k, n] of [['hexprism', 6], ['prism', 5], ['prism', 3], ['prism', 8]]) {
+    const l = sides(top(k, { n: String(n) }));
+    T.eq(l.length, n, k + ' ' + n + ' corners');
+    T.ok(equal(l), k + ' ' + n + ' sides are equal: ' + l.join(', '));
+  }
+  const l = sides(top('prism', { n: '4', sl: '1, 2, 1, 2' }));
+  T.ok(Math.abs(l[1] / l[0] - 2) < 1e-3 && Math.abs(l[3] / l[2] - 2) < 1e-3 && Math.abs(l[0] - l[2]) < 1e-3, 'side lengths 1, 2, 1, 2 give a 1 : 2 rectangle');
+  T.ok(TD.TYPES.prim3d.run({ ...make('prism'), n: '4', sl: '1, 5, 1, 1' }).error, 'a side longer than the rest together is refused');
+  T.ok(!TD.TYPES.prim3d.run({ ...make('hexprism'), sl: '1, 2, 3, 2' }).error, 'a short list leaves the rest regular');
+});
+
+T.test('3D solids: the name sits above the solid, not on it', () => {
+  for (const k of ['box', 'hexprism', 'cylinder', 'sphere', 'pyramid', 'torus']) {
+    const r = TD.TYPES.prim3d.run({ ...make(k), name: 'hello' });
+    const t = r.items.find((i) => i.k === 'text' && i.text === 'hello');
+    T.ok(t && t.push[1] > 0, k + ' name is pushed up');
+    const ys = r.items.flatMap((i) => (i.k === 'poly' || i.pts ? i.pts.map((p) => p[1]) : i.k === 'ball' ? [i.at[1] + i.r] : []));
+    T.ok(ys.length && t.at[1] >= Math.max(...ys) - 1e-6, k + ' name is anchored at the top of the outline');
+  }
+});
+
+T.test('3D solids: a bottom label sits below the solid', () => {
+  for (const k of ['box', 'hexprism', 'sphere']) {
+    const r = TD.TYPES.prim3d.run({ ...make(k), name: 'top', nameBelow: 'bottom' });
+    const up = r.items.find((i) => i.text === 'top'), dn = r.items.find((i) => i.text === 'bottom');
+    T.ok(up && dn && dn.push[1] < 0 && up.at[1] > dn.at[1], k + ': top above bottom');
+    const ys = r.items.flatMap((i) => (i.pts ? i.pts.map((p) => p[1]) : i.k === 'ball' ? [i.at[1] - i.r] : []));
+    T.ok(dn.at[1] <= Math.min(...ys) + 1e-6, k + ': bottom label under the outline');
+  }
+});

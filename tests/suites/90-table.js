@@ -383,7 +383,7 @@ T.test('table render: layout, SVG and PNG export', async () => {
   const ML = t.layout(merged);
   const box = ML.cells.find((c) => c.r === 0 && c.c === 0);
   T.ok(Math.abs(box.w - (ML.colX[2] - ML.colX[0])) < 1.5 && Math.abs(box.h - (ML.rowY[2] - ML.rowY[0])) < 1.5, 'a merged cell covers its columns and rows: ' + JSON.stringify([box.w, box.h, ML.colX, ML.rowY]));
-  const shape = { type: 'table', x: 0, y: 0, table: m };
+  const shape = { type: 'table', x: 0, y: 0, table: m, cap: true };
   const svg = TD.app.svgOf([shape]);
   T.ok(/^<svg/.test(svg) && /foreignObject/.test(svg) && /Cap/.test(svg));
   const full = await TD.app.svgWithFonts(svg);
@@ -643,4 +643,75 @@ T.test('table workspace: open, import, type, keys, undo, paste, leave', async ()
   C.setTable(true); await wait(60);
   T.eq(cellsOf(W().model), [['P', 'Q', '', ''], ['1', '2', 'y', 'z'], ['', '1', '2', '3']], 'the table is kept while the browser has it');
   C.setTable(false); await wait(60);
+});
+
+// ---------------------------------------------------------------- the Table block on the canvas
+T.test('table block: pasted cells and a pasted tabular become Table blocks; exported in a node, read back, edited in the workspace', async () => {
+  TD.app.newDoc('Table block', null, null, null, null, 'board'); TD.app.render();
+  // as a paste or a drop hands them over (⌘V itself prefers shapes copied in the app while the system clipboard is older)
+  const paste = (data) => TD.app.takeIn(data['text/plain'] || '', [], null, undefined, data['text/html'] || '');
+  const shapes = () => TD.state.doc.shapes;
+  // cells from a spreadsheet: HTML with tab-separated text
+  await paste({ 'text/plain': 'Name\tScore\nAda\t9.5\nBob\t7.25\n', 'text/html': '<table><tr><td>Name</td><td>Score</td></tr><tr><td>Ada</td><td>9.5</td></tr><tr><td>Bob</td><td>7.25</td></tr></table>' });
+  await wait(150);
+  T.eq(shapes().length, 1, 'spreadsheet cells: one object: ' + JSON.stringify(shapes().map((x) => x.type)));
+  T.eq(shapes()[0].type, 'table');
+  T.eq(cellsOf(shapes()[0].table), [['Name', 'Score'], ['Ada', '9.5'], ['Bob', '7.25']]);
+  // a Markdown table, and a tabular with settings and a float round it
+  await paste({ 'text/plain': '| a | b |\n|---|---|\n| 1 | 2 |\n' });
+  await wait(150);
+  T.eq(shapes()[1] && shapes()[1].type, 'table', 'a Markdown table');
+  await TD.app.takeText('\\begin{table}[h]\n  \\centering\\small\n  \\caption{Results}\n  \\begin{tabular}{lr}\n    \\toprule\n    x & y \\\\\n    \\midrule\n    1 & 2 \\\\\n    \\bottomrule\n  \\end{tabular}\n\\end{table}', null);
+  const tb = shapes()[2];
+  T.eq(tb && tb.type, 'table', 'a table float pasted: a Table block');
+  T.eq(cellsOf(tb.table), [['x', 'y'], ['1', '2']]);
+  // words before the tabular: not a table block
+  T.ok(TD.pasteIn.kind('Some words \\begin{tabular}{l} a \\end{tabular}') !== 'block', 'words before it: not a table block');
+  T.eq(TD.pasteIn.kind('\\begin{tabular}{l} a \\\\ \\end{tabular}'), 'block');
+  // exported as a tabular in a node; read back, the same table at the same place
+  const tikz = TD.toTikz([tb], { standalone: true });
+  T.ok(/\\node\[inner sep=0pt\] at \([^)]*\) \{%[\s\S]*\\begin\{tabular\}\{lr\}[\s\S]*\\end\{tabular\}[\s\S]*%\s*\};/.test(tikz), 'a tabular in a node: ' + tikz);
+  T.ok(/\\usepackage\{booktabs\}/.test(tikz), 'booktabs in the preamble');
+  T.ok(!/\\caption|\\begin\{table\}/.test(tikz), 'no float or caption in the node');
+  T.tex('table-block', tikz);
+  const back = TD.importLatex(tikz).blocks.flatMap((b) => b.shapes || []).filter((x) => x.type !== 'tikz');
+  T.eq(back.length, 1, 'read back: one object');
+  T.eq(back[0].type, 'table', 'read back: a Table block');
+  T.eq(cellsOf(back[0].table), cellsOf(tb.table));
+  T.ok(Math.abs(back[0].x - tb.x) < 0.5 && Math.abs(back[0].y - tb.y) < 0.5, `read back at the same place (${back[0].x},${back[0].y} vs ${tb.x},${tb.y})`);
+  // edited in the Table workspace: the workspace's own table waits; Done writes back as one undo step; Cancel drops
+  const own = JSON.stringify(TD.tableWs.model);
+  TD.tableOpen(tb.id);
+  await wait(100);
+  T.ok(TD.app.cmd.inTable() && TD.tableWs.inBlock, 'the block opens in Table mode');
+  T.ok(document.querySelector('.tb-session [data-ses=done]'), 'with Cancel and Done');
+  T.ok(!/\\begin\{center\}|\\begin\{table\}/.test(document.querySelector('.tb-code').textContent), 'the LaTeX shown is the bare tabular');
+  const m = TD.tableWs.model; m.cells[1][0].t = 'one'; TD.tableWs.model = m;
+  document.querySelector('[data-ses=done]').click();
+  await wait(100);
+  T.ok(!TD.app.cmd.inTable(), 'Done leaves Table mode');
+  T.eq(TD.state.doc.shapes.find((s) => s.id === tb.id).table.cells[1][0].t, 'one', 'Done writes the table back');
+  T.eq(JSON.stringify(TD.tableWs.model), own, "the workspace's own table is back");
+  TD.app.cmd.undo();
+  T.eq(TD.state.doc.shapes.find((s) => s.id === tb.id).table.cells[1][0].t, '1', 'one undo step');
+  TD.tableOpen(tb.id);
+  await wait(100);
+  const m2 = TD.tableWs.model; m2.cells[1][0].t = 'two'; TD.tableWs.model = m2;
+  document.querySelector('[data-ses=cancel]').click();
+  await wait(100);
+  const discard = [...document.querySelectorAll('.td-dialog button')].find((b) => /Discard/.test(b.textContent));
+  T.ok(discard, 'Cancel with changes asks first');
+  discard.click();
+  await wait(100);
+  T.ok(!TD.app.cmd.inTable(), 'Cancel leaves Table mode');
+  T.eq(TD.state.doc.shapes.find((s) => s.id === tb.id).table.cells[1][0].t, '1', 'Cancel keeps the block as it was');
+  // the panel's LaTeX edits the table; code that doesn't read keeps the last table
+  const P = TD.panels.table;
+  P.apply(tb, { dataset: { p: 'src' }, value: '\\begin{tabular}{ll} p & q \\\\ \\end{tabular}' });
+  T.eq(cellsOf(tb.table), [['p', 'q']]);
+  P.apply(tb, { dataset: { p: 'src' }, value: '\\begin{tabular}{ll} p & q' });
+  T.eq(cellsOf(tb.table), [['p', 'q']], 'half-typed code: the table stays');
+  T.ok(P.model(tb).warnings.length === 1, 'with a note');
+  P.apply(tb, { dataset: { p: 'src' }, value: '\\begin{tabular}{ll} p & r \\\\ \\end{tabular}' });
+  T.eq(P.model(tb).warnings.length, 0);
 });

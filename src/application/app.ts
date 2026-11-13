@@ -50,6 +50,31 @@ import { runtime as TD } from '../runtime';
   const isDrawTool = (t: any) => !['select', 'hand', 'text', 'math', 'image'].includes(t);
   const toolType = (t: any) => (({ arc3: 'arc', arrow: 'line', darrow: 'line', elbow: 'line', curvedconn: 'line', curvearrow: 'curve', blob: 'poly', smoothcurve: 'poly', pencil: 'poly', math: 'text' }) as Record<string, any>)[t] || t.split(':')[0];
   const TOOL_KEYS: Record<string, any> = { v: 'select', h: 'hand', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
+  // How the Rectangle and Ellipse tools draw, chosen from the menu on their buttons and remembered: rows are
+  // [mode, label, hint, icon (20 × 20)]. The first is the default. 'three' and 'circle3' are drawn click by
+  // click (pointsKind); the rest by one drag (the shape type's drag, given the mode).
+  const DOT = (x: number, y: number) => `<circle cx="${x}" cy="${y}" r="1.6" class="f"/>`;
+  const DRAW_MODES: Record<string, string[][]> = {
+    rect: [
+      ['corner', 'Corner to corner', 'Drag from one corner to the other, or click both (Shift keeps it square)', `<rect x="3" y="5" width="14" height="10"/>${DOT(3, 15)}${DOT(17, 5)}`],
+      ['center', 'From the centre', 'Drag from the centre out to a corner, or click both (Shift keeps it square)', `<rect x="3" y="5" width="14" height="10"/>${DOT(10, 10)}${DOT(17, 5)}`],
+      ['three', 'Three points', 'Click a corner, the next corner, then how far the other side goes: a turned rectangle', `<path d="M4.25 9.75L9.75 4.25 15.75 10.25 10.25 15.75z"/>${DOT(4.25, 9.75)}${DOT(9.75, 4.25)}${DOT(15.75, 10.25)}`],
+    ],
+    ellipse: [
+      ['corner', 'Corner to corner', 'Drag across the box round the ellipse, or click two opposite corners (Shift makes a circle)', `<ellipse cx="10" cy="10" rx="7" ry="5"/>${DOT(3, 15)}${DOT(17, 5)}`],
+      ['center', 'From the centre', 'Drag from the centre out to a corner of its box, or click both (Shift makes a circle)', `<ellipse cx="10" cy="10" rx="7" ry="5"/>${DOT(10, 10)}${DOT(17, 5)}`],
+      ['circle', 'Circle from the centre', 'Drag from the centre out to the circle, or click both', `<circle cx="10" cy="10" r="7"/>${DOT(10, 10)}`],
+      ['circle2', 'Circle by 2 points', 'Drag or click across the circle: the two ends of a diameter', `<circle cx="10" cy="10" r="7"/><path d="M3 10h14" stroke-dasharray="1.5 2"/>${DOT(3, 10)}${DOT(17, 10)}`],
+      ['circle3', 'Circle by 3 points', 'Click three points on the circle', `<circle cx="10" cy="10" r="7"/>${DOT(3, 10)}${DOT(13.5, 3.94)}${DOT(13.5, 16.06)}`],
+    ],
+  };
+  const MODES_KEY = 'diagramtex.drawModes';
+  const drawModes: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem(MODES_KEY) || '{}') || {}; } catch (e: any) { return {}; } })();
+  const drawMode = (tool: string) => { const L = DRAW_MODES[tool]; return L && L.some((r) => r[0] === drawModes[tool]) ? drawModes[tool] : L ? L[0][0] : ''; };
+  const modeRow = (tool: string) => DRAW_MODES[tool].find((r) => r[0] === drawMode(tool))!;
+  const modeHint = (tool: string) => modeRow(tool)[2];
+  // what the second click of a two-click box sets, by draw mode
+  const secondClickHint = (m: string) => (({ center: 'Click where a corner goes', circle: 'Click a point on the circle', circle2: 'Click the other end of the diameter' }) as Record<string, string>)[m] || 'Click the opposite corner';
 
   // A document is a list of blocks (text paragraphs and diagrams). The canvas edits one diagram
   // block at a time; state.doc.shapes always points at that block's shapes.
@@ -1435,13 +1460,14 @@ import { runtime as TD } from '../runtime';
     $('#emptyHint').hidden = shapes().length > 0 || t !== 'select';
     snapHint = null;
     const sym = t.startsWith('sym:') && TD.SYMS[t.slice(4)];
-    if (t === 'arc' || t === 'arc3') { arcHint(); renderOverlay(); return; }
+    if (pointsKind()) { arcHint(); renderOverlay(); return; }
     showHint(t === 'poly' ? 'Click to add points · double-click / Enter to finish · click first point to close'
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
       : t === 'smoothcurve' ? 'Click to add points the curve passes through · double-click / Enter to finish'
       : t === 'elbow' || t === 'curvedconn' ? `Drag from start to end; the ends hold on to shapes${t === 'elbow' ? ' · drag the middle handle to move the bend' : ''}`
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
+      : DRAW_MODES[t] ? modeHint(t)
       : (TD.blocks.get(toolType(t)) || /^(plot|pie|solid|prim3d|revolve)/.test(t)) ? 'Click to place, or drag to set the size' : '');
     renderOverlay();
   }
@@ -1465,6 +1491,9 @@ import { runtime as TD } from '../runtime';
   ];
   const MISC_EXTRA = [
     ['ball', 'Shaded ball (B)', '<circle cx="17" cy="12" r="7" class="ballic"/>'], ['dot', 'Dot (D)', '<circle cx="17" cy="12" r="3" class="f"/>'],
+  ];
+  // the plain TikZ rectangle and ellipse lead the basic shapes; each has a menu of draw modes
+  const PLAIN_SHAPES = [
     ['rect', 'Rectangle (R) — plain TikZ rectangle', '<rect x="6" y="5" width="22" height="14"/>'], ['ellipse', 'Ellipse (E) — plain TikZ ellipse', '<ellipse cx="17" cy="12" rx="11" ry="7"/>'],
   ];
   const btn = (tool: any, title: any, icon: any) => `<button data-pick="${tool}" title="${esc(title)}">${icon}</button>`;
@@ -1472,8 +1501,10 @@ import { runtime as TD } from '../runtime';
   const sec = (title: any, inner: any) => (title ? `<div class="pop-title">${title}</div>` : '') + `<div class="sym-grid">${inner}</div>`;
   const lineBtns = (L: any) => L.map(([t, n, d]: any) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('');
   $('#fly-lines').innerHTML = sec('Lines', lineBtns(LINE_TOOLS)) + sec('Freeform', lineBtns(FREE_TOOLS));
-  $('#fly-shapes').innerHTML = sec('Rectangles', symBtns('rect')) + sec('Basic shapes', symBtns('basic')) + sec('Flowchart', symBtns('flow'));
-  $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('')) ;
+  // the Rectangle and Ellipse buttons show the way they draw now; a mark in the corner says they have a menu
+  const modeBtn = (t: any, n: any) => `<button data-pick="${t}" data-modes="${t}" title="${esc(n)}"><svg viewBox="-4.2 0 28.4 20">${modeRow(t)[3]}</svg><i class="more"></i></button>`;
+  $('#fly-shapes').innerHTML = sec('Rectangles', symBtns('rect')) + sec('Basic shapes', PLAIN_SHAPES.map(([t, n]) => modeBtn(t, n)).join('') + symBtns('basic')) + sec('Flowchart', symBtns('flow'));
+  $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join(''));
   $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
   // Physics: computed figures (the physics block, one entry per domain), then the drawn symbols
   const PHYS_DOMAINS = [
@@ -1498,9 +1529,9 @@ import { runtime as TD } from '../runtime';
   TD.drawTools = () => [
     ['Text', [['text', 'Text: click to place, then type. Use $…$ for maths', railIcon('text')], ['math', 'Maths: a text that starts in $…$', railIcon('math')]]],
     ['Lines', [...[...LINE_TOOLS, ...FREE_TOOLS].map(([t, n, d]) => [t, n, ic34(d)]), ['pencil', 'Pencil: freehand, smoothed', railIcon('pencil')]]],
-    ['Shapes', [...MISC_EXTRA.filter((x) => x[0] === 'rect' || x[0] === 'ellipse').map(([t, n, d]) => [t, n, ic34(d)]), ...symItems('rect')]],
-    ['Basic shapes', symItems('basic')], ['Flowchart', symItems('flow')],
-    ['Misc', [...symItems('misc'), ...MISC_EXTRA.filter((x) => x[0] === 'ball' || x[0] === 'dot').map(([t, n, d]) => [t, n, ic34(d)])]],
+    ['Shapes', symItems('rect')],
+    ['Basic shapes', [...PLAIN_SHAPES.map(([t, n, d]) => [t, n, ic34(d)]), ...symItems('basic')]], ['Flowchart', symItems('flow')],
+    ['Misc', [...symItems('misc'), ...MISC_EXTRA.map(([t, n, d]) => [t, n, ic34(d)])]],
     ['Block arrows', symItems('arrow')], ['Mechanics symbols', symItems('mech')], ['Optics symbols', symItems('optics')],
     ['Electrical symbols', symItems('elec')], ['Waveforms', symItems('wave')],
   ];
@@ -1515,6 +1546,7 @@ import { runtime as TD } from '../runtime';
     if (TD.blocks.get(t)) return 'blocks';
     if ([...LINE_TOOLS, ...FREE_TOOLS].some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
+    if (PLAIN_SHAPES.some((x) => x[0] === t)) return 'shapes';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
     return null;
   }
@@ -1531,6 +1563,7 @@ import { runtime as TD } from '../runtime';
   }
   function hideFly() {
     clearTimeout(flyTimer); flyPinned = false;
+    hideModes();
     if (!openFly) return;
     flyEl(openFly).hidden = true; openFly = null;
     document.querySelectorAll('#tools [data-fly]').forEach((x) => x.classList.remove('open'));
@@ -1573,8 +1606,67 @@ import { runtime as TD } from '../runtime';
     setTool((b as HTMLElement).dataset.pick || (b as HTMLElement).dataset.insert);
   });
   document.addEventListener('pointerdown', (e) => {
-    if (openFly && !(e.target! as Element).closest('.flyout') && !(e.target! as Element).closest('#tools [data-fly]')) hideFly();
+    if (openFly && !(e.target! as Element).closest('.flyout, #modeMenu') && !(e.target! as Element).closest('#tools [data-fly]')) hideFly();
   });
+
+  // The draw-mode menu of the Rectangle and Ellipse buttons: it opens beside the button on hover (or on a
+  // right-click), lists the modes with the current one ticked, and a choice sets the mode and takes the tool.
+  // It belongs to the open flyout: being over either keeps both open.
+  const modeMenu = document.createElement('div');
+  modeMenu.id = 'modeMenu'; modeMenu.className = 'ctx mode-menu'; modeMenu.hidden = true;
+  modeMenu.setAttribute('role', 'menu');
+  document.body.appendChild(modeMenu);
+  const TICK = '<svg class="ck" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>';
+  let modeTimer = 0, modeFor = '';
+  function hideModes() { clearTimeout(modeTimer); modeMenu.hidden = true; modeFor = ''; document.querySelectorAll('[data-modes].open').forEach((x) => x.classList.remove('open')); }
+  function showModes(b: HTMLElement) {
+    const tool = b.dataset.modes!, cur = drawMode(tool);
+    modeFor = tool;
+    modeMenu.setAttribute('aria-label', `${TYPES[tool].name} drawing`);
+    modeMenu.innerHTML = DRAW_MODES[tool].map(([m, label, hint, icon]) =>
+      `<button class="ctx-item" role="menuitemradio" aria-checked="${m === cur}" data-mode="${tool}:${m}" title="${esc(hint)}"><svg viewBox="0 0 20 20">${icon}</svg><span class="lb">${label}</span>${m === cur ? TICK : '<span class="ck"></span>'}</button>`).join('');
+    modeMenu.hidden = false;
+    // below the button, its left edge on the button's; kept on screen
+    const r = b.getBoundingClientRect(), w = modeMenu.offsetWidth, h = modeMenu.offsetHeight;
+    modeMenu.style.left = Math.max(8, Math.min(r.left - 5, innerWidth - w - 8)) + 'px';
+    modeMenu.style.top = (r.bottom + 4 + h > innerHeight - 8 ? r.top - 4 - h : r.bottom + 4) + 'px';
+    document.querySelectorAll('[data-modes]').forEach((x) => x.classList.toggle('open', x === b));
+  }
+  function setDrawMode(tool: string, m: string) {
+    drawModes[tool] = m;
+    try { localStorage.setItem(MODES_KEY, JSON.stringify(drawModes)); } catch (e: any) { /* storage blocked */ }
+    const b = $(`#fly-shapes [data-modes="${tool}"] svg`);
+    if (b) b.innerHTML = modeRow(tool)[3];
+  }
+  $('#fly-shapes').addEventListener('pointerover', (e: any) => {
+    if (e.pointerType !== 'mouse') return;
+    const b = e.target.closest('[data-modes]');
+    clearTimeout(modeTimer);
+    if (b && modeFor !== b.dataset.modes) modeTimer = setTimeout(() => { TD.tooltip && TD.tooltip.hide(); showModes(b); }, HOVER_OPEN) as any;
+    else if (!b && modeFor) modeTimer = setTimeout(hideModes, HOVER_CLOSE) as any;
+  });
+  $('#fly-shapes').addEventListener('contextmenu', (e: any) => {
+    const b = e.target.closest('[data-modes]');
+    if (b) { e.preventDefault(); showModes(b); }
+  });
+  modeMenu.addEventListener('pointerenter', () => { clearTimeout(modeTimer); flyHover(); });
+  modeMenu.addEventListener('pointerleave', (e: any) => {
+    if (e.pointerType !== 'mouse') return;
+    const to = e.relatedTarget as Element | null;
+    if (to && to.closest && to.closest('#fly-shapes')) { if (!to.closest('[data-modes]')) modeTimer = setTimeout(hideModes, HOVER_CLOSE) as any; return; }
+    modeTimer = setTimeout(hideModes, HOVER_CLOSE) as any;
+    if (openFly && !flyPinned) flyHover(hideFly, HOVER_CLOSE);
+  });
+  modeMenu.addEventListener('click', (e: any) => {
+    const b = e.target.closest('[data-mode]');
+    if (!b) return;
+    const [tool, m] = b.dataset.mode.split(':');
+    setDrawMode(tool, m);
+    hideFly();
+    if (state.mode === 'document') setMode('diagram');
+    setTool(tool);
+  });
+  document.addEventListener('pointerdown', (e) => { if (!modeMenu.hidden && !(e.target as Element).closest('#modeMenu, .flyout')) hideModes(); });
 
   // ---------------- image insert ----------------
   // A picture goes in at most 8 cm wide, centred on `at` (the middle of the view when not given), under a file
@@ -1683,15 +1775,41 @@ import { runtime as TD } from '../runtime';
     const r = Math.hypot(A.x - x, A.y - y);
     return r > 50 * dist(A, B) ? null : { x, y, r }; // nearly straight: no arc yet
   }
+  // the tools drawn click by click through this draft: the two arcs, a rectangle by three points and a circle
+  // through three points (their tools' draw modes)
+  function pointsKind(t = state.tool) {
+    if (t === 'arc' || t === 'arc3') return t;
+    if (t === 'rect' && drawMode('rect') === 'three') return 'rect3';
+    if (t === 'ellipse' && drawMode('ellipse') === 'circle3') return 'circle3';
+    return null;
+  }
+  const POINT_HINTS: Record<string, string[]> = {
+    arc3: ['Click one end of the arc', 'Click the other end', 'Click a point the arc passes through · Esc cancels'],
+    arc: ['Click the centre of the arc', 'Click where the arc starts (sets the radius) · Shift snaps to 15°', 'Turn round the centre and click where the arc ends · Shift snaps to 15° · Esc cancels'],
+    rect3: ['Click one corner of the rectangle', 'Click the next corner (sets one side and the angle) · Shift snaps to 15°', 'Click to set the other side · Esc cancels'],
+    circle3: ['Click a point on the circle', 'Click a second point', 'Click a third point · Esc cancels'],
+  };
   function arcHint() {
-    const d = arcDraft, n = d ? d.pts.length : 0;
-    showHint(state.tool === 'arc3'
-      ? (n === 0 ? 'Click one end of the arc' : n === 1 ? 'Click the other end' : 'Click a point the arc passes through · Esc cancels')
-      : (n === 0 ? 'Click the centre of the arc' : n === 1 ? 'Click where the arc starts (sets the radius) · Shift snaps to 15°' : 'Turn round the centre and click where the arc ends · Shift snaps to 15° · Esc cancels'));
+    const d = arcDraft, n = d ? d.pts.length : 0, k = d ? d.tool : pointsKind();
+    if (k) showHint(POINT_HINTS[k][Math.min(n, 2)]);
+  }
+  // a rectangle with one side from A to B, as far to one side of it as q is
+  function rect3(A: any, B: any, q: any) {
+    const L = dist(A, B), ux = (B.x - A.x) / L, uy = (B.y - A.y) / L, nx = -uy, ny = ux;
+    const h = (q.x - A.x) * nx + (q.y - A.y) * ny;
+    const cx = (A.x + B.x) / 2 + (nx * h) / 2, cy = (A.y + B.y) / 2 + (ny * h) / 2, H = Math.abs(h);
+    return { x: cx - L / 2, y: cy - H / 2, w: L, h: H, angle: TD.normDeg(angDeg(A, B)) };
   }
   function arcMove(q: any, e: any) {
     const d = arcDraft, s = byId(d.id);
     d.cur = q;
+    if (d.tool === 'rect3' || d.tool === 'circle3') {
+      if (d.pts.length < 2) return;
+      if (d.tool === 'rect3') { Object.assign(s!, rect3(d.pts[0], d.pts[1], q)); return; }
+      const C = circumcircle(d.pts[0], d.pts[1], q);
+      Object.assign(s!, C ? { cx: C.x, cy: C.y, rx: C.r, ry: C.r } : { rx: 0, ry: 0 });
+      return;
+    }
     if (d.tool === 'arc') {
       if (d.pts.length < 2) return;
       let ang = angDeg(d.pts[0], q);
@@ -1713,6 +1831,7 @@ import { runtime as TD } from '../runtime';
     const d = arcDraft, s = byId(d.id), far = (a: any, b: any) => dist(a, b) * state.view.zoom >= 4;
     if (d.pts.length === 1) {
       if (!far(d.pts[0], q)) return;
+      if (d.tool === 'rect3' && e.shiftKey) { const P = d.pts[0], a = Math.round(angDeg(P, q) / 15) * 15 * Math.PI / 180, L = dist(P, q); q = { x: P.x + L * Math.cos(a), y: P.y - L * Math.sin(a) }; }
       d.pts.push(q);
       if (d.tool === 'arc') {
         let a0 = angDeg(d.pts[0], q);
@@ -1724,6 +1843,13 @@ import { runtime as TD } from '../runtime';
       return;
     }
     arcMove(q, e);
+    if (d.tool === 'rect3' || d.tool === 'circle3') {
+      if (!TYPES[s!.type].valid(s) || !far(d.pts[0], q) || !far(d.pts[1], q)) return;
+      arcDraft = null; snapHint = null;
+      commit(); setTool('select');
+      render(); renderProps();
+      return;
+    }
     if (d.tool === 'arc' ? Math.abs(d.sweep) < 0.5 : !(s!.r > 0) || !far(d.pts[0], q) || !far(d.pts[1], q)) return;
     arcDraft = null;
     if (s!.a1 < 0 || s!.a1 >= 360) { const k = Math.floor(s!.a1 / 360) * 360; s!.a1 -= k; s!.a2 -= k; }
@@ -1748,7 +1874,7 @@ import { runtime as TD } from '../runtime';
     if (lk) q = { ...linkPoint(lk), anchor: true };
     d.lk = lk || null; linkHint = lk ? lk.id : null;
     snapHint = q;
-    TYPES[s.type].drag(s, d.a, q, e);
+    TYPES[s.type].drag(s, d.a, q, e, d.dm);
     render();
   }
   function arcCancel() {
@@ -1762,9 +1888,10 @@ import { runtime as TD } from '../runtime';
     const q = snapPoint(p, e, arcDraft ? new Set([arcDraft.id]) : null);
     if (!arcDraft) {
       begin();
-      const s = addShape(TYPES.arc.create(q, state.defaults));
+      const kind = pointsKind()!, type = kind === 'rect3' ? 'rect' : kind === 'circle3' ? 'ellipse' : 'arc';
+      const s = addShape(TYPES[type].create(q, state.defaults));
       state.sel = new Set([s.id]);
-      arcDraft = { tool: state.tool, id: s.id, pts: [q], cur: q };
+      arcDraft = { tool: kind, id: s.id, pts: [q], cur: q };
     } else arcStep(q, e);
     if (arcDraft) { arcDraft.down = { x: e.clientX, y: e.clientY }; arcHint(); }
     render();
@@ -1880,7 +2007,7 @@ import { runtime as TD } from '../runtime';
       render();
       return;
     }
-    if (state.tool === 'arc' || state.tool === 'arc3') { arcDown(p, e); return; }
+    if (pointsKind()) { arcDown(p, e); return; }
     if (state.tool === 'poly' || state.tool === 'blob' || state.tool === 'smoothcurve') {
       const q = snapPoint(p, e, polyDraft ? new Set([polyDraft]) : null);
       if (!polyDraft) {
@@ -1921,7 +2048,7 @@ import { runtime as TD } from '../runtime';
       const s = addShape(TYPES[type].create(q, state.defaults, tool));
       if (lk) s.link1 = lk;
       state.sel = new Set([s.id]);
-      drag = { mode: 'create', id: s.id, a: q };
+      drag = { mode: 'create', id: s.id, a: q, dm: DRAW_MODES[tool] ? drawMode(tool) : undefined, c0: { x: e.clientX, y: e.clientY } };
       render();
       return;
     }
@@ -2182,6 +2309,12 @@ import { runtime as TD } from '../runtime';
     return false;
   }
 
+  // whether a click alone leaves this new shape standing (a symbol takes its own size; a rectangle doesn't)
+  function clickMakes(s: any) {
+    const t = TYPES[s.type], c = clone(s);
+    if (t.fix) t.fix(c);
+    return t.valid(c);
+  }
   function endDrag(e: any) {
     if (!drag) return;
     const d = drag;
@@ -2227,11 +2360,15 @@ import { runtime as TD } from '../runtime';
       return;
     }
     if (d.mode === 'create' && !d.second) {
-      // a click without a drag starts a two-click line: the end follows the pointer to the next click
+      // a click without a drag starts a two-click line: the end follows the pointer to the next click. A shape
+      // that only a drag can size (a rectangle, an ellipse: a click alone makes nothing) does the same, its
+      // second corner (or edge) following the pointer
       const s = byId(d.id), z = state.view.zoom;
-      if (s && CONNECT.has(s.type) && s.x2 != null && Math.hypot(s.x2 - d.a.x, s.y2 - d.a.y) * z < 4) {
+      const line = s && CONNECT.has(s.type) && s.x2 != null && Math.hypot(s.x2 - d.a.x, s.y2 - d.a.y) * z < 4;
+      const box = s && !line && d.c0 && Math.hypot(e.clientX - d.c0.x, e.clientY - d.c0.y) < 4 && !clickMakes(s);
+      if (line || box) {
         lineDraft = d;
-        showHint('Click where it ends · Esc cancels');
+        showHint(line ? 'Click where it ends · Esc cancels' : secondClickHint(d.dm) + ' · Esc cancels');
         return;
       }
     }
@@ -3042,7 +3179,7 @@ import { runtime as TD } from '../runtime';
     const stale = codeFailed && clipboard && clipboard.t >= codeFailed;
     if (ownCopy(text) || stale || (!text.trim() && !files.length)) { paste(); return; }
     e.preventDefault();
-    takeIn(text, files, null);
+    takeIn(text, files, null, undefined, (dt && dt.getData('text/html')) || '');
   });
   // ---------- from outside: pasted or dropped ----------
   // Pictures (PNG, JPEG, SVG, and GIF, WebP … as PNG) go in as images, as the Image tool inserts them. Text is read
@@ -3053,14 +3190,48 @@ import { runtime as TD } from '../runtime';
   // blocks, after the block they are dropped on (pasted: after the active one).
   const PIC_FILE = (f: File) => /^image\//.test(f.type) || /\.(svg|png|jpe?g|gif|webp|bmp|avif|ico)$/i.test(f.name);
   const TEXT_FILE = (f: File) => /\.(tex|tikz|ltx|txt)$/i.test(f.name) || /^text\/(plain|x-tex)/.test(f.type);
-  async function takeIn(text: string, files: File[], at: any, docAt?: number) {
+  async function takeIn(text: string, files: File[], at: any, docAt?: number, html = '') {
     const pics = files.filter(PIC_FILE), texts = files.filter((f) => !PIC_FILE(f) && TEXT_FILE(f)), t = String(text || '').trim();
+    // on the canvas, cells from a spreadsheet (or a Markdown table) become a Table block, and so does a dropped .csv, .tsv or .xlsx
+    if (state.mode !== 'document') {
+      const sheet = files.find(TABLE_FILE);
+      if (sheet && !pics.length) {
+        try { const r = await TD.table.importFile(sheet); placeTable(r.table, at, `Inserted ${sheet.name} as a table`); } catch (err: any) { showHint(`Couldn't read ${sheet.name}: ${err.message || err}`, 2600); }
+        return;
+      }
+      const tb = files.every(PIC_FILE) && tableFrom(html, text); // a spreadsheet's copy may carry a picture of the cells too
+      if (tb) { placeTable(tb, at, 'Pasted as a table · double-click to edit it'); return; }
+    }
     // a picture copied from a file manager or a web page carries its file name or address as text too
     const nameOnly = !t || (!t.includes('\n') && (/^https?:\/\/\S+$/.test(t) || /^[^\s\\$]+\.\w{2,5}$/.test(t) || pics.some((f) => f.name === t)));
     if (pics.length && nameOnly) return takePictures(pics.map((f) => ({ blob: f, name: f.name })), at, docAt);
     if (t) return takeText(text, at, docAt);
     if (texts.length) { try { return takeText(await texts[0].text(), at, docAt); } catch (err: any) { showHint(`Couldn't read ${texts[0].name}`, 2000); return; } }
     if (files.length) showHint(`Can't use ${files[0].name}: drop a picture (PNG, JPEG, SVG, GIF, WebP) or a .tex file`, 2600);
+  }
+  const TABLE_FILE = (f: File) => /\.(csv|tsv|tab|xlsx|xlsm)$/i.test(f.name);
+  /** cells copied from a spreadsheet or the Table workspace (HTML with tab-separated text), or a Markdown table: a table model */
+  function tableFrom(html: string, text: string) {
+    const T = TD.table, body = String(text || '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+    try {
+      const own = html && /data-diagramtex-table="/.test(html) && new DOMParser().parseFromString(html, 'text/html').querySelector('[data-diagramtex-table]');
+      if (own) return T.normalize(JSON.parse(own.getAttribute('data-diagramtex-table')!));
+      const rows = body.split('\n'), tabbed = rows.length > 1 && rows.every((l) => l.includes('\t') || !l.trim());
+      if (tabbed && html && T.isHtml(html)) return T.fromHtml(html);
+      if (tabbed) return T.fromDelimited(body, '\t');
+      if (T.detect(body) === 'markdown' && rows.length > 2) return T.importText(body, 'markdown').table;
+    } catch (err: any) { /* not a table after all: pasted as text */ }
+    return null;
+  }
+  /** a Table block centred on `at` (pasted: the middle of the view), selected */
+  function placeTable(table: any, at: any, msg: string) {
+    begin();
+    const c = at || viewCentre(), s = addShape({ ...TYPES.table.create(c, state.defaults), table: TD.table.normalize(table) });
+    const L = TD.table.layout(s.table);
+    s.x = c.x - L.w / 2; s.y = c.y - L.h / 2;
+    state.sel = new Set([s.id]);
+    commit(); render(); renderProps();
+    showHint(msg, 1800);
   }
   async function takePictures(list: { blob: Blob | string; name: string }[], at: any, docAt?: number) {
     const got: { pic: Picture; name: string }[] = [];
@@ -3146,7 +3317,7 @@ import { runtime as TD } from '../runtime';
       }).catch(() => showHint("That site doesn't let its pictures be copied: save the picture, then drop the file", 3000));
       return;
     }
-    takeIn(text, files, at, docAt);
+    takeIn(text, files, at, docAt, dt.getData('text/html') || '');
   });
   function paste() {
     pasteTimer = 0;

@@ -35,17 +35,18 @@ T.test('architecture: every block editor opens through Enter, panel alias and co
       ctx.appendChild(button); button.click(); button.remove();
       T.eq(calls, 3, type + ' context command');
       const before = JSON.stringify(s);
-      done(type === 'cz' ? { items: s.items, raw: s.raw } : { src: s.src + '\n% integration test' });
+      const edited = () => { const t = JSON.parse(JSON.stringify(s.table)); t.cells[0][0].t = 'integration test'; return t; };
+      done(type === 'cz' ? { items: s.items, raw: s.raw } : type === 'table' ? { src: '', table: edited() } : { src: s.src + '\n% integration test' });
       if (type !== 'cz') {
         T.eq(TD.state.undo.length, 1, type + ' single document undo step');
         key('z', { ctrlKey: true, metaKey: true });
         T.eq(JSON.stringify(TD.state.doc.shapes[0]), before, type + ' undo restores source and placement');
         key('z', { ctrlKey: true, metaKey: true, shiftKey: true });
-        T.ok(TD.state.doc.shapes[0].src.endsWith('% integration test'), type + ' redo');
+        T.ok(type === 'table' ? TD.state.doc.shapes[0].table.cells[0][0].t === 'integration test' : TD.state.doc.shapes[0].src.endsWith('% integration test'), type + ' redo');
       }
       // A late callback must not resurrect a deleted object.
       TD.state.doc.shapes = [];
-      done(type === 'cz' ? { items: [], raw: [] } : { src: s.src });
+      done(type === 'cz' ? { items: [], raw: [] } : type === 'table' ? { src: '', table: s.table } : { src: s.src });
       T.eq(TD.state.doc.shapes.length, 0, type + ' deleted object');
     } finally { view.open = original; }
   }

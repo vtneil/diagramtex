@@ -38,6 +38,9 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   let editing: Edit | null = null;
   const undoStack: string[] = [], redoStack: string[] = [];
   let shown = false;
+  // editing a Table block from the diagram (editBlock): the workspace's own table waits in `stash` meanwhile
+  let session: { done: (r: { src: string; table: TableModel }) => void; start: string; cancel?: boolean } | null = null;
+  let stash: { M: TableModel; fresh: boolean; undo: string[]; redo: string[]; act: [number, number]; ext: [number, number] } | null = null;
 
   const range = (): Range => T.expand(M, T.rangeOf(act, ext));
   const clampSel = () => {
@@ -49,6 +52,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   };
   let saveTimer: any = null;
   function save() {
+    if (session) return; // a Table block's table: it goes back to the diagram, not into the workspace's storage
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ table: M, fresh })); } catch (e: any) { /* too large or blocked */ } }, 200);
   }
@@ -112,7 +116,8 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
 
   // ---------------------------------------------------------------- the frame
   function build() {
-    host!.innerHTML = `<div class="tbw">
+    host!.innerHTML = `<div class="tbw${session ? ' tb-in-block' : ''}">
+      ${session ? `<div class="tb-session" role="region" aria-label="Editing a table from the diagram"><span>Editing a table from the diagram. <b>Done</b> puts it back; the Table workspace's own table is left as it was.</span><div class="spacer"></div><button type="button" data-ses="cancel">Cancel</button><button type="button" class="primary" data-ses="done" title="Put the table back in the diagram (${MOD}S keeps editing)">Done</button></div>` : ''}
       <div class="tb-bar" role="toolbar" aria-label="Table">
         <div class="tb-grp"><button type="button" data-t="import" class="tb-imp" title="Import a table: paste or open CSV, TSV, Excel (.xlsx), Markdown, HTML or LaTeX" aria-haspopup="menu">${I.imp}Import</button></div>
         <div class="tb-grp"><button type="button" class="icon" data-t="undo" title="Undo (${MOD}Z)">${I.undo}</button><button type="button" class="icon" data-t="redo" title="Redo (${SHIFT}${MOD}Z)">${I.redo}</button></div>
@@ -677,18 +682,18 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       ['Text', swatch('fg', x.fg, 'Automatic')],
       ['Fill', swatch('bg', x.bg, 'None')],
     ])}</div>
-    <div class="sec"><div class="sec-title">LaTeX</div>${rowsHtml([
+    <div class="sec"><div class="sec-title">LaTeX</div>${session ? '<div class="hint-line">In the diagram the table is a tabular in a node: no caption, label or float.</div>' : ''}${rowsHtml(session ? [] : [
       ['Caption', `<input type="text" data-p="caption" value="${esc(M.caption)}" placeholder="None" aria-label="Caption">`],
       ['Label', `<input type="text" data-p="label" value="${esc(M.label)}" placeholder="tab:results" aria-label="Label" spellcheck="false">`],
       ['Float', `<span class="tb-floatctl">${floatCtl()}</span>`],
       ['Place', seg('place', [['left', I.al.l, 'Left'], ['center', I.al.c, 'Centre'], ['right', I.al.r, 'Right']], M.place)],
     ])}
     <details class="tb-more-sec"${detailsOpen ? ' open' : ''}><summary>More options</summary>${rowsHtml([
-      ['Environment', `<select data-p="env" aria-label="Environment">${opt([['tabular', 'tabular'], ['tabularx', 'tabularx (full width)'], ['longtable', 'longtable (over pages)']], M.env)}</select>`],
+      ['Environment', `<select data-p="env" aria-label="Environment">${opt([['tabular', 'tabular'], ['tabularx', 'tabularx (full width)'], ...(session ? [] : [['longtable', 'longtable (over pages)'] as [string, string]])], M.env)}</select>`],
       ...(M.env === 'tabularx' ? [['Width', `<input type="number" data-p="width" min="10" max="100" step="5" value="${Math.round(M.width * 100)}" aria-label="Width"><span class="tb-unit">% of the line</span>`] as [string, string]] : []),
-      ...(M.env === 'longtable' ? [['Footer rows', `<input type="number" data-p="foot" min="0" max="${T.nRows(M) - M.head}" step="1" value="${M.foot}" aria-label="Footer rows">`, 'The bottom rows: written once, at the end of the table (\\endlastfoot); the other pages end with the rule above them'] as [string, string, string]] : []),
-      ...(M.env !== 'longtable' ? [['Placement', `<input type="text" data-p="floatPos" value="${esc(M.floatPos)}" placeholder="htbp" aria-label="Float placement" spellcheck="false" maxlength="5" title="Where LaTeX may put the table: h here, t top, b bottom, p own page, ! try harder, H exactly here (float package)">`] as [string, string]] : []),
-      ['Caption at', seg('capTop', [['1', 'Top'], ['0', 'Bottom']], M.capTop ? '1' : '0')],
+      ...(M.env === 'longtable' && !session ? [['Footer rows', `<input type="number" data-p="foot" min="0" max="${T.nRows(M) - M.head}" step="1" value="${M.foot}" aria-label="Footer rows">`, 'The bottom rows: written once, at the end of the table (\\endlastfoot); the other pages end with the rule above them'] as [string, string, string]] : []),
+      ...(M.env !== 'longtable' && !session ? [['Placement', `<input type="text" data-p="floatPos" value="${esc(M.floatPos)}" placeholder="htbp" aria-label="Float placement" spellcheck="false" maxlength="5" title="Where LaTeX may put the table: h here, t top, b bottom, p own page, ! try harder, H exactly here (float package)">`] as [string, string]] : []),
+      ...(session ? [] : [['Caption at', seg('capTop', [['1', 'Top'], ['0', 'Bottom']], M.capTop ? '1' : '0')] as [string, string]]),
       ['Font size', `<select data-p="size" aria-label="Font size">${opt(SIZE_NAMES, M.size)}</select>`],
       ['Padding', `<input type="number" data-p="pad" min="0" max="30" step="0.5" value="${M.pad}" aria-label="Cell padding (pt)" title="\\tabcolsep: the space on each side of a column"><span class="tb-unit">pt</span>`],
       ['Row height', `<input type="number" data-p="stretch" min="0.5" max="4" step="0.05" value="${M.stretch}" aria-label="Row height" title="\\arraystretch: 1 is LaTeX's own"><span class="tb-unit">×</span>`],
@@ -782,7 +787,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   props?.addEventListener('toggle', (e) => { if ((e.target as Element).matches?.('.tb-more-sec')) detailsOpen = (e.target as HTMLDetailsElement).open; }, true);
 
   // ---------------------------------------------------------------- preview and output
-  const shape = () => ({ type: 'table', x: 0, y: 0, table: M });
+  const shape = () => ({ type: 'table', x: 0, y: 0, table: M, cap: true }); // its caption drawn too
   let pvTimer: any = null, codeText = '';
   function preview() {
     clearTimeout(pvTimer);
@@ -797,7 +802,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       const pad = 12;
       p.innerHTML = `<svg class="tb-pic" viewBox="${-pad} ${-pad} ${(d.w + 2 * pad).toFixed(2)} ${(d.h + 2 * pad).toFixed(2)}" width="${((d.w + 2 * pad) * 1.25).toFixed(1)}" height="${((d.h + 2 * pad) * 1.25).toFixed(1)}">${d.svg}</svg>`;
     } catch (e: any) { p.textContent = 'Could not draw the table: ' + (e.message || e); }
-    const r = T.toLatex(M);
+    const r = T.toLatex(M, { bare: !!session });
     const text = (r.packages.length ? `% ${r.packages.join(' ')}\n` : '') + r.code;
     codeText = text;
     code.innerHTML = text.split('\n').map((l: string, i: number) => `<div class="cl" data-n="${i + 1}">${esc(l) || ' '}</div>`).join('');
@@ -821,7 +826,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     finishEdit();
     try {
       if (what === 'copy') {
-        const r = T.toLatex(M);
+        const r = T.toLatex(M, { bare: !!session });
         await navigator.clipboard.writeText((r.packages.length ? `% Preamble: ${r.packages.join(' ')}\n` : '') + r.code + '\n');
         flash(btn, 'Copied');
       } else if (what === 'dl-tex') TD.app.downloadBlob(fileName() + '.tex', new Blob([T.toLatex(M, { standalone: true }).code], { type: 'text/x-tex' }));
@@ -840,6 +845,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   host.addEventListener('click', (e) => {
     const b = (e.target as Element).closest('button') as HTMLElement | null;
     if (!b) return;
+    if (b.dataset.ses) { endBlock(b.dataset.ses === 'done'); return; }
     if (b.dataset.tab) { out.tab = b.dataset.tab; saveOut(); tabs(); return; }
     if (b.dataset.o) { output(b.dataset.o, b); return; }
     if (b.dataset.add) {
@@ -1087,9 +1093,53 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   if (TD.math && TD.math.onChange) TD.math.onChange(() => { if (shown) { paint(); preview(); } });
 
   function refresh() { paint(); panel(); preview(); startScreen(); }
+
+  // ---------------------------------------------------------------- a Table block from the diagram
+  // Double-clicking a Table block opens it here: the workspace's own table is put aside, the block's table is
+  // edited with the whole workspace, and Done (or leaving Table for Classic, Page or Whiteboard) writes it back as
+  // one undo step there. Cancel drops the changes. ⌘S writes it back and keeps editing.
+  function editBlock(shape: { table: TableModel }, done: (r: { src: string; table: TableModel }) => void) {
+    if (session || !TD.app?.cmd?.setTable) return;
+    stash = { M, fresh, undo: undoStack.splice(0), redo: redoStack.splice(0), act, ext };
+    M = T.normalize(JSON.parse(JSON.stringify(shape.table)));
+    fresh = false; act = [0, 0]; ext = [0, 0];
+    session = { done, start: JSON.stringify(M) };
+    TD.app.cmd.setTable(true);
+  }
+  /** back from a block's table to the workspace's own (hide() calls it with ok = true when Table mode is left) */
+  function closeBlock(ok: boolean) {
+    const s = session;
+    if (!s || !stash) return;
+    const cur = JSON.stringify(M), res = ok && !s.cancel && cur !== s.start ? JSON.parse(cur) : null;
+    M = stash.M; fresh = stash.fresh; act = stash.act; ext = stash.ext;
+    undoStack.splice(0, undoStack.length, ...stash.undo); redoStack.splice(0, redoStack.length, ...stash.redo);
+    stash = null; session = null;
+    // after the switch back has finished, so the diagram is showing when the change lands
+    if (res) queueMicrotask(() => s.done({ src: '', table: res }));
+  }
+  async function endBlock(ok: boolean) {
+    if (!session) return;
+    finishEdit();
+    if (!ok && JSON.stringify(M) !== session.start && !(await TD.confirm('Discard changes to this table?', 'Your edits since opening the table will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!session) return;
+    if (!ok) session.cancel = true;
+    TD.app.cmd.setTable(false);
+  }
+  window.addEventListener('keydown', (e) => {
+    if (!session || !shown || !(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's') return;
+    if (document.querySelector('.td-dialog')) return; // a dialog is open
+    e.preventDefault(); e.stopImmediatePropagation();
+    finishEdit();
+    const cur = JSON.stringify(M);
+    if (cur !== session.start) { session.start = cur; session.done({ src: '', table: JSON.parse(cur) }); }
+    hint('Saved to the diagram');
+  }, true);
+  TD.tableBlockEditor = { open: editBlock };
+
   TD.tableWs = {
     show() { shown = true; host.hidden = false; build(); requestAnimationFrame(() => { syncSel(); if (!fresh) focusGrid(); }); },
-    hide() { finishEdit(); closeMenu(); shown = false; host.hidden = true; host.innerHTML = ''; },
+    hide() { finishEdit(); closeMenu(); closeBlock(true); shown = false; host.hidden = true; host.innerHTML = ''; },
+    get inBlock() { return !!session; },
     renderProps() { panel(); },
     undo, redo, canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0,
     // for the tests

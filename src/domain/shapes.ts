@@ -3,7 +3,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.45.2'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.46.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -317,7 +317,7 @@ import { runtime as TD } from '../runtime';
   function hopsFor(s: any, P: any, scene: any) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o: any) => o !== s && (T as Record<string, any>)[o.type] && (T as Record<string, any>)[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'geo3d', 'geo2d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'tikz'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o: any) => o !== s && (T as Record<string, any>)[o.type] && (T as Record<string, any>)[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'geo3d', 'geo2d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'table', 'tikz'].includes(o.type));
     const polys = below.map((o: any) => {
       const q = (T as Record<string, any>)[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];
@@ -776,6 +776,12 @@ import { runtime as TD } from '../runtime';
     return { x: Math.min(a.x, a.x + w), y: Math.min(a.y, a.y + h), w: Math.abs(w), h: Math.abs(h) };
   }
 
+  // a box drawn out from its centre a to the corner q (Shift keeps it square)
+  function centreBox(a: any, q: any, e: any) {
+    let w = Math.abs(q.x - a.x), h = Math.abs(q.y - a.y);
+    if (e && e.shiftKey) w = h = Math.max(w, h);
+    return { x: a.x - w, y: a.y - h, w: 2 * w, h: 2 * h };
+  }
   TD.box = { handles: (b: any) => boxHandles(b), resize: (o: any, k: any, q: any, e: any) => boxResize(o, k, q, e), drag: (a: any, q: any, e: any) => dragBox(a, q, e) };
   const bboxOf = (pts: any, pad = 0) => {
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
@@ -1125,7 +1131,8 @@ import { runtime as TD } from '../runtime';
     name: 'Rectangle',
     pts: [['x', 'y']],
     create: (p: any, d: any) => ({ type: 'rect', x: p.x, y: p.y, w: 0, h: 0, radius: 0, ...lineStyle(d), fill: d.fill || null }),
-    drag(s: any, a: any, q: any, e: any) { Object.assign(s, dragBox(a, q, e)); },
+    // m: the tool's draw mode ('center' grows from where the drag began; corner to corner otherwise)
+    drag(s: any, a: any, q: any, e: any, m?: any) { Object.assign(s, m === 'center' ? centreBox(a, q, e) : dragBox(a, q, e)); },
     valid: (s: any) => s.w > 2 && s.h > 2,
     handles: (s: any) => boxHandles(s),
     setHandle(s: any, k: any, q: any, e: any, o: any) { Object.assign(s, boxResize(o, k, q, e)); },
@@ -1151,7 +1158,14 @@ import { runtime as TD } from '../runtime';
     name: 'Ellipse',
     pts: [['cx', 'cy']],
     create: (p: any, d: any) => ({ type: 'ellipse', cx: p.x, cy: p.y, rx: 0, ry: 0, ...lineStyle(d), fill: d.fill || null }),
-    drag(s: any, a: any, q: any, e: any) { Object.assign(s, fromBox(dragBox(a, q, e))); },
+    // m: the tool's draw mode: 'center' (an ellipse from its centre), 'circle' (from the centre, the drag is the
+    // radius), 'circle2' (the drag is a diameter); corner to corner otherwise
+    drag(s: any, a: any, q: any, e: any, m?: any) {
+      if (m === 'circle' || m === 'circle2') {
+        const r = Math.hypot(q.x - a.x, q.y - a.y) / (m === 'circle2' ? 2 : 1);
+        Object.assign(s, m === 'circle' ? { cx: a.x, cy: a.y } : { cx: (a.x + q.x) / 2, cy: (a.y + q.y) / 2 }, { rx: r, ry: r });
+      } else Object.assign(s, fromBox(m === 'center' ? centreBox(a, q, e) : dragBox(a, q, e)));
+    },
     valid: (s: any) => s.rx > 1 && s.ry > 1,
     handles: (s: any) => boxHandles(ellBox(s)),
     setHandle(s: any, k: any, q: any, e: any, o: any) { Object.assign(s, fromBox(boxResize(ellBox(o), k, q, e))); },

@@ -18,7 +18,28 @@ import { runtime as TD } from '../runtime';
     return { pts: dot(n, out) < 0 ? [...pts].reverse() : pts, color, group, ...extra };
   }
   const centroid = (pts: any) => pts.reduce((m: any, p: any) => add(m, mul(p, 1 / pts.length)), [0, 0, 0]);
-  const ring = (r: any, z: any, n: any, t0 = 0, t1 = 2 * Math.PI, closed = true) => Array.from<any, any>({ length: closed ? n : n + 1 }, (_, i) => { const t = t0 + ((t1 - t0) * i) / n; return [r * Math.cos(t), r * Math.sin(t), z]; });
+  // t1 is the end angle; it follows t0 so that an offset start still turns a full circle (the old default of 2π squeezed it)
+  const ring = (r: any, z: any, n: any, t0 = 0, t1 = t0 + 2 * Math.PI, closed = true) => Array.from<any, any>({ length: closed ? n : n + 1 }, (_, i) => { const t = t0 + ((t1 - t0) * i) / n; return [r * Math.cos(t), r * Math.sin(t), z]; });
+  // The base polygon of a prism or pyramid, one side per length. The polygon is the one inscribed in a circle
+  // (equal sides give the regular polygon); the circle's radius is found so that the sides' arcs close the turn.
+  // A side longer than all the others together cannot close. Returns corners about the base's centre.
+  function basePolygon(len: number[], t0: number) {
+    const n = len.length, big = Math.max(...len), rest = len.reduce((m, v) => m + v, 0) - big;
+    if (!(big < rest - 1e-9)) throw new Error('The longest side must be shorter than the others together');
+    const iMax = len.indexOf(big);
+    const arc = (R: number, l: number) => 2 * Math.asin(Math.min(1, l / (2 * R)));
+    // centre inside: the arcs add to 2π; centre outside: the longest side's arc equals the others'
+    const g = (R: number) => len.reduce((m, l) => m + arc(R, l), 0) - 2 * Math.PI;
+    const outside = g(big / 2) < 0;
+    const f = outside ? (R: number) => len.reduce((m, l, i) => m + (i === iMax ? 1 : -1) * arc(R, l), 0) : g;
+    let lo = big / 2, hi = Math.max(...len) * n * 4;
+    for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2; if (f(mid) > 0) lo = mid; else hi = mid; }
+    const R = (lo + hi) / 2;
+    let th = t0;
+    const P = len.map((l, i) => { const p = [R * Math.cos(th), R * Math.sin(th)]; th += (outside && i === iMax ? -1 : 1) * arc(R, l); return p; });
+    const mx = P.reduce((m, p) => m + p[0], 0) / n, my = P.reduce((m, p) => m + p[1], 0) / n;
+    return P.map((p) => [p[0] - mx, p[1] - my]);
+  }
 
   // ================================================================ basic solids
   const KINDS = [['box', 'Box (cuboid)'], ['cube', 'Cube'], ['cylinder', 'Cylinder'], ['cone', 'Cone'], ['frustum', 'Frustum'], ['tube', 'Hollow cylinder (tube)'],
@@ -27,6 +48,14 @@ import { runtime as TD } from '../runtime';
     ['swedge', 'Spherical wedge'], ['axes', '3D axes']];
   // a polygon without repeated points (a quad that closes on a pole)
   const clean = (pts: any) => pts.filter((p: any, k: any) => Math.hypot(...sub(p, pts[(k + pts.length - 1) % pts.length])) > 1e-9);
+  // a comma-separated list, commas inside brackets kept
+  function splitList(v: any) {
+    const t = String(v ?? '').trim(), out: string[] = []; let d = 0, cur = '';
+    if (!t) return out;
+    for (const ch of t) { if (ch === '(') d++; if (ch === ')') d--; if (ch === ',' && d === 0) { out.push(cur.trim()); cur = ''; } else cur += ch; }
+    out.push(cur.trim());
+    return out;
+  }
   function solidFigure(s: any) {
     const vw = V3.view(s.view?.[0] ?? 30, s.view?.[1] ?? 20);
     const n = V3.num, kind = s.kind || 'box', color = s.solidColor || '#2f7fc1', line = s.style === 'line';
@@ -76,7 +105,12 @@ import { runtime as TD } from '../runtime';
       const t = bestAngle(vw, a);
       if (s.la) dims.push({ p: [0, 0, 0], q: [a * Math.cos(t), a * Math.sin(t), 0], lab: s.la, ctr: [0, 0, a], inner: true, solid: true });
     } else if (pri || pyr) {
-      const B = ring(a, 0, sides, Math.PI / sides - Math.PI / 2), Tp = ring(a, c, sides, Math.PI / sides - Math.PI / 2);
+      // side lengths: blank or missing entries take the regular polygon's edge (2a sin(π/n)); a list of lengths makes an irregular base
+      const e0 = 2 * a * Math.sin(Math.PI / sides), given = splitList(s.sl);
+      const lens = Array.from({ length: sides }, (_, i) => (given[i] ? Math.max(1e-3, n(given[i], e0)) : e0));
+      const base = basePolygon(lens, Math.PI / sides - Math.PI / 2);
+      const B = base.map((p) => [p[0], p[1], 0]), Tp = base.map((p) => [p[0], p[1], c]);
+      a = Math.max(...base.map((p) => Math.hypot(p[0], p[1]))); // the extents and the height label follow the real corner radius
       for (let i = 0; i < sides; i++) {
         const j = (i + 1) % sides, out = sub(centroid([B[i], B[j]]), [0, 0, c / 2]);
         faces.push(face(pri ? [B[i], B[j], Tp[j], Tp[i]] : [B[i], B[j], [0, 0, c]], out, color, 's' + i));
@@ -202,7 +236,14 @@ import { runtime as TD } from '../runtime';
       const l = Math.hypot(u[0], u[1]) || 1;
       items.push({ k: 'text', at: m, text: d.lab, push: [u[0] / l, u[1] / l] });
     }
-    if (s.name) items.push({ k: 'text', at: vw.P(kind === 'box' || kind === 'cube' ? [a / 2, b / 2, c] : kind === 'sphere' ? [0, 0, a] : kind === 'ellipsoid' ? [0, 0, c] : [0, 0, H]), text: s.name, push: [0, 1] });
+    if (s.name || s.nameBelow) { // the top label sits above the solid's outline and the bottom label below it, centred, not on the solid
+      const shown = faces.filter(Boolean).flatMap((fc: any) => fc.pts.map((p: any) => vw.P(p)));
+      if (ballAt) { const o = vw.P([0, 0, 0]); shown.push([o[0], o[1] + a], [o[0], o[1] - a]); }
+      const mid = (v: number[]) => (Math.min(...v) + Math.max(...v)) / 2;
+      const put = (text: any, y: any, push: any) => items.push({ k: 'text', at: [shown.length ? mid(shown.map((p: any) => p[0])) : vw.P([0, 0, H])[0], y], text, push });
+      if (s.name) put(s.name, shown.length ? Math.max(...shown.map((p: any) => p[1])) : vw.P([0, 0, H])[1], [0, 1]);
+      if (s.nameBelow) put(s.nameBelow, shown.length ? Math.min(...shown.map((p: any) => p[1])) : vw.P([0, 0, 0])[1], [0, -1]);
+    }
     return { items };
   }
   // the angle round the z-axis whose rim point shows best: in front, towards the right
@@ -214,9 +255,9 @@ import { runtime as TD } from '../runtime';
 
   const SDEF = {
     w: 240, h: 220, kind: 'box', style: 'shaded', a: '2', b: '1.5', c: '1.2', r2: '0.6', n: '6',
-    r1: '0.8', t1: '0', t2: '70', p1: '20', p2: '60',
+    sl: '', r1: '0.8', t1: '0', t2: '70', p1: '20', p2: '60',
     view: [30, 20], axes: false, axesNeg: true, xlabel: '$x$', ylabel: '$y$', zlabel: '$z$', hiddenEdges: true,
-    solidColor: '#2f7fc1', la: '$a$', lb: '$b$', lc: '$c$', name: '',
+    solidColor: '#2f7fc1', la: '$a$', lb: '$b$', lc: '$c$', name: '', nameBelow: '',
   };
   const SPRE = {
     box: {},

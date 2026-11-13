@@ -29,6 +29,7 @@ TD.panels.prim3d = {
       else {
         dims = [row(k === 'frustum' ? 'Radii (base, top)' : k === 'tube' ? 'Radii (outer, inner)' : k === 'prism' || k === 'pyramid' || k === 'hexprism' ? 'Radius (corner)' : 'Radius', input('a', s.a), ...(k === 'frustum' || k === 'tube' ? [input('r2', s.r2)] : [])), row('Height', input('c', s.c))];
         if (k === 'prism' || k === 'pyramid') dims.push(row('Sides', input('n', s.n)));
+        if (k === 'prism' || k === 'pyramid' || k === 'hexprism') dims.push(row('Side lengths', input('sl', s.sl, { placeholder: 'all equal, or 1, 2, 1, …', title: 'One length per side, separated by commas; a blank or missing one takes the regular edge. The base is the polygon inscribed in a circle with those sides.' })));
       }
       const labels = k === 'box' ? [['la', 'Edge x'], ['lb', 'Edge y'], ['lc', 'Edge z']] : k === 'cube' || k === 'octa' ? [['la', 'Edge']] : k === 'sphere' || k === 'hemisphere' ? [['la', 'Radius']]
         : k === 'swedge' || k === 'axes' ? [] : k === 'ellipsoid' ? [['la', 'Radius x'], ['lb', 'Radius y'], ['lc', 'Radius z']] : k === 'cap' ? [['la', 'Base radius'], ['lc', 'Height']]
@@ -40,7 +41,7 @@ TD.panels.prim3d = {
           ...(s.style === 'line' ? [] : [row('Colour', colour(0, s.solidColor))])]),
         section('View', [view(s, [30, 20]), row('Hidden edges', check('hiddenEdges', s.hiddenEdges)), row('Axes', check('axes', !!s.axes)),
           ...(s.axes ? [row('Axis labels', input('xlabel', s.xlabel, { 'data-tx': 'text' }), input('ylabel', s.ylabel, { 'data-tx': 'text' }), input('zlabel', s.zlabel, { 'data-tx': 'text' }))] : [])], 'sec'),
-        section('Labels', [...labels.map(([key, label]) => row(label, input(key, s[key], { 'data-tx': 'text', placeholder: '(none)' }))), row('Name', input('name', s.name, { 'data-tx': 'text', placeholder: '(none)' })),
+        section('Labels', [...labels.map(([key, label]) => row(label, input(key, s[key], { 'data-tx': 'text', placeholder: '(none)' }))), row('Top label', input('name', s.name, { 'data-tx': 'text', placeholder: '(none)' })), row('Bottom label', input('nameBelow', s.nameBelow, { 'data-tx': 'text', placeholder: '(none)' })),
           ...(k === 'sphere' ? [row('Meridian', check('lb', !!s.lb))] : []),
           help('Sizes can be expressions such as ', { code: 'sqrt(2)' }, '. Exported as plain TikZ.')], 'sec'),
       ] };
