@@ -76,6 +76,51 @@ T.test('paste in: a block environment, TikZ, a formula and text land on the canv
     T.ok(made[0].type !== 'tikz' && made[0].type !== 'text', `${env}: a block, not ${made[0].type}`);
     T.ok(TD.toTikz(made).includes(env), `${env}: exports its environment`);
   }
+  // circuitikz, as an environment or a picture of parts, becomes a Circuit block
+  const CZ = String.raw`\begin{circuitikz}[american voltages]
+\draw
+  (0,0) to [short, *-] (6,0)
+  to [V, l_=$\mathrm{j}{\omega}_m$] (6,2)
+  to [R, l_=$R_R$] (6,4)
+  (0,0) to [open, v^>=$u$] (0,4)
+  to [L, l=$L$] (6,4);
+\end{circuitikz}`;
+  for (const src of [CZ, '\\begin{tikzpicture}\\draw (0,0) to[R=$R_1$] (2,0) -- (2,-1);\\end{tikzpicture}']) {
+    const n = TD.state.doc.shapes.length;
+    await TD.app.takeText(src, null);
+    const made = TD.state.doc.shapes.slice(n);
+    T.eq(made.map((s) => s.type), ['cz'], 'circuitikz becomes a Circuit block');
+  }
+  {
+    const p = TD.cz.parse(CZ);
+    T.eq(p.items.map((i) => i.part), ['short', 'src:vsource-us', 'res:us', 'open', 'ind:L'], 'short names in their style; a bare coordinate moves the pen');
+    T.eq(p.raw, '\\tikzset{american voltages}', 'the environment options are kept');
+    const code = TD.cz.code(p.items, p.raw);
+    T.ok(code.includes('to[V, l_=') && code.includes('to[R, l_=') && code.includes('to[L, l='), 'short names written as they were');
+    T.eq(TD.cz.parse('\\draw (0,0) to[R=$R_1$] (2,0) to[I=$I_0$] (2,2);').items.map((i) => [i.part, i.l, i.i]), [['res:us', '$R_1$', ''], ['src:isource-eu', '', '$I_0$']], '`R=label` is the label');
+    T.eq(TD.cz.parse('\\ctikzset{resistor=european}\n\\draw (0,0) to[R] (2,0);').items[0].part, 'res:iec', 'a style line picks the drawing');
+  }
+  // every block's own LaTeX, without the data the app embeds, pasted back: the same block, the same code, the same place
+  {
+    const strip = (c) => c.replace(/\\tddata\{[A-Za-z0-9+/=]*\}/g, '');
+    for (const t of ['cz', 'automata', 'uml', 'umlsd', 'qc', 'cd', 'xy', 'zx', 'forest', 'timing', 'kmap', 'bytefield', 'chemfig', 'bloch', 'feynman']) {
+      const s = TD.TYPES[t].create({ x: 37, y: 91 }, {}); s.id = 'a';
+      const code = strip(TD.toTikz([s]));
+      const back = TD.importLatex(code).blocks.flatMap((b) => b.shapes).filter((x) => !(x.type === 'tikz' && x.kind === 'defs'));
+      T.eq(back.map((x) => x.type), [t], t + ': read back as its block');
+      T.eq(strip(TD.toTikz(back)), code, t + ': writes the same code');
+    }
+    const fsm = String.raw`\begin{tikzpicture}[shorten >=1pt, node distance=2cm, on grid, auto]
+\node[state, initial] (q_0) {$q_0$};
+\node[state] (q_1) [right=of q_0] {$q_1$};
+\path[->] (q_0) edge node {0} (q_1) (q_1) edge [loop above] node {1} ();
+\end{tikzpicture}`;
+    const n = TD.state.doc.shapes.length;
+    await TD.app.takeText(fsm, null);
+    T.eq(TD.state.doc.shapes.slice(n).map((s) => s.type), ['automata'], 'a picture of automata states becomes an Automaton block');
+    const plain = TD.importLatex('\\begin{tikzpicture}\\node[draw] (a) at (0,0) {A};\\node[draw] (b) at (2,0) {B};\\draw[->] (a) -- (b);\\end{tikzpicture}');
+    T.ok(plain.blocks[0].shapes.every((x) => x.type !== 'automata' && x.type !== 'cz'), 'plain nodes and arrows stay a picture');
+  }
   let n = TD.state.doc.shapes.length;
   await TD.app.takeText('\\begin{tikzpicture}\\draw[->] (0,0) -- (2,0);\\draw (0,0) circle (1);\\end{tikzpicture}', null);
   T.eq(TD.state.doc.shapes.slice(n).map((s) => s.type).sort(), ['ellipse', 'line'], 'TikZ becomes shapes');

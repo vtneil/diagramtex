@@ -19,13 +19,13 @@ plot_scatter3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
 blk_qc: 1/1 modelled · regenerated same
 blk_cd: 1/1 modelled · regenerated differs from line 4 (cd → cd)
 blk_forest: 1/1 modelled · regenerated differs from line 4 (forest → forest)
-blk_cz: 0/4 modelled · regenerated differs from line 4 (cz → tikz)
+blk_cz: 1/1 modelled · regenerated same
 blk_zx: 1/1 modelled · regenerated differs from line 4 (zx → zx)
 blk_feynman: 1/1 modelled · regenerated differs from line 4 (feynman → feynman)
 blk_bloch: 1/1 modelled · regenerated differs from line 4 (bloch → bloch)
 blk_timing: 1/1 modelled · regenerated same
 blk_kmap: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
-blk_automata: 0/4 modelled · regenerated differs from line 4 (automata → tikz)
+blk_automata: 1/1 modelled · regenerated same
 blk_geo3d: 3/15 modelled · regenerated differs from line 5 (geo3d → tikz)
 blk_chem: 1/1 modelled · regenerated same
 blk_uml: 1/1 modelled · regenerated same
@@ -43,12 +43,12 @@ tip_w2: 27/27 modelled · regenerated same
 op_shapes: 9/10 modelled · regenerated differs from line 7 (curve,ellipse,line,rect → curve,ellipse,line,rect,tikz)
 tip_ticks: 0/4 modelled · regenerated same
 pat_all: 2/10 modelled · regenerated differs from line 4 (rect → tikz)
-cz_a: 0/11 modelled · regenerated differs from line 4 (cz → tikz)
-cz_b: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
-cz_c: 0/7 modelled · regenerated differs from line 4 (cz → tikz)
-cz_d: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
-fsm_a: 0/5 modelled · regenerated differs from line 4 (automata → tikz)
-fsm_b: 0/5 modelled · regenerated differs from line 4 (automata → tikz)
+cz_a: 1/1 modelled · regenerated same
+cz_b: 1/1 modelled · regenerated same
+cz_c: 1/1 modelled · regenerated same
+cz_d: 1/1 modelled · regenerated same
+fsm_a: 1/1 modelled · regenerated same
+fsm_b: 1/1 modelled · regenerated same
 forest_syntax: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_org: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_dir: 1/1 modelled · regenerated differs from line 4 (forest → forest)
@@ -78,48 +78,48 @@ km_4: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
 km_4b: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
 km_5: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
 km_6: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
-cz_h1: 0/1 modelled · regenerated same
-cz_v1: 0/1 modelled · regenerated same
-cz_i1: 0/1 modelled · regenerated same
-cz_vv: 0/1 modelled · regenerated same
-cz_v2: 0/1 modelled · regenerated same
-cz_i2: 0/1 modelled · regenerated same
-cz_l2: 0/1 modelled · regenerated same
-cz_v3: 0/1 modelled · regenerated same
-cz_v4: 0/1 modelled · regenerated same
-cz_i4: 0/1 modelled · regenerated same
-cz_vup: 0/3 modelled · regenerated differs from line 4 (cz → tikz)
-cz_vst: 0/3 modelled · regenerated differs from line 4 (cz → tikz)
-cz_vam: 0/3 modelled · regenerated differs from line 4 (cz → tikz)
-cz_vra: 0/2 modelled · regenerated differs from line 4 (cz → tikz)
-cz_vset: 1/3 modelled · regenerated differs from line 4 (cz → tikz)
-cz_vsrc: 0/4 modelled · regenerated differs from line 4 (cz → tikz)
-cz_idir: 0/5 modelled · regenerated differs from line 4 (cz → tikz)
-cz_color: 0/2 modelled · regenerated differs from line 4 (cz → tikz)
+cz_h1: 1/1 modelled · regenerated same
+cz_v1: 1/1 modelled · regenerated same
+cz_i1: 1/1 modelled · regenerated same
+cz_vv: 1/1 modelled · regenerated same
+cz_v2: 1/1 modelled · regenerated same
+cz_i2: 1/1 modelled · regenerated same
+cz_l2: 1/1 modelled · regenerated same
+cz_v3: 1/1 modelled · regenerated same
+cz_v4: 1/1 modelled · regenerated same
+cz_i4: 1/1 modelled · regenerated same
+cz_vup: 1/1 modelled · regenerated same
+cz_vst: 1/1 modelled · regenerated same
+cz_vam: 1/1 modelled · regenerated same
+cz_vra: 1/1 modelled · regenerated same
+cz_vset: 1/1 modelled · regenerated same
+cz_vsrc: 1/1 modelled · regenerated same
+cz_idir: 1/1 modelled · regenerated same
+cz_color: 1/1 modelled · regenerated same
 cz_path: 0/8 modelled · regenerated differs from line 4 (cz → tikz)
-czg_amp1: 0/10 modelled · regenerated differs from line 4 (cz → tikz)
-czg_logic1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
-czg_logic2: 0/2 modelled · regenerated differs from line 4 (cz → tikz)
-czg_mosd1: 0/8 modelled · regenerated differs from line 4 (cz → tikz)
-czg_src1: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
-czg_ind1: 0/10 modelled · regenerated differs from line 4 (cz → tikz)
-czg_dio1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
-czg_dio2: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
-czg_dio3: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
-czg_wire1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
-czg_wire2: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
-czg_sw1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
-czg_sw2: 0/4 modelled · regenerated differs from line 4 (cz → tikz)
-czg_tube1: 0/7 modelled · regenerated differs from line 4 (cz → tikz)
-czg_rf1: 0/12 modelled · regenerated differs from line 4 (cz → tikz)
-czg_rf2: 0/9 modelled · regenerated differs from line 4 (cz → tikz)
+czg_amp1: 1/1 modelled · regenerated same
+czg_logic1: 1/1 modelled · regenerated same
+czg_logic2: 1/1 modelled · regenerated same
+czg_mosd1: 1/1 modelled · regenerated same
+czg_src1: 1/1 modelled · regenerated same
+czg_ind1: 1/1 modelled · regenerated same
+czg_dio1: 1/1 modelled · regenerated same
+czg_dio2: 1/1 modelled · regenerated same
+czg_dio3: 1/1 modelled · regenerated same
+czg_wire1: 1/1 modelled · regenerated same
+czg_wire2: 1/1 modelled · regenerated same
+czg_sw1: 1/1 modelled · regenerated same
+czg_sw2: 1/1 modelled · regenerated same
+czg_tube1: 1/1 modelled · regenerated same
+czg_rf1: 1/1 modelled · regenerated same
+czg_rf2: 1/1 modelled · regenerated same
 qc_long: 1/1 modelled · regenerated same
 qc_multi: 1/1 modelled · regenerated same
 qc_group: 1/1 modelled · regenerated same
 qc_cw: 1/1 modelled · regenerated same
 qc_small: 1/1 modelled · regenerated differs from line 2 (qc → qc)
 qc_large: 1/1 modelled · regenerated differs from line 2 (qc → qc)
-cz_e: 0/11 modelled · regenerated differs from line 4 (cz → tikz)
+cz_e: 1/1 modelled · regenerated same
 plt_legend_sw: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
 plt_legend_se: 2/3 modelled · regenerated differs from line 4 (plot → tikz)
 plt_middle_line: 1/2 modelled · regenerated differs from line 3 (plot → tikz)

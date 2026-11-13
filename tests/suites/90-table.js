@@ -302,7 +302,8 @@ T.test('table latex: grid with colours, rules, wrapping, tabularx, longtable all
   T.ok(/\\endfirsthead/.test(rl.code) && /\\endhead/.test(rl.code) && /\\caption\{Long one\}/.test(rl.code), rl.code.slice(0, 600));
   T.tex('table-longtable', doc(l));
   const s = t.create(4, 3, 'striped'); s.cells[0][0].t = 'a'; s.stripe = '#EEF2F7';
-  T.ok(/\\rowcolor\[HTML\]\{EEF2F7\}/.test(t.toLatex(s).code));
+  T.ok(/\\definecolor\{stripeOdd\}\{HTML\}\{EEF2F7\}\s+\\rowcolors\{2\}\{stripeOdd\}\{\}/.test(t.toLatex(s).code), t.toLatex(s).code);
+  T.ok(/\\rowcolor\[HTML\]\{EEF2F7\}/.test(t.toLatex(s, { bare: true }).code), 'in a TikZ node, row by row');
   T.tex('table-striped', doc(s));
   const lines = t.create(3, 3, 'grid'); lines.booktabs = false; lines.cells[1][1].t = '$\\alpha \\pm \\beta$';
   t.merge(lines, { r0: 0, c0: 0, r1: 0, c1: 1 });
@@ -393,6 +394,156 @@ T.test('table render: layout, SVG and PNG export', async () => {
   T.ok(bmp.width > L.w * 150 / 2.54 / TD.PX_PER_CM * 0.8, 'PNG at the DPI asked');
   const tikz = TD.TYPES.table.tikz(shape, { pkgs: new Set(), c: (x, y) => `(${x},${y})` });
   T.ok(/\\node\[inner sep=0pt\]/.test(tikz) && /\\begin\{tabular\}/.test(tikz));
+});
+
+// ---------------------------------------------------------------- Overleaf's "Tables" article, read and written
+const OV = {
+  double: String.raw`\begin{tabular}{||c c c c||}
+ \hline
+ Col1 & Col2 & Col2 & Col3 \\ [0.5ex]
+ \hline\hline
+ 1 & 6 & 87837 & 787 \\
+ \hline
+\end{tabular}`,
+  middle: String.raw`\begin{tabular}{ | m{5em} | m{1cm}| b{1cm} | }
+  \hline
+  cell1 dummy text dummy text dummy text& cell2 & cell3 \\
+  \hline
+\end{tabular}`,
+  multirow: String.raw`\begin{tabular}{ |c|c|c| }
+\hline
+col1 & col2 & col3 \\
+\hline
+\multirow{3}{4em}{Multiple row} & cell2 & cell3 \\
+& cell5 & cell6 \\
+& cell8 & cell9 \\
+\hline
+\end{tabular}`,
+  longtable: String.raw`\begin{longtable}[c]{| c | c |}
+\caption{Long table caption.\label{long}}\\
+\hline
+\multicolumn{2}{| c |}{Begin of Table}\\
+\hline
+Something & Something else\\
+\hline
+\endfirsthead
+\hline
+\multicolumn{2}{| c |}{Continuation of Table \ref{long}}\\
+\hline
+Something & Something else\\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\multicolumn{2}{| c |}{End of Table}\\
+\hline\hline
+\endlastfoot
+Lots of lines & like this\\
+Lots of lines & like this\\
+\end{longtable}`,
+  float: String.raw`\begin{table}[h!]
+\centering
+\begin{tabular}{||c c||}
+ \hline
+ Col1 & Col2 \\
+ \hline
+\end{tabular}
+\caption{Table to test captions and labels.}
+\label{table:1}
+\end{table}`,
+  rules: String.raw`\setlength{\arrayrulewidth}{0.5mm}
+\setlength{\tabcolsep}{18pt}
+\renewcommand{\arraystretch}{1.5}
+\arrayrulecolor[HTML]{DB5800}
+\begin{tabular}{ |p{3cm}|p{3cm}| }
+\hline
+Afghanistan & AF \\
+\hline
+\end{tabular}`,
+  rowcolors: String.raw`\rowcolors{3}{green!80!yellow!50}{green!70!yellow!40}
+\begin{tabular}{ |p{3cm}|p{3cm}| }
+\hline
+\multicolumn{2}{|c|}{Country List} \\
+\hline
+Country Name & ISO 2 \\
+Afghanistan & AF \\
+Aland Islands & AX \\
+Albania & AL \\
+\hline
+\end{tabular}`,
+  coltype: String.raw`\newcolumntype{s}{>{\columncolor[HTML]{AAACED}} p{3cm}}
+\begin{tabular}{ |s|p{3cm}|p{3cm}|  }
+\hline
+\rowcolor{lightgray} \multicolumn{3}{|c|}{Country List} \\
+\hline
+Afghanistan & AF & AFG \\
+\hline
+\end{tabular}`,
+  star: String.raw`\begin{tabular}[t]{|*{3}{c|}}
+\hline
+a & b & c \\ \hhline{|~|=|=|}
+d & e & g \\[6pt]
+\hline
+\end{tabular}`,
+};
+T.test('table latex: the examples of Overleaf\'s Tables article read and write back', () => {
+  const t = TB(), rd = (k) => t.importText(OV[k]).table;
+  let m = rd('double');
+  T.eq(m.vr[0][0], 3, '|| is a double rule'); T.eq(m.hr[1].join(), '3,3,3,3', '\\hline\\hline is a double rule'); T.eq(m.skip[0], '0.5ex', '\\\\[0.5ex] is kept');
+  let code = t.toLatex(m).code;
+  T.ok(/\{\|\|cccc\|\|\}/.test(code) && /\\hline\\hline/.test(code) && /\\\\\[0\.5ex\]/.test(code), code);
+  m = rd('middle');
+  T.eq(m.cells[0].map((x) => x.va || 't').join(''), 'mmb', 'm{} and b{} columns sit in the middle and at the bottom');
+  T.ok(/\{\|m\{1\.75cm\}\|m\{1cm\}\|b\{1cm\}\|\}/.test(t.toLatex(m).code), t.toLatex(m).code);
+  m = rd('multirow');
+  T.eq(m.cells[1][0].mw, '4em'); T.ok(/\\multirow\{3\}\{4em\}\{Multiple row\}/.test(t.toLatex(m).code));
+  m = rd('longtable');
+  T.eq([m.caption, m.label, m.head, m.foot, t.nRows(m)].join('|'), 'Long table caption.|long|2|1|5', 'caption, label in it, header and footer');
+  T.eq(m.cells[4][0].t, 'End of Table', 'the last footer is the last row, not one in the middle');
+  code = t.toLatex(m).code;
+  T.ok(/\\endhead\s+\\hline\s+\\endfoot\s+\\hline\s+\\multicolumn\{2\}\{\|c\|\}\{End of Table\} \\\\\s+\\hline\\hline\s+\\endlastfoot\s+Lots/.test(code), code);
+  m = rd('float');
+  T.eq([m.floatPos, m.caption, m.label].join('|'), 'h!|Table to test captions and labels.|table:1');
+  T.ok(/\\begin\{table\}\[h!\]/.test(t.toLatex(m).code));
+  m = rd('rules');
+  T.eq([m.ruleW, m.ruleColor, m.pad, m.stretch].join('|'), '1.42|#db5800|18|1.5');
+  code = t.toLatex(m).code;
+  T.ok(/\\setlength\{\\arrayrulewidth\}\{1\.42pt\}/.test(code) && /\\arrayrulecolor\[HTML\]\{DB5800\}/.test(code), code);
+  m = rd('rowcolors');
+  T.eq([m.stripe2, m.stripe, m.stripeFrom].join('|'), '#99ff80|#b8ff99|2', 'two colours from the third row');
+  T.ok(m.cells.every((row) => row.every((x) => !x.bg)), 'not painted cell by cell');
+  const rc = t.toLatex(m);
+  T.ok(/\\rowcolors\{3\}\{stripeOdd\}\{stripeEven\}/.test(rc.code) && rc.packages.includes('\\usepackage[table]{xcolor}'), rc.code + rc.packages);
+  m = rd('coltype');
+  T.eq(t.nCols(m), 3, 'a \\newcolumntype column is a column');
+  T.eq([m.cells[1][0].bg, m.cells[1][1].bg, m.cells[0][0].bg].join('|'), '#aaaced||#bfbfbf', 'its \\columncolor, under the row colour');
+  T.eq(m.cols[0].w, 3);
+  m = rd('star');
+  T.eq(m.tpos, 't'); T.eq(m.hr[1].join(), '0,3,3', '\\hhline'); T.eq(m.skip[1], '6pt');
+  code = t.toLatex(m).code;
+  T.ok(/\\begin\{tabular\}\[t\]/.test(code) && /\\hhline\{\|~\|=\|=\|\}/.test(code), code);
+  // each one compiles, and reads back to the same code
+  for (const k of Object.keys(OV)) {
+    const a = rd(k), once = t.toLatex(a).code, twice = t.toLatex(t.importText(once).table).code;
+    T.eq(twice, once, k + ': LaTeX → table → LaTeX is stable');
+    T.tex('table-overleaf-' + k, doc(a));
+  }
+  // drawn: a double rule is two lines, \\[6pt] makes the row taller, the rules take their colour
+  const d = rd('double'), L1 = t.layout(d); d.skip[0] = ''; const L0 = t.layout(d);
+  T.ok(L1.rowY[1] - L0.rowY[1] > 2, 'the space after the row is drawn: ' + (L1.rowY[1] - L0.rowY[1]));
+  const svg = t.draw(rd('rules')).svg;
+  T.ok(/fill="#db5800"/.test(svg) && !/fill="#000000"\/>/.test(svg), 'the rules are drawn in their colour');
+});
+T.test('table: footer rows follow inserts and deletes', () => {
+  const t = TB(), m = t.create(6, 2, 'grid');
+  m.env = 'longtable'; m.head = 1; m.foot = 2;
+  t.insertRows(m, 2, 1); T.eq(m.foot, 2, 'a row in the body');
+  t.insertRows(m, 6, 1); T.eq(m.foot, 3, 'a row inside the footer');
+  t.deleteRows(m, 5, 6); T.eq(m.foot, 1, 'two footer rows deleted');
+  T.eq(m.skip.length, t.nRows(m), 'the row spacing follows');
+  const back = t.normalize(JSON.parse(JSON.stringify(m)));
+  T.eq([back.foot, back.skip.length].join(), [m.foot, t.nRows(m)].join());
 });
 
 // ---------------------------------------------------------------- the workspace

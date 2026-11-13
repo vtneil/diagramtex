@@ -8,7 +8,7 @@
 
 export type HAlign = 'l' | 'c' | 'r' | 'j';
 export type VAlign = 't' | 'm' | 'b';
-export type Rule = 0 | 1 | 2; // none, thin, thick
+export type Rule = 0 | 1 | 2 | 3; // none, thin, thick, double
 
 export interface TCell {
   t: string;
@@ -23,6 +23,8 @@ export interface TCell {
   /** #rrggbb */
   fg?: string;
   bg?: string;
+  /** \multirow's own width (a LaTeX length, 4em), when the text wraps at it */
+  mw?: string;
 }
 export interface TNum {
   /** significant figures (round-mode=figures) */
@@ -62,6 +64,12 @@ export interface TableModel {
   booktabs: boolean;
   /** fill of every other body row (#rrggbb), or '' */
   stripe: string;
+  /** the fill of the rows between the stripes (\rowcolors' other colour), or '' */
+  stripe2: string;
+  /** the first row the stripes start at; −1: the first body row */
+  stripeFrom: number;
+  /** footer rows (bottom); longtable writes them once, at the end (\endlastfoot) */
+  foot: number;
   env: 'tabular' | 'tabularx' | 'longtable';
   /** tabularx width, as a share of \linewidth */
   width: number;
@@ -71,6 +79,15 @@ export interface TableModel {
   label: string;
   capTop: boolean;
   place: 'center' | 'left' | 'right';
+  /** the float's placement: htbp, h!, H… */
+  floatPos: string;
+  /** the tabular's own [t] / [b] (its baseline when set inline), or '' */
+  tpos: '' | 't' | 'b';
+  /** \arrayrulewidth in pt (LaTeX's 0.4) and \arrayrulecolor (#rrggbb or '') */
+  ruleW: number;
+  ruleColor: string;
+  /** extra space after each row (\\[0.5ex]): a LaTeX length or '' */
+  skip: string[];
   /** \tabcolsep in pt (LaTeX's 6) and \arraystretch */
   pad: number;
   stretch: number;
@@ -88,8 +105,9 @@ export function create(rows = 3, cols = 3, preset: Preset = 'booktabs'): TableMo
   const m: TableModel = {
     v: 1, cells: Array.from({ length: rows }, () => Array.from({ length: cols }, emptyCell)),
     cols: Array.from({ length: cols }, newCol), head: rows > 1 ? 1 : 0, headBold: false,
-    hr: [], vr: [], preset, booktabs: true, stripe: '', env: 'tabular', width: 1, float: false, caption: '', label: '',
-    capTop: true, place: 'center', pad: 6, stretch: 1, size: 'normalsize', unitStyle: 'paren',
+    hr: [], vr: [], preset, booktabs: true, stripe: '', stripe2: '', stripeFrom: -1, foot: 0, env: 'tabular', width: 1, float: false, caption: '', label: '',
+    capTop: true, place: 'center', floatPos: 'htbp', tpos: '', ruleW: 0.4, ruleColor: '', skip: Array(rows).fill(''),
+    pad: 6, stretch: 1, size: 'normalsize', unitStyle: 'paren',
   };
   applyPreset(m, preset);
   return m;
@@ -125,6 +143,7 @@ export function normalize(input: unknown): TableModel {
     const fg = color(x.fg), bg = color(x.bg);
     if (fg) out.fg = fg;
     if (bg) out.bg = bg;
+    if (typeof x.mw === 'string' && lenPt(x.mw) != null) out.mw = x.mw.trim();
     return out;
   };
   const cells = Array.from({ length: nr }, (_, r) => Array.from({ length: nc }, (_, c) => cell((rawCells[r] || [])[c])));
@@ -145,21 +164,36 @@ export function normalize(input: unknown): TableModel {
   });
   const grid = (raw: unknown, h: number, w: number): Rule[][] => Array.from({ length: h }, (_, r) => Array.from({ length: w }, (_, c) => {
     const v = Array.isArray(raw) && Array.isArray(raw[r]) ? Number(raw[r][c]) : 0;
-    return (v === 1 || v === 2 ? v : 0) as Rule;
+    return (v === 1 || v === 2 || v === 3 ? v : 0) as Rule;
   }));
   const m: TableModel = {
     v: 1, cells, cols, head: int(o.head, 0, nr, 0), headBold: !!o.headBold,
     hr: grid(o.hr, nr + 1, nc), vr: grid(o.vr, nr, nc + 1),
     preset: oneOf(o.preset, ['booktabs', 'grid', 'minimal', 'striped', 'plain', 'custom'] as const, 'custom'),
-    booktabs: o.booktabs !== false, stripe: color(o.stripe) || '', env: oneOf(o.env, ['tabular', 'tabularx', 'longtable'] as const, 'tabular'),
+    booktabs: o.booktabs !== false, stripe: color(o.stripe) || '', stripe2: color(o.stripe2) || '', stripeFrom: int(o.stripeFrom, -1, nr, -1),
+    foot: int(o.foot, 0, nr, 0), env: oneOf(o.env, ['tabular', 'tabularx', 'longtable'] as const, 'tabular'),
     width: num(o.width, 0.1, 1, 1), float: !!o.float, caption: str(o.caption), label: str(o.label), capTop: o.capTop !== false,
-    place: oneOf(o.place, ['center', 'left', 'right'] as const, 'center'), pad: num(o.pad, 0, 30, 6), stretch: num(o.stretch, 0.5, 4, 1),
+    place: oneOf(o.place, ['center', 'left', 'right'] as const, 'center'),
+    floatPos: typeof o.floatPos === 'string' && /^[htbpH!]{1,5}$/.test(o.floatPos) ? o.floatPos : 'htbp', tpos: oneOf(o.tpos, ['', 't', 'b'] as const, ''),
+    ruleW: num(o.ruleW, 0.1, 5, 0.4), ruleColor: color(o.ruleColor) || '',
+    skip: Array.from({ length: nr }, (_, r) => (Array.isArray(o.skip) && typeof o.skip[r] === 'string' && lenPt(o.skip[r]) != null ? o.skip[r].trim() : '')),
+    pad: num(o.pad, 0, 30, 6), stretch: num(o.stretch, 0.5, 4, 1),
     size: SIZES.includes(o.size) ? o.size : 'normalsize', unitStyle: oneOf(o.unitStyle, ['paren', 'bracket', 'slash'] as const, 'paren'),
   };
+  m.foot = Math.min(m.foot, nr - m.head);
   fixSpans(m);
   if (!Array.isArray(o.hr) && m.preset !== 'custom') applyPreset(m, m.preset);
   return m;
 }
+
+/** A LaTeX length in pt (0.5ex, 6pt, 0.5mm, 4em at 10pt), or null when it isn't one. */
+export function lenPt(v: string): number | null {
+  const m = /^\s*(-?[\d.]+)\s*(pt|mm|cm|in|em|ex|bp|pc)\s*$/.exec(String(v));
+  if (!m || !Number.isFinite(+m[1])) return null;
+  return +m[1] * ({ pt: 1, mm: 2.845, cm: 28.45, in: 72.27, em: 10, ex: 4.31, bp: 1.00375, pc: 12 } as Record<string, number>)[m[2]];
+}
+/** The thick rule's width in pt: 0.8, or twice the thin one when that is wider. */
+export const thickPt = (m: TableModel) => Math.max(0.8, 2 * m.ruleW);
 
 /** Spans fit inside the grid and never overlap: a later merge that would cross an earlier one is cut back. */
 export function fixSpans(m: TableModel) {
@@ -224,8 +258,11 @@ export function insertRows(m: TableModel, at: number, n = 1) {
   const tmpl = m.cells[Math.min(Math.max(at - 1, 0), nRows(m) - 1)];
   const rows = Array.from({ length: n }, () => tmpl.map((x) => { const y: TCell = { t: '' }; for (const k of ['b', 'i', 'u', 'tt', 'sz', 'al', 'va', 'fg', 'bg'] as const) if (x[k] !== undefined) (y as any)[k] = x[k]; return y; }));
   m.cells.splice(at, 0, ...rows);
+  const nr0 = nRows(m) - n;
   if (at <= m.head && at > 0 && at < m.head + 1 && at !== m.head) m.head += n; // inside the header
   else if (at < m.head) m.head += n;
+  else if (m.foot && at > nr0 - m.foot) m.foot += n; // inside the footer, or after it (the footer is the bottom rows)
+  m.skip.splice(at, 0, ...Array(n).fill(''));
   const hrRow = (m.hr[at] || []).map(() => 0 as Rule);
   m.hr.splice(at + 1, 0, ...Array.from({ length: n }, () => hrRow.slice()));
   const vrRow = (m.vr[Math.min(Math.max(at - 1, 0), m.vr.length - 1)] || Array(nc + 1).fill(0)).slice() as Rule[];
@@ -249,6 +286,9 @@ export function deleteRows(m: TableModel, r0: number, r1: number) {
   m.cells.splice(r0, r1 - r0 + 1);
   m.hr.splice(r0 + 1, r1 - r0 + 1);
   m.vr.splice(r0, r1 - r0 + 1);
+  m.skip.splice(r0, r1 - r0 + 1);
+  const f0 = nr - m.foot; // the footer's first row
+  m.foot -= Math.max(0, r1 - Math.max(r0, f0) + 1);
   m.head = m.head > r1 ? m.head - (r1 - r0 + 1) : Math.min(m.head, r0);
   fixSpans(m);
   restyle(m);
@@ -296,8 +336,8 @@ export function moveRows(m: TableModel, r0: number, r1: number, d: -1 | 1) {
   // the block and the row it swaps with must each be whole: no merge reaches out of either
   const whole = (a: number, z: number) => { const g = expand(m, { r0: a, c0: 0, r1: z, c1: nCols(m) - 1 }); return g.r0 === a && g.r1 === z; };
   if (!whole(r0, r1) || !whole(to, to)) return false;
-  const rows = m.cells.splice(r0, r1 - r0 + 1), vr = m.vr.splice(r0, r1 - r0 + 1);
-  m.cells.splice(r0 + d, 0, ...rows); m.vr.splice(r0 + d, 0, ...vr);
+  const rows = m.cells.splice(r0, r1 - r0 + 1), vr = m.vr.splice(r0, r1 - r0 + 1), sk = m.skip.splice(r0, r1 - r0 + 1);
+  m.cells.splice(r0 + d, 0, ...rows); m.vr.splice(r0 + d, 0, ...vr); m.skip.splice(r0 + d, 0, ...sk);
   fixSpans(m);
   restyle(m);
   return true;
@@ -400,6 +440,7 @@ export function applyPreset(m: TableModel, p: Preset) {
   m.vr = Array.from({ length: nr }, () => Array(nc + 1).fill(0));
   m.preset = p;
   if (p === 'custom') return;
+  if (p !== 'striped') { m.stripe2 = ''; m.stripeFrom = -1; }
   const full = (r: number, w: Rule) => { for (let c = 0; c < nc; c++) m.hr[r][c] = w; };
   m.booktabs = p === 'booktabs';
   m.stripe = p === 'striped' ? (m.stripe || '#eef2f7') : '';
@@ -431,6 +472,8 @@ export function applyPreset(m: TableModel, p: Preset) {
 /** After a structural change, a preset table gets its pattern again (a custom one keeps its rules). */
 export function restyle(m: TableModel) {
   m.head = Math.min(m.head, nRows(m));
+  m.foot = Math.max(0, Math.min(m.foot, nRows(m) - m.head));
+  if (m.skip.length !== nRows(m)) m.skip = Array.from({ length: nRows(m) }, (_, r) => m.skip[r] || '');
   if (m.preset !== 'custom') { const keepStripe = m.stripe; applyPreset(m, m.preset); if (m.preset === 'striped' && keepStripe) m.stripe = keepStripe; }
   else {
     // rules inside a merged cell can't be drawn
@@ -444,7 +487,11 @@ export function restyle(m: TableModel) {
 }
 
 /** The fill a body row gets from the stripes (null when none). */
-export const stripeOf = (m: TableModel, r: number) => (m.stripe && r >= m.head && (r - m.head) % 2 === 1 ? m.stripe : null);
+export const stripeOf = (m: TableModel, r: number) => {
+  const from = m.stripeFrom < 0 ? m.head : m.stripeFrom;
+  if (r < from || (!m.stripe && !m.stripe2)) return null;
+  return ((r - from) % 2 === 1 ? m.stripe : m.stripe2) || null;
+};
 /** Whether a cell is drawn bold: its own flag, or the header's. */
 export const isBold = (m: TableModel, r: number, x: TCell) => !!x.b || (m.headBold && r < m.head);
 /** The alignment a cell is drawn with. */
@@ -480,6 +527,8 @@ export function slice(m: TableModel, g: Range): TableModel {
   t.hr = m.hr.slice(g.r0, g.r1 + 2).map((row) => row.slice(g.c0, g.c1 + 1)) as Rule[][];
   t.vr = m.vr.slice(g.r0, g.r1 + 1).map((row) => row.slice(g.c0, g.c1 + 2)) as Rule[][];
   t.head = Math.max(0, Math.min(m.head - g.r0, g.r1 - g.r0 + 1));
+  t.skip = m.skip.slice(g.r0, g.r1 + 1);
+  t.foot = Math.max(0, Math.min(m.foot - (nRows(m) - 1 - g.r1), g.r1 - g.r0 + 1 - t.head));
   fixSpans(t);
   return t;
 }

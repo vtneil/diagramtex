@@ -2,7 +2,7 @@
 // usual case once (\multicolumn only where a cell differs), booktabs or \hline / \cline rules, siunitx S
 // columns for aligned numbers, and \multirow placed so cell colours don't paint over it.
 import type { TableModel, TCell, HAlign, Rule, VAlign } from './model';
-import { nRows, nCols, owners, stripeOf, isBold, alignOf } from './model';
+import { nRows, nCols, owners, stripeOf, isBold, alignOf, thickPt } from './model';
 import { parseNum, format, siString, tableFormat, type Formatted } from './numbers';
 
 // ---------------------------------------------------------------- escaping
@@ -110,8 +110,9 @@ export interface LatexResult { code: string; packages: string[] }
 
 /** The \usepackage lines a table needs, in a working order. */
 function packageLines(need: Set<string>) {
-  const order = ['amsmath', 'xcolor', 'colortbl', 'array', 'booktabs', 'multirow', 'tabularx', 'longtable', 'siunitx'];
-  return order.filter((p) => need.has(p)).map((p) => `\\usepackage{${p}}`);
+  const order = ['amsmath', 'xcolor', 'colortbl', 'array', 'booktabs', 'multirow', 'hhline', 'tabularx', 'longtable', 'float', 'siunitx'];
+  // \rowcolors is xcolor's, with its table option (which loads colortbl too)
+  return order.filter((p) => need.has(p) && !(p === 'colortbl' && need.has('xcolor-table'))).map((p) => (p === 'xcolor' && need.has('xcolor-table') ? '\\usepackage[table]{xcolor}' : `\\usepackage{${p}}`));
 }
 
 interface NumCol { fmt: (Formatted | null)[]; spec: string }
@@ -146,11 +147,16 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
   const fillCol = (c: number) => env === 'tabularx' && !m.cols[c].num && (m.cols[c].fill || !m.cols.some((x) => x.fill));
   // ---- vertical rules: the column spec has the rule most rows have; the others say so in \multicolumn
   const vSpec: Rule[] = Array.from({ length: nc + 1 }, (_, k) => {
-    const cnt = [0, 0, 0];
+    const cnt = [0, 0, 0, 0];
     for (let r = 0; r < nr; r++) cnt[m.vr[r][k]]++;
-    return (cnt[1] >= cnt[0] && cnt[1] >= cnt[2] ? 1 : cnt[2] > cnt[0] ? 2 : 0) as Rule;
+    // the most common; a tie goes to thin, then none
+    let best: Rule = 1;
+    for (const w of [0, 2, 3] as Rule[]) if (cnt[w] > cnt[best]) best = w;
+    return best;
   });
-  const bar = (w: Rule) => (w === 1 ? '|' : w === 2 ? (need.add('array'), '!{\\vrule width 0.8pt}') : '');
+  const tk = `${+thickPt(m).toFixed(2)}pt`, rc = m.ruleColor ? `\\color[HTML]{${hex(m.ruleColor)}}` : '';
+  if (rc) { need.add('xcolor'); need.add('colortbl'); }
+  const bar = (w: Rule) => (w === 1 ? '|' : w === 3 ? '||' : w === 2 ? (need.add('array'), `!{${rc}\\vrule width ${tk}}`) : '');
   const vaOfCol = (c: number): VAlign => {
     const cnt: Record<string, number> = { t: 0, m: 0, b: 0 };
     for (let r = 0; r < nr; r++) cnt[m.cells[r][c].va || 't']++;
@@ -237,6 +243,18 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
     const row = m.hr[k];
     if (!row.some(Boolean)) return '';
     const full = row.every((w) => w === row[0]);
+    if (full && row[0] === 3) return '\\hline\\hline';
+    if (!full && row.includes(3)) {
+      // a double rule over some columns: hhline, which also meets the vertical rules
+      need.add('hhline');
+      const vr = m.vr[Math.min(k, nr - 1)];
+      let h = '';
+      for (let c = 0; c <= nc; c++) {
+        h += vr[c] === 3 ? '||' : vr[c] ? '|' : '';
+        if (c < nc) h += row[c] === 3 ? '=' : row[c] ? '-' : '~';
+      }
+      return `\\hhline{${h}}`;
+    }
     if (full) {
       const w = row[0];
       if (booktabs) {
@@ -244,7 +262,7 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
         if (k === nr) return w === 2 ? '\\bottomrule' : '\\bottomrule[\\lightrulewidth]';
         return w === 2 ? '\\midrule[\\heavyrulewidth]' : '\\midrule';
       }
-      return w === 2 ? '\\noalign{\\hrule height 0.8pt}' : '\\hline';
+      return w === 2 ? (rc ? `\\noalign{{${rc}\\hrule height ${tk}}}` : `\\noalign{\\hrule height ${tk}}`) : '\\hline';
     }
     // runs of columns with the same rule
     const out: string[] = [];
@@ -267,6 +285,8 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
   // a merge over several rows is written in its last row with a negative count when the table has fills:
   // a later row's colour would otherwise paint over its text
   const multirowAt = (ar: number, rs: number) => (anyColor ? ar + rs - 1 : ar);
+  // stripes: \rowcolors before the table, except in a TikZ node (where xcolor comes without its table option)
+  const rowcolors = !o.bare && !!(m.stripe || m.stripe2);
   const rowLines: string[] = [];
   for (let r = 0; r < nr; r++) {
     const cells: string[] = [];
@@ -287,7 +307,7 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
           const inner = content(ar, ac, x, false, false);
           const n = r === ar ? rs : -rs;
           const va = x.va === 't' ? '[t]' : x.va === 'b' ? '[b]' : '';
-          const width = cs === 1 && m.cols[c].w > 0 ? cmLen(m.cols[c].w) : '*';
+          const width = x.mw || (cs === 1 && m.cols[c].w > 0 ? cmLen(m.cols[c].w) : '*');
           txt = inner ? `\\multirow${va}{${n}}{${width}}{${inner}}` : '';
         }
       }
@@ -299,9 +319,9 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
       c += cs;
     }
     let line = cells.join(' & ');
-    if (stripe) { need.add('colortbl'); need.add('xcolor'); line = `\\rowcolor[HTML]{${hex(stripe)}}` + line; }
-    // trailing empty cells can go
-    rowLines.push(line.replace(/(\s*&\s*)+$/, ''));
+    if (stripe && !rowcolors) { need.add('colortbl'); need.add('xcolor'); line = `\\rowcolor[HTML]{${hex(stripe)}}` + line; }
+    // trailing empty cells can go, except in a striped row: its colour covers only the cells it has
+    rowLines.push(stripe ? line : line.replace(/(\s*&\s*)+$/, ''));
   }
 
   // ---- body
@@ -312,31 +332,59 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
   if (env === 'tabularx') need.add('tabularx');
   const capLine = m.caption.trim() || m.label.trim()
     ? `${m.caption.trim() ? `\\caption{${safeTex(m.caption.trim())}}` : ''}${m.label.trim() ? `\\label{${m.label.trim()}}` : ''}` : '';
-  // longtable carries its own caption, as its first row, and repeats the header on every page
-  if (lt && capLine && !o.bare && m.capTop) body.push(`${capLine} \\\\`);
-  if (top) body.push(top);
-  for (let r = 0; r < nr; r++) {
-    body.push(`${rowLines[r]} \\\\`);
-    const rl = ruleLine(r + 1);
-    if (rl) body.push(rl);
-    if (lt && r === m.head - 1 && m.head < nr) {
-      // the header repeats on every page
+  const row = (r: number, rule = true) => { body.push(`${rowLines[r]} \\\\${m.skip[r] ? `[${m.skip[r]}]` : ''}`); const rl = ruleLine(r + 1); if (rule && rl) body.push(rl); };
+  if (!lt) {
+    if (top) body.push(top);
+    for (let r = 0; r < nr; r++) row(r);
+  } else {
+    // longtable carries its own caption as its first row, repeats the header on every page and writes the footer
+    // once, at the end; the other pages end with the rule above it
+    const H = m.head < nr ? m.head : 0, F = Math.max(0, Math.min(m.foot, nr - H)), fr = nr - F;
+    const capRow = capLine && !o.bare ? `${capLine} \\\\` : '';
+    if (capRow && m.capTop) body.push(capRow);
+    if (top) body.push(top);
+    for (let r = 0; r < H; r++) row(r);
+    if (H || F) {
       body.push('\\endfirsthead');
       if (top) body.push(top);
-      for (let k = 0; k < m.head; k++) { body.push(`${rowLines[k]} \\\\`); const l2 = ruleLine(k + 1); if (l2) body.push(l2); }
+      for (let r = 0; r < H; r++) row(r);
       body.push('\\endhead');
     }
+    if (F) {
+      const above = ruleLine(fr);
+      if (above) body.push(above);
+      body.push('\\endfoot');
+      if (above) body.push(above);
+      for (let r = fr; r < nr; r++) row(r);
+      if (capRow && !m.capTop) body.push(capRow);
+      body.push('\\endlastfoot');
+    }
+    for (let r = H; r < fr; r++) row(r, r + 1 < fr || !F);
+    if (capRow && !m.capTop && !F) body.push(capRow);
   }
-  if (lt && capLine && !o.bare && !m.capTop) body.push(`${capLine} \\\\`);
 
   const align = m.place === 'left' ? 'l' : m.place === 'right' ? 'r' : 'c';
-  const open = env === 'tabularx' ? `\\begin{tabularx}{${m.width === 1 ? '' : +m.width.toFixed(2)}\\linewidth}{${spec}}`
-    : lt ? `\\begin{longtable}${align === 'c' ? '' : `[${align}]`}{${spec}}` : `\\begin{tabular}{${spec}}`;
-  const tab = [open, ...body.map((l) => '  ' + l), `\\end{${env}}`];
+  const pos = m.tpos ? `[${m.tpos}]` : '';
+  const open = env === 'tabularx' ? `\\begin{tabularx}{${m.width === 1 ? '' : +m.width.toFixed(2)}\\linewidth}${pos}{${spec}}`
+    : lt ? `\\begin{longtable}${align === 'c' ? '' : `[${align}]`}{${spec}}` : `\\begin{tabular}${pos}{${spec}}`;
+  // colortbl's \arrayrulecolor is global: the tables after this one get black rules again
+  const tab = [open, ...body.map((l) => '  ' + l), `\\end{${env}}`, ...(rc ? ['\\arrayrulecolor{black}'] : [])];
 
   const settings: string[] = [];
   if (Math.abs(m.pad - 6) > 1e-6) settings.push(`\\setlength{\\tabcolsep}{${+m.pad.toFixed(2)}pt}`);
   if (Math.abs(m.stretch - 1) > 1e-6) settings.push(`\\renewcommand{\\arraystretch}{${+m.stretch.toFixed(2)}}`);
+  if (Math.abs(m.ruleW - 0.4) > 1e-6) settings.push(`\\setlength{\\arrayrulewidth}{${+m.ruleW.toFixed(2)}pt}`);
+  if (rc) settings.push(`\\arrayrulecolor[HTML]{${hex(m.ruleColor)}}`);
+  if (rowcolors) {
+    // xcolor counts rows from 1, and its odd rows are the ones with an odd number
+    need.add('xcolor'); need.add('xcolor-table');
+    const from = (m.stripeFrom < 0 ? m.head : m.stripeFrom) + 1;
+    const first = m.stripe2, second = m.stripe; // the row the stripes start at, then the one after it
+    const odd = from % 2 ? first : second, even = from % 2 ? second : first;
+    const name = (c: string, n: string) => (c ? (settings.push(`\\definecolor{${n}}{HTML}{${hex(c)}}`), n) : '');
+    const a = name(odd, odd === even ? 'stripe' : 'stripeOdd'), b = odd === even ? a : name(even, 'stripeEven');
+    settings.push(`\\rowcolors{${from}}{${a}}{${b}}`);
+  }
   if (m.size !== 'normalsize') settings.unshift(`\\${m.size}`);
 
   let lines: string[];
@@ -344,7 +392,8 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
   else if (lt) lines = settings.length ? ['{' + settings.join(' '), ...tab, '}'] : tab;
   else if (m.float || capLine) { // a caption or label needs the table environment
     const pos = m.place === 'left' ? '\\raggedright' : m.place === 'right' ? '\\raggedleft' : '\\centering';
-    lines = ['\\begin{table}[htbp]', '  ' + pos, ...settings.map((s) => '  ' + s), ...(capLine && m.capTop ? ['  ' + capLine] : []),
+    if (/H/.test(m.floatPos)) need.add('float');
+    lines = [`\\begin{table}[${m.floatPos}]`, '  ' + pos, ...settings.map((s) => '  ' + s), ...(capLine && m.capTop ? ['  ' + capLine] : []),
       ...tab.map((l) => '  ' + l), ...(capLine && !m.capTop ? ['  ' + capLine] : []), '\\end{table}'];
   } else {
     const envName = m.place === 'left' ? 'flushleft' : m.place === 'right' ? 'flushright' : 'center';

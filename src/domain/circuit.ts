@@ -59,7 +59,9 @@ import { runtime as TD } from '../runtime';
       } else {
         const L = Math.hypot(it.b[0] - it.a[0], it.b[1] - it.a[1]), w = def ? Math.min(def.w || 0, L) : 0;
         const T = bipXf(it), [ax, ay] = m(...it.a), [bx, by] = m(...it.b);
-        if (!def || w <= 0) s += `<path d="M${r2(ax)},${r2(ay)}L${r2(bx)},${r2(by)}" stroke="${c}" stroke-width="${r2(wW)}" stroke-linecap="round" fill="none"${def ? '' : ' stroke-dasharray="3 3"'}/>`;
+        // an open circuit draws nothing; in the editor (o.wrap) a faint dashed line keeps it findable
+        if (it.part === 'open') { if (o.wrap) s += `<path d="M${r2(ax)},${r2(ay)}L${r2(bx)},${r2(by)}" stroke="${c}" stroke-opacity=".35" stroke-width="${r2(wW)}" stroke-dasharray="3 3" fill="none"/>`; }
+        else if (!def || w <= 0) s += `<path d="M${r2(ax)},${r2(ay)}L${r2(bx)},${r2(by)}" stroke="${c}" stroke-width="${r2(wW)}" stroke-linecap="round" fill="none"${def ? '' : ' stroke-dasharray="3 3"'}/>`;
         else {
           const [p1x, p1y] = m(...T(-w / 2, 0)), [p2x, p2y] = m(...T(w / 2, 0));
           s += `<path d="M${r2(ax)},${r2(ay)}L${r2(p1x)},${r2(p1y)}M${r2(p2x)},${r2(p2y)}L${r2(bx)},${r2(by)}" stroke="${c}" stroke-width="${r2(wW)}" stroke-linecap="round" fill="none"/>`;
@@ -275,13 +277,15 @@ import { runtime as TD } from '../runtime';
     }
     return refs;
   }
+  // the name a part is written with: circuitikz's short name it was read as (`R`, `V` …) while that still means it
+  const nameOf = (it: any, def: any, st: CzStyle) => (it.as && partByName(it.as, def.kind, styleWith(st, it.opts || '')) === it.part ? it.as : def.tikz);
   function code(items: any, raw: any) {
-    const lines = [], refs = pinRefs(items);
+    const lines = [], refs = pinRefs(items), st = styleOf(raw);
     const pt = (q: any) => { const r = refs.find(([p]) => same(p, q)); return r ? r[1] : `(${f(q[0])},${f(q[1])})`; };
     for (const it of items) {
       const def = CZ.parts[it.part];
       if (!def || !it.p) continue;
-      const o = [def.tikz];
+      const o = [nameOf(it, def, st)];
       if (it.rot) o.push(`rotate=${f(it.rot)}`);
       if (it.flip) o.push('xscale=-1');
       if (it.opts) o.push(it.opts);
@@ -299,7 +303,7 @@ import { runtime as TD } from '../runtime';
       if (it.poles && it.poles !== '-') o.push(it.poles);
       if (it.opts) o.push(it.opts);
       if (isWire(it) && !o.length) lines.push(`\\draw ${pt(it.a)} -- ${pt(it.b)};`);
-      else lines.push(`\\draw ${pt(it.a)} to[${[def.tikz, ...o].join(', ')}] ${pt(it.b)};`);
+      else lines.push(`\\draw ${pt(it.a)} to[${[nameOf(it, def, st), ...o].join(', ')}] ${pt(it.b)};`);
     }
     // \ctikzset / \tikzset lines go first: they set the style of everything drawn after them
     if (raw && raw.trim()) {
@@ -336,7 +340,7 @@ import { runtime as TD } from '../runtime';
   }
   const norm = (t: any) => t.trim().replace(/\s+/g, ' ').toLowerCase();
   let tikzIndex: any = null;
-  function partFor(list: any, kind: any) {
+  function partFor(list: any, kind: any, st0?: CzStyle) {
     if (!tikzIndex) {
       tikzIndex = CZ.order.map((k: any) => ({ k, kind: CZ.parts[k].kind, t: splitTop(CZ.parts[k].tikz, ',').map(norm) }));
       tikzIndex.sort((a: any, b: any) => b.t.length - a.t.length);
@@ -344,13 +348,135 @@ import { runtime as TD } from '../runtime';
     // the part's name usually comes first, but `to[american voltages, R]` is fine too
     const L = list.map(norm);
     for (let j = 0; j < L.length; j++)
-      for (const e of tikzIndex) if (e.kind === kind && e.t.every((t: any, i: any) => L[j + i] === t)) return { key: e.k, rest: [...list.slice(0, j), ...list.slice(j + e.t.length)] };
+      for (const e of tikzIndex) if (e.kind === kind && e.t.every((t: any, i: any) => L[j + i] === t)) return { key: e.k, rest: [...list.slice(0, j), ...list.slice(j + e.t.length)], as: '' };
+    // circuitikz's other names for it (R, V, D …), as the style reads them; the name is kept as written
+    const st = styleWith(st0 || STYLE0, list.join(','));
+    for (let j = 0; j < list.length; j++) {
+      const key = partByName(list[j], kind, st);
+      if (key) return { key, rest: [...list.slice(0, j), ...list.slice(j + 1)], as: list[j].trim() };
+    }
+    // `R=$R_1$`: the part with its label (a voltage source's voltage, a current source's current)
+    for (let j = 0; j < list.length; j++) {
+      const m = /^([^=]+?)\s*=\s*([\s\S]*)$/.exec(list[j].trim());
+      if (!m) continue;
+      const exact = tikzIndex.find((e: any) => e.kind === kind && e.t.length === 1 && e.t[0] === norm(m[1])), key = exact ? exact.k : partByName(m[1], kind, st);
+      if (key) return { key, rest: [...list.slice(0, j), ...list.slice(j + 1)], as: exact ? '' : m[1].trim(), lab: unbrace(m[2]) };
+    }
     return null;
   }
   const unbrace = (v: any) => v.trim().replace(/^\{([\s\S]*)\}$/, '$1');
+
+  // ---------------------------------------------------------------- circuitikz's own names for parts
+  // The short names circuitikz defines (R, L, C, V, I, D, sV, leD* …, from pgfcircbipoles.tex): name=what it stands for.
+  const ALIAS = new Map<string, string>((
+    'xing=crossing|R=resistor|vR=variable resistor|sR=resistive sensor|ldR=light dependent resistor|pR=potentiometer|thR=thermistor|' +
+    'thRp=thermistor ptc|thRn=thermistor ntc|phR=photoresistor|Mr=memristor|C=capacitor|eC=ecapacitor|elko=ecapacitor|pC=polar capacitor|' +
+    'cC=curved capacitor|vC=variable capacitor|PZ=piezoelectric|sC=capacitive sensor|feC=ferrocap|L=inductor|vL=variable inductor|sL=inductive sensor|' +
+    'vsource=voltage source|V=voltage source|cvsource=controlled voltage source|controlled vsource=controlled voltage source|' +
+    'cV=controlled voltage source|vsourceAM=american voltage source|cvsourceAM=american controlled voltage source|vsourceEU=european voltage source|' +
+    'cvsourceEU=european controlled voltage source|ecsource=empty controlled source|vsourcesin=sinusoidal voltage source|sV=sinusoidal voltage source|' +
+    'cvsourcesin=controlled sinusoidal voltage source|controlled vsourcesin=controlled sinusoidal voltage source|' +
+    'csV=controlled sinusoidal voltage source|vsourcesquare=square voltage source|sqV=square voltage source|vsourcetri=triangle voltage source|' +
+    'tV=triangle voltage source|vsourceC=cute european voltage source|ceV=cute european voltage source|' +
+    'cvsourceC=cute european controlled voltage source|cceV=cute european controlled voltage source|vsourceN=noise voltage source|' +
+    'nV=noise voltage source|isource=current source|I=current source|cisource=controlled current source|controlled isource=controlled current source|' +
+    'cI=controlled current source|isourceAM=american current source|cisourceAM=american controlled current source|isourceEU=european current source|' +
+    'cisourceEU=european controlled current source|isourcesin=sinusoidal current source|sI=sinusoidal current source|' +
+    'cisourcesin=controlled sinusoidal current source|controlled isourcesin=controlled sinusoidal current source|' +
+    'csI=controlled sinusoidal current source|isourceC=cute european current source|ceI=cute european current source|' +
+    'cisourceC=cute european controlled current source|cceI=cute european controlled current source|isourceN=noise current source|' +
+    'nI=noise current source|D*=full diode|Do=empty diode|D-=stroke diode|zD*=full Zener diode|zDo=empty Zener diode|zD-=stroke Zener diode|' +
+    'zzD*=full ZZener diode|zzDo=empty ZZener diode|zzD-=stroke ZZener diode|sD*=full Schottky diode|sDo=empty Schottky diode|' +
+    'sD-=stroke Schottky diode|tD*=full tunnel diode|tDo=empty tunnel diode|tD-=stroke tunnel diode|leD*=full led|leDo=empty led|leD-=stroke led|' +
+    'lasD*=full laser diode|lasDo=empty laser diode|lasD-=stroke laser diode|pD*=full photodiode|pDo=empty photodiode|pD-=stroke photodiode|' +
+    'VC*=full varcap|VCo=empty varcap|VC-=stroke varcap|tvsD*=full TVS diode|tvsDo=empty TVS diode|tvsD-=stroke TVS diode|shD*=full Shockley diode|' +
+    'shDo=empty Shockley diode|shD-=stroke Shockley diode|biD*=full bidirectionaldiode|biDo=empty bidirectionaldiode|biD-=stroke bidirectionaldiode|' +
+    'Ty*=full thyristor|Tyo=empty thyristor|Ty-=stroke thyristor|PUT*=full put|PUTo=empty put|PUT-=stroke put|GTO*=full gto|GTOo=empty gto|' +
+    'GTO-=stroke gto|GTOb*=full gtobar|GTObo=empty gtobar|GTOb-=stroke gtobar|aGTOb*=full agtobar|aGTObo=empty agtobar|aGTOb-=stroke agtobar|' +
+    'IGCT*=full igct|IGCTo=empty igct|IGCT-=stroke igct|Tr*=full triac|Tro=empty triac|Tr-=stroke triac|D=diode|zD=Zener diode|zzD=ZZener diode|' +
+    'sD=Schottky diode|tD=tunnel diode|leD=led|pD=photodiode|lasD=laser diode|VC=varcap|tvsD=TVS diode|shD=Shockley diode|biD=bidirectionaldiode|' +
+    'Ty=thyristor|PUT=put|GTO=gto|GTOb=gtobar|aGTOb=agtobar|IGCT=igct|Tr=triac|switch=closing switch|cspst=closing switch|spst=switch|' +
+    'ospst=opening switch|normal open switch=nos|normal closed switch=ncs|opening normal closed switch=oncs|closing normal closed switch=cncs|' +
+    'opening normal open switch=onos|closing normal open switch=cnos|nopb=push button|normally open push button=push button|' +
+    'normally closed push button=ncpb|normally open push button closed=nopbc|normally closed push button open=ncpbo|ccsw=cute closed switch|' +
+    'cosw=cute open switch|ccgsw=cute closing switch|cogsw=cute opening switch|afuse=asymmetric fuse|vdd=vcc|vss=vee|transmission line=tline|TL=tline|' +
+    'iec connector=iecconn'
+  ).split('|').map((x) => x.split('=') as [string, string]));
+  // names that follow the circuit's style: `R` is a zigzag unless resistors are European, and so on
+  type CzStyle = { resistor: string; inductor: string; voltage: string; current: string; diode: string };
+  const STYLE0: CzStyle = { resistor: 'american', inductor: 'cute', voltage: 'european', current: 'european', diode: 'empty' }; // circuitikz's defaults
+  const DIODES = new Set(['diode', 'Zener diode', 'ZZener diode', 'Schottky diode', 'tunnel diode', 'led', 'photodiode', 'laser diode', 'varcap', 'TVS diode',
+    'Shockley diode', 'bidirectionaldiode', 'thyristor', 'put', 'gto', 'gtobar', 'agtobar', 'igct', 'triac']);
+  function styled(n: string, st: CzStyle) {
+    const R = st.resistor === 'european' ? 'european' : 'american', V = st.voltage === 'american' || st.voltage === 'raised' ? 'american' : 'european';
+    const I = st.current === 'american' ? 'american' : 'european';
+    const resist: Record<string, string> = { resistor: `${R} resistor`, 'variable resistor': `variable ${R} resistor`, 'resistive sensor': `${R} resistive sensor`,
+      'light dependent resistor': `${R} light dependent resistor`, potentiometer: `${R} potentiometer` };
+    if (resist[n]) return resist[n];
+    if (n === 'inductor' || n === 'inductive sensor') return `${st.inductor} ${n}`;
+    if (n === 'variable inductor') return `variable ${st.inductor} inductor`;
+    if (n === 'voltage source' || n === 'controlled voltage source') return `${V} ${n}`;
+    if (n === 'controlled current source') return `${V} ${n}`; // circuitikz picks this one by the voltage style too
+    if (n === 'current source') return `${I} ${n}`;
+    if (DIODES.has(n)) return `${st.diode} ${n}`;
+    return null;
+  }
+  // what a name finally stands for in style st
+  function resolveName(n: string, st: CzStyle) {
+    for (let k = 0; k < 8; k++) { const r = styled(n, st) ?? ALIAS.get(n); if (r == null) break; n = r; }
+    return n;
+  }
+  // style settings in a list of options (`american`, `european voltages`, `full diodes`, `resistor=european` …)
+  function styleWith(st: CzStyle, opts: string) {
+    st = { ...st };
+    for (const x of splitTop(opts || '', ',')) {
+      const t = norm(x);
+      let m;
+      if (t === 'american' || t === 'european') { st.voltage = st.current = st.resistor = st.inductor = t; continue; }
+      if ((m = /^(american|european|straight|raised|curved) voltages$/.exec(t))) st.voltage = m[1];
+      else if ((m = /^(american|european) currents$/.exec(t))) st.current = m[1];
+      else if ((m = /^(american|european) resistors$/.exec(t))) st.resistor = m[1];
+      else if ((m = /^(american|european|cute) inductors$/.exec(t))) st.inductor = m[1];
+      else if ((m = /^(full|empty|stroke) diodes?$/.exec(t))) st.diode = m[1];
+      else if ((m = /^(voltage|current|resistor|inductor)\s*=\s*(\w+)$/.exec(t))) (st as any)[m[1]] = m[2];
+    }
+    return st;
+  }
+  // the style \ctikzset{…} and \tikzset{…} lines set
+  function styleOf(raw: any) {
+    let st = STYLE0;
+    for (const m of String(raw || '').matchAll(/\\(?:ctikzset|tikzset)\s*\{/g)) {
+      const t = String(raw), j = closeAt(t, m.index! + m[0].length - 1);
+      if (j > 0) st = styleWith(st, t.slice(m.index! + m[0].length, j));
+    }
+    return st;
+  }
+  // a part by any of its names: Map (kind, what the name stands for) → part key
+  let canon: Map<string, string> | null = null;
+  function partByName(n: string, kind: string, st: CzStyle) {
+    if (!canon) {
+      canon = new Map();
+      for (const k of CZ.order) {
+        const t = CZ.parts[k].tikz, kd = CZ.parts[k].kind;
+        if (/,/.test(t)) continue;
+        for (const v of [t, resolveName(t, STYLE0)]) if (!canon.has(kd + ':' + norm(v))) canon.set(kd + ':' + norm(v), k);
+      }
+    }
+    return canon.get(kind + ':' + norm(resolveName(n.trim(), st))) || null;
+  }
   function parse(src: any) {
     const items: any[] = [], raw = [];
-    const text = String(src || '').replace(/(^|[^\\])%.*$/gm, '$1');
+    let text = String(src || '').replace(/(^|[^\\])%.*$/gm, '$1');
+    // a whole \begin{circuitikz}[…] … \end{circuitikz} (or tikzpicture): its options become a \tikzset line
+    const env = [];
+    text = text.replace(/\\end\{(circuitikz|tikzpicture)\}/g, ';');
+    for (let bm; (bm = /\\begin\{(circuitikz|tikzpicture)\}\s*/.exec(text));) {
+      let e = bm.index + bm[0].length;
+      if (text[e] === '[') { const j = closeAt(text, e); if (j > 0) { if (text.slice(e + 1, j).trim()) env.push(`\\tikzset{${text.slice(e + 1, j).trim()}}`); e = j + 1; } }
+      text = text.slice(0, bm.index) + ';' + text.slice(e);
+    }
+    raw.push(...env);
+    let st = styleOf(env.join('\n'));
     const coords = new Map(); // \coordinate (name) at (x,y);
     const named = () => {
       const m = new Map(coords);
@@ -372,14 +498,14 @@ import { runtime as TD } from '../runtime';
       while ((m = /^\\(ctikzset|tikzset|usetikzlibrary)\s*\{/.exec(stmt.trim()))) {
         const t = stmt.trim(), j = closeAt(t, m[0].length - 1);
         if (j < 0) break;
-        raw.push(t.slice(0, j + 1)); stmt = t.slice(j + 1);
+        raw.push(t.slice(0, j + 1)); st = styleOf(t.slice(0, j + 1)) === STYLE0 ? st : styleWith(st, t.slice(m[0].length, j)); stmt = t.slice(j + 1);
       }
       if (!stmt.trim()) continue;
       orig = stmt.trim();
       // a named coordinate: kept as written, and its name is known to the statements after it
       const cm = /^\\coordinate\s*\(\s*([^()]+?)\s*\)\s*at\s*(\([^()]*\))$/.exec(orig);
       if (cm) { const q = coord(cm[2], named()); if (q) coords.set(cm[1], q); raw.push(orig + ';'); continue; }
-      const got = readStmt(orig, coord, named);
+      const got = readStmt(orig, coord, named, st);
       if (got) items.push(...got); else raw.push(orig + ';');
     }
     return { items, raw: raw.join('\n') };
@@ -400,11 +526,12 @@ import { runtime as TD } from '../runtime';
     }
     return out;
   }
-  function nodeFrom(optStr: any, name: any, p: any, txt: any) {
+  function nodeFrom(optStr: any, name: any, p: any, txt: any, st?: CzStyle) {
     const list = splitTop(optStr, ',').map((t) => t.trim()).filter(Boolean);
-    const hit = partFor(list, 'node');
+    const hit = partFor(list, 'node', st);
     if (!hit) return null;
-    const it = { id: uid(), part: hit.key, p, rot: 0, flip: false, name: name || '', text: txt || '', opts: '' };
+    const it: Record<string, any> = { id: uid(), part: hit.key, p, rot: 0, flip: false, name: name || '', text: txt || '', opts: '' };
+    if (hit.as) it.as = hit.as;
     const rest = [];
     for (const t of hit.rest) {
       const r = /^rotate\s*=\s*(-?[\d.]+)$/.exec(t);
@@ -415,8 +542,8 @@ import { runtime as TD } from '../runtime';
     it.opts = rest.join(', ');
     return it;
   }
-  function readStmt(st: any, coord: any, named: any) {
-    const T = tokens(st);
+  function readStmt(stmt: any, coord: any, named: any, st?: CzStyle) {
+    const T = tokens(stmt);
     if (!T || !T.length) return null;
     if (T[0] === '\\node') {
       // \node[opts] (name) at (x,y) {text}
@@ -426,7 +553,7 @@ import { runtime as TD } from '../runtime';
       if (T[k] === 'at') { p = coord(T[k + 1] || '', named()); k += 2; }
       if (T[k] && T[k][0] === '{') txt = T[k++].slice(1, -1);
       if (k !== T.length || !p || txt == null) return null;
-      const it = nodeFrom(opt, name, p, txt);
+      const it = nodeFrom(opt, name, p, txt, st);
       return it ? [it] : null;
     }
     if (T[0] !== '\\draw' && T[0] !== '\\path') return null;
@@ -448,6 +575,8 @@ import { runtime as TD } from '../runtime';
     if (!cur) return null;
     while (k < T.length) {
       const t = T[k];
+      // a coordinate on its own moves the pen: `(0,0) to[R] (2,0) (0,1) to[C] (2,1)`
+      if (t[0] === '(' || t === '++' || t === '+') { const q = at(); if (!q) return null; cur = q; continue; }
       if (t === 'node') {
         // \draw (x,y) node[opts] (name) {text}
         let opt = '', name = '', txt = null;
@@ -456,7 +585,7 @@ import { runtime as TD } from '../runtime';
         if (T[k] && T[k][0] === '(') name = T[k++].slice(1, -1).trim();
         if (T[k] && T[k][0] === '{') txt = T[k++].slice(1, -1);
         if (txt == null) return null;
-        const it = nodeFrom(opt, name, cur.slice(), txt);
+        const it = nodeFrom(opt, name, cur.slice(), txt, st);
         if (!it) return null;
         out.push(it);
         continue;
@@ -475,9 +604,11 @@ import { runtime as TD } from '../runtime';
         const list = splitTop(T[k + 1].slice(1, -1), ',').map((x) => x.trim()).filter(Boolean);
         k += 2;
         const q = at();
-        const hit = partFor(list, 'bipole');
+        const hit = partFor(list, 'bipole', st);
         if (!q || !hit) return null;
         const it: Record<string, any> = { id: uid(), part: hit.key, a: cur, b: q, l: '', ann: '', v: '', i: '', poles: '', name: '', opts: '' };
+        if (hit.as) it.as = hit.as;
+        if (hit.lab) it[({ v: 'v', i: 'i' } as Record<string, string>)[srcKind(hit.key)] || 'l'] = hit.lab;
         const rest = [];
         for (const x of hit.rest) {
           const m = /^(l|a|v|i|n)\s*=\s*([\s\S]*)$/.exec(x);

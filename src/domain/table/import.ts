@@ -1,7 +1,7 @@
 // Import adapters: text and files in, a TableModel out. Everything runs here in the browser; HTML is read
 // with DOMParser (no scripts run, nothing loads), XLSX is unzipped with the browser's own inflate.
 import type { TableModel, TCell, HAlign, Rule, VAlign } from './model';
-import { create, normalize, nRows, nCols, applyPreset, fixSpans, owners, PRESETS, clone } from './model';
+import { create, normalize, nRows, nCols, applyPreset, fixSpans, owners, PRESETS, clone, lenPt } from './model';
 import { plainWithMath } from './latex';
 import { looksNumeric, parseNum } from './numbers';
 import { runtime as TD } from '../../runtime';
@@ -350,11 +350,39 @@ function splitTop(s: string, sep: '&' | '\\\\'): string[] {
   return out;
 }
 const stripComments = (s: string) => s.replace(/(^|[^\\])%.*$/gm, '$1');
-interface ColSpec { al: HAlign; w: number; fill?: boolean; num?: boolean; numOpts?: string; left: Rule; right: Rule }
+interface ColSpec { al: HAlign; w: number; fill?: boolean; num?: boolean; numOpts?: string; left: Rule; right: Rule; va?: 'm' | 'b'; bg?: string }
+/** Column types the source defines with \newcolumntype{s}[n]{…}: name → [argument count, definition] */
+type ColTypes = Record<string, [number, string]>;
+let colTypes: ColTypes = {};
+function readColTypes(s: string): ColTypes {
+  const out: ColTypes = {};
+  const re = /\\newcolumntype\s*\{?\s*([A-Za-z])\s*\}?/g;
+  for (let m; (m = re.exec(s));) {
+    let i = m.index + m[0].length;
+    const n = arg(s, i, '['); if (n) i = n[1];
+    const d = arg(s, i);
+    if (d) { out[m[1]] = [Math.max(0, Math.min(9, +(n ? n[0] : 0) || 0)), d[0]]; re.lastIndex = d[1]; }
+  }
+  return out;
+}
 /** Column spec → columns with their rules. Handles l c r p{} m{} b{} X S[...] | !{\vrule…} @{} >{} <{} *{n}{…}. */
-export function parseSpec(spec: string): ColSpec[] {
+export function parseSpec(spec: string, types: ColTypes = colTypes): ColSpec[] {
   // expand *{n}{x}
   let s = spec;
+  // and the source's own column types (\newcolumntype), several levels deep
+  for (let guard = 0; guard < 50; guard++) {
+    let hit = false;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '{' || c === '[') { const e = closeAt(s, i, c, c === '{' ? '}' : ']'); if (e > 0) { i = e; continue; } }
+      const t = types[c];
+      if (!t) continue;
+      let body = t[1], end = i + 1;
+      for (let k = 1; k <= t[0]; k++) { const a = arg(s, end); if (!a) break; body = body.split('#' + k).join(a[0]); end = a[1]; }
+      s = s.slice(0, i) + ' ' + body + ' ' + s.slice(end); hit = true; break;
+    }
+    if (!hit) break;
+  }
   for (let guard = 0; guard < 20 && s.includes('*{'); guard++) {
     const i = s.indexOf('*{'), a = arg(s, i + 1), b = a && arg(s, a[1]);
     if (!a || !b) break;
@@ -373,7 +401,7 @@ export function parseSpec(spec: string): ColSpec[] {
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (/\s/.test(c)) continue;
-    if (c === '|') { pendingRule = pendingRule ? 2 : 1; if (cols.length) cols[cols.length - 1].right = pendingRule; continue; }
+    if (c === '|') { pendingRule = pendingRule ? 3 : 1; if (cols.length) cols[cols.length - 1].right = pendingRule; continue; }
     if (c === '!' || c === '@' || c === '<' || c === '>') {
       const a = arg(s, i + 1);
       if (!a) continue;
@@ -384,12 +412,15 @@ export function parseSpec(spec: string): ColSpec[] {
     let col: ColSpec | null = null;
     const alPre: HAlign | null = /\\centering/.test(pre) ? 'c' : /\\raggedleft/.test(pre) ? 'r' : /\\raggedright/.test(pre) ? 'l' : null;
     if (c === 'l' || c === 'c' || c === 'r') col = { al: c, w: 0, left: 0, right: 0 };
-    else if (c === 'p' || c === 'm' || c === 'b') { const a = arg(s, i + 1); col = { al: alPre || 'j', w: a ? width(a[0]) : 3, left: 0, right: 0 }; if (a) i = a[1] - 1; }
+    else if (c === 'p' || c === 'm' || c === 'b') { const a = arg(s, i + 1); col = { al: alPre || 'j', w: a ? width(a[0]) : 3, left: 0, right: 0 }; if (c !== 'p') col.va = c; if (a) i = a[1] - 1; }
     else if (c === 'X') col = { al: alPre || 'j', w: 0, fill: true, left: 0, right: 0 };
     else if (c === 'S') { const a = arg(s, i + 1, '['); col = { al: 'r', w: 0, num: true, numOpts: a ? a[0] : '', left: 0, right: 0 }; if (a) i = a[1] - 1; }
     else if (c === 'L' || c === 'C' || c === 'R') col = { al: c.toLowerCase() as HAlign, w: 0, left: 0, right: 0 };
     if (!col) continue;
     if (alPre && !col.w && !col.fill) col.al = alPre;
+    // >{\columncolor[HTML]{AAACED}}: the column's fill
+    const cc = /\\columncolor\s*(?:\[([^\]]*)\])?\s*\{([^{}]*)\}/.exec(pre);
+    if (cc) { const v = colorOf(cc[1], cc[2]); if (v) col.bg = v; }
     col.left = cols.length ? cols[cols.length - 1].right : pendingRule;
     pendingRule = 0; pre = '';
     cols.push(col);
@@ -408,7 +439,10 @@ function lead(s: string, name: string, nOpt: number, nArg: number): { opts: stri
   for (let k = 0; k < nArg; k++) { const a = arg(t, i); if (!a) return null; args.push(a[0]); i = a[1]; }
   return { opts, args, rest: t.slice(i) };
 }
+/** Colours the source names with \definecolor{name}{HTML}{…} */
+let defColors: Record<string, string> = {};
 const colorOf = (model: string | undefined, v: string): string | undefined => {
+  if (!model && defColors[v.trim()]) return defColors[v.trim()];
   if (model === 'HTML') return /^[0-9a-f]{6}$/i.test(v.trim()) ? '#' + v.trim().toLowerCase() : undefined;
   if (model === 'rgb') { const p = v.split(',').map(Number); return p.length === 3 ? '#' + p.map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('') : undefined; }
   if (model === 'RGB') { const p = v.split(',').map(Number); return p.length === 3 ? '#' + p.map((x) => Math.round(x).toString(16).padStart(2, '0')).join('') : undefined; }
@@ -428,9 +462,9 @@ function readCell(raw: string, defaults: ColSpec | undefined) {
       let L = lead(t, 'cellcolor', 1, 1);
       if (L) { const c = colorOf(L.opts[0], L.args[0]); if (c) x.bg = c; t = L.rest.trim(); any = true; continue; }
       L = lead(t, 'multicolumn', 0, 3);
-      if (L) { cs = Math.max(1, +L.args[0] || 1); spec = parseSpec(L.args[1])[0] || null; t = L.args[2].trim(); any = true; continue; }
+      if (L) { cs = Math.max(1, +L.args[0] || 1); spec = parseSpec(L.args[1])[0] || null; if (spec && (spec as ColSpec).va) x.va = (spec as ColSpec).va; if (spec && (spec as ColSpec).bg && !x.bg) x.bg = (spec as ColSpec).bg; t = L.args[2].trim(); any = true; continue; }
       L = lead(t, 'multirow', 1, 3) || lead(t, 'multirowcell', 1, 1);
-      if (L && L.args.length === 3) { rs = +L.args[0] || 1; t = L.args[2].trim(); if (L.opts[0] && /t/.test(L.opts[0])) x.va = 't'; else if (L.opts[0] && /b/.test(L.opts[0])) x.va = 'b'; any = true; continue; }
+      if (L && L.args.length === 3) { rs = +L.args[0] || 1; t = L.args[2].trim(); { const w = L.args[1].trim(); if (w !== '*' && w !== '=' && lenPt(w) != null) x.mw = w; } if (L.opts[0] && /t/.test(L.opts[0])) x.va = 't'; else if (L.opts[0] && /b/.test(L.opts[0])) x.va = 'b'; any = true; continue; }
       // nicematrix \Block{rows-cols}{text} and tabularray \SetCell[c=2,r=3]{align} text
       L = lead(t, 'Block', 1, 2);
       if (L) { const d = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(L.args[0]); if (d) { rs = +d[1] || 1; cs = +d[2] || 1; } t = (L.args[1] + L.rest).trim(); any = true; continue; }
@@ -472,14 +506,17 @@ function readCell(raw: string, defaults: ColSpec | undefined) {
 export function fromLatex(src: string): { table: TableModel; warnings: string[] } {
   const warnings: string[] = [];
   const s = stripComments(src);
+  colTypes = readColTypes(s);
+  defColors = {};
+  for (const d of s.matchAll(/\\definecolor\s*\{([^{}]*)\}\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g)) { const c = colorOf(d[2].trim(), d[3]); if (c) defColors[d[1].trim()] = c; }
   const em = TAB_BEGIN.exec(s);
-  let envName: string, specStr = '', bodyStr: string, widthShare = 1;
+  let envName: string, specStr = '', bodyStr: string, widthShare = 1, envOpt = '';
   if (em) {
     envName = em[1];
     let i = em.index + em[0].length;
     // tabular*, tabularx, tabulary and xltabular have a width first; longtable an optional [c]
     if (/^(tabularx|tabular\*|tabulary|xltabular)$/.test(envName)) { const w = arg(s, i); if (w) { const f = /^\s*([\d.]*)\s*\\(linewidth|textwidth|columnwidth)/.exec(w[0]); if (f && f[1]) widthShare = +f[1]; i = w[1]; } }
-    const o = arg(s, i, '['); if (o) i = o[1];
+    const o = arg(s, i, '['); if (o) { i = o[1]; envOpt = o[0].trim(); }
     const a = arg(s, i);
     if (!a) throw new Error('The column spec is missing');
     specStr = a[0];
@@ -496,11 +533,30 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
     bodyStr = s.slice(a[1], stop < 0 ? s.length : stop);
     if (stop < 0) warnings.push(`No \\end{${envName}}: read to the end`);
   } else { envName = 'tabular'; bodyStr = s; }
-  // longtable: the header written for the first page is kept, the repeats dropped
-  if (envName === 'longtable') {
-    const fh = bodyStr.indexOf('\\endfirsthead');
-    if (fh >= 0) { const eh = bodyStr.indexOf('\\endhead', fh); bodyStr = bodyStr.slice(0, fh) + (eh >= 0 ? bodyStr.slice(eh + 8) : bodyStr.slice(fh + 13)); }
-    bodyStr = bodyStr.replace(/\\end(head|foot|lastfoot)\b/g, '');
+  // longtable: the header written for the first page is kept and the repeats dropped; the last page's footer
+  // goes to the end (the footer rows), the other pages' one is dropped
+  let ltHead = -1, ltFoot = 0;
+  if (envName === 'longtable' && /\\end(firsthead|head|foot|lastfoot)(?![A-Za-z])/.test(bodyStr)) {
+    const part: Record<string, string> = {};
+    let last = 0, body = '';
+    const re = /\\end(firsthead|head|foot|lastfoot)(?![A-Za-z])/g;
+    for (let mm; (mm = re.exec(bodyStr));) { part[mm[1]] = bodyStr.slice(last, mm.index); last = mm.index + mm[0].length; }
+    body = bodyStr.slice(last);
+    const head = part.firsthead ?? part.head ?? '';
+    const foot = part.lastfoot ?? part.foot ?? '';
+    // a piece with no cells: only rules, colours and spacing
+    const bare = (x: string) => !x.replace(/^\s*\[[^\]]*\]/, '').replace(/\\(hline|toprule|midrule|bottomrule|morecmidrules)(?![A-Za-z])(\[[^\]]*\])?|\\(cline|Xhline|hhline)\{[^}]*\}|\\cmidrule(\[[^\]]*\])?(\([^)]*\))?\{[^}]*\}|\\addlinespace(\[[^\]]*\])?|\\specialrule\{[^}]*\}\{[^}]*\}\{[^}]*\}|\\noalign\{[^{}]*\}|\\rowcolor(\[[^\]]*\])?\{[^}]*\}/g, '').trim();
+    const noCap = (t: string) => t.replace(/\\caption(?:\[[^\]]*\])?\{[\s\S]*?\}\s*(\\label\{[^}]*\})?\s*\\\\/, '');
+    const rowsIn = (t: string) => { const p = splitTop(noCap(t), '\\\\'); return p.length - (bare(p[p.length - 1]) ? 1 : 0); };
+    // the text ends with a row's \\ (and rules after it), so more rows can follow
+    const ends = (t: string) => { const p = splitTop(t, '\\\\'); return bare(t) || (p.length > 1 && bare(p[p.length - 1])); };
+    if (part.firsthead != null || part.head != null) ltHead = rowsIn(head);
+    ltFoot = foot.trim() ? rowsIn(foot) : 0;
+    let b = head;
+    if (!ends(b)) b += ' \\\\';
+    b += body;
+    if (ltFoot) { if (!ends(b)) b += ' \\\\'; b += foot; }
+    bodyStr = b;
   }
   const spec = parseSpec(specStr);
   // the caption and label: inside a longtable as a row, or around the tabular in a table float
@@ -513,6 +569,8 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
   else if (capOut) caption = capOut.text;
   const lab = /\\label\{([^}]*)\}/.exec(outside);
   if (!label && lab) label = lab[1];
+  // \caption{Text.\label{tab:x}}: the label written inside the caption
+  { const li = /\s*\\label\{([^}]*)\}\s*/.exec(caption); if (li) { if (!label) label = li[1]; caption = caption.slice(0, li.index) + (li.index && li.index + li[0].length < caption.length ? ' ' : '') + caption.slice(li.index + li[0].length); } }
   const capTop = capOut ? (em ? s.indexOf('\\caption') < em.index : true) : capIn ? bodyStr.length > 0 && src.indexOf('\\caption') < src.indexOf('\\\\', src.indexOf(em ? em[0] : '')) : true;
 
   // \rowcolors{first}{odd}{even} (xcolor's table option), before the table or at the top of its body
@@ -535,8 +593,11 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
   const rowColors: (string | undefined)[] = [];
   let booktabs = false;
   const RULES: [RegExp, Rule, boolean][] = [[/^\\toprule(\[[^\]]*\])?/, 2, true], [/^\\bottomrule(\[[^\]]*\])?/, 2, true], [/^\\midrule(\[[^\]]*\])?/, 1, true], [/^\\hline/, 1, false], [/^\\Xhline\{[^}]*\}/, 2, false], [/^\\noalign\{\\hrule[^}]*\}/, 2, false], [/^\\specialrule\{[^}]*\}\{[^}]*\}\{[^}]*\}/, 2, true]];
+  const skips: string[] = [];
+  let ruleColor = '';
   rawRows.forEach((raw, idx) => {
-    let t = raw.replace(/^\s*(\[[^\]]*\])/, ''); // \\[2pt]
+    // \\[2pt]: space after the row above
+    let t = raw.replace(/^\s*\[([^\]]*)\]/, (_w, v) => { if (rows.length && lenPt(v) != null) skips[rows.length - 1] = v.trim(); return ''; });
     const rl = rules[rules.length - 1];
     for (let again = true; again;) {
       again = false;
@@ -547,7 +608,7 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
           // \toprule[\lightrulewidth] or a heavy \midrule
           let ww: Rule = w;
           if (m[1] && /light/.test(m[1])) ww = 1; else if (m[1] && /heavy/.test(m[1])) ww = 2;
-          if (/^\\hline\s*\\hline/.test(t)) ww = 2;
+          if (/^\\hline\s*\\hline/.test(t)) ww = 3; // \hline\hline: a double rule
           rl.full = Math.max(rl.full, ww) as Rule; if (bt) booktabs = true; t = t.slice(m[0].length); again = true;
           if (/^\\hline/.test(m[0])) t = t.replace(/^\s*\\hline/, '');
           break;
@@ -561,6 +622,18 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
         if (/^\s*\\cmidrule/.test(t)) booktabs = true;
         t = cl.rest; again = true;
       }
+      // \hhline{|=|~-|}: = double, - single, ~ none, per column
+      const hh = lead(t, 'hhline', 0, 1);
+      if (hh) {
+        let c = 0;
+        for (const ch of hh.args[0].replace(/\*\{(\d+)\}\{([^{}]*)\}/g, (_w, n, x) => x.repeat(Math.min(100, +n)))) {
+          if (ch === '=') rl.parts.push([c, c, 3]); else if (ch === '-') rl.parts.push([c, c, 1]);
+          if (ch === '=' || ch === '-' || ch === '~') c++;
+        }
+        t = hh.rest; again = true;
+      }
+      const arc = lead(t, 'arrayrulecolor', 1, 1);
+      if (arc) { ruleColor = colorOf(arc.opts[0], arc.args[0]) || ruleColor; t = arc.rest; again = true; }
       for (const skip of [/^\\addlinespace(\[[^\]]*\])?/, /^\\morecmidrules/, /^\\pagebreak/, /^\\nopagebreak/, /^\\noalign\{[^{}]*\}/]) { const m = skip.exec(t); if (m) { t = t.slice(m[0].length); again = true; } }
       const rc = lead(t, 'rowcolor', 1, 1);
       if (rc) { rowColors[rows.length] = colorOf(rc.opts[0], rc.args[0]); t = rc.rest; again = true; }
@@ -569,12 +642,7 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
     rows.push(t);
     rules.push({ full: 0, parts: [] });
   });
-  if (rowcolors) for (let r = 0; r < rows.length; r++) {
-    const k = r + 1; // xcolor counts rows from 1
-    if (k < rowcolors.from || rowColors[r]) continue;
-    const c = k % 2 ? rowcolors.odd : rowcolors.even;
-    if (c) rowColors[r] = c;
-  }
+
   // cells
   const grid: TCell[][] = [], specs: (ColSpec | null)[][] = [];
   rows.forEach((row, r) => {
@@ -613,14 +681,24 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
     m.cols[c].w = sp.w;
     if (sp.fill) m.cols[c].fill = true;
     if (sp.num) m.cols[c].num = {};
+    // m{…} and b{…}: the column's cells sit in the middle or at the bottom; >{\columncolor}: their fill
+    for (let r = 0; r < nRows(m); r++) {
+      const x = m.cells[r][c];
+      if (sp.va && !x.va && !(specs[r]?.[c])) x.va = sp.va;
+      if (sp.bg && !x.bg && !rowColors[r]) x.bg = sp.bg;
+    }
   }
+  for (let r = 0; r < nRows(m); r++) if (skips[r]) m.skip[r] = skips[r];
   m.env = envName === 'tabularx' ? 'tabularx' : envName === 'longtable' ? 'longtable' : 'tabular';
   if (m.env === 'tabularx') m.width = Math.max(0.1, Math.min(1, widthShare));
   // the header: rows above the first full rule inside the table, at most half of it
   const nr = nRows(m);
   let head = 0;
   for (let k = 1; k < Math.min(nr, Math.max(2, Math.ceil(nr / 2) + 1)); k++) if (rules[k] && rules[k].full) { head = k; break; }
+  // a longtable says which rows are its header and footer
+  if (ltHead >= 0) head = Math.max(0, Math.min(nr - 1, ltHead));
   m.head = head;
+  m.foot = Math.max(0, Math.min(nr - head - 1, ltFoot));
   // rules
   applyPreset(m, 'custom');
   m.booktabs = booktabs;
@@ -650,6 +728,13 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
     m.stripe = rowColors[odd[0]]!;
     for (const r of odd) for (const x of m.cells[r]) if (x.bg === m.stripe) delete x.bg;
   }
+  // \rowcolors{first}{odd}{even}: xcolor counts rows from 1; the model's stripe is the second row from the start
+  if (rowcolors && (rowcolors.odd || rowcolors.even)) {
+    const from = Math.max(0, rowcolors.from - 1), firstOdd = rowcolors.from % 2 === 1;
+    m.stripe = (firstOdd ? rowcolors.even : rowcolors.odd) || '';
+    m.stripe2 = (firstOdd ? rowcolors.odd : rowcolors.even) || '';
+    m.stripeFrom = from === head ? -1 : from;
+  }
   // a unit after a header's text: Mass (\unit{kg}) → the column's unit
   if (head > 0) for (let c = 0; c < nc; c++) {
     const x = m.cells[head - 1][c];
@@ -663,14 +748,24 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
   }
   // settings around the table
   const pre = em ? s.slice(Math.max(0, s.lastIndexOf('\\begin{table', em.index)), em.index) : '';
-  const sep = /\\setlength\{?\\tabcolsep\}?\{?\s*([\d.]+)\s*pt/.exec(pre);
-  if (sep) m.pad = +sep[1];
+  const setLen = (name: string) => { const v = new RegExp(`\\\\setlength\\s*\\{?\\s*\\\\${name}\\s*\\}?\\s*\\{([^{}]*)\\}`).exec(pre); return v ? lenPt(v[1]) : null; };
+  const sep = setLen('tabcolsep');
+  if (sep != null) m.pad = +sep.toFixed(2);
+  const arw = setLen('arrayrulewidth');
+  if (arw != null) m.ruleW = +arw.toFixed(2);
+  const arc = /\\arrayrulecolor\s*(?:\[([^\]]*)\])?\s*\{([^{}]*)\}/.exec(pre);
+  if (arc) ruleColor = colorOf(arc[1], arc[2]) || ruleColor;
+  m.ruleColor = ruleColor;
+  const fp = /\\begin\{table\*?\}\s*\[([^\]]*)\]/.exec(s);
+  if (fp && /^[htbpH!]{1,5}$/.test(fp[1].trim())) m.floatPos = fp[1].trim();
+  if (envName === 'longtable') { if (/^l$/.test(envOpt)) m.place = 'left'; else if (/^r$/.test(envOpt)) m.place = 'right'; }
+  else if (/^[tb]$/.test(envOpt)) m.tpos = envOpt as 't' | 'b';
   const st = /\\renewcommand\{?\\arraystretch\}?\{\s*([\d.]+)\s*\}/.exec(pre);
   if (st) m.stretch = +st[1];
   const size = /\\(tiny|scriptsize|footnotesize|small|large|Large)\b/.exec(pre);
   if (size) m.size = size[1];
   m.float = /\\begin\{table\*?\}/.test(s);
-  if (/\\raggedleft|\\begin\{flushright\}/.test(pre)) m.place = 'right'; else if (/\\raggedright|\\begin\{flushleft\}/.test(pre)) m.place = 'left';
+  if (envName !== 'longtable' && /\\raggedleft|\\begin\{flushright\}/.test(pre)) m.place = 'right'; else if (/\\raggedright|\\begin\{flushleft\}/.test(pre)) m.place = 'left';
   m.caption = caption.trim(); m.label = label.trim(); m.capTop = capTop;
   matchPreset(m);
   return { table: normalize(m), warnings };
@@ -678,11 +773,11 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
 
 /** When the rules are exactly a preset's, the table says so (its rules then follow edits). */
 export function matchPreset(m: TableModel) {
-  const keep = { hr: JSON.stringify(m.hr), vr: JSON.stringify(m.vr), bt: m.booktabs, stripe: m.stripe, hb: m.headBold };
+  const keep = { hr: JSON.stringify(m.hr), vr: JSON.stringify(m.vr), bt: m.booktabs, stripe: m.stripe, stripe2: m.stripe2, hb: m.headBold };
   for (const p of PRESETS) {
     const t = clone(m);
     applyPreset(t, p.key);
-    if (JSON.stringify(t.hr) === keep.hr && JSON.stringify(t.vr) === keep.vr && t.booktabs === keep.bt && !!t.stripe === !!keep.stripe && t.headBold === keep.hb) {
+    if (JSON.stringify(t.hr) === keep.hr && JSON.stringify(t.vr) === keep.vr && t.booktabs === keep.bt && !!(t.stripe || t.stripe2) === !!(keep.stripe || keep.stripe2) && t.headBold === keep.hb) {
       m.preset = p.key; return;
     }
   }

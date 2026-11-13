@@ -273,6 +273,8 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 #docList li.folder.shut .chev { transform: none; }
 #docList li.folder .fic { flex: none; margin-right: 4px; }
 #docList li.folder.has-active { color: var(--ink); font-weight: 600; }
+#docList li.drop-before { box-shadow: inset 0 2px 0 var(--bluepen); }
+#docList li.drop-after { box-shadow: inset 0 -2px 0 var(--bluepen); }
 #docList li.drop-into, #docList.drop-into { box-shadow: inset 0 0 0 1.5px var(--bluepen); }
 @media (prefers-reduced-motion: reduce) { #docList li.folder .chev { transition: none; } }
 #docList li .del { visibility: hidden; border: 0; background: none; height: 20px; width: 20px; padding: 0; color: var(--pencil); border-radius: var(--r-sm); }
@@ -814,6 +816,7 @@ body.drop-over #stage, body.drop-over #docview { box-shadow: inset 0 0 0 2px var
 #tikzOut .cl.chg::after { background: var(--bluepen); }
 #tikzOut .cl.err { text-decoration: underline wavy var(--redpen); text-decoration-skip-ink: none; text-underline-offset: 3px; }
 #tikzOut .cl.err::before { color: var(--redpen); font-weight: 600; }
+.imp-note { flex: none; padding: 8px 16px; color: var(--redpen); background: var(--redpen-wash); font-size: 12px; border-bottom: 1px solid var(--rule); }
 .modal-foot { padding: 8px 16px; min-height: 32px; color: var(--redpen); font-size: 12px; border-top: 1px solid var(--rule); }
 .modal-foot:empty { display: none; }
 /* the import report: what stays TikZ code, and why */

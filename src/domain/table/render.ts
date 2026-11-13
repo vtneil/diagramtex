@@ -3,7 +3,7 @@
 // rules with their space above and below, numbers aligned on the decimal marker. Drawn as SVG with the app's
 // own text renderer (KaTeX maths), so the preview, the SVG and the PNG are one picture.
 import type { TableModel, TCell } from './model';
-import { nRows, nCols, owners, stripeOf, isBold, alignOf } from './model';
+import { nRows, nCols, owners, stripeOf, isBold, alignOf, thickPt, lenPt } from './model';
 import { parseNum, format, texParts, unitTex } from './numbers';
 import { envRanges } from './latex';
 import { runtime as TD } from '../../runtime';
@@ -54,7 +54,10 @@ const decorate = (t: string, x: TCell) => {
   return s;
 };
 /** booktabs' rule widths and the space round them, in pt */
-const RULE = { heavy: 0.8, light: 0.5, hline: 0.4, thick: 0.8, above: 0.4 * 4.3, below: 0.65 * 4.3 };
+const RULE = { heavy: 0.8, light: 0.5, above: 0.4 * 4.3, below: 0.65 * 4.3, double: 2 };
+/** A rule's width in pt (a double rule: both lines and the space between them), outside booktabs. */
+const plainW = (m: TableModel, w: number) => (w === 3 ? 2 * m.ruleW + RULE.double : w === 2 ? thickPt(m) : m.ruleW);
+const ALIGN: Record<string, string> = { l: 'left', c: 'center', r: 'right', j: 'justify' };
 
 export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout {
   const nr = nRows(m), nc = nCols(m), own = owners(m);
@@ -82,7 +85,9 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
     } else {
       box.text = decorate(shownText(m, r, c, x), x);
       if (cs === 1 && col.w > 0) st.tw = col.w * TD.PX_PER_CM;
-      if (cs === 1 && st.tw) st.align = ({ l: 'left', c: 'center', r: 'right', j: 'justify' } as Record<string, string>)[alignOf(m, c, x)];
+      // \multirow{3}{4em}{…} wraps at its own width
+      else if (cs === 1 && x.mw && lenPt(x.mw)) st.tw = pt(lenPt(x.mw)!);
+      if (cs === 1 && st.tw) st.align = ALIGN[alignOf(m, c, x)];
       if (box.text.trim()) { const b = TD.textBox(box.text, st); box.tw = b.w - (st.tw ? 0 : 2); box.th = b.h; }
       else { box.tw = 0; box.th = 0; }
     }
@@ -103,7 +108,7 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
       for (const c of fill) widths[c] = each;
       // cells in X columns wrap at that width: measured again
       for (const b of anchors) if (b.cs === 1 && fill.includes(b.c) && !b.num && b.text.trim()) {
-        b.st.tw = each; b.st.align = ({ l: 'left', c: 'center', r: 'right', j: 'justify' } as Record<string, string>)[alignOf(m, b.c, m.cells[b.r][b.c])];
+        b.st.tw = each; b.st.align = ALIGN[alignOf(m, b.c, m.cells[b.r][b.c])];
         const tb = TD.textBox(b.text, b.st); b.tw = tb.w; b.th = tb.h;
       }
     }
@@ -118,6 +123,8 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
   // rows: the strut, or the tallest single-row cell
   const heights = new Array(nr).fill(strutH + strutD);
   for (const b of anchors) if (b.rs === 1) heights[b.r] = Math.max(heights[b.r], b.th + pt(2));
+  // \\[0.5ex]: room after the row
+  for (let r = 0; r < nr; r++) { const v = m.skip[r] ? lenPt(m.skip[r]) : null; if (v) heights[r] = Math.max(pt(2), heights[r] + pt(v)); }
   // a merge taller than its rows grows the last of them
   for (const b of anchors) if (b.rs > 1) {
     let span = 0;
@@ -125,12 +132,13 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
     if (b.th > span) heights[b.r + b.rs - 1] += b.th - span;
   }
   // rules take room: the line itself, and booktabs' space round it
-  const ruleW = (k: number, w: number) => (!w ? 0 : m.booktabs ? (w === 2 ? RULE.heavy : RULE.light) : (w === 2 ? RULE.thick : RULE.hline));
+  // a double rule is \hline\hline even in a booktabs table: no space round it
+  const ruleW = (w: number) => (!w ? 0 : m.booktabs && w !== 3 ? (w === 2 ? RULE.heavy : RULE.light) : plainW(m, w));
   const gapAt = (k: number) => {
     const row = m.hr[k], w = Math.max(...row);
     if (!w) return 0;
-    let g = pt(ruleW(k, w));
-    if (m.booktabs) g += pt((k > 0 ? RULE.above : 0) + (k < nr ? RULE.below : 0));
+    let g = pt(ruleW(w));
+    if (m.booktabs && w !== 3) g += pt((k > 0 ? RULE.above : 0) + (k < nr ? RULE.below : 0));
     return g;
   };
   const rowY: number[] = [];
@@ -147,7 +155,7 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
   rowY.push(y);
   const colX: number[] = [];
   let x = 0;
-  const vGap = (c: number) => Math.max(0, ...m.vr.map((row) => row[c])) ? pt(Math.max(...m.vr.map((row) => row[c])) === 2 ? RULE.thick : RULE.hline) : 0;
+  const vGap = (c: number) => { const w = Math.max(0, ...m.vr.map((row) => row[c])); return w ? pt(plainW(m, w)) : 0; };
   for (let c = 0; c < nc; c++) { x += vGap(c); colX.push(x); x += widths[c] + 2 * padX; }
   x += vGap(nc);
   colX.push(x);
@@ -186,13 +194,13 @@ export function draw(m: TableModel, ctx: { export?: boolean } = {}): { svg: stri
     out.push(`<rect x="${r2(b.x)}" y="${r2(b.y)}" width="${r2(L.colX[b.c + b.cs] - b.x)}" height="${r2(b.h)}" fill="${x.bg}"/>`);
   }
   // rules: each sits in the gap between two rows, below booktabs' space above it
-  const ink = '#000000';
+  const ink = m.ruleColor || '#000000';
   const end = (r: number) => L.rowY[r] + L.rowH[r];
   const gapTop = (k: number) => (k === 0 ? L.tableY : end(k - 1));
-  const hW = (w: number) => pt(m.booktabs ? (w === 2 ? RULE.heavy : RULE.light) : (w === 2 ? RULE.thick : RULE.hline));
+  const hW = (w: number) => pt(m.booktabs ? (w === 2 ? RULE.heavy : RULE.light) : plainW(m, w));
   for (let k = 0; k <= nr; k++) {
     const row = m.hr[k], full = row.every((v) => v === row[0]);
-    const y0 = gapTop(k) + (m.booktabs && k > 0 ? pt(RULE.above) : 0);
+    const y0 = gapTop(k) + (m.booktabs && k > 0 && Math.max(...row) !== 3 ? pt(RULE.above) : 0);
     for (let c = 0; c < nc;) {
       const w = row[c];
       let e = c;
@@ -201,7 +209,10 @@ export function draw(m: TableModel, ctx: { export?: boolean } = {}): { svg: stri
         let x0 = c === 0 ? 0 : L.colX[c], x1 = e === nc - 1 ? L.colX[nc] : L.colX[e + 1];
         // \cmidrule(lr) is trimmed by half an em at its inner ends
         if (m.booktabs && !full) { const trim = pt(5); if (c > 0) x0 += trim; if (e < nc - 1) x1 -= trim; }
-        out.push(`<rect x="${r2(x0)}" y="${r2(y0)}" width="${r2(x1 - x0)}" height="${r2(hW(w))}" fill="${ink}"/>`);
+        if (w === 3) { // two thin lines
+          const t = pt(m.ruleW);
+          out.push(`<rect x="${r2(x0)}" y="${r2(y0)}" width="${r2(x1 - x0)}" height="${r2(t)}" fill="${ink}"/>`, `<rect x="${r2(x0)}" y="${r2(y0 + t + pt(RULE.double))}" width="${r2(x1 - x0)}" height="${r2(t)}" fill="${ink}"/>`);
+        } else out.push(`<rect x="${r2(x0)}" y="${r2(y0)}" width="${r2(x1 - x0)}" height="${r2(hW(w))}" fill="${ink}"/>`);
       }
       c = e + 1;
     }
@@ -210,10 +221,13 @@ export function draw(m: TableModel, ctx: { export?: boolean } = {}): { svg: stri
   for (let r = 0; r < nr; r++) for (let c = 0; c <= nc; c++) {
     const w = m.vr[r][c];
     if (!w) continue;
-    const th = pt(w === 2 ? RULE.thick : RULE.hline);
+    const th = pt(plainW(m, w));
     const x0 = c < nc ? L.colX[c] - th : L.colX[nc] - th;
     const y0 = r === 0 ? L.tableY : end(r - 1), y1 = r === nr - 1 ? L.rowY[nr] : end(r);
-    out.push(`<rect x="${r2(Math.max(0, x0))}" y="${r2(y0)}" width="${r2(th)}" height="${r2(y1 - y0)}" fill="${ink}"/>`);
+    if (w === 3) { // two thin lines
+      const t = pt(m.ruleW);
+      out.push(`<rect x="${r2(Math.max(0, x0))}" y="${r2(y0)}" width="${r2(t)}" height="${r2(y1 - y0)}" fill="${ink}"/>`, `<rect x="${r2(x0 + th - t)}" y="${r2(y0)}" width="${r2(t)}" height="${r2(y1 - y0)}" fill="${ink}"/>`);
+    } else out.push(`<rect x="${r2(Math.max(0, x0))}" y="${r2(y0)}" width="${r2(th)}" height="${r2(y1 - y0)}" fill="${ink}"/>`);
   }
   // text
   for (const b of L.cells) {

@@ -178,7 +178,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     if (x.sz && x.sz !== M.size) st.push(`font-size:${(TD.sizePx(x.sz) as number).toFixed(2)}px`);
     // rules: the strongest on each edge
     const cs = x.cs || 1, rs = x.rs || 1;
-    const bw = (w: number) => (w === 2 ? '2px solid var(--tb-rule)' : w === 1 ? '1px solid var(--tb-rule)' : '');
+    const bw = (w: number) => (w === 3 ? '3px double var(--tb-rule)' : w === 2 ? '2px solid var(--tb-rule)' : w === 1 ? '1px solid var(--tb-rule)' : '');
     const top = Math.max(...M.hr[r].slice(c, c + cs)), bot = Math.max(...M.hr[r + rs].slice(c, c + cs));
     const lef = Math.max(...M.vr.slice(r, r + rs).map((row) => row[c])), rig = Math.max(...M.vr.slice(r, r + rs).map((row) => row[c + cs]));
     if (top) st.push(`border-top:${bw(top)}`);
@@ -206,7 +206,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const nr = T.nRows(M), nc = T.nCols(M), own = T.owners(M);
     const wrap = $('.tb-gridwrap'), keep = [wrap.scrollLeft, wrap.scrollTop];
     const colW = (c: number) => (M.cols[c].w > 0 ? `${(M.cols[c].w * PX).toFixed(1)}px` : 'auto');
-    let h = `<table class="tg" style="font-size:${(TD.sizePx(M.size) as number).toFixed(2)}px;--tb-stretch:${M.stretch}"><colgroup><col class="tg-rhc">${M.cols.map((_: any, c: number) => `<col style="width:${colW(c)}">`).join('')}</colgroup>`;
+    let h = `<table class="tg" style="font-size:${(TD.sizePx(M.size) as number).toFixed(2)}px;--tb-stretch:${M.stretch}${M.ruleColor ? `;--tb-rule:${M.ruleColor}` : ''}"><colgroup><col class="tg-rhc">${M.cols.map((_: any, c: number) => `<col style="width:${colW(c)}">`).join('')}</colgroup>`;
     h += `<thead><tr><th class="tg-corner" data-all title="Select all (${MOD}A)"></th>${M.cols.map((col: any, c: number) => `<th class="tg-ch${col.num ? ' num' : ''}" data-ch="${c}"><span>${T.colName(c)}</span>${col.num ? '<i title="Numbers aligned on the decimal point">.00</i>' : ''}${col.w > 0 ? `<i title="Wraps at ${col.w} cm">${col.w}cm</i>` : col.fill && M.env === 'tabularx' ? '<i title="Takes the rest of the width (X)">X</i>' : ''}<span class="tg-rs" data-rs="${c}" title="Drag to set a width (the column wraps); double-click for automatic"></span></th>`).join('')}</tr></thead><tbody>`;
     for (let r = 0; r < nr; r++) {
       h += `<tr class="${r < M.head ? 'hd' : ''}${r === M.head - 1 ? ' hd-last' : ''}"><th class="tg-rh" data-rh="${r}">${r + 1}</th>`;
@@ -453,7 +453,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const r = anchor.getBoundingClientRect();
     const where: BorderWhere[] = ['all', 'outer', 'inner', 'innerH', 'innerV', 'top', 'bottom', 'left', 'right', 'none'];
     openMenu(`<div class="tb-bgrid">${where.map((w) => `<button type="button" class="icon flat" data-m="b:${w}" title="${BNAME[w]}">${B[w]}</button>`).join('')}</div><hr>
-      ${item('Thick Rules', 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 })}${item('Thin Rules', 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 })}`, r.left, r.bottom + 6);
+      ${item('Thick Rules', 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 })}${item('Thin Rules', 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 })}${item('Double Rules', 'bw:3', { icon: ic('<path d="M3 8h14M3 12h14"/>'), checked: borderW === 3 })}`, r.left, r.bottom + 6);
   }
   let borderW: Rule = 1;
   function ctxMenu(x: number, y: number) {
@@ -479,7 +479,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     if (a === 'imp-file') { chooseFile(); return; }
     if (a === 'imp-blank') { replaceTable(T.create(4, 3, 'booktabs'), 'A new table'); return; }
     if (a.startsWith('b:')) { border(a.slice(2) as BorderWhere, borderW); return; }
-    if (a.startsWith('bw:')) { borderW = +a.slice(3) as Rule; hint(borderW === 2 ? 'New rules are thick' : 'New rules are thin'); return; }
+    if (a.startsWith('bw:')) { borderW = +a.slice(3) as Rule; hint(borderW === 3 ? 'New rules are double' : borderW === 2 ? 'New rules are thick' : 'New rules are thin'); return; }
     switch (a) {
       case 'cut': copySel(true); break;
       case 'copy': copySel(false); break;
@@ -657,7 +657,8 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       ['Style', `<select data-p="preset" aria-label="Table style">${opt([...T.PRESETS.map((p: any) => [p.key, p.name]), ['custom', 'Custom rules']], M.preset)}</select>`],
       ['Header rows', `<input type="number" data-p="head" min="0" max="${T.nRows(M)}" step="1" value="${M.head}" aria-label="Header rows"><label class="tb-chk" title="The header rows in bold"><input type="checkbox" data-p="headBold"${M.headBold ? ' checked' : ''}> Bold</label>`],
       ['Rules', seg('booktabs', [['1', 'booktabs', 'Rules of different weights, with space round them (\\toprule, \\midrule, \\bottomrule)'], ['0', 'Lines', '\\hline and \\cline: thin lines, no extra space']], M.booktabs ? '1' : '0')],
-      ['Stripes', `<label class="tb-chk"><input type="checkbox" data-p="striped"${M.stripe ? ' checked' : ''}> Every other row</label>${M.stripe ? swatch('stripe', M.stripe, 'None').replace('class="tb-swatch"', 'class="tb-swatch bare" aria-label="Stripe colour"') : ''}`],
+      ['Stripes', `<label class="tb-chk"><input type="checkbox" data-p="striped"${M.stripe || M.stripe2 ? ' checked' : ''}> Every other row</label>${M.stripe || M.stripe2 ? swatch('stripe', M.stripe, 'None').replace('class="tb-swatch"', 'class="tb-swatch bare" aria-label="Stripe colour"') : ''}`],
+      ...(M.stripe || M.stripe2 ? [['Other rows', swatch('stripe2', M.stripe2, 'None'), 'The rows between the stripes (\\rowcolors\' other colour)'] as [string, string, string]] : []),
     ])}</div>
     <div class="sec"><div class="sec-title">Column ${T.colName(c)}${g.c1 > g.c0 ? `–${T.colName(g.c1)}` : ''}</div>${rowsHtml([
       ['Align', seg('colAl', [['l', I.al.l, 'Left'], ['c', I.al.c, 'Centre'], ['r', I.al.r, 'Right'], ['j', I.al.j, 'Justified (with a width)']], col.al)],
@@ -685,10 +686,13 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     <details class="tb-more-sec"${detailsOpen ? ' open' : ''}><summary>More options</summary>${rowsHtml([
       ['Environment', `<select data-p="env" aria-label="Environment">${opt([['tabular', 'tabular'], ['tabularx', 'tabularx (full width)'], ['longtable', 'longtable (over pages)']], M.env)}</select>`],
       ...(M.env === 'tabularx' ? [['Width', `<input type="number" data-p="width" min="10" max="100" step="5" value="${Math.round(M.width * 100)}" aria-label="Width"><span class="tb-unit">% of the line</span>`] as [string, string]] : []),
+      ...(M.env === 'longtable' ? [['Footer rows', `<input type="number" data-p="foot" min="0" max="${T.nRows(M) - M.head}" step="1" value="${M.foot}" aria-label="Footer rows">`, 'The bottom rows: written once, at the end of the table (\\endlastfoot); the other pages end with the rule above them'] as [string, string, string]] : []),
+      ...(M.env !== 'longtable' ? [['Placement', `<input type="text" data-p="floatPos" value="${esc(M.floatPos)}" placeholder="htbp" aria-label="Float placement" spellcheck="false" maxlength="5" title="Where LaTeX may put the table: h here, t top, b bottom, p own page, ! try harder, H exactly here (float package)">`] as [string, string]] : []),
       ['Caption at', seg('capTop', [['1', 'Top'], ['0', 'Bottom']], M.capTop ? '1' : '0')],
       ['Font size', `<select data-p="size" aria-label="Font size">${opt(SIZE_NAMES, M.size)}</select>`],
       ['Padding', `<input type="number" data-p="pad" min="0" max="30" step="0.5" value="${M.pad}" aria-label="Cell padding (pt)" title="\\tabcolsep: the space on each side of a column"><span class="tb-unit">pt</span>`],
       ['Row height', `<input type="number" data-p="stretch" min="0.5" max="4" step="0.05" value="${M.stretch}" aria-label="Row height" title="\\arraystretch: 1 is LaTeX's own"><span class="tb-unit">×</span>`],
+      ['Rule width', `<input type="number" data-p="ruleW" min="0.1" max="5" step="0.1" value="${M.ruleW}" aria-label="Rule width (pt)" title="\\arrayrulewidth: thin rules and | (LaTeX's 0.4 pt)"><span class="tb-unit">pt</span>${swatch('ruleColor', M.ruleColor, 'Black').replace('class="tb-swatch"', 'class="tb-swatch bare" aria-label="Rule colour"').replace(/title="[^"]*"/, `title="\\arrayrulecolor: ${M.ruleColor || 'black'}"`)}`],
       ['Units as', `<select data-p="unitStyle" aria-label="How units follow the header">${opt([['paren', 'Mass (kg)'], ['bracket', 'Mass [kg]'], ['slash', 'Mass / kg']], M.unitStyle)}</select>`],
     ])}</details></div>
     <div class="sec tb-keys"><div class="sec-title">Keys</div><div class="hint-line">Type to replace a cell · <kbd>Enter</kbd> or double-click to edit · <kbd>${SHIFT}Enter</kbd> new line · <kbd>${SHIFT}</kbd>+arrows select · <kbd>${MOD}C</kbd> <kbd>${MOD}V</kbd> copy and paste with Excel and Sheets · right-click for rows, columns and merging.</div></div>`;
@@ -715,7 +719,10 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       case 'preset': if (t.value !== 'custom') change(() => { const s = M.stripe; T.applyPreset(M, t.value); if (t.value === 'striped' && s) M.stripe = s; }); break;
       case 'head': { const v = num(t.value, 0, T.nRows(M)); if (v != null) change(() => { M.head = Math.round(v); T.restyle(M); }, o); break; }
       case 'headBold': change(() => { M.headBold = t.checked; }); break;
-      case 'striped': change(() => { M.stripe = t.checked ? '#eef2f7' : ''; if (M.preset === 'striped' && !t.checked) M.preset = 'custom'; }); break;
+      case 'striped': change(() => { M.stripe = t.checked ? '#eef2f7' : ''; if (!t.checked) { M.stripe2 = ''; M.stripeFrom = -1; } if (M.preset === 'striped' && !t.checked) M.preset = 'custom'; }); break;
+      case 'foot': { const v = num(t.value, 0, T.nRows(M) - M.head); if (v != null) change(() => { M.foot = Math.round(v); }, o); break; }
+      case 'floatPos': { const v = t.value.trim(); if (/^[htbpH!]{1,5}$/.test(v) || !v) change(() => { M.floatPos = v || 'htbp'; }, o); break; }
+      case 'ruleW': { const v = num(t.value, 0.1, 5); if (v != null) change(() => { M.ruleW = v; }, o); break; }
       case 'w': { const v = t.value === '' ? 0 : num(t.value, 0, 40); if (v != null) change(() => { for (const k2 of cols) M.cols[k2].w = v; }, o); break; }
       case 'fill': change(() => { for (const k2 of cols) M.cols[k2].fill = t.checked || undefined; }); break;
       case 'num': change(() => { for (const k2 of cols) M.cols[k2].num = t.checked ? {} : null; }); break;
@@ -759,9 +766,11 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     }
     if (b.dataset.color) {
       const k = b.dataset.color;
-      if (k === 'stripe') {
-        const before = JSON.stringify(M);
-        TD.openColorPicker(b, { value: M.stripe, nullable: false, onInput: (v: any) => { M.stripe = TD.parseColor(v).hex; paint(); preview(); }, onChange: (v: any) => { M.stripe = TD.parseColor(v).hex; paint(); preview(); },
+      if (k === 'stripe' || k === 'stripe2' || k === 'ruleColor') {
+        // a table-wide colour; the stripes' other rows and the rules can have none (no fill, black)
+        const before = JSON.stringify(M), key = k as 'stripe' | 'stripe2' | 'ruleColor';
+        const set = (v: any) => { M[key] = v ? TD.parseColor(v).hex : ''; if (!M.stripe && !M.stripe2) M.stripe = '#eef2f7'; paint(); preview(); };
+        TD.openColorPicker(b, { value: M[key] || null, nullable: k !== 'stripe' || !!M.stripe2, noneLabel: k === 'ruleColor' ? 'Black' : 'No Fill', onInput: set, onChange: set,
           onClose: () => { if (JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; save(); panel(); } } });
       } else pickColor(b, k as 'fg' | 'bg');
     }

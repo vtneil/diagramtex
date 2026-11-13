@@ -1258,6 +1258,9 @@ import { runtime as TD } from '../runtime';
       p = bodyS.indexOf(BEG, e + END.length);
     }
     const inPic = (i: any) => found.some((f) => i >= f.at && i < f.end);
+    // circuitikz environments: a Circuit block each
+    for (const b of bodyS.matchAll(/\\begin\{circuitikz\}[\s\S]*?\\end\{circuitikz\}/g))
+      if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, cz: bodyO.slice(b.index, b.index + b[0].length) });
     for (const b of bodyS.matchAll(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|\\begin\{sequencediagram\}[\s\S]*?\\end\{sequencediagram\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
       if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, bare: bodyO.slice(b.index, b.index + b[0].length) });
     found.sort((a, b) => a.at - b.at);
@@ -1267,6 +1270,13 @@ import { runtime as TD } from '../runtime';
       const before = latexToText(bodyS.slice(last, f.at));
       if (before && docM) blocks.push({ type: 'text', text: before });
       last = f.end;
+      if (f.cz) {
+        const q = circuitBlock(f.cz, false);
+        if (q) { blocks.push({ type: 'diagram', shapes: withDefs([q], preDefs, C) }); continue; }
+        const shapes = importPicture(C, bodyS.slice(f.at, f.end).replace(/\\(begin|end)\{circuitikz\}(\[[^\]]*\])?/g, (m: any) => ' '.repeat(m.length)), bodyO.slice(f.at, f.end), '');
+        blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
+        continue;
+      }
       if (f.bare) {
         const q = `\\node at (0,0) {${f.bare}};`;
         const shapes = importPicture(C, q, q, '');
@@ -1280,10 +1290,15 @@ import { runtime as TD } from '../runtime';
       // a pgf-umlcd class diagram: the whole picture is the block's code
       const uml = TD.uml && TD.uml.fromPicture(picO);
       if (uml) { blocks.push({ type: 'diagram', shapes: withDefs([uml], preDefs, C) }); continue; }
+      // a picture drawn wholly with circuitikz parts: a Circuit block
+      const czq = circuitBlock(picO, true) || automataBlock(picO);
+      if (czq) { blocks.push({ type: 'diagram', shapes: withDefs([czq], preDefs, C) }); continue; }
       const shapes = importPicture(C, bodyS.slice(f.inner, f.inner + f.len), bodyO.slice(f.inner, f.inner + f.len), bodyO.slice(f.open, f.inner));
       blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
     }
-    if (!found.length) {
+    const bareCz = !found.length && (circuitBlock(bodyO, true) || (/^\s*\\(node|path|draw|tikzset)\b/.test(bodyS) && automataBlock(bodyO)));
+    if (bareCz) blocks.push({ type: 'diagram', shapes: withDefs([bareCz], preDefs, C) });
+    else if (!found.length) {
       if (/\\(draw|fill|filldraw|node|shade|path|coordinate|foreach|tikzset|begin\{axis\})\b/.test(bodyS)) {
         const shapes = importPicture(C, bodyS, bodyO, '');
         blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
@@ -1313,6 +1328,80 @@ import { runtime as TD } from '../runtime';
       .map((x) => ({ code: x.code, line: lineAt(x.code), issues: x.issues || [], preview: (x.prev || []).length }));
     return { blocks, warnings: [...new Set(C.warnings)], kept: report, title, page };
   };
+  // top-level comma-separated items (commas inside {} [] () stay)
+  function splitList(t: string) {
+    const out: string[] = [];
+    let d = 0, buf = '';
+    for (const ch of t) {
+      if ('{[('.includes(ch)) d++; else if ('}])'.includes(ch)) d--;
+      if (ch === ',' && d === 0) { out.push(buf.trim()); buf = ''; } else buf += ch;
+    }
+    if (buf.trim()) out.push(buf.trim());
+    return out.filter(Boolean);
+  }
+  // A picture as DiagramTeX writes one block: \begin{tikzpicture}[x=1cm, y=1cm] \begin{scope}[shift={(x,y)}, …] body
+  // \end{scope} \end{tikzpicture}. Gives where the scope moves it (cm, y up), the scope's other options and the body
+  // (the picture's own x=1cm, y=1cm are DiagramTeX's and dropped). Anything else: the picture's options and body as written.
+  function unscope(pic: string) {
+    const t = blankComments(pic), bm = /^\s*\\begin\{tikzpicture\}\s*/.exec(t), end = t.lastIndexOf('\\end{tikzpicture}');
+    if (!bm || end < 0) return null;
+    let i = bm[0].length, env: string[] = [];
+    if (t[i] === '[') { const e = matchClose(t, i, '[', ']'); if (e < 0) return null; env = splitList(t.slice(i + 1, e)); i = e + 1; }
+    const body = pic.slice(i, end), bt = t.slice(i, end);
+    const sm = /^\s*\\begin\{scope\}\s*\[/.exec(bt);
+    if (sm) {
+      const ob = sm[0].length - 1, oe = matchClose(bt, ob, '[', ']'), se = bt.lastIndexOf('\\end{scope}');
+      const o = oe > 0 ? splitList(bt.slice(ob + 1, oe)) : [];
+      const sh = o.length ? /^shift\s*=\s*\{?\s*\(\s*(-?[\d.]+)\s*(?:cm)?\s*,\s*(-?[\d.]+)\s*(?:cm)?\s*\)\s*\}?$/.exec(o[0]) : null;
+      if (sh && se > oe && !bt.slice(se + 11).trim() && !/\\begin\{scope\}/.test(bt.slice(oe, se))) {
+        const own = env.every((x) => /^[xy]\s*=\s*1\s*cm$/.test(x));
+        if (own) return { at: [+sh[1], +sh[2]], opts: o.slice(1), body: body.slice(oe + 1, se) };
+      }
+    }
+    return { at: null as number[] | null, opts: env, body };
+  }
+  // Circuitikz code as a Circuit block. `whole`: only when every statement is a circuitikz part or wire (with at
+  // least one part) and nothing is left over but settings, so a plain TikZ picture stays a picture. Otherwise (a
+  // circuitikz environment) what can't be read is kept as code in the block.
+  function circuitBlock(code: string, whole: boolean) {
+    if (!TD.cz || !TD.TYPES.cz) return null;
+    const u = /^\s*\\begin\{tikzpicture\}/.test(code) ? unscope(code) : null;
+    let size = '', col = '';
+    if (u && u.at) {
+      // the options the Circuit block itself writes: its colour and its labels' size
+      const rest = u.opts.filter((o) => {
+        const f = /^font\s*=\s*\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)$/.exec(o);
+        if (f) { size = f[1]; return false; }
+        const c = /^color\s*=\s*(.+)$/.exec(o), h = c && TD.tikzColor(c[1].trim());
+        if (h) { col = h; return false; }
+        return true;
+      });
+      code = (rest.length ? `\\tikzset{${rest.join(', ')}}\n` : '') + u.body;
+    }
+    const { items, raw } = TD.cz.parse(code);
+    if (!items.length) return null;
+    if (whole && (!items.some((it: any) => !TD.cz.isWire(it)) || String(raw).split('\n').some((l: string) => l.trim() && !/^\\(ctikzset|tikzset)\b/.test(l.trim())))) return null;
+    const q = { ...TD.TYPES.cz.create({ x: 0, y: 0 }, {}), items, raw, x: 0, y: 0, id: uid8() };
+    if (u && u.at) { q.x = u.at[0] * TD.PX_PER_CM; q.y = -u.at[1] * TD.PX_PER_CM; }
+    if (size) q.size = size;
+    if (col) q.color = col;
+    return q;
+  }
+  // A picture of automata states (\node[state] …) and the transitions between them, and nothing else: an Automaton block
+  function automataBlock(pic: string) {
+    if (!TD.fsm || !TD.TYPES.automata || !/\bstate\b/.test(pic)) return null;
+    const u = /^\s*\\begin\{tikzpicture\}/.test(pic) ? unscope(pic) : { at: null, opts: [], body: pic };
+    if (!u) return null;
+    // its lines indented by two spaces, as the block keeps its code
+    const lines = u.body.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n'), ind = least(lines.filter((l) => l.trim()).map((l) => (/^[ \t]*/.exec(l))![0].length));
+    const src = `\\begin{tikzpicture}${u.opts.length ? `[${u.opts.join(', ')}]` : ''}\n${lines.map((l) => (l.trim() ? '  ' + l.slice(isFinite(ind) ? ind : 0) : '')).join('\n')}\n\\end{tikzpicture}`;
+    const M = TD.fsm.parse(src);
+    if (!M.states.length || M.warnings.length || [...M.pre, ...M.post].some((x: string) => !/^\\tikzset\b/.test(x))) return null;
+    if (!M.states.every((st: any) => st.o.some((o: string) => /^state\b/.test(o)))) return null;
+    const q: any = { ...TD.TYPES.automata.create({ x: 0, y: 0 }), src, id: uid8() };
+    if (u.at) { const b = TD.fsm.layout(q).bb; q.x = u.at[0] * TD.PX_PER_CM + b.x; q.y = -u.at[1] * TD.PX_PER_CM + b.y; }
+    return q;
+  }
   // packages a picture's code may need (others in a preamble are the document's own)
   const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'pgf-umlcd', 'pgf-umlsd', 'blochsphere',
     'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',

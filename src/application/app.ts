@@ -706,7 +706,7 @@ import { runtime as TD } from '../runtime';
     const walk = (node: any, path: any, depth: any) => {
       for (const [name, sub] of [...node.dirs].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' }))) {
         const fp = joinPath(path, name), shut = folded.has(foldKey(fp));
-        out.push(`<li class="folder${shut ? ' shut' : ''}${shut && holds(sub) ? ' has-active' : ''}" data-folder="${esc(fp)}" style="--depth:${depth}" aria-expanded="${!shut}" title="${esc(fp)} (${count(sub)} file${count(sub) === 1 ? '' : 's'})">${CHEV_IC}${FOLDER_IC}<span class="nm">${esc(name)}</span><button class="del" data-delfolder="${esc(fp)}" title="Delete folder" aria-label="Delete folder ${esc(name)}">×</button></li>`);
+        out.push(`<li class="folder${shut ? ' shut' : ''}${shut && holds(sub) ? ' has-active' : ''}" data-folder="${esc(fp)}" style="--depth:${depth}" draggable="true" aria-expanded="${!shut}" title="${esc(fp)} (${count(sub)} file${count(sub) === 1 ? '' : 's'})">${CHEV_IC}${FOLDER_IC}<span class="nm">${esc(name)}</span><button class="del" data-delfolder="${esc(fp)}" title="Delete folder" aria-label="Delete folder ${esc(name)}">×</button></li>`);
         if (!shut) walk(sub, fp, depth + 1);
       }
       for (const d of node.files) {
@@ -4463,10 +4463,31 @@ import { runtime as TD } from '../runtime';
   // Drag a file onto a folder to move it there, or onto the list's empty part to take it out of its folder.
   {
     const ul = $('#docList');
-    let dragId: any = null;
+    let dragId: any = null, dragFolder: any = null;
+    // a file row: the drop goes before it (upper half) or after it (lower half)
+    const rowAt = (e: any) => {
+      const li = e.target.closest('[data-doc]');
+      if (!li || li.dataset.doc === dragId) return null;
+      const r = li.getBoundingClientRect();
+      return { li, after: e.clientY > r.top + r.height / 2 };
+    };
     const target = (e: any) => e.target.closest('[data-folder]') || (e.target === ul ? ul : null);
-    const clear = () => ul.querySelectorAll('.drop-into').forEach((el: any) => el.classList.remove('drop-into'));
+    const clear = () => [ul, ...ul.querySelectorAll('.drop-into,.drop-before,.drop-after')].forEach((el: any) => el.classList.remove('drop-into', 'drop-before', 'drop-after'));
+    // a folder can go into another folder (not into itself), or to the top level
+    const folderOk = (t: any) => {
+      if (!dragFolder) return true;
+      const to = t === ul ? '' : t.dataset.folder;
+      return to !== dragFolder && !to.startsWith(dragFolder + '/') && folderOf(dragFolder) !== to;
+    };
     ul.addEventListener('dragstart', (e: any) => {
+      const fo = e.target.closest('[data-folder]');
+      if (fo) {
+        if (fo.classList.contains('renaming')) { e.preventDefault(); return; }
+        dragFolder = fo.dataset.folder;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', leafOf(dragFolder));
+        return;
+      }
       const li = e.target.closest('[data-doc]');
       if (!li || li.classList.contains('renaming')) { e.preventDefault(); return; }
       dragId = li.dataset.doc;
@@ -4474,22 +4495,54 @@ import { runtime as TD } from '../runtime';
       e.dataTransfer.setData('text/plain', leafOf(docEntry(dragId)?.name || ''));
     });
     ul.addEventListener('dragover', (e: any) => {
-      if (!dragId) return;
-      const t = target(e);
+      if (!dragId && !dragFolder) return;
+      if (dragFolder) {
+        const ft = target(e);
+        clear();
+        if (!ft || !folderOk(ft)) return;
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+        ft.classList.add('drop-into');
+        return;
+      }
+      const t = target(e), row = t ? null : rowAt(e);
       clear();
+      if (row) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.li.classList.add(row.after ? 'drop-after' : 'drop-before'); return; }
       if (!t) return;
       e.preventDefault(); e.dataTransfer.dropEffect = 'move';
       t.classList.add('drop-into');
     });
     ul.addEventListener('dragleave', (e: any) => { if (!ul.contains(e.relatedTarget)) clear(); });
     ul.addEventListener('drop', (e: any) => {
-      const t = target(e), id = dragId;
+      if (dragFolder) {
+        const ft = target(e), f = dragFolder;
+        clear(); dragFolder = null;
+        if (!ft || !f) return;
+        const to = ft === ul ? '' : ft.dataset.folder;
+        if (to === f || to.startsWith(f + '/') || folderOf(f) === to) return;
+        e.preventDefault();
+        renameFolder(f, joinPath(to, leafOf(f)));
+        return;
+      }
+      const t = target(e), row = t ? null : rowAt(e), id = dragId;
       clear(); dragId = null;
+      if (row && id) {
+        e.preventDefault();
+        const tid = row.li.dataset.doc, tgt: any = docEntry(tid);
+        if (tgt && folderOf((docEntry(id) as any)?.name || '') !== folderOf(tgt.name)) moveToFolder(id, folderOf(tgt.name));
+        const idx: any[] = index(), from = idx.findIndex((d) => d.id === id);
+        if (from < 0) return;
+        const [it] = idx.splice(from, 1);
+        const to = idx.findIndex((d) => d.id === tid);
+        idx.splice(to + (row.after ? 1 : 0), 0, it);
+        store.set(LS_INDEX, idx);
+        renderDocList();
+        return;
+      }
       if (!t || !id) return;
       e.preventDefault();
       moveToFolder(id, t === ul ? '' : t.dataset.folder);
     });
-    ul.addEventListener('dragend', () => { clear(); dragId = null; });
+    ul.addEventListener('dragend', () => { clear(); dragId = null; dragFolder = null; });
   }
 
   const slug = () => (leafOf(state.doc.name) || 'diagram').replace(/[^\w\-]+/g, '_');
