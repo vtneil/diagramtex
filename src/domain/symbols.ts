@@ -715,7 +715,6 @@ import { runtime as TD } from '../runtime';
   });
 
   // ---------- image ----------
-  const extOf = (src: any) => ((/^data:image\/(png|jpe?g|gif|webp|svg)/.exec(src || '') || [])[1] || 'png').replace('jpeg', 'jpg').replace('svg', 'svg');
   TD.TYPES.image = {
     name: 'Image',
     pts: [['x', 'y']],
@@ -735,18 +734,17 @@ import { runtime as TD } from '../runtime';
     },
     anchors: (s: any) => TD.box.handles(s).map((h: any) => ({ x: h.x, y: h.y })),
     samples: (s: any) => [{ x: s.x, y: s.y }, { x: s.x + s.w, y: s.y + s.h }],
-    fileName: (s: any) => s.file || `${s.id || 'image'}.${extOf(s.src)}`,
+    fileName: (s: any) => TD.texImages.fileName(s.file || s.id || 'image', s.src),
     svg(s: any, ctx: any) {
       const op = s.opacity != null && s.opacity < 1 ? ` opacity="${s.opacity}"` : '';
       return `<image href="${esc(s.src)}" x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" preserveAspectRatio="none"${op}/>` +
         (ctx.export ? '' : `<rect class="hitfill" x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}"/>`);
     },
     tikz(s: any, X: any) {
-      X.pkgs.add('graphicx');
-      const name = this.fileName(s);
+      const name = TD.texImages.use(X, this.fileName(s), s.src);
       const o = ['anchor=north west', 'inner sep=0pt'];
       if (s.opacity != null && s.opacity < 1) o.push(`opacity=${f(s.opacity)}`);
-      return `% image file: ${name} (Image panel → Download)\n\\node[${o.join(', ')}] at ${X.c(s.x, s.y)} {\\includegraphics[width=${X.len(s.w)}cm, height=${X.len(s.h)}cm]{${name}}};`;
+      return `% image file: ${name} (Image panel → Download, or download the LaTeX as a .zip)\n\\node[${o.join(', ')}] at ${X.c(s.x, s.y)} {${TD.texImages.include(X, name, `width=${X.len(s.w)}cm, height=${X.len(s.h)}cm`)}};`;
     },
   };
   

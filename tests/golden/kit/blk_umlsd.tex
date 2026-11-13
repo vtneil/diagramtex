@@ -1,0 +1,18 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgf-umlsd}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (3.37,-2.07) {\pgfinterruptpicture%
+  \begin{sequencediagram}
+    \newthread{c}{:Client}
+    \newinst[1]{s}{:Server}
+    \newinst[1]{d}{:Database}
+    \begin{call}{c}{request()}{s}{response}
+      \begin{call}{s}{query()}{d}{rows}
+      \end{call}
+    \end{call}
+  \end{sequencediagram}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

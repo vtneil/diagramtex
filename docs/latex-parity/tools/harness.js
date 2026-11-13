@@ -32,8 +32,11 @@
       const b = TD.bboxOf(pts, 0);
       full = [...list, mk('dot', 'dot', { cx: b.x - 16, cy: b.y - 16, r: 2 }), mk('dot', 'dot', { cx: b.x + b.w + 16, cy: b.y + b.h + 16, r: 2 })];
     }
-    const tex = TD.toTikz(full, { standalone: true });
-    const r = await (await fetch('/__parity/tex/' + name, { method: 'POST', body: tex, headers: engine ? { 'X-Engine': engine } : {} })).json();
+    const { result: tex, files } = TD.texImages.collect(() => TD.toTikz(full, { standalone: true }));
+    // pictures the code names go next to it, as the .zip for a setup without Inkscape has them (an SVG with
+    // its PDF, and the LaTeX set to use that)
+    for (const e of await TD.app.texFiles(files, TD.texImages.svgFallback, true)) await fetch('/__parity/' + e.name, { method: 'PUT', body: e.data });
+    const r = await (await fetch('/__parity/tex/' + name, { method: 'POST', body: TD.texImages.noInkscape(tex), headers: engine ? { 'X-Engine': engine } : {} })).json();
     if (!r.ok) return { name, error: r.log.slice(-1500) };
     const appBlob = await TD.app.pngOf(full, DPI, false);
     await fetch('/__parity/' + name + '.app.png', { method: 'PUT', body: appBlob });

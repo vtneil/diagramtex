@@ -69,6 +69,7 @@ import { runtime as TD } from '../../runtime';
       { label: 'Move to Folder…', words: 'folder move organise', ic: IC.folder, when: () => !C.inQuick(), run: () => C.docAction('move', id) },
       { label: `Duplicate This ${kindWord()[0].toUpperCase() + kindWord().slice(1)}`, words: 'copy duplicate file', ic: IC.dup, when: () => !C.inQuick(), run: () => C.docAction('dup', id) },
       { label: document.body.classList.contains('no-files') ? 'Show File List' : 'Hide File List', words: 'sidebar documents files panel toggle', ic: IC.side, run: () => $('#btnSidebar').click() },
+      { label: 'Recovery Copies…', words: 'history versions backup restore recover earlier autosave revert lost', ic: IC.undo, when: () => !C.inQuick(), run: () => C.docAction('recovery', id) },
       { label: 'Recycle Bin…', words: 'trash deleted restore undelete bin recover', ic: IC.del, run: () => C.openBin() },
       { label: `Move This ${kindWord()[0].toUpperCase() + kindWord().slice(1)} to the Recycle Bin`, words: 'delete remove trash file bin', ic: IC.del, danger: true, when: () => !C.inQuick(), run: () => C.docAction('del', id) },
     ];

@@ -2,6 +2,7 @@ import DocumentSettings from '../ui/DocumentSettings.svelte';
 import { renderView } from '../ui/render-view.svelte';
 import { runtime as TD } from '../runtime';
 import { downloadImage } from '../platform/download';
+import { readPicture } from '../platform/images';
 // Document view: a page of text blocks (LaTeX-flavoured, $math$) with embedded diagrams,
 // plus whole-document LaTeX export.
 (function () {
@@ -147,6 +148,9 @@ import { downloadImage } from '../platform/download';
 
   // ---------- LaTeX export ----------
   const escTex = (line: any) => TD.segments(line).map((seg: any) => (seg.math ? `$${TD.mathTex(seg)}$` : seg.s.replace(/(^|[^\\])([%&#])/g, '$1\\$2').replace(/(^|[^\\])([%&#])/g, '$1\\$2'))).join('');
+  // a name typed as plain text (a file name), every character as it is
+  const PLAIN: Record<string, string> = { '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', $: '\\$', '%': '\\%', '&': '\\&', '#': '\\#', _: '\\_', '^': '\\textasciicircum{}', '~': '\\textasciitilde{}' };
+  const plainTex = (t: any) => String(t).replace(/[\\{}$%&#_^~]/g, (c) => PLAIN[c]);
   function textToLatex(text: any, ctx: Record<string, any> = {}) {
     const parts = String(text).split(/\$\$([\s\S]*?)\$\$/);
     const env: Record<string, any> = { ul: 'itemize', ol: 'enumerate', chk: 'itemize' };
@@ -205,11 +209,7 @@ import { downloadImage } from '../platform/download';
   }
   const ALIGN_ENV: Record<string, any> = { center: 'center', right: 'flushright', left: 'flushleft' };
   // image file name used in \includegraphics (the user saves the picture under this name)
-  const imageName = (b: any, i: any) => {
-    const ext = ((b.src || '').match(/^data:image\/(\w+)/) || [])[1] || 'png';
-    const base = (b.name || `image-${i + 1}`).replace(/\.[a-z0-9]+$/i, '').replace(/[^\w-]+/g, '-');
-    return `${base}.${ext === 'jpeg' ? 'jpg' : ext === 'svg' ? 'svg' : ext}`;
-  };
+  const imageName = (b: any, i: any) => TD.texImages.fileName(b.name || `image-${i + 1}`, b.src);
   function tableToLatex(b: any) {
     const rows = b.rows || [[]], nc = Math.max(1, ...rows.map((r: any) => r.length));
     const a = (b.colAlign || 'c')[0];
@@ -227,9 +227,9 @@ import { downloadImage } from '../platform/download';
     out.push('\\end{tabular}', '\\end{center}');
     return out.join('\n');
   }
-  function imageToLatex(b: any, i: any) {
-    const name = imageName(b, i), w = +(b.width || 0.6).toFixed(2);
-    const g = `\\includegraphics[width=${w === 1 ? '' : w}\\linewidth]{${name}}`;
+  function imageToLatex(b: any, i: any, X: any) {
+    const name = TD.texImages.use(X, imageName(b, i), b.src), w = +(b.width || 0.6).toFixed(2);
+    const g = TD.texImages.include(X, name, `width=${w === 1 ? '' : w}\\linewidth`);
     const note = `% image file: ${name} (save it next to the .tex)`;
     if (b.caption && b.caption.trim()) return [note, '\\begin{figure}[h]', '  \\centering', '  ' + g, `  \\caption{${escTex(b.caption)}}`, '\\end{figure}'].join('\n');
     return [note, '\\begin{center}', g, '\\end{center}'].join('\n');
@@ -253,14 +253,14 @@ import { downloadImage } from '../platform/download';
         return;
       }
       if (b.type === 'table') { for (const r of b.rows || []) for (const c of r) textPkgs(c || '', pk); body.push(tableToLatex(b), ''); return; }
-      if (b.type === 'image') { if (b.src) { needGraphicx = true; body.push(imageToLatex(b, i), ''); } return; }
+      if (b.type === 'image') { if (b.src) { needGraphicx = true; body.push(imageToLatex(b, i, X), ''); } return; }
       if (!b.shapes || !b.shapes.length) return;
       X.scene = b.shapes;
-      const data = btoa(unescape(encodeURIComponent(JSON.stringify(b.shapes.map(({ id, ...rest }: any) => rest)))));
-      // a picture imported and not changed is written as it was (the data comment first inside it)
+      // a picture imported and not changed is written as it was. No data comment: one line of base64 can pass
+      // TeX's line limit and stop pdflatex, so the app can't restore its own export exactly (the dialog says so)
       const W = TD.tikzWhole(b.shapes.filter((s: any) => !s.hidden), X);
-      const pic = W ? [W.open + `\n  % diagramtex-data: ${data}` + W.pre.map((c: any) => '\n  ' + c.replace(/\n/g, '\n  ')).join('') + W.body + W.close]
-        : [TD.tikzOpen(b.shapes), `  % diagramtex-data: ${data}`, ...TD.tikzLines(b.shapes, X).map((l: any) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}'];
+      const pic = W ? [W.open + W.pre.map((c: any) => '\n  ' + c.replace(/\n/g, '\n  ')).join('') + W.body + W.close]
+        : [TD.tikzOpen(b.shapes), ...TD.tikzLines(b.shapes, X).map((l: any) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}'];
       // wider than the text block: scale down to \linewidth, as the page preview does
       const wide = diagramWidthCm(b.shapes) > P.textW + 0.01;
       if (wide) needGraphicx = needBox = true;
@@ -272,6 +272,8 @@ import { downloadImage } from '../platform/download';
     });
     const pre = TD.preamble(X);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
+    // shadings, patterns and parts the pictures declare once
+    if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
     const extra = [...pk].filter((p) => !(p as any).includes('hyperref')).map((p) => `\\usepackage${p}`);
     const spread = +P.spread || 1;
     return [
@@ -289,7 +291,7 @@ import { downloadImage } from '../platform/download';
       ...X.preDefs,
       ...(spread !== 1 ? [`\\linespread{${spread}}`] : []),
       '',
-      ...(P.title ? [`\\title{${textToLatex(leafName(doc.name) || 'Untitled')}}`, '\\date{}', ''] : []),
+      ...(P.title ? [`\\title{${plainTex(leafName(doc.name) || 'Untitled')}}`, '\\date{}', ''] : []),
       '\\begin{document}',
       ...(P.title ? ['\\maketitle'] : []),
       '',
@@ -300,7 +302,7 @@ import { downloadImage } from '../platform/download';
   };
 
   // Page mode: every object keeps its exact place on the paper. Each page is one overlay
-  // tikzpicture anchored at the page's top-left corner (needs two LaTeX runs: remember picture).
+  // tikzpicture placed at the page's top-left corner with eso-pic (one LaTeX run).
   TD.pageToLatex = function (doc: any, { only }: Record<string, any> = {}) {
     const X = TD.makeTikzContext();
     X.preDefs = new Set(); // definitions kept from an imported preamble
@@ -321,9 +323,12 @@ import { downloadImage } from '../platform/download';
       });
       X.scene = copies;
       const lines = TD.tikzLines(copies, X);
-      body.push(`% ---- page ${k + 1} ----`, '\\noindent',
-        '\\begin{tikzpicture}[remember picture, overlay, x=1cm, y=1cm, shift={(current page.north west)}]',
-        ...lines.map((l: any) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}', '');
+      // The picture goes in a box that eso-pic sets at the paper's top-left corner as the page ships out,
+      // so one compile is enough (\\null gives the page something to ship).
+      body.push(`% ---- page ${k + 1} ----`, '\\begin{lrbox}{\\tdpage}',
+        '\\begin{tikzpicture}[overlay, x=1cm, y=1cm]',
+        ...lines.map((l: any) => '  ' + l.replace(/\n/g, '\n  ')), '\\end{tikzpicture}',
+        '\\end{lrbox}', '\\AddToShipoutPictureFG*{\\AtPageUpperLeft{\\usebox{\\tdpage}}}', '\\null', '');
     });
     const pre = TD.preamble(X);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
@@ -331,15 +336,16 @@ import { downloadImage } from '../platform/download';
     return [
       `% ${leafName(doc.name) || 'Untitled'}: free-form page from DiagramTeX ${TD.VERSION}.`,
       '% Coordinates are measured from the top-left corner of the paper (x right, y up, so y is negative on the page).',
-      '% Compile twice: the pictures use "remember picture" to find the page corner.',
       '\\documentclass[10pt]{article}',
       `\\usepackage[${geometryOpts(P)}]{geometry}`,
       '\\usepackage{amsmath, amssymb}',
       '\\usepackage{xcolor}',
       ...pre,
+      '\\usepackage{eso-pic}',
       ...mathStyleLines(body, X),
       ...defs,
       ...X.preDefs,
+      '\\newsavebox{\\tdpage}',
       '\\pagestyle{empty}',
       '',
       '\\begin{document}',
@@ -561,9 +567,11 @@ import { downloadImage } from '../platform/download';
   // Ctrl/⌘ + / − / 0, as in the browser
   document.addEventListener('keydown', (e) => {
     if (app.state.mode !== 'document' || !(e.ctrlKey || e.metaKey) || e.altKey || document.body.classList.contains('mode-quick')) return;
-    if (e.key === '=' || e.key === '+') { e.preventDefault(); stepZoom(1); }
-    else if (e.key === '-' || e.key === '_') { e.preventDefault(); stepZoom(-1); }
-    else if (e.key === '0') { e.preventDefault(); zoomTo(1); }
+    // by key and by physical key (layouts where = or − need Shift, and the number pad), never the browser's page zoom
+    const c = e.code;
+    if (e.key === '=' || e.key === '+' || c === 'Equal' || c === 'NumpadAdd') { e.preventDefault(); stepZoom(1); }
+    else if (e.key === '-' || e.key === '_' || c === 'Minus' || c === 'NumpadSubtract') { e.preventDefault(); stepZoom(-1); }
+    else if (e.key === '0' || c === 'Digit0' || c === 'Numpad0') { e.preventDefault(); zoomTo(1); }
   });
 
   // ---------- page settings panel (right side in document mode) ----------
@@ -687,13 +695,12 @@ import { downloadImage } from '../platform/download';
     inp.onchange = () => {
       const f = inp.files && inp.files[0];
       if (!f) return;
-      const rd = new FileReader();
-      rd.onload = () => {
-        if (replaceIdx != null) Object.assign(doc().blocks[replaceIdx], { src: rd.result, name: f.name });
-        else { keepActive((d: any) => d.blocks.splice(at, 0, { type: 'image', src: rd.result, name: f.name, width: 0.6, caption: '' })); editingIdx = at; }
+      // as the canvas takes pictures: GIF, WebP and the like become PNG (what pdflatex reads), big ones are scaled down
+      readPicture(f).then((pic) => {
+        if (replaceIdx != null) Object.assign(doc().blocks[replaceIdx], { src: pic.src, name: f.name });
+        else { keepActive((d: any) => d.blocks.splice(at, 0, { type: 'image', src: pic.src, name: f.name, width: 0.6, caption: '' })); editingIdx = at; }
         changed(); render();
-      };
-      rd.readAsDataURL(f);
+      }, (err) => app.showHint?.(`Couldn't open ${f.name}: ${err.message}`, 2500));
     };
     inp.click();
   }

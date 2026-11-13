@@ -3,7 +3,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.38.3'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.43.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -1464,9 +1464,18 @@ import { runtime as TD } from '../runtime';
     '\\AddToHook{env/ZX/begin}{\\let\\pgfsetlayers\\dtx@zxlayers}',
     '\\makeatother',
   ];
+  // pgf-umlcd makes \object its object environment inside every tikzpicture, and xy-pic draws each entry of an
+  // \xymatrix with its own \object: an xy diagram (a node's interrupted picture) gets xy's back
+  const XY_UML = [
+    '\\makeatletter % pgf-umlcd takes \\object inside pictures; xy diagrams in them need xy\'s own',
+    '\\let\\dtx@xyobject\\object',
+    '\\let\\dtx@interruptpicture\\pgfinterruptpicture',
+    '\\def\\pgfinterruptpicture{\\dtx@interruptpicture\\let\\object\\dtx@xyobject}',
+    '\\makeatother',
+  ];
   TD.preambleCompat = (X: any) => {
     const qk = X.libs.has('quantikz2'), zx = X.pkgs.has('zx-calculus');
-    return { before: qk && (zx || X.pkgs.has('tikz-cd')) ? QK_CD : [], after: qk && zx ? QK_ZX : [] };
+    return { before: qk && (zx || X.pkgs.has('tikz-cd')) ? QK_CD : [], after: [...(qk && zx ? QK_ZX : []), ...(X.pkgs.has('xy') && X.pkgs.has('pgf-umlcd') ? XY_UML : [])] };
   };
   TD.preamble = function (X: any) {
     const pre = ['\\usepackage{tikz}'];
@@ -1476,7 +1485,7 @@ import { runtime as TD } from '../runtime';
     if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
     // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
     const forest = [...X.pkgs].filter((p) => /^forest\b/.test(p));
-    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p) && !p.startsWith('svgcolor:')) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : `\\usepackage{${p}}`);
+    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p) && !p.startsWith('svgcolor:')) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : p === 'svg' ? TD.texImages.SVG_PKG : `\\usepackage{${p}}`);
     if (forest.length) {
       const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
       pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);

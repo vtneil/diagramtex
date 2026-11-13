@@ -47,14 +47,14 @@
   --shadow-modal: 0 0 0 .5px rgba(28,27,25,.08), 0 20px 50px rgba(28,27,25,.22);
   --shadow-knob: 0 .5px 1px rgba(28,27,25,.18), 0 1px 3px rgba(28,27,25,.10);
   /* geometry: 4px grid, one control height. Rounded corners nest concentrically: a shape inset by N px
-     inside another uses the outer radius minus N (segment 4 in a 6 track with 2px padding, menu row 6
-     in a 10 menu with 4px padding), so inner and outer corners share their diagonal. */
+     inside another uses the outer radius minus N (segment 5 in an 8 track with 3px padding, menu row 8
+     in a 12 menu with 4px padding), so inner and outer corners share their diagonal. */
   --ctl: 28px;               /* HIG macOS default control size */
   --ctl-sm: 24px;            /* dense secondary controls; HIG minimum is 20 */
   --r-sm: 4px;               /* swatches, kbd, segments inside a track */
-  --r: 6px;                  /* buttons, inputs, segmented tracks, menu rows */
-  --r-lg: 10px;              /* popovers, menus, cards */
-  --r-xl: 18px;              /* modals: the head's 6px buttons sit 12px in, so 6 + 12 */
+  --r: 8px;                  /* buttons, inputs, dropdowns, segmented tracks, menu rows */
+  --r-lg: 12px;              /* popovers, menus, cards: a menu row (--r) sits 4px in, so 8 + 4 */
+  --r-xl: 20px;              /* modals: the head's buttons (--r) sit 12px in, so 8 + 12 */
   --files-w: 200px;
   --props-w: 280px;
   --font-ui: "Inter Display", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -189,15 +189,15 @@ body:not(.no-files) #btnSidebar { color: var(--ink); background: var(--wash); }
 
 /* Segmented controls (Page | Classic, Diagram | Document, export format, engine, orientation, gradient kind,
    fill tabs): a recessed track with a raised selected segment, 28px tall overall. */
-.seg, #props .seg-ctl, #engineBox .eng-seg, #inputBox .eng-seg, .fp-seg, .cp-tabs {
+.seg, #props .seg-ctl, .cz-props .seg-ctl, #engineBox .eng-seg, #inputBox .eng-seg, .fp-seg, .cp-tabs {
   display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r);
 }
-.seg button, #props .seg-ctl button, #engineBox .eng-seg button, #inputBox .eng-seg button, .fp-seg button, .cp-tabs button {
+.seg button, #props .seg-ctl button, .cz-props .seg-ctl button, #engineBox .eng-seg button, #inputBox .eng-seg button, .fp-seg button, .cp-tabs button {
   flex: 1 1 auto; height: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px;
   border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); font-size: 12px; font-weight: 500; margin: 0;
 }
-.seg button:hover, #props .seg-ctl button:hover, #engineBox .eng-seg button:hover, #inputBox .eng-seg button:hover, .fp-seg button:hover, .cp-tabs button:hover { background: var(--wash); color: var(--ink); }
-.seg button.on, #props .seg-ctl button.on, #engineBox .eng-seg button.on, #inputBox .eng-seg button.on, .fp-seg button.on, .cp-tabs button.on {
+.seg button:hover, #props .seg-ctl button:hover, .cz-props .seg-ctl button:hover, #engineBox .eng-seg button:hover, #inputBox .eng-seg button:hover, .fp-seg button:hover, .cp-tabs button:hover { background: var(--wash); color: var(--ink); }
+.seg button.on, #props .seg-ctl button.on, .cz-props .seg-ctl button.on, #engineBox .eng-seg button.on, #inputBox .eng-seg button.on, .fp-seg button.on, .cp-tabs button.on {
   background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob);
 }
 /* With src/ui/services/segthumb.ts one knob per switch slides to the chosen segment; the segments then draw none. */
@@ -299,6 +299,12 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 .bin-box .bin-empty { min-width: 0; border: 0; background: none; color: var(--graphite); padding: 0 8px; margin-left: -8px; }
 .bin-box .bin-empty:hover:not([disabled]) { color: var(--redpen); background: none; }
 .bin-box .bin-empty[disabled] { color: var(--faint); }
+.rec-list .rec-open { flex: none; width: var(--ctl-sm); height: var(--ctl-sm); padding: 0; color: var(--pencil); }
+.rec-list .rec-open svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.rec-list .rec-open:hover { color: var(--ink); background: none; }
+.rec-set { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--graphite); }
+.rec-set label { display: flex; align-items: center; gap: 8px; }
+.rec-set select { height: var(--ctl-sm); }
 .files-foot { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
 .files-foot .app-src { align-self: center; display: inline-flex; padding: 3px; margin: -3px 0 -3px -3px; }
 .files-foot .app-ver { margin-left: auto; }
@@ -742,6 +748,8 @@ textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); r
 @keyframes tdd-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .td-dialog, .tdd-box { animation: none; } }
 
+/* a picture, .tex file or text dragged in from outside: where it will land */
+body.drop-over #stage, body.drop-over #docview { box-shadow: inset 0 0 0 2px var(--bluepen); }
 #modal, .modal { position: fixed; inset: 0; background: var(--scrim); display: flex; align-items: center; justify-content: center; z-index: 10; }
 #modal[hidden], .modal[hidden] { display: none; }
 .modal-box { width: min(860px, 92vw); height: min(620px, 86vh); background: var(--sheet-raised); display: flex; flex-direction: column; border: 1px solid var(--rule-strong); border-radius: var(--r-xl); overflow: hidden; box-shadow: var(--shadow-modal); }
@@ -961,7 +969,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 /* Menu for every <select> (src/ui/services/selectmenu.ts): same rows as the dash/width menus, so no dropdown
    falls back to the system menu. Highlight follows pointer and arrow keys; the current value is marked. */
 .selmenu {
-  position: fixed; z-index: 1100; padding: 4px; overflow-y: auto; max-width: min(360px, calc(100vw - 16px));
+  position: fixed; z-index: 2100; padding: 4px; overflow-y: auto; /* over dialogs too */ max-width: min(360px, calc(100vw - 16px));
   background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-lg);
   box-shadow: var(--shadow-pop); animation: pop-in .14s var(--ease); font-size: 12px;
 }
@@ -1083,7 +1091,8 @@ body.mode-board #emptyHint .eh-board { display: block; }
 .ddpop > button .sprev { height: 14px; }
 
 /* ---------- export menu ---------- */
-.exp-pop { width: 264px; padding: 12px; font-family: var(--font-ui); font-size: 13px; color: var(--ink); }
+/* its controls sit 12px in, so the shell's corner is theirs + 12 (concentric) */
+.exp-pop { width: 264px; padding: 12px; border-radius: calc(var(--r) + 12px); font-family: var(--font-ui); font-size: 13px; color: var(--ink); }
 .exp-h { font-size: 11px; font-weight: 600; color: var(--pencil); margin-bottom: 8px; }
 .exp-fmt { margin-bottom: 12px; }
 .exp-fmt button { flex: 1 1 0; }
@@ -1119,6 +1128,26 @@ input[type=checkbox][role=switch]:focus-visible { outline: 2px solid var(--bluep
 @media (max-width: 1140px) { #topbar .group > button:not(.icon) { padding: 0 10px; } #topbar .group > button:not(.icon) svg { display: none; } }
 #props .row > label, #props .row > .field-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #props .cval { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* grid | snap: one track of independent toggles (.ze-flags: no sliding knob, each segment raised while on) */
+#topbar .flag-seg { margin-left: 8px; flex: none; gap: 2px; }
+#topbar .flag-seg button { width: 28px; padding: 0; flex: none; }
+/* the LaTeX dialog's .zip: a split button (the download, and a menu of the two kinds of .zip); the segments meet
+   square with a hairline between, outer corners round. With no SVG there is one kind, so no menu. */
+.split-btn { display: inline-flex; flex: none; }
+.split-btn[hidden] { display: none; }
+.split-btn > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split-btn > button + button { width: 24px; padding: 0; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; display: inline-flex; align-items: center; justify-content: center; }
+.split-btn > button:hover, .split-btn > button:focus-visible { position: relative; z-index: 1; }
+.split-btn > button + button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.split-btn.one > button:first-child { border-radius: var(--r); }
+.split-btn.one > button + button { display: none; }
+.zip-menu { min-width: 0; }
+/* one split button: the two segments meet square, only the outer corners round */
+#topbar .flag-seg button:first-of-type { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+#topbar .flag-seg button:last-of-type { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+#btnSnap svg { transform: translateY(1px); } /* the magnet's weight sits high in its box: optically centred */
+#topbar .flag-seg button svg { display: block; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 
 /* appearance: icon-only, at the right end of the top bar */
 #topbar .theme-seg { margin-left: 8px; flex: none; }
@@ -1217,13 +1246,14 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-props .cbtn:disabled { opacity: .4; cursor: default; }
 .cz-props input.mono { font-family: var(--font-mono); font-size: 12px; }
 .cz-props input[type]:disabled, .cz-props select:disabled { background: var(--well); color: var(--pencil); cursor: default; }
+.cz-props .row.col { flex-direction: column; align-items: stretch; gap: 4px; }
+.cz-props .row.col > label { width: auto; }
+.cz-props .row.col textarea { width: 100%; min-height: 76px; padding: 6px 8px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); font: 12px/1.5 var(--font-mono); resize: vertical; }
 .cz-props input:focus, .cz-props select:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
-.cz-props .ctl.seg-ctl { display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r); }
-.cz-props .seg-ctl button { flex: 1; height: 100%; padding: 0; border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); font-size: 11px; font-variant-numeric: tabular-nums; }
-.cz-props .seg-ctl button.on { background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob); }
-/* hover like the main page's segmented controls */
-.cz-props .seg-ctl button:hover:not(.on) { background: var(--wash); color: var(--ink); }
+.cz-props .seg-ctl button { flex: 1; padding: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
 .cz-props .seg-ctl button:disabled, .cz-props .seg-ctl button:disabled:hover { opacity: .35; cursor: default; background: transparent; color: var(--graphite); }
+/* icons in a segmented control (the UML line's Route) */
+.cz-props .seg-ctl button svg { display: block; width: 16px; height: 16px; margin: auto; }
 .cz-props .help { color: var(--graphite); font-size: 12px; line-height: 1.55; margin: 0 0 8px; }
 .cz-props .help:last-child { margin-bottom: 0; }
 .cz-props code, .cz-tikz code { font-family: var(--font-mono); font-size: 11px; color: var(--graphite); }
@@ -1355,6 +1385,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 /* a path that drags as a whole, under the pointer */
 .g3-hov { fill: none; stroke: var(--bluepen); stroke-width: 7; stroke-linejoin: round; stroke-linecap: round; opacity: .24; pointer-events: none; }
 .fy-vsel { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; fill-opacity: .5; }
+.uml-sel { fill: none; stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; }
 .cf-bhov { fill: none; stroke: color-mix(in srgb, var(--bluepen) 22%, transparent); stroke-linecap: round; pointer-events: none; }
 .fy-vtarget { fill: color-mix(in srgb, var(--bluepen) 12%, transparent); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
 /* 3D geometry editor: the xy-plane grid, points to drag, a moving point's drop to the floor, the axes gizmo */

@@ -9,8 +9,9 @@ export const numField = (label: string, key: string, value: string | number | nu
   controlClass: unit ? 'ctl unit' : 'ctl',
 });
 export const segments = (label: string, key: string, value: unknown, options: (string | number)[][], disabled = false): FormRow => ({
-  ...row(label, ...options.map(([keyValue, text, title]): Control => ({ kind: 'button' as const, text: String(text),
-    attrs: { 'data-fs': key, 'data-v': String(keyValue), class: !disabled && String(value) === String(keyValue) ? 'on' : '', title, ...(disabled ? { disabled: true } : {}) } }))),
+  // an option is [value, text, title?, name?]: a name for a button whose text is a symbol
+  ...row(label, ...options.map(([keyValue, text, title, name]): Control => ({ kind: 'button' as const, text: String(text),
+    attrs: { 'data-fs': key, 'data-v': String(keyValue), class: !disabled && String(value) === String(keyValue) ? 'on' : '', title, ...(name ? { 'aria-label': String(name) } : {}), ...(disabled ? { disabled: true } : {}) } }))),
   controlClass: 'ctl seg-ctl',
 });
 export const codeRow = (code: string) => row('Code', { kind: 'code' as const, text: code, class: 'km-cmd' });

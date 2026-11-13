@@ -221,7 +221,8 @@ import { runtime as TD } from '../runtime';
       const [X, Y] = m(L.at[0] + ox, L.at[1] + oy);
       if (zoom === 1) s += TD.textSvg(L.t, st, c, X, Y, o.ctx || {});
       else s += `<g transform="translate(${r2(X)},${r2(Y)}) scale(${r2(zoom)})">${TD.textSvg(L.t, st, c, 0, 0, o.ctx || {})}</g>`;
-      const T = bipXf(it, true);
+      // the voltage and current marks follow a two-terminal part's path: a node part (a ground, a label) has none
+      const T = it.b ? bipXf(it, true) : (x: any, y: any) => [x, y];
       if (L.arc) {
         const P = ['p0', 'c1', 'c2', 'p3'].map((n) => m(...T(...(L.arc[n] as [any, any]))));
         const tx = P[3][0] - P[2][0], ty = P[3][1] - P[2][1], tl = Math.hypot(tx, ty) || 1;

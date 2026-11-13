@@ -2,7 +2,9 @@ import type { DiagramDocument, FileKind } from './contracts';
 import type { JsonStore } from '../platform/browser-store';
 export interface FileEntry { id: string; name: string; kind?: FileKind; updated?: number }
 export function createAutosave(state: { docId: string | null; doc: DiagramDocument; view: { x: number; y: number; zoom: number }; mode: string },
-  store: JsonStore, hooks: { index(): FileEntry[]; inBin(id: string): boolean; inDatabase(key: string): boolean; report(ok: boolean, full: boolean): void; showState(): void; renderList(): void }) {
+  store: JsonStore, hooks: { index(): FileEntry[]; inBin(id: string): boolean; inDatabase(key: string): boolean; report(ok: boolean, full: boolean): void; showState(): void; renderList(): void;
+    /** the stored file `id` (last changed at `updated`) is about to be replaced by new content */
+    replacing?(id: string, stored: Record<string, unknown> | null, updated: number | undefined): void }) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   // What this tab last read or wrote for the open file. A save with no change since then writes only the view, so
   // a tab left open (and saved on hide) does not put its stale copy over another tab's edit.
@@ -22,9 +24,10 @@ export function createAutosave(state: { docId: string | null; doc: DiagramDocume
       const stored = store.get<Record<string, unknown> | null>(key, null);
       if (stored) { store.set(key, { ...stored, view: state.view, mode: state.mode }); hooks.showState(); return; }
     }
+    const index = hooks.index(), entry = index.find(file => file.id === id);
+    hooks.replacing?.(id, store.get<Record<string, unknown> | null>(key, null), entry?.updated);
     const ok = store.set(key, { ...JSON.parse(content), view: state.view, mode: state.mode });
     if (ok) synced = { id, content };
-    const index = hooks.index(), entry = index.find(file => file.id === id);
     if (entry) { entry.name = doc.name; entry.kind = doc.kind; entry.updated = Date.now(); }
     // a file deleted in another tab stays in the Recycle Bin (its data kept current), not back in the list
     else if (!hooks.inBin(id)) index.push({ id, name: doc.name, kind: doc.kind, updated: Date.now() });

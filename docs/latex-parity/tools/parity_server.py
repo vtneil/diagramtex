@@ -18,7 +18,11 @@ class H(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
     def do_PUT(s):
         if not s.path.startswith('/__parity/'): return s._send(403, b'{}')
-        open(os.path.join(OUT, safe(s.path[10:])), 'wb').write(s._body()); s._send(200, b'{"ok":true}')
+        # one folder allowed: svg-inkscape/, where svg.sty looks for an SVG converted without Inkscape
+        sub, _, rest = s.path[10:].partition('/')
+        p = os.path.join(OUT, 'svg-inkscape', safe(rest)) if sub == 'svg-inkscape' and rest else os.path.join(OUT, safe(s.path[10:]))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, 'wb').write(s._body()); s._send(200, b'{"ok":true}')
     def do_POST(s):
         if not s.path.startswith('/__parity/tex/'): return s._send(403, b'{}')
         name = safe(s.path[14:]); dpi = s.headers.get('X-Dpi', '254')

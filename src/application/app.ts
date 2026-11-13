@@ -6,11 +6,15 @@ interface DeletedEntry extends SavedEntry { deleted: number; folder?: string; ba
 import type { EditorState } from '../core/state';
 import { createEditorState } from '../core/state';
 import { downloadBlob, downloadImage, createExportWriter } from '../platform/download';
+import { readPicture, svgFilePdf, texBundle, texFiles, type Picture } from '../platform/images';
+import { svgVectorPdf } from '../platform/svgpdf';
 import { createBrowserStore } from '../platform/browser-store';
 import { createAutosave } from '../core/autosave';
+import type { HistoryStep } from '../core/contracts';
+import { createRecovery, RECOVERY_DEFAULTS, RECOVERY_EVERY, RECOVERY_KEEP, RECOVERY_KEY, RECOVERY_QUICK, type RecoveryCopy, type RecoverySettings } from '../core/recovery';
 import { createDocumentFactory } from '../core/document';
 import { conformShape } from '../core/conform';
-import { createDocumentHistory } from '../core/history';
+import { createDocumentHistory, stamp } from '../core/history';
 import MainProperties from '../ui/MainProperties.svelte';
 import type { Model as StyleModel } from '../ui/StyleField.svelte';
 import type { Model as PageModel } from '../ui/PageProperties.svelte';
@@ -110,14 +114,30 @@ import { runtime as TD } from '../runtime';
   // Document transactions are independent of DOM and persistence. Input completion stays here.
   const documentHistory = createDocumentHistory(state, {
     syncLinks,
-    changed: scheduleSave,
+    changed() { fileRedo.length = 0; scheduleSave(); }, // a new edit ends what redo could bring back
     applied() { render(); renderProps(); scheduleSave(); updateTopbar(); },
     updateTools: updateTopbar,
   });
   const { begin, commit, apply: applyStep, trim: trimUndo } = documentHistory;
 
-  function undo() { finishEdit(); finishPoly(); commit(); const st = state.undo.pop(); if (!st) return; state.redo.push(st); applyStep(st, true); }
-  function redo() { finishEdit(); commit(); const st = state.redo.pop(); if (!st) return; state.undo.push(st); trimUndo(); applyStep(st, false); }
+  // The open file's own steps come first; once they run out, undo reaches the file list (a file or folder
+  // moved to the Recycle Bin comes back), as redo does the other way.
+  // Whichever is later goes first: the open file's last step, or the last change to the file list. Redo takes
+  // back whichever was undone last.
+  function undo() {
+    finishEdit(); finishPoly(); commit();
+    const st = state.undo[state.undo.length - 1], f = canUndoFile() ? fileUndo[fileUndo.length - 1] : null;
+    if (f && (!st || f.t > (st.t || 0))) { undoFile(); return; }
+    if (!st) return;
+    state.undo.pop(); st.r = stamp(); state.redo.push(st); applyStep(st, true);
+  }
+  function redo() {
+    finishEdit(); commit();
+    const st = state.redo[state.redo.length - 1], f = canRedoFile() ? fileRedo[fileRedo.length - 1] : null;
+    if (f && (!st || (f.r || 0) > (st.r || 0))) { redoFile(); return; }
+    if (!st) return;
+    state.redo.pop(); st.t = stamp(); state.undo.push(st); trimUndo(); applyStep(st, false);
+  }
 
   // ---------------- storage ----------------
   const LS_INDEX = 'diagramtex.index', LS_DOC = 'diagramtex.doc.', LS_PREFS = 'diagramtex.prefs', LS_CLIP = 'diagramtex.clip';
@@ -127,7 +147,17 @@ import { runtime as TD } from '../runtime';
   const { store, inDatabase: inDb } = createBrowserStore(DS, () => localStorage);
   const index = () => store.get<SavedEntry[]>(LS_INDEX, []);
   // Stable function declarations allow history callbacks to call the initialized service later.
-  const autosave = createAutosave(state, store, { index, inBin: (id) => bin().some((x) => (x as any).id === id), inDatabase: inDb, report: reportSave, showState: showSaveState, renderList: renderDocList });
+  // Recovery copies (src/core/recovery.ts): autosave keeps a file's earlier state, at most once a period.
+  // The period and how many copies are kept are app settings, kept in this browser.
+  const LS_RECOVERY = 'diagramtex.recovery';
+  const recoverySettings = (): RecoverySettings => {
+    const s = store.get<Partial<RecoverySettings>>(LS_RECOVERY, {});
+    return { every: RECOVERY_EVERY.includes(s.every as number) ? s.every as number : RECOVERY_DEFAULTS.every,
+      keep: RECOVERY_KEEP.includes(s.keep as number) ? s.keep as number : RECOVERY_DEFAULTS.keep };
+  };
+  const recovery = createRecovery(store, recoverySettings);
+  const autosave = createAutosave(state, store, { index, inBin: (id) => bin().some((x) => (x as any).id === id), inDatabase: inDb, report: reportSave, showState: showSaveState, renderList: renderDocList,
+    replacing: (id, stored, updated) => { recovery.take(id, stored, updated); } });
   function scheduleSave() { autosave.scheduleSave(); }
   function saveNow() { autosave.saveNow(); }
   // Saving is continuous, so there is nothing to report while it works: the sidebar says autosave is on.
@@ -215,9 +245,33 @@ import { runtime as TD } from '../runtime';
   }
   function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
 
+  // ---- Undo history per file (and per diagram of a classic file). Leaving a file keeps its steps; coming back
+  // gives them back, as long as what they apply to is still exactly as it was left. Another tab's edit, a
+  // restored recovery copy or reordered blocks change it, and its steps are dropped rather than misapplied.
+  // The newest 40 are kept for the session.
+  interface KeptHistory { undo: HistoryStep[]; redo: HistoryStep[]; mark: string }
+  const histories = new Map<string, KeptHistory>();
+  const historyKey = (id: string) => id + ':' + (state.doc.kind === 'page' ? 'page' : state.doc.active);
+  const historyMark = () => JSON.stringify(state.doc.kind === 'page' ? state.doc.sheet : state.doc.blocks[state.doc.active]);
+  function keepHistory() {
+    if (!state.docId) return;
+    const key = historyKey(state.docId);
+    histories.delete(key);
+    if (state.undo.length || state.redo.length) histories.set(key, { undo: state.undo, redo: state.redo, mark: historyMark() });
+    while (histories.size > 40) histories.delete(histories.keys().next().value!);
+  }
+  function takeHistory() {
+    state.undo = []; state.redo = []; documentHistory.reset();
+    if (!state.docId) return;
+    const key = historyKey(state.docId), kept = histories.get(key);
+    histories.delete(key);
+    if (kept && kept.mark === historyMark()) { state.undo = kept.undo; state.redo = kept.redo; }
+  }
+  const forgetHistory = (id: string) => { for (const k of [...histories.keys()]) if (k.startsWith(id + ':')) histories.delete(k); };
+
   function openDoc(id: any) {
     finishEdit(); finishPoly(); commit();
-    if (state.docId) saveNow();
+    if (state.docId) { saveNow(); keepHistory(); }
     const d: any = store.get<Record<string, any> | null>(LS_DOC + id, null);
     if (!d) return;
     const gone = dropRetiredDoc(d);
@@ -226,7 +280,7 @@ import { runtime as TD } from '../runtime';
     state.doc = makeDoc(d.name, d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }], d.active ?? 0, d.page, d.sheet, kind);
     const fit = !(d.view && d.view.zoom > 0);
     if (!fit) state.view = d.view;
-    state.sel.clear(); state.undo = []; state.redo = []; documentHistory.reset();
+    state.sel.clear(); takeHistory();
     autosave.markSynced();
     $('#docName').value = state.doc.name;
     renderDocList();
@@ -241,8 +295,9 @@ import { runtime as TD } from '../runtime';
   function setActiveBlock(i: any) {
     if (!state.doc.blocks[i] || state.doc.blocks[i].type !== 'diagram') return;
     finishEdit(); finishPoly(); commit();
+    keepHistory();
     state.doc.active = i;
-    state.sel.clear(); state.undo = []; state.redo = []; documentHistory.reset();
+    state.sel.clear(); takeHistory();
     render(); renderProps(); updateTopbar(); scheduleSave();
   }
   // Modes: 'page' (Page files), 'board' (Whiteboard files) or 'diagram' / 'document' (the two views of a
@@ -298,31 +353,103 @@ import { runtime as TD } from '../runtime';
     for (const x of bin()) {
       if (now - (x as any).deleted < BIN_DAYS * DAY) keep.push(x);
       // a file put back in the list (by another tab) keeps its data
-      else if (!index().some((d) => (d as any).id === (x as any).id)) { store.del(LS_DOC + (x as any).id); TD.files.forget((x as any).id); }
+      else if (!index().some((d) => (d as any).id === (x as any).id)) { store.del(LS_DOC + (x as any).id); recovery.forget((x as any).id); forgetHistory((x as any).id); TD.files.forget((x as any).id); }
     }
     if (keep.length !== bin().length) store.set(LS_BIN, keep);
     return keep;
   }
-  // take files out of the list into the bin; `folder` groups the files of a deleted folder
-  function binDocs(ids: any, folder?: any) {
+  // take files out of the list into the bin; `folder` groups the files of a deleted folder. When the open file
+  // goes, `next` opens in its place if it is listed (redo goes back to where undo came from), else the last
+  // file of the kind.
+  function binDocs(ids: any, folder?: any, next?: string | null) {
     if (ids.includes(state.docId)) saveNow();
     const all = index(), out = all.filter((d) => ids.includes((d as any).id)), when = Date.now(), batch = folder ? uid() : null;
+    // what undo needs to put things back as they were: places in the list, the open file, folded folders
+    const step: FileStep = { t: stamp(), ids: out.map((d) => d.id), folder, at: out.map((d) => all.indexOf(d)), open: ids.includes(state.docId) ? state.docId : null, created: null,
+      folded: folder ? [...folded].filter((k) => k === foldKey(folder) || k.startsWith(foldKey(folder + '/'))) : [] };
     store.set(LS_BIN, [...bin(), ...out.map((d) => ({ id: (d as any).id, name: (d as any).name, kind: (d as any).kind || 'classic', deleted: when, ...(folder ? { folder, batch } : {}) }))]);
     const idx = all.filter((d) => !ids.includes((d as any).id));
     store.set(LS_INDEX, idx);
     if (ids.includes(state.docId)) {
       const kind = state.doc.kind;
+      finishEdit(); finishPoly(); commit();
+      keepHistory(); // its steps come back with it
       state.docId = null;
       const same = idx.filter((d) => ((d as any).kind || 'classic') === kind);
-      if (same.length) openDoc((same[same.length - 1] as any).id); else newDoc(null, null, null, null, null, kind);
+      if (next && same.some((d) => d.id === next)) openDoc(next);
+      else if (same.length) openDoc((same[same.length - 1] as any).id); else step.created = newDoc(null, null, null, null, null, kind);
     }
     renderDocList(); renderBinRow();
+    if (step.ids.length) { fileUndo.push(step); if (fileUndo.length > 50) fileUndo.shift(); }
+    updateTopbar();
   }
+  // ---- Undo for the file list. A delete is one step: undo takes the files back out of the bin, to the places
+  // they had in the list and under their names (a name taken since gets "copy"), and reopens the file that
+  // was open. A file restored or erased from the bin dialog since is no longer the step's to bring back.
+  // `t` / `r`: when it was done and undone (`stamp()`), so it takes its turn among the files' own steps;
+  // `back`: the file that was open before undo, where redo returns to.
+  interface FileStep { t: number; r?: number; back?: string | null; ids: string[]; folder?: string; at: number[]; open: string | null; created: string | null; folded: string[] }
+  const fileUndo: FileStep[] = [], fileRedo: FileStep[] = [];
+  const binnedOf = (step: FileStep) => { const b = new Set(bin().map((x) => x.id)); return step.ids.filter((id) => b.has(id) && store.get(LS_DOC + id, null)); };
+  const listedOf = (step: FileStep) => { const l = new Set(index().map((x) => x.id)); return step.ids.filter((id) => l.has(id)); };
+  const canUndoFile = () => { while (fileUndo.length && !binnedOf(fileUndo[fileUndo.length - 1]).length) fileUndo.pop(); return fileUndo.length > 0; };
+  const canRedoFile = () => { while (fileRedo.length && !listedOf(fileRedo[fileRedo.length - 1]).length) fileRedo.pop(); return fileRedo.length > 0; };
+  // a file made only because the last one of its kind was deleted, and still untouched
+  const isBlankNew = (id: string) => {
+    const d: any = store.get(LS_DOC + id, null), e: any = docEntry(id);
+    if (!d || !e || e.name !== NEW_NAME[normKind(d.kind)]) return false;
+    return !(d.sheet?.shapes?.length) && (d.blocks || []).every((b: any) => b.type === 'diagram' && !(b.shapes || []).length);
+  };
+  function undoFile() {
+    if (!canUndoFile()) return;
+    const step = fileUndo.pop()!, ids = binnedOf(step), items = bin().filter((x) => ids.includes(x.id));
+    if (step.created && step.created === state.docId) saveNow();
+    const idx: any[] = index();
+    // back in list order, each at its old place (or the end, when the list has shrunk since)
+    const order = ids.map((id) => ({ id, at: step.at[step.ids.indexOf(id)] })).sort((a, b) => a.at - b.at);
+    for (const { id, at } of order) {
+      const x: any = items.find((y) => y.id === id);
+      const name = idx.some((d) => d.name === x.name) ? copyName(x.name) : x.name;
+      if (name !== x.name) store.set(LS_DOC + id, { ...store.get<Record<string, any>>(LS_DOC + id, {}), name });
+      idx.splice(Math.min(at, idx.length), 0, { id, name, kind: x.kind, updated: x.updated || Date.now() });
+    }
+    // the empty file that stood in for the deleted one goes again
+    let dropped = false;
+    if (step.created && isBlankNew(step.created)) {
+      const k = idx.findIndex((d) => d.id === step.created);
+      if (k >= 0) idx.splice(k, 1);
+      store.del(LS_DOC + step.created); recovery.forget(step.created); forgetHistory(step.created);
+      dropped = true;
+    }
+    store.set(LS_INDEX, idx);
+    store.set(LS_BIN, bin().filter((x) => !ids.includes(x.id)));
+    for (const k of step.folded) folded.add(k);
+    if (step.folded.length) store.set(LS_FOLDED, [...folded]);
+    fileRedo.push({ ...step, ids, created: null, r: stamp(), back: dropped && state.docId === step.created ? null : state.docId });
+    const reopen = step.open && ids.includes(step.open) ? step.open : null;
+    if (dropped && state.docId === step.created) state.docId = null; // nothing of it left to save
+    if (reopen) openDoc(reopen);
+    else if (!state.docId) { const same = idx.filter((d) => (d.kind || 'classic') === state.doc.kind); if (same.length) openDoc(same[same.length - 1].id); }
+    renderDocList(); renderBinRow(); updateTopbar();
+    const first: any = items.find((x) => x.id === ids[0]);
+    showHint(step.folder ? `Restored "${leafOf(step.folder)}"` : ids.length === 1 ? `Restored "${leafOf(first.name)}"` : `Restored ${ids.length} files`, 1600);
+  }
+  function redoFile() {
+    if (!canRedoFile()) return;
+    const step = fileRedo.pop()!, ids = listedOf(step);
+    const it: any = docEntry(ids[0]);
+    binDocs(ids, step.folder, step.back);
+    for (const k of step.folded) folded.delete(k);
+    if (step.folded.length) store.set(LS_FOLDED, [...folded]);
+    showHint(`Moved "${leafOf(step.folder || it.name)}" to the Recycle Bin`, 1600);
+  }
+  const undoHint = () => `${kb('Ctrl+Z')} brings it back`;
   function deleteDoc(id: any) {
     const it: any = docEntry(id);
     if (!it) return;
+    fileRedo.length = 0;
     binDocs([id]);
-    showHint(`Moved "${leafOf(it.name)}" to the Recycle Bin`, 1600);
+    showHint(`Moved "${leafOf(it.name)}" to the Recycle Bin. ${undoHint()}`, 2400);
   }
   // A folder goes to the bin with everything in it (files of the kind on show, and the folders inside).
   async function deleteFolder(path: any) {
@@ -330,10 +457,11 @@ import { runtime as TD } from '../runtime';
     const ids = index().filter((d) => ((d as any).kind || 'classic') === kind && pathOf((d as any).name).join('/').startsWith(pre)).map((d) => (d as any).id);
     if (!ids.length) return;
     if (!(await TD.confirm(`Delete the folder "${leafOf(path)}"?`, `${ids.length === 1 ? 'The file' : `All ${ids.length} files`} in it ${ids.length === 1 ? 'goes' : 'go'} to the Recycle Bin, where you can restore ${ids.length === 1 ? 'it' : 'them'} for ${BIN_DAYS} days.`, { ok: 'Delete Folder', danger: true }))) return;
+    fileRedo.length = 0;
     binDocs(ids, path);
     for (const k of [...folded]) if (k === foldKey(path) || (k as any).startsWith(foldKey(pre))) folded.delete(k);
     store.set(LS_FOLDED, [...folded]);
-    showHint(`Moved "${leafOf(path)}" to the Recycle Bin`, 1600);
+    showHint(`Moved "${leafOf(path)}" to the Recycle Bin. ${undoHint()}`, 2400);
   }
   // Put files back under their old names (a name taken since gets "copy"); the first one opens.
   function restoreFromBin(ids: any) {
@@ -352,7 +480,7 @@ import { runtime as TD } from '../runtime';
     showHint(items.length === 1 ? `Restored "${leafOf((items[0] as any).name)}"` : `Restored ${items.length} files`, 1600);
   }
   function eraseFromBin(ids: any) {
-    for (const id of ids) { store.del(LS_DOC + id); TD.files.forget(id); }
+    for (const id of ids) { store.del(LS_DOC + id); recovery.forget(id); forgetHistory(id); TD.files.forget(id); }
     store.set(LS_BIN, bin().filter((x) => !ids.includes((x as any).id)));
     renderBinRow();
   }
@@ -425,6 +553,107 @@ import { runtime as TD } from '../runtime';
       }
     });
     requestAnimationFrame(() => ((root.querySelector('.bin-restore') || root.querySelector('.bin-done'))! as HTMLElement).focus());
+  }
+  // ---- Recovery copies of one file: the newest first, each restored in place or opened as a new file. ----
+  const HIST_IC = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2.8 8a5.2 5.2 0 101.5-3.7" fill="none" stroke="currentColor"/><path d="M2.4 2.4v2.8h2.8" fill="none" stroke="currentColor"/><path d="M8 5.2V8l2 1.2" fill="none" stroke="currentColor"/></svg>';
+  const clockOf = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  function whenOf(t: number) {
+    const d = new Date(t), today = new Date(), y = new Date(today.getTime() - DAY);
+    const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+    return same(d, today) ? `Today, ${clockOf(t)}` : same(d, y) ? `Yesterday, ${clockOf(t)}`
+      : d.toLocaleDateString([], { month: 'short', day: 'numeric', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) }) + ', ' + clockOf(t);
+  }
+  function sinceOf(t: number) {
+    const m = Math.round((Date.now() - t) / 6e4);
+    return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 60 * 24 ? `${Math.round(m / 60)} h ago` : ago(t);
+  }
+  const sizeOf = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+  function contentsOf(d: any) {
+    if (d.kind === 'page') { const n = d.sheet?.shapes?.length || 0; return `${n} object${n === 1 ? '' : 's'}`; }
+    const blocks = d.blocks || [], n = blocks.reduce((s: number, b: any) => s + (b.shapes?.length || 0), 0);
+    const objects = `${n} object${n === 1 ? '' : 's'}`;
+    return d.kind === 'board' || blocks.length < 2 ? objects : `${blocks.length} blocks, ${objects}`;
+  }
+  const everyWord = (m: number) => m === 60 ? 'every hour' : m === 1 ? 'every minute' : `every ${m} minutes`;
+  // Put a copy back in place of the file. What the file holds now becomes a copy itself, so this is undone
+  // by restoring that one. The name, view and place in the list stay as they are.
+  function restoreRecovery(id: string, copy: RecoveryCopy) {
+    const open = id === state.docId;
+    if (open) { finishEdit(); finishPoly(); commit(); saveNow(); }
+    const cur: any = store.get(LS_DOC + id, null), e: any = docEntry(id);
+    if (!cur || !e) return;
+    recovery.take(id, cur, e.updated, true);
+    store.set(LS_DOC + id, { ...copy.doc, kind: cur.kind, name: cur.name, view: cur.view, mode: cur.mode });
+    const idx: any[] = index(), it = idx.find((x) => x.id === id);
+    if (it) { it.updated = Date.now(); store.set(LS_INDEX, idx); }
+    if (open) { state.docId = null; openDoc(id); } else renderDocList();
+    showHint(`Restored the copy from ${whenOf(copy.at)}. The state before it is kept as a recovery copy.`, 3200);
+  }
+  function openRecoveryCopy(id: string, copy: RecoveryCopy) {
+    const e: any = docEntry(id);
+    if (!e) return;
+    let name = `${e.name} (${whenOf(copy.at)})`;
+    if (index().some((x) => x.name === name)) name = copyName(name);
+    openDoc(storeCopy(copy.doc, name, id));
+    showHint(`Opened the recovery copy as "${leafOf(name)}"`, 1800);
+  }
+  function openRecovery(id?: string) {
+    id = id || state.docId || undefined;
+    if (!id || !docEntry(id) || $('#recDlg')) return;
+    if (id === state.docId) saveNow(); // the open file's latest edit is in storage, not mistaken for a copy
+    const prev = document.activeElement;
+    const root = document.createElement('div');
+    root.className = 'td-dialog'; root.id = 'recDlg';
+    const opts = (vals: number[], cur: number, word: (v: number) => string) => vals.map((v) => `<option value="${v}"${v === cur ? ' selected' : ''}>${word(v)}</option>`).join('');
+    const s0 = recoverySettings();
+    root.innerHTML = `<div class="tdd-box bin-box rec-box" role="dialog" aria-modal="true" aria-labelledby="recTitle">
+      <h2 id="recTitle">Recovery Copies</h2><p class="bin-sub"></p>
+      <ul class="bin-list rec-list" role="list"></ul>
+      <div class="rec-set">
+        <label>Keep a copy <select name="every" aria-label="How often a copy is kept">${opts(RECOVERY_EVERY, s0.every, (v) => v ? everyWord(v) : 'never')}</select></label>
+        <label>Keep the newest <select name="keep" aria-label="How many copies are kept">${opts(RECOVERY_KEEP, s0.keep, (v) => String(v))}</select></label>
+      </div>
+      <div class="tdd-btns"><span class="sp"></span><button type="button" class="primary rec-done">Done</button></div></div>`;
+    document.body.appendChild(root);
+    const list = root.querySelector('.rec-list')!, sub = root.querySelector('.bin-sub')!;
+    let copies: RecoveryCopy[] = [];
+    const draw = () => {
+      const e: any = docEntry(id!), s = recoverySettings();
+      copies = recovery.list(id!);
+      const total = copies.reduce((n, c) => n + JSON.stringify(c.doc).length, 0);
+      sub.textContent = !s.every ? `Copies of "${leafOf(e.name)}" are no longer kept. Those below stay until the file is deleted for good.`
+        : `Earlier states of "${leafOf(e.name)}", kept on their own while you edit: one ${everyWord(s.every)} at most, the newest ${s.keep}${s.every > RECOVERY_QUICK ? `, and one more in between, ${everyWord(RECOVERY_QUICK)}` : ''}.` +
+          (copies.length ? ` They take ${sizeOf(total)} in this browser.` : '');
+      list.innerHTML = copies.length ? copies.map((c, i) => `<li data-i="${i}"><span class="bin-ic">${HIST_IC}</span><span class="bin-nm"><b>${esc(whenOf(c.at))}</b><small>${esc(sinceOf(c.at))} · ${esc(contentsOf(c.doc))} · ${sizeOf(JSON.stringify(c.doc).length)}</small></span>
+        <button type="button" class="bin-restore" title="Put this copy in place of the file. Its state now is kept as a copy.">Restore</button><button type="button" class="icon flat rec-open" title="Open as a new file" aria-label="Open the copy from ${esc(whenOf(c.at))} as a new file"><svg viewBox="0 0 20 20">${IC.dup}</svg></button></li>`).join('')
+        : `<li class="bin-none">No copies yet. The first is kept when the file is next changed${s.every ? '' : ', once copies are turned on'}.</li>`;
+    };
+    const close = () => { root.remove(); if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); };
+    draw();
+    root.addEventListener('change', (ev) => {
+      const t = ev.target as HTMLSelectElement, s = recoverySettings();
+      if (t.name === 'every') s.every = +t.value; else if (t.name === 'keep') s.keep = +t.value; else return;
+      store.set(LS_RECOVERY, s);
+      // fewer copies kept: the oldest go now, in every file (those in the bin too)
+      if (t.name === 'keep') recovery.trim([...index(), ...bin()].map((x) => x.id));
+      draw();
+    });
+    root.addEventListener('click', (ev) => {
+      const t = ev.target as Element, li = t.closest('li[data-i]'), c = li ? copies[+(li as HTMLElement).dataset.i!] : null;
+      if (t.closest('.rec-done')) close();
+      else if (c && t.closest('.bin-restore')) { close(); restoreRecovery(id!, c); }
+      else if (c && t.closest('.rec-open')) { close(); openRecoveryCopy(id!, c); }
+    });
+    for (const ty of ['pointerdown', 'mousedown']) root.addEventListener(ty, (ev) => { ev.stopPropagation(); if (ev.target === root) { ev.preventDefault(); close(); } });
+    root.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Escape') { ev.preventDefault(); close(); }
+      else if (ev.key === 'Tab') {
+        const f = [...root.querySelectorAll('button:not([disabled]), select')], i = f.indexOf(document.activeElement!), n = f.length;
+        ev.preventDefault(); (f[(i + (ev.shiftKey ? n - 1 : 1)) % n] as HTMLElement).focus();
+      }
+    });
+    requestAnimationFrame(() => ((root.querySelector('.bin-restore') || root.querySelector('.rec-done'))! as HTMLElement).focus());
   }
   // Folders are only a way of showing names: a file named "Physics/Lab 1" is listed as "Lab 1" inside a
   // folder "Physics" (like a path in cloud storage). A folder exists while a file is in it; folded folders
@@ -549,6 +778,8 @@ import { runtime as TD } from '../runtime';
     const r = stageSize();
     return { x: (e.clientX - r.left) / state.view.zoom + state.view.x, y: (e.clientY - r.top) / state.view.zoom + state.view.y };
   }
+  // the middle of the visible canvas, left of the floating panel column
+  function viewCentre() { const r = fitArea(), v = state.view; return { x: v.x + r.w / 2 / v.zoom, y: v.y + r.h / 2 / v.zoom }; }
   function toScreen(p: any) { return { x: (p.x - state.view.x) * state.view.zoom, y: (p.y - state.view.y) * state.view.zoom }; }
   function applyView() {
     const r = stageSize(), v = state.view;
@@ -1327,44 +1558,36 @@ import { runtime as TD } from '../runtime';
   });
 
   // ---------------- image insert ----------------
-  function readImage(file: any, cb: any) {
-    const fr = new FileReader();
-    fr.onload = () => {
-      const src = fr.result as string;
-      if (/svg/.test(file.type)) { const im = new Image(); im.onload = () => cb(src, im.naturalWidth || 300, im.naturalHeight || 200); im.src = src; return; }
-      const im = new Image();
-      im.onload = () => { // keep stored documents small: cap at 1600 px on the long side
-        const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight));
-        if (k >= 1) { cb(src, im.naturalWidth, im.naturalHeight); return; }
-        const c = document.createElement('canvas');
-        c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
-        (c.getContext('2d'))!.drawImage(im, 0, 0, c.width, c.height);
-        cb(c.toDataURL(/png|gif/.test(file.type) ? 'image/png' : 'image/jpeg', 0.9), c.width, c.height);
-      };
-      im.src = src;
-    };
-    fr.readAsDataURL(file);
+  // A picture goes in at most 8 cm wide, centred on `at` (the middle of the view when not given), under a file
+  // name LaTeX can use that no other picture in this file has.
+  function imageFileName(name: any, src: any) {
+    const used = new Set(shapes().filter((q: any) => q.type === 'image').map((q: any) => TYPES.image.fileName(q)));
+    const first = TD.texImages.fileName(name || 'image', src), dot = first.lastIndexOf('.');
+    let out = first;
+    for (let k = 2; used.has(out); k++) out = `${first.slice(0, dot)}-${k}${first.slice(dot)}`;
+    return out;
   }
+  function placeImage(pic: Picture, name: any, at?: any) {
+    const r = stageSize(), v = state.view, w = pic.w, h = pic.h;
+    const sc = Math.min(1, (8 * PX) / w, (r.h * 0.6) / v.zoom / h);
+    const W = w * sc, H = h * sc, c = at || viewCentre();
+    const s = addShape({ type: 'image', x: Math.round(c.x - W / 2), y: Math.round(c.y - H / 2), w: W, h: H, src: pic.src, file: '', opacity: 1 });
+    s.file = imageFileName(name, pic.src);
+    return s;
+  }
+  const stemOf = (n: any) => String(n || '').replace(/\.[^.]+$/, '');
   let imageTarget: any = null; // id of an image being replaced
-  $('#imageInput').addEventListener('change', (e: any) => {
+  $('#imageInput').addEventListener('change', async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
-    readImage(file, (src: any, w: any, h: any) => {
-      begin();
-      const base = file.name.replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '-') || 'image';
-      const old = imageTarget && byId(imageTarget);
-      if (old) { old.src = src; old.h = old.w * (h / w); old.file = ''; }
-      else {
-        const r = stageSize(), v = state.view;
-        const sc = Math.min(1, (8 * PX) / w, (r.h * 0.6) / v.zoom / h); // at most 8 cm wide
-        const W = w * sc, H = h * sc, cx = v.x + r.w / 2 / v.zoom, cy = v.y + r.h / 2 / v.zoom;
-        const s = addShape({ type: 'image', x: Math.round(cx - W / 2), y: Math.round(cy - H / 2), w: W, h: H, src, file: '', opacity: 1 });
-        s.file = `${base}.${(/^data:image\/(\w+)/.exec(src) || [])[1] === 'jpeg' ? 'jpg' : ((/^data:image\/(\w+)/.exec(src) || [])[1] || 'png').replace('svg+xml', 'svg')}`;
-        state.sel = new Set([s.id]);
-      }
-      imageTarget = null;
-      commit(); render(); renderProps();
-    });
+    let pic: Picture;
+    try { pic = await readPicture(file); } catch (err: any) { imageTarget = null; showHint(`Couldn't open ${file.name}: ${err.message}`, 2500); return; }
+    begin();
+    const old = imageTarget && byId(imageTarget);
+    if (old) { old.src = pic.src; old.h = old.w * (pic.h / pic.w); old.file = ''; old.file = imageFileName(stemOf(file.name), pic.src); }
+    else state.sel = new Set([placeImage(pic, stemOf(file.name)).id]);
+    imageTarget = null;
+    commit(); render(); renderProps();
   });
   $('#props').addEventListener('click', (e: any) => {
     const b = e.target.closest('[data-imgact]');
@@ -2688,9 +2911,10 @@ import { runtime as TD } from '../runtime';
   }
   // Document view: blocks go in after the active diagram (at the end when there is none), the first new
   // diagram becomes the active one, and the page scrolls to them.
-  function insertBlocks(blocks: any) {
+  function insertBlocks(blocks: any, where?: number) {
     if (!blocks.length) return;
-    const d = state.doc, at = d.blocks[d.active] ? d.active + 1 : d.blocks.length;
+    const d = state.doc, at = where != null && where >= 0 && where <= d.blocks.length ? where : d.blocks[d.active] ? d.active + 1 : d.blocks.length;
+    if (d.blocks[d.active] && at <= d.active) d.active += blocks.length; // the active block keeps being itself
     d.blocks.splice(at, 0, ...blocks);
     const k = blocks.findIndex((b: any) => b.type === 'diagram');
     if (k >= 0) setActiveBlock(at + k); else scheduleSave();
@@ -2736,27 +2960,134 @@ import { runtime as TD } from '../runtime';
     let code;
     try { code = state.mode === 'page' ? TD.pageToLatex(state.doc, { only: state.sel.size ? list : null }) : TD.toTikz(list); } catch (err: any) { return; }
     codeCopied = code;
-    navigator.clipboard.writeText(code).then(() => { if (!state.sel.size) showHint('Copied the TikZ code of this diagram', 1500); }, () => {});
+    // the code pastes back as these shapes, here and in the app's other windows (the whole diagram when nothing is selected)
+    const t = Date.now();
+    clipboard = { shapes: clone(list), n: 0, t };
+    store.set(LS_CLIP, { shapes: clipboard.shapes, t, code });
+    navigator.clipboard.writeText(code).then(() => { codeFailed = 0; if (!state.sel.size) showHint('Copied the TikZ code of this diagram', 1500); }, () => { codeFailed = t; });
   }
-  // ⌘V: TikZ or LaTeX from elsewhere is imported (straight in when every line becomes shapes, else through the
-  // import dialog, which says what stays code); anything else pastes the copied shapes. A browser that sends no
-  // paste event gets the shapes.
-  let pasteTimer = 0;
+  // ⌘V: what the system clipboard holds decides. A copy made in this app (in any of its windows) pastes its
+  // shapes; anything else comes in through takeIn below. A browser that sends no paste event gets the shapes.
+  let pasteTimer = 0, codeFailed = 0;
   function pasteSoon() { clearTimeout(pasteTimer); pasteTimer = setTimeout(paste, 80); }
-  const looksTex = (t: any) => /\\(begin\{(tikzpicture|circuitikz|document)\}|draw|fill|filldraw|node|path|coordinate)\b/.test(t);
+  function ownCopy(text: any) {
+    if (text === codeCopied) return true;
+    const c: any = store.get(LS_CLIP, null);
+    return !!(c && c.code && c.code === text);
+  }
   document.addEventListener('paste', (e) => {
     if (!pasteTimer || isTyping(e.target) || !$('#modal').hidden || !imp.hidden) return;
     clearTimeout(pasteTimer); pasteTimer = 0;
-    const text = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
-    if (!text.trim() || text === codeCopied || !looksTex(text)) { paste(); return; }
+    const dt = e.clipboardData, text = (dt && dt.getData('text/plain')) || '', files = dt ? [...dt.files] : [];
+    // shapes copied here while the system clipboard could not be written: the clipboard's text is older
+    const stale = codeFailed && clipboard && clipboard.t >= codeFailed;
+    if (ownCopy(text) || stale || (!text.trim() && !files.length)) { paste(); return; }
     e.preventDefault();
-    let res = null;
-    try { res = TD.importLatex(text); } catch (err: any) { res = null; }
-    const list = res ? res.blocks.flatMap((b: any) => b.shapes || []) : [];
-    const clean = res && list.length && !(res.kept || []).length && !res.warnings.length && !res.blocks.some((b: any) => b.type === 'text');
-    if (!clean) { openImport(text); return; }
-    $('#impText').value = text;
-    runImport(false);
+    takeIn(text, files, null);
+  });
+  // ---------- from outside: pasted or dropped ----------
+  // Pictures (PNG, JPEG, SVG, and GIF, WebP … as PNG) go in as images, as the Image tool inserts them. Text is read
+  // by TD.pasteIn: TikZ and LaTeX are imported (straight in when every line becomes shapes, else through the
+  // import dialog, which says what stays code), a block's bare environment becomes that block, a formula or a
+  // symbol a text object holding it as maths, anything else a text object. A dropped .tex file is read as text.
+  // Things land on the point they are dropped on (pasted: the middle of the view); in Document view they become
+  // blocks, after the block they are dropped on (pasted: after the active one).
+  const PIC_FILE = (f: File) => /^image\//.test(f.type) || /\.(svg|png|jpe?g|gif|webp|bmp|avif|ico)$/i.test(f.name);
+  const TEXT_FILE = (f: File) => /\.(tex|tikz|ltx|txt)$/i.test(f.name) || /^text\/(plain|x-tex)/.test(f.type);
+  async function takeIn(text: string, files: File[], at: any, docAt?: number) {
+    const pics = files.filter(PIC_FILE), texts = files.filter((f) => !PIC_FILE(f) && TEXT_FILE(f)), t = String(text || '').trim();
+    // a picture copied from a file manager or a web page carries its file name or address as text too
+    const nameOnly = !t || (!t.includes('\n') && (/^https?:\/\/\S+$/.test(t) || /^[^\s\\$]+\.\w{2,5}$/.test(t) || pics.some((f) => f.name === t)));
+    if (pics.length && nameOnly) return takePictures(pics.map((f) => ({ blob: f, name: f.name })), at, docAt);
+    if (t) return takeText(text, at, docAt);
+    if (texts.length) { try { return takeText(await texts[0].text(), at, docAt); } catch (err: any) { showHint(`Couldn't read ${texts[0].name}`, 2000); return; } }
+    if (files.length) showHint(`Can't use ${files[0].name}: drop a picture (PNG, JPEG, SVG, GIF, WebP) or a .tex file`, 2600);
+  }
+  async function takePictures(list: { blob: Blob | string; name: string }[], at: any, docAt?: number) {
+    const got: { pic: Picture; name: string }[] = [];
+    for (const it of list) {
+      try { got.push({ pic: await readPicture(it.blob), name: it.name }); }
+      catch (err: any) { showHint(`Couldn't open ${it.name || 'that picture'}: ${err.message}`, 2600); }
+    }
+    if (!got.length) return;
+    if (state.mode === 'document') {
+      insertBlocks(got.map((g) => ({ type: 'image', src: g.pic.src, name: g.name || 'image', width: 0.6, caption: '' })), docAt);
+      return;
+    }
+    begin();
+    state.sel.clear();
+    const c = at || viewCentre(), G = TD.GRID;
+    got.forEach((g, k) => state.sel.add(placeImage(g.pic, stemOf(g.name) || 'image', { x: c.x + k * G * 2, y: c.y + k * G * 2 }).id));
+    commit(); render(); renderProps();
+    showHint(got.length > 1 ? `Inserted ${got.length} pictures` : 'Inserted the picture · the LaTeX names it ' + TYPES.image.fileName(selected()[0]), 2000);
+  }
+  async function takeText(text: string, at: any, docAt?: number) {
+    const P = TD.pasteIn, k = P.kind(text);
+    if (k === 'empty') return;
+    if (k === 'svg') return takePictures([{ blob: text.trim(), name: 'image.svg' }], at, docAt);
+    if (k === 'image') {
+      let blob: Blob;
+      try { blob = await (await fetch(text.trim())).blob(); } catch (err: any) { showHint("Couldn't read that picture", 2000); return; }
+      return takePictures([{ blob, name: 'image' }], at, docAt);
+    }
+    if (k === 'tex' || k === 'block') {
+      const src = k === 'block' ? P.asPicture(text) : text;
+      let res = null;
+      try { res = TD.importLatex(src); } catch (err: any) { res = null; }
+      const list = res ? res.blocks.flatMap((b: any) => b.shapes || []) : [];
+      const clean = res && list.length && !(res.kept || []).length && !res.warnings.length && !res.blocks.some((b: any) => b.type === 'text');
+      if (!clean) { openImport(src); return; }
+      groupPictures(res);
+      placeImported(res, at, docAt);
+      showHint(k === 'block' ? `Pasted as a ${(TYPES[list[0].type] || {}).name || 'block'}` : `Imported ${list.length} shape${list.length === 1 ? '' : 's'}`, 1800);
+      return;
+    }
+    const body = P.asText(text, k);
+    if (state.mode === 'document') { insertBlocks([{ type: 'text', text: k === 'math' ? `$${body}$` : String(text).trim() }], docAt); return; }
+    begin();
+    const s = addShape(TYPES.text.create(at || viewCentre(), state.defaults));
+    s.text = body;
+    // a long line wraps at 12 cm, as a paragraph would
+    if (body.split('\n').some((l: any) => l.length > 90)) { s.tw = 12 * PX; s.align = 'left'; }
+    conform(s);
+    state.sel = new Set([s.id]);
+    commit(); render(); renderProps();
+    showHint(k === 'math' ? 'Pasted as a formula' : 'Pasted as text', 1200);
+  }
+  // Dropping: only drags from outside the page (a drag started here, like a file row in the sidebar, is not one)
+  let innerDrag = false;
+  document.addEventListener('dragstart', () => { innerDrag = true; });
+  document.addEventListener('dragend', () => { innerDrag = false; });
+  const dropZone = (e: any) => (e.target as Element).closest?.('#stage, #docview') as HTMLElement | null;
+  const fromOutside = (e: any) => !innerDrag && !!e.dataTransfer && [...e.dataTransfer.types].some((t) => t === 'Files' || t === 'text/plain' || t === 'text/uri-list');
+  document.addEventListener('dragover', (e: any) => {
+    if (!fromOutside(e)) return;
+    e.preventDefault(); // a file dropped anywhere else would make the browser leave the app to show it
+    const z = dropZone(e) && $('#modal').hidden && imp.hidden && !inQuick();
+    e.dataTransfer.dropEffect = z ? 'copy' : 'none';
+    document.body.classList.toggle('drop-over', !!z);
+  });
+  document.addEventListener('dragleave', (e: any) => { if (!e.relatedTarget) document.body.classList.remove('drop-over'); });
+  document.addEventListener('drop', (e: any) => {
+    document.body.classList.remove('drop-over');
+    if (!fromOutside(e)) return;
+    e.preventDefault();
+    if (!dropZone(e) || !$('#modal').hidden || !imp.hidden || inQuick()) return;
+    const dt = e.dataTransfer, files = [...dt.files] as File[];
+    let text = dt.getData('text/plain') || '';
+    const uri = (dt.getData('text/uri-list') || '').split('\n').find((l: string) => l && !l.startsWith('#')) || '';
+    let docAt: number | undefined;
+    if (state.mode === 'document') { const b = (e.target as Element).closest('#docview .blk') as HTMLElement | null; docAt = b ? +b.dataset.i! + 1 : undefined; }
+    const at = state.mode === 'document' ? null : toWorld(e);
+    // a picture dragged from a web page comes as its address: fetched (where the site allows it)
+    if (!files.length && uri && (!text.trim() || text.trim() === uri.trim()) && /^(https?:|data:image\/)/.test(uri)) {
+      fetch(uri).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status))))).then((blob) => {
+        if (!/^image\//.test(blob.type)) throw new Error('not a picture');
+        takePictures([{ blob, name: decodeURIComponent((uri.split(/[?#]/)[0].split('/').pop() || 'image')) }], at, docAt);
+      }).catch(() => showHint("That site doesn't let its pictures be copied: save the picture, then drop the file", 3000));
+      return;
+    }
+    takeIn(text, files, at, docAt);
   });
   function paste() {
     pasteTimer = 0;
@@ -3373,6 +3704,7 @@ import { runtime as TD } from '../runtime';
     cut: '<circle cx="5.5" cy="15" r="2.5"/><circle cx="14.5" cy="15" r="2.5"/><path d="M7 13.2L15 3M13 13.2L5 3"/>',
     paste: '<path d="M6 4H4v14h12V4h-2"/><path d="M7 2.5h6v3H7z"/>',
     dup: '<path d="M3 3h10v10H3z"/><path d="M7 17h10V7"/>',
+    history: '<path d="M3.5 10a6.5 6.5 0 101.9-4.6"/><path d="M3 3v3.5h3.5"/><path d="M10 6.5V10l2.5 1.5"/>',
     del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
     group: '<path d="M2.5 2.5h15v15h-15z" stroke-dasharray="2 2"/><path d="M5 5h6v5H5zM9 8h6v6H9z"/>',
     ungroup: '<path d="M3 3h7v6H3zM10 11h7v6h-7z"/>',
@@ -3564,7 +3896,9 @@ import { runtime as TD } from '../runtime';
   }
   // Put a project file's contents into an existing file of the app (reopening it from disk).
   function replaceDoc(id: any, p: any) {
+    if (state.docId === id) saveNow();
     const old = store.get<Record<string, any> | null>(LS_DOC + id, null) || {};
+    recovery.take(id, old.kind ? old : null, docEntry(id)?.updated, true); // what it held stays recoverable
     store.set(LS_DOC + id, p.kind === 'page'
       ? { kind: 'page', name: p.name, page: p.page, sheet: p.sheet, view: old.view, mode: 'page' }
       : { kind: p.kind, name: p.name, blocks: p.blocks, active: 0, page: p.page, view: old.view, mode: p.kind === 'board' ? 'board' : (old.mode === 'diagram' ? 'diagram' : 'document') });
@@ -3646,7 +3980,8 @@ import { runtime as TD } from '../runtime';
         item('Rename…', d('rename'), { ic: 'rename' }) +
         item('Move to Folder…', d('move'), { ic: 'folder' }) +
         item('Duplicate', d('dup'), { ic: 'dup' }) +
-        item('Save a Copy…', d('saveas'), { ic: 'dup' }) + hr +
+        item('Save a Copy…', d('saveas'), { ic: 'dup' }) +
+        item('Recovery Copies…', d('recovery'), { ic: 'history' }) + hr +
         item('Copy', d('copy'), { ic: 'copy' }) +
         item('Paste', d('paste'), { ic: 'paste' }) +
         item('Copy Share Link', d('share'), { ic: 'link' }) + hr +
@@ -3732,6 +4067,7 @@ import { runtime as TD } from '../runtime';
       case 'renamefolder': renameFolderInList(ctx.dataset.folder); break;
       case 'delfolder': deleteFolder(ctx.dataset.folder); break;
       case 'bin': openBin(); break;
+      case 'recovery': openRecovery(id); break;
       case 'fold': setFolded(ctx.dataset.folder, !folded.has(foldKey(ctx.dataset.folder))); break;
       case 'move': {
         if (!it) break;
@@ -3848,9 +4184,44 @@ import { runtime as TD } from '../runtime';
   }
 
   const isTyping = (t: any) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'MATH-FIELD' || t.isContentEditable);
+  // Ctrl/⌘ + = − 0: 1 in, −1 out, 0 to 100%, or null. Read by key and by physical key, so layouts where = or −
+  // need Shift, and the number pad, work too.
+  const zoomKey = (e: KeyboardEvent) => {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey) return null;
+    const c = e.code;
+    return e.key === '0' || c === 'Digit0' || c === 'Numpad0' ? 0
+      : e.key === '=' || e.key === '+' || c === 'Equal' || c === 'NumpadAdd' ? 1
+      : e.key === '-' || e.key === '_' || c === 'Minus' || c === 'NumpadSubtract' ? -1 : null;
+  };
+  // The browser's page zoom never takes these keys, wherever the focus is: block editors and Quick stop keys from
+  // reaching the handlers below, but a listener on window in the capture phase runs first, whatever they do.
+  // In an open block editor they zoom its canvas instead: in and out about the middle, through the editor's own
+  // ⌘-wheel zoom (one step of −100·ln 1.25 is ×1.25 there, within the editor's own limits, carrying its pop-ups
+  // along), and ⌘0 presses its Fit button.
+  window.addEventListener('keydown', (e) => {
+    const z = zoomKey(e);
+    if (z === null) return;
+    e.preventDefault();
+    if (document.querySelector('.td-dialog')) return; // a question over the editor: leave the view alone
+    const svg = [...document.querySelectorAll<SVGSVGElement>('.cz-svg')].find((s) => s.getClientRects().length);
+    if (!svg) return;
+    const ed = svg.closest('[id$="Modal"]') || svg.parentElement!;
+    if (z === 0) { [...ed.querySelectorAll<HTMLElement>('button')].find((b) => Object.values(b.dataset).includes('fit'))?.click(); return; }
+    const r = svg.getBoundingClientRect();
+    svg.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaMode: 0, deltaY: (z > 0 ? -100 : 100) * Math.log(1.25), clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+  }, true);
   document.addEventListener('keydown', (e) => {
-    if (inQuick()) return; // Quick handles its own keys
     const mod = e.metaKey || e.ctrlKey;
+    // Ctrl/⌘ + = − 0 zoom the canvas (the Document view handles its own, in docview.ts)
+    const z = zoomKey(e);
+    if (inQuick()) return; // Quick handles its own keys (nothing to zoom there)
+    if (state.mode !== 'document') {
+      if (z !== null) {
+        if (!$('#modal').hidden || !imp.hidden) return; // a dialog is open: the page stays as it is
+        if (z === 0) zoomTo(1); else { const r = stageSize(); zoomAt(z > 0 ? 1.25 : 0.8, r.w / 2, r.h / 2); }
+        return;
+      }
+    }
     if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; }
     if (!imp.hidden) { if (e.key === 'Escape') closeImport(); return; }
     if (e.key === 'Escape' && (openFly || ctxOpen())) { hideFly(); closeCtx(); return; }
@@ -3873,7 +4244,13 @@ import { runtime as TD } from '../runtime';
       if (k0 === 'p') { e.preventDefault(); runCmd('print'); return; }
     }
     if (isTyping(e.target)) return;
-    if (state.mode === 'document') { if (mod && !e.altKey && e.key.toLowerCase() === 'v') pasteSoon(); return; } // a new diagram block
+    if (state.mode === 'document') {
+      const k1 = e.key.toLowerCase();
+      if (mod && !e.altKey && k1 === 'v') pasteSoon(); // a new diagram block
+      // the page has no steps of its own here: undo and redo reach the file list (a file moved to the bin)
+      else if (mod && !e.altKey && (k1 === 'z' || k1 === 'y')) { e.preventDefault(); if (k1 === 'y' || e.shiftKey) redoFile(); else undoFile(); }
+      return;
+    }
 
     const k = e.key.toLowerCase();
     if (mod) {
@@ -3954,10 +4331,9 @@ import { runtime as TD } from '../runtime';
     $('#btnExport').title = state.mode === 'page' ? 'Export the page as PNG (choose DPI), SVG or PDF' : `Export ${what} as PNG (choose DPI), SVG or PDF`;
     $('#btnTikz').title = state.mode === 'page' ? 'LaTeX for this page, to copy or download (Ctrl+E)' : `LaTeX code for ${what} or the whole document, to copy or download (Ctrl+E)`;
     bs.innerHTML = diagrams.map(([b, i]: any, n: any) => `<option value="${i}"${i === state.doc.active ? ' selected' : ''}>Diagram ${n + 1} of ${diagrams.length}</option>`).join('');
-    $('#btnUndo').disabled = !state.undo.length;
-    $('#btnRedo').disabled = !state.redo.length;
-    $('#btnGrid').classList.toggle('on', state.grid);
-    $('#btnSnap').classList.toggle('on', state.snap);
+    $('#btnUndo').disabled = !state.undo.length && !canUndoFile();
+    $('#btnRedo').disabled = !state.redo.length && !canRedoFile();
+    for (const [id, on] of [['#btnGrid', state.grid], ['#btnSnap', state.snap]] as const) { const b = $(id); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
     $('#stage').classList.toggle('hide-grid', !state.grid);
     updateStatus();
   }
@@ -4166,7 +4542,7 @@ import { runtime as TD } from '../runtime';
     if (c === 'save') saveFile();
     if (c === 'saveas') saveFile(true);
     if (c === 'tikz') openTikz();
-    if (c === 'latex') out(slug() + '.tex', state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc), 'text/x-tex');
+    if (c === 'latex') { const r = TD.texImages.collect(() => (state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc))); showHint(NO_RESTORE, 6000); downloadLatex(r.result, r.files); } // a failed export's hint replaces the warning
     if (c === 'svg') { if (state.mode === 'page') exportPageSvg(); else if (shapes().length) exportSvg(); else showHint('This diagram is empty', 1200); }
     if (c === 'import') openImport('');
     if (c === 'print') printDoc();
@@ -4483,12 +4859,29 @@ import { runtime as TD } from '../runtime';
   }
   let impTimer = 0;
   $('#impText').addEventListener('input', () => { clearTimeout(impTimer); impTimer = setTimeout(importReport, 300); });
+  // each picture comes in as one group, so it moves as one and its pieces don't scatter
+  function groupPictures(res: any) {
+    for (const b of res.blocks) if (b.type === 'diagram' && b.shapes.length > 1) { const g = uid(); for (const x of b.shapes) { x.g = g; delete x.gname; } }
+  }
+  // Imported code into this file: in Document view as new blocks (after the active one, or at docAt), else as
+  // shapes centred on `at` (the middle of the visible canvas), moved by whole grid steps so they stay on the grid.
+  function placeImported(res: any, at: any, docAt?: number) {
+    if (state.mode === 'document') { insertBlocks(res.blocks.filter((b: any) => b.type !== 'diagram' || b.shapes.length), docAt); return; }
+    const list = res.blocks.flatMap((b: any) => (b.type === 'diagram' ? b.shapes : []));
+    const c = at || viewCentre(), G = TD.GRID;
+    const bb = list.length ? TD.bboxOf(list.flatMap((x: any) => { const q = TD.bbox(x); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; })) : null;
+    const dx = bb ? Math.round((c.x - bb.x - bb.w / 2) / G) * G : 0, dy = bb ? Math.round((c.y - bb.y - bb.h / 2) / G) * G : 0;
+    begin();
+    state.sel.clear();
+    for (const sh of list) { sh.id = uid(); if (dx || dy) TD.translate(sh, dx, dy); addShape(sh); state.sel.add(sh.id); }
+    commit();
+    render(); renderProps();
+  }
   function runImport(asNew: any) {
     const src = $('#impText').value;
     let res;
     try { res = importAs(src); } catch (err: any) { $('#impMsg').textContent = 'Could not parse: ' + err.message; return; }
-    // each picture comes in as one group, so it moves as one and its pieces don't scatter
-    for (const b of res.blocks) if (b.type === 'diagram' && b.shapes.length > 1) { const g = uid(); for (const x of b.shapes) { x.g = g; delete x.gname; } }
+    groupPictures(res);
     const nShapes = res.blocks.reduce((a: any, b: any) => a + (b.shapes ? b.shapes.length : 0), 0);
     if (!nShapes && !res.blocks.some((b: any) => b.type === 'text')) { $('#impMsg').textContent = 'Nothing recognised in this code.' + (res.warnings.length ? ' ' + res.warnings.join(' ') : ''); return; }
     if (asNew && state.doc.kind === 'board') { newDoc(res.title || 'Imported', null, null, res.blocks, res.page, 'board'); zoomFit(); }
@@ -4496,21 +4889,7 @@ import { runtime as TD } from '../runtime';
       newDoc(res.title || 'Imported', null, null, res.blocks, res.page);
       if (res.blocks.filter((b: any) => b.type === 'diagram').length > 1 || res.blocks.some((b: any) => b.type === 'text')) setMode('document');
       else zoomFit();
-    } else if (state.mode === 'document') {
-      // the document gets the code as new blocks after the active one, a diagram for each picture
-      insertBlocks(res.blocks.filter((b: any) => b.type !== 'diagram' || b.shapes.length));
-    } else {
-      // lands in the middle of the visible canvas, moved by whole grid steps so it stays on the grid
-      const list = res.blocks.flatMap((b: any) => (b.type === 'diagram' ? b.shapes : []));
-      const r = fitArea(), v = state.view, G = TD.GRID, cx = v.x + r.w / 2 / v.zoom, cy = v.y + r.h / 2 / v.zoom;
-      const bb = list.length ? TD.bboxOf(list.flatMap((x: any) => { const q = TD.bbox(x); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; })) : null;
-      const dx = bb ? Math.round((cx - bb.x - bb.w / 2) / G) * G : 0, dy = bb ? Math.round((cy - bb.y - bb.h / 2) / G) * G : 0;
-      begin();
-      state.sel.clear();
-      for (const sh of list) { sh.id = uid(); if (dx || dy) TD.translate(sh, dx, dy); addShape(sh); state.sel.add(sh.id); }
-      commit();
-      render(); renderProps();
-    }
+    } else placeImported(res, null);
     closeImport();
     const nKept = (res.kept || []).length;
     showHint(`Imported ${nShapes - nKept} shape${nShapes - nKept === 1 ? '' : 's'}${nKept ? ` · ${nKept} kept as TikZ code (dashed frames)` : ''}`, 3000);
@@ -4527,6 +4906,15 @@ import { runtime as TD } from '../runtime';
   // and lines changed since the code was last copied or downloaded get a blue bar.
   const view = $('#tikzOut');
   let tikzText = '', tikzSpans: any[] = [], tikzErr = new Map();
+  let tikzFiles = new Map<string, string>(); // pictures the code in the dialog refers to (name → data)
+  // LaTeX out: the .tex alone, or (when it uses pictures, or zip is asked for) a .zip with the pictures
+  // convert: the .zip for a setup without Inkscape: each SVG with a PDF of it, and the LaTeX set to use those
+  async function downloadLatex(tex: string, files: Map<string, string>, zip = files.size > 0, convert = false) {
+    if (!zip) { await out(slug() + '.tex', tex, 'text/x-tex'); return; }
+    await askDir();
+    try { await out(slug() + '.zip', await texBundle(slug() + '.tex', convert ? TD.texImages.noInkscape(tex) : tex, files, TD.texImages.svgFallback, convert)); }
+    catch (e: any) { showHint('Export failed: ' + (e.message || e), 3000); }
+  }
   const tikzBase = new Map(); // what was last copied or downloaded, per file, scope and selection
   const baseKey = () => [state.docId, state.mode === 'page' ? 'page' : $('#tikzScope').value, $('#tikzSelOnly').checked ? 'sel' : ''].join(':');
   // lines of b (0-based) not in a longest common subsequence with a
@@ -4566,6 +4954,8 @@ import { runtime as TD } from '../runtime';
     }).join('');
     markSel(false);
   }
+  // the LaTeX carries no copy of the diagram (a long data line stopped pdflatex), so importing it again is a best effort
+  const NO_RESTORE = 'DiagramTeX can\'t restore this LaTeX exactly: importing it again brings back lines, shapes and text, but plots, most blocks and library symbols come back as TikZ code. To keep editing, save the .diagramtex file.';
   function genTikz() {
     const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value;
     $('#tikzSelWrap').style.display = state.sel.size && scope !== 'doc' ? '' : 'none';
@@ -4574,17 +4964,24 @@ import { runtime as TD } from '../runtime';
     let raw;
     TD.srcMark = true;
     try {
-      raw = scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
+      ({ result: raw, files: tikzFiles } = TD.texImages.collect(() => scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
         : scope === 'doc' ? TD.docToLatex(state.doc)
-        : TD.toTikz(list, { standalone: scope === 'standalone' });
+        : TD.toTikz(list, { standalone: scope === 'standalone' })));
     } finally { TD.srcMark = false; }
+    // the pictures the code names: a .zip carries them with the .tex
+    const n = tikzFiles.size, svgs = [...tikzFiles.keys()].some((k) => /\.svg$/i.test(k));
+    $('#tikzZipWrap').hidden = !n;
+    // the menu's other .zip matters only when there is an SVG to convert
+    $('#tikzZipWrap').classList.toggle('one', !svgs);
+    closeZipMenu();
+    if (n) $('#tikzZip').title = `The .tex and the ${n === 1 ? 'picture' : `${n} pictures`} it uses${svgs ? '. SVGs are converted by Inkscape when the LaTeX compiles (shell escape; Overleaf has both)' : ''}`;
     const m = TD.srcMap(raw);
     tikzText = m.text; tikzSpans = m.spans;
     // what would stop pdflatex: mostly TikZ code kept as written (imported or typed in a code object)
     const L = TD.lint ? TD.lint(tikzText, { preview: false }).filter((d: any) => d.sev !== 'info') : [];
     tikzErr = new Map();
     for (const d of L) tikzErr.set(d.line, [...(tikzErr.get(d.line) || []), d.msg]);
-    $('#tikzLint').innerHTML = L.length ? TD.lint.html(L) : '';
+    $('#tikzLint').innerHTML = `<div class="lint warn">${NO_RESTORE}</div>` + (L.length ? TD.lint.html(L) : '');
     paintTikz();
   }
   // a click on a line selects what it draws (⇧ adds); dragging across lines selects text as usual
@@ -4633,7 +5030,7 @@ import { runtime as TD } from '../runtime';
     view.focus({ preventScroll: true }); view.scrollTop = 0;
     markSel(true);
   }
-  function closeModal() { $('#modal').hidden = true; }
+  function closeModal() { closeZipMenu(); $('#modal').hidden = true; }
   $('#modalClose').onclick = closeModal;
   $('#modal').addEventListener('pointerdown', (e: any) => { if (e.target.id === 'modal') closeModal(); });
   $('#tikzScope').onchange = genTikz;
@@ -4645,6 +5042,47 @@ import { runtime as TD } from '../runtime';
     taken();
   };
   $('#tikzDownload').onclick = () => { out(slug() + '.tex', tikzText, 'text/x-tex'); taken(); };
+  $('#tikzZip').onclick = async () => { closeZipMenu(); await downloadLatex(tikzText, tikzFiles, true); taken(); };
+  // the split button's menu: the two .zip downloads, the first the same as the button
+  let zipMenu: HTMLElement | null = null;
+  function closeZipMenu() {
+    if (!zipMenu) return;
+    zipMenu.remove(); zipMenu = null;
+    $('#tikzZipMore').setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', zipAway, true); document.removeEventListener('keydown', zipKeys, true);
+  }
+  const zipAway = (e: Event) => { if (zipMenu && !zipMenu.contains(e.target as Node) && !(e.target as Element).closest?.('#tikzZipMore')) closeZipMenu(); };
+  function zipKeys(e: KeyboardEvent) {
+    if (!zipMenu) return;
+    const items = [...zipMenu.querySelectorAll<HTMLElement>('.ctx-item')], i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeZipMenu(); $('#tikzZipMore').focus(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    else if (e.key === 'Tab') closeZipMenu();
+  }
+  $('#tikzZipMore').onclick = () => {
+    if (zipMenu) { closeZipMenu(); return; }
+    const m = document.createElement('div');
+    m.className = 'ctx zip-menu'; m.setAttribute('role', 'menu');
+    const row = (act: string, label: string, title: string) => `<button class="ctx-item" role="menuitem" data-zip="${act}" title="${title}"><span class="lb">${label}</span></button>`;
+    m.innerHTML = row('ink', 'Download .zip: SVG through Inkscape', 'The SVGs as they are: the svg package has Inkscape convert them when the LaTeX compiles. Needs shell escape and Inkscape; Overleaf has both.')
+      + row('pdf', 'Download .zip: SVG as PDF, no Inkscape', 'Each SVG also comes as a vector PDF made here, and the LaTeX tells the svg package to use it instead of calling Inkscape. Compiles with plain pdflatex.');
+    m.addEventListener('click', async (e) => {
+      const b = (e.target as Element).closest<HTMLElement>('[data-zip]');
+      if (!b) return;
+      closeZipMenu();
+      await downloadLatex(tikzText, tikzFiles, true, b.dataset.zip === 'pdf'); taken();
+    });
+    document.body.appendChild(m);
+    // under the split button, right edges together, growing left (it sits at the dialog's right)
+    // (offset sizes: the opening animation scales the box, so its bounding rect is smaller at first)
+    const r = $('#tikzZipWrap').getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+    m.style.left = Math.max(6, r.right - mw) + 'px'; m.style.top = Math.min(r.bottom + 4, innerHeight - mh - 6) + 'px';
+    m.style.transformOrigin = 'top right';
+    zipMenu = m;
+    $('#tikzZipMore').setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', zipAway, true); document.addEventListener('keydown', zipKeys, true);
+    m.querySelector<HTMLElement>('.ctx-item')!.focus({ preventScroll: true });
+  };
 
   // ---------------- sample document ----------------
   // The first file a new user sees, a Classic file that opens in Document view: what the app is, its
@@ -4664,7 +5102,7 @@ import { runtime as TD } from '../runtime';
     '- \\textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.',
     '- \\textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.',
     '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; and 3D geometry in tikz-3dplot (points, vectors, planes, rotated frames, projections and angles), edited by dragging.',
-    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
+    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), UML class diagrams (pgf-umlcd), UML sequence diagrams (pgf-umlsd), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
     '- \\textbf{Images} and \\textbf{freehand} pencil strokes.',
     '',
     '# Four modes',
@@ -4704,7 +5142,7 @@ import { runtime as TD } from '../runtime';
     '',
     '## Get the LaTeX out',
     '- \\textbf{LaTeX} (' + key('Mod+E') + ') shows the code to copy or download: the TikZ picture for the diagram (it lists the packages your preamble needs), a standalone file, or the whole document.',
-    '- ' + key('Mod+Shift+E') + ' downloads the whole document as a \\texttt{.tex} file straight away.',
+    '- ' + key('Mod+Shift+E') + ' downloads the whole document as a \\texttt{.tex} file straight away (a \\texttt{.zip} with its pictures when it has any).',
     '- \\textbf{Export} saves a PNG, SVG or PDF. ' + key('Mod+P') + ' prints.',
   ].join('\n');
   function sampleBlocks() {
@@ -4863,6 +5301,7 @@ import { runtime as TD } from '../runtime';
         // another tab changed the file list, or a file: keep the list current
         remote: (k) => {
           if (k === LS_INDEX) renderDocList();
+          if (k.startsWith(RECOVERY_KEY)) recovery.stale(k.slice(RECOVERY_KEY.length));
           if (k === LS_DOC + state.docId) reloadFromOtherTab();
         },
       });
@@ -4970,6 +5409,9 @@ import { runtime as TD } from '../runtime';
   TD.app = {
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
     parseProject, projectJson, // project files, for the tests
+    recovery, restoreRecovery, openRecoveryCopy, // recovery copies, for the tests
+    showHint, takeIn, takeText, texBundle, texFiles, svgFilePdf, svgVectorPdf, // pictures, code and text from outside (pasted or dropped); LaTeX with its pictures (an SVG as vector PDF)
+    clearAllHistory: () => { histories.clear(); fileUndo.length = fileRedo.length = 0; state.undo = []; state.redo = []; documentHistory.reset(); updateTopbar(); }, // tests
     newDoc, // tests/bench.mjs
     resetHistory: () => { state.undo = []; state.redo = []; documentHistory.reset(); },
     newSample: () => { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); },
@@ -4987,8 +5429,8 @@ import { runtime as TD } from '../runtime';
       runCmd, setMode, setQuick, inQuick, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
       toggleSnap: () => { state.snap = !state.snap; savePrefs(); updateTopbar(); },
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
-      docAction, shareLink, newFolder, openBin, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
-      canUndo: () => state.undo.length > 0, canRedo: () => state.redo.length > 0,
+      docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
+      canUndo: () => state.undo.length > 0 || canUndoFile(), canRedo: () => state.redo.length > 0 || canRedoFile(),
     },
   };
   // the files are read from IndexedDB first; the loading screen stays up until they are open

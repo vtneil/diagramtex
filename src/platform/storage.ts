@@ -6,8 +6,9 @@ import type { FileKind } from '../core/contracts';
 // background, gathered into one transaction. Other tabs of the app hear about each write and keep their
 // copy current. Without IndexedDB (blocked, or failing to open) the app keeps using localStorage.
 (function () {
-  const DB = 'diagramtex', OS = 'kv', INDEX = 'diagramtex.index', DOC = 'diagramtex.doc.';
-  const owns = (k: string) => k === INDEX || k.startsWith(DOC);
+  const DB = 'diagramtex', OS = 'kv', INDEX = 'diagramtex.index', DOC = 'diagramtex.doc.', REC = 'diagramtex.rec.';
+  // files, the file list and the files' recovery copies (src/core/recovery.ts)
+  const owns = (k: string) => k === INDEX || k.startsWith(DOC) || k.startsWith(REC);
   const mem = new Map<string, string>(); // key → JSON text
   const queue = new Map<string, string | null>(); // key → JSON text, or null to delete
   let db: IDBDatabase | null = null, busy = false, asked = false;

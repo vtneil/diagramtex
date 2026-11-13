@@ -36,6 +36,9 @@ export interface HistoryStep {
   pa?: number;
   vb?: string;
   va?: string;
+  /** when it was done (or redone), and when it was last undone: `stamp()` order across every file */
+  t?: number;
+  r?: number;
 }
 export interface HistoryState {
   doc: DiagramDocument;

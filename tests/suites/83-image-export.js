@@ -13,9 +13,10 @@ T.test('image export: named image emits graphicx, dimensions and its filename', 
 });
 
 T.test('image export: generated filenames use image id and source extension', () => {
-  for (const [mime, extension] of [['png', 'png'], ['jpeg', 'jpg'], ['svg+xml', 'svg']]) {
+  for (const [mime, extension] of [['png', 'png'], ['jpeg', 'jpg'], ['svg+xml', 'svg'], ['gif', 'png'], ['webp', 'png']]) {
     const image = exportImage({ src: `data:image/${mime};base64,AA==` });
-    T.ok(TD.toTikz([image]).includes(`{export-image.${extension}}`), mime);
+    // an SVG goes in through the svg package, named without its extension
+    T.ok(TD.toTikz([image]).includes(extension === 'svg' ? '\\includesvg[width=2cm, height=1cm]{export-image}' : `{export-image.${extension}}`), mime);
   }
 });
 

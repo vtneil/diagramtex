@@ -1,6 +1,11 @@
 // Document transactions, independent of DOM, input devices, rendering, and persistence.
 import type { HistoryState, HistoryStep, Shape, ShapeChange, ShapeOwner } from './contracts';
 
+// One clock for every undo step in the app (each file's own, and the file list's), so undo and redo can take
+// whichever of them is the latest.
+let clock = 0;
+export const stamp = () => ++clock;
+
 interface Snapshot {
   owner: ShapeOwner;
   ids: string[];
@@ -58,7 +63,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     for (const [id, old] of previous.json) if (!now.json.has(id)) before.push([id, old, positions.get(id)!]);
     const moved = !sameOrder(previous, now);
     if (before.length || after.length || moved || now.pages !== previous.pages || now.vars !== previous.vars) {
-      const step: HistoryStep = { before, after, size: 64 };
+      const step: HistoryStep = { before, after, size: 64, t: stamp() };
       if (moved) { step.ib = previous.ids; step.ia = now.ids; step.size += 12 * (previous.ids.length + now.ids.length); }
       if (now.pages !== previous.pages) { step.pb = previous.pages; step.pa = now.pages; }
       if (now.vars !== previous.vars) { step.vb = previous.vars; step.va = now.vars; }

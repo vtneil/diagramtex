@@ -6,7 +6,8 @@ KIT.pie = () => SC.pie();
 for (const p of ['function', 'line', 'scatter', 'area', 'bar', 'contour', 'heatmap', 'param3d', 'curve3d', 'function3d', 'surface3d', 'mesh3d', 'scatter3d'])
   KIT['plot_' + p] = () => SC.plot(p);
 for (const [n, t] of [['blk_qc', 'qc'], ['blk_cd', 'cd'], ['blk_forest', 'forest'], ['blk_cz', 'cz'], ['blk_zx', 'zx'], ['blk_feynman', 'feynman'],
-  ['blk_bloch', 'bloch'], ['blk_timing', 'timing'], ['blk_kmap', 'kmap'], ['blk_automata', 'automata'], ['blk_geo3d', 'geo3d'], ['blk_chem', 'chemfig']])
+  ['blk_bloch', 'bloch'], ['blk_timing', 'timing'], ['blk_kmap', 'kmap'], ['blk_automata', 'automata'], ['blk_geo3d', 'geo3d'], ['blk_chem', 'chemfig'], ['blk_uml', 'uml'], ['blk_umlsd', 'umlsd'],
+  ['blk_geo2d', 'geo2d'], ['blk_bytefield', 'bytefield'], ['blk_physics', 'physics']])
   KIT[n] = () => SC.block(t);
 KIT.sym_basic = () => SC.syms(['basic', 'rect']); KIT.sym_flow = () => SC.syms(['flow', 'arrow']);
 KIT.sym_elec = () => SC.syms(['misc', 'elec', 'wave']); KIT.sym_phys = () => SC.syms(['mech', 'optics']);
@@ -451,3 +452,35 @@ KIT.chem_text = chS(String.raw`\schemestart
   \arrow{->[$h\nu$]}
   \chemfig{A-B}
 \schemestop`);
+
+// ---- sd_* : pgf-umlsd demos (from the package documentation, as in tests/fixtures/umlsd-demos.json)
+const sdS = (src) => () => SC.block('umlsd', { src });
+KIT.sd_threads = sdS("\\begin{sequencediagram}\n  \\tikzstyle{inststyle}+=[bottom color=yellow] % custom the style\n  \\newthread[blue]{ss}{:SimulationServer}\n  \\newinst{ps}{:PhysicsServer}\n  \\newinst[2]{sense}{:SenseServer}\n  \\newthread[red]{ctr}{:SimControlNode}\n  \n  \\begin{sdblock}[green!20]{Run Loop}{The main loop}\n    \\mess{ctr}{StartCycle}{ss}\n    \\begin{call}{ss}{Update()}{ps}{}\n      \\prelevel\n      \\begin{call}{ctr}{SenseAgent()}{ctr}{}\n        \\begin{call}[3]{ctr}{Read}{sense}{}\n        \\end{call}\n      \\end{call}\n      \\prelevel\\prelevel\\prelevel\\prelevel\n      \\setthreadbias{west}\n      \\begin{call}{ps}{PrePhysicsUpdate()}{sense}{}\n      \\end{call}\n      \\setthreadbias{center}\n      \\begin{call}{ps}{Update()}{ps}{}\n        \\begin{call}{ps}{\\small CollisionDetection()}{ps}{}\n        \\end{call}\n        \\begin{call}{ps}{Dynamics()}{ps}{}\n        \\end{call}\n      \\end{call}\n      \\begin{call}{ps}{PostPhysicsUpdate()}{sense}{}\n      \\end{call}\n    \\end{call}\n    \\mess{ss}{EndCycle}{ctr}\n    \\begin{call}{ctr}{ActAgent()}{ctr}{}\n      \\begin{call}{ctr}{Write}{sense}{}\n      \\end{call}\n    \\end{call}\n  \\end{sdblock}\n\n\\end{sequencediagram}");
+KIT.sd_block = sdS("\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n  \\newinst[1]{i}{:Instance}\n\n  \\begin{sdblock}{Block}{description}\n    \\begin{call}{t}{function()}{i}{}\n    \\end{call}\n  \\end{sdblock}\n\\end{sequencediagram}");
+KIT.sd_threadbias = sdS("\\begin{sequencediagram}\n  \\newthread[blue]{s1}{:Server1}\n  \\newinst{db}{:Database}\n  \\newthread[red]{s2}{:Server2}\n\n  \\begin{call}{s1}{reading}{db}{data}\n    \\postlevel\n  \\end{call}\n\n  \\prelevel\\prelevel\n\n  \\setthreadbias{east}\n\n  \\begin{call}{s2}{reading}{db}{data}\n    \\postlevel\n  \\end{call}\n\\end{sequencediagram}");
+KIT.sd_delay = sdS("\\begin{sequencediagram}\n  \\newthread{a}{:Thread A}\n  \\newthread[gray]{b}{:Thread B}\n\n  \\mess[1]{a}{ping}{b}\n  \\mess[1]{b}{pong}{a}\n\\end{sequencediagram}");
+KIT.sd_callself = sdS("\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n\n  \\begin{call}{t}{function()}{t}{return value}\n  \\end{call}\n\\end{sequencediagram}");
+KIT.sd_messcall = sdS("\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n  \\newinst[1]{i}{:Instance}\n\n  \\begin{messcall}{t}{function()}{i}\n  \\end{messcall}\n\\end{sequencediagram}");
+KIT.sd_customize = sdS("\\begin{sequencediagram}\n  \\newthread[red]{r}{:Red}\n  \\newthread[green]{g}{:Green}\n  \\newthread[blue]{b}{:Blue}\n  \\tikzstyle{inststyle}+=[top color=yellow, bottom color=gray]\n  \\newinst{y}{:Yellow}\n  \\tikzstyle{inststyle}+=[bottom color=white, top color=white, rounded corners=3mm]\n  \\newinst{o}{:Rounded}\n\\end{sequencediagram}");
+
+// ---- img_* : pictures (\includegraphics, \includesvg). The harness puts the picture files next to the .tex.
+const imgPng = (type = 'image/png') => {
+  const c = document.createElement('canvas'); c.width = 800; c.height = 400; const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 800, 400);
+  const bars = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'];
+  bars.forEach((col, i) => { g.fillStyle = col; g.fillRect(60 + i * 140, 360 - (i + 2) * 45, 100, (i + 2) * 45); });
+  g.strokeStyle = '#000000'; g.lineWidth = 8; g.strokeRect(4, 4, 792, 392);
+  g.beginPath(); g.moveTo(40, 40); g.lineTo(760, 40); g.stroke();
+  g.fillStyle = '#000000'; g.beginPath(); g.arc(700, 110, 40, 0, Math.PI * 2); g.fill();
+  return c.toDataURL(type, 0.95);
+};
+const IMG_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">'
+  + '<rect x="4" y="4" width="392" height="192" fill="#eef3ff" stroke="#000" stroke-width="6"/>'
+  + '<path d="M30 170 C 120 20, 200 20, 260 120 S 360 180, 380 40" fill="none" stroke="#d62728" stroke-width="8"/>'
+  + '<circle cx="90" cy="70" r="30" fill="#2ca02c"/><polygon points="300,160 340,90 380,160" fill="#1f77b4"/></svg>';
+const imgShape = (o) => P.mk('image', 'image', { x: 0, y: 0, w: 200, h: 100, opacity: 1, ...o });
+const frame = (x, y, w, h) => P.mk('rect', 'rect', { x, y, w, h, stroke: '#000000', width: 1, fill: null });
+KIT.img_png = () => [imgShape({ src: imgPng(), file: 'chart.png' }), frame(0, 120, 200, 30)];
+KIT.img_jpg = () => [imgShape({ src: imgPng('image/jpeg'), file: 'photo.jpg', w: 160, h: 80 }), frame(0, 100, 160, 30)];
+KIT.img_svg = () => [imgShape({ src: 'data:image/svg+xml;base64,' + btoa(IMG_SVG), file: 'drawing.svg' }), frame(0, 120, 200, 30)];
+KIT.img_rot = () => [imgShape({ src: imgPng(), file: 'chart.png', angle: 30, opacity: 0.6 }), frame(-40, -40, 280, 180)];

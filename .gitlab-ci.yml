@@ -1,0 +1,21 @@
+image: node:22-bookworm
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+
+stages:
+  - test
+
+compile:
+  stage: test
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  script:
+    - npm ci --include=dev --cache .npm --prefer-offline --no-audit --no-fund
+    - npm run check
+    - npm run build

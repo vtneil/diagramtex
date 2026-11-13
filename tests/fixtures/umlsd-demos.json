@@ -1,0 +1,83 @@
+{
+ "nested-call": {
+  "src": "\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n  \\newinst{a}{:A}\n  \\newinst{b}{:B}\n\n  \\begin{call}{t}{funcA()}{a}{return}\n    \\begin{call}{a}{funcA()}{b}{return}\n    \\end{call}\n  \\end{call}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -106.0451,
+   154.84506,
+   11.58113
+  ]
+ },
+ "block": {
+  "src": "\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n  \\newinst[1]{i}{:Instance}\n\n  \\begin{sdblock}{Block}{description}\n    \\begin{call}{t}{function()}{i}{}\n    \\end{call}\n  \\end{sdblock}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -123.11691,
+   126.356,
+   11.58113
+  ]
+ },
+ "threadbias": {
+  "src": "\\begin{sequencediagram}\n  \\newthread[blue]{s1}{:Server1}\n  \\newinst{db}{:Database}\n  \\newthread[red]{s2}{:Server2}\n\n  \\begin{call}{s1}{reading}{db}{data}\n    \\postlevel\n  \\end{call}\n\n  \\prelevel\\prelevel\n\n  \\setthreadbias{east}\n\n  \\begin{call}{s2}{reading}{db}{data}\n    \\postlevel\n  \\end{call}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -106.0451,
+   159.23654,
+   11.58113
+  ]
+ },
+ "multi-threads-example": {
+  "src": "\\begin{sequencediagram}\n  \\tikzstyle{inststyle}+=[bottom color=yellow] % custom the style\n  \\newthread[blue]{ss}{:SimulationServer}\n  \\newinst{ps}{:PhysicsServer}\n  \\newinst[2]{sense}{:SenseServer}\n  \\newthread[red]{ctr}{:SimControlNode}\n  \n  \\begin{sdblock}[green!20]{Run Loop}{The main loop}\n    \\mess{ctr}{StartCycle}{ss}\n    \\begin{call}{ss}{Update()}{ps}{}\n      \\prelevel\n      \\begin{call}{ctr}{SenseAgent()}{ctr}{}\n        \\begin{call}[3]{ctr}{Read}{sense}{}\n        \\end{call}\n      \\end{call}\n      \\prelevel\\prelevel\\prelevel\\prelevel\n      \\setthreadbias{west}\n      \\begin{call}{ps}{PrePhysicsUpdate()}{sense}{}\n      \\end{call}\n      \\setthreadbias{center}\n      \\begin{call}{ps}{Update()}{ps}{}\n        \\begin{call}{ps}{\\small CollisionDetection()}{ps}{}\n        \\end{call}\n        \\begin{call}{ps}{Dynamics()}{ps}{}\n        \\end{call}\n      \\end{call}\n      \\begin{call}{ps}{PostPhysicsUpdate()}{sense}{}\n      \\end{call}\n    \\end{call}\n    \\mess{ss}{EndCycle}{ctr}\n    \\begin{call}{ctr}{ActAgent()}{ctr}{}\n      \\begin{call}{ctr}{Write}{sense}{}\n      \\end{call}\n    \\end{call}\n  \\end{sdblock}\n\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -413.33786,
+   413.03502,
+   11.58113
+  ]
+ },
+ "postlevel": {
+  "src": "\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n  \\newinst[1]{i}{:Instance}\n    \\begin{call}{t}{function()}{i}{\\shortstack{return A\\\\ return B\\\\\n          return C}}\n      \\postlevel\n    \\end{call}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -88.97328,
+   126.356,
+   11.58113
+  ]
+ },
+ "non-instantaneous-message": {
+  "src": "\\begin{sequencediagram}\n  \\newthread{a}{:Thread A}\n  \\newthread[gray]{b}{:Thread B}\n\n  \\mess[1]{a}{ping}{b}\n  \\mess[1]{b}{pong}{a}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -106.0451,
+   115.70743,
+   11.58113
+  ]
+ },
+ "callself": {
+  "src": "\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n\n  \\begin{call}{t}{function()}{t}{return value}\n  \\end{call}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -71.90146,
+   114.92514,
+   11.58113
+  ]
+ },
+ "messcall": {
+  "src": "\\begin{sequencediagram}\n  \\newthread{t}{:Thread}\n  \\newinst[1]{i}{:Instance}\n\n  \\begin{messcall}{t}{function()}{i}\n  \\end{messcall}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -71.90146,
+   126.356,
+   11.58113
+  ]
+ },
+ "customize": {
+  "src": "\\begin{sequencediagram}\n  \\newthread[red]{r}{:Red}\n  \\newthread[green]{g}{:Green}\n  \\newthread[blue]{b}{:Blue}\n  \\tikzstyle{inststyle}+=[top color=yellow, bottom color=gray]\n  \\newinst{y}{:Yellow}\n  \\tikzstyle{inststyle}+=[bottom color=white, top color=white, rounded corners=3mm]\n  \\newinst{o}{:Rounded}\n\\end{sequencediagram}",
+  "bb": [
+   0.0,
+   -37.75781,
+   261.02213,
+   11.58113
+  ]
+ }
+}

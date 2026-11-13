@@ -1473,7 +1473,7 @@ import { runtime as TD } from '../runtime';
     }
     nodes.push({ k: 'comp', gs });
     const yc = -0.683 * EM / 2, bo = baseOff(TEXT);
-    ext(H, lead, -0.683 * EM, lead, 0);
+    ext(H, 0, -0.683 * EM, lead, 0); // TeX's box holds the leading spaces
     let x = lead;
     nodes.forEach((nd, i) => {
       const left = x + (i === 0 ? 0 : P.hsep);

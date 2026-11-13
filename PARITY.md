@@ -4,11 +4,12 @@ You draw in DiagramTeX, copy the code, paste it into Overleaf or your own `.tex`
 answers how close the result comes to what you saw, with measured numbers, side-by-side samples, and the
 differences that are still there.
 
-**In short:** across 45 test figures, **99.5 % of the ink lands within 0.5 mm** of where the canvas drew it,
-and **99.9 % lands within 1 mm**. Every figure type now scores at least 97 % within 0.5 mm. Shapes, arrows,
-symbols, plots, 3D figures and every block (quantum circuits, trees, commutative diagrams, circuits,
-automata, timing diagrams, Karnaugh maps, chemistry) are drawn in the same places. What is left is mostly
-the font: the canvas draws letters a little heavier than pdflatex does.
+**In short:** across 48 test figures, **99.4 % of the ink lands within 0.5 mm** of where the canvas drew it
+(median 99.9 %), and **99.9 % lands within 1 mm**. Every figure type scores at least 97 % within 0.5 mm.
+Shapes, arrows, symbols, plots, 3D figures and every block (quantum circuits, trees, commutative diagrams,
+circuits, automata, timing diagrams, Karnaugh maps, chemistry, UML class and sequence diagrams, 2D geometry,
+bit fields, physics) are drawn in the same places. What is left is mostly the font: the canvas draws letters
+a little heavier than pdflatex does.
 
 The test setup, per-commit fixes and every image are in [docs/latex-parity/](docs/latex-parity/README.md).
 
@@ -27,48 +28,56 @@ The 0.2 mm column is close to an exact pixel overlap, so anti-aliasing and the h
 down (text-heavy figures score lowest there). **Read the 0.5 mm column** as "looks the same on paper" and the
 1 mm column as "same layout, maybe nudged".
 
-Measured on DiagramTeX 1.21.0 with the fixes described below.
+Measured on DiagramTeX 1.40.0 with the fixes described below. 168 figures were run in all; the tables show the
+scored ones.
 
 ## Scores
 
-| Figure type | Test figures | ≤ 0.2 mm | ≤ 0.5 mm | ≤ 1 mm | ≤ 0.5 mm in 1.21.0 |
+| Figure type | Test figures | ≤ 0.2 mm | ≤ 0.5 mm | ≤ 1 mm | ≤ 0.5 mm in 1.22.0 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Lines, arrow tips, dashes, ticked shafts | 5 | 98.9 % | 99.8 % | 100 % | 99.9 % |
-| Shapes, fills, translucent shapes | 2 | 97.3 % | 98.9 % | 100 % | 97.5 % |
-| Text and maths labels | 2 | 87.7 % | 98.9 % | 100 % | 98.9 % |
+| Lines, arrow tips, dashes, ticked shafts | 5 | 99.4 % | 99.9 % | 100 % | 99.8 % |
+| Shapes, fills, translucent shapes | 2 | 97.3 % | 98.9 % | 100 % | 98.9 % |
+| Text and maths labels | 2 | 87.6 % | 98.9 % | 100 % | 98.9 % |
 | Symbol library (basic, electrical, flowchart, physics) | 4 | 99.8 % | 100 % | 100 % | 100 % |
 | Pie chart | 1 | 99.1 % | 99.9 % | 100 % | 99.9 % |
-| 2D plots: function, line, scatter, area, bar, contour, heatmap | 7 | 98.7 % | 99.7 % | 99.9 % | 97.6 % |
-| 3D plots: function, surface, mesh, parametric, curve, scatter | 6 | 97.7 % | 99.3 % | 99.8 % | 93.0 % |
-| 3D solids, revolve, sketch | 6 | 98.9 % | 99.8 % | 99.9 % | |
-| Quantum circuit (quantikz) | blk_qc | 99.2 % | 100 % | 100 % | 68.4 % |
-| Tree (forest) | blk_forest | 91.7 % | 100 % | 100 % | 69.2 % |
-| Commutative diagram (tikz-cd) | blk_cd | 97.9 % | 100 % | 100 % | 96.6 % |
-| Karnaugh map | blk_kmap | 99.5 % | 100 % | 100 % | 85.2 % |
-| Timing diagram (tikz-timing) | blk_timing | 99.1 % | 99.8 % | 100 % | 86.5 % |
-| Automaton | blk_automata | 99.4 % | 100 % | 100 % | 98.5 % |
-| Circuit (circuitikz) | blk_cz | 93.9 % | 98.4 % | 100 % | 97.7 % |
+| 2D plots: function, line, scatter, area, bar, contour, heatmap | 7 | 99.0 % | 99.7 % | 99.9 % | 99.7 % |
+| 3D plots: function, surface, mesh, parametric, curve, scatter | 6 | 97.7 % | 99.3 % | 99.8 % | 99.3 % |
+| 3D solids and revolve | 4 | 99.5 % | 99.7 % | 99.8 % | 99.8 % |
+| Quantum circuit (quantikz) | blk_qc | 99.2 % | 100 % | 100 % | 100 % |
+| Tree (forest) | blk_forest | 91.7 % | 100 % | 100 % | 100 % |
+| Commutative diagram (tikz-cd) | blk_cd | 98.2 % | 100 % | 100 % | 100 % |
+| Karnaugh map | blk_kmap | 99.5 % | 100 % | 100 % | 100 % |
+| Timing diagram (tikz-timing) | blk_timing | 99.1 % | 99.8 % | 100 % | 99.8 % |
+| Automaton | blk_automata | 99.4 % | 100 % | 100 % | 100 % |
+| Circuit (circuitikz) | blk_cz | 93.9 % | 98.4 % | 100 % | 98.4 % |
 | Chemistry (chemfig) | blk_chem | 91.2 % | 100 % | 100 % | 100 % |
 | ZX calculus | blk_zx | 100 % | 100 % | 100 % | 100 % |
 | Bloch sphere | blk_bloch | 94.1 % | 97.7 % | 99.2 % | 97.7 % |
 | Feynman diagram | blk_feynman | 90.9 % | 97.4 % | 100 % | 97.4 % |
 | 3D geometry (tikz-3dplot) | blk_geo3d | 89.5 % | 97.0 % | 100 % | 97.0 % |
-| **All 45 figures** (mean / median) | | 97.3 / 99.0 % | **99.5 / 99.9 %** | 99.9 / 100 % | |
+| UML class diagram (pgf-umlcd) | blk_uml | 94.5 % | 98.0 % | 99.9 % | |
+| UML sequence diagram (pgf-umlsd) | blk_umlsd | 96.7 % | 100 % | 100 % | |
+| 2D geometry | blk_geo2d | 85.7 % | 97.4 % | 100 % | |
+| Pictures (PNG, JPEG, SVG via `\includesvg`, rotated and translucent) | 4 | 100 % | 100 % | 100 % | |
+| Bit field (bytefield) | blk_bytefield | 95.0 % | 99.9 % | 100 % | |
+| Physics diagram | blk_physics | 98.6 % | 99.8 % | 100 % | |
+| **All 48 figures** (mean / median) | | 97.1 / 99.0 % | **99.4 / 99.9 %** | 99.9 / 100 % | |
 
-Rows with several figures show the mean. The last column is the same figures scored on the 1.21.0 release,
-before this round of fixes (blank where that figure wasn't scored then). On the 34 figures scored both times,
-the 0.5 mm mean went from 95.0 % to 99.4 %.
+Rows with several figures show the mean. The last column is the previous round (1.22.0); blank rows are
+blocks added since. On the 43 figures scored both times the 0.5 mm mean is unchanged at 99.5 %: nothing
+drifted, and the two figures that had (below) are fixed. The 3D sketch tool was removed in 1.33, so that row
+lost its two sketch figures.
 
 Harder cases, scored separately (0.5 mm / 1 mm):
 
 | Case | ≤ 0.5 mm | ≤ 1 mm |
 | --- | ---: | ---: |
 | Quantum: gate over several wires | 99.9 % | 100 % |
-| Quantum: gate groups with labels | 97.8 % | 100 % |
+| Quantum: gate groups with labels | 98.0 % | 100 % |
 | tikz-cd: tall and deep cells (∏, ∑) | 100 % | 100 % |
 | xymatrix: the default square (blk_xy) | 99.3 % | 100 % |
 | xymatrix: exact sequences over two rows | 99.4 % | 100 % |
-| xymatrix: curves, shifts, hooks, `\|` labels | 99.8 % | 100 % |
+| xymatrix: curves, shifts, hooks, `\|` labels | 100 % | 100 % |
 | xymatrix: tips (`->>`, `>->`, `=>`, `\|->`, `=`) | 100 % | 100 % |
 | xymatrix: mixed styles with `@C=3pc` | 99.7 % | 100 % |
 | xymatrix: turning arrow (`` `[ul] `[l] ``…) | 89.3 % | 98.2 % |
@@ -80,15 +89,15 @@ Harder cases, scored separately (0.5 mm / 1 mm):
 | forest: org chart (forked edges) | 97.1 % | 100 % |
 | forest: folder tree | 87.6 % | 99.1 % |
 | circuitikz: voltage arrows (`v=`) | 100 % | 100 % |
-| circuitikz: labels and currents on one part | 94.1 % | 99.3 % |
-| circuitikz: `v^= v<= v^<=` (curved, above and backward) | 98.9 % | 100 % |
-| circuitikz: straight voltages | 99.9 % | 100 % |
+| circuitikz: labels and currents on one part | 96.9 % | 99.8 % |
+| circuitikz: `v^= v<= v^<=` (curved, above and backward) | 100 % | 100 % |
+| circuitikz: straight voltages | 100 % | 100 % |
 | circuitikz: American voltages (`+`/`−`) | 100 % | 100 % |
 | circuitikz: raised voltages | 100 % | 100 % |
 | circuitikz: `\ctikzset{voltage=american}` for the circuit | 100 % | 100 % |
-| circuitikz: voltages on sources (generator arrow, `+`/`−`, `v_<=`) | 99.9 % | 100 % |
-| circuitikz: current directions (`i< i>_ i_< i<^`, on a source) | 99.9 % | 100 % |
-| circuitikz: part colour (`color=red`, `blue!70!black`) | 99.9 % | 100 % |
+| circuitikz: voltages on sources (generator arrow, `+`/`−`, `v_<=`) | 100 % | 100 % |
+| circuitikz: current directions (`i< i>_ i_< i<^`, on a source) | 100 % | 100 % |
+| circuitikz: part colour (`color=red`, `blue!70!black`) | 100 % | 100 % |
 | circuitikz: `++`, `+`, `-\|`, `\|-`, `\coordinate` | 100 % | 100 % |
 | circuitikz: amplifiers (`en amp`, `fd op amp`, `inst amp`, `plain amp`, `buffer`…) | 100 % | 100 % |
 | circuitikz: IEEE logic ports, transmission gates, `notcirc` | 100 % | 100 % |
@@ -104,9 +113,33 @@ Harder cases, scored separately (0.5 mm / 1 mm):
 | chemfig: `\chemmove` curve, lone pairs, `@{db,.5}`, anchored arrow | 99.9 % | 100 % |
 | chemfig: nitro resonance, two `\chemmove` curves | 99.9 % | 100 % |
 | chemfig: `\hreac`, submols with arguments, `!0`, `\|`, fixed length | 100 % | 100 % |
-| chemfig: text between molecules (`\quad or \quad`) | 87.5 % | 100 % |
+| chemfig: text between molecules (`\quad or \quad`) | 87.4 % | 100 % |
+| circuitikz: ground and supply nodes with labels | 99.1 % | 99.7 % |
+| circuitikz: a node with text beside the circuit | 94.1 % | 99.3 % |
+| pgf-umlsd: threads, `sdblock`, shaded instances | 99.9 % | 100 % |
+| pgf-umlsd: `sdblock` with a comment | 100 % | 100 % |
+| pgf-umlsd: `\setthreadbias` | 100 % | 100 % |
+| pgf-umlsd: messages with a delay | 100 % | 100 % |
+| pgf-umlsd: `callself`, `messcall` | 100 % | 100 % |
+| pgf-umlsd: rounded and shaded instances, thread colours | 100 % | 100 % |
+| Patterns (Lines, Hatch, Grid, Dots, Bricks…) | 75.6 % | 100 % |
 
-## What changed in this round
+## What changed in this round (1.40.0)
+
+- **Sequence diagrams (pgf-umlsd):** the export put the environment in a node with `inner sep=0pt`, which
+  carried into the package's own empty nodes: activation bars came out as hairlines, instances moved and
+  labels sat low (62 % within 0.5 mm). The node now keeps TikZ's inner sep, and it is placed knowing that
+  pgf-umlsd sets four interword spaces before its picture (13.3 pt). Every pgf-umlsd demo now scores
+  99.9–100 %.
+- **Chemistry `\hreac`:** the line breaks after `\definesubmol` are spaces TeX sets before the reaction. Since
+  the scheme rewrite (1.30) the canvas moved the reaction right by them but left them out of its box, so
+  the export landed 3.5 mm off (37.9 %, was 100 %). Back to 100 %.
+- **Circuits:** a ground, supply or other node part with a label stopped the whole circuit drawing on the
+  canvas (and in SVG and PNG export). Fixed; a test now draws every parity figure.
+- **UML class diagrams:** a space after a colon (`name : String`) now gets TeX's extra space, as pdflatex sets
+  it in running text (97.4 → 98.0 %).
+
+## The previous round (1.22.0)
 
 - **Quantum circuits:** wires, gates and meters now land on LaTeX's (they were about 0.1 cm off). Gate height
   is the text's height plus quantikz's padding, the target circle and meters use TeX's real em, and the
@@ -149,6 +182,16 @@ Harder cases, scored separately (0.5 mm / 1 mm):
 Each image is three panels: the app, LaTeX, and an overlay. In the overlay, **dark** is drawn by both, **red**
 only by the app and **blue** only by LaTeX. A thin red/blue fringe is half-pixel noise or the heavier canvas
 font. A doubled shape is a real shift.
+
+**UML sequence diagram: 100 % within 0.5 mm** (pgf-umlsd's threads demo: 99.9 %). Instances, activation bars,
+messages and frames coincide.
+
+![pgf-umlsd threads demo, app vs LaTeX](docs/latex-parity/sd_threads.png)
+
+**UML class diagram: 98.0 % within 0.5 mm.** Boxes, compartments and inheritance arrows coincide; member text
+ends within about 0.3 mm.
+
+![pgf-umlcd class diagram, app vs LaTeX](docs/latex-parity/blk_uml.png)
 
 **Quantum circuit: 100 % within 0.5 mm** (was 68 % in 1.21.0). Wires, gates and meters coincide.
 
@@ -203,7 +246,8 @@ figure went from 69 % to 100 %.)
 
 - **Pattern position.** Lines, Hatch, Dots and Bricks have the same spacing and line width in LaTeX, but
   TikZ lines its pattern tiles up with the page corner, so the stripes or dots can be shifted inside the
-  shape. The canvas can't predict where your page puts the picture.
+  shape (the patterns figure scores 75.6 % within 0.5 mm and 100 % within 1 mm for that reason). The canvas
+  can't predict where your page puts the picture.
 - **Translucent symbols** (library symbols, balls, dots and text with opacity) still fade fill and outline
   separately in LaTeX, so overlaps look slightly darker.
 
@@ -236,6 +280,10 @@ figure went from 69 % to 100 %.)
   positions to see them on the canvas.
 - **Automata and 3D geometry:** extra TikZ in the block source is passed through untouched.
 
+- **UML class diagrams:** text widths differ from pdflatex by about 1 %, so a long member can end 0.3 mm
+  earlier or later.
+- **2D geometry:** an angle's label and a label on a segment can sit about 1 mm higher on the canvas.
+
 ### Documents (Page mode)
 
 - Cross-references, the contents list and citations need **two compiles**, as with any LaTeX document.
@@ -249,6 +297,7 @@ The harness is in [docs/latex-parity/tools/](docs/latex-parity/tools/):
 - `harness.js` composes the three panels, `scenes.js` and `scenes-kit.js` hold the test figures.
 - `cdp.mjs` drives a headless Chrome on that page: `CDP=<port> node cdp.mjs run blk_qc blk_forest …`.
 - `match.py <figure.cmp.png …>` prints the scores at 0, 0.2, 0.5 and 1 mm.
+- Figures with pictures (`img_png`, `img_jpg`, `img_svg`, `img_rot`): `harness.js` sends the files the .zip would carry (each picture, and for an SVG the PDF in `svg-inkscape/`) to the server before compiling, so LaTeX sees what a downloaded .zip holds. The pictures land on the same pixels as the canvas; only the anti-aliasing at their edges differs (90 % at 0 mm).
 
 Between measurement rounds, `node tests/run.mjs` guards the same figures: it keeps each one's exported TikZ
 as a golden file (so any change to an export shows as a diff), compiles every export with pdflatex, checks

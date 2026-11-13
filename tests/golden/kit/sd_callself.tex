@@ -1,0 +1,15 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgf-umlsd}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (1.78,-1.47) {\pgfinterruptpicture%
+  \begin{sequencediagram}
+    \newthread{t}{:Thread}
+  
+    \begin{call}{t}{function()}{t}{return value}
+    \end{call}
+  \end{sequencediagram}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}

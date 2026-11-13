@@ -54,6 +54,8 @@ import { runtime as TD } from '../runtime';
     ['xy', /\\xymatrix\b/],
     ['tikz-feynman', /\\feynmandiagram\b|\\begin\{feynman\}/],
     ['tikz-timing', /\\(?:texttiming|tikztiming)\b|\\begin\{tikztimingtable\}/],
+    ['pgf-umlcd', /\\begin\{(?:class|interface|abstractclass|staticclass|object)\}\[?[^\n]*\}\{[^}]*,[^}]*\}|\\(?:umlnote|unidirectionalAssociation|switchUmlcdSchool)\b/],
+    ['pgf-umlsd', /\\begin\{sequencediagram\}/],
     ['amssymb', /\\(?:mathbb|mathfrak|Bbb|frak|bold|varnothing|leqslant|geqslant|square|blacksquare|checkmark)\b/],
     ['amsmath', /\\(?:text|dfrac|tfrac|binom|operatorname|xrightarrow|xleftarrow|boldsymbol)\b|\\begin\{(?:align|aligned|pmatrix|bmatrix|vmatrix|cases|gather|multline)\*?\}/],
     ['siunitx', /\\(?:SI|si|qty|unit|num|ang)\s*[[{]/],
@@ -63,7 +65,7 @@ import { runtime as TD } from '../runtime';
     ['bm', /\\bm\b/],
     ['physics', /\\(?:ket|bra|braket|dv|pdv|abs|norm)\{/],
   ];
-  const LOADS_TIKZ = ['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'forest', 'tikz-feynman', 'tikz-timing', 'quantikz', 'chemfig', 'tikz-3dplot', 'tkz-euclide', 'smartdiagram', 'zx-calculus', 'blochsphere', 'karnaugh-map', 'pgf-pie'];
+  const LOADS_TIKZ = ['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'forest', 'tikz-feynman', 'tikz-timing', 'quantikz', 'chemfig', 'tikz-3dplot', 'tkz-euclide', 'smartdiagram', 'zx-calculus', 'blochsphere', 'karnaugh-map', 'pgf-pie', 'pgf-umlcd', 'pgf-umlsd'];
   const PKG_IMPLIES: Record<string, any> = { amssymb: ['amsfonts'], mathtools: ['amsmath'], physics: [], quantikz: ['tikz-cd'], 'tikz-cd': [], bm: [] };
   // pdflatex can't run these; the app compiles and exports for pdflatex
   const LUA = [
@@ -142,6 +144,38 @@ import { runtime as TD } from '../runtime';
       add('warn', Math.max(0, i), `quantikz2 changes how ${pkgs.has('zx-calculus') ? 'zx-calculus and ' : ''}tikz-cd diagrams look: export from DiagramTeX to get the lines that keep them apart`);
     }
     for (const [re, msg] of LUA) { const m = (re as any).exec(s); if (m) add('error', m.index, msg + ' (DiagramTeX exports for pdfLaTeX)'); }
+
+    // pgf-umlcd draws \inherit, \implement and the relations where they are written: a class they name that comes
+    // later in the same picture is not there yet ("No shape named … is known")
+    if (/\\begin\{(?:class|interface|abstractclass|staticclass|object)\}/.test(body)) {
+      const UML = /\\begin\{tikzpicture\}|\\begin\{(class|interface|abstractclass|staticclass|object)\}\s*(?:\[[^\]]*\])?\s*\{([^{}]*)\}|\\umlnote\s*(?:\[[^\]]*\])?\s*\(([^()]*)\)|\\(inherit|implement)\s*\{([^{}]*)\}|\\(association|unidirectionalAssociation|aggregation|composition)\s*(?:\[[^\]]*\])?\s*((?:\{[^{}]*\}\s*){4})/g;
+      const pics: any[] = [];
+      let cur: any = null;
+      for (const m of body.matchAll(UML)) {
+        if (!m[1] && !m[3] && !m[4] && !m[6]) { pics.push(cur = { defs: new Map(), refs: [] }); continue; }
+        if (!cur) pics.push(cur = { defs: new Map(), refs: [] });
+        const at = base + m.index!;
+        if (m[1] || m[3]) { const n = (m[2] ?? m[3]).trim(); if (!cur.defs.has(n)) cur.defs.set(n, at); continue; }
+        if (m[4]) { for (const n of m[5].split(',')) cur.refs.push({ n: n.trim(), at, cmd: m[4] }); continue; }
+        const a = [...m[7].matchAll(/\{([^{}]*)\}/g)].map((x) => x[1].trim());
+        for (const n of [a[0], a[3]]) cur.refs.push({ n: n.replace(/\.(?:north|south|east|west|center|north east|north west|south east|south west)$/, ''), at, cmd: m[6] });
+      }
+      for (const P of pics) for (const r of P.refs) {
+        const d = P.defs.get(r.n);
+        if (d != null && d > r.at) add('error', r.at, `\\${r.cmd} names "${r.n}" before its class: pgf-umlcd needs "${r.n}" earlier in the picture`);
+      }
+    }
+
+    // pgf-umlsd draws a message where it is written, at its instances' nodes: one made later is not there yet
+    if (TD.umlsd && /\\begin\{sequencediagram\}/.test(body)) {
+      for (const m of body.matchAll(/\\begin\{sequencediagram\}([\s\S]*?)\\end\{sequencediagram\}/g)) {
+        const inner = m[1], at0 = base + m.index! + 23;
+        for (const r of TD.umlsd.lateRefs(TD.umlsd.parse(`\\begin{sequencediagram}${inner}\\end{sequencediagram}`).items)) {
+          const i = inner.indexOf(`{${r.name}}`);
+          add('error', at0 + Math.max(0, i), `"${r.name}" is used before its \\newinst: pgf-umlsd needs the instance earlier in the diagram`);
+        }
+      }
+    }
 
     // maths the preview can't draw (KaTeX and Temml); LaTeX itself is fine when the command is defined
     if (TD.TEX_COMMANDS && opt.preview !== false) {

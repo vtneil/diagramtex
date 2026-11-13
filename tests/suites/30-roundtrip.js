@@ -30,12 +30,37 @@ T.test('round trip: export → import → export, per figure', () => {
   T.eq(lost, [], 'figures not exported exactly as written');
 });
 
-// The app's own LaTeX (Document export with data comments) is lossless.
-T.test('round trip: document LaTeX with data comments is exact', () => {
+// The Document export carries no data comment (one line of base64 could pass TeX's line limit and stop
+// pdflatex), so it re-imports as well as any LaTeX does. Files exported before still restore exactly.
+T.test('document LaTeX: no data comment, short lines; older files with one still restore exactly', () => {
   const blocks = [{ type: 'text', text: '# Title\nSome *text* with $x^2$.' }];
   for (const n of ['lines', 'shapes', 'text', 'labels', 'blk_qc', 'blk_cd', 'blk_forest', 'blk_chem', 'blk_xy', 'plot_function', 'prim3d_a'])
     blocks.push({ type: 'diagram', shapes: KIT[n]() });
   const tex = TD.docToLatex({ name: 'Round trip', page: {}, blocks });
-  const got = TD.importLatex(tex).blocks.filter((b) => b.type === 'diagram').map((b) => b.shapes.map(({ id, ...r }) => r));
-  T.eq(got, blocks.filter((b) => b.type === 'diagram').map((b) => b.shapes.map(({ id, ...r }) => r)));
+  T.ok(!/diagramtex-data/.test(tex), 'no data comment');
+  const long = tex.split('\n').reduce((a, l) => Math.max(a, l.length), 0);
+  T.ok(long < 5000, `longest line ${long} characters`);
+  T.eq(TD.importLatex(tex).blocks.filter((b) => b.type === 'diagram').length, blocks.length - 1, 'every picture comes back');
+  // an older export: the data comment first inside each picture
+  const want = blocks.filter((b) => b.type === 'diagram').map((b) => b.shapes.map(({ id, ...r }) => r));
+  let k = 0;
+  const old = tex.replace(/\\begin\{tikzpicture\}(\[[^\n]*\])?/g, (m) => `${m}\n  % diagramtex-data: ${btoa(unescape(encodeURIComponent(JSON.stringify(want[k++]))))}`);
+  T.eq(k, want.length, 'one data comment per picture');
+  const got = TD.importLatex(old).blocks.filter((b) => b.type === 'diagram').map((b) => b.shapes.map(({ id, ...r }) => r));
+  T.eq(got, want);
+});
+
+T.test('document export: the title is the file name as typed, and pattern and shading declarations come along', () => {
+  const tex = TD.docToLatex({ name: 'my_notes 50% & #1 {draft}', page: { title: true }, blocks: [{ type: 'diagram', shapes: KIT.pat_all() }] });
+  T.ok(tex.includes('\\title{my\\_notes 50\\% \\& \\#1 \\{draft\\}}'), tex.split('\n').find((l) => l.startsWith('\\title')));
+  T.ok(/\\pgfdeclarepattern\{name=tdbricks0/.test(tex), 'the bricks pattern is declared');
+  T.tex('doc-title-patterns', tex);
+});
+
+T.test('every parity figure draws on the canvas (the SVG and PNG export) without throwing', () => {
+  const bad = [];
+  for (const n of Object.keys(KIT)) {
+    try { const svg = TD.app.shapesSvg(KIT[n]()); if (!/<svg/.test(svg)) bad.push(`${n}: no svg`); } catch (e) { bad.push(`${n}: ${e.message}`); }
+  }
+  T.eq(bad, []);
 });

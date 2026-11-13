@@ -1,6 +1,7 @@
 // In-page test library. Suites (tests/suites/*.js) call T.test(name, fn); fn may be async.
 // Inside a test: T.eq / T.ok assert; T.golden(name, text) compares text with tests/golden/<name> (in Node);
-// T.tex(name, source) asks Node to compile a standalone document with pdflatex.
+// T.tex(name, source, files?) asks Node to compile a standalone document with pdflatex; files ({ 'path': base64 })
+// are written next to it first (the pictures a .zip export carries).
 // T.fixtures holds the fixture files ({ 'legacy/v1.0.0.diagramtex': text, … }), set by the runner.
 (function () {
   const tests = [];
@@ -18,7 +19,7 @@
       }
     },
     golden(name, text) { cur.goldens.push({ name, text }); },
-    tex(name, src) { cur.tex.push({ name, src }); },
+    tex(name, src, files) { cur.tex.push({ name, src, files: files || null }); },
     // a shape of `type` with the app's defaults, at (x, y) in cm
     make(type, o = {}, tool) {
       const D = { stroke: '#000000', fill: null, width: 1, dash: 'solid', color: '#000000', size: 'normalsize', font: 'default', ballColor: '#a05a5a' };

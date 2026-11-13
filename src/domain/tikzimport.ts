@@ -730,14 +730,18 @@ import { runtime as TD } from '../runtime';
     const ind = least(src.split('\n').slice(1).filter((l: any) => l.trim()).map((l: any) => (/^[ \t]*/.exec(l))![0].length));
     return ind > 0 && isFinite(ind) ? src.split('\n').map((l: any, i: any) => (i ? l.slice(Math.min(ind, (/^[ \t]*/.exec(l))![0].length)) : l)).join('\n') : src;
   };
-  function nodeBlock(C: any, node: any, at: any) {
+  // raw/plain: the statement as written and with its comments blanked (same length, same positions), so the block
+  // keeps the comments written in its code
+  function nodeBlock(C: any, node: any, at: any, raw = '', plain = '') {
     const text = node.text.replace(/^\s*\\pgfinterruptpicture%?\s*|\s*%?\s*\\endpgfinterruptpicture\s*$/g, '').replace(/^\$\s*([\s\S]*?)\s*\$$/, '$1').trim();
     for (const B of TD.blocks.nodeImports()) {
       if (!TD.TYPES[B.type]) continue;
       const m = B.re.exec(text);
       if (!m) continue;
       const q = TD.TYPES[B.type].create(at, {});
-      q.src = B.dedent ? dedentLines(m[0]) : m[0];
+      const i = raw.length === plain.length ? plain.indexOf(m[0]) : -1;
+      const code = i >= 0 ? raw.slice(i, i + m[0].length) : m[0];
+      q.src = B.dedent ? dedentLines(code) : code;
       if ((B as any).place) (B as any).place(q, at); else { const b = B.bb!(q); q.x = at.x - b.w / 2; q.y = at.y - b.h / 2; }
       const extra = text.replace(m[0], '').replace(/\\color\{[^}]*\}/g, '').trim();
       const bad = unknownKeys(C, parseOpts(node.opts), new Set(['inner sep', 'anchor', 'text', 'color', 'font']));
@@ -789,6 +793,8 @@ import { runtime as TD } from '../runtime';
     const shapes: any[] = [];
     const preview = !!C.preview;
     let i = 0;
+    // pgf-umlcd classes somewhere in this code: a shifted scope may hold a class diagram
+    const umlIn = !!TD.uml && /\\begin\s*\{(?:class|interface|abstractclass|staticclass|object)\}/.test(s);
     const scopeCtx = () => (C.scopes || []).slice().reverse().map((L: any) => L.opts).filter(Boolean);
     const scopeIssue = () => (C.scopes || []).map((L: any) => L.issue).filter(Boolean);
     // one statement: shapes when exact, else one code object previewing them
@@ -826,6 +832,14 @@ import { runtime as TD } from '../runtime';
       if (name === 'begin' || name === 'end') {
         const e = s.indexOf('}', j);
         const env = s.slice(j + 1, e).trim();
+        if (name === 'begin' && env === 'scope' && umlIn && /^\\begin\{scope\}\s*\[\s*shift\s*=/.test(s.slice(bs, bs + 40))) {
+          // a pgf-umlcd class diagram in its shifted scope (how a picture with other objects exports it)
+          let d = 0, stop = -1;
+          for (const m of s.slice(bs).matchAll(/\\(begin|end)\{scope\}/g)) if ((d += m[1] === 'begin' ? 1 : -1) === 0) { stop = bs + m.index! + m[0].length; break; }
+          const uml = stop > 0 && /\\begin\s*\{(?:class|interface|abstractclass|staticclass|object)\}/.test(s.slice(bs, stop))
+            ? TD.uml.fromPicture(`\\begin{tikzpicture}\n${o.slice(bs, stop)}\n\\end{tikzpicture}`) : null;
+          if (uml) { done(bs, stop, applyXf([uml], C.scopes || []), issues()); i = stop; continue; }
+        }
         if (name === 'begin' && env === 'scope') {
           i = e + 1; while (/\s/.test(s[i])) i++;
           let L: Record<string, any> = { xf: [], shape: false, opts: '' };
@@ -990,7 +1004,7 @@ import { runtime as TD } from '../runtime';
           else done(bs, k, [], ['a named point: kept so the code that uses its name still works'], { raw: true, at: abs, names });
           continue;
         }
-        const blk = nodeBlock(C, node, at);
+        const blk = nodeBlock(C, node, at, o.slice(bs, k), s.slice(bs, k));
         if (blk) { styUsed = null; done(bs, k, [blk.shape], [...nodeIss(), ...blk.issues], { names }); continue; }
         if (node.text.trim()) {
           const make = () => {
@@ -1244,7 +1258,7 @@ import { runtime as TD } from '../runtime';
       p = bodyS.indexOf(BEG, e + END.length);
     }
     const inPic = (i: any) => found.some((f) => i >= f.at && i < f.end);
-    for (const b of bodyS.matchAll(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
+    for (const b of bodyS.matchAll(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|\\begin\{sequencediagram\}[\s\S]*?\\end\{sequencediagram\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
       if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, bare: bodyO.slice(b.index, b.index + b[0].length) });
     found.sort((a, b) => a.at - b.at);
     const blocks = [];
@@ -1263,6 +1277,9 @@ import { runtime as TD } from '../runtime';
       const picO = bodyO.slice(f.at, f.end);
       const data = embedded(picO);
       if (data) { blocks.push({ type: 'diagram', shapes: data }); continue; }
+      // a pgf-umlcd class diagram: the whole picture is the block's code
+      const uml = TD.uml && TD.uml.fromPicture(picO);
+      if (uml) { blocks.push({ type: 'diagram', shapes: withDefs([uml], preDefs, C) }); continue; }
       const shapes = importPicture(C, bodyS.slice(f.inner, f.inner + f.len), bodyO.slice(f.inner, f.inner + f.len), bodyO.slice(f.open, f.inner));
       blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
     }
@@ -1297,7 +1314,7 @@ import { runtime as TD } from '../runtime';
     return { blocks, warnings: [...new Set(C.warnings)], kept: report, title, page };
   };
   // packages a picture's code may need (others in a preamble are the document's own)
-  const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'blochsphere',
+  const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'pgf-umlcd', 'pgf-umlsd', 'blochsphere',
     'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',
     'amsmath', 'amssymb', 'amsfonts', 'mathrsfs', 'stmaryrd', 'upgreek', 'esint', 'dsfont', 'bbm']);
   // the preamble's definitions go with each picture, as a code object that exports them to the preamble

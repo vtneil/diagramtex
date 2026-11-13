@@ -28,6 +28,11 @@ blk_kmap: 1/1 modelled · regenerated differs from line 4 (kmap → kmap)
 blk_automata: 0/4 modelled · regenerated differs from line 4 (automata → tikz)
 blk_geo3d: 3/15 modelled · regenerated differs from line 5 (geo3d → tikz)
 blk_chem: 1/1 modelled · regenerated same
+blk_uml: 1/1 modelled · regenerated same
+blk_umlsd: 1/1 modelled · regenerated same
+blk_geo2d: 25/30 modelled · regenerated differs from line 2 (geo2d → coord,line,text,tikz)
+blk_bytefield: 1/1 modelled · regenerated same
+blk_physics: 4/24 modelled · regenerated differs from line 6 (physics → tikz)
 sym_basic: 1/53 modelled · regenerated differs from line 3 (sym → tikz)
 sym_flow: 5/69 modelled · regenerated differs from line 3 (sym → poly,tikz)
 sym_elec: 3/58 modelled · regenerated differs from line 3 (sym → poly,tikz)
@@ -154,3 +159,14 @@ chem_move: 0/1 modelled · regenerated same
 chem_nitro: 0/1 modelled · regenerated same
 chem_hreac: 0/1 modelled · regenerated same
 chem_text: 0/1 modelled · regenerated same
+sd_threads: 1/1 modelled · regenerated same
+sd_block: 1/1 modelled · regenerated same
+sd_threadbias: 1/1 modelled · regenerated same
+sd_delay: 1/1 modelled · regenerated same
+sd_callself: 1/1 modelled · regenerated same
+sd_messcall: 1/1 modelled · regenerated same
+sd_customize: 1/1 modelled · regenerated same
+img_png: 1/2 modelled · regenerated same
+img_jpg: 1/2 modelled · regenerated same
+img_svg: 1/2 modelled · regenerated same
+img_rot: 1/2 modelled · regenerated same

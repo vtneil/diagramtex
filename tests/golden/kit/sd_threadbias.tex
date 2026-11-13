@@ -1,0 +1,26 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{pgf-umlsd}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node at (2.57,-2.07) {\pgfinterruptpicture%
+  \begin{sequencediagram}
+    \newthread[blue]{s1}{:Server1}
+    \newinst{db}{:Database}
+    \newthread[red]{s2}{:Server2}
+  
+    \begin{call}{s1}{reading}{db}{data}
+      \postlevel
+    \end{call}
+  
+    \prelevel\prelevel
+  
+    \setthreadbias{east}
+  
+    \begin{call}{s2}{reading}{db}{data}
+      \postlevel
+    \end{call}
+  \end{sequencediagram}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}
+\end{document}
