@@ -50,7 +50,7 @@ import { runtime as TD } from '../runtime';
   const codeOf = (M: any) => (M.dirty ? T.write(M) : M.raw);
   // maths in an annotation label: $x$ → x; written back as $x$
   const mathOf = (t: any) => { t = String(t || '').trim(); const m = /^\$([\s\S]*)\$$/.exec(t) || /^\\\(([\s\S]*)\\\)$/.exec(t); return m ? m[1] : t; };
-  const wrapMath = (t: any) => (String(t).trim() ? `$${t.trim()}$` : '');
+  const wrapMath = (t: any) => { const v = mathOf(t).trim(); return v ? `$${v}$` : ''; };
   const cfg = () => T.config(E.M);
   const baseOf = (r: any) => -r * cfg().rowdist;
   const spansOf = (r: any) => { const row = E.M.rows[r]; return row ? T.drawRow(row, cfg()).spans : []; };
@@ -795,7 +795,7 @@ import { runtime as TD } from '../runtime';
       const p = bgParts(sg.bg);
       show(T.VALUE_NAMES[sg.c], `${rname || `Row ${E.sel.r + 1}`} · ${T.num(sp.a)}–${T.num(sp.b)}`, [
         selectField('Value', 'value', sg.c, T.VALUES.map((c: any) => [c, `${T.VALUE_NAMES[c]} (${c})`])), numeric(clock ? 'Step width' : 'Width', 'w', sg.w, 'periods', 0.5, sg.c === 'G' ? { disabled: true } : { min: '0.05' }),
-        ...(clock ? [numeric('Clock width', 'cw', clockW, 'periods', 0.5, { min: '0.25' })] : []), ...(sg.c === 'D' ? [field('Text', 't', sg.t || '', { placeholder: 'none' })] : []),
+        ...(clock ? [numeric('Clock width', 'cw', clockW, 'periods', 0.5, { min: '0.25' })] : []), ...(sg.c === 'D' ? [field('Text', 't', sg.t || '', { 'data-tx': 'text', placeholder: 'none' })] : []),
         ...(band ? [{ ...row('Fill', texColour(p.c, { 'data-f': 'bg' }, { nullable: true, defaultSwatch: p.hatch ? '#000000' : sg.c === 'U' ? '#808080' : '', title: 'Fill' })), controlClass: 'ctl tc' }, segments('Pattern', 'bgpat', p.hatch ? '1' : '0', [['0', 'Solid'], ['1', 'Hatched']])] : []),
         ...(sg.c === 'D' ? [segments('Starts', 'newv', sg.t == null ? 0 : 1, [[1, 'New value', 'A crossing where it starts: D{…}'], [0, 'Continues', 'No crossing: the value before goes on']], sg.t != null && sg.t !== '')] : []),
         note(...(clock ? [`Clock width sets every step of this ${sg.c === 'C' ? 'clock' : 'toggle'} (${run!.b - run!.a + 1} steps, each a high or a low) and keeps about the same length: 2 writes `, { code: '2C' }, '. Step width changes only this step. '] : []), 'Drag its edges along the row; ', { kbd: '⇧' }, ' moves the rest of the row with an edge. Drag the segment to move it between its neighbours.'),
@@ -803,7 +803,7 @@ import { runtime as TD } from '../runtime';
     }
     if (signal) {
       show(signal.segs.length ? 'Signal' : 'Blank row', signal.segs.length ? `${signal.segs.length} segment${signal.segs.length === 1 ? '' : 's'} · ${T.num(rowEnd(E.sel.row))} periods` : 'a gap between rows; type characters to make it a signal', [
-        field('Name', 'name', signal.name, { placeholder: 'none' }), selectField('Starts from', 'init', signal.init || '', [['', 'Nothing'], ['L', 'Low'], ['H', 'High'], ['Z', 'High impedance'], ['X', 'Unknown'], ['D', 'Data']]), field('Characters', 'chars', T.charsCode(signal), { class: 'mono' }),
+        field('Name', 'name', signal.name, { 'data-tx': 'text', placeholder: 'none' }), selectField('Starts from', 'init', signal.init || '', [['', 'Nothing'], ['L', 'Low'], ['H', 'High'], ['Z', 'High impedance'], ['X', 'Unknown'], ['D', 'Data']]), field('Characters', 'chars', T.charsCode(signal), { class: 'mono' }),
         ...(signal.ropts ? [field('Options', 'ropts', signal.ropts, { class: 'mono' })] : []), note('Characters: ', { code: 'H L Z X D{text} U M G S C T' }, '; a number in front sets the width (', { code: '3H' }, '), lower case is half (', { code: 'h' }, '), ', { code: '4{C}' }, ' repeats.'),
       ]); return;
     }

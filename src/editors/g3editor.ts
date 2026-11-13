@@ -1001,7 +1001,7 @@ import { runtime as TD } from '../runtime';
     }
     return out + '}'.repeat(depth);
   }
-  const wrapMath = (t: any) => { const v = balanced(String(t).trim()); return v ? `$${v}$` : ''; };
+  const wrapMath = (t: any) => { const v = balanced(mathOf(String(t)).trim()); return v ? `$${v}$` : ''; };
   // write a label (math) for a command: into its node, or as a new node at the end of a path
   function setLabel(src: any, si: any, t: any) {
     const Lx = G.layout(src, FLAT), st = Lx.S[si], lb = labelOf(si, Lx);

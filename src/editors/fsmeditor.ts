@@ -49,7 +49,7 @@ import { runtime as TD } from '../runtime';
   const sOf = (name: any) => E.M.states.find((s: any) => s.name === name) || null;
   // maths in a label: $x$ or \(x\) → x; written back as $x$
   const mathOf = (t: any) => { t = F.unbrace(t || ''); const m = /^\$([\s\S]*)\$$/.exec(t) || /^\\\(([\s\S]*)\\\)$/.exec(t); return m ? m[1] : t; };
-  const wrapMath = (t: any) => (String(t).trim() ? `$${t.trim()}$` : '');
+  const wrapMath = (t: any) => { const v = mathOf(t).trim(); return v ? `$${v}$` : ''; };
   const val = (t: any) => (/[,=\]]/.test(t) || t === '' ? `{${t}}` : t);
   // state options by kind
   const isInitW = (it: any) => kv(it).k === 'initial where';
@@ -650,7 +650,7 @@ import { runtime as TD } from '../runtime';
       const kind = f.initial && f.accepting ? 'Initial, accepting state' : f.initial ? 'Initial state' : f.accepting ? 'Accepting state' : f.state ? 'State' : 'Node', side = /\s/.test(f.side) ? '' : f.side;
       show(kind, `${outs} transition${outs === 1 ? '' : 's'} out`, [field('Name', 'name', s.name, { class: 'mono' }), field('Label', 'text', mathOf(s.text || ''), { 'data-tx': 'math', placeholder: 'none' }),
         segments('Initial', 'init', f.initial ? 1 : 0, [[0, 'No'], [1, 'Yes', 'initial: an arrow comes in from outside']]), segments('Arrow from', 'iside', side, [['left', 'Left'], ['above', 'Above'], ['below', 'Below'], ['right', 'Right']], !f.initial),
-        field('Start text', 'itext', f.initial ? f.text : '', { ...(!f.initial ? { disabled: true } : {}), placeholder: 'none' }), segments('Accepting', 'acc', f.accepting ? 1 : 0, [[0, 'No'], [1, 'Yes', 'accepting: drawn with a double line']]),
+        field('Start text', 'itext', f.initial ? f.text : '', { 'data-tx': 'text', ...(!f.initial ? { disabled: true } : {}), placeholder: 'none' }), segments('Accepting', 'acc', f.accepting ? 1 : 0, [[0, 'No'], [1, 'Yes', 'accepting: drawn with a double line']]),
         numField('x', 'x', x == null ? '' : F.num(x), 'cm', { step: '0.25' }), numField('y', 'y', y == null ? '' : F.num(y), 'cm', { step: '0.25' }),
         ...(s.x == null ? [note(s.rel ? `Placed ${s.rel.dir} of ${s.rel.of}. Moving it writes its position.` : 'No position in the code: moving it writes one.')] : []),
         colorRow('Fill', 'sfill', getOpt(s.o, 'fill'), { dflt: 'None' }), colorRow('Line', 'sdraw', getOpt(s.o, 'draw'), { dfltSw: TD.css('#000000') }), colorRow('Text', 'stext', getOpt(s.o, 'text'), { dfltSw: TD.css('#000000') }),

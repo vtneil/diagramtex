@@ -14,9 +14,9 @@ import { runtime as TD } from '../runtime';
   const COLOR = txt('color', 'Colour', RED, { color: true });
 
   const commands: Record<string, any> = {
-    axis: { label: 'Optical axis', args: 1, argHelp: '(from, to)', params: [txt('label', 'Label')], make: (x: any) => `\\axis(${P.fmt(x - 3)}, ${P.fmt(x + 9)})` },
+    axis: { label: 'Optical axis', args: 1, argHelp: '(from, to)', params: [LABEL], make: (x: any) => `\\axis(${P.fmt(x - 3)}, ${P.fmt(x + 9)})` },
     object: { label: 'Object', cat: 'Sources', args: 1, params: [num('h', 'Height', 1.2, cm), LABEL, txt('rays', 'Rays', 'principal', { kind: 'enum', opts: [['principal', 'Principal rays'], ['none', 'None']] }), COLOR], make: (x: any) => `\\object[h=1.2, label=$O$](${P.fmt(x)})` },
-    ray: { label: 'Ray', cat: 'Sources', args: 1, params: [num('angle', 'Direction', 0, deg), COLOR, txt('label', 'Label')], make: (x: any, y: any) => `\\ray[angle=0](${P.fmt(x)}, ${P.fmt(y)})` },
+    ray: { label: 'Ray', cat: 'Sources', args: 1, params: [num('angle', 'Direction', 0, deg), COLOR, LABEL], make: (x: any, y: any) => `\\ray[angle=0](${P.fmt(x)}, ${P.fmt(y)})` },
     beam: { label: 'Parallel beam', cat: 'Sources', args: 1, params: [num('angle', 'Direction', 0, deg), num('width', 'Width', 1.2, { ...cm, min: 0 }), num('n', 'Rays', 5, { min: 1, max: 41, step: 1, int: true }), COLOR], make: (x: any, y: any) => `\\beam[width=1.2, n=5](${P.fmt(x)}, ${P.fmt(y)})` },
     source: { label: 'Point source', cat: 'Sources', args: 1, params: [num('from', 'From', -15, deg), num('to', 'To', 15, deg), num('n', 'Rays', 5, { min: 1, max: 61, step: 1, int: true }), COLOR, LABEL], make: (x: any, y: any) => `\\source[from=-15, to=15, n=5](${P.fmt(x)}, ${P.fmt(y)})` },
     laser: { label: 'Laser', cat: 'Sources', args: 1, params: [num('angle', 'Direction', 0, deg), txt('pol', 'Polarisation', '', { help: 'Angle of linear polarisation in degrees; empty: unpolarised' }), COLOR, LABEL], make: (x: any, y: any) => `\\laser(${P.fmt(x)}, ${P.fmt(y)})` },

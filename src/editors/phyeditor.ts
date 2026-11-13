@@ -1,6 +1,6 @@
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { row, section } from '../ui/forms';
+import { row, section, txPlaceholder } from '../ui/forms';
 import type { FormRow, FormSection, Control } from '../ui/forms';
 import { note } from '../ui/editor-fields';
 import PhyeditorFrame from '../ui/editors/PhyeditorFrame.svelte';
@@ -669,7 +669,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- properties
   function paramRow(L: any, p: any): FormRow {
     const raw = P.getOpt(L, p.k), def = typeof p.def === 'function' ? null : p.def;
-    const base = (controls: Control[], controlClass = 'ctl'): FormRow => ({ kind: 'row', label: [p.label], labelTitle: p.help || undefined, controlClass, controls });
+    const base = (controls: Control[], controlClass = 'ctl'): FormRow => ({ kind: 'row', label: [p.label], labelTitle: p.help || (p.math ? 'Use $…$ for maths' : undefined), controlClass, controls });
     if (p.kind === 'bool') {
       const on = raw == null ? !!def && def !== 'false' : !/^(false|no|0|off)$/i.test(raw);
       return base([[1, 'On'], [0, 'Off']].map(([v, n]) => ({ kind: 'button', text: String(n), attrs: { 'data-pb': p.k, 'data-v': v, class: +on === v ? 'on' : '' } })), 'ctl seg-ctl');
@@ -677,7 +677,7 @@ import { runtime as TD } from '../runtime';
     if (p.kind === 'enum') return base([{ kind: 'select', value: raw != null ? raw : def, attrs: { 'data-pf': p.k }, options: p.opts.map(([v, n]: string[]) => [v, n || v]) }]);
     const ph = def == null || def === '' ? (p.kind === 'num' ? 'auto' : 'none') : p.kind === 'num' ? P.writeQ(def, { ...p, unit: p.dim ? p.unit : undefined }).replace(p.unit || '\u0000', '') : String(def);
     const unit = p.unit ? (p.unit === 'deg' ? '°' : p.unit) : '';
-    return base([{ kind: 'input', value: raw ?? '', attrs: { type: 'text', 'data-pf': p.k, placeholder: ph, spellcheck: 'false', ...(p.kind === 'num' ? { class: 'mono' } : {}), ...(p.math ? { 'data-tx': 'math' } : {}) } }, ...(unit ? [{ kind: 'text' as const, text: unit }] : [])], unit ? 'ctl unit' : 'ctl');
+    return base([{ kind: 'input', value: raw ?? '', attrs: { type: 'text', 'data-pf': p.k, placeholder: p.math && ph === 'none' ? txPlaceholder('text', true) : ph, spellcheck: 'false', ...(p.kind === 'num' ? { class: 'mono' } : {}), ...(p.math ? { 'data-tx': 'text' } : {}) } }, ...(unit ? [{ kind: 'text' as const, text: unit }] : [])], unit ? 'ctl unit' : 'ctl');
   }
   function renderProps() {
     if (!E) return;
@@ -732,7 +732,7 @@ import { runtime as TD } from '../runtime';
   const SHAPE_NAMES: Record<string, any> = { line: 'Line', curve: 'Curve', poly: 'Polyline', arc: 'Arc', rect: 'Rectangle', ellipse: 'Ellipse', text: 'Text', sym: 'Symbol', ball: 'Ball', dot: 'Dot', spring: 'Spring' };
   function shapeProps(sh: any): FormSection {
     const has = (k: string) => Object.prototype.hasOwnProperty.call(sh, k);
-    const input = (label: string, key: string) => ({ ...row(label, { kind: 'input' as const, value: sh[key] || '', attrs: { type: 'text', 'data-sf': key, spellcheck: 'false' } }), labelTitle: 'Use $…$ for maths' });
+    const input = (label: string, key: string) => ({ ...row(label, { kind: 'input' as const, value: sh[key] || '', attrs: { type: 'text', 'data-sf': key, 'data-tx': 'text', placeholder: 'Text, $math$', spellcheck: 'false' } }), labelTitle: 'Use $…$ for maths' });
     const select = (label: string, key: string, options: string[][]) => row(label, { kind: 'select', value: sh[key], attrs: { 'data-sf': key }, options });
     const color = (label: string, key: string, nullable: boolean, fills: boolean) => row(label, { kind: 'fillColour', none: !sh[key], label: TD.fillLabel(sh[key]), css: TD.fillCss(sh[key]), attrs: { 'data-sc': key, ...(nullable ? { 'data-nullable': '1' } : {}), ...(fills ? { 'data-fills': '1' } : {}), title: TD.fillLabel(sh[key]) } });
     const rows: FormRow[] = [];

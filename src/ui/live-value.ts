@@ -14,6 +14,8 @@ function write(node: Field) {
   const text = latest.get(node);
   if (text === undefined || document.activeElement === node || node.value === text) return;
   node.value = text;
+  // fields that dress their text by its value (src/ui/services/texhighlight.ts) hear about writes too
+  node.dispatchEvent(new Event('td-value', { bubbles: true }));
 }
 
 /** `deps` are only read so the attachment re-runs when they change (a select's option list). */

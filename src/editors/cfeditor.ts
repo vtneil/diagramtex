@@ -1058,7 +1058,7 @@ import { runtime as TD } from '../runtime';
     const lr = lrOf(mol), sub = compOf(mol).sub, bk = lr ? lr.l : '', options = [['', 'None'], ['[', '[ ]'], ['(', '( )'], ['\\{', '{ }']];
     if (bk && !options.some(o => o[0] === bk)) options.push([bk, `${bk} ${lr.r}`]);
     const group = sub ? [{ text: 'Ungroup', attrs: { 'data-ce': 'ungroup', title: 'Take its \\subscheme apart' } }] : nextStep(mol) ? [{ text: 'Group with Next', attrs: { 'data-ce': 'group', title: 'Put it, the next arrow and the compound after it in a \\subscheme' } }] : [];
-    return [{ ...section('Compound', [field('Name', 'mname', nameOf(mol), { placeholder: 'none, shown under it' }), selectField('Brackets', 'brk', bk, options),
+    return [{ ...section('Compound', [field('Name', 'mname', nameOf(mol), { 'data-tx': 'text', placeholder: 'none, shown under it' }), selectField('Brackets', 'brk', bk, options),
       ...(sub ? [field('Arrows at', 'subang', sub.opt, { class: 'mono', placeholder: 'default, e.g. 90' })] : []), { kind: 'actions' as const, class: 'row', buttons: [...group, { text: 'Delete Molecule', attrs: { class: 'danger', 'data-ce': 'mdel' } }] }], 'sec'), ...(sub ? { summary: 'in a subscheme' } : {}) }];
   }
   function renderProps() {
@@ -1083,12 +1083,12 @@ import { runtime as TD } from '../runtime';
     if (a && a.seg.t === 'merge') {
       const M = a.seg;
       show('Merge arrow', `from ${M.srcs.length}`, [selectField('Direction', 'mdir', M.dir, [['>', 'Right'], ['<', 'Left'], ['^', 'Up'], ['v', 'Down']]),
-        field('Above', 'above', C.unbrace(M.labels[0] || ''), { placeholder: 'none' }), field('Below', 'below', C.unbrace(M.labels[1] || ''), { placeholder: 'none' }), field('From', 'msrc', M.srcs.join(', '), { class: 'mono', placeholder: 'e.g. c1, c2' }), field('To', 'mtgt', M.target, { class: 'mono', placeholder: 'none, or a name for what follows' }),
+        field('Above', 'above', C.unbrace(M.labels[0] || ''), { 'data-tx': 'text', placeholder: 'none' }), field('Below', 'below', C.unbrace(M.labels[1] || ''), { 'data-tx': 'text', placeholder: 'none' }), field('From', 'msrc', M.srcs.join(', '), { class: 'mono', placeholder: 'e.g. c1, c2' }), field('To', 'mtgt', M.target, { class: 'mono', placeholder: 'none, or a name for what follows' }),
         note("From names the compounds whose lines join: c1 is a scheme's first compound, c2 the next, and so on."), actionRow('ce', 'adel', 'Delete Merge')]); return;
     }
     if (a) {
       const A = a.seg, direct = isDirect(A);
-      show((ARROW_NAMES[A.type] || 'Arrow') + ' arrow', undefined, [selectField('Type', 'atype', A.type, Object.entries<any>(ARROW_NAMES)), field('Above', 'above', C.unbrace(A.labels[0] || ''), { placeholder: 'none, e.g. $\\Delta$' }), field('Below', 'below', C.unbrace(A.labels[1] || ''), { placeholder: 'none, e.g. H$_2$O' }),
+      show((ARROW_NAMES[A.type] || 'Arrow') + ' arrow', undefined, [selectField('Type', 'atype', A.type, Object.entries<any>(ARROW_NAMES)), field('Above', 'above', C.unbrace(A.labels[0] || ''), { 'data-tx': 'text', placeholder: 'none, e.g. $\\Delta$' }), field('Below', 'below', C.unbrace(A.labels[1] || ''), { 'data-tx': 'text', placeholder: 'none, e.g. H$_2$O' }),
         chemicalNumber('Angle', 'aangle', direct ? null : A.opt[0] ? parseFloat(A.opt[0]) : a.ang, '°', { step: '15', ...(direct ? { disabled: true } : {}) }), chemicalNumber('Length', 'alen', direct ? null : A.opt[1] ? parseFloat(A.opt[1]) : 1, '×', { step: '0.25', min: '0.25', ...(direct ? { disabled: true } : {}) }),
         field('Ends', 'aends', A.names ? A.names.slice(1, -1) : '', { class: 'mono', placeholder: 'none, e.g. c1--c2 or @c1--@c3' }), field('Style', 'astyle', A.opt.slice(2).filter((x: any) => x && x.trim()).join(', '), { class: 'mono', placeholder: 'none, e.g. red, thick' }),
         direct ? note('It joins two compounds already placed (@ names), so it has no angle or length of its own.') : note('Drag its head to turn and stretch it (15° steps; ', { kbd: '⌥' }, ' for any angle).'), actionRow('ce', 'adel', 'Delete Arrow')]); return;

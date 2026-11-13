@@ -5,10 +5,10 @@ import { runtime as TD } from '../../runtime';
 (function () {
 
   // Fields that get suggestions.
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], .td-pop-ta, #quickTex';
+  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], #qcModal .cz-code textarea, .td-pop-ta, #quickTex, [data-tx]';
   // Quantum circuit code (the canvas code editor, or the panel's code field): quantikz commands at cell
   // level, maths inside a command's {argument}, nothing inside [options].
-  const isQc = (el: any) => el.matches('#props textarea[data-p="src"]') || (el.id === 'inlineEditor' && el.classList.contains('code'));
+  const isQc = (el: any) => el.matches('#props [data-panel="qc"] textarea[data-p="src"], #qcModal .cz-code textarea') || (el.id === 'inlineEditor' && el.classList.contains('code'));
 
   // Command list, roughly by how often it is used. Each entry: name, then optionally what to
   // insert ("|" marks where the caret goes) and the TeX to preview it with.
@@ -245,7 +245,7 @@ import { runtime as TD } from '../../runtime';
       const where = qcPlace(el.value, cur.at);
       if (where === 'opt') return close();
       items = where === 'arg' ? rank(cur.q, false) : rank(cur.q, false, QC);
-    } else items = rank(cur.q, !(el.dataset.tx === 'math' || TD.texMath.inMath(el.value, cur.at))); // data-tx="math": the whole field is maths (a gate label)
+    } else items = rank(cur.q, !TD.texMath.inMath(el.value, cur.at, el.dataset.tx === 'math')); // data-tx="math": the whole field is maths (except inside \text{…})
     if (!items.length) return close();
     field = el; start = cur.at; idx = 0;
     pop.innerHTML = '<ul>' + items.map((c: any, i: any) => `<li role="option" data-i="${i}"${i === 0 ? ' class="on" aria-selected="true"' : ''}>` +

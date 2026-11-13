@@ -5,7 +5,7 @@
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate. (This literal is for the
 // dev server only: scripts/build.js names dist/sw.js's cache after a hash of everything it precaches.)
-const CACHE = 'diagramtex-v78';
+const CACHE = 'diagramtex-v79';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
@@ -15,9 +15,12 @@ const PRECACHE = [
     'guide/img/04-document.png',
     'guide/img/05-quantum.png',
     'guide/img/06-circuit-dark.png',
+    'guide/img/09-uml.png',
+    'guide/img/10-table.png',
     'css/style.css',
     'css/kmap.css',
     'css/bytefield.css',
+    'css/table.css',
     'fonts/InterDisplay-Medium.woff2',
     'fonts/InterDisplay-SemiBold.woff2',
     'fonts/InterDisplay-Bold.woff2',

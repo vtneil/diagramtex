@@ -165,3 +165,84 @@ T.test('migration: inspector labels resolve to labelable controls across style v
     }
   }
 });
+
+T.test('migration: block editor and panel TeX fields declare math vs text mode, highlight and suggest accordingly', async () => {
+  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const suggest = (el, val) => {
+    el.focus();
+    el.value = val;
+    el.setSelectionRange(val.length, val.length);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    const pop = document.getElementById('texComplete');
+    return pop && !pop.hidden ? [...pop.querySelectorAll('.tc-name')].map(n => n.textContent) : [];
+  };
+
+  // 1. Main-canvas panels: bloch (math), plot/prim3d/solid (text)
+  const bloch = migrationBloch();
+  const sl = document.querySelector('[data-sl="0"]');
+  T.eq(sl.dataset.tx, 'math', 'Bloch state label is math mode');
+  sl.value = '$\\ket{+}$'; sl.dispatchEvent(new Event('input', { bubbles: true }));
+  T.ok(!bloch.src.includes('$$'), 'Bloch state label strips outer $...$ instead of doubling');
+  T.ok(suggest(sl, '\\al').includes('\\alpha'), 'Bloch state label suggests math commands without $');
+  sl.blur();
+
+  for (const type of ['plot', 'prim3d', 'revolve', 'solid']) {
+    const sh = T.make(type);
+    if (type === 'prim3d') sh.axes = true;
+    TD.state.doc.shapes = [sh]; TD.state.sel = new Set([sh.id]);
+    TD.app.render(); TD.app.renderProps();
+    const xl = document.querySelector('#props input[data-p="xlabel"]');
+    T.ok(xl && xl.dataset.tx === 'text', `${type} xlabel is text mode`);
+    T.eq(xl.placeholder, 'Text, $math$', `${type} xlabel placeholder indicates $math$`);
+  }
+
+  // 2. Quantum editor: meter/gate/push are math, lstick/slice/group are text, permute is numeric
+  TD.qcEditor.open( { ...T.make('qc'), src: '\\begin{quantikz}\n\\lstick{$\\ket{0}$} & \\gate{H} & \\meter{Z} & \\permute{2,1}\n\\end{quantikz}' }, () => {});
+  await frame();
+  const qcModal = document.getElementById('qcModal');
+  const qcArg = () => qcModal.querySelector('.cz-props input[data-f="arg"]');
+  // cell (0,0) is lstick (text)
+  qcModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+  qcModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+  await frame();
+  T.eq(qcArg().dataset.tx, 'text', 'quantikz lstick is text mode');
+  T.eq(qcArg().placeholder, 'Text, $math$');
+  T.ok(!suggest(qcArg(), '\\al').includes('\\alpha'), 'text mode outside $ does not suggest math-only \\alpha');
+  T.ok(suggest(qcArg(), '$\\al').includes('\\alpha'), 'text mode inside $ suggests \\alpha');
+  // cell (0,1) is gate (math)
+  qcArg().blur();
+  qcModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await frame();
+  T.eq(qcArg().dataset.tx, 'math', 'quantikz gate is math mode');
+  T.eq(qcArg().placeholder, 'Maths, without $');
+  T.ok(suggest(qcArg(), '\\al').includes('\\alpha'), 'math mode suggests \\alpha immediately');
+  T.ok(!suggest(qcArg(), '\\text{\\al').includes('\\alpha'), 'inside \\text{...} in a math field switches to text suggestions');
+  // cell (0,2) is meter (math)
+  qcArg().blur();
+  qcModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await frame();
+  T.eq(qcArg().dataset.tx, 'math', 'quantikz meter basis label is math mode');
+  // cell (0,3) is permute (plain order list, no data-tx)
+  qcModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await frame();
+  T.ok(!qcArg().dataset.tx, 'quantikz permute order is not a TeX field');
+  qcModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+
+  // 3. Physics editor: command labels are text mode ($...$ for math)
+  TD.blocks.get('physics').editor.get().open(T.make('physics'), () => {});
+  await frame();
+  const phyModal = document.getElementById('phyModal');
+  phyModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  await frame();
+  const phyLbl = phyModal.querySelector('.cz-props input[data-pf="label"]');
+  T.ok(phyLbl && phyLbl.dataset.tx === 'text', 'physics label is text mode');
+  T.eq(phyLbl.placeholder, 'none · $math$', 'physics label: empty means none');
+  T.ok(!suggest(phyLbl, '\\al').includes('\\alpha'), 'physics label outside $ does not suggest math-only \\alpha');
+  T.ok(suggest(phyLbl, '$\\al').includes('\\alpha'), 'physics label inside $ suggests \\alpha');
+  await frame();
+  const hl = phyLbl.nextElementSibling;
+  T.ok(hl && hl.classList.contains('tx-hl') && hl.querySelector('.tx-m'), 'physics label highlights $...$ span in maths green');
+  phyLbl.blur();
+  phyModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+});
+

@@ -3,7 +3,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.43.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.44.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -790,45 +790,165 @@ import { runtime as TD } from '../runtime';
   // ---------- types ----------
   const T: any = (TD.TYPES = {});
 
+  // ---------- connector routes ----------
+  // A line runs straight, as an elbow (right angles) or as a curve. Its dir says which way it leaves its start and
+  // reaches its end: h = sideways, v = up or down ('hh' is a ⌐-shaped elbow, 'hv' an L). Without one it follows the
+  // longer side of the line. An elbow's middle segment runs at s.mc (see elbowAt).
+  const routeOf = (s: any) => (s.route === 'elbow' || s.route === 'curved' ? s.route : 'straight');
+  const routeDir = (s: any) => (/^[hv][hv]$/.test(s.dir) ? s.dir : Math.abs(s.x2 - s.x1) >= Math.abs(s.y2 - s.y1) ? 'hh' : 'vv');
+  TD.routeOf = routeOf; TD.routeDir = routeDir;
+  // Where an elbow's middle segment runs. s.mc is where it was put (an x for hh, a y for vv; halfway until then),
+  // s.ms the side it was put on (lo: beyond the lower end, hi: beyond the higher one, mid: between them) and s.mr
+  // how close each end may come ([lower end, higher end], at most MID_MIN, less if it was put nearer). It is drawn
+  // at mc unless an end has come too near, then pushed just clear of it; when the end goes back, so does it.
+  const MID_MIN = 20;
+  function elbowAt(s: any, h: boolean) {
+    const a = h ? s.x1 : s.y1, b = h ? s.x2 : s.y2, lo = Math.min(a, b), hi = Math.max(a, b);
+    if (s.mc == null) return (a + b) / 2;
+    const m = s.mc, [rl, rh] = Array.isArray(s.mr) ? s.mr : [MID_MIN, MID_MIN];
+    if (s.ms === 'lo') return Math.min(m, lo - rl);
+    if (s.ms === 'hi') return Math.max(m, hi + rh);
+    if (s.ms === 'mid') return lo + rl <= hi - rh ? Math.max(lo + rl, Math.min(hi - rh, m)) : (lo + hi) / 2;
+    return m;
+  }
+  TD.elbowMid = (s: any) => elbowAt(s, routeDir(s) === 'hh');
+  // put the middle segment through q (no change of direction), remembering its side and how near the ends are
+  function placeMid(s: any, q: any) {
+    s.dir = routeDir(s);
+    const h = s.dir === 'hh', a = h ? s.x1 : s.y1, b = h ? s.x2 : s.y2, lo = Math.min(a, b), hi = Math.max(a, b);
+    const m = Math.round((h ? q.x : q.y) * 100) / 100, r = (v: number) => Math.round(Math.min(MID_MIN, Math.max(0, v)) * 100) / 100;
+    s.mc = m;
+    if (m < lo - 1e-6) { s.ms = 'lo'; s.mr = [r(lo - m), MID_MIN]; }
+    else if (m > hi + 1e-6) { s.ms = 'hi'; s.mr = [MID_MIN, r(m - hi)]; }
+    else { s.ms = 'mid'; s.mr = [r(m - lo), r(hi - m)]; }
+  }
+  // An end of an elbow is about to move from o (the old x1..y2): a middle that was never put anywhere is fixed
+  // where it is drawn now, so it stays there (and on that side) as the ends move.
+  function keepMid(s: any, o: any) {
+    if (routeOf(s) !== 'elbow' || s.ms) return;
+    const d = /^[hv][hv]$/.test(s.dir) ? s.dir : routeDir(o);
+    if (d !== 'hh' && d !== 'vv') return;
+    const old = { ...s, ...o, dir: d };
+    const m = elbowAt(old, d === 'hh');
+    placeMid(old, d === 'hh' ? { x: m, y: 0 } : { x: 0, y: m });
+    Object.assign(s, { dir: d, mc: old.mc, ms: old.ms, mr: old.mr });
+  }
+  TD.keepElbowMid = keepMid;
+  TD.placeElbowMid = placeMid;
+  // the elbow's points from start to end; seg is the segment a label sits on
+  function elbowPts(s: any) {
+    const A = { x: s.x1, y: s.y1 }, B = { x: s.x2, y: s.y2 }, d = routeDir(s);
+    if (d === 'hh') { const x = elbowAt(s, true); return { P: [A, { x, y: A.y }, { x, y: B.y }, B], seg: 1 }; }
+    if (d === 'vv') { const y = elbowAt(s, false); return { P: [A, { x: A.x, y }, { x: B.x, y }, B], seg: 1 }; }
+    const C = d === 'hv' ? { x: B.x, y: A.y } : { x: A.x, y: B.y };
+    return { P: [A, C, B], seg: dist(A, C) >= dist(C, B) ? 0 : 1 };
+  }
+  // the points without zero-length steps (for tips, hops and the drawn path)
+  const dedupe = (P: any[]) => { const out = [P[0]]; for (const p of P.slice(1)) if (dist(p, out[out.length - 1]) > 1e-6) out.push(p); return out; };
+  // a curved route as a cubic: TikZ's to[out=…, in=…] puts both controls 0.3915 × the distance along the end directions
+  function curvedOf(s: any) {
+    const A = { x: s.x1, y: s.y1 }, B = { x: s.x2, y: s.y2 }, d = routeDir(s), k = 0.3915 * dist(A, B);
+    const sx = Math.sign(B.x - A.x) || 1, sy = Math.sign(B.y - A.y) || 1;
+    const o = d[0] === 'h' ? { x: sx, y: 0 } : { x: 0, y: sy }, i = d[1] === 'h' ? { x: sx, y: 0 } : { x: 0, y: sy };
+    return { ...s, cx1: A.x + o.x * k, cy1: A.y + o.y * k, cx2: B.x - i.x * k, cy2: B.y - i.y * k, _o: o, _i: i };
+  }
+  // an elbow whose middle segment has no length: its ends are level across the way it bends
+  const elbowFlat = (s: any) => { const d = routeDir(s); return (d === 'hh' || d === 'vv') && Math.abs(d === 'hh' ? s.y2 - s.y1 : s.x2 - s.x1) < 2; };
+  TD.elbowFlat = elbowFlat;
+  // a screen direction as a TikZ angle (y up)
+  const tzAngle = (v: any) => (v.x ? (v.x > 0 ? 0 : 180) : v.y > 0 ? -90 : 90);
+
   T.line = {
     name: 'Line',
     pts: [['x1', 'y1'], ['x2', 'y2']],
     create: (p: any, d: any, tool: any) => ({
       type: 'line', x1: p.x, y1: p.y, x2: p.x, y2: p.y, ...lineStyle(d),
-      startTip: 'none', endTip: tool === 'arrow' ? 'stealth' : 'none', ...TD.LINE_EXTRA, ...labelDefaults(d),
+      startTip: tool === 'darrow' ? 'stealth' : 'none', endTip: tool === 'arrow' || tool === 'darrow' ? 'stealth' : 'none', ...TD.LINE_EXTRA, ...labelDefaults(d),
+      ...(tool === 'elbow' ? { route: 'elbow' } : tool === 'curvedconn' ? { route: 'curved' } : {}),
     }),
-    drag(s: any, a: any, q: any, e: any) { const b = e.shiftKey ? constrain(a, q) : q; s.x2 = b.x; s.y2 = b.y; },
+    drag(s: any, a: any, q: any, e: any) { const b = e.shiftKey && routeOf(s) === 'straight' ? constrain(a, q) : q; s.x2 = b.x; s.y2 = b.y; },
     valid: (s: any) => Math.hypot(s.x2 - s.x1, s.y2 - s.y1) > 2,
-    handles: (s: any) => [{ k: 'p1', x: s.x1, y: s.y1 }, { k: 'p2', x: s.x2, y: s.y2 }],
-    setHandle(s: any, k: any, q: any, e: any) {
-      if (k === 'p1') { const b = e.shiftKey ? constrain({ x: s.x2, y: s.y2 }, q) : q; s.x1 = b.x; s.y1 = b.y; }
-      else { const b = e.shiftKey ? constrain({ x: s.x1, y: s.y1 }, q) : q; s.x2 = b.x; s.y2 = b.y; }
+    handles(s: any) {
+      const h = [{ k: 'p1', x: s.x1, y: s.y1 }, { k: 'p2', x: s.x2, y: s.y2 }];
+      if (routeOf(s) === 'elbow' && /^(hh|vv)$/.test(routeDir(s))) { // the middle segment slides across
+        const { P } = elbowPts(s);
+        h.push({ k: 'mid', x: (P[1].x + P[2].x) / 2, y: (P[1].y + P[2].y) / 2, ctrl: true } as any);
+      }
+      return h;
     },
-    anchors: (s: any) => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }, { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }],
-    samples: (s: any) => [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }],
+    setHandle(s: any, k: any, q: any, e: any) {
+      if (k === 'mid') {
+        // ends level with each other (a straight run): the middle can only go out sideways, making a U
+        if (elbowFlat(s)) s.dir = routeDir(s) === 'hh' ? 'vv' : 'hh';
+        placeMid(s, q);
+        return;
+      }
+      const shift = e.shiftKey && routeOf(s) === 'straight', o = { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 };
+      if (k === 'p1') { const b = shift ? constrain({ x: s.x2, y: s.y2 }, q) : q; s.x1 = b.x; s.y1 = b.y; }
+      else { const b = shift ? constrain({ x: s.x1, y: s.y1 }, q) : q; s.x2 = b.x; s.y2 = b.y; }
+      keepMid(s, o);
+    },
+    anchors(s: any) {
+      const M = routeOf(s) === 'straight' ? { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 } : this.labelAt({ ...s, labelPos: 0.5 }).P;
+      return [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }, M];
+    },
+    samples(s: any) {
+      const r = routeOf(s);
+      if (r === 'elbow') return elbowPts(s).P;
+      if (r === 'curved') return T.curve.samples(curvedOf(s));
+      return [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }];
+    },
     labelAt(s: any) {
-      const t = s.labelPos ?? 0.5;
-      return { P: { x: s.x1 + (s.x2 - s.x1) * t, y: s.y1 + (s.y2 - s.y1) * t }, u: norm({ x: s.x2 - s.x1, y: s.y2 - s.y1 }) };
+      const t = s.labelPos ?? 0.5, r = routeOf(s);
+      if (r === 'curved') return T.curve.labelAt(curvedOf(s));
+      let A = { x: s.x1, y: s.y1 }, B = { x: s.x2, y: s.y2 };
+      if (r === 'elbow') {
+        const { P, seg } = elbowPts(s);
+        // on its segment, or the longest one when that has no length
+        let i = seg;
+        if (dist(P[i], P[i + 1]) < 1e-6) i = P.slice(1).reduce((b: number, p: any, j: number) => (dist(P[j], p) > dist(P[b], P[b + 1]) ? j : b), 0);
+        A = P[i]; B = P[i + 1];
+      }
+      return { P: { x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t }, u: norm({ x: B.x - A.x, y: B.y - A.y }) };
     },
     svg(s: any, ctx: any) {
-      const A = { x: s.x1, y: s.y1 }, B = { x: s.x2, y: s.y2 };
-      const u = norm(sub(B, A));
+      const r = routeOf(s);
+      if (r === 'curved') return T.curve.svg(curvedOf(s), ctx);
+      const P = r === 'elbow' ? dedupe(elbowPts(s).P) : [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }];
+      if (P.length < 2) P.push({ ...P[0] });
+      const n = P.length, A = P[0], B = P[n - 1];
+      const ue = norm(sub(B, P[n - 2])), us = norm(sub(A, P[1]));
       const col = css(s.stroke || '#000');
-      const te = tip(s.endTip, B, u, s.width, col), ts = tip(s.startTip, A, { x: -u.x, y: -u.y }, s.width, col);
-      const A2 = { x: A.x + u.x * ts.back, y: A.y + u.y * ts.back }, B2 = { x: B.x - u.x * te.back, y: B.y - u.y * te.back };
-      const H = hopsFor(s, [A2, B2], ctx.scene);
-      const d = H ? hopPaths([A2, B2], H).d : `M${pt(A2)}L${pt(B2)}`;
+      const te = tip(s.endTip, B, ue, s.width, col), ts = tip(s.startTip, A, us, s.width, col);
+      const Q = P.map((p: any) => ({ ...p }));
+      Q[0] = { x: A.x - us.x * ts.back, y: A.y - us.y * ts.back }; Q[n - 1] = { x: B.x - ue.x * te.back, y: B.y - ue.y * te.back };
+      const H = hopsFor(s, Q, ctx.scene);
+      const dOf = (Z: any) => Z.map((p: any, i: any) => (i ? 'L' : 'M') + pt(p)).join('');
+      const d = H ? hopPaths(Q, H).d : dOf(Q);
       const L = this.labelAt(s);
-      return wrap(s, strokeSvg(s, d, `M${pt(A)}L${pt(B)}`) + ts.svg + te.svg) + hit(`M${pt(A)}L${pt(B)}`, ctx) + labelSvg(s, L.P, L.u, ctx);
+      return wrap(s, strokeSvg(s, d, dOf(P)) + ts.svg + te.svg) + hit(dOf(P), ctx) + labelSvg(s, L.P, L.u, ctx);
     },
     tikz(s: any, X: any) {
       if (!s.stroke) return '';
-      const H = hopsFor(s, [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }], X.scene);
-      if (H) {
-        const hp = hopPaths([{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }], H, X);
-        return `\\draw${opts(styleOpts(s, X, { arrows: true }))} ${hp.tz};` + (s.label ? `\n\\path ${X.c(s.x1, s.y1)} --${labelTikz(s, X)} ${X.c(s.x2, s.y2)};` : '');
+      const r = routeOf(s), o = opts(styleOpts(s, X, { arrows: true }));
+      if (r === 'curved') {
+        const c = curvedOf(s);
+        return `\\draw${o} ${X.c(s.x1, s.y1)} to[out=${tzAngle(c._o)}, in=${tzAngle({ x: -c._i.x, y: -c._i.y })}]${labelTikz(s, X)} ${X.c(s.x2, s.y2)};`;
       }
-      return `\\draw${opts(styleOpts(s, X, { arrows: true }))} ${X.c(s.x1, s.y1)} --${labelTikz(s, X)} ${X.c(s.x2, s.y2)};`;
+      let P = [{ x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 }], seg = 0;
+      if (r === 'elbow') {
+        const e = elbowPts(s), D = dedupe(e.P);
+        // the label's segment, counted again once repeated points are gone
+        const L = this.labelAt(s).P;
+        P = D.length >= 2 ? D : P;
+        seg = Math.max(0, P.findIndex((p: any, i: any) => i + 1 < P.length && dist(p, L) + dist(L, P[i + 1]) - dist(p, P[i + 1]) < 1e-3));
+      }
+      const H = hopsFor(s, P, X.scene);
+      if (H) {
+        const hp = hopPaths(P, H, X);
+        return `\\draw${o} ${hp.tz};` + (s.label ? `\n\\path ${X.c(P[seg].x, P[seg].y)} --${labelTikz(s, X)} ${X.c(P[seg + 1].x, P[seg + 1].y)};` : '');
+      }
+      return `\\draw${o} ` + P.map((p: any, i: any) => (i ? ` --${i === seg + 1 ? labelTikz(s, X) : ''} ` : '') + X.c(p.x, p.y)).join('') + ';';
     },
   };
 
@@ -1422,6 +1542,7 @@ import { runtime as TD } from '../runtime';
     const t = (T as Record<string, any>)[s.type];
     if (t.translate) return t.translate(s, dx, dy);
     for (const [kx, ky] of t.pts) { s[kx] += dx; s[ky] += dy; }
+    if (s.mc != null && s.type === 'line') s.mc += routeDir(s) === 'hh' ? dx : dy; // an elbow's middle moves with it
   };
   TD.bbox = function (s: any) {
     const t = (T as Record<string, any>)[s.type];

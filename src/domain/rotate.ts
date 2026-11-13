@@ -125,7 +125,11 @@ import { runtime as TD } from '../runtime';
       return;
     }
     if (['line', 'curve', 'spring'].includes(s.type) && t.pts) {
+      // an elbow or curved connector turned a quarter (or three) leaves the other way
+      const mh = s.type === 'line' && t.handles(s).find((h: any) => h.k === 'mid');
+      if (s.type === 'line' && TD.routeOf(s) !== 'straight' && Math.abs(Math.round(deg / 90)) % 2 === 1) s.dir = TD.routeDir(s).replace(/[hv]/g, (c: string) => (c === 'h' ? 'v' : 'h'));
       for (const [kx, ky] of t.pts) [s[kx], s[ky]] = P(s[kx], s[ky]);
+      if (mh) { const [mx, my] = P(mh.x, mh.y); TD.placeElbowMid(s, { x: mx, y: my }); }
       return;
     }
     // everything else (plots, diagrams, balls, dots…) keeps its look and moves with the rotation

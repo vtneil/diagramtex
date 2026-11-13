@@ -48,7 +48,7 @@ import { runtime as TD } from '../runtime';
 
   const hasHand = (m: any) => m === 'board' || m === 'page'; // modes with a Hand tool
   const isDrawTool = (t: any) => !['select', 'hand', 'text', 'math', 'image'].includes(t);
-  const toolType = (t: any) => (({ arc3: 'arc', arrow: 'line', curvearrow: 'curve', blob: 'poly', pencil: 'poly', math: 'text' }) as Record<string, any>)[t] || t.split(':')[0];
+  const toolType = (t: any) => (({ arc3: 'arc', arrow: 'line', darrow: 'line', elbow: 'line', curvedconn: 'line', curvearrow: 'curve', blob: 'poly', smoothcurve: 'poly', pencil: 'poly', math: 'text' }) as Record<string, any>)[t] || t.split(':')[0];
   const TOOL_KEYS: Record<string, any> = { v: 'select', h: 'hand', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
 
   // A document is a list of blocks (text paragraphs and diagrams). The canvas edits one diagram
@@ -84,6 +84,7 @@ import { runtime as TD } from '../runtime';
   const state: EditorState = createEditorState(makeDoc);
   let drag: any = null;       // active pointer interaction
   let polyDraft: any = null;  // id of polyline being drawn
+  let lineDraft: any = null;  // a line started with a click (no drag): it follows the pointer until the second click
   let arcDraft: any = null;   // arc being drawn click by click: { tool, id, pts, a0, sweep, last, down }
   let snapHint: any = null;   // point to show snap indicator
   let marquee: any = null;
@@ -908,6 +909,7 @@ import { runtime as TD } from '../runtime';
   function handleCursor(s: any, k: any) {
     if (s.type === 'arc' && k === 'rad') { const m = ((s.a1 + s.a2) / 2) * Math.PI / 180, a = Math.atan2((s.ry > 0 ? s.ry : s.r) * Math.sin(m), s.r * Math.cos(m)) * 180 / Math.PI + (+s.angle || 0); return RESIZE_CUR[Math.round(((a % 180) + 180) % 180 / 45) % 4]; } // along the radius
     if (s.type === 'arc' && (k === 'rx' || k === 'ry')) return RESIZE_CUR[Math.round(((((k === 'rx' ? 0 : 90) + (+s.angle || 0)) % 180) + 180) % 180 / 45) % 4];
+    if (s.type === 'line' && k === 'mid') return (TD.routeDir(s) === 'hh') !== TD.elbowFlat(s) ? 'ew-resize' : 'ns-resize'; // an elbow's middle slides across (out sideways when its ends are level)
     if (!(k in HANDLE_DIR)) return 'move';
     const a = (((HANDLE_DIR[k] + (s.angle || 0)) % 180) + 180) % 180;
     return RESIZE_CUR[Math.round(a / 45) % 4];
@@ -1031,6 +1033,7 @@ import { runtime as TD } from '../runtime';
     paramErr = TD.GEOM && ((vars && Object.keys(vars).length) || shapes().some((s: any) => s.ex)) ? TD.params.solve(shapes(), vars, TD.GEOM) : new Map();
     for (const s of shapes()) {
       if (!CONNECT.has(s.type) || !(s.link1 || s.link2)) continue;
+      const o = { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 };
       for (const [L, X, Y, CX, CY] of Object.values<any>(END)) {
         if (!s[L]) continue;
         const P = linkPoint(s[L]);
@@ -1040,6 +1043,7 @@ import { runtime as TD } from '../runtime';
         s[X] = P.x; s[Y] = P.y;
         if (s.type === 'curve') { s[CX] += dx; s[CY] += dy; } // the curve keeps its shape near that end
       }
+      if (s.type === 'line' && (s.x1 !== o.x1 || s.y1 !== o.y1 || s.x2 !== o.x2 || s.y2 !== o.y2)) TD.keepElbowMid(s, o); // an elbow's middle stays put
     }
     syncPos();
   }
@@ -1393,9 +1397,13 @@ import { runtime as TD } from '../runtime';
   // put them back on the shapes, which have not moved yet)
   function fastLinks(d: any) {
     const { dx, dy } = d.off;
-    for (const { s, ends } of d.ext) for (const [X, Y, CX, CY, x, y, cx, cy] of ends) {
-      s[X] = x + dx; s[Y] = y + dy;
-      if (s.type === 'curve') { s[CX] = cx + dx; s[CY] = cy + dy; }
+    for (const { s, ends } of d.ext) {
+      const o = { x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 };
+      for (const [X, Y, CX, CY, x, y, cx, cy] of ends) {
+        s[X] = x + dx; s[Y] = y + dy;
+        if (s.type === 'curve') { s[CX] = cx + dx; s[CY] = cy + dy; }
+      }
+      if (s.type === 'line') TD.keepElbowMid(s, o); // an elbow's middle stays put
     }
   }
   function endFastMove(d: any) {
@@ -1430,6 +1438,8 @@ import { runtime as TD } from '../runtime';
     if (t === 'arc' || t === 'arc3') { arcHint(); renderOverlay(); return; }
     showHint(t === 'poly' ? 'Click to add points · double-click / Enter to finish · click first point to close'
       : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
+      : t === 'smoothcurve' ? 'Click to add points the curve passes through · double-click / Enter to finish'
+      : t === 'elbow' || t === 'curvedconn' ? `Drag from start to end; the ends hold on to shapes${t === 'elbow' ? ' · drag the middle handle to move the bend' : ''}`
       : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
       : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
       : (TD.blocks.get(toolType(t)) || /^(plot|pie|solid|prim3d|revolve)/.test(t)) ? 'Click to place, or drag to set the size' : '');
@@ -1439,9 +1449,16 @@ import { runtime as TD } from '../runtime';
   TD.blocks.renderMenu(document.querySelector<HTMLElement>('#fly-blocks .pop-grid')!);
 
   // ---------------- tool flyouts (lines / shapes / misc / arrows / plots) ----------------
+  // in PowerPoint's order: straight lines, connectors, curves, then the freeform ones
   const LINE_TOOLS = [
-    ['line', 'Line (L)', '<path d="M4 12h26"/>'], ['curve', 'Bézier curve (C)', '<path d="M4 16C10 2 20 22 30 8"/>'],
-    ['arrow', 'Arrow (A)', '<path d="M4 12h24M23 7l6 5-6 5"/>'], ['curvearrow', 'Curved arrow', '<path d="M4 16C10 4 18 20 27 9M22 8l6 0-1 6"/>'],
+    ['line', 'Line (L)', '<path d="M4 12h26"/>'], ['arrow', 'Arrow (A)', '<path d="M4 12h24M23 7l6 5-6 5"/>'],
+    ['darrow', 'Double arrow', '<path d="M6 12h22M11 7l-6 5 6 5M23 7l6 5-6 5"/>'],
+    ['elbow', 'Elbow connector: right angles; drag its middle handle to move the bend', '<path d="M4 18h12V6h14"/>'],
+    ['curvedconn', 'Curved connector', '<path d="M4 18C17 18 17 6 30 6"/>'],
+    ['curve', 'Bézier curve (C)', '<path d="M4 16C10 2 20 22 30 8"/>'], ['curvearrow', 'Curved arrow', '<path d="M4 16C10 4 18 20 27 9M22 8l6 0-1 6"/>'],
+  ];
+  const FREE_TOOLS = [
+    ['smoothcurve', 'Curve through points', '<path d="M4 18Q9 5 16 11T29 7"/><circle cx="4" cy="18" r="1.6" class="f"/><circle cx="16" cy="11" r="1.6" class="f"/><circle cx="29" cy="7" r="1.6" class="f"/>'],
     ['poly', 'Polyline / polygon (P)', '<path d="M5 19l5-14 9 10 9-11"/>'], ['blob', 'Smooth closed curve', '<path d="M8 6c6-4 18-3 20 4s-4 10-10 9-15 0-14-6 1-5 4-7z"/>'],
     ['arc', 'Arc by centre (O) — click the centre, the start, then the end', '<path d="M7 18h20M27 18a20 20 0 0 0-6.5-14.8"/><path d="M7 18L20.5 3.2" stroke-dasharray="2 2"/><circle cx="7" cy="18" r="1.8" class="f"/>'],
     ['arc3', 'Arc through three points — click both ends, then a point on the arc', '<path d="M5 19A13 13 0 0 1 29 19"/><circle cx="5" cy="19" r="1.8" class="f"/><circle cx="29" cy="19" r="1.8" class="f"/><circle cx="17" cy="11" r="1.8" class="f"/>'], ['spring', 'Spring (S)', '<path d="M2 12h5l2-6 4 12 4-12 4 12 4-12 2 6h5"/>'],
@@ -1453,7 +1470,8 @@ import { runtime as TD } from '../runtime';
   const btn = (tool: any, title: any, icon: any) => `<button data-pick="${tool}" title="${esc(title)}">${icon}</button>`;
   const symBtns = (cat: any) => TD.SYM_CATS[cat].map((k: any) => btn('sym:' + k, TD.SYMS[k].name, TD.symIcon(k))).join('');
   const sec = (title: any, inner: any) => (title ? `<div class="pop-title">${title}</div>` : '') + `<div class="sym-grid">${inner}</div>`;
-  $('#fly-lines').innerHTML = sec('', LINE_TOOLS.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join(''));
+  const lineBtns = (L: any) => L.map(([t, n, d]: any) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('');
+  $('#fly-lines').innerHTML = sec('Lines', lineBtns(LINE_TOOLS)) + sec('Freeform', lineBtns(FREE_TOOLS));
   $('#fly-shapes').innerHTML = sec('Rectangles', symBtns('rect')) + sec('Basic shapes', symBtns('basic')) + sec('Flowchart', symBtns('flow'));
   $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('')) ;
   $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
@@ -1479,7 +1497,7 @@ import { runtime as TD } from '../runtime';
   TD.toolType = toolType;
   TD.drawTools = () => [
     ['Text', [['text', 'Text: click to place, then type. Use $…$ for maths', railIcon('text')], ['math', 'Maths: a text that starts in $…$', railIcon('math')]]],
-    ['Lines', [...LINE_TOOLS.map(([t, n, d]) => [t, n, ic34(d)]), ['pencil', 'Pencil: freehand, smoothed', railIcon('pencil')]]],
+    ['Lines', [...[...LINE_TOOLS, ...FREE_TOOLS].map(([t, n, d]) => [t, n, ic34(d)]), ['pencil', 'Pencil: freehand, smoothed', railIcon('pencil')]]],
     ['Shapes', [...MISC_EXTRA.filter((x) => x[0] === 'rect' || x[0] === 'ellipse').map(([t, n, d]) => [t, n, ic34(d)]), ...symItems('rect')]],
     ['Basic shapes', symItems('basic')], ['Flowchart', symItems('flow')],
     ['Misc', [...symItems('misc'), ...MISC_EXTRA.filter((x) => x[0] === 'ball' || x[0] === 'dot').map(([t, n, d]) => [t, n, ic34(d)])]],
@@ -1490,11 +1508,12 @@ import { runtime as TD } from '../runtime';
   $('#fly-elec').innerHTML = sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'))
     + `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: 415 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>Advanced Circuit Block (<code>circuitikz</code>)</span></button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`;
   function flyOf(t: any) {
-    if (/^(solid|prim3d|revolve)\b|^plot:\w*3d$/.test(t)) return 'plots3d';
+    if (/^(solid|prim3d|revolve)\b/.test(t)) return 'figures3d';
+    if (/^plot:\w*3d$/.test(t)) return 'plots3d';
     if (/^(plot|pie)/.test(t)) return 'insertPop';
     if (/^physics\b/.test(t)) return 'phys';
     if (TD.blocks.get(t)) return 'blocks';
-    if (LINE_TOOLS.some((x) => x[0] === t)) return 'lines';
+    if ([...LINE_TOOLS, ...FREE_TOOLS].some((x) => x[0] === t)) return 'lines';
     if (MISC_EXTRA.some((x) => x[0] === t)) return 'misc';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
     return null;
@@ -1632,6 +1651,7 @@ import { runtime as TD } from '../runtime';
 
   function finishPoly(e?: any) {
     if (arcDraft) arcCancel();
+    if (lineDraft) lineCancel();
     if (!polyDraft) return;
     const s = byId(polyDraft);
     polyDraft = null;
@@ -1713,6 +1733,24 @@ import { runtime as TD } from '../runtime';
     setTool('select');
     render(); renderProps();
   }
+  function lineCancel() {
+    const s = byId(lineDraft.id);
+    lineDraft = null; linkHint = null; snapHint = null;
+    if (s) removeShape(s.id);
+    commit(); render(); renderProps();
+  }
+  // the free end of a line being drawn follows the pointer (a drag, or a two-click line between its clicks)
+  function createMove(d: any, p: any, e: any) {
+    const s = byId(d.id);
+    if (!s) return;
+    let q = snapPoint(p, e, new Set([d.id]));
+    const lk = CONNECT.has(s.type) && !e.shiftKey && linkAt(p, q, e, s.id);
+    if (lk) q = { ...linkPoint(lk), anchor: true };
+    d.lk = lk || null; linkHint = lk ? lk.id : null;
+    snapHint = q;
+    TYPES[s.type].drag(s, d.a, q, e);
+    render();
+  }
   function arcCancel() {
     const s = byId(arcDraft.id);
     arcDraft = null;
@@ -1745,9 +1783,11 @@ import { runtime as TD } from '../runtime';
   // blocks whose content never turns: rotating one alone does nothing, so it gets no rotate zone, hint or menu item
   const fixedContent = (type: any) => !!(TD.blocks.get(type) || {}).fixed || ['plot', 'solid', 'prim3d', 'revolve', 'tikz'].includes(type);
   const rotatable = (sel = selected()) => sel.length > 1 || (sel.length === 1 && !fixedContent(sel[0].type));
+  // an elbow connector alone can be flipped but not turned: it always runs in right angles
+  const turnable = (sel = selected()) => rotatable(sel) && !(sel.length === 1 && sel[0].type === 'line' && TD.routeOf(sel[0]) === 'elbow');
   function rotFrame() {
     const sel = selected();
-    if (!sel.length || state.tool !== 'select' || !rotatable(sel)) return null;
+    if (!sel.length || state.tool !== 'select' || !turnable(sel)) return null;
     let C = null;
     if (sel.length === 1 && (TD.ROT_TYPES.has(sel[0].type) || sel[0].type === 'sym' || sel[0].type === 'arc')) C = TD.rotFrame(sel[0]);
     if (!C) { const b = unionBox(sel); C = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]; }
@@ -1820,6 +1860,11 @@ import { runtime as TD } from '../runtime';
     }
     if (e.button !== 0) return;
     svg.setPointerCapture(e.pointerId);
+    if (lineDraft) { // the second click of a two-click line: it ends where this press lets go
+      drag = { ...lineDraft, second: true }; lineDraft = null;
+      createMove(drag, p, e);
+      return;
+    }
     const now = performance.now();
     const dbl = now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
@@ -1830,18 +1875,19 @@ import { runtime as TD } from '../runtime';
       begin();
       const s = addShape(TYPES.poly.create(p, state.defaults));
       s.pts = [[p.x, p.y]]; s.smooth = true;
-      state.sel = new Set([s.id]);
+      state.sel = new Set(); // no handles while drawing; selected on release
       drag = { mode: 'pencil', id: s.id };
       render();
       return;
     }
     if (state.tool === 'arc' || state.tool === 'arc3') { arcDown(p, e); return; }
-    if (state.tool === 'poly' || state.tool === 'blob') {
+    if (state.tool === 'poly' || state.tool === 'blob' || state.tool === 'smoothcurve') {
       const q = snapPoint(p, e, polyDraft ? new Set([polyDraft]) : null);
       if (!polyDraft) {
         begin();
         const s = addShape(TYPES.poly.create(q, state.defaults));
         if (state.tool === 'blob') { s.smooth = true; s.closed = true; s._draft = true; }
+        if (state.tool === 'smoothcurve') s.smooth = true;
         polyDraft = s.id; state.sel = new Set([s.id]);
       } else {
         const s = byId(polyDraft);
@@ -1958,6 +2004,7 @@ import { runtime as TD } from '../runtime';
     $('#cursorPos').textContent = `x ${fx(p.x / PX)} · y ${fx(-p.y / PX)} cm`;
     cursorW = p; drawRulers();
     if (!drag) {
+      if (lineDraft) { createMove(lineDraft, p, e); return; }
       if (arcDraft) {
         const q = snapPoint(p, e, new Set([arcDraft.id]));
         arcMove(q, e);
@@ -2073,17 +2120,7 @@ import { runtime as TD } from '../runtime';
         render(); renderGeom();
         break;
       }
-      case 'create': {
-        const s = byId(drag.id);
-        let q = snapPoint(p, e, new Set([drag.id]));
-        const lk = CONNECT.has(s!.type) && !e.shiftKey && linkAt(p, q, e, s!.id);
-        if (lk) q = { ...linkPoint(lk), anchor: true };
-        drag.lk = lk || null; linkHint = lk ? lk.id : null;
-        snapHint = q;
-        TYPES[s!.type].drag(s, drag.a, q, e);
-        render();
-        break;
-      }
+      case 'create': createMove(drag, p, e); break;
       case 'pencil': {
         const s = byId(drag.id), l = s!.pts[s!.pts.length - 1];
         if (Math.hypot(p.x - l[0], p.y - l[1]) > 2 / state.view.zoom) { s!.pts.push([p.x, p.y]); render(); }
@@ -2185,9 +2222,18 @@ import { runtime as TD } from '../runtime';
       s!.pts = simplify(s!.pts, 1.6 / state.view.zoom);
       // closes itself when the stroke ends near where it started
       if (s!.pts.length > 3 && Math.hypot(s!.pts[0][0] - s!.pts[s!.pts.length - 1][0], s!.pts[0][1] - s!.pts[s!.pts.length - 1][1]) < 10 / state.view.zoom) { s!.pts.pop(); s!.closed = true; }
-      if (s!.pts.length < 2) removeShape(s!.id);
+      if (s!.pts.length < 2) removeShape(s!.id); else state.sel = new Set([s!.id]);
       commit(); render(); renderProps();
       return;
+    }
+    if (d.mode === 'create' && !d.second) {
+      // a click without a drag starts a two-click line: the end follows the pointer to the next click
+      const s = byId(d.id), z = state.view.zoom;
+      if (s && CONNECT.has(s.type) && s.x2 != null && Math.hypot(s.x2 - d.a.x, s.y2 - d.a.y) * z < 4) {
+        lineDraft = d;
+        showHint('Click where it ends · Esc cancels');
+        return;
+      }
     }
     linkHint = null;
     if (d.mode === 'create') {
@@ -2215,7 +2261,7 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
   svg.addEventListener('pointerleave', () => { cursorW = null; drawRulers(); });
-  svg.addEventListener('pointerleave', () => { if (!drag && state.tool !== 'select' && !polyDraft && !arcDraft) { snapHint = null; renderOverlay(); } });
+  svg.addEventListener('pointerleave', () => { if (!drag && state.tool !== 'select' && !polyDraft && !arcDraft && !lineDraft) { snapHint = null; renderOverlay(); } });
 
   svg.addEventListener('wheel', (e: any) => {
     e.preventDefault();
@@ -2400,6 +2446,8 @@ import { runtime as TD } from '../runtime';
     { key: 'fill', label: 'Fill', type: 'color', nullable: true, fills: true },
     { key: 'width', label: 'Line width', type: 'width', min: 0.25, step: 0.25, unit: 'px' },
     { key: 'dash', label: 'Dash', type: 'dash' },
+    { key: 'route', label: 'Route', type: 'icons', icons: [['straight', 'Straight', 'M3 16L17 4'], ['elbow', 'Elbow: right angles', 'M3 15h7V5h7'], ['curved', 'Curved', 'M3 15C11 15 9 5 17 5']] },
+    { key: 'dir', label: 'Direction', type: 'icons' },
     { key: 'startTip', label: 'Start tip', type: 'tip' },
     { key: 'endTip', label: 'End tip', type: 'tip' },
     { key: 'midTip', label: 'Middle tip', type: 'tip' },
@@ -2472,8 +2520,8 @@ import { runtime as TD } from '../runtime';
       min: p.min ?? '', max: p.max ?? '', step: p.step ?? 1, unit: p.unit, hint: p.hint,
       options: p.type === 'size' ? [...sizeOpts, ['custom', 'Custom px…']] : p.options || [],
       checked: !!v, italic: !!p.italic, px: p.type === 'size' ? Math.round(TD.sizePx(v ?? 'normalsize') * 10) / 10 : 0,
-      range: r2(v), radioLabel: p.type === 'align' ? 'Align' : 'Vertical alignment',
-      radios: (p.type === 'align' ? ALIGNS : p.type === 'valign' ? VALIGNS : []).map(([key, label, path]) => ({ key, path, on: key === v,
+      range: r2(v), radioLabel: p.type === 'align' ? 'Align' : p.type === 'valign' ? 'Vertical alignment' : p.label,
+      radios: (p.type === 'align' ? ALIGNS : p.type === 'valign' ? VALIGNS : (p.icons || []) as string[][]).map(([key, label, path]) => ({ key, path, on: key === v,
         disabled: p.type === 'align' && key === 'justify' && !p.wraps,
         label: p.type === 'align' && key === 'justify' && !p.wraps ? 'Justify (paragraph boxes only: drag with the text tool)' : label })),
       colour: { none: !v, nullable: !!p.nullable, fills: !!p.fills, label: p.type === 'color' ? TD.fillLabel(v) : '', css: p.type === 'color' ? TD.fillCss(v) : '' },
@@ -2483,6 +2531,8 @@ import { runtime as TD } from '../runtime';
     return model;
   }
 
+  const DIR_ELBOW = [['hh', 'Sideways at both ends', 'M2 15h8V5h8'], ['vv', 'Up or down at both ends', 'M4 2v8h12v8'], ['hv', 'Sideways, then up or down', 'M2 4h14v14'], ['vh', 'Up or down, then sideways', 'M4 2v14h14']];
+  const DIR_CURVED = [['hh', 'Sideways at both ends', 'M2 15C11 15 9 5 18 5'], ['vv', 'Up or down at both ends', 'M4 2C4 11 16 9 16 18'], ['hv', 'Sideways, then up or down', 'M2 4C12 4 16 8 16 18'], ['vh', 'Up or down, then sideways', 'M4 2C4 12 8 16 18 16']];
   const TIP_KEYS = ['startTip', 'endTip', 'midTip', 'bpTip'];
   const tipName = (v: any) => (TD.TIPS.find((t: any) => t[0] === v) || TD.TIPS[0])[1];
   function tipPreview(v: any) {
@@ -2496,10 +2546,10 @@ import { runtime as TD } from '../runtime';
   // keys a shape has, counting the line extras older files lack
   const SYM_XF = new Set(['angle', 'skew']), TICK_KEYS: Record<string, any> = { tick: 6 / TD.PT_PER_PX, ticksz: 6 / TD.PT_PER_PX };
   const symParams = (s: any) => (s.type === 'sym' && TD.SYMS[s.kind] && TD.SYMS[s.kind].params) || null;
-  const hasKey = (s: any, k: any) => s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && (TD.ROT_TYPES.has(s.type) || s.type === 'arc')) ||
+  const hasKey = (s: any, k: any) => (s.type === 'line' && (k === 'route' || (k === 'dir' && TD.routeOf(s) !== 'straight'))) || s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && (TD.ROT_TYPES.has(s.type) || s.type === 'arc')) ||
     (s.type === 'sym' && (SYM_XF.has(k) || !!(symParams(s) && k in symParams(s)))) || (TD.LINEISH.has(s.type) && k in TICK_KEYS && keyVal(s, 'shaft') === 'ticks');
   // text with no alignment set: centred lines, or left in a wrapping box
-  const keyVal = (s: any, k: any) => s[k] ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
+  const keyVal = (s: any, k: any) => (s.type === 'line' && k === 'route' ? TD.routeOf(s) : s.type === 'line' && k === 'dir' ? TD.routeDir(s) : undefined) ?? s[k] ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
   const dashName = (v: any) => (TD.DASHES.find((d: any) => d[0] === v) || [0, TD.dashPat(v) ? 'Custom' : 'Solid'])[1];
   function dashPreview(v: any, w: any) {
     const da = TD.dashArray(v, w);
@@ -2559,6 +2609,7 @@ import { runtime as TD } from '../runtime';
     const dp = document.querySelector('.ddpop'); if (dp) (dp as HTMLElement).hidden = true;
     const el = $('#props');
     destroyView(el); el.replaceChildren();
+    if (inTable()) { if (TD.tableWs) TD.tableWs.renderProps(); return; }
     if (state.mode === 'document') { if (TD.docview) TD.docview.renderSettings(el); return; }
     const sel = selected(), fields: StyleModel[] = [];
     if (!sel.length) {
@@ -2582,7 +2633,13 @@ import { runtime as TD } from '../runtime';
       if (p.key === 'color' && types.every(t => t === 'bloch')) continue;
       if (p.needs && !sel.some(s => s[p.needs])) continue;
       if ((p.key === 'startTip' || p.key === 'endTip') && sel.every(s => s.type === 'poly' && s.closed)) continue;
-      if (p.key === 'cross' && !sel.some(s => s.type === 'line' || (s.type === 'poly' && !s.smooth))) continue;
+      if (p.key === 'cross' && !sel.some(s => (s.type === 'line' && TD.routeOf(s) !== 'curved') || (s.type === 'poly' && !s.smooth))) continue;
+      if (p.key === 'dir') { // which way an elbow or curved line leaves and arrives, drawn the way it routes
+        const ln = sel.find(s => s.type === 'line' && TD.routeOf(s) !== 'straight');
+        if (!ln) continue;
+        fields.push(fieldModel({ ...p, icons: TD.routeOf(ln) === 'curved' ? DIR_CURVED : DIR_ELBOW }, TD.routeDir(ln)));
+        continue;
+      }
       if (['stroke', 'fill', 'width', 'dash', 'radius'].includes(p.key) && sel.every(s => s.type === 'text' && !s.boxed)) continue;
       let label = p.label;
       if (!isText && p.key === 'size') label = 'Label size';
@@ -2609,7 +2666,7 @@ import { runtime as TD } from '../runtime';
       ...(canUngroup() ? [{ text: 'Ungroup', attrs: { 'data-act': 'ungroup', title: 'Ctrl+Shift+G' } }] : []),
       ...[['front', 'Bring to Front'], ['back', 'Send to Back'], ['dup', 'Duplicate'], ['del', 'Delete']].map(([key, text]) => ({ text, attrs: { 'data-act': key } })),
     ];
-    after.push({ class: 'sec', rows: [{ kind: 'actions', class: 'btns', buttons }, { kind: 'hint', text: [`Right-click for more: ${rotatable(sel) ? 'rotate, flip, ' : ''}arrange, distribute.`] }] });
+    after.push({ class: 'sec', rows: [{ kind: 'actions', class: 'btns', buttons }, { kind: 'hint', text: [`Right-click for more: ${turnable(sel) ? 'rotate, flip, ' : rotatable(sel) ? 'flip, ' : ''}arrange, distribute.`] }] });
     const panel = sel.length === 1 && TD.panels[sel[0].type];
     propertiesView = mountFrame(el, MainProperties, { defaults: false, title, fields, before, after, ...(panel ? { panel: sel[0].type } : {}), geometry: sel.length === 1 && !!GEOM[sel[0].type] });
     if (panel) panelType = sel[0].type, panelView = TD.panelViews[sel[0].type].mount(el.querySelector('[data-panel]'), sel[0] as Shape & { src: string });
@@ -2837,6 +2894,8 @@ import { runtime as TD } from '../runtime';
     if (al) { applyProp('align', al.dataset.alignv, true); renderProps(); return; }
     const va = e.target.closest('[data-valign]');
     if (va) { applyProp('valign', va.dataset.valign, true); renderProps(); return; }
+    const pv = e.target.closest('[data-pv]');
+    if (pv) { applyProp(pv.dataset.pk, pv.dataset.pv, true); renderProps(); return; }
     const sc = e.target.closest('[data-sercolor]');
     if (sc) {
       const s = selected()[0], h = (TD.panels[s.type] as any).color(s, +sc.dataset.sercolor);
@@ -3063,7 +3122,7 @@ import { runtime as TD } from '../runtime';
   document.addEventListener('dragover', (e: any) => {
     if (!fromOutside(e)) return;
     e.preventDefault(); // a file dropped anywhere else would make the browser leave the app to show it
-    const z = dropZone(e) && $('#modal').hidden && imp.hidden && !inQuick();
+    const z = dropZone(e) && $('#modal').hidden && imp.hidden && !inTool();
     e.dataTransfer.dropEffect = z ? 'copy' : 'none';
     document.body.classList.toggle('drop-over', !!z);
   });
@@ -3072,7 +3131,7 @@ import { runtime as TD } from '../runtime';
     document.body.classList.remove('drop-over');
     if (!fromOutside(e)) return;
     e.preventDefault();
-    if (!dropZone(e) || !$('#modal').hidden || !imp.hidden || inQuick()) return;
+    if (!dropZone(e) || !$('#modal').hidden || !imp.hidden || inTool()) return;
     const dt = e.dataTransfer, files = [...dt.files] as File[];
     let text = dt.getData('text/plain') || '';
     const uri = (dt.getData('text/uri-list') || '').split('\n').find((l: string) => l && !l.startsWith('#')) || '';
@@ -3545,7 +3604,7 @@ import { runtime as TD } from '../runtime';
   // how: 'cw' | 'ccw' | 'fliph' | 'flipv'  (screen coordinates, y down)
   function transformSel(how: any) {
     const sel = selected();
-    if (!rotatable(sel)) return;
+    if (!rotatable(sel) || ((how === 'cw' || how === 'ccw') && !turnable(sel))) return;
     const b = unionBox(sel), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
     const M = ({ cw: (dx: any, dy: any) => [-dy, dx], ccw: (dx: any, dy: any) => [dy, -dx], fliph: (dx: any, dy: any) => [-dx, dy], flipv: (dx: any, dy: any) => [dx, -dy] } as Record<string, any>)[how];
     const P = (x: any, y: any) => { const [u, v] = M(x - cx, y - cy); return [cx + u, cy + v]; };
@@ -3586,7 +3645,11 @@ import { runtime as TD } from '../runtime';
         TD.translate(s, nx - (bb.x + bb.w / 2), ny - (bb.y + bb.h / 2));
         continue;
       }
+      // an elbow's middle goes where the transform takes it
+      const mh = s.type === 'line' && t.handles(s).find((h: any) => h.k === 'mid');
+      if (s.type === 'line' && quarter && TD.routeOf(s) !== 'straight') s.dir = TD.routeDir(s).replace(/[hv]/g, (c: string) => (c === 'h' ? 'v' : 'h'));
       for (const [kx, ky] of t.pts) [s[kx], s[ky]] = P(s[kx], s[ky]);
+      if (mh) { const [mx, my] = P(mh.x, mh.y); TD.placeElbowMid(s, { x: mx, y: my }); }
       if (s.type === 'ellipse' && quarter) [s.rx, s.ry] = [s.ry, s.rx];
       if (s.type === 'arc' && quarter && s.ry > 0) [s.r, s.ry] = [s.ry, s.r];
       if (s.type === 'arc') {
@@ -3654,32 +3717,35 @@ import { runtime as TD } from '../runtime';
   }
 
   // The selection as a picture, from the right-click menu: copied (PNG, or SVG as image and text) or saved
-  // like an export (into the file's export folder, else downloaded). PNG uses the Export menu's DPI and
-  // transparency; a saved SVG carries its maths fonts.
+  // like an export (into the file's export folder, else downloaded). PNG comes on a white background or
+  // transparent (the item says which; `-t` is transparent) at the Export menu's DPI; an SVG, copied or saved,
+  // carries its maths fonts, so it shows the same wherever it is pasted.
   async function selImage(what: any) {
     const list = selected().filter((s: any) => !s.hidden);
     if (!list.length) { showHint('Nothing visible is selected', 1200); return; }
     const name = slug() + '-selection';
-    const png = () => TD.app.pngOf(list, expOpts.dpi, expOpts.transparent);
+    const clear = what.endsWith('-t'), kind = what.replace(/-t$/, '');
+    const png = () => TD.app.pngOf(list, expOpts.dpi, clear);
+    const svg = () => svgWithFonts(TD.app.svgOf(list));
     try {
-      if (what === 'copy-png') {
+      if (kind === 'copy-png') {
         // the item is made during the click with the picture still to come: Safari allows a copy only then
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': png() })]);
-        showHint(`Copied as PNG at ${expOpts.dpi} DPI`, 1400);
-      } else if (what === 'copy-svg') {
-        const svg = TD.app.svgOf(list), item: Record<string, any> = { 'text/plain': new Blob([svg], { type: 'text/plain' }) };
-        if (ClipboardItem.supports && ClipboardItem.supports('image/svg+xml')) item['image/svg+xml'] = new Blob([svg], { type: 'image/svg+xml' });
+        showHint(`Copied as PNG at ${expOpts.dpi} DPI${clear ? ', transparent' : ''}`, 1400);
+      } else if (kind === 'copy-svg') {
+        const text = svg(), item: Record<string, any> = { 'text/plain': text.then((t: string) => new Blob([t], { type: 'text/plain' })) };
+        if (ClipboardItem.supports && ClipboardItem.supports('image/svg+xml')) item['image/svg+xml'] = text.then((t: string) => new Blob([t], { type: 'image/svg+xml' }));
         await navigator.clipboard.write([new ClipboardItem(item)]);
         showHint('Copied as SVG', 1200);
-      } else if (what === 'save-png') {
+      } else if (kind === 'save-png') {
         await askDir();
         await out(name + '.png', await png());
-      } else if (what === 'save-svg') {
+      } else if (kind === 'save-svg') {
         await askDir();
-        await out(name + '.svg', await svgWithFonts(TD.app.svgOf(list)), 'image/svg+xml');
+        await out(name + '.svg', await svg(), 'image/svg+xml');
       }
     } catch (e: any) {
-      showHint(`Couldn't ${what.startsWith('copy') ? 'copy' : 'save'} the picture (${e.message || e})`, 3000);
+      showHint(`Couldn't ${kind.startsWith('copy') ? 'copy' : 'save'} the picture (${e.message || e})`, 3000);
     }
   }
 
@@ -3759,8 +3825,8 @@ import { runtime as TD } from '../runtime';
       if (one && (one.type === 'text' || one.label !== undefined)) h += item(one.type === 'text' ? 'Edit Text' : 'Edit Label', 'edit', { ic: 'edit', key: 'Enter' }) + hr;
       h += item('Copy', 'copy', { ic: 'copy', key: 'Ctrl+C' }) +
         item('Copy TikZ Code', 'copytikz', { ic: 'tikz' }) +
-        item('Copy as Image', '', { ic: 'image', sub: item('PNG', 'img:copy-png') + item('SVG', 'img:copy-svg') }) +
-        item('Save as Image', '', { ic: 'exp', sub: item('PNG', 'img:save-png') + item('SVG', 'img:save-svg') }) +
+        item('Copy as Image', '', { ic: 'image', sub: item('PNG (Background)', 'img:copy-png') + item('PNG (Transparent)', 'img:copy-png-t') + item('SVG', 'img:copy-svg') }) +
+        item('Save as Image', '', { ic: 'exp', sub: item('PNG (Background)', 'img:save-png') + item('PNG (Transparent)', 'img:save-png-t') + item('SVG', 'img:save-svg') }) +
         (sel.some((s: any) => (s.text || s.label || '').trim()) ? item('Copy Text', 'copytext', { ic: 'copy' }) : '') +
         item('Cut', 'cut', { ic: 'cut', key: 'Ctrl+X' }) +
         item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
@@ -3774,7 +3840,7 @@ import { runtime as TD } from '../runtime';
           item('Bring to Front', 'a:front', { key: 'Ctrl+Shift+]' }) + item('Bring Forward', 'a:forward', { key: 'Ctrl+]' }) +
           item('Send Backward', 'a:backward', { key: 'Ctrl+[' }) + item('Send to Back', 'a:back', { key: 'Ctrl+Shift+[' }) }) +
         (rotatable() ? item('Rotate', '', { ic: 'rotate', sub:
-          item('Rotate 90° Clockwise', 'r:cw', { key: 'Ctrl+R' }) + item('Rotate 90° Counterclockwise', 'r:ccw', { key: 'Ctrl+Shift+R' }) + hr +
+          item('Rotate 90° Clockwise', 'r:cw', { key: 'Ctrl+R', dis: !turnable() }) + item('Rotate 90° Counterclockwise', 'r:ccw', { key: 'Ctrl+Shift+R', dis: !turnable() }) + hr +
           item('Flip Horizontal', 'r:fliph') + item('Flip Vertical', 'r:flipv') }) : '') +
         item('Align', '', { ic: 'align', dis: nu < 2, sub:
           item('Left', 'l:left') + item('Center', 'l:center') + item('Right', 'l:right') + hr +
@@ -3868,7 +3934,7 @@ import { runtime as TD } from '../runtime';
     showHint(`Opened the shared file "${name}". It is now saved in this browser.`, 3000);
     return true;
   }
-  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#' + SHARE_KEY)) { setQuick(false); openShared(); } });
+  window.addEventListener('hashchange', () => { if (location.hash.startsWith('#' + SHARE_KEY)) { setQuick(false); setTable(false); openShared(); } });
   // store a copy of a file under a new name, listed right after `afterId`; returns the new id
   function storeCopy(d: any, name: any, afterId: any) {
     const id = uid(), kind = normKind(d.kind);
@@ -4126,6 +4192,7 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
     if (drag || polyDraft) return;
+    if (lineDraft) { lineCancel(); return; }
     if (editing) finishEdit();
     if (state.tool !== 'select') setTool('select');
     const hitG = e.target.closest && e.target.closest('[data-id]');
@@ -4214,7 +4281,7 @@ import { runtime as TD } from '../runtime';
     const mod = e.metaKey || e.ctrlKey;
     // Ctrl/⌘ + = − 0 zoom the canvas (the Document view handles its own, in docview.ts)
     const z = zoomKey(e);
-    if (inQuick()) return; // Quick handles its own keys (nothing to zoom there)
+    if (inTool()) return; // Quick and Table handle their own keys (nothing to zoom there)
     if (state.mode !== 'document') {
       if (z !== null) {
         if (!$('#modal').hidden || !imp.hidden) return; // a dialog is open: the page stays as it is
@@ -4567,11 +4634,33 @@ import { runtime as TD } from '../runtime';
     catch (e: any) { showHint('Could not build the HTML file: ' + e.message, 2500); }
   }
   // Quick: a formula box on its own, over whatever file is open. Picking a file kind leaves it.
-  const QUICK_KEY = 'diagramtex.quick';
+  const QUICK_KEY = 'diagramtex.quick', TABLE_KEY = 'diagramtex.tablemode';
   const inQuick = () => document.body.classList.contains('mode-quick');
+  // Table (src/ui/services/table.ts): a table to import, format and export, over whatever file is open, like Quick
+  const inTable = () => document.body.classList.contains('mode-table');
+  /** Quick or Table: a tool on its own, the file's canvas and document hidden */
+  const inTool = () => inQuick() || inTable();
+  function leaveFile() { finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); hideFly(); closeCtx(); expPop.hidden = true; }
+  function setTable(on: any) {
+    if (on === inTable()) return;
+    if (on) { setQuick(false); leaveFile(); }
+    document.body.classList.toggle('mode-table', on);
+    try { on ? localStorage.setItem(TABLE_KEY, '1') : localStorage.removeItem(TABLE_KEY); } catch (e: any) { /* storage blocked */ }
+    if (on) {
+      document.querySelectorAll('#kindSeg [data-mode], #kindSeg [data-kind]').forEach((b) => b.classList.remove('on'));
+      $('#kindSeg [data-table]').classList.add('on');
+      TD.tableWs.show();
+      renderProps();
+    } else {
+      $('#kindSeg [data-table]').classList.remove('on');
+      TD.tableWs.hide();
+      applyMode(state.mode, false);
+      renderProps();
+    }
+  }
   function setQuick(on: any) {
     if (on === inQuick()) return;
-    if (on) { finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); }
+    if (on) { setTable(false); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); }
     document.body.classList.toggle('mode-quick', on);
     try { on ? localStorage.setItem(QUICK_KEY, '1') : localStorage.removeItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
     if (on) {
@@ -4586,11 +4675,12 @@ import { runtime as TD } from '../runtime';
     }
   }
   $('#kindSeg [data-quick]').onclick = () => setQuick(true);
+  $('#kindSeg [data-table]').onclick = () => setTable(true);
   // upcoming features (.soon) are shown greyed out; a click on one does nothing
   document.addEventListener('click', (e) => { if ((e.target! as Element).closest && (e.target! as Element).closest('.soon')) { e.preventDefault(); e.stopPropagation(); } }, true);
-  document.querySelectorAll('[data-mode]').forEach((b) => ((b as HTMLElement).onclick = () => { setQuick(false); setMode((b as HTMLElement).dataset.mode); }));
+  document.querySelectorAll('[data-mode]').forEach((b) => ((b as HTMLElement).onclick = () => { setQuick(false); setTable(false); setMode((b as HTMLElement).dataset.mode); }));
   // Classic reopens the last Classic file in the view it was left in (Diagram or Document).
-  document.querySelectorAll('[data-kind]').forEach((b) => ((b as HTMLElement).onclick = () => { setQuick(false); if (state.doc.kind !== (b as HTMLElement).dataset.kind) { finishEdit(); finishPoly(); commit(); switchKind((b as HTMLElement).dataset.kind); } }));
+  document.querySelectorAll('[data-kind]').forEach((b) => ((b as HTMLElement).onclick = () => { setQuick(false); setTable(false); if (state.doc.kind !== (b as HTMLElement).dataset.kind) { finishEdit(); finishPoly(); commit(); switchKind((b as HTMLElement).dataset.kind); } }));
   $('#blockSel').onchange = (e: any) => setActiveBlock(+e.target.value);
 
   // Page mode: the sheet as SVG, one <svg> per page (for print) or one tall SVG (for download).
@@ -5380,7 +5470,7 @@ import { runtime as TD } from '../runtime';
       }
       renderDocList();
     }
-    else if (!shared) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); }
+    else if (!shared) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); if (TD.tour) TD.tour.firstRun(); } // the very first visit
     if (shared) await openShared();
     if (!state.docId) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); } // a broken link and no files
     setTool('select');
@@ -5424,9 +5514,10 @@ import { runtime as TD } from '../runtime';
       return pngWithDpi(await rasterise({ vb: [b.x, b.y, b.w, b.h], inner }, transparent, dpi), dpi);
     },
     downloadBlob: (name: any, blob: any) => downloadBlob(name, blob),
+    svgWithFonts, // a standalone SVG with the maths fonts embedded (Table's SVG download)
     // for the command search (src/ui/services/palette.ts)
     cmd: {
-      runCmd, setMode, setQuick, inQuick, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
+      runCmd, setMode, setQuick, inQuick, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
       toggleSnap: () => { state.snap = !state.snap; savePrefs(); updateTopbar(); },
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
@@ -5438,5 +5529,7 @@ import { runtime as TD } from '../runtime';
     let q = null; try { q = localStorage.getItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
     // src/ui/services/quick.ts may still be loading: the page's scripts can still be parsing when the files are read
     if (q) { if (TD.quick) setQuick(true); else document.addEventListener('DOMContentLoaded', () => setQuick(true), { once: true }); }
+    let t = null; try { t = localStorage.getItem(TABLE_KEY); } catch (e: any) { /* storage blocked */ }
+    if (t && !q) { if (TD.tableWs) setTable(true); else document.addEventListener('DOMContentLoaded', () => setTable(true), { once: true }); }
   });
 })();

@@ -23,7 +23,7 @@
       <button data-kind="classic" class="toggle" title="Classic file — diagrams, and a document that arranges them with text"><svg viewBox="0 0 20 20"><path d="M3 4h14M3 7.5h9"/><circle cx="5.5" cy="14" r="2.5"/><path d="M8 14h3.5"/><rect x="11.5" y="11" width="6" height="6" rx="1"/></svg><span class="lbl">Classic</span></button>
       <button data-mode="page" class="toggle" title="Page file — free-form page: place text, maths, shapes and plots anywhere on the paper"><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6h3M7.5 8.5h5"/><path d="M8 15l2-3.5 2 2 1-1.5" /></svg><span class="lbl">Page</span></button>
       <button data-mode="board" class="toggle" title="Whiteboard — an endless canvas: draw anywhere, scroll to pan, pinch or Ctrl+scroll to zoom"><svg viewBox="0 0 20 20"><path d="M2.5 4.5h15v10h-15z"/><path d="M5.5 11c1.6-3.4 3.2-3.4 4.5 0s2.9 3.4 4.5 0"/><path d="M7 17.5l3-3 3 3"/></svg><span class="lbl">Whiteboard</span></button>
-      <button class="toggle soon" aria-disabled="true" tabindex="-1" title="Table — coming soon"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="1"/><path d="M2.5 8h15M2.5 12h15M8 4v12"/></svg><span class="lbl">Table</span></button>
+      <button data-table class="toggle" title="Table — import a table (Excel, Google Sheets, CSV, LaTeX…), format it, and copy it as LaTeX or a picture"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="1"/><path d="M2.5 8h15M2.5 12h15M8 4v12"/></svg><span class="lbl">Table</span></button>
       <button data-quick class="toggle" title="Quick — type one formula and copy it as a picture (PNG or SVG)"><svg viewBox="0 0 20 20"><path d="M2.5 11h2.5l2.5 5.5 4-13h6"/><path d="M12.5 9l4 5M16.5 9l-4 5"/></svg><span class="lbl">Quick</span></button>
     </div>
     <input id="docName" class="doc-name" spellcheck="false" title="Document name" aria-label="Document name">
@@ -84,7 +84,8 @@
       <button data-fly="misc" title="Axis, wave, brace, ruler, grid"><svg viewBox="0 0 20 20"><path d="M3 3v14h14M3 9h14M3 13h14M7 3v14M11 3v14M15 3v14" style="stroke-width:1.1"/></svg><i class="more"></i></button>
       <button data-fly="arrows" title="Block arrows"><svg viewBox="0 0 20 20"><path d="M2.5 7.5h8.5V4l6.5 6-6.5 6v-3.5H2.5z"/></svg><i class="more"></i></button>
       <button data-fly="insertPop" id="btnInsert" title="2D plots and charts: function, line, scatter, area, bar, pie, contour, heatmap"><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
-      <button data-fly="plots3d" id="btnPlots3d" title="3D: surfaces, parametric surfaces, space curves, solid regions, solids of revolution, basic solids"><svg viewBox="0 0 20 20"><path d="M6.5 13.5V2.5M6.5 13.5H18M6.5 13.5l-4 4"/><path d="M9 7.5c2.2-2.4 4.2.6 8.5-2l-1.5 3.8c-4.3 2.6-6.3-.4-8.5 2z"/></svg><i class="more"></i></button>
+      <button data-fly="plots3d" id="btnPlots3d" title="3D plots: surfaces, parametric surfaces, space curves, scatter"><svg viewBox="0 0 20 20"><path d="M6.5 13.5V2.5M6.5 13.5H18M6.5 13.5l-4 4"/><path d="M9 7.5c2.2-2.4 4.2.6 8.5-2l-1.5 3.8c-4.3 2.6-6.3-.4-8.5 2z"/></svg><i class="more"></i></button>
+      <button data-fly="figures3d" id="btnFigures3d" title="3D figures: solid regions, solids of revolution, basic solids"><svg viewBox="0 0 20 20"><text x="10" y="15" text-anchor="middle" font-size="14.5" font-weight="800" letter-spacing="-.6" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">3D</text></svg><i class="more"></i></button>
       <button data-fly="blocks" id="btnBlocks" title="Blocks (experimental; some inputs might not be rendered correctly): commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman, timing, state machine, Karnaugh map, bit field, chemistry, 2D and 3D geometry"><svg viewBox="0 0 20 20"><path d="M10 2l4 2.3v4.6L10 11.2 6 8.9V4.3zM6 4.3l4 2.3 4-2.3M10 6.6v4.6M6 8.9l4 2.3v4.6L6 18.1 2 15.8v-4.6zM2 11.2l4 2.3 4-2.3M6 13.5v4.6M14 8.9l4 2.3v4.6L14 18.1 10 15.8v-4.6zM10 11.2l4 2.3 4-2.3M14 13.5v4.6"/></svg><i class="more"></i></button>
       <div class="sep"></div>
       <button data-tool="image" title="Image (I) — inserted with \includegraphics"><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12"/><circle cx="7" cy="8" r="1.5"/><path d="M3 15l5-5 3.5 3.5 2-2L17 15"/></svg></button>
@@ -118,11 +119,13 @@
         <button data-insert="plot:curve3d" title="Space curve (x(t), y(t), z(t)), in pgfplots"><svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><path d="M8 17c0-3 16-3 16 0s-16 3-16-3 16-6 16-3-16 2-16-3" class="c1"/></svg>Space curve</button>
         <button data-insert="plot:scatter3d" title="Points (x, y, z) from data, in pgfplots"><svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><g class="dots"><circle cx="9" cy="10" r="1.5"/><circle cx="14" cy="7" r="1.5"/><circle cx="20" cy="12" r="1.5"/><circle cx="24" cy="6" r="1.5"/><circle cx="12" cy="14" r="1.5"/></g></svg>Scatter 3D</button>
       </div>
+    </div>
+    <div id="fly-figures3d" class="popover flyout" hidden>
       <div class="pop-title">3D figures</div>
       <div class="pop-grid">
         <button data-insert="solid" title="Solid region E over a base D between two surfaces: a disk, rectangle, polar curve or cylindrical wedge, and Riemann columns, in plain TikZ"><svg viewBox="0 0 32 24"><ellipse cx="16" cy="21" rx="9" ry="2.2" class="a1"/><path d="M8 5v9M24 5v9"/><ellipse cx="16" cy="5" rx="8" ry="2.4"/><path d="M8 14a8 2.4 0 0016 0"/><path d="M8 14a8 2.4 0 0116 0" stroke-dasharray="1.6 1.4"/></svg>Solid region</button>
         <button data-insert="revolve:disk" title="Solid of revolution: disks and washers about the x-axis, shells about the y-axis, cut open, with a slice, in plain TikZ"><svg viewBox="0 0 32 24"><path d="M2 12h28"/><ellipse cx="7" cy="12" rx="2" ry="4"/><ellipse cx="25" cy="12" rx="3" ry="9" class="a1"/><path d="M7 8c6-1 12-4 18-5M7 16c6 1 12 4 18 5"/></svg>Revolution</button>
-        <button data-insert="prim3d:box" title="Basic solid: box, cylinder, cone, frustum, sphere, prism, pyramid or spherical wedge (Shape), shaded or as a line drawing, in plain TikZ"><svg viewBox="0 0 32 24"><path d="M5 9l9-4 13 3v11l-9 4-13-3z" class="a1"/><path d="M5 9l13 3 9-4M18 12v11"/></svg>Solid</button>
+        <button data-insert="prim3d:box" title="Basic solid: box, cube, cylinder, cone, frustum, hollow cylinder, sphere, hemisphere, spherical cap, ellipsoid, torus, prism, hexagonal prism, pyramid, tetrahedron, octahedron or spherical wedge (Shape), shaded or as a line drawing, in plain TikZ"><svg viewBox="0 0 32 24"><path d="M5 9l9-4 13 3v11l-9 4-13-3z" class="a1"/><path d="M5 9l13 3 9-4M18 12v11"/></svg>Solid</button>
       </div>
     </div>
     <div id="fly-blocks" class="popover flyout" hidden>
@@ -219,6 +222,7 @@
     </div>
     <div id="docview"></div>
     <section id="quick" aria-label="Quick formula" hidden></section>
+    <section id="tableview" aria-label="Table" hidden></section>
   </div>
 
   <div id="modal" hidden>

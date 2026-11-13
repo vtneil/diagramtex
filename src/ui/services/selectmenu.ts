@@ -29,6 +29,10 @@ import { runtime as TD } from '../../runtime';
     if (sel === s) { close(); return; }
     sel = s;
     menu.textContent = '';
+    // a select with data-pics names a set of pictures (TD.selectPics[name][value] = [short label, svg]):
+    // its options are tiles in a grid, like the Blocks menu
+    const pics = s.dataset.pics && TD.selectPics && TD.selectPics[s.dataset.pics];
+    menu.classList.toggle('pics', !!pics);
     menu.setAttribute('aria-label', s.title || s.getAttribute('aria-label') || '');
     let group: any = null;
     [...s.options].forEach((o, i) => {
@@ -44,6 +48,7 @@ import { runtime as TD } from '../../runtime';
       el.setAttribute('role', 'option');
       el.setAttribute('aria-selected', String(i === s.selectedIndex));
       el.textContent = o.textContent;
+      if (pics && pics[o.value]) { el.innerHTML = pics[o.value][1] + '<span></span>'; el.lastElementChild!.textContent = pics[o.value][0]; el.title = o.textContent; }
       // an option with data-swatch shows that colour before its name
       if (o.dataset.swatch) { const sw = document.createElement('span'); sw.className = 'selmenu-sw'; sw.style.background = o.dataset.swatch; el.prepend(sw); }
       menu.appendChild(el);
@@ -87,8 +92,11 @@ import { runtime as TD } from '../../runtime';
     if (s.isConnected) s.focus({ preventScroll: true });
   }
 
-  function step(dir: any) {
-    const n = sel.options.length;
+  // in a grid of tiles, up and down move a row (the tiles across the first row)
+  const across = () => { const t = items(); if (!menu.classList.contains('pics') || !t.length) return 1; const y = (t[0] as HTMLElement).offsetTop; return Math.max(1, t.filter((x) => (x as HTMLElement).offsetTop === y).length); };
+  function step(dir: any, rows = false) {
+    const n = sel.options.length, by = rows ? across() : 1;
+    if (by > 1) { const i = hi + dir * by; if (i >= 0 && i < n && enabled(i)) setHi(i, true); return; }
     for (let i = hi + dir; i >= 0 && i < n; i += dir) if (enabled(i)) { setHi(i, true); return; }
   }
   function edge(first: any) {
@@ -124,8 +132,9 @@ import { runtime as TD } from '../../runtime';
       return;
     }
     switch (e.key) {
-      case 'ArrowDown': e.preventDefault(); e.altKey ? edge(false) : step(1); break;
-      case 'ArrowUp': e.preventDefault(); e.altKey ? edge(true) : step(-1); break;
+      case 'ArrowDown': e.preventDefault(); e.altKey ? edge(false) : step(1, true); break;
+      case 'ArrowUp': e.preventDefault(); e.altKey ? edge(true) : step(-1, true); break;
+      case 'ArrowRight': case 'ArrowLeft': if (menu.classList.contains('pics')) { e.preventDefault(); step(e.key === 'ArrowRight' ? 1 : -1); } break;
       case 'Home': case 'PageUp': e.preventDefault(); edge(true); break;
       case 'End': case 'PageDown': e.preventDefault(); edge(false); break;
       case 'Enter': case ' ': e.preventDefault(); if (hi >= 0) pick(hi); else close(); break;

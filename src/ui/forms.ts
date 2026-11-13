@@ -39,9 +39,26 @@ export interface FormSection {
   rows: FormRow[];
 }
 export interface FormPanelModel { sections: FormSection[] }
-export const row = (label: string | Inline[], ...controls: Control[]): Extract<FormRow, { kind: 'row' }> => ({ kind: 'row' as const, label: typeof label === 'string' ? [label] : label, controls });
+const TX_PLACEHOLDER: Record<string, string> = { math: 'Maths, without $', text: 'Text, $math$' };
+const TX_TITLE: Record<string, string> = { math: 'Maths, without $', text: 'Use $\u2026$ for maths' };
+const NONE_PH = new Set(['none', 'empty', 'add a label', '(none)']);
+// where leaving the field empty means no label: short enough for the narrowest panel field (about 110px)
+const TX_NONE: Record<string, string> = { math: 'none \u00b7 maths', text: 'none \u00b7 $math$' };
+/** The placeholder of a TeX field: what it takes, or with `none`, that empty means no label. */
+export const txPlaceholder = (tx: string, none = false) => (none ? TX_NONE : TX_PLACEHOLDER)[tx];
+export function txAttrs(attrs: Attributes): Attributes {
+  const tx = typeof attrs['data-tx'] === 'string' ? attrs['data-tx'] : '';
+  const ph = attrs.placeholder == null ? '' : String(attrs.placeholder);
+  if (TX_PLACEHOLDER[tx] && (ph === '' || NONE_PH.has(ph))) return { ...attrs, placeholder: txPlaceholder(tx, ph !== '') };
+  return attrs;
+}
+export const row = (label: string | Inline[], ...controls: Control[]): Extract<FormRow, { kind: 'row' }> => {
+  const tx = controls.length === 1 && controls[0].kind === 'input' && typeof controls[0].attrs['data-tx'] === 'string' ? controls[0].attrs['data-tx'] : '';
+  const labelTitle = TX_TITLE[tx];
+  return { kind: 'row' as const, label: typeof label === 'string' ? [label] : label, ...(labelTitle ? { labelTitle } : {}), controls };
+};
 export const input = (key: string, value: string | number | null | undefined, attrs: Attributes = {}): Control => ({
-  kind: 'input' as const, value: value ?? '', attrs: { type: 'text', 'data-p': key, spellcheck: 'false', ...attrs },
+  kind: 'input' as const, value: value ?? '', attrs: txAttrs({ type: 'text', 'data-p': key, spellcheck: 'false', ...attrs }),
 });
 export const number = (key: string, value: string | number, attrs: Attributes = {}): Control => ({ kind: 'input' as const, value, attrs: { type: 'number', 'data-p': key, ...attrs } });
 export const check = (key: string, value: boolean | undefined): Control => ({ kind: 'input' as const, value: '', checked: value !== false, attrs: { type: 'checkbox', 'data-p': key } });

@@ -566,7 +566,7 @@ import { readPicture } from '../platform/images';
   root!.addEventListener('gesturechange', (e) => { e.preventDefault(); const r = root!.getBoundingClientRect(); zoomTo(gz * (e as any).scale, (e as any).clientX - r.left, (e as any).clientY - r.top); });
   // Ctrl/⌘ + / − / 0, as in the browser
   document.addEventListener('keydown', (e) => {
-    if (app.state.mode !== 'document' || !(e.ctrlKey || e.metaKey) || e.altKey || document.body.classList.contains('mode-quick')) return;
+    if (app.state.mode !== 'document' || !(e.ctrlKey || e.metaKey) || e.altKey || document.body.classList.contains('mode-quick') || document.body.classList.contains('mode-table')) return;
     // by key and by physical key (layouts where = or − need Shift, and the number pad), never the browser's page zoom
     const c = e.code;
     if (e.key === '=' || e.key === '+' || c === 'Equal' || c === 'NumpadAdd') { e.preventDefault(); stepZoom(1); }

@@ -1,6 +1,6 @@
 export let panelServices: any;
 import { runtime as TD } from '../runtime';
-// Basic 3D solids (box, cylinder, cone, frustum, sphere, prism, pyramid, spherical wedge) and solids of
+// Basic 3D solids (box, cube, cylinder, cone, frustum, tube, sphere, hemisphere, cap, ellipsoid, torus, prism, hexagonal prism, pyramid, tetrahedron, octahedron, spherical wedge, axes) and solids of
 // revolution (disks, washers, shells, with a cutaway and a highlighted slice). Both are built as meshes for
 // the 3D engine (view3d.ts), drawn shaded or as line drawings with dashed hidden edges, and exported as
 // plain TikZ.
@@ -21,18 +21,26 @@ import { runtime as TD } from '../runtime';
   const ring = (r: any, z: any, n: any, t0 = 0, t1 = 2 * Math.PI, closed = true) => Array.from<any, any>({ length: closed ? n : n + 1 }, (_, i) => { const t = t0 + ((t1 - t0) * i) / n; return [r * Math.cos(t), r * Math.sin(t), z]; });
 
   // ================================================================ basic solids
-  const KINDS = [['box', 'Box (cuboid)'], ['cylinder', 'Cylinder'], ['cone', 'Cone'], ['frustum', 'Frustum'], ['sphere', 'Sphere'],
-    ['prism', 'Prism'], ['pyramid', 'Pyramid'], ['swedge', 'Spherical wedge']];
+  const KINDS = [['box', 'Box (cuboid)'], ['cube', 'Cube'], ['cylinder', 'Cylinder'], ['cone', 'Cone'], ['frustum', 'Frustum'], ['tube', 'Hollow cylinder (tube)'],
+    ['sphere', 'Sphere'], ['hemisphere', 'Hemisphere'], ['cap', 'Spherical cap'], ['ellipsoid', 'Ellipsoid'], ['torus', 'Torus'],
+    ['prism', 'Prism'], ['hexprism', 'Hexagonal prism'], ['pyramid', 'Pyramid'], ['tetra', 'Tetrahedron'], ['octa', 'Octahedron'],
+    ['swedge', 'Spherical wedge'], ['axes', '3D axes']];
+  // a polygon without repeated points (a quad that closes on a pole)
+  const clean = (pts: any) => pts.filter((p: any, k: any) => Math.hypot(...sub(p, pts[(k + pts.length - 1) % pts.length])) > 1e-9);
   function solidFigure(s: any) {
     const vw = V3.view(s.view?.[0] ?? 30, s.view?.[1] ?? 20);
     const n = V3.num, kind = s.kind || 'box', color = s.solidColor || '#2f7fc1', line = s.style === 'line';
-    const a = Math.max(1e-3, n(s.a, 2)), b = Math.max(1e-3, n(s.b, 1.5)), c = Math.max(1e-3, n(s.c, 1.2)), r2 = Math.max(0, n(s.r2, 0.6));
-    const sides = Math.max(3, Math.min(24, Math.round(n(s.n, 6))));
+    let a = Math.max(1e-3, n(s.a, 2)), b = Math.max(1e-3, n(s.b, 1.5)), c = Math.max(1e-3, n(s.c, 1.2)), r2 = Math.max(0, n(s.r2, 0.6));
+    if (kind === 'cube') { b = a; c = a; }
+    if (kind === 'tetra') { const e = a; a = e / Math.sqrt(3); c = e * Math.sqrt(2 / 3); } // a = edge: the base's corner radius and the height follow
+    const pri = kind === 'prism' || kind === 'hexprism', pyr = kind === 'pyramid' || kind === 'tetra';
+    const sides = kind === 'hexprism' ? 6 : kind === 'tetra' ? 3 : Math.max(3, Math.min(24, Math.round(n(s.n, 6))));
+    let H = c, capR = a, capH = c;
     const faces = [], curves = [], items = [], dims = [];
     const ink = V3.ink(line ? '#000000' : color);
     const M = 64;
     let convex = true, ballAt = null;
-    if (kind === 'box') {
+    if (kind === 'box' || kind === 'cube') {
       faces.push(...V3.boxFaces([0, 0, 0], [a, b, c], color, null).map((fc: any, i: any) => ({ ...fc, group: 'f' + i })));
       // dimension labels on the three edges at the front-bottom corner
       const C = [[0, 0, 0], [a, 0, 0], [a, b, 0], [0, b, 0]];
@@ -67,16 +75,79 @@ import { runtime as TD } from '../runtime';
       }
       const t = bestAngle(vw, a);
       if (s.la) dims.push({ p: [0, 0, 0], q: [a * Math.cos(t), a * Math.sin(t), 0], lab: s.la, ctr: [0, 0, a], inner: true, solid: true });
-    } else if (kind === 'prism' || kind === 'pyramid') {
+    } else if (pri || pyr) {
       const B = ring(a, 0, sides, Math.PI / sides - Math.PI / 2), Tp = ring(a, c, sides, Math.PI / sides - Math.PI / 2);
       for (let i = 0; i < sides; i++) {
         const j = (i + 1) % sides, out = sub(centroid([B[i], B[j]]), [0, 0, c / 2]);
-        faces.push(face(kind === 'prism' ? [B[i], B[j], Tp[j], Tp[i]] : [B[i], B[j], [0, 0, c]], out, color, 's' + i));
+        faces.push(face(pri ? [B[i], B[j], Tp[j], Tp[i]] : [B[i], B[j], [0, 0, c]], out, color, 's' + i));
       }
       faces.push(face([...B], [0, 0, -1], color, 'bot'));
-      if (kind === 'prism') faces.push(face([...Tp], [0, 0, 1], color, 'top'));
-      if (s.lc) dims.push({ p: [0, 0, 0], q: [0, 0, c], lab: s.lc, ctr: [a, 0, c / 2], inner: true, at: kind === 'pyramid' ? 0.4 : 0.5 });
+      if (pri) faces.push(face([...Tp], [0, 0, 1], color, 'top'));
+      if (s.lc) dims.push({ p: [0, 0, 0], q: [0, 0, c], lab: s.lc, ctr: [a, 0, c / 2], inner: true, at: pyr ? 0.4 : 0.5 });
       if (s.la) { const i = B.reduce((m, p, k) => (vw.depth(centroid([p, B[(k + 1) % sides]])) > vw.depth(centroid([B[m], B[(m + 1) % sides]])) ? k : m), 0); dims.push({ p: B[i], q: B[(i + 1) % sides], lab: s.la, ctr: [0, 0, c / 2] }); }
+    } else if (kind === 'octa') {
+      const R = a / Math.SQRT2, eq = ring(R, 0, 4, Math.PI / 4), top = [0, 0, R], bot = [0, 0, -R];
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        faces.push(face([eq[i], eq[j], top], centroid([eq[i], eq[j], top]), color, 'u' + i), face([eq[j], eq[i], bot], centroid([eq[i], eq[j], bot]), color, 'd' + i));
+      }
+      H = R; capR = R;
+      if (s.la) { const i = eq.reduce((m: any, p: any, k: any) => (vw.depth(centroid([p, eq[(k + 1) % 4]])) > vw.depth(centroid([eq[m], eq[(m + 1) % 4]])) ? k : m), 0); dims.push({ p: eq[i], q: eq[(i + 1) % 4], lab: s.la, ctr: [0, 0, 0] }); }
+    } else if (kind === 'ellipsoid') {
+      const nt = 48, nf = 20, t = (i: any) => (i / nt) * 2 * Math.PI, f = (j: any) => (j / nf) * Math.PI;
+      const P = (ti: any, fj: any) => [a * Math.sin(fj) * Math.cos(ti), b * Math.sin(fj) * Math.sin(ti), c * Math.cos(fj)];
+      for (let i = 0; i < nt; i++) for (let j = 0; j < nf; j++) {
+        const pts = clean([P(t(i), f(j)), P(t(i + 1), f(j)), P(t(i + 1), f(j + 1)), P(t(i), f(j + 1))]);
+        if (pts.length >= 3) faces.push(face(pts, centroid(pts), color, 'surf'));
+      }
+      const eq = Array.from<any, any>({ length: 97 }, (_, i) => [a * Math.cos((i / 96) * 2 * Math.PI), b * Math.sin((i / 96) * 2 * Math.PI), 0]);
+      curves.push({ pts: eq, normals: eq.map((p: any) => norm([p[0] / (a * a), p[1] / (b * b), 0])) });
+      if (s.la) dims.push({ p: [0, 0, 0], q: [a, 0, 0], lab: s.la, ctr: [0, 0, c], inner: true, solid: true });
+      if (s.lb) dims.push({ p: [0, 0, 0], q: [0, b, 0], lab: s.lb, ctr: [0, 0, c], inner: true, solid: true });
+      if (s.lc) dims.push({ p: [0, 0, 0], q: [0, 0, c], lab: s.lc, ctr: [a, 0, 0], inner: true, solid: true });
+    } else if (kind === 'hemisphere' || kind === 'cap') {
+      const h = kind === 'hemisphere' ? a : Math.min(c, 2 * a - 1e-3), zc = h - a;
+      const f0 = Math.acos(Math.max(-1, Math.min(1, (a - h) / a))), rho = a * Math.sin(f0);
+      const nt = 48, nf = Math.max(6, Math.round((20 * f0) / (Math.PI / 2)));
+      const P = (ti: any, fj: any) => [a * Math.sin(fj) * Math.cos(ti), a * Math.sin(fj) * Math.sin(ti), zc + a * Math.cos(fj)];
+      for (let i = 0; i < nt; i++) for (let j = 0; j < nf; j++) {
+        const t0 = (i / nt) * 2 * Math.PI, t1 = ((i + 1) / nt) * 2 * Math.PI, f1 = (j / nf) * f0, f2 = ((j + 1) / nf) * f0;
+        const pts = clean([P(t0, f1), P(t1, f1), P(t1, f2), P(t0, f2)]);
+        if (pts.length >= 3) faces.push(face(pts, sub(centroid(pts), [0, 0, zc]), color, 'cap'));
+      }
+      faces.push(face(ring(rho, 0, M), [0, 0, -1], color, 'bot'));
+      H = h; capR = h > a ? a : rho; capH = h;
+      const t = bestAngle(vw, rho);
+      if (s.la) dims.push({ p: [0, 0, 0], q: [rho * Math.cos(t), rho * Math.sin(t), 0], lab: s.la, ctr: [0, 0, h / 2], inner: true });
+      if (s.lc && kind === 'cap') dims.push({ p: [0, 0, 0], q: [0, 0, h], lab: s.lc, ctr: [a, 0, h / 2], inner: true });
+    } else if (kind === 'tube') {
+      convex = false;
+      const ro = a, ri = Math.min(r2, ro * 0.98);
+      const Bo = ring(ro, 0, M), Bi = ring(ri, 0, M), To = ring(ro, c, M), Ti = ring(ri, c, M);
+      for (let i = 0; i < M; i++) {
+        const j = (i + 1) % M, mid = ((i + 0.5) / M) * 2 * Math.PI, co = Math.cos(mid), si = Math.sin(mid);
+        faces.push(face([Bo[i], Bo[j], To[j], To[i]], [co, si, 0], color, 'out'), face([Bi[i], Bi[j], Ti[j], Ti[i]], [-co, -si, 0], color, 'in'),
+          face([To[i], To[j], Ti[j], Ti[i]], [0, 0, 1], color, 'top'), face([Bo[i], Bo[j], Bi[j], Bi[i]], [0, 0, -1], color, 'bot'));
+      }
+      const t = bestAngle(vw, ro);
+      if (s.la) dims.push({ p: [0, 0, 0], q: [ro * Math.cos(t), ro * Math.sin(t), 0], lab: s.la, ctr: [0, 0, c / 2], inner: true });
+      if (s.lb && ri > 0) dims.push({ p: [0, 0, c], q: [ri * Math.cos(t), ri * Math.sin(t), c], lab: s.lb, ctr: [0, 0, 0], inner: true, up: true });
+      if (s.lc) dims.push({ p: [0, 0, 0], q: [0, 0, c], lab: s.lc, ctr: [ro, 0, c / 2], inner: true });
+    } else if (kind === 'torus') {
+      convex = false;
+      const Rm = a, rt = Math.max(1e-3, Math.min(r2, Rm * 0.98)), nt = 48, np = 20;
+      const P = (ti: any, pj: any) => [(Rm + rt * Math.cos(pj)) * Math.cos(ti), (Rm + rt * Math.cos(pj)) * Math.sin(ti), rt * Math.sin(pj)];
+      for (let i = 0; i < nt; i++) for (let j = 0; j < np; j++) {
+        const t0 = (i / nt) * 2 * Math.PI, t1 = ((i + 1) / nt) * 2 * Math.PI, p0 = (j / np) * 2 * Math.PI, p1 = ((j + 1) / np) * 2 * Math.PI, tm = (t0 + t1) / 2;
+        const pts = [P(t0, p0), P(t1, p0), P(t1, p1), P(t0, p1)];
+        faces.push(face(pts, sub(centroid(pts), [Rm * Math.cos(tm), Rm * Math.sin(tm), 0]), color, 'surf'));
+      }
+      H = rt; capR = Rm + rt; capH = rt;
+      const t = bestAngle(vw, Rm);
+      if (s.la) dims.push({ p: [0, 0, 0], q: [Rm * Math.cos(t), Rm * Math.sin(t), 0], lab: s.la, ctr: [0, 0, rt], inner: true });
+      if (s.lb) dims.push({ p: [Rm * Math.cos(t), Rm * Math.sin(t), 0], q: [(Rm + rt) * Math.cos(t), (Rm + rt) * Math.sin(t), 0], lab: s.lb, ctr: [0, 0, rt], inner: true, solid: true });
+    } else if (kind === 'axes') {
+      H = a; capR = a; capH = a;
     } else if (kind === 'swedge') {
       convex = false;
       const p1 = Math.max(0, n(s.r1, 0.8)), p2 = Math.max(p1 + 1e-3, n(s.r2, 2));
@@ -107,11 +178,15 @@ import { runtime as TD } from '../runtime';
     }
     // extents for the axes and the scene
     let ext = [a, a, c];
-    if (kind === 'box') ext = [a, b, c];
+    if (kind === 'box' || kind === 'cube') ext = [a, b, c];
+    if (kind === 'ellipsoid') ext = [a, b, c];
+    if (kind === 'octa') ext = [capR, capR, capR];
+    if (kind === 'axes') ext = [a, a, a];
+    if (kind === 'hemisphere' || kind === 'cap' || kind === 'torus') ext = [capR, capR, capH];
     if (kind === 'sphere') ext = [a, a, a];
     if (kind === 'swedge') { const R = Math.max(1e-3, n(s.r2, 2)); ext = [R * 0.75, R * 0.75, R * 0.75]; }
-    if (s.axes) {
-      const neg = kind === 'box' || kind === 'swedge' ? [0, 0, 0] : kind === 'sphere' ? [a, a, a] : [a, a, 0];
+    if (s.axes || kind === 'axes') {
+      const neg = kind === 'box' || kind === 'cube' || kind === 'swedge' || kind === 'axes' ? [0, 0, 0] : kind === 'sphere' || kind === 'ellipsoid' || kind === 'octa' ? ext : kind === 'torus' ? [ext[0], ext[1], capH] : [ext[0], ext[1], 0];
       items.push(...V3.axes(vw, ext.map((v) => v * 1.45), [s.xlabel, s.ylabel, s.zlabel], [0, 0, 0], s.axesNeg === false ? [0, 0, 0] : neg));
     }
     if (ballAt) items.push({ k: 'ball', at: vw.P([0, 0, 0]), r: a, color, shaded: !line, stroke: ink, w: V3.LW });
@@ -127,7 +202,7 @@ import { runtime as TD } from '../runtime';
       const l = Math.hypot(u[0], u[1]) || 1;
       items.push({ k: 'text', at: m, text: d.lab, push: [u[0] / l, u[1] / l] });
     }
-    if (s.name) items.push({ k: 'text', at: vw.P(kind === 'box' ? [a / 2, b / 2, c] : kind === 'sphere' ? [0, 0, a] : [0, 0, c]), text: s.name, push: [0, 1] });
+    if (s.name) items.push({ k: 'text', at: vw.P(kind === 'box' || kind === 'cube' ? [a / 2, b / 2, c] : kind === 'sphere' ? [0, 0, a] : kind === 'ellipsoid' ? [0, 0, c] : [0, 0, H]), text: s.name, push: [0, 1] });
     return { items };
   }
   // the angle round the z-axis whose rim point shows best: in front, towards the right
@@ -151,6 +226,16 @@ import { runtime as TD } from '../runtime';
     sphere: { kind: 'sphere', a: '1.2', la: '$r$', lb: '', lc: '', w: 200, h: 200 },
     prism: { kind: 'prism', a: '1', c: '1.8', n: '6', la: '$a$', lb: '', lc: '$h$', w: 200, h: 240 },
     pyramid: { kind: 'pyramid', a: '1.2', c: '1.8', n: '4', la: '$a$', lb: '', lc: '$h$', w: 200, h: 240 },
+    cube: { kind: 'cube', a: '1.6', la: '$a$', lb: '', lc: '', w: 200, h: 200 },
+    tube: { kind: 'tube', a: '1.2', r2: '0.7', c: '1.8', la: '$R$', lb: '$r$', lc: '$h$', w: 200, h: 240 },
+    hemisphere: { kind: 'hemisphere', a: '1.4', la: '$r$', lb: '', lc: '', w: 200, h: 170 },
+    cap: { kind: 'cap', a: '1.4', c: '0.8', la: '$\\rho$', lb: '', lc: '$h$', w: 200, h: 160 },
+    ellipsoid: { kind: 'ellipsoid', a: '2', b: '1.4', c: '1.1', la: '$a$', lb: '$b$', lc: '$c$', w: 240, h: 200 },
+    torus: { kind: 'torus', a: '1.5', r2: '0.5', la: '$R$', lb: '$r$', lc: '', w: 240, h: 200 },
+    hexprism: { kind: 'hexprism', a: '1', c: '1.8', la: '$a$', lb: '', lc: '$h$', w: 200, h: 240 },
+    tetra: { kind: 'tetra', a: '2.2', la: '$a$', lb: '', lc: '$h$', w: 200, h: 220 },
+    octa: { kind: 'octa', a: '2.2', la: '$a$', lb: '', lc: '', w: 200, h: 220 },
+    axes: { kind: 'axes', a: '1.6', la: '', lb: '', lc: '', w: 200, h: 200 },
     swedge: { kind: 'swedge', r1: '0.9', r2: '2', t1: '0', t2: '60', p1: '25', p2: '65', view: [35, 25], axes: true, la: '', lb: '', lc: '', w: 240, h: 240 },
   };
   T.prim3d = V3.blockType('3D solid', SDEF, solidFigure, SPRE);

@@ -822,11 +822,11 @@ import { runtime as TD } from '../runtime';
     const n = selN(), r = selR(), h = selH();
     const show = (title: string, summary: string, rows: any[]) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), summary }] });
     const colorRow = (label: string, key: string, value: string, o: Record<string, any> = {}) => ({ ...row(label, texColour(value, { 'data-f': key }, { nullable: true, title: label, defaultLabel: o.dflt, defaultSwatch: o.dfltSw })), controlClass: 'ctl tc' });
-    const area = (label: string, key: string, value: string, rows: number, placeholder: string) => ({ kind: 'column' as const, label: [label], value, attrs: { 'data-f': key, rows, spellcheck: 'false', class: 'mono', placeholder, 'aria-label': label } });
+    const area = (label: string, key: string, value: string, rows: number, placeholder: string) => ({ kind: 'column' as const, label: [label], labelTitle: 'Use $…$ for maths', value, attrs: { 'data-f': key, 'data-tx': 'text', rows, spellcheck: 'false', class: 'mono', placeholder, 'aria-label': label } });
     const sel = (label: string, key: string, value: string, options: string[][]) => row(label, { kind: 'select' as const, attrs: { 'data-f': key, 'aria-label': label }, options, value });
     // one end of a relation: its role name and multiplicity side by side
     const end = (name: string, rk: string, rv: string, mk: string, mv: string, eg: string) => {
-      const inp = (key: string, value: string, placeholder: string, label: string) => ({ kind: 'input' as const, value: value || '', attrs: { type: 'text', 'data-f': key, spellcheck: 'false', placeholder, 'aria-label': label, title: label } });
+      const inp = (key: string, value: string, placeholder: string, label: string) => ({ kind: 'input' as const, value: value || '', attrs: { type: 'text', 'data-f': key, 'data-tx': 'text', spellcheck: 'false', placeholder, 'aria-label': label, title: label } });
       return row(`At ${name}`, inp(rk, rv, 'role', `Role at ${name}`), inp(mk, mv, eg, `Multiplicity at ${name}`));
     };
     const actions = (buttons: any[]) => ({ kind: 'actions' as const, class: 'row', buttons });
@@ -837,7 +837,7 @@ import { runtime as TD } from '../runtime';
       show(ENV_NAMES[n.env] || 'Class', `${n.attrs.length} attribute${n.attrs.length === 1 ? '' : 's'} · ${n.ops.length} operation${n.ops.length === 1 ? '' : 's'}${rels ? ` · ${rels} line${rels === 1 ? '' : 's'}` : ''}`, [
         field('Name', 'name', n.name, { class: 'mono' }),
         sel('Kind', 'env', n.env, U.KINDS.map((k: string) => [k, ENV_NAMES[k]])),
-        ...(n.env === 'object' ? [field('Instance of', 'inst', n.instanceOf || '', { placeholder: 'class name' })] : []),
+        ...(n.env === 'object' ? [field('Instance of', 'inst', n.instanceOf || '', { 'data-tx': 'text', placeholder: 'class name' })] : []),
         area('Attributes', 'attrs', n.attrs.join('\n'), Math.max(2, Math.min(8, n.attrs.length + 1)), '- name : String'),
         area('Operations', 'ops', opsText(n), Math.max(2, Math.min(8, n.ops.length + 1)), '+ area() : double'),
         note('One per line. A leading ', { code: '*' }, ' marks an abstract operation (', { code: '\\operation[0]' }, ', in italics).'),
@@ -894,7 +894,7 @@ import { runtime as TD } from '../runtime';
       const dk = drawKind(r), first = r.labels[0];
       show(dk === 'dependency' ? 'Dependency' : dk === 'notelink' ? 'Note link' : 'Line', `${r.a} ${r.op} ${r.b}`, [
         ...(dk === 'line' ? [] : [segments('Arrow', 'dk', dk, [['notelink', 'None'], ['dependency', 'Dependency', 'dashed with an arrow']])]),
-        field('Label', 'dlabel', first ? first.t : '', { placeholder: 'none' }),
+        field('Label', 'dlabel', first ? first.t : '', { 'data-tx': 'text', placeholder: 'none' }),
         routeRow(r.op),
         field('Options', 'dopts', r.o || '', { class: 'mono', placeholder: 'e.g. ->' }),
         actions([{ text: 'Reverse Direction', attrs: { 'data-ue': 'rev' } }, { text: 'Delete', attrs: { class: 'danger', 'data-ue': 'ldel' } }]),

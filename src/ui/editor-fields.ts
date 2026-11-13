@@ -1,9 +1,9 @@
 import { runtime } from '../runtime';
-import { row } from './forms';
+import { row, txAttrs } from './forms';
 import type { Attributes, Control, FormRow, Inline } from './forms';
 
 export const field = (label: string, key: string, value: string | number | null | undefined, attrs: Attributes = {}): FormRow =>
-  row(label, { kind: 'input' as const, value: value ?? '', attrs: { type: 'text', 'data-f': key, spellcheck: 'false', ...attrs } });
+  row(label, { kind: 'input' as const, value: value ?? '', attrs: txAttrs({ type: 'text', 'data-f': key, spellcheck: 'false', ...attrs }) });
 export const numField = (label: string, key: string, value: string | number | null | undefined, unit = '', attrs: Attributes = {}): FormRow => ({
   ...row(label, { kind: 'input' as const, value: value ?? '', attrs: { type: 'number', 'data-f': key, ...attrs } }, ...(unit ? [{ kind: 'text' as const, text: unit }] : [])),
   controlClass: unit ? 'ctl unit' : 'ctl',

@@ -486,7 +486,7 @@ import { runtime as TD } from '../runtime';
       return;
     }
     const it = selected[0], def = CZ.parts[it.part] || { name: it.part, tikz: it.part, pins: {} };
-    const field = (f: any, label: any, placeholder = '', mono = false) => ({ ...row(label, { kind: 'input' as const, value: it[f] || '', attrs: { type: 'text', id: 'czf-' + f, 'data-f': f, placeholder, spellcheck: 'false', ...(mono ? { class: 'mono' } : {}) } }), labelFor: 'czf-' + f });
+    const field = (f: any, label: any, placeholder = '', mono = false) => ({ ...row(label, { kind: 'input' as const, value: it[f] || '', attrs: { type: 'text', id: 'czf-' + f, 'data-f': f, placeholder: placeholder || (mono ? '' : 'Text, $math$'), spellcheck: 'false', ...(mono ? { class: 'mono' } : { 'data-tx': 'text' }) } }), labelFor: 'czf-' + f });
     const rows = [];
     if (it.p) {
       if (Object.keys(def.pins).some(name => name !== 'center')) rows.push(field('name', 'Name', 'Q1', true));

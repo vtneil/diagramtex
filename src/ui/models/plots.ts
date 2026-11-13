@@ -2,17 +2,17 @@ import { runtime as TD } from '../../runtime';
 import { panelServices } from '../../domain/plots.ts';
 const { CMAPS, usesExprOnly, usesDataOnly, GRID_KINDS, evalSeries, withVars, KINDS3, KINDS2, MARKS, KIND_DEF, newSeries, SERIES_COLORS } = panelServices;
 import type { FormRow } from '../forms';
-import { row, section, errors, help } from '../forms';
+import { row, section, errors, help, txAttrs } from '../forms';
 
 TD.panels = TD.panels || {};
 TD.panels.plot = {
     model(s) {
-      const I = (key: any, value: any, attrs = {}, type = 'text') => ({ kind: 'input' as const, value: value ?? '', attrs: { type, 'data-p': key, ...attrs } });
+      const I = (key: any, value: any, attrs = {}, type = 'text') => ({ kind: 'input' as const, value: value ?? '', attrs: txAttrs({ type, 'data-p': key, ...attrs }) });
       const S = (key: any, options: any, value: any) => ({ kind: 'select' as const, value, options, attrs: { 'data-p': key } });
       const C = (key: any, checked: any) => ({ kind: 'input' as const, value: '', checked: !!checked, attrs: { type: 'checkbox', 'data-p': key } });
       const is3 = s.dim === 3;
-      const axis = [row('Title', I('title', s.title)), row('x label', I('xlabel', s.xlabel)), row('y label', I('ylabel', s.ylabel))];
-      if (is3) axis.push(row('z label', I('zlabel', s.zlabel)));
+      const axis = [row('Title', I('title', s.title, { 'data-tx': 'text' })), row('x label', I('xlabel', s.xlabel, { 'data-tx': 'text' })), row('y label', I('ylabel', s.ylabel, { 'data-tx': 'text' }))];
+      if (is3) axis.push(row('z label', I('zlabel', s.zlabel, { 'data-tx': 'text' })));
       axis.push(row('x range', I('xmin', s.xmin, { placeholder: 'auto' }), I('xmax', s.xmax, { placeholder: 'auto' })), row('y range', I('ymin', s.ymin, { placeholder: 'auto' }), I('ymax', s.ymax, { placeholder: 'auto' })));
       if (is3) axis.push(row('z range', I('zmin', s.zmin, { placeholder: 'auto' }), I('zmax', s.zmax, { placeholder: 'auto' })), row('View (az, el)', I('view0', s.view?.[0] ?? 25, { step: '5' }, 'number'), I('view1', s.view?.[1] ?? 30, { step: '5' }, 'number')));
       else axis.push(row('Axis lines', S('axisLines', [['box', 'Box'], ['left', 'Left (arrows)'], ['middle', 'Middle (through 0)']], s.axisLines)));
@@ -21,7 +21,7 @@ TD.panels.plot = {
         row('Legend', S('legendPos', [['north east', 'Top right'], ['north west', 'Top left'], ['south east', 'Bottom right'], ['south west', 'Bottom left'], ['outer north east', 'Outside right'], ['none', 'Hidden']], s.legendPos)));
       const sections = [section('Axis', axis, 'sec')];
       s.series.forEach((ser: any, i: any) => {
-        const inp = (key: any, value: any, attrs = {}, type = 'text') => ({ kind: 'input' as const, value: value ?? '', attrs: { type, 'data-i': i, 'data-sk': key, ...attrs } });
+        const inp = (key: any, value: any, attrs = {}, type = 'text') => ({ kind: 'input' as const, value: value ?? '', attrs: txAttrs({ type, 'data-i': i, 'data-sk': key, ...attrs }) });
         const sel = (key: any, options: any, value: any) => ({ kind: 'select' as const, value, options, attrs: { 'data-i': i, 'data-sk': key } });
         const exprOnly = usesExprOnly(ser.kind), dataOnly = usesDataOnly(ser.kind), useExpr = exprOnly || (!dataOnly && ser.source !== 'data');
         const grid = GRID_KINDS.includes(ser.kind), result = evalSeries(withVars(ser, s.vars));
@@ -58,7 +58,7 @@ TD.panels.plot = {
         if (['line', 'area', 'ineq', 'between', 'xofy', 'param', 'polar', 'implicit', 'phase', 'curve3d'].includes(ser.kind)) rows.push(row('Dash', sel('dash', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']], ser.dash)));
         if (['line', 'scatter', 'scatter3d'].includes(ser.kind)) rows.push(row('Marker', sel('mark', MARKS, ser.mark)));
         if (ser.kind === 'bar') rows.push(row('Bar width', inp('barWidth', ser.barWidth, { min: '1' }, 'number'), { kind: 'text' as const, text: 'px', class: 'val' }));
-        rows.push(row('Legend', inp('legend', ser.legend, { placeholder: '(none)' })));
+        rows.push(row('Legend', inp('legend', ser.legend, { 'data-tx': 'text', placeholder: '(none)' })));
         sections.push({ ...section(`Series ${i + 1}`, rows), remove: { action: 'rmser', index: i, title: 'Remove series' } });
       });
       sections.push({ class: 'sec', rows: [{ kind: 'button' as const, class: 'wide', action: 'addser', label: '+ Add series' },

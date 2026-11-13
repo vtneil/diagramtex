@@ -840,8 +840,8 @@ import { runtime as TD } from '../runtime';
       const title = word ? 'Word box' : many ? 'Bits' : 'Bit box';
       const small = b ? boxTip(b).split(' · ').slice(0, 1).join('').replace(/^Word box/, `${num(it.w)} row${num(it.w) === 1 ? '' : 's'}`) : '';
       const flags = { ...row('Borders', ...[['l', 'L', 'Left'], ['r', 'R', 'Right'], ['t', 'T', 'Top'], ['b', 'B', 'Bottom']].map(([key, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-fb': key, class: sd[key] ? 'on' : '', title: title + ' line' } }))), controlClass: 'ctl seg-ctl ze-flags' };
-      show(title, small, [field(many ? `Bit ${E.sel.sub != null ? E.sel.sub + 1 : ''} label` : 'Label', 'text', label, { placeholder: 'none' }),
-        ...(many ? [field('All labels', 'all', it.text)] : []), numField(word ? 'Rows' : many ? 'Bits each' : 'Bits', 'w', it.w, '', { min: '0', step: '1' }), flags,
+      show(title, small, [field(many ? `Bit ${E.sel.sub != null ? E.sel.sub + 1 : ''} label` : 'Label', 'text', label, { 'data-tx': 'text', placeholder: 'none' }),
+        ...(many ? [field('All labels', 'all', it.text, { 'data-tx': 'text' })] : []), numField(word ? 'Rows' : many ? 'Bits each' : 'Bits', 'w', it.w, '', { min: '0', step: '1' }), flags,
         { ...row('Fill', texColour(TD.texColor.unwrap(F.getKey(it.opts, 'bgcolor')), { 'data-f': 'bg' }, { nullable: true, defaultLabel: 'None', title: 'Fill' })), controlClass: 'ctl tc' },
         field('Options', 'opts', it.opts || '', { placeholder: 'boxformatting=…' }), codeRow(code),
         note(multi ? `${nsel} fields selected${rr![1] > rr![0] ? `, rows ${rr![0] + 1}–${rr![1] + 1}: R or L groups the rows` : ''}. This panel edits the first.` : `Drag its ${word ? 'bottom edge to change its rows' : 'right edge to move the line between it and the next field (⌥ for this field alone)'}; double-click to edit its label. Drag across fields, ⇧-click or ⇧-arrow to select a range.`),
@@ -849,7 +849,7 @@ import { runtime as TD } from '../runtime';
     }
     if (g) {
       const gi = M.items[g.beg];
-      show('Word group', g.side === 'r' ? 'right' : 'left', [field('Label', 'gtext', gi.text, { placeholder: 'none' }), segments('Side', 'gside', g.side, [['l', 'Left'], ['r', 'Right']]),
+      show('Word group', g.side === 'r' ? 'right' : 'left', [field('Label', 'gtext', gi.text, { 'data-tx': 'text', placeholder: 'none' }), segments('Side', 'gside', g.side, [['l', 'Left'], ['r', 'Right']]),
         field('Options', 'gopts', gi.opts || '', { placeholder: 'rightcurly=., …' }), note('A ', { code: '\\\\' }, ' in the label breaks the line.'), actionRow('be', 'gdel', 'Delete Group')]); return;
     }
     const o = M.head.opts, c = L.cfg;

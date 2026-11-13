@@ -22,10 +22,10 @@ TD.panels.solid = {
           ...(s.columns ? [row('Columns', input('nx', s.nx, { title: 'Along the first variable' }), input('ny', s.ny, { title: 'Along the second variable' }))] : []),
           row('Solid colour', colour(0, s.solidColor)), row('Base colour', colour(1, s.baseColor))]),
         section('View', [view(s), row('Axes', check('axes', s.axes)),
-          ...(s.axes !== false ? [row('Axis labels', input('xlabel', s.xlabel), input('ylabel', s.ylabel), input('zlabel', s.zlabel))] : []),
+          ...(s.axes !== false ? [row('Axis labels', input('xlabel', s.xlabel, { 'data-tx': 'text' }), input('ylabel', s.ylabel, { 'data-tx': 'text' }), input('zlabel', s.zlabel, { 'data-tx': 'text' }))] : []),
           row('Show D', check('showBase', s.showBase)), row('Drop lines', check('dropLines', s.dropLines)), row('Hidden edges', check('hiddenEdges', s.hiddenEdges))], 'sec'),
-        section('Labels', [row('Solid', input('solidLabel', s.solidLabel, { placeholder: '(none)' })), row('Base', input('baseLabel', s.baseLabel, { placeholder: '(none)' })),
-          row('Top callout', input('topLabel', s.topLabel, { placeholder: '(none)' })), row('Bottom callout', input('bottomLabel', s.bottomLabel, { placeholder: '(none)' })),
+        section('Labels', [row('Solid', input('solidLabel', s.solidLabel, { 'data-tx': 'text', placeholder: '(none)' })), row('Base', input('baseLabel', s.baseLabel, { 'data-tx': 'text', placeholder: '(none)' })),
+          row('Top callout', input('topLabel', s.topLabel, { 'data-tx': 'text', placeholder: '(none)' })), row('Bottom callout', input('bottomLabel', s.bottomLabel, { 'data-tx': 'text', placeholder: '(none)' })),
           help('Surfaces use ', { code: p }, ', ', { code: q }, ', ', { code: 'pi' }, ', ', { code: '^' }, ', sin, cos, exp, sqrt… (radians). r(θ) uses ', { code: 't' }, '. Exported as plain TikZ.')], 'sec'),
       ] };
     },

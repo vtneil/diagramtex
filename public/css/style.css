@@ -17,6 +17,8 @@
   --gutter: #e9e6de;         /* empty space between status-bar groups */
   /* ink & pencil text */
   --ink: #1c1b19;
+  --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%231c1b19' stroke-width='1.3'/%3E%3C/svg%3E"); /* a <select>'s chevron, as .ddsel .chev draws it, in --ink */
+  --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%236f6c64' stroke-width='1.3'/%3E%3C/svg%3E"); /* the same in --pencil, when disabled */
   --ink-hover: #3a3833;
   --graphite: #5d5b55;
   --pencil: #6f6c64;         /* 4.7:1 on paper, 5.2:1 on the sheet: secondary text that still passes AA */
@@ -76,6 +78,8 @@
     --well: #1a1917;
     --gutter: #171614;
     --ink: #ecebe6;
+    --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%23ecebe6' stroke-width='1.3'/%3E%3C/svg%3E");
+    --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%2395928a' stroke-width='1.3'/%3E%3C/svg%3E");
     --ink-hover: #d4d2cb;
     --graphite: #b4b1a9;
     --pencil: #95928a;
@@ -104,6 +108,7 @@
     color-scheme: light;
     --sheet: #fffdf8; --sheet-raised: #ffffff; --well: #f3f0e8;
     --ink: #1c1b19; --ink-hover: #3a3833; --graphite: #5d5b55; --pencil: #6f6c64; --faint: #bab7ae;
+    --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%231c1b19' stroke-width='1.3'/%3E%3C/svg%3E"); --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%236f6c64' stroke-width='1.3'/%3E%3C/svg%3E");
     --rule: rgba(28, 27, 25, .12); --rule-soft: rgba(28, 27, 25, .07); --rule-strong: rgba(28, 27, 25, .24);
     --wash: rgba(28, 27, 25, .045); --wash-strong: rgba(28, 27, 25, .085); --wash-strong-solid: color-mix(in srgb, rgb(28, 27, 25) 8.5%, var(--sheet-raised));
     --redpen: #c8361d; --redpen-wash: rgba(200, 54, 29, .07); --bluepen: #2459a6;
@@ -147,6 +152,11 @@ button svg .f { fill: currentColor; }
 input, select, textarea { color: var(--ink); font: inherit; border-radius: var(--r); }
 input[type=checkbox], input[type=radio] { accent-color: var(--ink); width: 14px; height: 14px; margin: 0; }
 select { background: var(--sheet-raised); border: 1px solid var(--rule-strong); height: var(--ctl); padding: 0 6px; }
+/* Every drop-down shows the app's own chevron (the .ddsel one: 10px, 1.3 stroke, 8px from the right), never the
+   browser's. !important because many rules set the background shorthand, which would reset the picture. */
+select:not([multiple], [size]) { appearance: none; -webkit-appearance: none; padding-right: 24px !important;
+  background-image: var(--select-chev) !important; background-repeat: no-repeat !important; background-position: right 8px center !important; background-size: 10px 10px !important; }
+select:disabled:not([multiple], [size]) { background-image: var(--select-chev-off) !important; }
 kbd { font: 11px var(--font-mono); background: var(--well); border: 1px solid var(--rule); border-radius: var(--r-sm); padding: 0 4px; color: var(--graphite); }
 .sc { font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--pencil); }
 
@@ -627,6 +637,10 @@ body.mode-doc #layersWin { display: none; }
 #props .seg-ctl svg { width: 16px; height: 16px; }
 #props .seg-ctl[aria-label="Align"] button { width: 30px; }
 #props .seg-ctl[aria-label="Align"] svg { stroke-width: 2; stroke-linecap: butt; }
+/* icon choices that fill the field's width (a line's Route and Direction) */
+#props .seg-ctl.fill { flex: 1 1 auto; min-width: 0; }
+#props .seg-ctl.fill button { flex: 1 1 0; width: auto; min-width: 0; }
+#props .seg-ctl.fill svg { width: 18px; height: 18px; stroke-width: 1.5; }
 #props .ang { flex: none; display: inline-flex; align-items: center; font: 11px var(--font-mono); color: var(--pencil); cursor: text; }
 #props .ang input { width: 4.5ch; padding: 0 2px; height: 22px; border: 1px solid transparent; background: transparent; font: inherit; color: inherit; text-align: right; font-variant-numeric: tabular-nums; field-sizing: content; min-width: 2ch; -moz-appearance: textfield; }
 #props .ang input::-webkit-inner-spin-button, #props .ang input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -719,6 +733,8 @@ body.mode-doc #layersWin { display: none; }
 .ctx-item:not([disabled]):not(.dis) svg { color: var(--graphite); }
 .ctx-item svg .f { fill: currentColor; }
 .ctx-item .lb { flex: 1; }
+.ctx-item .ck { width: 16px; height: 16px; flex: none; margin-left: 8px; }
+.ctx-item:not([disabled]):not(.dis) svg.ck { color: var(--ink); } /* the picked one of a radio group (role menuitemradio) */
 .ctx-item kbd { background: none; border: 0; color: var(--pencil); padding: 0 0 0 16px; font: 12px var(--font-ui); letter-spacing: .04em; }
 .ctx-item .arr { color: var(--pencil); font-size: 16px; line-height: 1; }
 /* Submenu: clear of the parent menu (its 4px padding + 1px border + 4px gap), first row level with the
@@ -747,6 +763,36 @@ textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); r
 .tdd-btns button.danger:hover { filter: brightness(1.08); }
 @keyframes tdd-fade { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .td-dialog, .tdd-box { animation: none; } }
+/* Welcome tour (src/ui/services/tour.ts): the dialog sheet at one fixed size, a map of the window with the part
+   in question marked in blue pen, then the text; Skip | dots | Previous Next keep their places on every step */
+.tour-box { width: min(500px, 100%); padding: 24px 24px var(--tdd-inset); border-radius: calc(var(--r) + var(--tdd-inset)); }
+.tour-box h2 { font-size: 17px; }
+.tour-pic { display: flex; justify-content: center; padding: 18px 0; margin: -10px -10px 18px; background: var(--wash); border-radius: var(--r); } /* --tdd-inset from the top and sides: card radius − inset = --r, concentric with the card */
+.tour-map { width: 280px; height: 140px; display: block; }
+.tour-map .frame { fill: var(--paper); stroke: var(--rule-strong); }
+.tour-map .rule { fill: none; stroke: var(--rule-strong); }
+.tour-map .sheet { fill: var(--sheet-raised); stroke: var(--rule-strong); }
+.tour-map .ink { fill: none; stroke: var(--graphite); stroke-width: 1.4; stroke-linejoin: round; }
+.tour-map circle.ink { fill: var(--graphite); stroke: none; }
+.tour-map .rows { fill: none; stroke: var(--faint); stroke-width: 2; stroke-linecap: round; }
+.tour-map .zone { fill: transparent; stroke: none; }
+.tour-map .zone.on { fill: color-mix(in srgb, var(--bluepen) 14%, transparent); stroke: var(--bluepen); stroke-width: 1.5; }
+.tour-body { min-height: 104px; } /* the longest step, so the card and its buttons never move */
+.tour-body p { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--graphite); }
+.tour-body b { font-weight: 600; color: var(--ink); }
+.tour-body kbd { font-size: 12px; }
+.tour-body code { font: 13px var(--font-mono); color: var(--ink); }
+.tour-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 2px; }
+.tour-tags span { padding: 2px 8px; border-radius: var(--r-sm); background: var(--wash-strong); font-size: 13px; color: var(--ink); }
+.tour-box .tdd-btns { align-items: center; margin-top: 24px; margin-left: calc(var(--tdd-inset) - 24px); margin-right: calc(var(--tdd-inset) - 24px); } /* both corner buttons sit the inset from the side and the bottom, so they nest in the card's corners */
+.tour-box .tdd-btns button { min-width: 0; padding: 0 14px; height: 32px; font-size: 14px; }
+.tour-box .tdd-btns [data-t="next"] { min-width: 88px; }
+.tour-skip { margin-right: auto; border-color: transparent; background: transparent; color: var(--pencil); }
+.tour-skip:hover { background: var(--wash); color: var(--ink); }
+.tour-dots { display: flex; gap: 6px; margin-right: 8px; }
+.tour-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--rule-strong); transition: background .2s var(--ease); }
+.tour-dots i.on { background: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .tour-dots i { transition: none; } }
 
 /* a picture, .tex file or text dragged in from outside: where it will land */
 body.drop-over #stage, body.drop-over #docview { box-shadow: inset 0 0 0 2px var(--bluepen); }
@@ -908,7 +954,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 /* Flyouts: 8px of padding on every side, and the shell's corner is concentric with the 6px buttons inside it
    (6 + 8 = 14). Section titles are inset 4px so their text lines up with the drawings in the buttons. */
 .popover.flyout { width: auto; max-width: 420px; padding: 8px; border-radius: calc(var(--r) + 8px); }
-#insertPop.flyout, #fly-plots3d.flyout, #fly-blocks.flyout { width: 324px; }
+#insertPop.flyout, #fly-plots3d.flyout, #fly-figures3d.flyout, #fly-blocks.flyout { width: 324px; }
 #fly-phys .phy-domains { grid-template-columns: repeat(3, 1fr); }
 /* a long menu scrolls inside the window; the track stops short of the rounded corners */
 .popover.flyout { max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; }
@@ -921,7 +967,7 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 .pop-title .pop-warn { display: block; font-weight: 500; color: var(--redpen); }
 .flyout .pop-title:first-child { margin-top: 2px; }
 .sym-grid { display: grid; grid-template-columns: repeat(10, 36px); gap: 2px; }
-#fly-lines .sym-grid { grid-template-columns: repeat(9, 36px); }
+#fly-lines .sym-grid { grid-template-columns: repeat(7, 36px); }
 .sym-grid button { width: 36px; height: 32px; padding: 0; border: 1px solid transparent; border-radius: var(--r); background: transparent; color: var(--graphite); }
 .sym-grid button:hover { background: var(--wash-strong); color: var(--ink); }
 .sym-grid button svg { width: 34px; height: 24px; stroke-width: 1.2; }
@@ -992,6 +1038,17 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
 #props .swsel select, .cz-props .swsel select { padding-left: 30px; }
 .selmenu-group { padding: 8px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pencil); }
 @media (prefers-reduced-motion: reduce) { .selmenu { animation: none; } }
+/* a picture menu (select[data-pics]): tiles like the Blocks menu's, four across, with the same highlight states */
+.selmenu.pics:not([hidden]) { display: grid; } /* not over [hidden]: the grid must still close */
+.selmenu.pics { grid-template-columns: repeat(4, 76px); gap: 4px; max-width: none; }
+.selmenu.pics .selmenu-item { margin: 0; height: auto; min-height: 64px; flex-direction: column; justify-content: flex-start; gap: 4px; padding: 8px 2px 6px;
+  border: 1px solid var(--rule); background: var(--sheet); color: var(--graphite); font-size: 11px; line-height: 1.2; white-space: normal; text-align: center; }
+.selmenu.pics .selmenu-item.hi { background: var(--well); border-color: var(--rule-strong); color: var(--ink); }
+.selmenu.pics .selmenu-item.on { background: var(--wash-strong); border-color: var(--ink); color: var(--ink); }
+.selmenu.pics svg { width: 40px; height: 30px; flex: none; fill: none; stroke: var(--graphite); stroke-width: 1.2; stroke-linejoin: round; }
+.selmenu.pics svg .a1 { fill: #d6e2f2; stroke: var(--bluepen); }
+.selmenu.pics svg .d { stroke-dasharray: 1.6 1.4; }
+.selmenu.pics svg .h { fill: var(--sheet); }
 .ddpop { width: 200px; padding: 4px; }
 .ddpop > button { display: flex; align-items: center; gap: 8px; width: 100%; height: var(--ctl); padding: 0 8px; border-color: transparent; border-radius: var(--r); background: transparent; text-align: left; }
 .ddpop > button:hover { background: var(--well); border-color: transparent; }
@@ -1169,7 +1226,9 @@ input:disabled, input[readonly], select:disabled, textarea:disabled, textarea[re
 @media print { .tx-warn { text-decoration: none; } }
 
 /* maths in the LaTeX text fields, coloured as a LaTeX editor does (src/ui/services/texhighlight.ts): the field's own
-   text goes transparent and a copy laid over it carries the colour */
+   text goes transparent and a copy laid over it carries the colour; fields whose whole value is maths (data-tx="math")
+   keep the maths green at rest too (not when disabled or read-only, nor when \text{…} is in it: tx-mixed) */
+input[data-tx="math"]:not(:disabled, [readonly], .tx-mixed), textarea[data-tx="math"]:not(:disabled, [readonly], .tx-mixed) { color: var(--mathpen); }
 .tx-hl-on { color: transparent !important; caret-color: var(--ink); }
 .tx-hl-on::selection { color: transparent; }
 .tx-hl { position: absolute; margin: 0; border-style: solid; border-color: transparent; background: transparent; color: var(--ink);
@@ -1473,7 +1532,7 @@ body.mode-quick #inputBox,
 body.mode-quick #topbar > .group:not(.files-grp), body.mode-quick #docName, body.mode-quick #saveState,
 body.mode-quick #blockSel, body.mode-quick #classicSeg { display: none !important; }
 /* hidden but keeping their space, so the mode switch and the sidebar's engine box stay where they are in the other modes */
-body.mode-quick #topbar > .files-grp, body.mode-quick #files .panel-head, body.mode-quick #docList, body.mode-quick #binRow { visibility: hidden; }
+body.mode-quick #topbar > .files-grp, body.mode-quick #files .panel-head, body.mode-quick #docList, body.mode-quick #binRow, body.mode-quick #gridFlags { visibility: hidden; }
 .qk { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .qk-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .qk-label { font-size: 15px; font-weight: 600; color: var(--ink); }

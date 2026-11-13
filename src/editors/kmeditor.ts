@@ -50,7 +50,7 @@ import { runtime as TD } from '../runtime';
   function load(src: any) { const M = F.parse(src); M.raw = String(src || ''); M.dirty = false; return M; }
   const codeOf = (M: any) => (M.dirty ? F.write(M) : M.raw);
   const mathOf = (t: any) => { t = String(t || '').trim(); const m = /^\$([\s\S]*)\$$/.exec(t) || /^\\\(([\s\S]*)\\\)$/.exec(t); return m ? m[1] : t; };
-  const wrapMath = (t: any) => (String(t).trim() ? `$${t.trim()}$` : '');
+  const wrapMath = (t: any) => { const v = mathOf(t).trim(); return v ? `$${v}$` : ''; };
   const NEXT = { '0': '1', '1': '-', '-': '0' }, PREV = { '0': '-', '1': '0', '-': '1' };
   const VNAME: Record<string, any> = { '1': '1', '0': '0', '-': 'don’t care', '': 'empty' };
   const setOpt = (M: any, key: any, val: any) => {

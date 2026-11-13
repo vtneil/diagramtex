@@ -4,18 +4,18 @@ import { runtime as TD } from '../../runtime';
 // over it (same box, font and scroll, pointer-transparent) and the field's own text goes transparent;
 // the field keeps the caret, selection and spell-check underlines.
 (function () {
-  // the circuit and quantum editors: their label popups and the label fields in their side panels
-  const SUB = '.td-pop-ta, .cz-props input[data-f="l"], .cz-props input[data-f="ann"], .cz-props input[data-f="v"], .cz-props input[data-f="i"], .cz-props input[data-f="text"], .cz-props input[data-tx]';
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], ' + SUB;
+  // the block editors and panels: their label popups and any field tagged data-tx="math" or data-tx="text"
+  const SUB = '.td-pop-ta, [data-tx], .cz-props input[data-f="l"], .cz-props input[data-f="ann"], .cz-props input[data-f="v"], .cz-props input[data-f="i"], .cz-props input[data-f="text"]';
+  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], #qcModal .cz-code textarea, ' + SUB; // other panels' source: $…$ as in text
 
   // Maths spans of one line as [start, end) offsets, delimiters included. Same rules as the renderer
   // (TD.textSegments), except an unclosed $ runs to the end of the line, so maths lights up as it is typed.
   // In maths, the argument of these is text again: not green, and only text commands are suggested there
   // ($…$ inside it is maths once more)
   const TEXT_ARG = /^\\(text(?:bf|it|rm|sf|tt|up|sl|sc|md|normal)?|mbox|hbox|emph|textnormal)\s*\{/;
-  function spans(line: any) : any {
+  function spans(line: any, math = false) : any {
     const out = [];
-    let at = -1, display = false;
+    let at = math ? 0 : -1, display = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
       if (c === '\\' && at >= 0) {
@@ -28,17 +28,17 @@ import { runtime as TD } from '../../runtime';
             if (line[k] === '{') d++; else if (line[k] === '}' && --d === 0) break;
           }
           out.push([at, open + 1]);
-          for (const [x, y] of spans(line.slice(open + 1, Math.min(k, line.length)))) out.push([open + 1 + x, open + 1 + y]);
+          for (const [x, y] of spans(line.slice(open + 1, Math.min(k, line.length)), false)) out.push([open + 1 + x, open + 1 + y]);
           if (k >= line.length) return out; // still typing the argument: the caret is in text
           at = k; i = k; continue;
         }
       }
       if (c === '\\') {
-        if (at < 0 && line[i + 1] === '[') { at = i; display = true; i++; continue; }
-        if (at >= 0 && display && line[i + 1] === ']') { out.push([at, i + 2]); at = -1; i++; continue; }
+        if (!math && at < 0 && line[i + 1] === '[') { at = i; display = true; i++; continue; }
+        if (!math && at >= 0 && display && line[i + 1] === ']') { out.push([at, i + 2]); at = -1; i++; continue; }
         i++; continue;
       }
-      if (c !== '$') continue;
+      if (c !== '$' || math) continue;
       if (at < 0) { display = line[i + 1] === '$'; at = i; if (display) i++; continue; }
       if (display) { if (line[i + 1] === '$') { out.push([at, i + 2]); at = -1; i++; } continue; }
       out.push([at, i + 1]); at = -1;
@@ -46,19 +46,19 @@ import { runtime as TD } from '../../runtime';
     if (at >= 0) out.push([at, line.length, true]); // unclosed
     return out;
   }
-  // Is offset `pos` of `text` inside maths (after an opening $ that is not yet closed)?
-  function inMath(text: any, pos: any) {
-    const sp = spans(text.slice(text.lastIndexOf('\n', pos - 1) + 1, pos));
+  // Is offset `pos` of `text` inside maths (after an opening $ that is not yet closed, or in a data-tx="math" field outside \text{…})?
+  function inMath(text: any, pos: any, math = false) {
+    const sp = spans(text.slice(text.lastIndexOf('\n', pos - 1) + 1, pos), math);
     return !!(sp.length && sp[sp.length - 1][2]);
   }
 
   // Quantum circuit code (quantikz): what LaTeX sets as maths. quantikz cells are tikz-cd cells, so a
   // gate's text, \push, the meter and phase labels and bare text in a cell are maths; stick, slice and
   // group labels are text, where only $…$ is maths.
-  const QC_FIELDS = '#props textarea[data-p="src"]';
+  const QC_FIELDS = '#props [data-panel="qc"] textarea[data-p="src"], #qcModal .cz-code textarea';
   const isQc = (el: any) => el.matches(QC_FIELDS) || (el.id === 'inlineEditor' && el.classList.contains('code'));
-  const QC_MATH = new Set(['gate', 'phase', 'push', 'meter', 'meterD', 'measure', 'measuretab', 'qwbundle']);
-  const QC_TEXT = new Set(['lstick', 'rstick', 'midstick', 'slice', 'gategroup']);
+  const QC_MATH = new Set(['gate', 'phase', 'push', 'meter', 'metercw', 'meterD', 'inputD', 'measure', 'measuretab', 'qwbundle', 'phantomgate', 'hphantomgate', 'ghost']);
+  const QC_TEXT = new Set(['lstick', 'rstick', 'midstick', 'slice', 'gategroup', 'ground', 'trash', 'makeebit', 'gateinput', 'gateoutput']);
   // index just past the group opened at t[i] ({ or [), or the end of the text when it isn't closed
   function past(t: any, i: any) {
     const open = t[i], shut = open === '{' ? '}' : ']';
@@ -124,7 +124,7 @@ import { runtime as TD } from '../../runtime';
   // qc: true for quantikz code, 'all' for a field whose whole text is maths (data-tx="math": a quantikz gate label)
   function html(text: any, qc: any) {
     // a trailing newline still gets its line
-    if (qc === 'all') return text.split('\n').map((line: any) => paint(line, line ? [[0, line.length]] : [])).join('\n') + '\n';
+    if (qc === 'all') return text.split('\n').map((line: any) => paint(line, line ? spans(line, true) : [])).join('\n') + '\n';
     if (qc) return paint(text, qcSpans(text)) + '\n';
     return text.split('\n').map((line: any) => paint(line, spans(line))).join('\n') + '\n';
   }
@@ -182,6 +182,16 @@ import { runtime as TD } from '../../runtime';
 
   const isField = (t: any) => t && t.matches && t.matches(FIELDS);
   document.addEventListener('focusin', (e) => { if (isField(e.target)) attach(e.target); }, true);
+  document.addEventListener('input', (e) => { rest(e.target); if (ta === e.target && ov?.isConnected) sync(); else if (document.activeElement === e.target && isField(e.target)) attach(e.target); }, true);
+  // At rest (no overlay) a data-tx="math" field is green throughout by CSS; one holding \text{…} is marked
+  // tx-mixed and stays ink, so text never shows green
+  const TEXT_IN = /\\(text(?:bf|it|rm|sf|tt|up|sl|sc|md|normal)?|mbox|hbox|emph|textnormal)\s*\{/;
+  function rest(el: any) { if (el && el.dataset && el.dataset.tx === 'math') el.classList.toggle('tx-mixed', TEXT_IN.test(el.value)); }
+  document.addEventListener('td-value', (e) => rest(e.target), true);
+  document.addEventListener('focusout', (e) => setTimeout(() => rest(e.target), 0), true);
+  new MutationObserver((list) => {
+    for (const m of list) for (const n of m.addedNodes as any) if (n.nodeType === 1 && !(n instanceof SVGElement)) { if (n.matches('[data-tx="math"]')) rest(n); for (const f of n.querySelectorAll('[data-tx="math"]')) rest(f); }
+  }).observe(document.documentElement, { childList: true, subtree: true });
 
   // ----- brackets in maths -----
   // In maths (green), ( [ { type their closing partner after the caret, or wrap a selection in the pair;
@@ -190,7 +200,7 @@ import { runtime as TD } from '../../runtime';
   const PAIR: Record<string, any> = { '(': ')', '[': ']', '{': '}' }, SHUT: Record<string, any> = { ')': '(', ']': '[', '}': '{' };
   const BRACKET_FIELDS = FIELDS + ', #quickTex';
   function mathAt(el: any, pos: any) {
-    if (el.dataset.tx === 'math') return true;
+    if (el.dataset.tx === 'math') return inMath(el.value, pos, true);
     if (isQc(el)) return TD.texMath.qcSpans(el.value).some(([a, b]: any) => pos >= a && pos <= b);
     return inMath(el.value, pos);
   }

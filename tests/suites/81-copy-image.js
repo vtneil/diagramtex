@@ -12,8 +12,10 @@ T.test('copy image: the context menu offers Copy as Image and Save as Image, PNG
   const el = document.querySelector(`[data-id="${s.id}"]`), r = el.getBoundingClientRect();
   el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
   const menu = document.querySelector('#ctxMenu');
-  for (const a of ['copy-png', 'copy-svg', 'save-png', 'save-svg']) T.ok(menu.querySelector(`[data-ctx="img:${a}"]`), a);
+  for (const a of ['copy-png', 'copy-png-t', 'copy-svg', 'save-png', 'save-png-t', 'save-svg']) T.ok(menu.querySelector(`[data-ctx="img:${a}"]`), a);
   T.ok(/Copy as Image/.test(menu.textContent) && /Save as Image/.test(menu.textContent), 'labels');
+  T.eq(menu.querySelector('[data-ctx="img:copy-png"]').textContent.trim(), 'PNG (Background)');
+  T.eq(menu.querySelector('[data-ctx="img:save-png-t"]').textContent.trim(), 'PNG (Transparent)');
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 });
 
@@ -32,10 +34,17 @@ T.test('copy image: copies and saves the selection only', async () => {
     const svg = await blobText(await writes[0][0].getType('text/plain'));
     T.ok(svg.startsWith('<svg') || svg.includes('<svg'), 'SVG text on the clipboard');
     T.ok(!/<circle|<ellipse/.test(svg), 'only the selected shape');
+    T.ok(/@font-face[^}]*data:/.test(svg), 'the copied SVG embeds its maths fonts, as a saved one does');
 
     ctxClick('img:copy-png'); await until(() => writes.length > 1);
     const png = await writes[1][0].getType('image/png');
     T.eq(png.type, 'image/png'); T.ok(png.size > 100, 'PNG has content');
+    // corner pixel: white with a background, see-through when transparent
+    const corner = async (blob) => { const bm = await createImageBitmap(blob), c = new OffscreenCanvas(bm.width, bm.height), g = c.getContext('2d'); g.drawImage(bm, 0, 0); return [...g.getImageData(0, 0, 1, 1).data]; };
+    T.eq(await corner(png), [255, 255, 255, 255], 'PNG (Background) is white behind');
+    ctxClick('img:copy-png-t'); await until(() => writes.length > 2);
+    T.eq((await corner(await writes[2][0].getType('image/png')))[3], 0, 'PNG (Transparent) is see-through');
+    writes.pop();
 
     ctxClick('img:save-svg'); await until(() => saved.length);
     T.ok(/-selection\.svg$/.test(saved[0].fileName), 'SVG file name ' + saved[0].fileName);
@@ -44,6 +53,8 @@ T.test('copy image: copies and saves the selection only', async () => {
     ctxClick('img:save-png'); await until(() => saved.length > 1);
     T.ok(/-selection\.png$/.test(saved[1].fileName), 'PNG file name');
     T.eq(saved[1].type, 'image/png');
+    ctxClick('img:save-png-t'); await until(() => saved.length > 2);
+    T.ok(/-selection\.png$/.test(saved[2].fileName) && saved[2].type === 'image/png', 'transparent PNG saved');
 
     TD.state.sel = new Set(); const n = writes.length;
     ctxClick('img:copy-png'); await new Promise((r) => setTimeout(r, 50));

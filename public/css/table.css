@@ -1,0 +1,174 @@
+/* Table (src/ui/services/table.ts): a table to import, format and export, over whatever file is open (like
+   Quick). The workspace fills the room left of the floating right panel, which holds the table's settings:
+   a toolbar, the cell's text, the grid, and below it the preview and the LaTeX with the output actions.
+   The grid and the preview show content, so they stay on white in both appearances, like the canvas. */
+#tableview { display: none; }
+body.mode-table #tableview { display: block; flex: 1; order: 2; min-width: 0; position: relative; background: var(--paper); }
+body.mode-table #tools, body.mode-table #stage, body.mode-table #docview, body.mode-table #quick,
+body.mode-table #layersWin,
+body.mode-table #topbar > .group:not(.files-grp), body.mode-table #docName, body.mode-table #saveState,
+body.mode-table #blockSel, body.mode-table #classicSeg { display: none !important; }
+/* hidden but keeping their room, so the mode switch and the sidebar's engine box stay where they are */
+body.mode-table #topbar > .files-grp, body.mode-table #files .panel-head, body.mode-table #docList, body.mode-table #binRow, body.mode-table #gridFlags { visibility: hidden; }
+body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
+
+.tbw {
+  /* the grid is content (white in both appearances), so its headers keep the light look in dark too */
+  --tb-rule: #1c1b19; --tb-grid: #e3e0d8; --tb-head: #f6f4ef; --tb-head-ink: #6f6c64; --tb-head-rule: rgba(28, 27, 25, .12);
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px;
+  padding: 8px calc(var(--props-w) + 24px) 8px 16px;
+}
+/* ---- toolbar: one line at a 1400px window ---- */
+/* one line at a 1400px window; narrower, it scrolls sideways with no bar, like the top bar */
+.tb-bar, .tb-outbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+.tb-bar::-webkit-scrollbar, .tb-outbar::-webkit-scrollbar { display: none; }
+.tb-outbar > * { flex-shrink: 0; }
+.tb-outbar > .spacer, .tb-outbar > .tb-pk { flex-shrink: 1; }
+.tb-bar { flex: none; display: flex; align-items: center; gap: 4px; height: var(--ctl); }
+.tb-grp { display: flex; align-items: center; gap: 2px; flex: none; }
+.tb-grp + .tb-grp { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--rule); }
+.tb-grp.tb-seg + .tb-grp, .tb-grp + .tb-grp.tb-seg { border-left: 0; padding-left: 4px; }
+.tb-bar button.icon { border-color: transparent; background: transparent; color: var(--graphite); }
+.tb-bar button.icon:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
+.tb-bar button.icon.on { background: var(--wash-strong); color: var(--ink); }
+.tb-bar button.icon:disabled { color: var(--faint); }
+.tb-imp { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 10px; }
+.tb-imp svg { width: 16px; height: 16px; }
+.tb-glyph { display: inline-block; width: 16px; font: 600 15px/1 var(--font-ui); text-align: center; }
+.tb-mono { font-family: var(--font-mono); font-weight: 500; }
+.tb-preset { width: 112px; }
+.tb-bar .seg-ctl.tb-seg, .tb-bar .tb-seg { display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r); }
+.tb-bar .tb-seg button { width: 30px; height: 100%; padding: 0; border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); display: inline-flex; align-items: center; justify-content: center; }
+.tb-bar .tb-seg button:hover { background: var(--wash); color: var(--ink); }
+.tb-bar .tb-seg button.on { background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob); }
+.tb-bar .tb-seg svg { width: 16px; height: 16px; stroke-width: 2; stroke-linecap: butt; }
+.tb-split > button.icon { border-color: transparent; }
+.tb-split > .tb-more { width: 18px; border-color: transparent; background: transparent; color: var(--graphite); }
+.tb-split > .tb-more:hover { background: var(--wash); color: var(--ink); }
+.tb-split > .tb-more svg { width: 12px; height: 12px; }
+.tb-col .sw { stroke-linecap: butt; }
+
+/* ---- the cell's text ---- */
+.tb-fx { flex: none; display: flex; align-items: center; gap: 8px; }
+/* read-only, so tinted */
+.tb-ref { flex: none; min-width: 64px; height: var(--ctl); padding: 0 8px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r); background: var(--well); color: var(--graphite); font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+.tb-fxin { flex: 1; min-width: 0; height: var(--ctl); padding: 0 10px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); font: 13px var(--font-mono); }
+.tb-fxin:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 22%, transparent); }
+
+/* ---- the grid ---- */
+.tb-gridwrap { flex: 1 1 55%; min-height: 140px; position: relative; overflow: auto; border: 1px solid var(--rule-strong); border-radius: var(--r-lg); background: #fff; outline: none; }
+.tb-gridwrap:focus-visible { border-color: var(--bluepen); }
+.tb-grid { display: inline-block; min-width: 100%; }
+/* the table with a 28px band right of it and under it; hovering a band shows a dashed + strip that adds a column
+   (right) or a row (bottom) at the end */
+.tg-box { position: relative; display: inline-block; padding: 0 28px 28px 0; vertical-align: top; }
+.tg-add { position: absolute; display: grid; place-items: center; padding: 0; border: 1px dashed rgba(28, 27, 25, .24); border-radius: var(--r-sm); background: transparent; color: #5d5b55; opacity: 0; cursor: pointer; transition: opacity .16s var(--ease), background-color .16s var(--ease); }
+.tg-add svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.tg-addc { right: 3px; width: 22px; }
+.tg-addr { bottom: 3px; height: 22px; }
+.tg-add:hover, .tg-add:focus-visible { opacity: 1; background: rgba(28, 27, 25, .045); color: #1c1b19; }
+@media (prefers-reduced-motion: reduce) { .tg-add { transition: none; } }
+.tg { border-collapse: collapse; table-layout: auto; color: #1c1b19; font-family: var(--font-tex, 'Latin Modern Roman', serif); line-height: 1.25; }
+.tg col.tg-rhc { width: 40px; }
+.tg td { border: 1px solid var(--tb-grid); padding: 0; min-width: 48px; background-clip: padding-box; cursor: cell; }
+.tg td .tg-in { padding: calc(3px * var(--tb-stretch, 1)) 8px; min-height: calc(1.25em + 6px); white-space: pre; }
+.tg td .tg-in.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.tg td .katex { font-size: 1.05em; }
+.tg tr.hd-last td { border-bottom-color: #c9c5bb; }
+/* headers: chrome, in the UI's colours and type */
+.tg thead th, .tg .tg-rh { position: sticky; z-index: 2; background: var(--tb-head); color: var(--tb-head-ink); font: 500 11px var(--font-ui); font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; cursor: default; }
+.tg thead th { top: 0; height: 24px; border: 1px solid var(--tb-head-rule); border-top: 0; padding: 0 6px; }
+.tg .tg-rh { left: 0; width: 40px; min-width: 40px; border: 1px solid var(--tb-head-rule); border-left: 0; text-align: center; }
+.tg .tg-corner { left: 0; z-index: 3; }
+.tg thead th.on, .tg .tg-rh.on { background: #f8e9e5; color: #c8361d; }
+.tg-ch { position: relative; white-space: nowrap; }
+.tg-ch i { font-style: normal; margin-left: 6px; padding: 0 4px; border-radius: var(--r-sm); background: rgba(28, 27, 25, .085); color: #5d5b55; font: 10px var(--font-mono); }
+.tg-rs { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 1; }
+.tg-rs:hover { background: color-mix(in srgb, var(--bluepen) 30%, transparent); }
+/* the range (red pen) and its active cell */
+.tb-selbox { position: absolute; z-index: 1; pointer-events: none; border: 2px solid var(--redpen); border-radius: 2px; box-sizing: border-box; }
+.tb-selbox.multi { background: rgba(200, 54, 29, .06); }
+.tb-selbox[hidden] { display: none; }
+.tb-gridwrap:not(:focus-within) .tb-selbox { border-color: color-mix(in srgb, var(--redpen) 55%, transparent); }
+/* editing in place (blue pen: focus) */
+.tb-edit { position: absolute; z-index: 4; box-sizing: border-box; padding: 3px 7px; margin: 0; resize: none; overflow: hidden;
+  border: 2px solid var(--bluepen); border-radius: 2px; background: #fff; color: #1c1b19; font-family: var(--font-mono); line-height: 1.35; outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 20%, transparent), var(--shadow-pop); }
+
+/* ---- preview and LaTeX ---- */
+.tb-out { flex: 1 1 45%; min-height: 160px; display: flex; flex-direction: column; border: 1px solid var(--rule-strong); border-radius: var(--r-lg); background: var(--sheet); overflow: hidden; }
+.tb-outbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid var(--rule); }
+.tb-outbar .spacer { flex: 1; }
+.tb-tabs { flex: none; }
+.tb-tabs button { padding: 0 12px; }
+.tb-pk { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--font-mono); color: var(--pencil); }
+.tb-outbar button:not(.primary):not([role=tab]) { display: inline-flex; align-items: center; gap: 4px; }
+.tb-outbar button svg { width: 14px; height: 14px; }
+.tb-outbar .primary { min-width: 96px; }
+.tb-join { display: inline-flex; flex: none; }
+.tb-join > button { padding: 0 10px; }
+.tb-join > button:first-child { padding-left: 8px; }
+.tb-join > button + button { margin-left: -1px; }
+.tb-join > button:not(:first-child) { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.tb-join > button:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.tb-join > button:hover, .tb-join > button:focus-visible { position: relative; z-index: 1; }
+.tb-outbar select { width: 92px; }
+.tb-prev { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 16px; background: #fff; }
+.tb-prev > svg { margin: auto; flex: none; color: #000; }
+.tb-prev[hidden], .tb-code[hidden] { display: none; }
+.tb-code { flex: 1; min-height: 0; padding: 12px 16px 12px 0; overflow: auto; white-space: pre; user-select: text; cursor: text; background: var(--sheet-raised); font: 12px/1.6 var(--font-mono); color: var(--ink); }
+.tb-code .cl { position: relative; padding-left: 52px; width: max-content; min-width: 100%; box-sizing: border-box; }
+.tb-code .cl::before { content: attr(data-n); position: absolute; left: 0; width: 36px; text-align: right; color: var(--faint); user-select: none; }
+
+/* ---- the start screen: nothing imported yet ---- */
+.tb-start { position: absolute; inset: 0 calc(var(--props-w) + 24px) 0 16px; z-index: 5; display: flex; align-items: flex-start; justify-content: center; padding: 48px 0 24px; overflow: auto; background: var(--paper);
+  animation: tb-in .22s cubic-bezier(.3, .7, .2, 1); }
+.tb-start[hidden] { display: none; }
+@keyframes tb-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tb-start, .tb-ctx { animation: none; } }
+.tb-drop { width: min(640px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 24px; border: 1px dashed var(--rule-strong); border-radius: var(--r-xl); background: var(--sheet); }
+.tb-drop-t { font-size: 17px; font-weight: 600; color: var(--ink); }
+.tb-drop p { margin: 0; color: var(--graphite); font-size: 13px; line-height: 1.5; text-wrap: pretty; }
+.tb-drop code { font: 12px var(--font-mono); }
+.tb-paste { display: block; width: 100%; min-height: 160px; resize: vertical; padding: 10px 12px; border: 1px solid var(--rule-strong); background: var(--sheet-raised); font: 13px/1.5 var(--font-mono); }
+.tb-paste:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 22%, transparent); }
+.tb-drop-acts { display: flex; align-items: center; gap: 8px; }
+.tb-drop-acts .spacer { flex: 1; }
+.tb-drop-acts .primary { min-width: 96px; }
+.tb-drop .tb-drop-foot { font-size: 12px; color: var(--pencil); }
+#tableview.drop .tb-gridwrap, #tableview.drop .tb-drop { border-color: var(--bluepen); border-style: dashed; box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
+
+/* ---- menus ---- */
+.tb-ctx { min-width: 220px; }
+.tb-bgrid { display: grid; grid-template-columns: repeat(5, 28px); gap: 4px; padding: 4px; }
+.tb-bgrid button { color: var(--graphite); }
+.tb-bgrid button:hover { background: var(--well); color: var(--ink); }
+.tb-bgrid svg { width: 18px; height: 18px; }
+
+/* ---- the right panel in Table ---- */
+body.mode-table #props .tb-chk { display: inline-flex; align-items: center; gap: 6px; width: auto; color: var(--graphite); font-size: 12px; white-space: nowrap; }
+body.mode-table #props .tb-unit { flex: none; color: var(--pencil); font-size: 12px; }
+body.mode-table #props .ctl > input[type=number] { width: 64px; flex: none; }
+body.mode-table #props .ctl > input.tb-n { width: 52px; }
+body.mode-table #props .ctl > select { flex: 1; min-width: 0; }
+body.mode-table #props .tb-sub { margin: 4px 0 8px; padding-left: 8px; border-left: 2px solid var(--rule); }
+body.mode-table #props .tb-sub .row > label { width: 76px; }
+body.mode-table #props .seg-ctl[data-seg=colAl] button { width: 30px; }
+body.mode-table #props .seg-ctl[data-seg=unc] button, body.mode-table #props .seg-ctl[data-seg=booktabs] button, body.mode-table #props .seg-ctl[data-seg=capTop] button { width: auto; padding: 0 8px; font-size: 11px; }
+body.mode-table #props .seg-ctl[data-seg=booktabs] button:first-child { font-family: var(--font-mono); }
+.tb-swatch { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 10px 0 6px; flex: 1; min-width: 0; font: 12px var(--font-mono); color: var(--graphite); }
+/* beside a checkbox (Stripes): the chip alone, square, its value in the tooltip */
+.tb-swatch.bare { flex: none; width: var(--ctl); padding: 0; justify-content: center; margin-left: auto; }
+.tb-swatch.bare span { display: none; }
+.tb-swatch i { width: 16px; height: 16px; flex: none; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); }
+.tb-swatch i.none { background: linear-gradient(to top right, transparent calc(50% - .75px), var(--redpen) calc(50% - .75px), var(--redpen) calc(50% + .75px), transparent calc(50% + .75px)) !important; }
+.tb-more-sec { margin-top: 8px; }
+.tb-more-sec > summary { cursor: pointer; font-size: 12px; color: var(--graphite); padding: 4px 0; list-style: none; display: flex; align-items: center; gap: 6px; }
+.tb-more-sec > summary::-webkit-details-marker { display: none; }
+.tb-more-sec > summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .2s ease; }
+.tb-more-sec[open] > summary::before { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .tb-more-sec > summary::before { transition: none; } }
+body.mode-table #props .tb-keys .hint-line { font-size: 12px; line-height: 1.7; color: var(--pencil); }
+body.mode-table #props .tb-keys kbd { font-size: 10px; }
+body.mode-table #props .tb-floatctl { display: contents; }

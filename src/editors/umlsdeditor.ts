@@ -593,7 +593,7 @@ import { runtime as TD } from '../runtime';
     if (it && it.k === 'inst') {
       const uses = [...walk()].filter(([x]) => isArrow(x) && (x.a === it.v || x.b === it.v)).length;
       show(it.thread ? 'Thread' : 'Instance', `${it.v}${uses ? ` · ${uses} message${uses === 1 ? '' : 's'}` : ''}`, [
-        field('Text', 'itext', it.t, { placeholder: 'name:Class' }),
+        field('Text', 'itext', it.t, { 'data-tx': 'text', placeholder: 'name:Class' }),
         field('Name', 'ivar', it.v, { class: 'mono' }),
         note('The name messages refer to it by.'),
         segments('Kind', 'ikind', it.thread ? 'thread' : 'inst', [['inst', 'Instance', 'passive until called (\\newinst)'], ['thread', 'Thread', 'active from the start (\\newthread)']]),
@@ -611,8 +611,8 @@ import { runtime as TD } from '../runtime';
         sel('Kind', 'akind', k, [['call', 'Call'], ['callself', 'Self call'], ['messcall', 'Call without a return'], ['mess', 'Message']]),
         sel('From', 'afrom', it.a, vars),
         ...(self ? [] : [sel('To', 'ato', it.b, vars)]),
-        field('Text', 'atext', it.t, { placeholder: 'none' }),
-        ...(it.k === 'call' && it.env !== 'messcall' ? [field('Returns', 'aret', it.r || '', { placeholder: 'none' })] : []),
+        field('Text', 'atext', it.t, { 'data-tx': 'text', placeholder: 'none' }),
+        ...(it.k === 'call' && it.env !== 'messcall' ? [field('Returns', 'aret', it.r || '', { 'data-tx': 'text', placeholder: 'none' })] : []),
         it.k === 'mess'
           ? numField('Delay', 'adelay', it.o || '0', 'levels', { step: '1', min: '0' })
           : numField('Length', 'alevel', it.o || '1', 'levels', { step: '1', min: '0' }),
@@ -625,8 +625,8 @@ import { runtime as TD } from '../runtime';
     }
     if (it && it.k === 'block') {
       show('Block', `${it.body.length} item${it.body.length === 1 ? '' : 's'}`, [
-        field('Caption', 'btext', it.t, { placeholder: 'loop' }),
-        field('Comment', 'bcomm', it.c || '', { placeholder: 'e.g. [while running]' }),
+        field('Caption', 'btext', it.t, { 'data-tx': 'text', placeholder: 'loop' }),
+        field('Comment', 'bcomm', it.c || '', { 'data-tx': 'text', placeholder: 'e.g. [while running]' }),
         colorRow('Caption fill', 'bcol', it.o ? U.unbrace(it.o) : '', 'White'),
         moves(false),
         actions([{ text: 'Delete Block', attrs: { class: 'danger', 'data-ue': 'del' } }]),

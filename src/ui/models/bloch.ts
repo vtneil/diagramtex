@@ -35,7 +35,7 @@ TD.panels.bloch = {
         return true;
       }
       if (t.dataset.sl != null) {
-        const S = states(s.src)[+t.dataset.sl], v = t.value.trim(), L = S && S.label;
+        const S = states(s.src)[+t.dataset.sl], raw = t.value.trim(), m = /^\$([\s\S]*)\$$/.exec(raw) || /^\\\(([\s\S]*)\\\)$/.exec(raw), v = (m ? m[1] : raw).trim(), L = S && S.label;
         if (!S) return false;
         if (L && v) s.src = s.src.slice(0, L.bodyAt) + `$${v}$` + s.src.slice(L.bodyEnd);
         else if (L) s.src = cut(s.src, L.at, L.end);

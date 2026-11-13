@@ -52,7 +52,7 @@ import { runtime as TD } from '../runtime';
   const vOf = (name: any) => E.M.vertices.find((v: any) => v.name === name) || null;
   // maths in a label: \(x\) or $x$ → x; written back as \(x\)
   const mathOf = (t: any) => { t = F.unbrace(t || ''); const m = /^\\\(([\s\S]*)\\\)$/.exec(t) || /^\$([\s\S]*)\$$/.exec(t); return m ? m[1] : t; };
-  const wrapMath = (t: any) => (String(t).trim() ? `\\(${t.trim()}\\)` : '');
+  const wrapMath = (t: any) => { const v = mathOf(t).trim(); return v ? `\\(${v}\\)` : ''; };
   const val = (t: any) => (/[,=\]]/.test(t) ? `{${t}}` : t);
   // edge options by kind
   const isType = (it: any) => F.EDGE_TYPES.includes(it.trim());

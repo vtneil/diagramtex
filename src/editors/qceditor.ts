@@ -6,6 +6,7 @@ import { field, numField, note, texColour } from '../ui/editor-fields';
 import QceditorFrame from '../ui/editors/QceditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { GRID_ICON_PATHS } from '../ui/grid-icons';
 // Quantum circuit editor: the overlay that opens on a Quantum block. A palette of quantikz elements,
 // the circuit drawn by the canvas renderer over a grid of cells (wires × steps) where elements are
 // dropped, moved and linked, the selected cell's properties, and beside them the quantikz code, live
@@ -228,27 +229,7 @@ import { runtime as TD } from '../runtime';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  // wires and steps as three blocks; the one an action makes or removes stands out, offset in its pen.
-  // Insert: an accent block before (first) or after (last). Delete: the middle one, red, with a cross.
-  // three-bar icons: outlined bars are the wires (or steps) that stay, the filled one is the one that is
-  // inserted (offset to where it goes) or deleted (with a knocked-out ×); steps are the same, transposed
-  function blocks(at: any, del: any, cols: any) {
-    const P = (x: any, y: any) => { const r = (v: any) => +v.toFixed(2); return cols ? `${r(y)},${r(x)}` : `${r(x)},${r(y)}`; };
-    const box = (x: any, y: any, w: any, h: any) => `M${P(x, y)}L${P(x + w, y)}L${P(x + w, y + h)}L${P(x, y + h)}Z`;
-    const out = (x: any, y: any, w: any, h: any) => `<path class="qo" d="${box(x + 0.5, y + 0.5, w - 1, h - 1)}"/>`;
-    const solid = (d: any) => `<path class="qf" fill-rule="evenodd" d="${d}"/>`;
-    if (del) {
-      const a = 2.6, t = 0.75, k = Math.SQRT1_2, cx = 12, cy = 10;
-      const arm = [[t, a], [t, t], [a, t], [a, -t], [t, -t], [t, -a], [-t, -a], [-t, -t], [-a, -t], [-a, t], [-t, t], [-t, a]]
-        .map(([x, y], i) => `${i ? 'L' : 'M'}${P(cx + (x - y) * k, cy + (x + y) * k)}`).join('') + 'Z';
-      return out(1.5, 1, 12, 4) + out(1.5, 15, 12, 4) + solid(box(5.5, 6.5, 13, 7) + arm);
-    }
-    return [1.5, 8, 14.5].map((y, i) => (i === at ? solid(box(6.5, y, 12, 4)) : out(1.5, y, 12, 4))).join('');
-  }
-  const QI: Record<string, any> = {
-    above: blocks(0, false, false), below: blocks(2, false, false), rowdel: blocks(0, true, false),
-    before: blocks(0, false, true), after: blocks(2, false, true), coldel: blocks(0, true, true),
-  };
+  const QI = GRID_ICON_PATHS; // src/ui/grid-icons.ts, shared with the Table
   const qic = (k: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${QI[k]}</svg>`;
   mountFrame(root, QceditorFrame, { p0: qic('below'), p1: qic('after'), p2: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
@@ -897,7 +878,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- label editor
   // A floating box under the element (TD.input.popup): LaTeX or MathLive, as the Text input setting says.
   // Enter, Esc or clicking away finishes; the whole edit is one undo step.
-  const MATH_LABEL = new Set(['gate', 'phase', 'qwbundle']); // set as maths by quantikz; the rest are text
+  const MATH_LABEL = new Set(['gate', 'phase', 'qwbundle', 'push', 'meter', 'metercw', 'meterD', 'inputD', 'measure', 'measuretab', 'phantomgate', 'hphantomgate', 'ghost']); // set as maths by quantikz; the rest are text
   let L: any = null; // { r, c, pop }
   function editLabel(r: any, c: any) {
     const cell = at(r, c), m = cell && !cell.opaque && mainOf(cell);
@@ -1112,7 +1093,7 @@ import { runtime as TD } from '../runtime';
     const sections: FormSection[] = [{ ...section(cell.opaque ? 'Custom cell' : m ? NAMES[m.name] || m.name : cell.items.length ? 'Cell' : 'Empty cell', rows, 'sec'), summary: `wire ${b.r1 + 1} · step ${b.c1 + 1}` }];
     if (m) {
       const label = LABEL[m.name];
-      if (label) rows.push(field(label, 'arg', m.plain ? m.a[0] : m.a[0] || '', { 'data-tx': MATH_LABEL.has(m.name) ? 'math' : 'text' }));
+      if (label) rows.push(field(label, 'arg', m.plain ? m.a[0] : m.a[0] || '', m.name === 'permute' ? { class: 'mono', placeholder: '2, 1' } : { 'data-tx': MATH_LABEL.has(m.name) ? 'math' : 'text' }));
       if (SPANS.has(m.name)) rows.push(num('Wires', 'span', spanOf(m)));
       if (COLOURED.has(m.name)) { const st = styleOf(m); if (FILLED.has(m.name)) rows.push(hueSel('Fill', 'cfill', st.fill || '', true)); rows.push(hueSel(FILLED.has(m.name) ? 'Line' : 'Colour', 'cdraw', st.draw || st.color || '', false)); }
       if (m.name === 'gate') { const z = gateSize(m); rows.push(dec('Min width', 'gw', z.w)); if (spanOf(m) <= 1) rows.push(dec('Min height', 'gh', z.h)); }
