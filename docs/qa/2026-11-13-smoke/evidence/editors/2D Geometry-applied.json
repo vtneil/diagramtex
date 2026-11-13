@@ -1,0 +1,9 @@
+[
+  {
+    "type": "geo2d",
+    "x": 190,
+    "y": 120,
+    "src": "\\begin{tikzpicture}\n  % the vector v = (\\vlen; \\vang\u00b0): drag Q, or change the values\n  \\pgfmathsetmacro{\\vlen}{5}\n  \\pgfmathsetmacro{\\vang}{53.17}\n  \\pgfmathsetmacro{\\dx}{\\vlen*cos(\\vang)}\n  \\pgfmathsetmacro{\\dy}{\\vlen*sin(\\vang)}\n  \\draw[step=1, very thin, black!15] (-1,-1) grid (4,4);\n  \\draw[-stealth] (-1,0) -- (4.4,0) node[right]{$x$};\n  \\draw[-stealth] (0,-1) -- (0,4.4) node[above]{$y$};\n  \\foreach \\x in {1,...,3} \\draw (\\x,2pt) -- (\\x,-2pt) node[below]{$\\x$};\n  \\foreach \\y in {1,...,3} \\draw (2pt,\\y) -- (-2pt,\\y) node[left]{$\\y$};\n  \\coordinate (P) at (0,0);\n  \\coordinate (Q) at (\\vang:\\vlen);\n  \\coordinate (R) at (Q |- P);\n  \\draw[dashed, gray] (Q) -- (R) node[midway, right]{$\\Delta y = \\pgfmathprintnumber[fixed,precision=2]{\\dy}$};\n  \\path (P) -- (R) node[pos=0.62, above]{$\\Delta x = \\pgfmathprintnumber[fixed,precision=2]{\\dx}$};\n  \\pic[draw, \"$\\theta$\", angle radius=8mm] {angle = R--P--Q};\n  \\draw[-stealth, thick, blue] (P) -- (Q) node[midway, above left]{$\\vec{v}$};\n  \\fill (P) circle (1.5pt) node[below left]{$P$};\n  \\fill (Q) circle (1.5pt) node[above right]{$Q$};\n\\end{tikzpicture}",
+    "id": "3wxx73yg"
+  }
+]

@@ -1,0 +1,9 @@
+[
+  {
+    "type": "physics",
+    "x": 190,
+    "y": 120,
+    "src": "\\physics{optics}\n% a converging lens forms a real, inverted image: drag the object or the focus\n\\axis(-5, 9)\n\\object[h=1.2, label=$O$](-3.5)\n\\lens[f=3, h=3.4, label=$L$](0)",
+    "id": "ig7bmg9k"
+  }
+]

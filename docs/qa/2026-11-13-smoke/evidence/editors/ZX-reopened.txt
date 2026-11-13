@@ -1,0 +1,16 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Add a row at the bottom" [ref=e10901]
+- button "Add a column at the end" [ref=e10902]
+- button "Delete the selection (⌫)" [ref=e10903]
+- button "Undo (⌘Z)" [disabled, ref=e10904]
+- button "Redo (⇧⌘Z)" [disabled, ref=e10905]
+- button "Fit the diagram in view (0)" [ref=e10906]
+- button "Cancel" [ref=e10907]
+- button "Done" [ref=e10908]
+- searchbox "Search the palette" [ref=e10911]
+- textbox "e.g. row sep=3mm" [ref=e10912]
+- button "Copy" [ref=e10909]
+- textbox "zx-calculus code" [ref=e10910]: \begin{ZX}
+  \zxN{} \rar &[\zxwCol] \zxZ{\gamma} \ar[r,o',H] \ar[r,o.] &[\zxHCol] \zxX-{\beta} \rar &[\zxwCol] \zxN{}
+\end{ZX}

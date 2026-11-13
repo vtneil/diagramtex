@@ -1,0 +1,10 @@
+[
+  {
+    "type": "xy",
+    "x": 190,
+    "y": 120,
+    "src": "\\xymatrix{\n  A \\ar[r]^{f} \\ar[d]_{g} & B \\ar[d]^{h} \\\\\n  C \\ar[r]_{k}             & D\n}",
+    "color": "#000000",
+    "id": "gq2u6z4s"
+  }
+]

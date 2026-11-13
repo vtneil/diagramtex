@@ -1,0 +1,30 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selected group (⌫)" [disabled, ref=e11696]
+- button "Undo (⌘Z)" [disabled, ref=e11697]
+- button "Redo (⇧⌘Z)" [disabled, ref=e11698]
+- button "Fit the map in view (F)" [ref=e11699]
+- button "Cancel" [ref=e11700]
+- button "Done" [ref=e11701]
+- searchbox "Search the palette" [ref=e11704]
+- textbox "X_0" [ref=e11705]: E
+- textbox "X_1" [ref=e11706]: C
+- textbox "X_2" [ref=e11707]: B
+- textbox "X_3" [ref=e11708]: A
+- button "Sides" [ref=e11713]
+- button "Corner" [ref=e11714]
+- button "Coloured" [ref=e11715]
+- button "Outlined" [ref=e11716]
+- button "1s" [ref=e11717]
+- button "0s" [ref=e11718]
+- button [ref=e11709]
+- button [ref=e11710]
+- button "Find Groups" [ref=e11711]
+- button "Remove Groups" [ref=e11712]
+- button "Copy" [ref=e11702]
+- textbox "karnaugh-map code" [ref=e11703]: \begin{karnaugh-map}[4][4][1][$E$][$C$][$B$][$A$]
+  \minterms{0,2,5,7,8,10,13,15}
+  \autoterms[0]
+  \implicant{5}{15}
+  \implicantcorner
+\end{karnaugh-map}

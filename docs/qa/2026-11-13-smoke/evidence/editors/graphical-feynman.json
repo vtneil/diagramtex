@@ -1,0 +1,11 @@
+{
+  "type": "feynman",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\begin{feynman}\n  \\vertex (i1) at (0,1) {\\(e^-\\)};\n  \\vertex (i2) at (0,-1) {\\(e^+\\)};\n  \\vertex (a) at (1.25,0);\n  \\vertex (b) at (3.25,0);\n  \\vertex (f1) at (4.5,1) {\\(\\mu^-\\)};\n  \\vertex (f2) at (4.5,-1) {\\(\\mu^+\\)};\n  \\diagram* {\n    (i1) -- [fermion] (a) -- [fermion] (i2),\n    (a) -- [photon, edge label=\\(\\gamma\\), momentum'=\\(q\\)] (b),\n    (f2) -- [fermion] (b) -- [fermion] (f1),\n  };\n\\end{feynman}",
+  "after": "\\begin{feynman}\n  \\vertex (i1) at (0,1) {\\(e^-\\)};\n  \\vertex (i2) at (0,-1) {\\(e^+\\)};\n  \\vertex (a) at (1.25,0);\n  \\vertex (b) at (3.25,0);\n  \\vertex (f1) at (4.5,1) {\\(\\mu^-\\)};\n  \\vertex (f2) at (4.5,-1) {\\(\\mu^+\\)};\n  \\vertex [dot] (v1) at (3.25,-1.25) {};\n  \\diagram* {\n    (i1) -- [fermion] (a) -- [fermion] (i2),\n    (a) -- [photon, edge label=\\(\\gamma\\), momentum'=\\(q\\)] (b),\n    (f2) -- [fermion] (b) -- [fermion] (f1),\n  };\n\\end{feynman}",
+  "undone": "\\begin{feynman}\n  \\vertex (i1) at (0,1) {\\(e^-\\)};\n  \\vertex (i2) at (0,-1) {\\(e^+\\)};\n  \\vertex (a) at (1.25,0);\n  \\vertex (b) at (3.25,0);\n  \\vertex (f1) at (4.5,1) {\\(\\mu^-\\)};\n  \\vertex (f2) at (4.5,-1) {\\(\\mu^+\\)};\n  \\diagram* {\n    (i1) -- [fermion] (a) -- [fermion] (i2),\n    (a) -- [photon, edge label=\\(\\gamma\\), momentum'=\\(q\\)] (b),\n    (f2) -- [fermion] (b) -- [fermion] (f1),\n  };\n\\end{feynman}",
+  "redone": "\\begin{feynman}\n  \\vertex (i1) at (0,1) {\\(e^-\\)};\n  \\vertex (i2) at (0,-1) {\\(e^+\\)};\n  \\vertex (a) at (1.25,0);\n  \\vertex (b) at (3.25,0);\n  \\vertex (f1) at (4.5,1) {\\(\\mu^-\\)};\n  \\vertex (f2) at (4.5,-1) {\\(\\mu^+\\)};\n  \\vertex [dot] (v1) at (3.25,-1.25) {};\n  \\diagram* {\n    (i1) -- [fermion] (a) -- [fermion] (i2),\n    (a) -- [photon, edge label=\\(\\gamma\\), momentum'=\\(q\\)] (b),\n    (f2) -- [fermion] (b) -- [fermion] (f1),\n  };\n\\end{feynman}"
+}

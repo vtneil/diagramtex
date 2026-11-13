@@ -1,0 +1,11 @@
+{
+  "type": "cd",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\begin{tikzcd}\n  A \\arrow[r, \"f\"] \\arrow[d, \"g\"'] & B \\arrow[d, \"h\"] \\\\\n  C \\arrow[r, \"k\"']                & D\n\\end{tikzcd}",
+  "after": "\\begin{tikzcd}\n  A \\arrow[r, \"f\"] \\arrow[d, \"g\"'] & B \\arrow[d, \"h\"] \\\\\n  C \\arrow[r, \"k\"']                & D \\\\\n                                   & X\n\\end{tikzcd}",
+  "undone": "\\begin{tikzcd}\n  A \\arrow[r, \"f\"] \\arrow[d, \"g\"'] & B \\arrow[d, \"h\"] \\\\\n  C \\arrow[r, \"k\"']                & D\n\\end{tikzcd}",
+  "redone": "\\begin{tikzcd}\n  A \\arrow[r, \"f\"] \\arrow[d, \"g\"'] & B \\arrow[d, \"h\"] \\\\\n  C \\arrow[r, \"k\"']                & D \\\\\n                                   & X\n\\end{tikzcd}"
+}

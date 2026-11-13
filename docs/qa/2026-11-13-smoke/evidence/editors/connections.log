@@ -1,0 +1,4 @@
+PASS circuit: wire between pins, move capacitor, attached wire follows
+PASS geo2d drag a writable point, exact Undo/Redo
+PASS geo3d drag a writable point, exact Undo/Redo
+errors []

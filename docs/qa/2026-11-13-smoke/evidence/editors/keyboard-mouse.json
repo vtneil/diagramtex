@@ -1,0 +1,5 @@
+{
+  "focus": "<body class=\"no-files cz-open\">\n  <!--[--><!---->\n\n  <div id=\"phoneWall\" role=\"alertdialog\" aria-modal=\"true\" aria-labelledby=\"phoneWallTitle\" aria-describedby=\"phoneWallText\">\n    <img src=\"icons/icon.svg\" width=\"72\" height=\"72\" alt=\"\">\n    <h1 id=\"phoneWallT",
+  "armed": true,
+  "tip": "Hadamard: click a cell to place it. Esc when done."
+}

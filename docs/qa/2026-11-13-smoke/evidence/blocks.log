@@ -1,0 +1,16 @@
+✓ geo3d: double-click opens, Escape closes
+✓ geo2d: double-click opens, Escape closes
+✓ qc: double-click opens, Escape closes
+✓ forest: double-click opens, Escape closes
+✓ zx: double-click opens, Escape closes
+✓ feynman: double-click opens, Escape closes
+✓ timing: double-click opens, Escape closes
+✓ automata: double-click opens, Escape closes
+✓ kmap: double-click opens, Escape closes
+✓ bytefield: double-click opens, Escape closes
+✓ chemfig: double-click opens, Escape closes
+✓ cd: double-click opens, Escape closes
+✓ xy: double-click opens, Escape closes
+✓ cz: double-click opens, Escape closes
+✓ physics: double-click opens, Escape closes
+15 block editors passed (public)

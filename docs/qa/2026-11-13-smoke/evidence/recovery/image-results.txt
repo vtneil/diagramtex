@@ -1,0 +1,2 @@
+PASS: SVG image import; rotation to 45 degrees; duplicate; Undo; reload preserves exact image shape, source and geometry.
+File open via native picker: browser_element_not_interactable: Cannot upload: its file picker has no file input. Not an application defect conclusion.

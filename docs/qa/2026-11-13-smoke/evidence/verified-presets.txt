@@ -1,0 +1,17 @@
+Function {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Line {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Scatter {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Area {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Bar {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Pie {'result': '["pie"]', 'origin': 'http://127.0.0.1:5174/'}
+Contour {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Heatmap {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Surface {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Parametric {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Space curve {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Scatter 3D {'result': '["plot"]', 'origin': 'http://127.0.0.1:5174/'}
+Solid region {'result': '["solid"]', 'origin': 'http://127.0.0.1:5174/'}
+Revolution {'result': '["revolve"]', 'origin': 'http://127.0.0.1:5174/'}
+Solid {'result': '["solid"]', 'origin': 'http://127.0.0.1:5174/'}
+done
+Correction: exact Solid button {'result': '["solid","prim3d"]', 'origin': 'http://127.0.0.1:5174/'}

@@ -1,5 +1,5 @@
 // Usage: node scripts/gen-texcommands.js
-// Build js/texcommands.js: every command KaTeX / Temml know, with how many {} arguments it needs,
+// Build src/domain/texcommands.ts: every command KaTeX / Temml know, with how many {} arguments it needs,
 // whether it works in maths or only in text mode, and which engines support it.
 const fs = require('fs');
 const path = require('path');
@@ -38,9 +38,8 @@ for (const n of [...names].sort()) {
 const rows = out.map((r) => [r.n, r.k ?? -1, r.t ?? -1, r.tx ? 1 : 0]);
 const body = `// Generated from vendor/katex and vendor/temml by scripts/gen-texcommands.js. Do not edit by hand.
 // Each row: [name, KaTeX arity (-1 = unsupported), Temml arity (-1 = unsupported), text mode only (1)]
-window.TD = window.TD || {};
-window.TD.TEX_COMMANDS = ${JSON.stringify(rows)};
+TD.TEX_COMMANDS = ${JSON.stringify(rows)};
 `;
-fs.writeFileSync(path.join(ROOT, 'js/texcommands.js'), body);
+fs.writeFileSync(path.join(ROOT, '../src/domain/texcommands.ts'), "import { runtime as TD } from '../runtime';\n" + body);
 const both = rows.filter((r) => r[1] >= 0 && r[2] >= 0).length;
 console.log(`candidates ${names.size}, usable ${rows.length} (both ${both}, KaTeX only ${rows.filter((r) => r[1] >= 0 && r[2] < 0).length}, Temml only ${rows.filter((r) => r[1] < 0 && r[2] >= 0).length}), text-only ${rows.filter((r) => r[3]).length}`);

@@ -1,4 +1,4 @@
-/* Karnaugh map editor (js/kmeditor.js): the frame, panel and palette pieces come from the cz-* and qe-* rules */
+/* Karnaugh map editor (src/editors/kmeditor.ts): the frame, panel and palette pieces come from the cz-* and qe-* rules */
 #kmModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
 /* palette: a cell with its value, and a group over two cells */
 .km-vmini rect { fill: var(--qe-paper); stroke: currentColor; stroke-width: 1; }

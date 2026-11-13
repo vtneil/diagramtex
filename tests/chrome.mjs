@@ -41,12 +41,14 @@ export async function launch(url) {
   const port = new URL(wsUrl).port;
   const pg = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((t) => t.type === 'page');
   const ws = new WebSocket(pg.webSocketDebuggerUrl);
-  let id = 0; const pending = new Map(); const logs = [];
+  let id = 0; const pending = new Map(); const logs = [], warnings = [];
   ws.onmessage = (m) => {
     const d = JSON.parse(m.data);
     if (d.id && pending.has(d.id)) { pending.get(d.id)(d); pending.delete(d.id); }
     if (d.method === 'Runtime.exceptionThrown') logs.push('exception: ' + (d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text));
     if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') logs.push('console.error: ' + d.params.args.map((a) => a.value ?? a.description).join(' '));
+    // warnings do not fail a run; they are listed so Svelte dev-mode warnings are seen
+    if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'warning') warnings.push(d.params.args.map((a) => a.value ?? a.description).join(' '));
   };
   await new Promise((r) => (ws.onopen = r));
   // a call answered by nothing (the page navigated under it) gives up after `ms`
@@ -70,5 +72,13 @@ export async function launch(url) {
     await new Promise((r) => setTimeout(r, 100));
   }
   await ev('if (TD.ready) await TD.ready; return true', 30000);
-  return { ev, send, logs, close: () => { try { ws.close(); } catch (e) { /* closed */ } proc.kill(); setTimeout(() => fs.rmSync(prof, { recursive: true, force: true }), 500); } };
+  return { ev, send, logs, warnings, close: () => {
+    // Cancel outstanding protocol timeouts as well as the browser. Otherwise a
+    // completed visual matrix can keep Node alive until an abandoned call expires.
+    for (const resolve of pending.values()) resolve({ result: { exceptionDetails: { text: 'browser closed' } } });
+    pending.clear();
+    try { ws.close(); } catch (e) { /* closed */ }
+    proc.kill();
+    setTimeout(() => fs.rmSync(prof, { recursive: true, force: true }), 500);
+  } };
 }

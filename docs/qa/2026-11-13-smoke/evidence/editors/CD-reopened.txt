@@ -1,0 +1,31 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Add a row at the bottom" [ref=e10188]
+- button "Add a column at the end" [ref=e10189]
+- button "Delete the selection (⌫)" [ref=e10190]
+- button "Undo (⌘Z)" [disabled, ref=e10191]
+- button "Redo (⇧⌘Z)" [disabled, ref=e10192]
+- button "Fit the diagram in view (0)" [ref=e10193]
+- button "Cancel" [ref=e10194]
+- button "Done" [ref=e10195]
+- searchbox "Search the palette" [ref=e10198]
+- combobox [expanded=false, ref=e10199]: Normal
+  - option "Normal" [selected, ref=e10202]
+  - option "Tiny" [ref=e10203]
+  - option "Small" [ref=e10204]
+  - option "Scriptsize" [ref=e10205]
+  - option "Large" [ref=e10206]
+  - option "Huge" [ref=e10207]
+- combobox [expanded=false, ref=e10200]: Normal
+  - option "Normal" [selected, ref=e10208]
+  - option "Tiny" [ref=e10209]
+  - option "Small" [ref=e10210]
+  - option "Scriptsize" [ref=e10211]
+  - option "Large" [ref=e10212]
+  - option "Huge" [ref=e10213]
+- textbox "e.g. row sep=large" [ref=e10201]
+- button "Copy" [ref=e10196]
+- textbox "tikz-cd code" [ref=e10197]: \begin{tikzcd}
+  E \arrow[r, "f"] \arrow[d, "g"'] & B \arrow[d, "h"] \\
+  C \arrow[r, "k"']                & D
+\end{tikzcd}

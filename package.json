@@ -1,12 +1,27 @@
 {
   "name": "diagramtex",
   "private": true,
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "build": "node scripts/build.js",
     "deploy": "wrangler deploy",
-    "preview": "wrangler preview"
+    "preview": "wrangler preview",
+    "compile": "node scripts/compile.js",
+    "dev": "node scripts/dev.js",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "pretest": "npm run check",
+    "test": "node tests/run.mjs",
+    "test:ux": "node tests/bench.mjs"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "@jridgewell/remapping": "^2.3.5",
+    "esbuild": "^0.28.2",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.8",
+    "typescript": "^6.0.3",
+    "wrangler": "4.161.0"
   }
 }

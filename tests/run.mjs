@@ -5,20 +5,30 @@
 //   node tests/run.mjs import          only tests whose name contains "import"
 //   node tests/run.mjs --update        rewrite golden files from the current output (review the diff!)
 //   node tests/run.mjs --no-tex        skip the pdflatex compiles
+//   node tests/run.mjs --no-cache      compile every document again instead of trusting the pdflatex cache
+//   node tests/run.mjs --dist          test the production build in dist/ (run node scripts/build.js first);
+//                                      the bare `dist` works too and is never taken as a filter
+//
+// A golden file a test asks for that does not exist yet fails the test unless --update is given. A filter that matches
+// no test fails the run. An unfiltered run lists golden files no test refers to any more.
 //
 // Exit code 0 when every test passed. Needs Chrome (or CHROME=/path) and, for compiles, pdflatex on PATH.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { serve, launch } from './chrome.mjs';
+import { ROOT, APP_DIR, args, positional, flag, prepare } from './args.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
-const ROOT = path.resolve(HERE, '..');
-const args = process.argv.slice(2);
-const UPDATE = args.includes('--update'), NOTEX = args.includes('--no-tex');
-const filter = args.find((a) => !a.startsWith('--')) || '';
+const FLAGS = ['--update', '--no-tex', '--no-cache', '--dist'];
+const unknown = args.filter((a) => a.startsWith('--') && !FLAGS.includes(a));
+if (unknown.length) { console.error(`unknown option ${unknown.join(' ')} (known: ${FLAGS.join(' ')})`); process.exit(2); }
+if (positional.length > 1) { console.error(`one test filter at most, got: ${positional.join(' ')}`); process.exit(2); }
+const UPDATE = flag('--update'), NOTEX = flag('--no-tex'), NOCACHE = flag('--no-cache');
+const filter = positional[0] || '';
+await prepare();
 const GOLD = path.join(HERE, 'golden');
 
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
@@ -27,13 +37,19 @@ const fixtures = Object.fromEntries(walk(path.join(HERE, 'fixtures')).filter((f)
 const suites = fs.readdirSync(path.join(HERE, 'suites')).filter((f) => f.endsWith('.js')).sort()
   .map((f) => fs.readFileSync(path.join(HERE, 'suites', f), 'utf8'));
 
-// pdflatex, cached by content so unchanged documents are not compiled again
+// pdflatex, cached by the document and the pdflatex version (its first --version line, which names the TeX
+// distribution), so unchanged documents are not compiled again until TeX itself changes. --no-cache ignores it.
 const CACHE = path.join(os.tmpdir(), 'dtx-tex-cache');
 fs.mkdirSync(CACHE, { recursive: true });
+let TEXVERSION = '';
+if (!NOTEX) {
+  try { TEXVERSION = execFileSync('pdflatex', ['--version'], { encoding: 'utf8' }).split('\n')[0].trim(); }
+  catch (e) { TEXVERSION = 'pdflatex unavailable'; }
+}
 function compile(src) {
-  const h = crypto.createHash('sha1').update(src).digest('hex');
+  const h = crypto.createHash('sha1').update(TEXVERSION + '\0' + src).digest('hex');
   const ok = path.join(CACHE, h + '.ok');
-  if (fs.existsSync(ok)) return Promise.resolve({ ok: true, cached: true });
+  if (!NOCACHE && fs.existsSync(ok)) return Promise.resolve({ ok: true, cached: true });
   const dir = fs.mkdtempSync(path.join(CACHE, 'run-'));
   fs.writeFileSync(path.join(dir, 'doc.tex'), src);
   return new Promise((res) => {
@@ -55,7 +71,7 @@ async function pool(items, n, fn) {
   return out;
 }
 
-const srv = await serve(path.join(ROOT, 'public'));
+const srv = await serve(APP_DIR);
 const b = await launch(`http://127.0.0.1:${srv.port}/`);
 let results;
 try {
@@ -67,16 +83,19 @@ try {
   results = await b.ev(`return await T.run(${JSON.stringify(filter)});`);
 } finally { b.close(); srv.close(); }
 
+if (!results.length) { console.error(`no test matches the filter ${JSON.stringify(filter)}`); process.exit(1); }
+
 let fail = 0, golds = 0, updated = 0;
-const texJobs = [];
+const texJobs = [], referenced = new Set();
 for (const r of results) {
   const errs = r.err ? [r.err] : [];
   for (const g of r.goldens) {
-    golds++;
+    golds++; referenced.add(path.normalize(g.name));
     const f = path.join(GOLD, g.name);
     const have = fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null;
     if (have === g.text) continue;
-    if (UPDATE || have === null) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, g.text); updated++; if (have === null) console.log(`  new golden ${g.name}`); continue; }
+    if (UPDATE) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, g.text); updated++; if (have === null) console.log(`  new golden ${g.name}`); continue; }
+    if (have === null) { errs.push(`golden ${g.name} does not exist (run with --update to write it, then review it)`); continue; }
     const A = have.split('\n'), B = g.text.split('\n'); let i = 0; while (i < A.length && A[i] === B[i]) i++;
     errs.push(`golden ${g.name} differs at line ${i + 1}\n    golden: ${A[i] ?? '(end)'}\n    now:    ${B[i] ?? '(end)'}`);
   }
@@ -90,5 +109,9 @@ for (const r of results) {
   else console.log(`✓ ${r.name} (${r.ms} ms)`);
 }
 if (b.logs.length) console.log('page errors:\n  ' + b.logs.join('\n  '));
+if (b.warnings.length) console.log(`page warnings (${b.warnings.length}, not failures):\n  ` + [...new Set(b.warnings)].join('\n  '));
+// golden files no test produced (only known after an unfiltered run)
+const orphans = filter ? [] : walk(GOLD).map((f) => path.relative(GOLD, f)).filter((f) => !path.basename(f).startsWith('.') && !referenced.has(path.normalize(f)));
+if (orphans.length) console.log(`golden files no test refers to (delete them if they are stale):\n  ${orphans.join('\n  ')}`);
 console.log(`\n${results.length - fail}/${results.length} passed · ${golds} golden files${updated ? ` (${updated} written)` : ''} · ${NOTEX ? 'compiles skipped' : `${texJobs.length} compiles (${texRes.filter((x) => x.cached).length} cached)`}`);
 process.exit(fail || b.logs.length ? 1 : 0);

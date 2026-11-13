@@ -1,0 +1,11 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selection (⌫)" [ref=e12111]
+- button "Undo (⌘Z)" [disabled, ref=e12112]
+- button "Redo (⇧⌘Z)" [disabled, ref=e12113]
+- button "Fit the drawing in view (0)" [ref=e12114]
+- button "Cancel" [ref=e12115]
+- button "Done" [ref=e12116]
+- searchbox "Search the palette" [ref=e12119]
+- button "Copy" [ref=e12117]
+- textbox "chemfig code" [ref=e12118]: \chemfig{H_2N-C(=[1]O)-[7]OH}

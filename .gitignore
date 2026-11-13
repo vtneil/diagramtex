@@ -2,3 +2,7 @@
 .wrangler/
 node_modules/
 dist/
+public/js/app.bundle.js
+public/js/app.bundle.js.map
+public/version.json
+._*

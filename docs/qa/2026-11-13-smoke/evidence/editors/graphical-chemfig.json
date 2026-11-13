@@ -1,0 +1,11 @@
+{
+  "type": "chemfig",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\chemfig{H_3C-C(=[1]O)-[7]OH}",
+  "after": "\\chemfig{N-C(=[1]O)-[7]OH}",
+  "undone": "\\chemfig{H_3C-C(=[1]O)-[7]OH}",
+  "redone": "\\chemfig{N-C(=[1]O)-[7]OH}"
+}

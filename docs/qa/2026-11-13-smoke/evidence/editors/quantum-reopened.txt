@@ -1,0 +1,22 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Add a wire at the bottom" [ref=e9988]
+- button "Add a step at the end" [ref=e9989]
+- button "Clear the selected cells (⌫)" [ref=e9990]
+- button "Undo (⌘Z)" [disabled, ref=e9991]
+- button "Redo (⇧⌘Z)" [disabled, ref=e9992]
+- button "Fit the circuit in view (0)" [ref=e9993]
+- button "Cancel" [ref=e9994]
+- button "Done" [ref=e9995]
+- searchbox "Search elements" [ref=e10000]
+- spinbutton "0.5" [ref=e9996]
+- button "Gap" [ref=e10001]
+- button "Wire to wire" [ref=e10002]
+- spinbutton "0.5" [ref=e9997]
+- button "Gap" [ref=e10003]
+- button "Step to step" [ref=e10004]
+- button "Copy" [ref=e9998]
+- textbox "quantikz code" [ref=e9999]: \begin{quantikz}
+\lstick{\ket{0}} & \gate{Y} & \ctrl{1} & \meter{} \\
+\lstick{\ket{0}} &          & \targ{}  & \meter{}
+\end{quantikz}

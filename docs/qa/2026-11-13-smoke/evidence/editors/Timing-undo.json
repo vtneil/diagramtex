@@ -1,0 +1,10 @@
+[
+  {
+    "type": "timing",
+    "x": 190,
+    "y": 120,
+    "src": "\\begin{tikztimingtable}[timing/rowdist=3]\n  CLK & 8{2C} \\\\\n  D   & 3U 4D{A} 4D{B} 5U \\\\\n  Q   & 7X 4D{A} 5D{B} \\\\\n\\extracode\n  \\vertlines[help lines]{2,6,10,14}\n  \\draw [<->] (3,-1.5) -- node [above, font=\\footnotesize] {$t_{su}$} (6,-1.5);\n  \\draw [<->] (6,-4.5) -- node [above, font=\\footnotesize] {$t_{h}$} (7,-4.5);\n  \\draw [->] (6,-7.5) -- node [above, font=\\footnotesize] {$t_{co}$} (7,-7.5);\n\\end{tikztimingtable}",
+    "color": "#000000",
+    "id": "7hvcxkna"
+  }
+]

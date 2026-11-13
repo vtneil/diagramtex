@@ -1,0 +1,11 @@
+{
+  "type": "qc",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\begin{quantikz}\n\\lstick{\\ket{0}} & \\gate{H} & \\ctrl{1} & \\meter{} \\\\\n\\lstick{\\ket{0}} &          & \\targ{}  & \\meter{}\n\\end{quantikz}",
+  "after": "\\begin{quantikz}\n\\lstick{\\ket{0}} & \\gate{H} & \\ctrl{1} & \\meter{} \\\\\n\\lstick{\\ket{0}} &          & \\targ{}  & \\meter{} \\\\\n                 &          &          & \\gate{X}\n\\end{quantikz}",
+  "undone": "\\begin{quantikz}\n\\lstick{\\ket{0}} & \\gate{H} & \\ctrl{1} & \\meter{} \\\\\n\\lstick{\\ket{0}} &          & \\targ{}  & \\meter{}\n\\end{quantikz}",
+  "redone": "\\begin{quantikz}\n\\lstick{\\ket{0}} & \\gate{H} & \\ctrl{1} & \\meter{} \\\\\n\\lstick{\\ket{0}} &          & \\targ{}  & \\meter{} \\\\\n                 &          &          & \\gate{X}\n\\end{quantikz}"
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "type": "forest",
+    "x": 190,
+    "y": 120,
+    "src": "\\begin{forest}\n  for tree={draw, rounded corners}\n  [System\n    [Branch [Leaf] [Leaf]]\n    [Branch [Leaf]]\n  ]\n\\end{forest}",
+    "size": "large",
+    "font": "default",
+    "color": "#000000",
+    "id": "96cm03bu"
+  }
+]

@@ -1,0 +1,17 @@
+sample-Mechanics {'result': '[{"id":"wk05ij3d","type":"physics","x":490,"y":350}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Optics {'result': '[{"id":"yjwtuib1","type":"physics","x":490,"y":350}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Fields {'result': '[{"id":"v9tty3s7","type":"physics","x":490,"y":350}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Waves {'result': '[{"id":"z9emm6ne","type":"physics","x":490,"y":350}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Spacetime {'result': '[{"id":"nad3154t","type":"physics","x":490,"y":350}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Energy levels {'result': '[{"id":"41uqwko2","type":"physics","x":490,"y":350}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Diamond {'result': '[{"id":"bqhpb2mo","text":"","type":"sym","x":190,"y":120}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Star {'result': '[{"id":"qnk4hid6","text":"","type":"sym","x":190,"y":120}]', 'origin': 'http://127.0.0.1:5174/'}
+missing Resistor
+sample-Capacitor {'result': '[{"id":"7yrdv0tn","type":"sym","x":190,"y":120}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Brace {'result': '[{"id":"t45j3bea","type":"sym","x":190,"y":120}]', 'origin': 'http://127.0.0.1:5174/'}
+sample-Grid {'result': '[{"id":"3yexzh20","type":"sym","x":190,"y":120}]', 'origin': 'http://127.0.0.1:5174/'}
+before-plot {'result': '[{"id":"4eew3wqi","type":"rect","x":40,"y":50}]', 'origin': 'http://127.0.0.1:5174/'}
+after-plot {'result': '[{"id":"4eew3wqi","type":"rect","x":40,"y":50},{"id":"bux1jo0e","type":"plot","x":340,"y":250}]', 'origin': 'http://127.0.0.1:5174/'}
+after-plot-undo {'result': '[{"id":"4eew3wqi","type":"rect","x":40,"y":50}]', 'origin': 'http://127.0.0.1:5174/'}
+after-reload {'result': '[{"id":"4eew3wqi","type":"rect","x":40,"y":50}]', 'origin': 'http://127.0.0.1:5174/'}
+done

@@ -1,0 +1,10 @@
+[
+  {
+    "type": "zx",
+    "x": 190,
+    "y": 120,
+    "src": "\\begin{ZX}\n  \\zxN{} \\rar &[\\zxwCol] \\zxZ{\\gamma} \\ar[r,o',H] \\ar[r,o.] &[\\zxHCol] \\zxX-{\\beta} \\rar &[\\zxwCol] \\zxN{}\n\\end{ZX}",
+    "color": "#000000",
+    "id": "aj0py7u2"
+  }
+]

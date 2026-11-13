@@ -6,7 +6,7 @@
 
 **DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata**, **karnaugh-map**, **bytefield**, **chemfig** and **blochsphere** code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams, Feynman diagrams, 2D and 3D geometry, timing diagrams, state machines, Karnaugh maps, bit fields, chemical structures and reaction schemes, and Bloch spheres with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
-It is **free and open source** ([MIT License](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
+It is **free and open source** ([GNU GPLv3](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
 **[Open DiagramTeX: diagramtex.com](https://diagramtex.com/)**
 
@@ -20,7 +20,7 @@ It is **free and open source** ([MIT License](LICENSE)), **works offline**, and 
 - **Offline and private:** an installable web app (PWA). After the first visit it runs without an internet connection, and documents are saved in your browser.
 - **Privacy-focused:** no account, no analytics, no cookies, no ads. See [Privacy](#privacy).
 - **No account, no cost:** open the page and start drawing.
-- **No build step:** plain HTML, CSS and JavaScript, easy to self-host.
+- **Static hosting:** compiled HTML, CSS and JavaScript, with no application server required.
 
 ## What you can draw
 
@@ -84,17 +84,35 @@ To use it offline, install it from your browser (the install icon in the address
 
 ### Run it locally
 
-The site lives in `public/`; serve that folder. KaTeX 0.19.1, Temml 0.14.0 and MathLive are in `public/vendor`, so no CDN is needed. Opening `public/index.html` directly also works in most browsers.
+Use Node.js 22 or later. Install dependencies and start the local watcher:
 
 ```bash
-python3 -m http.server 5173 --directory public
+npm ci
+npm run dev
 ```
 
-Then open http://localhost:5173.
+Open http://127.0.0.1:5173. The watcher compiles TypeScript and Svelte modules into `public/js/app.bundle.js`, with a source map. Reload the
+browser after edits. The generated bundle is ignored by Git.
+
+For a simple static server or direct-file use, run `npm run compile` first, then
+serve `public/` (for example, `python3 -m http.server 5173 --directory public`).
+Opening `public/index.html` directly also works in most browsers after compilation.
+KaTeX, Temml, MathLive and fonts remain local; no CDN is needed.
+
+`npm run check` checks all application TypeScript modules and Svelte components.
+`npm test` compiles and runs the regression suite; `npm run test:ux` checks the
+existing mouse/keyboard workflows. See [migration.md](docs/architecture/migration.md)
+for boundaries, verification and the saved starting commit.
 
 ### Self-host on Cloudflare Workers
 
-`wrangler.toml` publishes a static-assets-only Worker (no server code). Before each deploy, wrangler runs `scripts/build.js`, which copies `public/` to `dist/` with the JS and CSS minified by esbuild, and serves `dist/`. To keep the number of requests low, the build also joins the app's scripts into `js/bundle.js` and its stylesheets into `css/app.css` (in the order `index.html` loads them), and writes the service worker's precache list from the files in `dist/`. It also writes `version.json` with `TD.VERSION`, left out of the precache, which the app fetches once per load to spot a newer deploy. `public/` is never changed, so local development still serves one file per script:
+`wrangler.toml` publishes a static-assets-only Worker (no server code). Before
+deployment, `scripts/build.js` compiles the module graph from `src/main.ts`, writes
+one minified application script and stylesheet to `dist/`, and copies local vendor
+assets and fonts. Production compilation writes only to `dist/`. The service
+worker's precache is generated from those output files. `version.json` is fetched
+from the network to detect newer releases and is excluded from the precache.
+Wrangler watches both `src/` and `public/` during development.
 
 ```bash
 npx wrangler deploy
@@ -368,7 +386,7 @@ DiagramTeX is privacy-focused by design:
 - **No account.** No sign-up, login, email or payment, ever.
 - **No tracking.** No analytics, telemetry, cookies, ads or third-party scripts. The app, its maths engines (KaTeX, Temml, MathLive) and fonts are served from the same site, and after the first visit the app runs fully offline.
 - **Files stay yours.** Save, Open, Import and Export work on files on your own computer. The app never contacts another site: everything it uses is served with it, a Content-Security-Policy blocks any other origin, and SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them, so opening an export requests nothing either.
-- **Open source.** Every line is in this repository ([MIT License](LICENSE)), and you can self-host it as plain static files.
+- **Open source.** Every line is in this repository ([GNU GPLv3](LICENSE)), and you can self-host it as plain static files.
 
 ## Use of generative AI
 
@@ -409,70 +427,74 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` fo
 
 ## Project structure
 
-- `public/js/shapes.js`: basic shape types (geometry, handles, SVG, TikZ), colours, fonts, preamble
-- `public/js/fills.js`: gradient and pattern fills (SVG defs, TikZ shadings and patterns, picker tabs), dash and width presets
-- `public/js/colorpicker.js`: colour picker popover (Basic / Gradient / Pattern tabs)
-- `public/js/symbols.js`: symbol library (141 shapes as one box-based `sym` type), image objects
-- `public/js/boolean.js`: Combine (shape booleans): outlines, edge splitting and the region builder
-- `public/js/rotate.js`: free rotation (the `angle` property, rotated handles, `TD.rotateShape`)
-- `public/js/quantum.js`: quantum circuits: quantikz parser, canvas drawing and export
-- `public/js/circuit.js`: the circuit block (`cz` type): item model, canvas drawing, circuitikz export and parser
-- `public/js/czeditor.js`: the overlay circuit editor (palette, drag-and-drop stage, properties and live code)
-- `public/js/qceditor.js`: the overlay quantum circuit editor (palette, cell grid, properties and live quantikz code)
-- `public/js/zx.js`: ZX diagrams: zx-calculus parser, layout, canvas drawing and export
-- `public/js/zxeditor.js`: the overlay ZX editor (palette, cell grid, wire handles and shapes, live zx-calculus code)
-- `public/js/feynman.js`: Feynman diagrams: tikz-feynman parser and writer, layout, canvas drawing and export
-- `public/js/fyeditor.js`: the overlay Feynman editor (palette, centimetre grid, vertex handles, properties and live code)
-- `public/js/physics.js`: physics figures: source model that keeps unknown lines, units, the scene shared by preview and TikZ export, results and warnings
-- `public/js/phys-optics.js`, `phys-fields.js`, `phys-waves.js`, `phys-spacetime.js`, `phys-levels.js`, `phys-mechanics.js`: one physics domain each (objects, solver, drawing, handles, examples)
-- `public/js/phyeditor.js`: the overlay Physics editor (palette by domain, handles, inspector with results, keyboard, live code)
-- `public/js/geo2d.js`: the 2D geometry block: plain TikZ read by geo3d.js seen straight on, its panel sliders and export
-- `public/js/geo3d.js`: 3D geometry: tikz-3dplot reader (statements with their spans), projection, canvas drawing, code edits and export
-- `public/js/g3editor.js`: the overlay 3D geometry editor (palette, orbiting view, draggable points, properties and live code); it also edits 2D geometry in a flat mode with its own palette
-- `public/js/timing.js`: timing diagrams: tikz-timing parser and writer, layout, canvas drawing and export
-- `public/js/tmeditor.js`: the overlay timing editor (value palette, painting, draggable transitions, arrows between edges, properties and live code)
-- `public/js/automata.js`: state machines: TikZ automata parser and writer, layout, auto layout, canvas drawing and export
-- `public/js/fsmeditor.js`: the overlay state machine editor (palette, centimetre grid, state handles, auto layout, properties and live code)
-- `public/js/kmap.js`: Karnaugh maps: karnaugh-map parser and writer, Gray-code layout, canvas drawing, group checking and solving, export
-- `public/js/kmeditor.js`: the overlay Karnaugh map editor (sizes and values palette, cell clicks, group drawing with wrap-round, check panel and live code); its styles are in `public/css/kmap.css`
-- `public/js/bytefield.js`: bit fields: bytefield parser and writer that keeps the code as written, layout to the package's measurements, canvas drawing, export
-- `public/js/bfeditor.js`: the overlay bit field editor (fields and groups palette, edge drags, split and merge, word groups, context menu and live code); its styles are in `public/css/bytefield.css`
-- `public/js/chemfig.js`: chemistry: chemfig parser and writer, chemfig's layout rules (bonds, rings, schemes), canvas drawing and export
-- `public/js/cfeditor.js`: the overlay Chemistry editor (palette, atom handles, properties and live chemfig code)
-- `public/js/tooltip.js`: the app's own tooltips (every `title` becomes a styled `data-tip`)
-- `public/js/czcore.js`: circuitikz part registry and drawing API; parts live in `czparts-wires.js`, `czparts-passive.js`, `czparts-semi.js`, `czparts-sources.js`, `czparts-switch.js` and `czparts-blocks.js`
-- `public/js/texhighlight.js`: maths highlighting in the LaTeX text fields
-- `public/js/mathinput.js`: the canvas text editor's LaTeX and MathLive input modes
-- `public/js/dialog.js`, `public/js/selectmenu.js`: in-app dialogs and dropdown menus
-- `public/js/texcomplete.js`: LaTeX command suggestions while typing
-- `public/js/quick.js`: Quick mode: one formula, copied or downloaded as PNG or SVG
-- `public/js/texcommands.js`: every command KaTeX and Temml support, with its number of arguments. It is generated, so do not edit it; rebuild with `node scripts/gen-texcommands.js` after updating either engine.
-- `public/js/mathengine.js`: the maths renderer (`TD.math.render`), switching between KaTeX and Temml
-- `public/js/plots.js`: expression parser, 2D/3D plot and pie rendering, pgfplots export
-- `public/js/view3d.js`: the shared 3D engine: projection, shaded meshes with hidden edges, fitting into the box, SVG and plain TikZ output
-- `public/js/solid3d.js`, `public/js/figures3d.js`: solid regions, basic solids and solids of revolution
-- `public/js/cd.js`: commutative diagrams: tikz-cd parser, layout, canvas drawing and export
-- `public/js/cdeditor.js`: the overlay CD editor (palette, cell grid, arrows, live tikz-cd or xymatrix code)
-- `public/js/xy.js`: the XyMatrix block: xymatrix to tikz-cd and back, xy's geometry, export
-- `public/js/bloch.js`: Bloch spheres: blochsphere parser, canvas drawing, panel and export
-- `public/js/segthumb.js`: the sliding knob of segmented switches
-- `public/js/tikzimport.js`: LaTeX/TikZ importer
-- `public/js/rawtikz.js`: TikZ code kept as written (the `tikz` object: preview, dashed frame, export inside its scopes)
-- `public/js/texlint.js`: LaTeX checks (`TD.lint`): brackets, environments, missing libraries and packages, engine clashes
-- `public/js/params.js`: variables and expressions in geometry fields (`TD.params`: parse, evaluate, solve)
-- `public/js/components.js`: components (the `comp` object: a part's shapes, linked copies, export as a TikZ pic)
+- `src/index.html`, `src/ui/AppShell.svelte`: static document template and prerendered Svelte shell
+- `src/domain/shapes.ts`: basic shape types (geometry, handles, SVG, TikZ), colours, fonts, preamble
+- `src/domain/fills.ts`: gradient and pattern fills (SVG defs, TikZ shadings and patterns, picker tabs), dash and width presets
+- `src/ui/services/colorpicker.ts`: colour picker popover (Basic / Gradient / Pattern tabs)
+- `src/domain/symbols.ts`: symbol library (141 shapes as one box-based `sym` type), image objects
+- `src/domain/boolean.ts`: Combine (shape booleans): outlines, edge splitting and the region builder
+- `src/domain/rotate.ts`: free rotation (the `angle` property, rotated handles, `TD.rotateShape`)
+- `src/domain/quantum.ts`: quantum circuits: quantikz parser, canvas drawing and export
+- `src/domain/circuit.ts`: the circuit block (`cz` type): item model, canvas drawing, circuitikz export and parser
+- `src/editors/czeditor.ts`: the overlay circuit editor (palette, drag-and-drop stage, properties and live code)
+- `src/editors/qceditor.ts`: the overlay quantum circuit editor (palette, cell grid, properties and live quantikz code)
+- `src/domain/zx.ts`: ZX diagrams: zx-calculus parser, layout, canvas drawing and export
+- `src/editors/zxeditor.ts`: the overlay ZX editor (palette, cell grid, wire handles and shapes, live zx-calculus code)
+- `src/domain/feynman.ts`: Feynman diagrams: tikz-feynman parser and writer, layout, canvas drawing and export
+- `src/editors/fyeditor.ts`: the overlay Feynman editor (palette, centimetre grid, vertex handles, properties and live code)
+- `src/domain/physics.ts`: physics figures: source model that keeps unknown lines, units, the scene shared by preview and TikZ export, results and warnings
+- `src/domain/phys-optics.ts`, `phys-fields.ts`, `phys-waves.ts`, `phys-spacetime.ts`, `phys-levels.ts`, `phys-mechanics.ts`: one physics domain each (objects, solver, drawing, handles, examples)
+- `src/editors/phyeditor.ts`: the overlay Physics editor (palette by domain, handles, inspector with results, keyboard, live code)
+- `src/domain/geo2d.ts`: the 2D geometry block: plain TikZ read by geo3d.ts seen straight on, its panel sliders and export
+- `src/domain/geo3d.ts`: 3D geometry: tikz-3dplot reader (statements with their spans), projection, canvas drawing, code edits and export
+- `src/editors/g3editor.ts`: the overlay 3D geometry editor (palette, orbiting view, draggable points, properties and live code); it also edits 2D geometry in a flat mode with its own palette
+- `src/domain/timing.ts`: timing diagrams: tikz-timing parser and writer, layout, canvas drawing and export
+- `src/editors/tmeditor.ts`: the overlay timing editor (value palette, painting, draggable transitions, arrows between edges, properties and live code)
+- `src/domain/automata.ts`: state machines: TikZ automata parser and writer, layout, auto layout, canvas drawing and export
+- `src/editors/fsmeditor.ts`: the overlay state machine editor (palette, centimetre grid, state handles, auto layout, properties and live code)
+- `src/domain/kmap.ts`: Karnaugh maps: karnaugh-map parser and writer, Gray-code layout, canvas drawing, group checking and solving, export
+- `src/editors/kmeditor.ts`: the overlay Karnaugh map editor (sizes and values palette, cell clicks, group drawing with wrap-round, check panel and live code); its styles are in `public/css/kmap.css`
+- `src/domain/bytefield.ts`: bit fields: bytefield parser and writer that keeps the code as written, layout to the package's measurements, canvas drawing, export
+- `src/editors/bfeditor.ts`: the overlay bit field editor (fields and groups palette, edge drags, split and merge, word groups, context menu and live code); its styles are in `public/css/bytefield.css`
+- `src/domain/chemfig.ts`: chemistry: chemfig parser and writer, chemfig's layout rules (bonds, rings, schemes), canvas drawing and export
+- `src/editors/cfeditor.ts`: the overlay Chemistry editor (palette, atom handles, properties and live chemfig code)
+- `src/ui/services/tooltip.ts`: the app's own tooltips (every `title` becomes a styled `data-tip`)
+- `src/domain/czcore.ts`: circuitikz part registry and drawing API; parts live in `czparts-wires.ts`, `czparts-passive.ts`, `czparts-semi.ts`, `czparts-sources.ts`, `czparts-switch.ts` and `czparts-blocks.ts`
+- `src/ui/services/texhighlight.ts`: maths highlighting in the LaTeX text fields
+- `src/ui/services/mathinput.ts`: the canvas text editor's LaTeX and MathLive input modes
+- `src/ui/services/dialog.ts`, `src/ui/services/selectmenu.ts`: in-app dialogs and dropdown menus
+- `src/ui/services/texcomplete.ts`: LaTeX command suggestions while typing
+- `src/ui/services/quick.ts`: Quick mode: one formula, copied or downloaded as PNG or SVG
+- `src/domain/texcommands.ts`: every command KaTeX and Temml support, with its number of arguments. It is generated, so do not edit it; rebuild with `node scripts/gen-texcommands.js` after updating either engine.
+- `src/domain/mathengine.ts`: the maths renderer (`TD.math.render`), switching between KaTeX and Temml
+- `src/domain/plots.ts`: expression parser, 2D/3D plot and pie rendering, pgfplots export
+- `src/domain/view3d.ts`: the shared 3D engine: projection, shaded meshes with hidden edges, fitting into the box, SVG and plain TikZ output
+- `src/domain/solid3d.ts`, `src/domain/figures3d.ts`: solid regions, basic solids and solids of revolution
+- `src/domain/cd.ts`: commutative diagrams: tikz-cd parser, layout, canvas drawing and export
+- `src/editors/cdeditor.ts`: the overlay CD editor (palette, cell grid, arrows, live tikz-cd or xymatrix code)
+- `src/domain/xy.ts`: the XyMatrix block: xymatrix to tikz-cd and back, xy's geometry, export
+- `src/domain/bloch.ts`: Bloch spheres: blochsphere parser, canvas drawing, panel and export
+- `src/ui/services/segthumb.ts`: the sliding knob of segmented switches
+- `src/domain/tikzimport.ts`: LaTeX/TikZ importer
+- `src/domain/rawtikz.ts`: TikZ code kept as written (the `tikz` object: preview, dashed frame, export inside its scopes)
+- `src/domain/texlint.ts`: LaTeX checks (`TD.lint`): brackets, environments, missing libraries and packages, engine clashes
+- `src/domain/params.ts`: variables and expressions in geometry fields (`TD.params`: parse, evaluate, solve)
+- `src/domain/components.ts`: components (the `comp` object: a part's shapes, linked copies, export as a TikZ pic)
 - `tests/bench.mjs`: workflow benchmark. Common tasks are done with real mouse and key input, counting clicks, drags, keys and switches between mouse and keyboard; it fails when a task gets longer than in `tests/bench.json` (`--update` writes it)
 - `tests/`: `node tests/run.mjs [filter] [--update] [--no-tex]` runs the suites in `tests/suites/` in headless Chrome against `tests/golden/` (TikZ of every parity figure, round trips, lossless import, lint) and compiles each export with pdfLaTeX (cached); `--update` rewrites the golden files. `node tests/probe.mjs script.js` runs a script in the loaded app and prints what it returns
-- `public/js/storage.js`: files and the file list in IndexedDB (read into memory at start, written in the background, shared between tabs)
-- `public/js/app.js`: editor state, interaction, history, properties panel, storage, menu, export
-- `public/js/docview.js`: document view and whole-document LaTeX export
-- `public/css/style.css`, `public/index.html`: UI
+- `src/platform/storage.ts`: files and the file list in IndexedDB (read into memory at start, written in the background, shared between tabs)
+- `src/application/app.ts`: editor state, interaction, history, properties panel, storage, menu, export
+- `src/application/docview.ts`: document view and whole-document LaTeX export
+- `public/css/style.css`: existing UI styles; `public/index.html`: generated static shell
 - `public/fonts/`: Inter Display, the UI typeface (SIL Open Font License, `Inter-LICENSE.txt`)
 - `public/sw.js`, `public/manifest.webmanifest`: offline cache and install manifest
 - `design/logo/`: logo kit and usage guide
 - `wrangler.toml`: Cloudflare Workers deployment (builds and serves `dist/`)
-- `scripts/build.js`: copies `public/` to `dist/`, minifying JS and CSS, joining the app's scripts and stylesheets into one file each and writing the precache list (run by wrangler before deploy)
-- `scripts/gen-texcommands.js`: regenerates `public/js/texcommands.js`
+- `src/main.ts`: application module entry point; `src/core/`: checked document, history, block, editor-session and file-codec services
+- `src/ui/`: Svelte shell, properties, editor frames and inspectors; `src/register-*.ts`: shared service registrations
+- `scripts/compile.js`, `scripts/prerender.js`, `scripts/dev.js`: compilation, static shell prerendering and watch server
+- `scripts/build.js`: compiles and minifies the static site into `dist/` and generates its precache (run by wrangler before deploy)
+- `scripts/gen-texcommands.js`: regenerates `src/domain/texcommands.ts`
 - `scripts/cz-sheet.js`: draws every circuitikz part with its pins on one SVG sheet, for checking part drawings by eye
 - `.interface-design/system.md`: design direction, tokens and measurements for the UI ("drafting table")
 - `public/vendor/katex/`: KaTeX 0.19.1 (MIT license, `.woff2` fonts only)
@@ -485,7 +507,15 @@ Bug reports and ideas are welcome in the [issue tracker](https://gitlab.com/igni
 
 ## License
 
-DiagramTeX is released under the [MIT License](LICENSE). © 2026 Vivatsathorn Thitasirivit.
+DiagramTeX is released under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`). © 2026 Vivatsathorn Thitasirivit.
 
-It bundles KaTeX (MIT), Temml (MIT), MathLive (MIT), the Latin Modern Math font (GUST Font License) and Inter Display (SIL Open Font License); see their licence files in `public/vendor/` and `public/fonts/`.
+### Licensing of generated content
+
+DiagramTeX is licensed under the GNU General Public License v3.0.
+
+Diagrams, LaTeX code, images, PDFs, and other content created using DiagramTeX are not subject to the GPL solely because they were produced with DiagramTeX. Users may use their original creations in academic publications, commercial projects, proprietary documents, and other works without additional licensing obligations imposed by DiagramTeX.
+
+Third-party assets or content incorporated into an output may remain subject to their own licenses.
+
+The compiled UI includes Svelte, clsx and esm-env (MIT; notices in `public/vendor/svelte/LICENSE.txt`). It also bundles KaTeX (MIT), Temml (MIT), MathLive (MIT), the Latin Modern Math font (GUST Font License) and Inter Display (SIL Open Font License); see their licence files in `public/vendor/` and `public/fonts/`.
 

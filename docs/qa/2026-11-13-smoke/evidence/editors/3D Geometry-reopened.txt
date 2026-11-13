@@ -1,0 +1,30 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selection (⌫)" [disabled, ref=e12311]
+- button "Undo (⌘Z)" [disabled, ref=e12312]
+- button "Redo (⇧⌘Z)" [disabled, ref=e12313]
+- button "Fit the picture in view (0)" [ref=e12314]
+- button "Cancel" [ref=e12315]
+- button "Done" [ref=e12316]
+- searchbox "Search the palette" [ref=e12319]
+- spinbutton [ref=e12320]: 45
+- spinbutton [ref=e12470]: 110
+- spinbutton [ref=e12471]: 3
+- button "Copy" [ref=e12317]
+- textbox "tikz-3dplot code" [ref=e12318]: \tdplotsetmaincoords{45}{110}
+\begin{tikzpicture}[scale=3, tdplot_main_coords]
+  \def\rvec{0.8}
+  \def\thetavec{40}
+  \def\phivec{60}
+  \coordinate (O) at (0,0,0);
+  \draw[thick, ->] (0,0,0) -- (1,0,0) node[anchor=north east]{$x$};
+  \draw[thick, ->] (0,0,0) -- (0,1,0) node[anchor=north west]{$y$};
+  \draw[thick, ->] (0,0,0) -- (0,0,1) node[anchor=south]{$z$};
+  \tdplotsetcoord{P}{\rvec}{\thetavec}{\phivec}
+  \draw[-stealth, color=red] (O) -- (P) node[above right]{$P$};
+  \draw[dashed, color=red] (O) -- (Pxy);
+  \draw[dashed, color=red] (P) -- (Pxy);
+  \tdplotdrawarc{(O)}{0.2}{0}{\phivec}{anchor=north}{$\phi$}
+  \tdplotsetthetaplanecoords{\phivec}
+  \tdplotdrawarc[tdplot_rotated_coords]{(0,0,0)}{0.5}{0}{\thetavec}{anchor=south west}{$\theta$}
+\end{tikzpicture}

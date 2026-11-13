@@ -1,6 +1,6 @@
 ---
 name: diagramtex-ui
-description: House rules for any change to DiagramTeX's interface (public/css, public/index.html, app.js, docview.js, quick.js, the block editors). Use before adding or changing a control, panel, menu, toolbar, mode, dialog, animation, zoom or layout, and when reviewing UI. It lists the quirks the owner has already corrected, so they are not repeated.
+description: House rules for any change to DiagramTeX's interface (public/css, src/index.html, src/ui (Svelte), src/application/app.ts, src/application/docview.ts, src/ui/services/quick.ts, the block editors). Use before adding or changing a control, panel, menu, toolbar, mode, dialog, animation, zoom or layout, and when reviewing UI. It lists the quirks the owner has already corrected, so they are not repeated.
 ---
 
 # DiagramTeX UI rules
@@ -21,7 +21,7 @@ nothing else shifts.
   it wiggle.
 - **Folding a sidebar or panel doesn't move the canvas or the page.** Selecting something doesn't move a pane.
 - **Re-rendering keeps the scroll.** Save `scrollTop`/`scrollLeft` around anything that lays out at another
-  zoom. Anchor the element under the pointer (see `renderKeep` in docview.js) and focus with
+  zoom. Anchor the element under the pointer (see `renderKeep` in src/application/docview.ts) and focus with
   `{ preventScroll: true }`. Opening, switching and leaving an edit must not jump the page.
 - **No flashes in animations**: no grey layout for a frame, and no scroll bar that disappears and comes back
   while a pane eases open or shut.
@@ -29,7 +29,7 @@ nothing else shifts.
 ## 2. The floating right panel is not part of the view
 
 `#rightCol` floats over the stage (`--props-w` 280px + 8px each side). Centring, Fit, Fit Width, empty
-hints and the document page all use the area to its left (`fitArea()` in app.js, `padding-right` on
+hints and the document page all use the area to its left (`fitArea()` in src/application/app.ts, `padding-right` on
 `#docview`). Never centre across the whole window.
 
 ## 3. Nothing overlaps or interferes
@@ -52,7 +52,7 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 - Buttons must not look like fields: panel actions use a `--wash-strong` fill with no border, and top-bar
   output buttons are outlined. All buttons in a group share one colour; solid black was rejected as too loud.
 - **Anything destructive turns red pen on hover**, everywhere: menus, block editors, the trash icon.
-- Maths inside LaTeX source fields is `--mathpen` green (`texhighlight.js`).
+- Maths inside LaTeX source fields is `--mathpen` green (`src/ui/services/texhighlight.ts`).
 - Icons are monotone line icons. Show emphasis with filled vs outlined, never with colour.
 
 ## 5. Shape and spacing
@@ -70,15 +70,20 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 
 ## 6. Use the app's own pieces
 
-- Dropdowns: a plain `<select>` gets the custom menu from `selectmenu.js`. Don't build another, and never let
+- Dropdowns: a plain `<select>` gets the custom menu from `src/ui/services/selectmenu.ts`. Don't build another, and never let
   a native menu show.
-- Dialogs: `TD.confirm` / `TD.prompt` / `TD.alert` (`dialog.js`), never `alert` / `confirm` / `prompt`.
+- Dialogs: `TD.confirm` / `TD.prompt` / `TD.alert` (`src/ui/services/dialog.ts`), never `alert` / `confirm` / `prompt`.
   Buttons name the action, and destructive ones pass `danger: true`.
-- Tooltips: a `title` becomes the app's tooltip (`tooltip.js`), shown after a delay. Shortcuts show ⌘ / ⌥ / ⇧
+- Tooltips: a `title` becomes the app's tooltip (`src/ui/services/tooltip.ts`), shown after a delay. Shortcuts show ⌘ / ⌥ / ⇧
   on Mac, never "Ctrl".
-- Switches: `.seg` plus `segthumb.js` for the sliding knob (220ms, `--ease`, still under reduced motion).
+- Switches: `.seg` plus `src/ui/services/segthumb.ts` for the sliding knob (220ms, `--ease`, still under reduced motion).
 - Cursors: standard CSS cursors (`*-resize`, `move`, `grab`). The hand (`pointer`) is for buttons and links
   only, never canvas handles.
+- Field values in Svelte: use `{@attach liveValue(x)}` (`src/ui/live-value.ts`), never `value={x}`. A plain binding
+  rewrites the field while the user types (e.g. `0.` becomes `0`). Every input also needs a name: `aria-label` or
+  a linked `<label>`.
+- Palette items in block editors are `<button>`s (no `role="listitem"`) and must work with Enter and Space, not only
+  with the pointer.
 
 ## 7. Interaction habits the owner expects
 
@@ -106,6 +111,6 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 4. Test on a scratch document made with **New**, and delete it afterwards from the sidebar's right-click
    menu. Never delete or edit the owner's documents.
 5. When a decision changes the system, update `.interface-design/system.md`, and the README if users see it.
-6. Commit or release only when asked. A release bumps `TD.VERSION` in `js/shapes.js` and `CACHE` in
-   `sw.js`, commits as "Title (vX.Y.Z)", tags `vX.Y.Z` and pushes both. Deploy (`npx wrangler deploy`) only
+6. Commit or release only when asked. A release bumps `TD.VERSION` in `src/domain/shapes.ts` and `CACHE` in
+   `public/sw.js`, commits as "Title (vX.Y.Z)", tags `vX.Y.Z` and pushes both. Deploy (`npx wrangler deploy`) only
    when asked.

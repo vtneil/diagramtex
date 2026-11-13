@@ -1,0 +1,6 @@
+<script lang="ts">
+  import { liveValue } from './live-value';
+  export interface Variable { name: string; expression: string; error?: string; title?: string }
+  let { variables }: { variables: Variable[] } = $props();
+</script>
+<div class="sec" id="varSec"><div class="sec-title">Variables</div>{#each variables as variable}<div class="row var"><input type="text" class="vname" data-vname={variable.name} {@attach liveValue(variable.name)} spellcheck="false" autocomplete="off" aria-label="Variable name"><div class="ctl"><input type="text" data-vexpr={variable.name} {@attach liveValue(variable.expression)} class={'geomin' + (variable.error ? ' bad' : '')} spellcheck="false" autocomplete="off" aria-label={'Value of ' + variable.name} title={variable.title}></div><button class="icon flat vdel" data-vdel={variable.name} title="Delete Variable" aria-label={'Delete variable ' + variable.name}><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button></div>{/each}<div class="btns"><button data-act="var:add">Add Variable</button></div><div class="hint-line">Any Geometry field takes an expression over these and over objects named in Layers: <code>w/2</code>, <code>a.east.x + gap</code>, <code>a.r * 2</code>, <code>dist(a, b)</code>. The export writes the values.</div></div>

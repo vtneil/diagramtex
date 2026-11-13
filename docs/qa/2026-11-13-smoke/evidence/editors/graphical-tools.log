@@ -1,0 +1,16 @@
+PASS geo3d {"undoExact":true,"redoExact":true,"applied":true}
+PASS geo2d {"undoExact":true,"redoExact":true,"applied":true}
+PASS qc {"undoExact":true,"redoExact":true,"applied":true}
+PASS forest {"undoExact":true,"redoExact":true,"applied":true}
+PASS zx {"undoExact":true,"redoExact":true,"applied":true}
+PASS feynman {"undoExact":true,"redoExact":true,"applied":true}
+INCONCLUSIVE timing palette gesture did not change source
+PASS automata {"undoExact":true,"redoExact":true,"applied":true}
+PASS kmap {"undoExact":true,"redoExact":true,"applied":true}
+PASS bytefield {"undoExact":true,"redoExact":true,"applied":true}
+INCONCLUSIVE chemfig palette gesture did not change source
+PASS cd {"undoExact":true,"redoExact":true,"applied":true}
+PASS xy {"undoExact":true,"redoExact":true,"applied":true}
+PASS cz {"undoExact":true,"redoExact":true,"applied":true}
+PASS physics {"undoExact":true,"redoExact":true,"applied":true}
+errors []

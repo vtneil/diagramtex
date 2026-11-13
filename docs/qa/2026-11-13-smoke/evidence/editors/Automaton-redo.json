@@ -1,0 +1,10 @@
+[
+  {
+    "type": "automata",
+    "x": 190,
+    "y": 120,
+    "src": "\\begin{tikzpicture}[->, >=Stealth, shorten >=1pt, auto, node distance=2.5cm, semithick]\n  \\node[state, initial] (q0) at (0,0) {$s_0$};\n  \\node[state] (q1) at (2.5,0) {$q_1$};\n  \\node[state, accepting] (q2) at (5,0) {$q_2$};\n  \\path (q0) edge node {$a$} (q1)\n        (q1) edge [loop above] node {$b$} ()\n        (q1) edge [bend left] node {$a$} (q2)\n        (q2) edge [bend left] node {$b$} (q1);\n\\end{tikzpicture}",
+    "color": "#000000",
+    "id": "g8hwxpon"
+  }
+]

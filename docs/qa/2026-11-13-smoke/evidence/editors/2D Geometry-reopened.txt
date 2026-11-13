@@ -1,0 +1,32 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selection (⌫)" [disabled, ref=e12311]
+- button "Undo (⌘Z)" [disabled, ref=e12312]
+- button "Redo (⇧⌘Z)" [disabled, ref=e12313]
+- button "Fit the picture in view (0)" [ref=e12314]
+- button "Cancel" [ref=e12315]
+- button "Done" [ref=e12316]
+- searchbox "Search the palette" [ref=e12319]
+- spinbutton [ref=e12320]: 1
+- button "Copy" [ref=e12317]
+- textbox "TikZ code" [ref=e12318]: \begin{tikzpicture}
+  % the vector v = (\vlen; \vang°): drag Q, or change the values
+  \pgfmathsetmacro{\vlen}{5}
+  \pgfmathsetmacro{\vang}{53.17}
+  \pgfmathsetmacro{\dx}{\vlen*cos(\vang)}
+  \pgfmathsetmacro{\dy}{\vlen*sin(\vang)}
+  \draw[step=1, very thin, black!15] (-1,-1) grid (4,4);
+  \draw[-stealth] (-1,0) -- (4.4,0) node[right]{$x$};
+  \draw[-stealth] (0,-1) -- (0,4.4) node[above]{$y$};
+  \foreach \x in {1,...,3} \draw (\x,2pt) -- (\x,-2pt) node[below]{$\x$};
+  \foreach \y in {1,...,3} \draw (2pt,\y) -- (-2pt,\y) node[left]{$\y$};
+  \coordinate (P) at (0,0);
+  \coordinate (Q) at (\vang:\vlen);
+  \coordinate (R) at (Q |- P);
+  \draw[dashed, gray] (Q) -- (R) node[midway, right]{$\Delta y = \pgfmathprintnumber[fixed,precision=2]{\dy}$};
+  \path (P) -- (R) node[pos=0.62, above]{$\Delta x = \pgfmathprintnumber[fixed,precision=2]{\dx}$};
+  \pic[draw, "$\theta$", angle radius=8mm] {angle = R--P--Q};
+  \draw[-stealth, thick, blue] (P) -- (Q) node[midway, above left]{$\vec{v}$};
+  \fill (P) circle (1.5pt) node[below left]{$P$};
+  \fill (Q) circle (1.5pt) node[above right]{$Q$};
+\end{tikzpicture}

@@ -1,0 +1,11 @@
+{
+  "type": "zx",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\begin{ZX}\n  \\zxN{} \\rar &[\\zxwCol] \\zxZ{\\alpha} \\ar[r,o',H] \\ar[r,o.] &[\\zxHCol] \\zxX-{\\beta} \\rar &[\\zxwCol] \\zxN{}\n\\end{ZX}",
+  "after": "\\begin{ZX}\n  \\zxN{} \\rar &[\\zxwCol] \\zxZ{\\alpha} \\ar[r,o',H] \\ar[r,o.] &[\\zxHCol] \\zxX-{\\beta} \\rar &[\\zxwCol] \\zxN{} \\\\\n              &                                             &                            & \\zxX{}\n\\end{ZX}",
+  "undone": "\\begin{ZX}\n  \\zxN{} \\rar &[\\zxwCol] \\zxZ{\\alpha} \\ar[r,o',H] \\ar[r,o.] &[\\zxHCol] \\zxX-{\\beta} \\rar &[\\zxwCol] \\zxN{}\n\\end{ZX}",
+  "redone": "\\begin{ZX}\n  \\zxN{} \\rar &[\\zxwCol] \\zxZ{\\alpha} \\ar[r,o',H] \\ar[r,o.] &[\\zxHCol] \\zxX-{\\beta} \\rar &[\\zxwCol] \\zxN{} \\\\\n              &                                             &                            & \\zxX{}\n\\end{ZX}"
+}

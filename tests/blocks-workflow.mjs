@@ -1,8 +1,8 @@
 // Real-pointer smoke check for every registered visual block editor.
-// node tests/blocks-workflow.mjs [public|dist] — the latter checks the production bundle.
-import path from 'node:path';
+// node tests/blocks-workflow.mjs [--dist] — the latter checks the production bundle (the bare `dist` works too).
+import { APP_DIR as root, APP_NAME, prepare } from './args.mjs';
 import { serve, launch } from './chrome.mjs';
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', process.argv[2] || 'public');
+await prepare();
 const srv = await serve(root), browser = await launch(`http://127.0.0.1:${srv.port}/`);
 try {
   const types = await browser.ev('return [...TD.blocks.entries()].filter(([, b]) => b.editor).map(([type]) => type);');
@@ -29,5 +29,5 @@ try {
     console.log('✓ ' + type + ': double-click opens, Escape closes');
   }
   if (browser.logs.length) throw new Error(browser.logs.join('\n'));
-  console.log(`${types.length} block editors passed (${path.basename(root)})`);
+  console.log(`${types.length} block editors passed (${APP_NAME})`);
 } finally { browser.close(); srv.close(); }

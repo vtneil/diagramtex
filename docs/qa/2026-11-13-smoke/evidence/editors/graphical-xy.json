@@ -1,0 +1,11 @@
+{
+  "type": "xy",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\xymatrix{\n  A \\ar[r]^{f} \\ar[d]_{g} & B \\ar[d]^{h} \\\\\n  C \\ar[r]_{k}            & D\n}",
+  "after": "\\xymatrix{\n  A \\ar[r]^{f} \\ar[d]_{g} & B \\ar[d]^{h} \\\\\n  C \\ar[r]_{k}            & X\n}",
+  "undone": "\\xymatrix{\n  A \\ar[r]^{f} \\ar[d]_{g} & B \\ar[d]^{h} \\\\\n  C \\ar[r]_{k}            & D\n}",
+  "redone": "\\xymatrix{\n  A \\ar[r]^{f} \\ar[d]_{g} & B \\ar[d]^{h} \\\\\n  C \\ar[r]_{k}            & X\n}"
+}

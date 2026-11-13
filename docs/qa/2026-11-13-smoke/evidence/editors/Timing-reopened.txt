@@ -1,0 +1,25 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selection (⌫)" [disabled, ref=e11296]
+- button "Undo (⌘Z)" [disabled, ref=e11297]
+- button "Redo (⇧⌘Z)" [disabled, ref=e11298]
+- button "Fit the diagram in view (0)" [ref=e11299]
+- button "Cancel" [ref=e11300]
+- button "Done" [ref=e11301]
+- searchbox "Search the palette" [ref=e11304]
+- spinbutton [ref=e11305]: 3
+- spinbutton [ref=e11306]: 0.10000000149011612
+- button "None" [ref=e11307]
+- button "Rows" [ref=e11308]
+- button "Full" [ref=e11309]
+- button "Copy" [ref=e11302]
+- textbox "tikz-timing code" [ref=e11303]: \begin{tikztimingtable}[timing/rowdist=3]
+  CLOCK & 8{2C} \\
+  D   & 3U 4D{A} 4D{B} 5U \\
+  Q   & 7X 4D{A} 5D{B} \\
+\extracode
+  \vertlines[help lines]{2,6,10,14}
+  \draw [<->] (3,-1.5) -- node [above, font=\footnotesize] {$t_{su}$} (6,-1.5);
+  \draw [<->] (6,-4.5) -- node [above, font=\footnotesize] {$t_{h}$} (7,-4.5);
+  \draw [->] (6,-7.5) -- node [above, font=\footnotesize] {$t_{co}$} (7,-7.5);
+\end{tikztimingtable}

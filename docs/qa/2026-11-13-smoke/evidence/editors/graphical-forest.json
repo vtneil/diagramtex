@@ -1,0 +1,11 @@
+{
+  "type": "forest",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\begin{forest}\n  for tree={draw, rounded corners}\n  [Root\n    [Branch [Leaf] [Leaf]]\n    [Branch [Leaf]]\n  ]\n\\end{forest}",
+  "after": "\\begin{forest}\n  for tree={draw, rounded corners}\n  [Root\n    [Branch [Leaf] [Leaf]]\n    [Branch [Leaf]]\n    [Node [A] [B]]\n  ]\n\\end{forest}",
+  "undone": "\\begin{forest}\n  for tree={draw, rounded corners}\n  [Root\n    [Branch [Leaf] [Leaf]]\n    [Branch [Leaf]]\n  ]\n\\end{forest}",
+  "redone": "\\begin{forest}\n  for tree={draw, rounded corners}\n  [Root\n    [Branch [Leaf] [Leaf]]\n    [Branch [Leaf]]\n    [Node [A] [B]]\n  ]\n\\end{forest}"
+}

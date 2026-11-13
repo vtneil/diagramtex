@@ -1,0 +1,12 @@
+[
+  {
+    "type": "qc",
+    "x": 190,
+    "y": 120,
+    "src": "\\begin{quantikz}\n\\lstick{\\ket{0}} & \\gate{Y} & \\ctrl{1} & \\meter{} \\\\\n\\lstick{\\ket{0}} &          & \\targ{}  & \\meter{}\n\\end{quantikz}",
+    "size": "large",
+    "font": "default",
+    "color": "#000000",
+    "id": "bcatmubg"
+  }
+]

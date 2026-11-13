@@ -1,0 +1,5 @@
+PASS 2D Geometry edit/apply/reopen/cancel/parent undo/redo
+PASS Circuit edit/apply/reopen/cancel/parent undo/redo
+PASS Quantum edit/apply/reopen/cancel/parent undo/redo
+PASS Physics edit/apply/reopen/cancel/parent undo/redo
+done

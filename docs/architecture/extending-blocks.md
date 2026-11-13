@@ -2,25 +2,26 @@
 
 ## Baseline and scope
 
-The rollback commit is recorded in [rollback.md](rollback.md). This is an incremental
-architecture pass: the UI, classic-script loading, version 3 file format, domain
-parsers, renderers and exporters retain their existing behavior.
+The original coupling-reduction baseline is recorded in [rollback.md](rollback.md).
+The subsequent TypeScript/Svelte migration baseline and current boundaries are in
+[migration.md](migration.md). UI, version 3 file formats and domain behavior remain
+compatible. Source modules compile into a classic script for static and local-file use.
 
 ## Adding a specialist block
 
-1. Define its shape behavior in `TD.TYPES` and its properties in `TD.panels`, as before.
+1. Import `runtime` from `src/runtime.ts`. Define shape behavior in `runtime.TYPES`, put property models/actions in `src/ui/models/`, and register its Svelte view in `src/ui/panels.svelte.ts`.
 2. In the same domain module, call `TD.blocks.register(type, definition)`.
-3. Include the model and editor scripts in `public/index.html` in dependency order,
-   and include new assets in `public/sw.js` for unbuilt/offline hosting. The production
-   build derives its precache from the output automatically.
+3. Import model and editor modules in `src/main.ts` in dependency order. Add any new
+   non-bundled runtime assets to `public/sw.js` for source/offline hosting. The
+   production build derives its precache from the output automatically.
 4. Add domain tests, an export/round-trip fixture and, when needed, LaTeX compilation checks.
 
-`public/js/blocks.js` documents the registration contract. A registration provides:
+`src/core/blocks.ts` documents the registration contract. A registration provides:
 
 - Menu label, tooltip, SVG icon and explicit display order. Future-feature placeholders
   remain in HTML; existing block markup and menu order are preserved.
 - Whether selection transforms keep the content upright, and the geometry fields exposed
-  by the main property panel. Circuit blocks intentionally retain their existing panel.
+  by the main property panel. All built-in property panels use Svelte views.
 - An optional editor resolver, existing public panel alias, options and preparation hook.
 - An optional result applier (circuit blocks use `items` and `raw`; others use `src`).
 - Optional layout bounds for preserving the drawing's position after edits. K-map and
@@ -37,7 +38,7 @@ CD legacy upgrade, flat 2D geometry options and the XyMatrix adapter remain expl
 
 ## Shared editor infrastructure
 
-`public/js/editor-session.js` supplies history and save/discard lifecycle utilities.
+`src/core/editor-session.ts` supplies history and save/discard lifecycle utilities.
 K-map and bit-field editors are the initial adopters. State remains owned by each
 editor session, including the existing 200-step history limit, source snapshots,
 selection clamping and domain rendering. The lifecycle preserves Save without closing,
@@ -51,15 +52,17 @@ the shared service.
 
 ## Project files and dependencies
 
-`public/js/project-files.js` owns normalization of file kinds, validation of known shape
+`src/core/project-files.ts` owns normalization of file kinds, validation of known shape
 types, legacy shape-array loading, retired-object removal and version 3 serialization.
 The application retains storage orchestration, file linking, dialogs and document switching.
 Existing legacy fixture tests protect the supported formats; serialization remains byte
 compatible. Shape-specific `upgrade` hooks still run when the app constructs a document.
 
-New source contracts have JSDoc documentation. This pass does not introduce a TypeScript
-compiler or claim project-wide static type checking. Scripts still load without a server
-or a build. Dependencies are documented at each new service boundary and ordered in HTML.
+Shared services have TypeScript contracts in `src/core/`. Registration modules install
+the retained `TD` APIs for debugging and existing editor entry points. The app
+uses typed document creation and history services; DOM, input completion and persistence
+hooks remain in the application. `src/main.ts` records the startup graph explicitly.
+Run `npm run compile` before serving or opening the static source site.
 
 ## Verification
 
@@ -71,13 +74,13 @@ or a build. Dependencies are documented at each new service boundary and ordered
 - `node tests/bench.mjs`: existing mouse/keyboard workflow costs and outcomes.
 - `npm run build`: production bundling and precache generation.
 
-## Remaining work
+## Maintenance boundaries
 
-These boundaries enable later steps without a rewrite. Wider extraction of selection,
-document history and export orchestration from `app.js` remains future work. So do adoption
-of the editor utilities by other domains, broader command registration, project-wide
-static checking and any ES-module conversion. ES modules need explicit compatibility
-work because opening `public/index.html` directly is a supported workflow.
+Application source, including every scientific engine, is TypeScript. Svelte owns the
+shell, main properties, document/page settings, block panels, editor frames and inspectors.
+Canvas drawing, source parsers, gestures and generated document/export content remain
+imperative TypeScript modules. Keep their algorithms separate from component markup.
+See [migration.md](migration.md) for verification and typing boundaries.
 
 No new file-format migration is needed for this pass. When one becomes necessary, add
 an explicit version transition in the codec, retain current-version output until the

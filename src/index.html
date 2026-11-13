@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DiagramTeX: draw diagrams, export LaTeX/TikZ</title>
+  <meta name="description" content="Free diagram editor for physics and maths: circuits, quantum circuits, commutative diagrams, Bloch spheres and plots. Export TikZ, LaTeX, PDF, SVG or PNG.">
+  <!-- Nothing is loaded from another site: every script, style, font and image is served from here (or made in the page). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <link rel="canonical" href="https://diagramtex.com/">
+  <!-- link previews (Slack, Discord, X, iMessage…) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="DiagramTeX">
+  <meta property="og:url" content="https://diagramtex.com/">
+  <meta property="og:title" content="DiagramTeX: draw diagrams, export LaTeX/TikZ">
+  <meta property="og:description" content="Draw physics and maths diagrams in your browser and export them as TikZ, LaTeX, PDF, SVG or PNG. Free, and it works offline.">
+  <meta property="og:image" content="https://diagramtex.com/icons/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="DiagramTeX: draw diagrams, export LaTeX/TikZ">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- for search engines: what the app is, and the site's name -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "WebSite", "name": "DiagramTeX", "url": "https://diagramtex.com/" },
+      {
+        "@type": "WebApplication",
+        "name": "DiagramTeX",
+        "url": "https://diagramtex.com/",
+        "description": "Diagram editor for physics and maths that exports LaTeX/TikZ: circuits, quantum circuits, commutative diagrams, Bloch spheres, trees, ZX diagrams, Feynman diagrams, 3D geometry, timing diagrams, state machines, Karnaugh maps, bit fields, chemical structures and plots, with maths typeset as you type.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any (runs in a web browser)",
+        "browserRequirements": "Requires JavaScript. Works offline once installed.",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "image": "https://diagramtex.com/icons/og-image.png",
+        "screenshot": "https://diagramtex.com/icons/og-image.png"
+      }
+    ]
+  }
+  </script>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#fffdf8">
+  <meta name="apple-mobile-web-app-title" content="DiagramTeX">
+  <meta name="mobile-web-app-capable" content="yes">
+  <!-- application-preflight -->
+
+  <style>
+    /* Loading screen: inline so it paints before the app's styles and scripts arrive. The paper covers the
+       half-built page at once; the mark fades in only if loading takes a moment, so fast loads never flash it. */
+    #splash { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: #f4f2ec; transition: opacity .22s ease; --edge: #23205A; }
+    [data-theme=dark] #splash { background: #1c1b19; --edge: #F1EFFF; }
+    #splash.out { opacity: 0; pointer-events: none; }
+    #splash svg { width: 88px; height: 88px; opacity: 0; animation: splash-in .3s ease .15s forwards; }
+    #splash .edge { fill: none; stroke: var(--edge); stroke-width: 26; stroke-dasharray: 150; stroke-dashoffset: 150; animation: splash-edge 1.6s cubic-bezier(.6, 0, .3, 1) .15s infinite; }
+    @keyframes splash-in { to { opacity: 1; } }
+    /* the edge draws from the round node to the square one, holds, then lifts off the round node */
+    @keyframes splash-edge { 0% { stroke-dashoffset: 150; } 45%, 65% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -150; } }
+    @media (prefers-reduced-motion: reduce) {
+      #splash svg { animation-duration: .01s; }
+      #splash .edge { animation: none; stroke-dashoffset: 0; }
+    }
+  </style>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <script src="vendor/katex/katex.min.js"></script>
+  <link rel="stylesheet" href="vendor/temml/Temml-Latin-Modern.css">
+  <script src="vendor/temml/temml.min.js"></script>
+  <link rel="preload" href="fonts/InterDisplay-Medium.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/InterDisplay-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/kmap.css">
+  <link rel="stylesheet" href="css/bytefield.css">
+</head>
+<body>
+  <!-- application-shell -->
+  <script src="js/app.bundle.js"></script>
+</body>
+</html>

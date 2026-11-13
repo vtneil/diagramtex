@@ -1,0 +1,22 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selection (⌫)" [ref=e11497]
+- button "Undo (⌘Z)" [disabled, ref=e11498]
+- button "Redo (⇧⌘Z)" [disabled, ref=e11499]
+- button "Auto layout: place the states in layers from the initial state" [ref=e11500]
+- button "Fit the diagram in view (0)" [ref=e11501]
+- button "Cancel" [ref=e11502]
+- button "Done" [ref=e11503]
+- searchbox "Search the palette" [ref=e11506]
+- button "In Layers" [ref=e11507]
+- button "On a Circle" [ref=e11508]
+- button "Copy" [ref=e11504]
+- textbox "TikZ automata code" [ref=e11505]: \begin{tikzpicture}[->, >=Stealth, shorten >=1pt, auto, node distance=2.5cm, semithick]
+  \node[state, initial] (q0) at (0,0) {$s_0$};
+  \node[state] (q1) at (2.5,0) {$q_1$};
+  \node[state, accepting] (q2) at (5,0) {$q_2$};
+  \path (q0) edge node {$a$} (q1)
+        (q1) edge [loop above] node {$b$} ()
+        (q1) edge [bend left] node {$a$} (q2)
+        (q2) edge [bend left] node {$b$} (q1);
+\end{tikzpicture}

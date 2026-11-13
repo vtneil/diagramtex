@@ -1,0 +1,23 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selection (⌫)" [ref=e11100]
+- button "Undo (⌘Z)" [disabled, ref=e11101]
+- button "Redo (⇧⌘Z)" [disabled, ref=e11102]
+- button "Fit the diagram in view (0)" [ref=e11103]
+- button "Cancel" [ref=e11104]
+- button "Done" [ref=e11105]
+- searchbox "Search the palette" [ref=e11108]
+- button "Copy" [ref=e11106]
+- textbox "tikz-feynman code" [ref=e11107]: \begin{feynman}
+  \vertex (i1) at (0,1) {\(e^-\)};
+  \vertex (i2) at (0,-1) {\(e^+\)};
+  \vertex (a) at (1.25,0);
+  \vertex (b) at (3.25,0);
+  \vertex (f1) at (4.5,1) {\(\mu^-\)};
+  \vertex (f2) at (4.5,-1) {\(\mu^+\)};
+  \diagram* {
+    (i1) -- [fermion] (a) -- [fermion] (i2),
+    (a) -- [photon, edge label=\(\gamma\), momentum'=\(p\)] (b),
+    (f2) -- [fermion] (b) -- [fermion] (f1),
+  };
+\end{feynman}

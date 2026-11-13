@@ -1,0 +1,12 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Delete the selection (⌫)" [disabled, ref=e630]
+- button "Undo (⌘Z)" [ref=e631]
+- button "Redo (⇧⌘Z)" [disabled, ref=e632]
+- button "Fit the picture in view (0)" [ref=e633]
+- button "Cancel" [ref=e634]
+- button "Done" [ref=e635]
+- searchbox "Search the palette" [ref=e638]
+- spinbutton [ref=e639]: 1
+- button "Copy" [ref=e636]
+- textbox "TikZ code" [ref=e637]: \begin{

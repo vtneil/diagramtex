@@ -7,14 +7,15 @@
 //   TRACE=1 node tests/bench.mjs    print where the focus is after each step
 //
 // Typed characters are the content (a label, an expression) and are reported but not counted as steps.
+import { APP_DIR, flag, prepare } from './args.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { serve, launch } from './chrome.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
-const ROOT = path.resolve(HERE, '..');
+await prepare();
 const BASE = path.join(HERE, 'bench.json');
-const UPDATE = process.argv.includes('--update');
+const UPDATE = flag('--update');
 const MOD = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
 
 // A task: setup (page code, not counted), steps (counted), check (page code returning true or a message).
@@ -87,7 +88,7 @@ const TASKS = [
 
 const KEYS = { Enter: ['Enter', 13], Escape: ['Escape', 27], Backspace: ['Backspace', 8] };
 async function main() {
-  const srv = await serve(path.join(ROOT, 'public'));
+  const srv = await serve(APP_DIR);
   const b = await launch(`http://127.0.0.1:${srv.port}/`);
   const out = [];
   try {

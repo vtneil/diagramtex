@@ -1,0 +1,30 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Add a row at the bottom" [ref=e10188]
+- button "Add a column at the end" [ref=e10189]
+- button "Delete the selection (⌫)" [ref=e10190]
+- button "Undo (⌘Z)" [disabled, ref=e10191]
+- button "Redo (⇧⌘Z)" [disabled, ref=e10192]
+- button "Fit the diagram in view (0)" [ref=e10193]
+- button "Cancel" [ref=e10194]
+- button "Done" [ref=e10195]
+- searchbox "Search the palette" [ref=e10198]
+- combobox [expanded=false, ref=e10199]: Normal (2pc)
+  - option "Normal (2pc)" [selected, ref=e10202]
+  - option "0.5pc" [ref=e10203]
+  - option "1pc" [ref=e10204]
+  - option "1.5pc" [ref=e10205]
+  - option "3pc" [ref=e10206]
+  - option "4pc" [ref=e10207]
+- combobox [expanded=false, ref=e10200]: Normal (2pc)
+  - option "Normal (2pc)" [selected, ref=e10208]
+  - option "0.5pc" [ref=e10209]
+  - option "1pc" [ref=e10210]
+  - option "1.5pc" [ref=e10211]
+  - option "3pc" [ref=e10212]
+  - option "4pc" [ref=e10213]
+- button "Copy" [ref=e10196]
+- textbox "xymatrix code" [ref=e10197]: \xymatrix{
+  E \ar[r]^{f} \ar[d]_{g} & B \ar[d]^{h} \\
+  C \ar[r]_{k}            & D
+}

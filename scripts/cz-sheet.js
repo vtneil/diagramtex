@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Preview sheet for circuitikz parts: draws every part from the given part files large, with leads,
 // pins (red dots + names) and the circuitikz name, so a drawing can be checked by eye.
-// usage: node scripts/cz-sheet.js public/js/czparts-a.js [more files…] [--cat res] -o sheet.svg
+// usage: node scripts/cz-sheet.js src/domain/czparts-a.ts [more files…] [--cat res] -o sheet.svg
 // Render to PNG with Quick Look: qlmanage -t -s 2400 -o <dir> sheet.svg   (writes sheet.svg.png)
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const args = process.argv.slice(2);
@@ -15,9 +15,11 @@ for (let i = 0; i < args.length; i++) {
 const window = {};
 const sandbox = { window, console, Math };
 vm.createContext(sandbox);
-const load = (f) => vm.runInContext(fs.readFileSync(f, 'utf8'), sandbox, { filename: f });
-load(path.join(__dirname, '../public/js/czcore.js'));
-for (const f of files) load(f);
+const esbuild = require('esbuild');
+const imports = [path.join(__dirname, '../src/domain/czcore.ts'), ...files.map(f => path.resolve(f))];
+const compiled = esbuild.buildSync({ stdin: { contents: imports.map(f => 'import ' + JSON.stringify(f) + ';').join('\n'), resolveDir: __dirname },
+  bundle: true, write: false, format: 'iife', platform: 'browser' });
+vm.runInContext(compiled.outputFiles[0].text, sandbox);
 const CZ = window.TD.CZ;
 const keys = CZ.order.filter((k) => !cat || CZ.parts[k].cat === cat);
 const S = 60, CW = 380, CH = 300; // px per cm, cell size

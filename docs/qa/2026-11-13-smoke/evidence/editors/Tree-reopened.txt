@@ -1,0 +1,43 @@
+page: 43ad63cd-0fbe-4b1b-8452-73554fb1a0d4
+DiagramTeX: draw diagrams, export LaTeX/TikZ — http://127.0.0.1:5174/
+- button "Add a child (Tab)" [ref=e10616]
+- button "Add a sibling (Enter)" [ref=e10617]
+- button "Delete the selected nodes and what hangs from them (⌫)" [ref=e10618]
+- button "Undo (⌘Z)" [disabled, ref=e10619]
+- button "Redo (⇧⌘Z)" [disabled, ref=e10620]
+- button "Fit the tree in view (0)" [ref=e10621]
+- button "Cancel" [ref=e10622]
+- button "Done" [ref=e10623]
+- searchbox "Search the palette" [ref=e10626]
+- button "Down" [ref=e10630]
+- button "Right" [ref=e10631]
+- button "Up" [ref=e10632]
+- button "Left" [ref=e10633]
+- button "Straight" [ref=e10634]
+- button "Forked" [ref=e10635]
+- spinbutton "auto" [ref=e10627]
+- spinbutton "auto" [ref=e10628]
+- button "Plain" [ref=e10636]
+- button "Box" [ref=e10637]
+- button "Round" [ref=e10638]
+- button "Circle" [ref=e10639]
+- button "Line" [ref=e10640]
+- button "Arrow" [ref=e10641]
+- button "Dash" [ref=e10642]
+- button "Roof" [ref=e10643]
+- button "None" [ref=e10644]
+- button "None" [ref=e10645]
+- button "Grey" [ref=e10646]
+- button "Blue" [ref=e10647]
+- button "Green" [ref=e10648]
+- button "Yellow" [ref=e10649]
+- button "Red" [ref=e10650]
+- textbox [ref=e10629]: for tree={draw, rounded corners}
+- button "Copy" [ref=e10624]
+- textbox "forest code" [ref=e10625]: \begin{forest}
+  for tree={draw, rounded corners}
+  [System
+    [Branch [Leaf] [Leaf]]
+    [Branch [Leaf]]
+  ]
+\end{forest}

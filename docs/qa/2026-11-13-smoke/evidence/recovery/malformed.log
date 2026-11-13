@@ -1,0 +1,16 @@
+{"type":"geo3d","source":"\\begin{","message":"","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"geo2d","source":"\\begin{","message":"","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"qc","source":"\\begin{","message":"\\begin isn't drawn here (it is kept in the code)","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"forest","source":"\\begin{forest}\n  \\begin{\n\\end{forest}","message":"","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"zx","source":"  \\begin{","message":"","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"feynman","source":"\\begin{","message":"\"\\begin{\" isn't drawn here (it is kept in the code)","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"timing","source":"\\begin{","message":"There is no \\begin{tikztimingtable}: the code is read as its rowsThe row \"\\begin{\" has no & between its name and its characters","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"automata","source":"\\begin{","message":"\"\\begin{\" isn't drawn here (it is kept in the code)","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"kmap","source":"\\begin{","message":"No \\begin{karnaugh-map} in the code\"\\begin\" isn't drawn here (it is kept in the code)\"{\" isn't drawn here (it is kept in the code)","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"bytefield","source":"\\begin{","message":"No \\begin{bytefield}: the code is read as its bodyNot drawn: \\begin{","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"chemfig","source":"\\begin{","message":"","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"cd","source":"  \\begin{","message":"","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"xy","source":"\\xymatrix{\n  \\begin{\n}","message":"","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"cz","source":"\\begin{;","message":"1 line can't be drawn here and will be kept as written.","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+{"type":"physics","source":"\\physics{optics}\n\\lens[f=oops](","message":"Line 2: line 2: a position without its ) (kept in the code)","undo":true,"restored":true,"discardPrompt":false,"parentUnchanged":true}
+console errors []

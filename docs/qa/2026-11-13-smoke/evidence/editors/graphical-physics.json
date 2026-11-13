@@ -1,0 +1,11 @@
+{
+  "type": "physics",
+  "changed": true,
+  "undoExact": true,
+  "redoExact": true,
+  "applied": true,
+  "before": "\\physics{optics}\n% a converging lens forms a real, inverted image: drag the object or the focus\n\\axis(-5, 9)\n\\object[h=1.2, label=$O$](-3.5)\n\\lens[f=2, h=3.4, label=$L$](0)",
+  "after": "\\physics{optics}\n% a converging lens forms a real, inverted image: drag the object or the focus\n\\axis(-5, 9)\n\\object[h=1.2, label=$O$](-3.5)\n\\lens[f=2, h=3.4, label=$L$](0)\n\\axis(2, 14)",
+  "undone": "\\physics{optics}\n% a converging lens forms a real, inverted image: drag the object or the focus\n\\axis(-5, 9)\n\\object[h=1.2, label=$O$](-3.5)\n\\lens[f=2, h=3.4, label=$L$](0)",
+  "redone": "\\physics{optics}\n% a converging lens forms a real, inverted image: drag the object or the focus\n\\axis(-5, 9)\n\\object[h=1.2, label=$O$](-3.5)\n\\lens[f=2, h=3.4, label=$L$](0)\n\\axis(2, 14)"
+}

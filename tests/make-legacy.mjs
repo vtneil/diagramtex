@@ -2,7 +2,7 @@
 // fresh profile and its Welcome document is saved as that release saved files (tests/fixtures/legacy/<tag>.diagramtex),
 // with that release's LaTeX export of it (<tag>.tex) where it had one.
 // Run once per new fixture:  node tests/make-legacy.mjs v1.0.0 v1.10.0 …
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,7 +12,14 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const OUT = path.join(ROOT, 'tests/fixtures/legacy');
 for (const tag of process.argv.slice(2)) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtx-legacy-'));
-  execSync(`git archive ${tag} public | tar -x -C ${dir}`, { cwd: ROOT });
+  // The whole tree of the tag: from v1.38.0 on, public/js/app.bundle.js is built from src/ and not in git, so that
+  // release's own compiler builds it (with its own lockfile's dependencies), as its tests would have.
+  execFileSync('sh', ['-c', `git archive --format=tar "$1" | tar -x -C "$2"`, 'sh', tag, dir], { cwd: ROOT, stdio: 'inherit' });
+  if (!fs.existsSync(path.join(dir, 'public/js/app.bundle.js')) && fs.existsSync(path.join(dir, 'scripts/compile.js'))) {
+    console.log(tag, 'compiling (public/js/app.bundle.js is not in git)');
+    execFileSync('npm', ['ci', '--include=dev', '--no-audit', '--no-fund', '--silent'], { cwd: dir, stdio: 'inherit' });
+    execFileSync(process.execPath, ['scripts/compile.js'], { cwd: dir, stdio: 'inherit' });
+  }
   const srv = await serve(path.join(dir, 'public'));
   const b = await launch(`http://127.0.0.1:${srv.port}/`);
   const r = await b.ev(`

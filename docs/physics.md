@@ -6,8 +6,8 @@ blocks and linkages. The figure is exported as plain TikZ (only `arrows.meta` is
 draws the preview and writes the TikZ, so the two agree.
 
 This page lists what each domain computes, the model behind each result, what it assumes and what it leaves
-out. The block's code is in `public/js/physics.js` (source model, units, scene, export) and one file per domain
-(`public/js/phys-*.js`). Its editor is `public/js/phyeditor.js`. The tests are in `tests/suites/78-physics.js`.
+out. The block's code is in `src/domain/physics.ts` (source model, units, scene, export) and one file per domain
+(`src/domain/phys-*.ts`). Its editor is `src/editors/phyeditor.ts`. The tests are in `tests/suites/78-physics.js`.
 
 ## The source
 
