@@ -1,7 +1,18 @@
+import { GRID_STYLES, snapCanvasGrid } from '../ui/canvas-grid';
+import { applyWelcomeEdits } from './examples/welcome-edits';
+import { exampleDiagramBlocks } from './example-diagrams';
+import { previewFadeFinished } from '../platform/preview-fade';
+import { updateSvg } from '../platform/update-svg';
+import { SvgLabelResources } from '../platform/svg-label-resources';
+import { labelFontsReady } from '../domain/label-image';
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, caption, message, onLocale } from '../i18n';
+import { typeName } from '../i18n/shapes';
 import { destroyView } from '../ui/render-view.svelte';
 import type { PositionedShape } from '../core/blocks';
 import type { Shape } from '../core/contracts';
-interface SavedEntry { id: string; name: string; kind: import('../core/contracts').FileKind; updated: number }
+interface SavedEntry { id: string; name: string; kind: import('../core/contracts').FileKind; updated: number; created?: number }
 interface DeletedEntry extends SavedEntry { deleted: number; folder?: string; batch?: string }
 import type { EditorState } from '../core/state';
 import { createEditorState } from '../core/state';
@@ -26,7 +37,7 @@ import { runtime as TD } from '../runtime';
 // DiagramTeX editor: state, interaction, history, properties panel, storage and export.
 (function () {
   const { TYPES, util } = TD;
-  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; v.title = `DiagramTeX ${TD.VERSION}: this release on GitLab`; (v as HTMLAnchorElement).href = `https://gitlab.com/igniting-space/diagramtex/-/tags/v${TD.VERSION}`; } }
+  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; v.title = uiText('app.version.title', 'DiagramTeX {version}: this release on GitLab', { version: TD.VERSION }); (v as HTMLAnchorElement).href = `https://gitlab.com/igniting-space/diagramtex/-/tags/v${TD.VERSION}`; } }
   // a newer release on this host (dist/version.json, written by the build): a marker dot by the version, and
   // a click reloads into it. Asked once per load, past every cache; no answer (dev, offline) changes nothing.
   {
@@ -35,7 +46,7 @@ import { runtime as TD } from '../runtime';
       const v = document.getElementById('appVer'), n = j && j.version;
       if (!v || !n || !newer(n, TD.VERSION)) return;
       v.classList.add('update');
-      v.title = `DiagramTeX ${n} is out (this is ${TD.VERSION}): click to reload`;
+      v.title = uiText('app.version.update', 'DiagramTeX {version} is out (this is {current}): click to reload', { version: n, current: TD.VERSION });
       v.removeAttribute('target'); (v as HTMLAnchorElement).href = location.href;
       v.addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
     }).catch(() => {});
@@ -54,27 +65,28 @@ import { runtime as TD } from '../runtime';
   // [mode, label, hint, icon (20 × 20)]. The first is the default. 'three' and 'circle3' are drawn click by
   // click (pointsKind); the rest by one drag (the shape type's drag, given the mode).
   const DOT = (x: number, y: number) => `<circle cx="${x}" cy="${y}" r="1.6" class="f"/>`;
-  const DRAW_MODES: Record<string, string[][]> = {
+  const DRAW_MODES: Record<string, any[][]> = {
     rect: [
-      ['corner', 'Corner to corner', 'Drag from one corner to the other, or click both (Shift keeps it square)', `<rect x="3" y="5" width="14" height="10"/>${DOT(3, 15)}${DOT(17, 5)}`],
-      ['center', 'From the centre', 'Drag from the centre out to a corner, or click both (Shift keeps it square)', `<rect x="3" y="5" width="14" height="10"/>${DOT(10, 10)}${DOT(17, 5)}`],
-      ['three', 'Three points', 'Click a corner, the next corner, then how far the other side goes: a turned rectangle', `<path d="M4.25 9.75L9.75 4.25 15.75 10.25 10.25 15.75z"/>${DOT(4.25, 9.75)}${DOT(9.75, 4.25)}${DOT(15.75, 10.25)}`],
+      ['corner', message('mode.corner', 'Corner to corner'), message('mode.rect.corner.hint', 'Drag from one corner to the other, or click both (Shift keeps it square)'), `<rect x="3" y="5" width="14" height="10"/>${DOT(3, 15)}${DOT(17, 5)}`],
+      ['center', message('mode.center', 'From the centre'), message('mode.rect.center.hint', 'Drag from the centre out to a corner, or click both (Shift keeps it square)'), `<rect x="3" y="5" width="14" height="10"/>${DOT(10, 10)}${DOT(17, 5)}`],
+      ['three', message('mode.three', 'Three points'), message('mode.rect.three.hint', 'Click a corner, the next corner, then how far the other side goes: a turned rectangle'), `<path d="M4.25 9.75L9.75 4.25 15.75 10.25 10.25 15.75z"/>${DOT(4.25, 9.75)}${DOT(9.75, 4.25)}${DOT(15.75, 10.25)}`],
     ],
     ellipse: [
-      ['corner', 'Corner to corner', 'Drag across the box round the ellipse, or click two opposite corners (Shift makes a circle)', `<ellipse cx="10" cy="10" rx="7" ry="5"/>${DOT(3, 15)}${DOT(17, 5)}`],
-      ['center', 'From the centre', 'Drag from the centre out to a corner of its box, or click both (Shift makes a circle)', `<ellipse cx="10" cy="10" rx="7" ry="5"/>${DOT(10, 10)}${DOT(17, 5)}`],
-      ['circle', 'Circle from the centre', 'Drag from the centre out to the circle, or click both', `<circle cx="10" cy="10" r="7"/>${DOT(10, 10)}`],
-      ['circle2', 'Circle by 2 points', 'Drag or click across the circle: the two ends of a diameter', `<circle cx="10" cy="10" r="7"/><path d="M3 10h14" stroke-dasharray="1.5 2"/>${DOT(3, 10)}${DOT(17, 10)}`],
-      ['circle3', 'Circle by 3 points', 'Click three points on the circle', `<circle cx="10" cy="10" r="7"/>${DOT(3, 10)}${DOT(13.5, 3.94)}${DOT(13.5, 16.06)}`],
+      ['corner', message('mode.corner', 'Corner to corner'), message('mode.ellipse.corner.hint', 'Drag across the box round the ellipse, or click two opposite corners (Shift makes a circle)'), `<ellipse cx="10" cy="10" rx="7" ry="5"/>${DOT(3, 15)}${DOT(17, 5)}`],
+      ['center', message('mode.center', 'From the centre'), message('mode.ellipse.center.hint', 'Drag from the centre out to a corner of its box, or click both (Shift makes a circle)'), `<ellipse cx="10" cy="10" rx="7" ry="5"/>${DOT(10, 10)}${DOT(17, 5)}`],
+      ['circle', message('mode.circle', 'Circle from the centre'), message('mode.circle.hint', 'Drag from the centre out to the circle, or click both'), `<circle cx="10" cy="10" r="7"/>${DOT(10, 10)}`],
+      ['circle2', message('mode.circle2', 'Circle by 2 points'), message('mode.circle2.hint', 'Drag or click across the circle: the two ends of a diameter'), `<circle cx="10" cy="10" r="7"/><path d="M3 10h14" stroke-dasharray="1.5 2"/>${DOT(3, 10)}${DOT(17, 10)}`],
+      ['circle3', message('mode.circle3', 'Circle by 3 points'), message('mode.circle3.hint', 'Click three points on the circle'), `<circle cx="10" cy="10" r="7"/>${DOT(3, 10)}${DOT(13.5, 3.94)}${DOT(13.5, 16.06)}`],
     ],
   };
   const MODES_KEY = 'diagramtex.drawModes';
   const drawModes: Record<string, string> = (() => { try { return JSON.parse(localStorage.getItem(MODES_KEY) || '{}') || {}; } catch (e: any) { return {}; } })();
   const drawMode = (tool: string) => { const L = DRAW_MODES[tool]; return L && L.some((r) => r[0] === drawModes[tool]) ? drawModes[tool] : L ? L[0][0] : ''; };
   const modeRow = (tool: string) => DRAW_MODES[tool].find((r) => r[0] === drawMode(tool))!;
-  const modeHint = (tool: string) => modeRow(tool)[2];
+  const modeHint = (tool: string) => caption(modeRow(tool)[2]);
   // what the second click of a two-click box sets, by draw mode
-  const secondClickHint = (m: string) => (({ center: 'Click where a corner goes', circle: 'Click a point on the circle', circle2: 'Click the other end of the diameter' }) as Record<string, string>)[m] || 'Click the opposite corner';
+  const secondClickHint = (m: string) => m === 'center' ? uiText('hint.second.center', 'Click where a corner goes') : m === 'circle' ? uiText('hint.second.circle', 'Click a point on the circle')
+    : m === 'circle2' ? uiText('hint.second.circle2', 'Click the other end of the diameter') : uiText('hint.second.corner', 'Click the opposite corner');
 
   // A document is a list of blocks (text paragraphs and diagrams). The canvas edits one diagram
   // block at a time; state.doc.shapes always points at that block's shapes.
@@ -102,7 +114,7 @@ import { runtime as TD } from '../runtime';
       // a shape its type cannot measure would break every redraw (and, at startup, the whole app): leave it out
       try { TD.bbox(sh); return true; } catch (err) { console.warn('Left out a damaged shape', sh.type, err); return false; }
     },
-    onDropped: (n) => setTimeout(() => showHint(`Left out ${n} damaged shape${n > 1 ? 's' : ''} that could not be drawn`, 5000), 0),
+    onDropped: (n) => setTimeout(() => showHint(n > 1 ? uiText('hint.droppedShapes.many', 'Left out {n} damaged shapes that could not be drawn', { n }) : uiText('hint.droppedShapes.one', 'Left out 1 damaged shape that could not be drawn'), 5000), 0),
     pageDefaults: TD.PAGE_DEFAULT,
   });
 
@@ -120,14 +132,19 @@ import { runtime as TD } from '../runtime';
 
   function uid() { return Math.random().toString(36).slice(2, 10); }
   const clone = (o: any) => JSON.parse(JSON.stringify(o));
-  const shapes = (): Shape[] => state.doc.shapes;
+  // Formatting previews have their own render scene. Saved files, exports and history always
+  // read the real document; linked geometry is solved only on the disposable scene while painting.
+  let renderScene: Shape[] | null = null;
+  let formatPreview: { owner: any; ids: string; key: string; value: any; scene: Shape[] | null } | null = null;
+  let formatPreviewFrame = 0;
+  const shapes = (): Shape[] => renderScene || state.doc.shapes;
   // where the diagram's variables live (saved with it): the page sheet, or the diagram block
   const home = () => (state.doc.kind === 'page' ? state.doc.sheet : state.doc.blocks[state.doc.active]);
   // shape by id: an index into the shape list, rebuilt when it no longer matches (loops over a large
   // selection call this once per shape, so a scan each time would be quadratic)
   let idList: any = null, idPos = new Map();
   function byId(id: any) {
-    const L = state.doc.shapes;
+    const L = shapes();
     let i = L === idList ? idPos.get(id) : undefined;
     if (i !== undefined && L[i] && L[i].id === id) return L[i];
     idList = L; idPos = new Map();
@@ -135,7 +152,7 @@ import { runtime as TD } from '../runtime';
     i = idPos.get(id);
     return i === undefined ? undefined : L[i];
   }
-  const selected = (): Shape[] => state.doc.shapes.filter((s: any) => state.sel.has(s.id));
+  const selected = (): Shape[] => shapes().filter((s: any) => state.sel.has(s.id));
 
   // Document transactions are independent of DOM and persistence. Input completion stays here.
   const documentHistory = createDocumentHistory(state, {
@@ -144,7 +161,8 @@ import { runtime as TD } from '../runtime';
     applied() { render(); renderProps(); scheduleSave(); updateTopbar(); },
     updateTools: updateTopbar,
   });
-  const { begin, commit, apply: applyStep, trim: trimUndo } = documentHistory;
+  const { commit, apply: applyStep, trim: trimUndo } = documentHistory;
+  function begin() { clearFormatPreview(false); documentHistory.begin(); }
 
   // The open file's own steps come first; once they run out, undo reaches the file list (a file or folder
   // moved to the Recycle Bin comes back), as redo does the other way.
@@ -193,24 +211,25 @@ import { runtime as TD } from '../runtime';
     const was = !saveOk;
     saveOk = ok; saveFull = full;
     showSaveState();
-    if (!ok && !was) showHint(full ? 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.'
-      : 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.', 6000);
+    if (!ok && !was) showHint(full ? uiText('hint.autosave.tooLarge', 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.')
+      : uiText('hint.autosave.unavailable', 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.'), 6000);
   }
   // Beside the file name: autosave, or, for a file linked to one on disk, that file's name, marked while the
   // document has changes not yet saved to it.
   function showSaveState() {
     const st = $('#saveState'), f = TD.files.fileOf(state.docId);
     const dirty = !!f && saveOk && !TD.files.isSaved(state.docId, projectJson(state.doc));
-    const msg = !saveOk ? (saveFull ? 'Autosave failed: browser storage is full' : 'Autosave failed: browser storage unavailable') : f ? f.name : '';
+    const msg = !saveOk ? (saveFull ? uiText('save.state.full', 'Autosave failed: browser storage is full') : uiText('save.state.unavailable', 'Autosave failed: browser storage unavailable')) : f ? f.name : '';
+    $('#autosaveNote').classList.toggle('unavailable', !saveOk);
     st.classList.toggle('err', !saveOk);
     st.classList.toggle('linked', saveOk && !!f);
     st.classList.toggle('dirty', dirty);
     if (st.textContent !== msg) st.textContent = msg; // unchanged text is not re-announced
     st.title = !saveOk ? msg // the full message where only "Not saved" fits
-      : f ? (dirty ? `Changes not yet saved to ${f.name}. Ctrl+S saves them.` : `Saved to ${f.name}. Ctrl+S saves changes to it.`)
-      : 'Every change is saved in this browser as you work';
+      : f ? (dirty ? uiText('save.state.dirty', 'Changes not yet saved to {file}. Ctrl+S saves them.', { file: f.name }) : uiText('save.state.saved', 'Saved to {file}. Ctrl+S saves changes to it.', { file: f.name }))
+      : caption(captions["ui.every.change.is.saved.in.this.browser.as.you.work"]);
     const b = $('#topbar [data-cmd="save"]');
-    if (b) b.title = f ? `Save to ${f.name} (Ctrl+S)` : TD.files.can ? 'Save to a .diagramtex file on your computer; later saves go to the same file (Ctrl+Shift+S)' : 'Save to a .diagramtex file that you can open again (Ctrl+Shift+S)';
+    if (b) b.title = f ? uiText('save.btn.linked', 'Save to {file} (Ctrl+S)', { file: f.name }) : TD.files.can ? uiText('save.btn.files', 'Save to a .diagramtex file on your computer; later saves go to the same file (Ctrl+Shift+S)') : caption(captions["ui.save.to.a.diagramtex.file.that.you.can.open.again.ctrl.shift.s"]);
   }
   // The properties window folds up to its first heading and back down, its height eased between the two.
   // Each time the panel is drawn, its first heading moves into the window's head, above the scrolling part,
@@ -245,7 +264,7 @@ import { runtime as TD } from '../runtime';
     const scrolled = els.map(overflows);
     win.classList.toggle('collapsed', !open);
     btn.setAttribute('aria-expanded', String(open));
-    btn.title = open ? 'Collapse panel' : 'Expand panel';
+    btn.title = open ? caption(captions["ui.collapse.panel"]) : uiText('panel.expand', 'Expand panel');
     if (after) after();
     if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const to = els.map((el) => el.offsetHeight), scrolls = els.map(overflows); // measured before `.folding` lifts the cap
@@ -269,7 +288,7 @@ import { runtime as TD } from '../runtime';
       el.addEventListener('transitionend', end);
     });
   }
-  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
+  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, gridStyle: state.gridStyle, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
 
   // ---- Undo history per file (and per diagram of a classic file). Leaving a file keeps its steps; coming back
   // gives them back, as long as what they apply to is still exactly as it was left. Another tab's edit, a
@@ -296,6 +315,7 @@ import { runtime as TD } from '../runtime';
   const forgetHistory = (id: string) => { for (const k of [...histories.keys()]) if (k.startsWith(id + ':')) histories.delete(k); };
 
   function openDoc(id: any) {
+    TD.math.cancelPending();
     finishEdit(); finishPoly(); commit();
     if (state.docId) { saveNow(); keepHistory(); }
     const d: any = store.get<Record<string, any> | null>(LS_DOC + id, null);
@@ -344,7 +364,11 @@ import { runtime as TD } from '../runtime';
     if (id) openDoc(id); else newDoc(NEW_NAME[kind], null, null, null, null, kind);
     if (kind === 'classic' && m && m !== state.mode) { applyMode(m, false); scheduleSave(); }
   }
+  const documentScroll = new Map<string, { top: number; left: number }>();
+  let documentViewId: string | null = null;
   function applyMode(m: any, fit: any) {
+    const docView = $('#docview');
+    if (state.mode === 'document' && documentViewId) documentScroll.set(documentViewId, { top: docView.scrollTop, left: docView.scrollLeft });
     state.mode = m;
     document.body.classList.toggle('mode-doc', m === 'document');
     document.body.classList.toggle('mode-page', m === 'page');
@@ -356,6 +380,12 @@ import { runtime as TD } from '../runtime';
     else requestAnimationFrame(() => { const f = fit || fitLater; fitLater = false; if (f) zoomFit(); else render(); });
     renderProps();
     updateTopbar();
+    if (m === 'document' && state.docId) {
+      const id = documentViewId = state.docId;
+      const scroll = documentScroll.get(id) || { top: 0, left: 0 };
+      const restore = () => { if (state.mode === 'document' && state.docId === id) { docView.scrollTop = scroll.top; docView.scrollLeft = scroll.left; } };
+      restore(); requestAnimationFrame(restore); // after docview's scheduled page layout
+    }
   }
   function newDoc(name: any, shapesArr: any, view: any, blocks: any, page?: any, kind?: any, sheet?: any) {
     const id = uid();
@@ -366,7 +396,7 @@ import { runtime as TD } from '../runtime';
     store.set(LS_DOC + id, kind === 'page'
       ? { kind, name, page, sheet: sheet || { pages: 1, shapes: [] }, view, mode: 'page' }
       : { kind, name, blocks: blocks || [{ type: 'diagram', shapes: shapesArr || [] }], active: 0, page, view: view || { x: -60, y: -60, zoom: 1 }, mode: kind === 'board' ? 'board' : 'document' }); // a Classic file opens on its page
-    const idx: any[] = index(); idx.push({ id, name, kind, updated: Date.now() }); store.set(LS_INDEX, idx);
+    const idx: any[] = index(); const now = Date.now(); idx.push({ id, name, kind, updated: now, created: now }); store.set(LS_INDEX, idx);
     openDoc(id);
     return id;
   }
@@ -393,7 +423,7 @@ import { runtime as TD } from '../runtime';
     // what undo needs to put things back as they were: places in the list, the open file, folded folders
     const step: FileStep = { t: stamp(), ids: out.map((d) => d.id), folder, at: out.map((d) => all.indexOf(d)), open: ids.includes(state.docId) ? state.docId : null, created: null,
       folded: folder ? [...folded].filter((k) => k === foldKey(folder) || k.startsWith(foldKey(folder + '/'))) : [] };
-    store.set(LS_BIN, [...bin(), ...out.map((d) => ({ id: (d as any).id, name: (d as any).name, kind: (d as any).kind || 'classic', deleted: when, ...(folder ? { folder, batch } : {}) }))]);
+    store.set(LS_BIN, [...bin(), ...out.map((d) => ({ id: (d as any).id, name: (d as any).name, kind: (d as any).kind || 'classic', updated: (d as any).updated, created: (d as any).created, deleted: when, ...(folder ? { folder, batch } : {}) }))]);
     const idx = all.filter((d) => !ids.includes((d as any).id));
     store.set(LS_INDEX, idx);
     if (ids.includes(state.docId)) {
@@ -437,7 +467,7 @@ import { runtime as TD } from '../runtime';
       const x: any = items.find((y) => y.id === id);
       const name = idx.some((d) => d.name === x.name) ? copyName(x.name) : x.name;
       if (name !== x.name) store.set(LS_DOC + id, { ...store.get<Record<string, any>>(LS_DOC + id, {}), name });
-      idx.splice(Math.min(at, idx.length), 0, { id, name, kind: x.kind, updated: x.updated || Date.now() });
+      idx.splice(Math.min(at, idx.length), 0, { id, name, kind: x.kind, updated: x.updated || Date.now(), created: x.created || x.updated || Date.now() });
     }
     // the empty file that stood in for the deleted one goes again
     let dropped = false;
@@ -458,7 +488,7 @@ import { runtime as TD } from '../runtime';
     else if (!state.docId) { const same = idx.filter((d) => (d.kind || 'classic') === state.doc.kind); if (same.length) openDoc(same[same.length - 1].id); }
     renderDocList(); renderBinRow(); updateTopbar();
     const first: any = items.find((x) => x.id === ids[0]);
-    showHint(step.folder ? `Restored "${leafOf(step.folder)}"` : ids.length === 1 ? `Restored "${leafOf(first.name)}"` : `Restored ${ids.length} files`, 1600);
+    showHint(step.folder ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(step.folder) }) : ids.length === 1 ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(first.name) }) : uiText('hint.restored.many', 'Restored {n} files', { n: ids.length }), 1600);
   }
   function redoFile() {
     if (!canRedoFile()) return;
@@ -467,27 +497,28 @@ import { runtime as TD } from '../runtime';
     binDocs(ids, step.folder, step.back);
     for (const k of step.folded) folded.delete(k);
     if (step.folded.length) store.set(LS_FOLDED, [...folded]);
-    showHint(`Moved "${leafOf(step.folder || it.name)}" to the Recycle Bin`, 1600);
+    showHint(uiText('hint.binned', 'Moved "{name}" to the Recycle Bin', { name: leafOf(step.folder || it.name) }), 1600);
   }
-  const undoHint = () => `${kb('Ctrl+Z')} brings it back`;
+  const undoHint = () => uiText('hint.undoBringsBack', '{key} brings it back', { key: kb('Ctrl+Z') });
   function deleteDoc(id: any) {
     const it: any = docEntry(id);
     if (!it) return;
     fileRedo.length = 0;
     binDocs([id]);
-    showHint(`Moved "${leafOf(it.name)}" to the Recycle Bin. ${undoHint()}`, 2400);
+    showHint(uiText('hint.binned.undo', 'Moved "{name}" to the Recycle Bin. {undo}', { name: leafOf(it.name), undo: undoHint() }), 2400);
   }
   // A folder goes to the bin with everything in it (files of the kind on show, and the folders inside).
   async function deleteFolder(path: any) {
     const kind = state.doc.kind, pre = path + '/';
     const ids = index().filter((d) => ((d as any).kind || 'classic') === kind && pathOf((d as any).name).join('/').startsWith(pre)).map((d) => (d as any).id);
     if (!ids.length) return;
-    if (!(await TD.confirm(`Delete the folder "${leafOf(path)}"?`, `${ids.length === 1 ? 'The file' : `All ${ids.length} files`} in it ${ids.length === 1 ? 'goes' : 'go'} to the Recycle Bin, where you can restore ${ids.length === 1 ? 'it' : 'them'} for ${BIN_DAYS} days.`, { ok: 'Delete Folder', danger: true }))) return;
+    if (!(await TD.confirm(uiText('dlg.deleteFolder.title', 'Delete the folder "{name}"?', { name: leafOf(path) }), ids.length === 1 ? uiText('dlg.deleteFolder.one', 'The file in it goes to the Recycle Bin, where you can restore it for {days} days.', { days: BIN_DAYS })
+      : uiText('dlg.deleteFolder.many', 'All {n} files in it go to the Recycle Bin, where you can restore them for {days} days.', { n: ids.length, days: BIN_DAYS }), { ok: uiText('dlg.deleteFolder.ok', 'Delete Folder'), danger: true }))) return;
     fileRedo.length = 0;
     binDocs(ids, path);
     for (const k of [...folded]) if (k === foldKey(path) || (k as any).startsWith(foldKey(pre))) folded.delete(k);
     store.set(LS_FOLDED, [...folded]);
-    showHint(`Moved "${leafOf(path)}" to the Recycle Bin. ${undoHint()}`, 2400);
+    showHint(uiText('hint.binned.undo', 'Moved "{name}" to the Recycle Bin. {undo}', { name: leafOf(path), undo: undoHint() }), 2400);
   }
   // Put files back under their old names (a name taken since gets "copy"); the first one opens.
   function restoreFromBin(ids: any) {
@@ -497,13 +528,13 @@ import { runtime as TD } from '../runtime';
     for (const x of items) {
       const name = idx.some((d) => d.name === (x as any).name) ? copyName((x as any).name) : (x as any).name;
       if (name !== (x as any).name) { const d = store.get<Record<string, any> | null>(LS_DOC + (x as any).id, null); store.set(LS_DOC + (x as any).id, { ...d, name }); }
-      idx.push({ id: (x as any).id, name, kind: (x as any).kind, updated: Date.now() });
+      idx.push({ id: (x as any).id, name, kind: (x as any).kind, updated: (x as any).updated || Date.now(), created: (x as any).created || (x as any).updated || Date.now() });
       store.set(LS_INDEX, idx);
     }
     store.set(LS_BIN, bin().filter((x) => !ids.includes((x as any).id)));
     openDoc((items[0] as any).id);
     renderBinRow();
-    showHint(items.length === 1 ? `Restored "${leafOf((items[0] as any).name)}"` : `Restored ${items.length} files`, 1600);
+    showHint(items.length === 1 ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf((items[0] as any).name) }) : uiText('hint.restored.many', 'Restored {n} files', { n: items.length }), 1600);
   }
   function eraseFromBin(ids: any) {
     for (const id of ids) { store.del(LS_DOC + id); recovery.forget(id); forgetHistory(id); TD.files.forget(id); }
@@ -517,8 +548,8 @@ import { runtime as TD } from '../runtime';
     b.querySelector('.bin-n').textContent = n ? n : '';
     b.classList.toggle('full', n > 0);
   }
-  const ago = (t: any) => { const d = Math.floor((Date.now() - t) / DAY); return d < 1 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`; };
-  const left = (t: any) => { const d = Math.max(0, Math.ceil((t + BIN_DAYS * DAY - Date.now()) / DAY)); return d <= 1 ? 'removed within a day' : `removed in ${d} days`; };
+  const ago = (t: any) => { const d = Math.floor((Date.now() - t) / DAY); return d < 1 ? uiText('time.today', 'today') : d === 1 ? uiText('time.yesterday', 'yesterday') : uiText('time.daysAgo', '{n} days ago', { n: d }); };
+  const left = (t: any) => { const d = Math.max(0, Math.ceil((t + BIN_DAYS * DAY - Date.now()) / DAY)); return d <= 1 ? uiText('bin.removedWithinDay', 'removed within a day') : uiText('bin.removedInDays', 'removed in {n} days', { n: d }); };
   // The bin: one row per file, or per folder deleted as a whole (restored or removed together).
   function openBin() {
     if ($('#binDlg')) return;
@@ -526,12 +557,13 @@ import { runtime as TD } from '../runtime';
     const root = document.createElement('div');
     root.className = 'td-dialog'; root.id = 'binDlg';
     root.innerHTML = `<div class="tdd-box bin-box" role="dialog" aria-modal="true" aria-labelledby="binTitle">
-      <h2 id="binTitle">Recycle Bin</h2><p class="bin-sub">Deleted files and folders stay here for ${BIN_DAYS} days, then they are removed for good.</p>
+      <h2 id="binTitle">${esc(caption(captions["ui.recycle.bin"]))}</h2><p class="bin-sub">${esc(uiText('bin.sub', 'Deleted files and folders stay here for {days} days, then they are removed for good.', { days: BIN_DAYS }))}</p>
       <ul class="bin-list" role="list"></ul>
-      <div class="tdd-btns"><button type="button" class="bin-empty danger-text">Empty Bin…</button><span class="sp"></span><button type="button" class="primary bin-done">Done</button></div></div>`;
+      <div class="tdd-btns"><button type="button" class="bin-empty danger-text">${esc(uiText('bin.empty', 'Empty Bin…'))}</button><span class="sp"></span><button type="button" class="primary bin-done">${esc(caption(captions["ui.done"]))}</button></div></div>`;
     document.body.appendChild(root);
     const list = root.querySelector('.bin-list');
-    const KIND_WORD: Record<string, any> = { page: 'Page', board: 'Whiteboard', classic: 'Classic' };
+    const KIND_WORD: Record<string, any> = { page: caption(captions["ui.page"]), board: caption(captions["ui.whiteboard"]), classic: caption(captions["ui.classic"]) };
+    const inFolder = (f: string) => f ? ' · ' + uiText('bin.inFolder', 'in {folder}', { folder: f }) : '';
     const draw = () => {
       const items = purgeBin().slice().sort((a, b) => b.deleted - a.deleted), rows = [], seen = new Set();
       for (const x of items) {
@@ -539,12 +571,12 @@ import { runtime as TD } from '../runtime';
           if (seen.has(x.batch)) continue;
           seen.add(x.batch);
           const g = items.filter((y) => y.batch === x.batch);
-          rows.push({ ids: g.map((y) => y.id), ic: FOLDER_IC, name: leafOf(x.folder), detail: `${g.length} file${g.length === 1 ? '' : 's'} · ${KIND_WORD[x.kind]}${folderOf(x.folder) ? ' · in ' + folderOf(x.folder) : ''}`, t: x.deleted });
-        } else rows.push({ ids: [x.id], ic: KIND_IC[x.kind] || KIND_IC.classic, name: leafOf(x.name), detail: `${KIND_WORD[x.kind]}${folderOf(x.name) ? ' · in ' + folderOf(x.name) : ''}`, t: x.deleted });
+          rows.push({ ids: g.map((y) => y.id), ic: FOLDER_IC, name: leafOf(x.folder), detail: `${g.length === 1 ? uiText('bin.files.one', '1 file') : uiText('bin.files.many', '{n} files', { n: g.length })} · ${KIND_WORD[x.kind]}${inFolder(folderOf(x.folder))}`, t: x.deleted });
+        } else rows.push({ ids: [x.id], ic: KIND_IC[x.kind] || KIND_IC.classic, name: leafOf(x.name), detail: `${KIND_WORD[x.kind]}${inFolder(folderOf(x.name))}`, t: x.deleted });
       }
-      list!.innerHTML = rows.length ? rows.map((r) => `<li data-ids="${r.ids.join(',')}"><span class="bin-ic">${r.ic}</span><span class="bin-nm"><b>${esc(r.name)}</b><small>${esc(r.detail)} · deleted ${ago(r.t)}, ${left(r.t)}</small></span>
-        <button type="button" class="bin-restore">Restore</button><button type="button" class="icon flat bin-erase" title="Delete for good" aria-label="Delete ${esc(r.name)} for good"><svg viewBox="0 0 20 20">${IC.del}</svg></button></li>`).join('')
-        : '<li class="bin-none">The Recycle Bin is empty.</li>';
+      list!.innerHTML = rows.length ? rows.map((r) => `<li data-ids="${r.ids.join(',')}"><span class="bin-ic">${r.ic}</span><span class="bin-nm"><b>${esc(r.name)}</b><small>${esc(r.detail)} · ${esc(uiText('bin.deletedWhen', 'deleted {ago}, {left}', { ago: ago(r.t), left: left(r.t) }))}</small></span>
+        <button type="button" class="bin-restore">${esc(uiText('bin.restore', 'Restore'))}</button><button type="button" class="icon flat bin-erase" title="${esc(uiText('bin.deleteForGood', 'Delete for good'))}" aria-label="${esc(uiText('bin.deleteForGood.aria', 'Delete {name} for good', { name: r.name }))}"><svg viewBox="0 0 20 20">${IC.del}</svg></button></li>`).join('')
+        : `<li class="bin-none">${esc(uiText('bin.isEmpty', 'The Recycle Bin is empty.'))}</li>`;
       ((root.querySelector('.bin-empty'))! as HTMLButtonElement).disabled = !rows.length;
     };
     const close = () => { root.remove(); if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); };
@@ -556,14 +588,14 @@ import { runtime as TD } from '../runtime';
       else if ((e.target! as Element).closest('.bin-erase')) {
         const name = (li!.querySelector('b'))!.textContent;
         root.hidden = true;
-        const yes = await TD.confirm(`Delete "${name}" for good?`, ids.length > 1 ? `Its ${ids.length} files are removed from this browser. This can't be undone.` : "It is removed from this browser. This can't be undone.", { ok: 'Delete', danger: true });
+        const yes = await TD.confirm(uiText('dlg.eraseBin.title', 'Delete "{name}" for good?', { name: name || '' }), ids.length > 1 ? uiText('dlg.eraseBin.many', "Its {n} files are removed from this browser. This can't be undone.", { n: ids.length }) : uiText('dlg.eraseBin.one', "It is removed from this browser. This can't be undone."), { ok: caption(captions["ui.delete"]), danger: true });
         root.hidden = false;
         if (yes) { eraseFromBin(ids); draw(); }
         ((root.querySelector('.bin-restore') || root.querySelector('.bin-done'))! as HTMLElement).focus();
       } else if ((e.target! as Element).closest('.bin-empty')) {
         const n = bin().length;
         root.hidden = true;
-        const yes = await TD.confirm('Empty the Recycle Bin?', `${n} file${n === 1 ? ' is' : 's are'} removed from this browser. This can't be undone.`, { ok: 'Empty Bin', danger: true });
+        const yes = await TD.confirm(uiText('dlg.emptyBin.title', 'Empty the Recycle Bin?'), n === 1 ? uiText('dlg.emptyBin.one', "1 file is removed from this browser. This can't be undone.") : uiText('dlg.emptyBin.many', "{n} files are removed from this browser. This can't be undone.", { n }), { ok: uiText('dlg.emptyBin.ok', 'Empty Bin'), danger: true });
         root.hidden = false;
         if (yes) { eraseFromBin(bin().map((x) => (x as any).id)); draw(); }
         ((root.querySelector('.bin-done'))! as HTMLElement).focus();
@@ -586,21 +618,22 @@ import { runtime as TD } from '../runtime';
   function whenOf(t: number) {
     const d = new Date(t), today = new Date(), y = new Date(today.getTime() - DAY);
     const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-    return same(d, today) ? `Today, ${clockOf(t)}` : same(d, y) ? `Yesterday, ${clockOf(t)}`
+    return same(d, today) ? uiText('time.todayAt', 'Today, {time}', { time: clockOf(t) }) : same(d, y) ? uiText('time.yesterdayAt', 'Yesterday, {time}', { time: clockOf(t) })
       : d.toLocaleDateString([], { month: 'short', day: 'numeric', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) }) + ', ' + clockOf(t);
   }
   function sinceOf(t: number) {
     const m = Math.round((Date.now() - t) / 6e4);
-    return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 60 * 24 ? `${Math.round(m / 60)} h ago` : ago(t);
+    return m < 1 ? uiText('time.justNow', 'just now') : m < 60 ? uiText('time.minAgo', '{n} min ago', { n: m }) : m < 60 * 24 ? uiText('time.hoursAgo', '{n} h ago', { n: Math.round(m / 60) }) : ago(t);
   }
   const sizeOf = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
   function contentsOf(d: any) {
-    if (d.kind === 'page') { const n = d.sheet?.shapes?.length || 0; return `${n} object${n === 1 ? '' : 's'}`; }
+    const count = (n: number) => n === 1 ? uiText('count.objects.one', '1 object') : uiText('count.objects.many', '{n} objects', { n });
+    if (d.kind === 'page') { const n = d.sheet?.shapes?.length || 0; return count(n); }
     const blocks = d.blocks || [], n = blocks.reduce((s: number, b: any) => s + (b.shapes?.length || 0), 0);
-    const objects = `${n} object${n === 1 ? '' : 's'}`;
-    return d.kind === 'board' || blocks.length < 2 ? objects : `${blocks.length} blocks, ${objects}`;
+    const objects = count(n);
+    return d.kind === 'board' || blocks.length < 2 ? objects : uiText('count.blocksObjects', '{blocks} blocks, {objects}', { blocks: blocks.length, objects });
   }
-  const everyWord = (m: number) => m === 60 ? 'every hour' : m === 1 ? 'every minute' : `every ${m} minutes`;
+  const everyWord = (m: number) => m === 60 ? uiText('rec.everyHour', 'every hour') : m === 1 ? uiText('rec.everyMinute', 'every minute') : uiText('rec.everyMinutes', 'every {n} minutes', { n: m });
   // Put a copy back in place of the file. What the file holds now becomes a copy itself, so this is undone
   // by restoring that one. The name, view and place in the list stay as they are.
   function restoreRecovery(id: string, copy: RecoveryCopy) {
@@ -613,7 +646,7 @@ import { runtime as TD } from '../runtime';
     const idx: any[] = index(), it = idx.find((x) => x.id === id);
     if (it) { it.updated = Date.now(); store.set(LS_INDEX, idx); }
     if (open) { state.docId = null; openDoc(id); } else renderDocList();
-    showHint(`Restored the copy from ${whenOf(copy.at)}. The state before it is kept as a recovery copy.`, 3200);
+    showHint(uiText('hint.recRestored', 'Restored the copy from {when}. The state before it is kept as a recovery copy.', { when: whenOf(copy.at) }), 3200);
   }
   function openRecoveryCopy(id: string, copy: RecoveryCopy) {
     const e: any = docEntry(id);
@@ -621,7 +654,7 @@ import { runtime as TD } from '../runtime';
     let name = `${e.name} (${whenOf(copy.at)})`;
     if (index().some((x) => x.name === name)) name = copyName(name);
     openDoc(storeCopy(copy.doc, name, id));
-    showHint(`Opened the recovery copy as "${leafOf(name)}"`, 1800);
+    showHint(uiText('hint.recOpened', 'Opened the recovery copy as "{name}"', { name: leafOf(name) }), 1800);
   }
   function openRecovery(id?: string) {
     id = id || state.docId || undefined;
@@ -633,13 +666,13 @@ import { runtime as TD } from '../runtime';
     const opts = (vals: number[], cur: number, word: (v: number) => string) => vals.map((v) => `<option value="${v}"${v === cur ? ' selected' : ''}>${word(v)}</option>`).join('');
     const s0 = recoverySettings();
     root.innerHTML = `<div class="tdd-box bin-box rec-box" role="dialog" aria-modal="true" aria-labelledby="recTitle">
-      <h2 id="recTitle">Recovery Copies</h2><p class="bin-sub"></p>
+      <h2 id="recTitle">${esc(uiText('rec.title', 'Recovery Copies'))}</h2><p class="bin-sub"></p>
       <ul class="bin-list rec-list" role="list"></ul>
       <div class="rec-set">
-        <label>Keep a copy <select name="every" aria-label="How often a copy is kept">${opts(RECOVERY_EVERY, s0.every, (v) => v ? everyWord(v) : 'never')}</select></label>
-        <label>Keep the newest <select name="keep" aria-label="How many copies are kept">${opts(RECOVERY_KEEP, s0.keep, (v) => String(v))}</select></label>
+        <label>${esc(uiText('rec.keepCopy', 'Keep a copy'))} <select name="every" aria-label="${esc(uiText('rec.keepCopy.aria', 'How often a copy is kept'))}">${opts(RECOVERY_EVERY, s0.every, (v) => esc(v ? everyWord(v) : uiText('rec.never', 'never')))}</select></label>
+        <label>${esc(uiText('rec.keepNewest', 'Keep the newest'))} <select name="keep" aria-label="${esc(uiText('rec.keepNewest.aria', 'How many copies are kept'))}">${opts(RECOVERY_KEEP, s0.keep, (v) => String(v))}</select></label>
       </div>
-      <div class="tdd-btns"><span class="sp"></span><button type="button" class="primary rec-done">Done</button></div></div>`;
+      <div class="tdd-btns"><span class="sp"></span><button type="button" class="primary rec-done">${esc(caption(captions["ui.done"]))}</button></div></div>`;
     document.body.appendChild(root);
     const list = root.querySelector('.rec-list')!, sub = root.querySelector('.bin-sub')!;
     let copies: RecoveryCopy[] = [];
@@ -647,12 +680,14 @@ import { runtime as TD } from '../runtime';
       const e: any = docEntry(id!), s = recoverySettings();
       copies = recovery.list(id!);
       const total = copies.reduce((n, c) => n + JSON.stringify(c.doc).length, 0);
-      sub.textContent = !s.every ? `Copies of "${leafOf(e.name)}" are no longer kept. Those below stay until the file is deleted for good.`
-        : `Earlier states of "${leafOf(e.name)}", kept on their own while you edit: one ${everyWord(s.every)} at most, the newest ${s.keep}${s.every > RECOVERY_QUICK ? `, and one more in between, ${everyWord(RECOVERY_QUICK)}` : ''}.` +
-          (copies.length ? ` They take ${sizeOf(total)} in this browser.` : '');
+      const nm = leafOf(e.name);
+      sub.textContent = !s.every ? uiText('rec.sub.off', 'Copies of "{name}" are no longer kept. Those below stay until the file is deleted for good.', { name: nm })
+        : (s.every > RECOVERY_QUICK ? uiText('rec.sub.everyQuick', 'Earlier states of "{name}", kept on their own while you edit: one {every} at most, the newest {keep}, and one more in between, {quick}.', { name: nm, every: everyWord(s.every), keep: s.keep, quick: everyWord(RECOVERY_QUICK) })
+          : uiText('rec.sub.every', 'Earlier states of "{name}", kept on their own while you edit: one {every} at most, the newest {keep}.', { name: nm, every: everyWord(s.every), keep: s.keep })) +
+          (copies.length ? ' ' + uiText('rec.sub.size', 'They take {size} in this browser.', { size: sizeOf(total) }) : '');
       list.innerHTML = copies.length ? copies.map((c, i) => `<li data-i="${i}"><span class="bin-ic">${HIST_IC}</span><span class="bin-nm"><b>${esc(whenOf(c.at))}</b><small>${esc(sinceOf(c.at))} · ${esc(contentsOf(c.doc))} · ${sizeOf(JSON.stringify(c.doc).length)}</small></span>
-        <button type="button" class="bin-restore" title="Put this copy in place of the file. Its state now is kept as a copy.">Restore</button><button type="button" class="icon flat rec-open" title="Open as a new file" aria-label="Open the copy from ${esc(whenOf(c.at))} as a new file"><svg viewBox="0 0 20 20">${IC.dup}</svg></button></li>`).join('')
-        : `<li class="bin-none">No copies yet. The first is kept when the file is next changed${s.every ? '' : ', once copies are turned on'}.</li>`;
+        <button type="button" class="bin-restore" title="${esc(uiText('rec.restore.title', 'Put this copy in place of the file. Its state now is kept as a copy.'))}">${esc(uiText('bin.restore', 'Restore'))}</button><button type="button" class="icon flat rec-open" title="${esc(uiText('rec.openNew', 'Open as a new file'))}" aria-label="${esc(uiText('rec.openNew.aria', 'Open the copy from {when} as a new file', { when: whenOf(c.at) }))}"><svg viewBox="0 0 20 20">${IC.dup}</svg></button></li>`).join('')
+        : `<li class="bin-none">${esc(s.every ? uiText('rec.none.on', 'No copies yet. The first is kept when the file is next changed.') : uiText('rec.none.off', 'No copies yet. The first is kept when the file is next changed, once copies are turned on.'))}</li>`;
     };
     const close = () => { root.remove(); if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); };
     draw();
@@ -704,11 +739,27 @@ import { runtime as TD } from '../runtime';
   };
   const FOLDER_IC = '<svg class="fic" viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 3.5h4.5l1.5 1.5h7v8h-13z" fill="none" stroke="currentColor" stroke-linejoin="round"/></svg>';
   const CHEV_IC = '<svg class="chev" viewBox="0 0 16 16" width="12" height="12"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  // The sidebar lists only files of the current kind: folders first (A to Z), then the files, in list order.
+  // How the sidebar sorts: the user's own order (dragging reorders), or by date created, date modified or name,
+  // either way round (dragging only moves files between folders then). Files from before created dates were
+  // kept count as created when last modified.
+  const LS_SORT = 'diagramtex.fileSort';
+  type SortBy = 'custom' | 'created' | 'modified' | 'name';
+  let fileSort: { by: SortBy; dir: 'asc' | 'desc' } = { by: 'custom', dir: 'asc', ...store.get<any>(LS_SORT, {}) };
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  const createdOf = (d: any) => d.created || d.updated || 0;
+  function sortDocs(files: any[]) {
+    const { by, dir } = fileSort, k = dir === 'desc' ? -1 : 1;
+    if (by === 'custom') return files;
+    const cmp = by === 'name' ? (a: any, b: any) => byName(leafOf(a.name), leafOf(b.name))
+      : by === 'created' ? (a: any, b: any) => createdOf(a) - createdOf(b) : (a: any, b: any) => (a.updated || 0) - (b.updated || 0);
+    return [...files].sort((a, b) => k * cmp(a, b));
+  }
+  // The sidebar lists only files of the current kind: folders first, then the files. Folders go A to Z, or by
+  // name or by their newest file when sorted.
   function renderDocList() {
     const ul = $('#docList'), kind = state.doc.kind;
-    $('#filesTitle').textContent = ({ page: 'Pages', board: 'Whiteboards', classic: 'Classic documents' } as Record<string, any>)[kind];
-    $('#btnNewDoc').title = ({ page: 'New page', board: 'New whiteboard', classic: 'New classic document' } as Record<string, any>)[kind];
+    $('#filesTitle').textContent = caption(({ page: captions["ui.pages"], board: captions["ui.whiteboards"], classic: captions["ui.classic.documents"] } as Record<string, any>)[kind]);
+    $('#btnNewDoc').title = caption(({ page: captions["ui.new.page"], board: captions["ui.new.whiteboard"], classic: captions["ui.new.classic.document"] } as Record<string, any>)[kind]);
     const docs = index().filter((d) => ((d as any).kind || 'classic') === kind);
     // a file just opened is shown: the folders around it unfold
     if (state.docId && listShows !== state.docId) {
@@ -727,16 +778,19 @@ import { runtime as TD } from '../runtime';
     }
     const count = (n: any) => n.files.length + [...n.dirs.values()].reduce((a, c) => a + count(c), 0);
     const holds = (n: any) => n.files.some((d: any) => d.id === state.docId) || [...n.dirs.values()].some(holds);
-    const out: any[] = [];
+    const out: any[] = [], { by, dir } = fileSort, k = dir === 'desc' && by !== 'custom' ? -1 : 1;
+    const newest = (n: any): number => Math.max(0, ...n.files.map((d: any) => (by === 'created' ? createdOf(d) : d.updated || 0)), ...[...n.dirs.values()].map(newest));
+    const dirCmp = (a: any, b: any) => (by === 'created' || by === 'modified' ? k * (newest(a[1]) - newest(b[1])) || byName(a[0], b[0]) : k * byName(a[0], b[0]));
+    $('#docList').classList.toggle('sorted', by !== 'custom');
     const walk = (node: any, path: any, depth: any) => {
-      for (const [name, sub] of [...node.dirs].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: 'base' }))) {
+      for (const [name, sub] of [...node.dirs].sort(dirCmp)) {
         const fp = joinPath(path, name), shut = folded.has(foldKey(fp));
-        out.push(`<li class="folder${shut ? ' shut' : ''}${shut && holds(sub) ? ' has-active' : ''}" data-folder="${esc(fp)}" style="--depth:${depth}" draggable="true" aria-expanded="${!shut}" title="${esc(fp)} (${count(sub)} file${count(sub) === 1 ? '' : 's'})">${CHEV_IC}${FOLDER_IC}<span class="nm">${esc(name)}</span><button class="del" data-delfolder="${esc(fp)}" title="Delete folder" aria-label="Delete folder ${esc(name)}">×</button></li>`);
+        out.push(`<li class="folder${shut ? ' shut' : ''}${shut && holds(sub) ? ' has-active' : ''}" data-folder="${esc(fp)}" style="--depth:${depth}" draggable="true" aria-expanded="${!shut}" title="${esc(count(sub) === 1 ? uiText('files.folder.title.one', '{path} (1 file)', { path: fp }) : uiText('files.folder.title.many', '{path} ({n} files)', { path: fp, n: count(sub) }))}">${CHEV_IC}${FOLDER_IC}<span class="nm">${esc(name)}</span><button class="del" data-delfolder="${esc(fp)}" title="${esc(uiText('files.deleteFolder', 'Delete folder'))}" aria-label="${esc(uiText('files.deleteFolder.aria', 'Delete folder {name}', { name }))}">×</button></li>`);
         if (!shut) walk(sub, fp, depth + 1);
       }
-      for (const d of node.files) {
+      for (const d of sortDocs(node.files)) {
         out.push(`<li data-doc="${d.id}" class="${d.id === state.docId ? 'active' : ''}" style="--depth:${depth}" draggable="true">
-      ${KIND_IC[kind] || KIND_IC.classic}<span class="nm">${esc(leafOf(d.name))}</span><button class="del" data-del="${d.id}" title="Delete">×</button></li>`);
+      ${KIND_IC[kind] || KIND_IC.classic}<span class="nm">${esc(leafOf(d.name))}</span><button class="del" data-del="${d.id}" title="${esc(caption(captions["ui.delete"]))}">×</button></li>`);
       }
     };
     walk(root, '', 0);
@@ -753,7 +807,7 @@ import { runtime as TD } from '../runtime';
     if (taken.has(name)) { let k = 1; const b = name; name = `${b} copy`; while (taken.has(name)) name = `${b} copy ${++k}`; }
     renameDoc(id, name);
     renderDocList();
-    showHint(folder ? `Moved "${leafOf(name)}" to ${folder}` : `Moved "${leafOf(name)}" out of its folder`, 1400);
+    showHint(folder ? uiText("hint.moved", 'Moved "{name}" to {folder}', { name: leafOf(name), folder }) : uiText('hint.movedOut', 'Moved "{name}" out of its folder', { name: leafOf(name) }), 1400);
   }
   // Rename a folder: every file of this kind inside it (and in folders inside it) changes its path.
   function renameFolder(path: any, to: any) {
@@ -773,7 +827,7 @@ import { runtime as TD } from '../runtime';
     if (!nm) return;
     const parent = pathOf(path).slice(0, -1).join('/'), old = leafOf(path);
     const inp = document.createElement('input');
-    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', 'Folder name'); inp.spellcheck = false;
+    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', uiText('files.folderName', 'Folder name')); inp.spellcheck = false;
     nm.replaceWith(inp);
     li.classList.add('renaming');
     let done = false;
@@ -792,14 +846,34 @@ import { runtime as TD } from '../runtime';
     inp.focus(); inp.select();
   }
   async function newFolder(parent: any) {
-    const name = await TD.prompt('New Folder', '', { ok: 'Create', placeholder: 'Folder name' });
+    const name = await TD.prompt(uiText('dlg.newFolder.title', 'New Folder'), '', { ok: caption(captions["ui.create"]), placeholder: uiText('files.folderName', 'Folder name') });
     if (name == null || !pathOf(name).length) return;
     const folder = joinPath(parent || '', pathOf(name).join('/'));
     newDoc(joinPath(folder, NEW_NAME[state.doc.kind]), null, null, null, null, state.doc.kind);
   }
 
   // ---------------- view ----------------
-  function stageSize() { const r = svg.getBoundingClientRect(); return { w: r.width, h: r.height, left: r.left, top: r.top }; }
+  type StageSize = { w: number; h: number; left: number; top: number };
+  let viewGeometry: { stage: StageSize; rulerWidth: number; rulerHeight: number } | null = null;
+  function stageSize(): StageSize {
+    if (viewGeometry) return viewGeometry.stage;
+    const r = svg.getBoundingClientRect();
+    return { w: r.width, h: r.height, left: r.left, top: r.top };
+  }
+  // A synchronous view update reads its geometry before changing SVG attributes.
+  // Navigation, rulers, culling and page layers share that snapshot, rather than
+  // forcing layout of every SVG label between their writes. It never survives
+  // the update: a later input/resize always measures the current viewport.
+  function withViewGeometry(update: () => void): void {
+    if (viewGeometry) { update(); return; }
+    const stage = stageSize();
+    viewGeometry = {
+      stage,
+      rulerWidth: $('#rulerX').clientWidth,
+      rulerHeight: $('#rulerY').clientHeight,
+    };
+    try { update(); } finally { viewGeometry = null; }
+  }
   function toWorld(e: any) {
     const r = stageSize();
     return { x: (e.clientX - r.left) / state.view.zoom + state.view.x, y: (e.clientY - r.top) / state.view.zoom + state.view.y };
@@ -807,7 +881,7 @@ import { runtime as TD } from '../runtime';
   // the middle of the visible canvas, left of the floating panel column
   function viewCentre() { const r = fitArea(), v = state.view; return { x: v.x + r.w / 2 / v.zoom, y: v.y + r.h / 2 / v.zoom }; }
   function toScreen(p: any) { return { x: (p.x - state.view.x) * state.view.zoom, y: (p.y - state.view.y) * state.view.zoom }; }
-  function applyView() {
+  function applyView(rulers = true) {
     const r = stageSize(), v = state.view;
     const w = r.w / v.zoom, h = r.h / v.zoom;
     svg.setAttribute('viewBox', `${v.x} ${v.y} ${w} ${h}`);
@@ -818,21 +892,38 @@ import { runtime as TD } from '../runtime';
       el.setAttribute('x', v.x); el.setAttribute('y', v.y); el.setAttribute('width', w); el.setAttribute('height', h);
     }
     $('#origin').setAttribute('d', `M${v.x},0H${v.x + w}M0,${v.y}V${v.y + h}`);
-    if (state.mode === 'board') dotGrid();
+    updateGridPattern();
     { const zv = $('#zoomVal'); if (document.activeElement !== zv) zv.value = Math.round(v.zoom * 100) + '%'; }
     updatePageNav();
-    drawRulers();
+    if (rulers) drawRulers();
     if (editing) positionEditor();
   }
 
-  // Whiteboard grid: a dot at every major grid line, kept 1.2px on screen; when zoomed out the dots
-  // thin out (every 2nd, 4th… line) so they never turn into a grey wash. Snapping is unaffected.
-  function dotGrid() {
-    const z = state.view.zoom, pat = $('#gridDots');
-    let step = TD.GRID * Math.max(1, Math.round(PX / TD.GRID)); // ≈ 1 cm, a whole number of grid steps
-    while (step * z < 18) step *= 2;
-    for (const [k, v] of [['width', step], ['height', step], ['x', -step / 2], ['y', -step / 2]]) pat.setAttribute(k, v);
-    const c = pat.querySelector('circle'); c.setAttribute('cx', step / 2); c.setAttribute('cy', step / 2); c.setAttribute('r', 1.2 / z);
+  const gridStyle = () => state.gridStyle;
+  function updateGridPattern() {
+    const style = gridStyle(), z = state.view.zoom;
+    let step = TD.GRID;
+    const dots = style === 'dot' || style === 'isometric-dot';
+    while (step * z < (dots || style.startsWith('isometric') ? 18 : 7)) step *= 2;
+    const iso = style.startsWith('isometric'), w = iso ? Math.sqrt(3) * step : step, h = step;
+    const id = style === 'grid' ? 'gridMajor' : style === 'dot' ? 'gridDots' : style === 'isometric' ? 'gridIsometric' : 'gridIsometricDots';
+    $('#gridRect').setAttribute('fill', `url(#${id})`);
+    if (style !== 'grid') {
+      const pat = $('#' + id);
+      pat.setAttribute('width', w); pat.setAttribute('height', h);
+      pat.setAttribute('x', dots ? -w / 4 : 0); pat.setAttribute('y', dots ? -h / 4 : 0);
+      if (dots) pat.querySelectorAll('circle').forEach((c: any, i: number) => {
+        c.setAttribute('cx', w * (i ? .75 : .25)); c.setAttribute('cy', h * (i ? .75 : .25)); c.setAttribute('r', 1.2 / z);
+      });
+      else pat.querySelector('path').setAttribute('d', `M0,0L${w},${h}M0,${h}L${w},0M0,0V${h}M${w / 2},0V${h}`);
+    }
+    updateGridSelection();
+  }
+  function updateGridSelection() {
+    $('#gridStyle').querySelectorAll('[data-grid-style]').forEach((b: HTMLButtonElement) => {
+      const remembered = b.dataset.gridStyle === state.gridStyle, on = state.grid && remembered;
+      b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.tabIndex = remembered ? 0 : -1;
+    });
   }
   let navPage = -1;
   function updatePageNav() {
@@ -840,7 +931,7 @@ import { runtime as TD } from '../runtime';
     nav.hidden = state.mode !== 'page';
     if (nav.hidden) return;
     const G = pageGeom(), k = currentPage();
-    $('#pageNavVal').textContent = `Page ${k + 1} / ${G.n}`;
+    $('#pageNavVal').textContent = uiText('page.nav', 'Page {n} / {total}', { n: k + 1, total: G.n });
     $('#pagePrev').disabled = k === 0; $('#pageNext').disabled = k === G.n - 1;
     // keep the highlighted page in the panel in step with scrolling
     if (k !== navPage) { navPage = k; document.querySelectorAll('#props .pg-item').forEach((el) => el.classList.toggle('on', +(el as HTMLElement).dataset.k! === k)); }
@@ -857,7 +948,8 @@ import { runtime as TD } from '../runtime';
     return 1000;
   }
   function fmtCm(c: any) { return String(+c.toFixed(2)).replace('-', '−'); }
-  function drawRulers() {
+  function drawRulers(): void {
+    if (!viewGeometry) return withViewGeometry(drawRulers);
     const rx = $('#rulerX svg'), ry = $('#rulerY svg');
     if (!rx || state.mode === 'document' || state.mode === 'board') return;
     const pageY = state.mode === 'page'; // page mode: y measured downwards from the top of the sheet
@@ -881,7 +973,9 @@ import { runtime as TD } from '../runtime';
     };
     const sel = selected(), sb = sel.length ? unionBox(sel) : null;
     // horizontal
-    const wX = r.w - RULER, x0 = (v.x + RULER / z) / PX, x1 = (v.x + r.w / z) / PX;
+    // Match the ruler length exactly. Its border reduces the cross-axis viewport to 17px;
+    // preserving aspect ratio would also shrink the entire scale by 17/18.
+    const wX = viewGeometry.rulerWidth || r.w - RULER, x0 = (v.x + RULER / z) / PX, x1 = (v.x + r.w / z) / PX;
     let h = '';
     if (sb) { const a = (sb.x - v.x) * z - RULER, b = (sb.x + sb.w - v.x) * z - RULER;
       h += `<rect class="span" x="${a}" y="0" width="${b - a}" height="${RULER}"/><path class="span-edge" d="M${Math.round(a) + .5},0V${RULER}M${Math.round(b) + .5},0V${RULER}"/>`; }
@@ -892,9 +986,9 @@ import { runtime as TD } from '../runtime';
     }
     h = `<path class="tk" d="${d}"/>` + h;
     if (cursorW) { const c = Math.round((cursorW.x - v.x) * z - RULER) + .5; h += `<path class="cur" d="M${c},0V${RULER}"/>`; }
-    rx.setAttribute('viewBox', `0 0 ${wX} ${RULER}`); rx.innerHTML = h;
+    rx.setAttribute('viewBox', `0 0 ${wX} ${RULER}`); rx.setAttribute('preserveAspectRatio', 'none'); rx.innerHTML = h;
     // vertical (TikZ y = −world y / PX)
-    const hY = r.h - RULER - 24, yTop = -(v.y + RULER / z) / PX, yBot = -(v.y + r.h / z) / PX;
+    const hY = viewGeometry.rulerHeight || r.h - RULER - 24, yTop = -(v.y + RULER / z) / PX, yBot = -(v.y + r.h / z) / PX;
     h = ''; d = '';
     if (sb) { const a = (sb.y - v.y) * z - RULER, b = (sb.y + sb.h - v.y) * z - RULER;
       h += `<rect class="span" x="0" y="${a}" width="${RULER}" height="${b - a}"/><path class="span-edge" d="M0,${Math.round(a) + .5}H${RULER}M0,${Math.round(b) + .5}H${RULER}"/>`; }
@@ -904,16 +998,16 @@ import { runtime as TD } from '../runtime';
     }
     h = `<path class="tk" d="${d}"/>` + h;
     if (cursorW) { const c = Math.round((cursorW.y - v.y) * z - RULER) + .5; h += `<path class="cur" d="M0,${c}H${RULER}"/>`; }
-    ry.setAttribute('viewBox', `0 0 ${RULER} ${hY}`); ry.innerHTML = h;
+    ry.setAttribute('viewBox', `0 0 ${RULER} ${hY}`); ry.setAttribute('preserveAspectRatio', 'none'); ry.innerHTML = h;
   }
   function updateStatus() {
     const sel = selected(), el = $('#selInfo');
     if (!el) return;
     if (!sel.length) el.textContent = '';
-    else { const b = unionBox(sel); el.textContent = `${sel.length} selected · ${r2(b.w / PX)} × ${r2(b.h / PX)} cm`; }
+    else { const b = unionBox(sel); el.textContent = uiText('status.selected', '{n} selected · {w} × {h} cm', { n: sel.length, w: r2(b.w / PX), h: r2(b.h / PX) }); }
     const gv = $('#gridVal');
     if (document.activeElement !== gv) gv.value = fmtGrid();
-    $('#snapInfo').textContent = state.snap ? 'snap on' : 'snap off';
+    $('#snapInfo').textContent = caption(state.snap ? captions["ui.snap.on"] : captions["ui.snap.off"]);
   }
   // Grid spacing: TD.GRID (px) drives snapping, nudging and paste offsets; the canvas pattern follows.
   // Major lines stay on whole centimetres when the spacing divides 1 cm, else every 4th line.
@@ -926,6 +1020,7 @@ import { runtime as TD } from '../runtime';
     ma.setAttribute('width', major); ma.setAttribute('height', major);
     const r = ma.querySelector('rect'); r.setAttribute('width', major); r.setAttribute('height', major);
     ma.querySelector('path').setAttribute('d', `M${major} 0H0V${major}`);
+    updateGridPattern();
   }
   // Standard cursors for handles: edge/corner handles resize along their axis (turned with the shape's
   // rotation, snapped to the four system resize cursors); point handles (ends, vertices, arc ends) move.
@@ -989,8 +1084,7 @@ import { runtime as TD } from '../runtime';
     }
     if (state.mode === 'page') for (const a of pageAnchors()) { const d = dist(a, p); if (d < bd) { bd = d; best = a; } }
     if (best) return { x: best.x, y: best.y, anchor: true };
-    const g = TD.GRID;
-    return { x: Math.round(p.x / g) * g, y: Math.round(p.y / g) * g };
+    return snapCanvasGrid(p, TD.GRID, gridStyle());
   }
 
 
@@ -1120,25 +1214,33 @@ import { runtime as TD } from '../runtime';
     }
     return out;
   }
+  let pageLayerKey = '', pageHoles = '';
   function renderPageLayer() {
     const layer = $('#pageLayer'), mask = $('#pageMask');
-    if (state.mode !== 'page') { layer.innerHTML = ''; mask.setAttribute('d', ''); $('#pageLabels').innerHTML = ''; return; }
-    const G = pageGeom(), z = state.view.zoom;
-    let h = '', holes = '', labels = '';
-    for (let k = 0; k < G.n; k++) {
-      const t = pageTop(k, G);
-      h += `<rect class="pg-shadow" x="${2 / z}" y="${t + 3 / z}" width="${G.w}" height="${G.h}"/>` +
-        `<rect class="pg-sheet" x="0" y="${t}" width="${G.w}" height="${G.h}"/>` +
-        `<rect class="pg-margin" x="${G.ml * PX}" y="${t + G.mt * PX}" width="${G.w - (G.ml + G.mr) * PX}" height="${G.h - (G.mt + G.mb) * PX}" stroke-width="${1 / z}" stroke-dasharray="${4 / z} ${3 / z}"/>` +
-        '';
-      labels += `<text class="pg-num" x="${G.w + 8 / z}" y="${t + 12 / z}" font-size="${11 / z}">${k + 1}${G.n > 1 ? ' / ' + G.n : ''}</text>`;
-      holes += `M0,${t}h${G.w}v${G.h}h${-G.w}z`;
+    if (state.mode !== 'page') {
+      if (pageLayerKey) { layer.innerHTML = ''; mask.setAttribute('d', ''); $('#pageLabels').innerHTML = ''; pageLayerKey = ''; pageHoles = ''; }
+      return;
     }
-    layer.innerHTML = h;
-    $('#pageLabels').innerHTML = labels;
+    const G = pageGeom(), z = state.view.zoom;
+    const key = JSON.stringify([G, z]);
+    if (key !== pageLayerKey) {
+      let h = '', holes = '', labels = '';
+      for (let k = 0; k < G.n; k++) {
+        const t = pageTop(k, G);
+        h += `<rect class="pg-shadow" x="${2 / z}" y="${t + 3 / z}" width="${G.w}" height="${G.h}"/>` +
+          `<rect class="pg-sheet" x="0" y="${t}" width="${G.w}" height="${G.h}"/>` +
+          `<rect class="pg-margin" x="${G.ml * PX}" y="${t + G.mt * PX}" width="${G.w - (G.ml + G.mr) * PX}" height="${G.h - (G.mt + G.mb) * PX}" stroke-width="${1 / z}" stroke-dasharray="${4 / z} ${3 / z}"/>` +
+          '';
+        labels += `<text class="pg-num" x="${G.w + 8 / z}" y="${t + 12 / z}" font-size="${11 / z}">${k + 1}${G.n > 1 ? ' / ' + G.n : ''}</text>`;
+        holes += `M0,${t}h${G.w}v${G.h}h${-G.w}z`;
+      }
+      layer.innerHTML = h;
+      $('#pageLabels').innerHTML = labels;
+      pageLayerKey = key; pageHoles = holes;
+    }
     // dim anything that falls outside the paper
     const v = state.view, r = stageSize(), W = r.w / z, H = r.h / z;
-    mask.setAttribute('d', `M${v.x - 10},${v.y - 10}h${W + 20}v${H + 20}h${-(W + 20)}z${holes}`);
+    mask.setAttribute('d', `M${v.x - 10},${v.y - 10}h${W + 20}v${H + 20}h${-(W + 20)}z${pageHoles}`);
   }
   // Page operations. Objects belong to the page under their centre; moving a page moves them with it.
   const pageStep = (G = pageGeom()) => G.h + PAGE_GAP;
@@ -1161,9 +1263,9 @@ import { runtime as TD } from '../runtime';
   }
   async function deletePage(k: any) {
     const G = pageGeom();
-    if (G.n < 2) { showHint('A page file needs at least one page', 1400); return; }
+    if (G.n < 2) { showHint(uiText('hint.pageNeedsOne', 'A page file needs at least one page'), 1400); return; }
     const lost = onPage(k, G).length;
-    if (lost && !(await TD.confirm(`Delete page ${k + 1}?`, `The ${lost} object${lost > 1 ? 's' : ''} on it will be deleted too.`, { ok: 'Delete Page', danger: true }))) return;
+    if (lost && !(await TD.confirm(message("dialog.deletePage", 'Delete page {page}?', { page: k + 1 }), lost > 1 ? uiText('dlg.deletePage.many', 'The {n} objects on it will be deleted too.', { n: lost }) : uiText('dlg.deletePage.one', 'The 1 object on it will be deleted too.'), { ok: uiText('dlg.deletePage.ok', 'Delete Page'), danger: true }))) return;
     pageOp(() => {
       const keep = [];
       for (const s of shapes()) { const p = pageOf(s, G); if (p === k) continue; if (p > k) TD.translate(s, 0, -pageStep(G)); keep.push(s); }
@@ -1216,14 +1318,31 @@ import { runtime as TD } from '../runtime';
     const ctx = { zoom: 1, hit: 0, export: true, scene: shapes() };
     return `<svg viewBox="0 ${r2(t)} ${r2(G.w)} ${r2(G.h)}" preserveAspectRatio="xMidYMid meet">` +
       `<rect x="0" y="${r2(t)}" width="${r2(G.w)}" height="${r2(G.h)}" fill="#fff"/>` +
-      fillDefsAround(() => list.map((s: any) => TYPES[s.type].svg(s, ctx)).join('')) + '</svg>';
+      fillDefsAround(() => list.map((s: any) => `<g data-thumb-id="${s.id}">${TYPES[s.type].svg(s, ctx)}</g>`).join('')) + '</svg>';
   }
 
   // ---------------- rendering ----------------
-  function render() {
+  function render(): void {
+    if (!TD.math.previewing) return TD.math.preview(render);
+    if (!viewGeometry) return withViewGeometry(render);
+    if (formatPreview && !renderScene) {
+      const p = formatPreview;
+      if (p.owner !== home() || p.ids !== [...state.sel].join(',')) clearFormatPreview(false);
+      else {
+        if (!p.scene) {
+          p.scene = clone(state.doc.shapes);
+          for (const s of p.scene!) if (state.sel.has(s.id) && s.type === 'text') {
+            TD.textHold(s, () => setTextFormat(s, p.key, p.value));
+          }
+        }
+        renderScene = p.scene;
+        try { render(); } finally { renderScene = null; }
+        return;
+      }
+    }
     syncLinks();
     if (drag && drag.fast) fastLinks(drag);
-    applyView();
+    applyView(false);
     // The drawing does not depend on the view (hit outlines take their width from --hitw), so a shape's
     // markup only changes when the shape does, and only changed shapes are put back into the canvas.
     paint();
@@ -1235,18 +1354,34 @@ import { runtime as TD } from '../runtime';
   // over others depend on the rest of the scene, and markup made with placeholder text sizes is not kept.
   const drawn = new Map(); // shape id → { key, html, defs }
   { const clear = TD.clearTextCache; TD.clearTextCache = () => { drawn.clear(); clear(); }; }
+  const changedMathShapes = new Set<string>();
+  const sidebarPending = new Map<string, number[]>();
+  const mathPriorities = new Map<string, number>();
+  const capturedMathPriorities = new Map<string, number>();
+  let sidebarVersion = 0;
+  let mathProgressPainting = false;
+  const pendingDependencies = (html: string): number[] => [...html.matchAll(/data-math-pending="([\d,]+)"/g)].flatMap(match => match[1].split(',').map(Number));
+  const dependsOn = (value: any, ids?: number[]) => value.pendingIds.length && (!ids || value.pendingIds.some((id: number) => ids.includes(id)));
+  { const clear = TD.clearPendingTextCache; TD.clearPendingTextCache = (ids?: number[]) => {
+    for (const [id, value] of drawn) if (dependsOn(value, ids)) { drawn.delete(id); changedMathShapes.add(id); }
+    for (const [id, value] of thumbs) if (dependsOn(value, ids)) { thumbs.delete(id); changedMathShapes.add(id); }
+    for (const [id, pending] of sidebarPending) if (!ids || pending.some(value => ids.includes(value))) { sidebarPending.delete(id); changedMathShapes.add(id); }
+    clear(ids);
+  }; }
   function shapeSvg(s: any, ctx: any, defs: any) {
     const key = JSON.stringify(s), m = drawn.get(s.id);
     if (m && m.key === key) { if (m.defs) defs.add(m.defs); return m.html; }
     TD.takeFillDefs();
     let html: string;
-    try { html = `${TYPES[s.type].svg(s, ctx)}`; } catch (err) { console.warn('Could not draw', s.type, s.id, err); html = ''; }
+    try { html = TD.math.withPriority(mathPriorities.get(s.id) ?? 2, () => `${TYPES[s.type].svg(s, ctx)}`); } catch (err) { console.warn('Could not draw', s.type, s.id, err); html = ''; }
+    TD.math.prioritize(pendingDependencies(html), mathPriorities.get(s.id) ?? 2);
     const d = TD.takeFillDefs();
     if (d) defs.add(d);
-    if (!TD.measuring() && (s.cross ?? TD.LINE_EXTRA.cross) !== 'hop') drawn.set(s.id, { key, html, defs: d });
+    if (!TD.measuring() && (s.cross ?? TD.LINE_EXTRA.cross) !== 'hop') drawn.set(s.id, { key, html, defs: d, pendingIds: pendingDependencies(html) });
     else drawn.delete(s.id);
     return html;
   }
+  const canvasLabelResources = new SvgLabelResources();
   const painted = new Map(); // shape id → { html, el } as last put in the canvas
   let defsEl: any = null, defsHtml = '';
   function paintContent(list: any, strs: any, defs: any) {
@@ -1265,12 +1400,27 @@ import { runtime as TD } from '../runtime';
         if (!seen.has(id)) painted.set(id, m);
       }
       seen.add(id);
-      if (m.html !== strs[i]) { m.el.innerHTML = strs[i]; m.html = strs[i]; }
+      if (m.html !== strs[i]) {
+        const unmarked = (html: string) => html.replace(/ data-math-pending="[\d,]+"/g, '').replace(/class="svg-label math-pending"/g, 'class="svg-label"');
+        if (m.html && unmarked(m.html) === unmarked(strs[i])) {
+          const markers = [...strs[i].matchAll(/class="svg-label(?: math-pending)?"(?: data-math-pending="([\d,]+)")?/g)];
+          let n = 0;
+          for (const image of m.el.querySelectorAll('image.svg-label')) {
+            const ids = markers[n++]?.[1];
+            const revealing = image.classList.contains('math-pending') && !ids;
+            image.classList.toggle('math-pending', !!ids);
+            if (ids) image.setAttribute('data-math-pending', ids); else image.removeAttribute('data-math-pending');
+            if (revealing) TD.math.trackView(previewFadeFinished(image));
+          }
+        } else updateSvg(m.el, strs[i], canvasLabelResources);
+        m.html = strs[i];
+      }
       if (m.el.classList.contains('locked') !== !!list[i].locked) m.el.classList.toggle('locked', !!list[i].locked);
       if (m.el === cur) cur = cur.nextSibling;
       else content.insertBefore(m.el, cur);
     }
     while (cur) { const n = cur.nextSibling; cur.remove(); cur = n; }
+    canvasLabelResources.update(content);
     if (painted.size > seen.size) for (const id of [...painted.keys()]) if (!seen.has(id)) painted.delete(id);
   }
   // On a large drawing only the shapes in and around the view are in the canvas (the browser repaints every
@@ -1301,13 +1451,15 @@ import { runtime as TD } from '../runtime';
     return v.x >= b.x1 && v.y >= b.y1 && v.x + r.w / v.zoom <= b.x2 && v.y + r.h / v.zoom <= b.y2 && v.zoom <= b.z * 3; // zoomed far in: paint fewer
   }
   // Only the view moved (pan, zoom): the drawing stays as it is.
-  function renderView() {
-    applyView();
+  function renderView(): void {
+    if (!TD.math.previewing) return TD.math.preview(renderView);
+    if (!viewGeometry) return withViewGeometry(renderView);
+    applyView(false);
     if (!viewPainted()) paint();
     renderPageLayer();
-    renderOverlay();
+    renderOverlay(true);
   }
-  function renderOverlay() {
+  function renderOverlay(viewOnly = false) {
     pruneSel();
     const z = state.view.zoom, out = [];
     const sel = selected();
@@ -1379,7 +1531,8 @@ import { runtime as TD } from '../runtime';
       if (hs.length) { const b = unionBox(hs); out.push(`<rect class="layer-hover" x="${b.x - 4 / z}" y="${b.y - 4 / z}" width="${b.w + 8 / z}" height="${b.h + 8 / z}"/>`); }
     }
     overlay.innerHTML = out.join('');
-    drawRulers(); updateStatus(); scheduleLayers();
+    drawRulers();
+    if (!viewOnly && !mathProgressPainting) { updateStatus(); scheduleLayers(); }
   }
 
   // ---------------- moving a large selection ----------------
@@ -1461,14 +1614,15 @@ import { runtime as TD } from '../runtime';
     snapHint = null;
     const sym = t.startsWith('sym:') && TD.SYMS[t.slice(4)];
     if (pointsKind()) { arcHint(); renderOverlay(); return; }
-    showHint(t === 'poly' ? 'Click to add points · double-click / Enter to finish · click first point to close'
-      : t === 'blob' ? 'Click to add points of a smooth closed curve · double-click / Enter to finish'
-      : t === 'smoothcurve' ? 'Click to add points the curve passes through · double-click / Enter to finish'
-      : t === 'elbow' || t === 'curvedconn' ? `Drag from start to end; the ends hold on to shapes${t === 'elbow' ? ' · drag the middle handle to move the bend' : ''}`
-      : t === 'pencil' ? 'Draw freehand · end near the start to close · Esc when done'
-      : sym ? `${sym.name}: click to place, or drag to set the size (Shift keeps it square)`
+    showHint(t === 'poly' ? uiText('tool.hint.poly', 'Click to add points · double-click / Enter to finish · click first point to close')
+      : t === 'blob' ? uiText('tool.hint.blob', 'Click to add points of a smooth closed curve · double-click / Enter to finish')
+      : t === 'smoothcurve' ? uiText('tool.hint.smoothcurve', 'Click to add points the curve passes through · double-click / Enter to finish')
+      : t === 'elbow' ? uiText('tool.hint.elbow', 'Drag from start to end; the ends hold on to shapes · drag the middle handle to move the bend')
+      : t === 'curvedconn' ? uiText('tool.hint.connector', 'Drag from start to end; the ends hold on to shapes')
+      : t === 'pencil' ? uiText('tool.hint.pencil', 'Draw freehand · end near the start to close · Esc when done')
+      : sym ? uiText('tool.hint.sym', '{name}: click to place, or drag to set the size (Shift keeps it square)', { name: sym.name })
       : DRAW_MODES[t] ? modeHint(t)
-      : (TD.blocks.get(toolType(t)) || /^(plot|pie|solid|prim3d|revolve)/.test(t)) ? 'Click to place, or drag to set the size' : '');
+      : (TD.blocks.get(toolType(t)) || /^(plot|pie|solid|prim3d|revolve)/.test(t)) ? uiText('tool.hint.place', 'Click to place, or drag to set the size') : '');
     renderOverlay();
   }
 
@@ -1476,68 +1630,77 @@ import { runtime as TD } from '../runtime';
 
   // ---------------- tool flyouts (lines / shapes / misc / arrows / plots) ----------------
   // in PowerPoint's order: straight lines, connectors, curves, then the freeform ones
-  const LINE_TOOLS = [
-    ['line', 'Line (L)', '<path d="M4 12h26"/>'], ['arrow', 'Arrow (A)', '<path d="M4 12h24M23 7l6 5-6 5"/>'],
-    ['darrow', 'Double arrow', '<path d="M6 12h22M11 7l-6 5 6 5M23 7l6 5-6 5"/>'],
-    ['elbow', 'Elbow connector: right angles; drag its middle handle to move the bend', '<path d="M4 18h12V6h14"/>'],
-    ['curvedconn', 'Curved connector', '<path d="M4 18C17 18 17 6 30 6"/>'],
-    ['curve', 'Bézier curve (C)', '<path d="M4 16C10 2 20 22 30 8"/>'], ['curvearrow', 'Curved arrow', '<path d="M4 16C10 4 18 20 27 9M22 8l6 0-1 6"/>'],
+  const LINE_TOOLS: any[][] = [
+    ['line', message('tool.line', 'Line (L)'), '<path d="M4 12h26"/>'], ['arrow', message('tool.arrow', 'Arrow (A)'), '<path d="M4 12h24M23 7l6 5-6 5"/>'],
+    ['darrow', message('tool.darrow', 'Double arrow'), '<path d="M6 12h22M11 7l-6 5 6 5M23 7l6 5-6 5"/>'],
+    ['elbow', message('tool.elbow', 'Elbow connector: right angles; drag its middle handle to move the bend'), '<path d="M4 18h12V6h14"/>'],
+    ['curvedconn', message('tool.curvedconn', 'Curved connector'), '<path d="M4 18C17 18 17 6 30 6"/>'],
+    ['curve', message('tool.curve', 'Bézier curve (C)'), '<path d="M4 16C10 2 20 22 30 8"/>'], ['curvearrow', message('tool.curvearrow', 'Curved arrow'), '<path d="M4 16C10 4 18 20 27 9M22 8l6 0-1 6"/>'],
   ];
-  const FREE_TOOLS = [
-    ['smoothcurve', 'Curve through points', '<path d="M4 18Q9 5 16 11T29 7"/><circle cx="4" cy="18" r="1.6" class="f"/><circle cx="16" cy="11" r="1.6" class="f"/><circle cx="29" cy="7" r="1.6" class="f"/>'],
-    ['poly', 'Polyline / polygon (P)', '<path d="M5 19l5-14 9 10 9-11"/>'], ['blob', 'Smooth closed curve', '<path d="M8 6c6-4 18-3 20 4s-4 10-10 9-15 0-14-6 1-5 4-7z"/>'],
-    ['arc', 'Arc by centre (O) — click the centre, the start, then the end', '<path d="M7 18h20M27 18a20 20 0 0 0-6.5-14.8"/><path d="M7 18L20.5 3.2" stroke-dasharray="2 2"/><circle cx="7" cy="18" r="1.8" class="f"/>'],
-    ['arc3', 'Arc through three points — click both ends, then a point on the arc', '<path d="M5 19A13 13 0 0 1 29 19"/><circle cx="5" cy="19" r="1.8" class="f"/><circle cx="29" cy="19" r="1.8" class="f"/><circle cx="17" cy="11" r="1.8" class="f"/>'], ['spring', 'Spring (S)', '<path d="M2 12h5l2-6 4 12 4-12 4 12 4-12 2 6h5"/>'],
+  const FREE_TOOLS: any[][] = [
+    ['smoothcurve', message('tool.smoothcurve', 'Curve through points'), '<path d="M4 18Q9 5 16 11T29 7"/><circle cx="4" cy="18" r="1.6" class="f"/><circle cx="16" cy="11" r="1.6" class="f"/><circle cx="29" cy="7" r="1.6" class="f"/>'],
+    ['poly', message('tool.poly', 'Polyline / polygon (P)'), '<path d="M5 19l5-14 9 10 9-11"/>'], ['blob', message('tool.blob', 'Smooth closed curve'), '<path d="M8 6c6-4 18-3 20 4s-4 10-10 9-15 0-14-6 1-5 4-7z"/>'],
+    ['arc', message('tool.arc', 'Arc by centre (O) — click the centre, the start, then the end'), '<path d="M7 18h20M27 18a20 20 0 0 0-6.5-14.8"/><path d="M7 18L20.5 3.2" stroke-dasharray="2 2"/><circle cx="7" cy="18" r="1.8" class="f"/>'],
+    ['arc3', message('tool.arc3', 'Arc through three points — click both ends, then a point on the arc'), '<path d="M5 19A13 13 0 0 1 29 19"/><circle cx="5" cy="19" r="1.8" class="f"/><circle cx="29" cy="19" r="1.8" class="f"/><circle cx="17" cy="11" r="1.8" class="f"/>'], ['spring', message('tool.spring', 'Spring (S)'), '<path d="M2 12h5l2-6 4 12 4-12 4 12 4-12 2 6h5"/>'],
   ];
-  const MISC_EXTRA = [
-    ['ball', 'Shaded ball (B)', '<circle cx="17" cy="12" r="7" class="ballic"/>'], ['dot', 'Dot (D)', '<circle cx="17" cy="12" r="3" class="f"/>'],
+  const MISC_EXTRA: any[][] = [
+    ['ball', message('tool.ball', 'Shaded ball (B)'), '<circle cx="17" cy="12" r="7" class="ballic"/>'], ['dot', message('tool.dot', 'Dot (D)'), '<circle cx="17" cy="12" r="3" class="f"/>'],
   ];
   // the plain TikZ rectangle and ellipse lead the basic shapes; each has a menu of draw modes
-  const PLAIN_SHAPES = [
-    ['rect', 'Rectangle (R) — plain TikZ rectangle', '<rect x="6" y="5" width="22" height="14"/>'], ['ellipse', 'Ellipse (E) — plain TikZ ellipse', '<ellipse cx="17" cy="12" rx="11" ry="7"/>'],
+  const PLAIN_SHAPES: any[][] = [
+    ['rect', message('tool.rect', 'Rectangle (R) — plain TikZ rectangle'), '<rect x="6" y="5" width="22" height="14"/>'], ['ellipse', message('tool.ellipse', 'Ellipse (E) — plain TikZ ellipse'), '<ellipse cx="17" cy="12" rx="11" ry="7"/>'],
   ];
-  const btn = (tool: any, title: any, icon: any) => `<button data-pick="${tool}" title="${esc(title)}">${icon}</button>`;
+  const btn = (tool: any, title: any, icon: any) => `<button data-pick="${tool}" title="${esc(caption(title))}">${icon}</button>`;
   const symBtns = (cat: any) => TD.SYM_CATS[cat].map((k: any) => btn('sym:' + k, TD.SYMS[k].name, TD.symIcon(k))).join('');
-  const sec = (title: any, inner: any) => (title ? `<div class="pop-title">${title}</div>` : '') + `<div class="sym-grid">${inner}</div>`;
+  const sec = (title: any, inner: any) => (title ? `<div class="pop-title">${esc(title)}</div>` : '') + `<div class="sym-grid">${inner}</div>`;
   const lineBtns = (L: any) => L.map(([t, n, d]: any) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('');
-  $('#fly-lines').innerHTML = sec('Lines', lineBtns(LINE_TOOLS)) + sec('Freeform', lineBtns(FREE_TOOLS));
   // the Rectangle and Ellipse buttons show the way they draw now; a mark in the corner says they have a menu
-  const modeBtn = (t: any, n: any) => `<button data-pick="${t}" data-modes="${t}" title="${esc(n)}"><svg viewBox="-4.2 0 28.4 20">${modeRow(t)[3]}</svg><i class="more"></i></button>`;
-  $('#fly-shapes').innerHTML = sec('Rectangles', symBtns('rect')) + sec('Basic shapes', PLAIN_SHAPES.map(([t, n]) => modeBtn(t, n)).join('') + symBtns('basic')) + sec('Flowchart', symBtns('flow'));
-  $('#fly-misc').innerHTML = sec('Misc', symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join(''));
-  $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
+  const modeBtn = (t: any, n: any) => `<button data-pick="${t}" data-modes="${t}" title="${esc(caption(n))}"><svg viewBox="-4.2 0 28.4 20">${modeRow(t)[3]}</svg><i class="more"></i></button>`;
   // Physics: computed figures (the physics block, one entry per domain), then the drawn symbols
-  const PHYS_DOMAINS = [
-    ['mechanics', 'Forces on blocks and inclines, pulleys, springs, pendulums, projectiles and linkages', '<path d="M3 20h25V6z"/><path d="M11 15.5l5.2-2.9-2-3.5L9 12z" class="a1"/>'],
-    ['optics', 'Ray optics: lenses, mirrors, prisms, refraction, polarisers and interferometers', '<path d="M2 12h28"/><path d="M15 3c2 3 2 15 0 18M15 3c-2 3-2 15 0 18"/><path d="M3 7h12l12 10" class="c1"/>'],
-    ['fields', 'Electric and magnetic fields: charges, wires, field lines, equipotentials and probes', '<path d="M9 12h14M9 12c4-7 10-7 14 0M9 12c4 7 10 7 14 0" class="c1"/><circle cx="8" cy="12" r="2.6"/><circle cx="24" cy="12" r="2.6"/>'],
-    ['waves', 'Waves: interference, slits and gratings, superposition and standing waves', '<path d="M2 12h28"/><path d="M3 12c3-8 6-8 8.5 0s6 8 8.5 0 6-8 8.5 0" class="c1"/>'],
-    ['spacetime', 'Minkowski diagrams: moving frames, events, world lines, light cones and intervals', '<path d="M6 21V3M6 21h22"/><path d="M6 21L24 3" stroke-dasharray="2 2"/><path d="M6 21l6-15M6 21l15-6" class="c1"/>'],
-    ['levels', 'Energy levels: atomic levels, transitions and line spectra', '<path d="M5 20h22M5 11h22M5 7.5h22M5 5.5h22"/><path d="M15 7.5V19M13 17l2 2 2-2" class="c1"/>'],
+  const PHYS_DOMAINS: any[][] = [
+    ['mechanics', message('phys.mechanics', 'Forces on blocks and inclines, pulleys, springs, pendulums, projectiles and linkages'), '<path d="M3 20h25V6z"/><path d="M11 15.5l5.2-2.9-2-3.5L9 12z" class="a1"/>'],
+    ['optics', message('phys.optics', 'Ray optics: lenses, mirrors, prisms, refraction, polarisers and interferometers'), '<path d="M2 12h28"/><path d="M15 3c2 3 2 15 0 18M15 3c-2 3-2 15 0 18"/><path d="M3 7h12l12 10" class="c1"/>'],
+    ['fields', message('phys.fields', 'Electric and magnetic fields: charges, wires, field lines, equipotentials and probes'), '<path d="M9 12h14M9 12c4-7 10-7 14 0M9 12c4 7 10 7 14 0" class="c1"/><circle cx="8" cy="12" r="2.6"/><circle cx="24" cy="12" r="2.6"/>'],
+    ['waves', message('phys.waves', 'Waves: interference, slits and gratings, superposition and standing waves'), '<path d="M2 12h28"/><path d="M3 12c3-8 6-8 8.5 0s6 8 8.5 0 6-8 8.5 0" class="c1"/>'],
+    ['spacetime', message('phys.spacetime', 'Minkowski diagrams: moving frames, events, world lines, light cones and intervals'), '<path d="M6 21V3M6 21h22"/><path d="M6 21L24 3" stroke-dasharray="2 2"/><path d="M6 21l6-15M6 21l15-6" class="c1"/>'],
+    ['levels', message('phys.levels', 'Energy levels: atomic levels, transitions and line spectra'), '<path d="M5 20h22M5 11h22M5 7.5h22M5 5.5h22"/><path d="M15 7.5V19M13 17l2 2 2-2" class="c1"/>'],
   ];
   const physDomains = () => `<div class="pop-grid phy-domains">${PHYS_DOMAINS.map(([k, title, d]) => {
     const D = TD.physics && TD.physics.domains[k];
-    return `<button data-insert="physics:${k}" title="${esc(title)}: computed, with an editor"><svg viewBox="0 0 32 24">${d}</svg>${esc(D ? D.label : k)}</button>`;
+    return `<button data-insert="physics:${k}" title="${esc(uiText('phys.computed', '{title}: computed, with an editor', { title: caption(title) }))}"><svg viewBox="0 0 32 24">${d}</svg>${esc(D ? D.label : k)}</button>`;
   }).join('')}</div>`;
-  $('#fly-phys').innerHTML = '<div class="pop-title">Physics figures (experimental)<span class="pop-warn">Results and drawings might not be correct.</span></div>' + physDomains() + sec('Mechanics symbols', symBtns('mech')) + sec('Optics symbols', symBtns('optics'));
+
   // the same drawing tools, for block editors that hold plain shapes too (the Physics editor): every tool but
   // images, plots, 3D and blocks. Items are [tool, title, icon svg]; TD.toolType gives the shape type of a tool.
   const railIcon = (t: any) => { const b = document.querySelector(`#tools [data-tool="${t}"] svg`); return b ? b.outerHTML : ''; };
   const symItems = (cat: any) => TD.SYM_CATS[cat].map((k: any) => ['sym:' + k, TD.SYMS[k].name, TD.symIcon(k)]);
+  const capItems = (L: any[][]) => L.map(([t, n, d]) => [t, caption(n), ic34(d)]);
   const ic34 = (d: any) => `<svg viewBox="0 0 34 24">${d}</svg>`;
   TD.toolType = toolType;
   TD.drawTools = () => [
-    ['Text', [['text', 'Text: click to place, then type. Use $…$ for maths', railIcon('text')], ['math', 'Maths: a text that starts in $…$', railIcon('math')]]],
-    ['Lines', [...[...LINE_TOOLS, ...FREE_TOOLS].map(([t, n, d]) => [t, n, ic34(d)]), ['pencil', 'Pencil: freehand, smoothed', railIcon('pencil')]]],
-    ['Shapes', symItems('rect')],
-    ['Basic shapes', [...PLAIN_SHAPES.map(([t, n, d]) => [t, n, ic34(d)]), ...symItems('basic')]], ['Flowchart', symItems('flow')],
-    ['Misc', [...symItems('misc'), ...MISC_EXTRA.map(([t, n, d]) => [t, n, ic34(d)])]],
-    ['Block arrows', symItems('arrow')], ['Mechanics symbols', symItems('mech')], ['Optics symbols', symItems('optics')],
-    ['Electrical symbols', symItems('elec')], ['Waveforms', symItems('wave')],
+    [uiText('fly.text', 'Text'), [['text', uiText('tool.text', 'Text: click to place, then type. Use $…$ for maths'), railIcon('text')], ['math', uiText('tool.math', 'Maths: a text that starts in $…$'), railIcon('math')]]],
+    [uiText('fly.lines', 'Lines'), [...capItems([...LINE_TOOLS, ...FREE_TOOLS]), ['pencil', uiText('tool.pencil', 'Pencil: freehand, smoothed'), railIcon('pencil')]]],
+    [uiText('fly.shapes', 'Shapes'), symItems('rect')],
+    [uiText('fly.basicShapes', 'Basic shapes'), [...capItems(PLAIN_SHAPES), ...symItems('basic')]], [uiText('fly.flowchart', 'Flowchart'), symItems('flow')],
+    [uiText('fly.misc', 'Misc'), [...symItems('misc'), ...capItems(MISC_EXTRA)]],
+    [uiText('fly.blockArrows', 'Block arrows'), symItems('arrow')], [uiText('fly.mechSymbols', 'Mechanics symbols'), symItems('mech')], [uiText('fly.opticsSymbols', 'Optics symbols'), symItems('optics')],
+    [uiText('fly.elecSymbols', 'Electrical symbols'), symItems('elec')], [uiText('fly.waveforms', 'Waveforms'), symItems('wave')],
   ];
-  // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
-  $('#fly-elec').innerHTML = sec('Symbols', symBtns('elec')) + sec('Waveforms', symBtns('wave'))
-    + `<div class="pop-grid cz-entry"><button data-insert="cz" title="A circuit drawn with circuitikz parts: 415 components, wires that snap to pins"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>Advanced Circuit Block (<code>circuitikz</code>)</span></button><div class="help">Every circuitikz part, wired on a grid and exported as circuitikz.</div></div>`;
+  // The flyouts are built once and rebuilt in place when the language changes (open and pinned states live
+  // on the containers and in openFly / flyPinned, which a rebuild leaves alone).
+  let flyBuilt = false;
+  onLocale(() => {
+    if (flyBuilt) hideModes();
+    flyBuilt = true;
+    $('#fly-lines').innerHTML = sec(uiText('fly.lines', 'Lines'), lineBtns(LINE_TOOLS)) + sec(uiText('fly.freeform', 'Freeform'), lineBtns(FREE_TOOLS));
+    $('#fly-shapes').innerHTML = sec(uiText('fly.rectangles', 'Rectangles'), symBtns('rect')) + sec(uiText('fly.basicShapes', 'Basic shapes'), PLAIN_SHAPES.map(([t, n]) => modeBtn(t, n)).join('') + symBtns('basic')) + sec(uiText('fly.flowchart', 'Flowchart'), symBtns('flow'));
+    $('#fly-misc').innerHTML = sec(uiText('fly.misc', 'Misc'), symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join(''));
+    $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
+    $('#fly-phys').innerHTML = `<div class="pop-title">${esc(uiText('fly.physTitle', 'Physics figures (experimental)'))}<span class="pop-warn">${esc(uiText('fly.physWarn', 'Results and drawings might not be correct.'))}</span></div>` + physDomains() + sec(uiText('fly.mechSymbols', 'Mechanics symbols'), symBtns('mech')) + sec(uiText('fly.opticsSymbols', 'Optics symbols'), symBtns('optics'));
+    // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
+    $('#fly-elec').innerHTML = sec(uiText('fly.symbols', 'Symbols'), symBtns('elec')) + sec(uiText('fly.waveforms', 'Waveforms'), symBtns('wave'))
+      + `<div class="pop-grid cz-entry"><button data-insert="cz" title="${esc(uiText('fly.cz.title', 'A circuit drawn with circuitikz parts: 415 components, wires that snap to pins'))}"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>${esc(uiText('fly.cz.label', 'Advanced Circuit Block ({code})', { code: '\u0000' })).replace('\u0000', '<code>circuitikz</code>')}</span></button><div class="help">${esc(uiText('fly.cz.help', 'Every circuitikz part, wired on a grid and exported as circuitikz.'))}</div></div>`;
+  });
   function flyOf(t: any) {
     if (/^(solid|prim3d|revolve)\b/.test(t)) return 'figures3d';
     if (/^plot:\w*3d$/.test(t)) return 'plots3d';
@@ -1622,9 +1785,9 @@ import { runtime as TD } from '../runtime';
   function showModes(b: HTMLElement) {
     const tool = b.dataset.modes!, cur = drawMode(tool);
     modeFor = tool;
-    modeMenu.setAttribute('aria-label', `${TYPES[tool].name} drawing`);
+    modeMenu.setAttribute('aria-label', uiText('mode.menu.aria', '{name} drawing', { name: typeName(tool) }));
     modeMenu.innerHTML = DRAW_MODES[tool].map(([m, label, hint, icon]) =>
-      `<button class="ctx-item" role="menuitemradio" aria-checked="${m === cur}" data-mode="${tool}:${m}" title="${esc(hint)}"><svg viewBox="0 0 20 20">${icon}</svg><span class="lb">${label}</span>${m === cur ? TICK : '<span class="ck"></span>'}</button>`).join('');
+      `<button class="ctx-item" role="menuitemradio" aria-checked="${m === cur}" data-mode="${tool}:${m}" title="${esc(caption(hint))}"><svg viewBox="0 0 20 20">${icon}</svg><span class="lb">${esc(caption(label))}</span>${m === cur ? TICK : '<span class="ck"></span>'}</button>`).join('');
     modeMenu.hidden = false;
     // below the button, its left edge on the button's; kept on screen
     const r = b.getBoundingClientRect(), w = modeMenu.offsetWidth, h = modeMenu.offsetHeight;
@@ -1692,7 +1855,7 @@ import { runtime as TD } from '../runtime';
     const file = e.target.files[0];
     if (!file) return;
     let pic: Picture;
-    try { pic = await readPicture(file); } catch (err: any) { imageTarget = null; showHint(`Couldn't open ${file.name}: ${err.message}`, 2500); return; }
+    try { pic = await readPicture(file); } catch (err: any) { imageTarget = null; showHint(uiText('hint.couldntOpenFile', "Couldn't open {name}: {error}", { name: file.name, error: err.message }), 2500); return; }
     begin();
     const old = imageTarget && byId(imageTarget);
     if (old) { old.src = pic.src; old.h = old.w * (pic.h / pic.w); old.file = ''; old.file = imageFileName(stemOf(file.name), pic.src); }
@@ -1783,15 +1946,15 @@ import { runtime as TD } from '../runtime';
     if (t === 'ellipse' && drawMode('ellipse') === 'circle3') return 'circle3';
     return null;
   }
-  const POINT_HINTS: Record<string, string[]> = {
-    arc3: ['Click one end of the arc', 'Click the other end', 'Click a point the arc passes through · Esc cancels'],
-    arc: ['Click the centre of the arc', 'Click where the arc starts (sets the radius) · Shift snaps to 15°', 'Turn round the centre and click where the arc ends · Shift snaps to 15° · Esc cancels'],
-    rect3: ['Click one corner of the rectangle', 'Click the next corner (sets one side and the angle) · Shift snaps to 15°', 'Click to set the other side · Esc cancels'],
-    circle3: ['Click a point on the circle', 'Click a second point', 'Click a third point · Esc cancels'],
+  const POINT_HINTS: Record<string, any[]> = {
+    arc3: [message('pt.arc3.1', 'Click one end of the arc'), message('pt.arc3.2', 'Click the other end'), message('pt.arc3.3', 'Click a point the arc passes through · Esc cancels')],
+    arc: [message('pt.arc.1', 'Click the centre of the arc'), message('pt.arc.2', 'Click where the arc starts (sets the radius) · Shift snaps to 15°'), message('pt.arc.3', 'Turn round the centre and click where the arc ends · Shift snaps to 15° · Esc cancels')],
+    rect3: [message('pt.rect3.1', 'Click one corner of the rectangle'), message('pt.rect3.2', 'Click the next corner (sets one side and the angle) · Shift snaps to 15°'), message('pt.rect3.3', 'Click to set the other side · Esc cancels')],
+    circle3: [message('hint.second.circle', 'Click a point on the circle'), message('pt.circle3.2', 'Click a second point'), message('pt.circle3.3', 'Click a third point · Esc cancels')],
   };
   function arcHint() {
     const d = arcDraft, n = d ? d.pts.length : 0, k = d ? d.tool : pointsKind();
-    if (k) showHint(POINT_HINTS[k][Math.min(n, 2)]);
+    if (k) showHint(caption(POINT_HINTS[k][Math.min(n, 2)]));
   }
   // a rectangle with one side from A to B, as far to one side of it as q is
   function rect3(A: any, B: any, q: any) {
@@ -2200,7 +2363,8 @@ import { runtime as TD } from '../runtime';
           if (best) { dx = best.dx; dy = best.dy; snapHint = { ...best.pt, anchor: true }; }
           else {
             const g = TD.GRID, rx = drag.ref.x + dx, ry = drag.ref.y + dy;
-            dx = Math.round(rx / g) * g - drag.ref.x; dy = Math.round(ry / g) * g - drag.ref.y;
+            const snapped = snapCanvasGrid({ x: rx, y: ry }, g, gridStyle());
+            dx = snapped.x - drag.ref.x; dy = snapped.y - drag.ref.y;
             snapHint = null;
           }
         }
@@ -2368,7 +2532,7 @@ import { runtime as TD } from '../runtime';
       const box = s && !line && d.c0 && Math.hypot(e.clientX - d.c0.x, e.clientY - d.c0.y) < 4 && !clickMakes(s);
       if (line || box) {
         lineDraft = d;
-        showHint(line ? 'Click where it ends · Esc cancels' : secondClickHint(d.dm) + ' · Esc cancels');
+        showHint(line ? uiText('hint.clickEnd', 'Click where it ends · Esc cancels') : uiText('hint.escCancels', '{hint} · Esc cancels', { hint: secondClickHint(d.dm) }));
         return;
       }
     }
@@ -2403,11 +2567,14 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('wheel', (e: any) => {
     e.preventDefault();
     const r = stageSize();
-    if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    if (e.ctrlKey || e.metaKey) zoomAt(wheelZoomFactor(e), e.clientX - r.left, e.clientY - r.top);
     else { state.view.x += e.deltaX / state.view.zoom; state.view.y += e.deltaY / state.view.zoom; renderView(); }
   }, { passive: false });
 
-  window.addEventListener('resize', render);
+  window.addEventListener('resize', () => { if (!inTool() && state.mode !== 'document') render(); });
+  // the stage also changes size without the window (the sidebar folding, leaving Table or Quick, the page view):
+  // the canvas's viewBox and the rulers follow, else they are drawn for the old size
+  { let raf = 0; new ResizeObserver(() => { cancelAnimationFrame(raf); if (!inTool() && state.mode !== 'document') raf = requestAnimationFrame(render); }).observe(svg); }
 
   // ---------------- inline text editor ----------------
   const ed = $('#inlineEditor'), mlBox = $('#mlEditor');
@@ -2468,9 +2635,9 @@ import { runtime as TD } from '../runtime';
     const code = field === 'src', para = code || (field === 'text' && TD.isParaText(s));
     ed.classList.toggle('para', para);
     ed.classList.toggle('code', code);
-    ed.placeholder = field === 'label' ? 'Label, e.g. $r$ — Enter to finish'
-      : code ? `quantikz code — Enter for a new line, ${isMac ? '⌘' : 'Ctrl+'}Enter or Esc to finish`
-      : para ? `Paragraph, $math$ — Enter for a new line, ${isMac ? '⌘' : 'Ctrl+'}Enter or Esc to finish` : 'Text, $math$ — Enter to finish, Shift+Enter newline';
+    ed.placeholder = field === 'label' ? uiText('ed.label', 'Label, e.g. $r$ — Enter to finish')
+      : code ? uiText('ed.code', 'quantikz code — Enter for a new line, {mod}Enter or Esc to finish', { mod: isMac ? '⌘' : 'Ctrl+' })
+      : para ? uiText('ed.para', 'Paragraph, $math$ — Enter for a new line, {mod}Enter or Esc to finish', { mod: isMac ? '⌘' : 'Ctrl+' }) : caption(captions["ui.text.math.enter.to.finish.shift.enter.newline"]);
     sizeEditor();
     positionEditor();
     // select the existing text for replacement, unless typing already started before this frame
@@ -2484,14 +2651,14 @@ import { runtime as TD } from '../runtime';
     if (init != null && !s[field]) s[field] = '';
     const para = field === 'text' && TD.isParaText(s);
     mlBox.classList.toggle('para', para);
-    mlBox.innerHTML = '<div class="ml-load">Loading MathLive…</div>';
+    mlBox.innerHTML = `<div class="ml-load">${esc(uiText('ed.loadingMathLive', 'Loading MathLive…'))}</div>`;
     mlBox.style.display = 'block';
     sizeEditor(); positionEditor();
     try { await TD.input.load(); }
     catch (err: any) { // offline before it was ever cached, say: fall back to the LaTeX field for this edit
       if (editing !== me) return;
       editing = null; mlBox.style.display = 'none';
-      showHint("MathLive couldn't load, so this edit uses LaTeX", 2500);
+      showHint(uiText('hint.mathliveFailed', "MathLive couldn't load, so this edit uses LaTeX"), 2500);
       TD.input.set('latex'); startEdit(s.id, field, init);
       return;
     }
@@ -2566,56 +2733,59 @@ import { runtime as TD } from '../runtime';
 
   // ---------------- properties panel ----------------
   const sizeOpts = TD.SIZES.map((s: any) => [s[0], s[0]]);
-  const PROPS = [
-    { key: 'text', label: 'Text', type: 'textarea', hint: 'Use $…$ for math, e.g. $\\vec{F}_e$; $$…$$ for display style' },
-    { key: 'mathStyle', label: 'Math style', type: 'select', options: [['inline', 'Inline  $…$'], ['display', 'Display  $$…$$'], ['mixed', 'Mixed']], derived: true },
-    { key: 'label', label: 'Label', type: 'text', hint: 'Shown along the path; $…$ for math' },
-    { key: 'labelSide', label: 'Label side', type: 'select', options: [['left', 'Left (auto)'], ['right', 'Right (swap)'], ['on', 'On the line']], needs: 'label' },
-    { key: 'labelPos', label: 'Label pos', type: 'range', min: 0, max: 1, step: 0.05, needs: 'label' },
-    { key: 'size', label: 'Font size', type: 'size' },
-    { key: 'font', label: 'Font', type: 'select', options: TD.FONTS.map((f: any) => [f[0], f[1]]) },
-    { key: 'bold', label: 'Style', type: 'bi' },
-    { key: 'align', label: 'Align', type: 'align' },
-    { key: 'valign', label: 'Vertical', type: 'valign' },
-    { key: 'color', label: 'Text color', type: 'color' },
-    { key: 'ballColor', label: 'Ball color', type: 'color' },
-    { key: 'stroke', label: 'Stroke', type: 'color', nullable: true },
-    { key: 'fill', label: 'Fill', type: 'color', nullable: true, fills: true },
-    { key: 'width', label: 'Line width', type: 'width', min: 0.25, step: 0.25, unit: 'px' },
-    { key: 'dash', label: 'Dash', type: 'dash' },
-    { key: 'route', label: 'Route', type: 'icons', icons: [['straight', 'Straight', 'M3 16L17 4'], ['elbow', 'Elbow: right angles', 'M3 15h7V5h7'], ['curved', 'Curved', 'M3 15C11 15 9 5 17 5']] },
-    { key: 'dir', label: 'Direction', type: 'icons' },
-    { key: 'startTip', label: 'Start tip', type: 'tip' },
-    { key: 'endTip', label: 'End tip', type: 'tip' },
-    { key: 'midTip', label: 'Middle tip', type: 'tip' },
-    { key: 'bpTip', label: 'Bend tips', type: 'tip' },
-    { key: 'shaft', label: 'Shaft', type: 'shaft' },
-    { key: 'cross', label: 'Crossings', type: 'select', options: TD.CROSSES },
-    { key: 'closed', label: 'Closed', type: 'checkbox' },
-    { key: 'boxed', label: 'Boxed', type: 'checkbox' },
-    { key: 'radius', label: 'Corner radius', type: 'number', min: 0, step: 1, unit: 'px' },
-    { key: 'coils', label: 'Coils', type: 'number', min: 1, step: 1 },
-    { key: 'amplitude', label: 'Amplitude', type: 'number', min: 1, step: 1, unit: 'px' },
-    { key: 'pitch', label: 'Pitch', type: 'number', min: 0, step: 1, unit: 'px', hint: 'Length of one coil; resizing adds coils. 0 = use a fixed coil count' },
-    { key: 'loop', label: 'Loop size', type: 'number', min: 0, step: 1, unit: 'px' },
-    { key: 'wl', label: 'Wave length', type: 'number', min: 4, step: 1, unit: 'px' },
-    { key: 'phase', label: 'Start position', type: 'range', min: 0, max: 100, step: 1 },
-    { key: 'duty', label: 'Duty cycle', type: 'range', min: 5, max: 95, step: 1 },
-    { key: 'fire', label: 'Firing angle', type: 'range', min: 0, max: 175, step: 5 },
-    { key: 'tick', label: 'Tick spacing', type: 'number', min: 0, step: 1, unit: 'px' },
-    { key: 'ticksz', label: 'Tick size', type: 'number', min: 1, step: 1, unit: 'px' },
-    { key: 'nums', label: 'Show numbers', type: 'checkbox' },
-    { key: 'cell', label: 'Cell size', type: 'number', min: 4, step: 1, unit: 'px' },
-    { key: 'shift', label: 'Corner shift', type: 'number', step: 1, unit: 'px' },
-    { key: 'frame', label: 'Border', type: 'checkbox' },
-    { key: 'hatch', label: 'Hatch spacing', type: 'number', min: 3, step: 1, unit: 'px' },
-    { key: 'mount', label: 'Mount', type: 'checkbox' },
-    { key: 'mark', label: 'Angle mark', type: 'checkbox' },
-    { key: 'lbl', label: 'Angle label', type: 'text', hint: 'Maths without $, e.g. \\theta or 30^\\circ; leave empty for none' },
-    { key: 'slits', label: 'Slits', type: 'number', min: 1, step: 1 },
-    { key: 'angle', label: 'Rotation', type: 'number', step: 1, unit: '°' },
-    { key: 'skew', label: 'Skew X', type: 'number', min: -75, step: 1, unit: '°' },
-    { key: 'opacity', label: 'Opacity', type: 'range', min: 0.05, max: 1, step: 0.05 },
+  const PROPS: any[] = [
+    { key: 'text', label: message('prop.text', 'Text'), type: 'textarea', hint: message('prop.text.hint', 'Use $…$ for math, e.g. $\\vec{F}_e$; $$…$$ for display style') },
+    { key: 'mathStyle', label: message('prop.mathStyle', 'Math style'), type: 'select', options: [['inline', message('prop.mathStyle.inline', 'Inline  $…$')], ['display', message('prop.mathStyle.display', 'Display  $$…$$')], ['mixed', message('prop.mathStyle.mixed', 'Mixed')]], derived: true },
+    { key: 'label', label: message('prop.label', 'Label'), type: 'text', hint: message('prop.label.hint', 'Shown along the path; $…$ for math') },
+    { key: 'labelSide', label: message('prop.labelSide', 'Label side'), type: 'select', options: [['left', message('prop.labelSide.left', 'Left (auto)')], ['right', message('prop.labelSide.right', 'Right (swap)')], ['on', message('prop.labelSide.on', 'On the line')]], needs: 'label' },
+    { key: 'labelPos', label: message('prop.labelPos', 'Label pos'), type: 'range', min: 0, max: 1, step: 0.05, needs: 'label' },
+    { key: 'size', label: message('prop.size', 'Font size'), type: 'size' },
+    { key: 'font', label: message('prop.font', 'Font'), type: 'select', options: TD.FONTS.map((f: any) => [f[0], f[1]]) },
+    { key: 'bold', label: message('prop.bold', 'Style'), type: 'bi' },
+    { key: 'align', label: message('prop.align', 'Align'), type: 'align' },
+    { key: 'valign', label: message('prop.valign', 'Vertical'), type: 'valign' },
+    { key: 'color', label: message('prop.color', 'Text color'), type: 'color' },
+    { key: 'ballColor', label: message('prop.ballColor', 'Ball color'), type: 'color' },
+    { key: 'stroke', label: message('prop.stroke', 'Stroke'), type: 'color', nullable: true },
+    { key: 'fill', label: message('prop.fill', 'Fill'), type: 'color', nullable: true, fills: true },
+    { key: 'width', label: message('prop.width', 'Line width'), type: 'width', min: 0.25, step: 0.25, unit: 'px' },
+    { key: 'dash', label: message('prop.dash', 'Dash'), type: 'dash' },
+    { key: 'route', label: message('prop.route', 'Route'), type: 'icons', icons: [['straight', message('prop.route.straight', 'Straight'), 'M3 16L17 4'], ['elbow', message('prop.route.elbow', 'Elbow: right angles'), 'M3 15h7V5h7'], ['curved', message('prop.route.curved', 'Curved'), 'M3 15C11 15 9 5 17 5']] },
+    { key: 'dir', label: message('prop.dir', 'Direction'), type: 'icons' },
+    { key: 'startTip', label: message('prop.startTip', 'Start tip'), type: 'tip' },
+    { key: 'endTip', label: message('prop.endTip', 'End tip'), type: 'tip' },
+    { key: 'midTip', label: message('prop.midTip', 'Middle tip'), type: 'tip' },
+    { key: 'bpTip', label: message('prop.bpTip', 'Bend tips'), type: 'tip' },
+    { key: 'shaft', label: message('prop.shaft', 'Shaft'), type: 'shaft' },
+    { key: 'cross', label: message('prop.cross', 'Crossings'), type: 'select', options: TD.CROSSES },
+    { key: 'closed', label: message('prop.closed', 'Closed'), type: 'checkbox' },
+    { key: 'boxed', label: message('prop.boxed', 'Boxed'), type: 'checkbox' },
+    { key: 'radius', label: message('prop.radius', 'Corner radius'), type: 'number', min: 0, step: 1, unit: 'px' },
+    { key: 'coils', label: message('prop.coils', 'Coils'), type: 'number', min: 1, step: 1 },
+    { key: 'amplitude', label: message('prop.amplitude', 'Amplitude'), type: 'number', min: 1, step: 1, unit: 'px' },
+    { key: 'pitch', label: message('prop.pitch', 'Pitch'), type: 'number', min: 0, step: 1, unit: 'px', hint: message('prop.pitch.hint', 'Length of one coil; resizing adds coils. 0 = use a fixed coil count') },
+    { key: 'loop', label: message('prop.loop', 'Loop size'), type: 'number', min: 0, step: 1, unit: 'px' },
+    { key: 'wl', label: message('prop.wl', 'Wave length'), type: 'number', min: 4, step: 1, unit: 'px' },
+    { key: 'phase', label: message('prop.phase', 'Start position'), type: 'range', min: 0, max: 100, step: 1 },
+    { key: 'duty', label: message('prop.duty', 'Duty cycle'), type: 'range', min: 5, max: 95, step: 1 },
+    { key: 'fire', label: message('prop.fire', 'Firing angle'), type: 'range', min: 0, max: 175, step: 5 },
+    { key: 'tick', label: message('prop.tick', 'Tick spacing'), type: 'number', min: 0, step: 1, unit: 'px' },
+    { key: 'ticksz', label: message('prop.ticksz', 'Tick size'), type: 'number', min: 1, step: 1, unit: 'px' },
+    { key: 'nums', label: message('prop.nums', 'Show numbers'), type: 'checkbox' },
+    { key: 'cell', label: message('prop.cell', 'Cell size'), type: 'number', min: 4, step: 1, unit: 'px' },
+    { key: 'shift', label: message('prop.shift', 'Corner shift'), type: 'number', step: 1, unit: 'px' },
+    { key: 'frame', label: message('prop.frame', 'Border'), type: 'checkbox' },
+    { key: 'hatch', label: message('prop.hatch', 'Hatch spacing'), type: 'number', min: 3, step: 1, unit: 'px' },
+    { key: 'hatchAngle', label: message('prop.hatchAngle', 'Hatch angle'), type: 'number', step: 1, unit: '°' },
+    { key: 'hatchWidth', label: message('prop.hatchWidth', 'Hatch lines width'), type: 'width', min: 0.25, step: 0.25, unit: 'px' },
+    ...['Top', 'Right', 'Bottom', 'Left'].map(side => ({ key: 'hatch' + side, label: message('prop.hatch' + side, side + ' edge'), type: 'checkbox' })),
+    { key: 'mount', label: message('prop.mount', 'Mount'), type: 'checkbox' },
+    { key: 'mark', label: message('prop.mark', 'Angle mark'), type: 'checkbox' },
+    { key: 'lbl', label: message('prop.lbl', 'Angle label'), type: 'text', hint: message('prop.lbl.hint', 'Maths without $, e.g. \\theta or 30^\\circ; leave empty for none') },
+    { key: 'slits', label: message('prop.slits', 'Slits'), type: 'number', min: 1, step: 1 },
+    { key: 'angle', label: message('prop.angle', 'Rotation'), type: 'number', step: 1, unit: '°' },
+    { key: 'skew', label: message('prop.skew', 'Skew X'), type: 'number', min: -75, step: 1, unit: '°' },
+    { key: 'opacity', label: message('prop.opacity', 'Opacity'), type: 'range', min: 0.05, max: 1, step: 0.05 },
   ];
   const GEOM: Record<string, any> = {
     line: [['x1', 'x'], ['y1', 'y'], ['x2', 'x'], ['y2', 'y']],
@@ -2644,23 +2814,23 @@ import { runtime as TD } from '../runtime';
   const fromUnit = (v: any, k: any) => (k === 'deg' ? v : k === 'y' ? -v * PX : v * PX);
 
   // Four bars, alternating long/short, drawn heavy so they read like the usual paragraph-align icons.
-  const ALIGNS = [['left', 'Align Left', 'M3 4h14M3 8h9M3 12h14M3 16h9'], ['center', 'Align Centre', 'M3 4h14M5.5 8h9M3 12h14M5.5 16h9'],
-    ['right', 'Align Right', 'M3 4h14M8 8h9M3 12h14M8 16h9'], ['justify', 'Justify', 'M3 4h14M3 8h14M3 12h14M3 16h14']];
+  const ALIGNS: any[][] = [['left', message('align.left', 'Align Left'), 'M3 4h14M3 8h9M3 12h14M3 16h9'], ['center', message('align.center', 'Align Centre'), 'M3 4h14M5.5 8h9M3 12h14M5.5 16h9'],
+    ['right', message('align.right', 'Align Right'), 'M3 4h14M8 8h9M3 12h14M8 16h9'], ['justify', message('align.justify', 'Justify'), 'M3 4h14M3 8h14M3 12h14M3 16h14']];
   // A rule for the edge the text holds to, with an arrow towards it (both arrows for middle)
-  const VALIGNS = [['top', 'Align Top: new lines grow the box downward', 'M3 3h14M10 17V7M6.5 10.5 10 7l3.5 3.5'],
-    ['middle', 'Align Middle: new lines grow the box both ways', 'M3 10h14M10 2v5M7.5 4.5 10 7l2.5-2.5M10 18v-5M7.5 15.5 10 13l2.5 2.5'],
-    ['bottom', 'Align Bottom: new lines grow the box upward', 'M3 17h14M10 3v10M6.5 9.5 10 13l3.5-3.5']];
+  const VALIGNS: any[][] = [['top', message('valign.top', 'Align Top: new lines grow the box downward'), 'M3 3h14M10 17V7M6.5 10.5 10 7l3.5 3.5'],
+    ['middle', message('valign.middle', 'Align Middle: new lines grow the box both ways'), 'M3 10h14M10 2v5M7.5 4.5 10 7l2.5-2.5M10 18v-5M7.5 15.5 10 13l2.5 2.5'],
+    ['bottom', message('valign.bottom', 'Align Bottom: new lines grow the box upward'), 'M3 17h14M10 3v10M6.5 9.5 10 13l3.5-3.5']];
   function fieldModel(p: any, v: any, labelOverride?: any): StyleModel {
     const model = {
-      type: p.type, key: p.key, id: 'f-' + p.key, label: labelOverride || p.label,
+      type: p.type, key: p.key, id: 'f-' + p.key, label: caption(labelOverride || p.label),
       value: p.type === 'size' && typeof v === 'number' ? 'custom' : p.type === 'number' && typeof v === 'number' ? +v.toFixed(3) : p.type === 'width' ? (typeof v === 'number' ? +v.toFixed(3) : '') : v ?? '',
-      min: p.min ?? '', max: p.max ?? '', step: p.step ?? 1, unit: p.unit, hint: p.hint,
-      options: p.type === 'size' ? [...sizeOpts, ['custom', 'Custom px…']] : p.options || [],
+      min: p.min ?? '', max: p.max ?? '', step: p.step ?? 1, unit: p.unit, hint: p.hint && caption(p.hint),
+      options: p.type === 'size' ? [...sizeOpts, ['custom', uiText('prop.size.custom', 'Custom px…')]] : (p.options || []).map((o: any) => [o[0], caption(o[1])]),
       checked: !!v, italic: !!p.italic, px: p.type === 'size' ? Math.round(TD.sizePx(v ?? 'normalsize') * 10) / 10 : 0,
-      range: r2(v), radioLabel: p.type === 'align' ? 'Align' : p.type === 'valign' ? 'Vertical alignment' : p.label,
-      radios: (p.type === 'align' ? ALIGNS : p.type === 'valign' ? VALIGNS : (p.icons || []) as string[][]).map(([key, label, path]) => ({ key, path, on: key === v,
+      range: r2(v), radioLabel: p.type === 'align' ? caption(captions["ui.align"]) : p.type === 'valign' ? uiText('prop.valign.radio', 'Vertical alignment') : caption(p.label),
+      radios: (p.type === 'align' ? ALIGNS : p.type === 'valign' ? VALIGNS : (p.icons || []) as any[][]).map(([key, label, path]) => ({ key, path, on: key === v,
         disabled: p.type === 'align' && key === 'justify' && !p.wraps,
-        label: p.type === 'align' && key === 'justify' && !p.wraps ? 'Justify (paragraph boxes only: drag with the text tool)' : label })),
+        label: p.type === 'align' && key === 'justify' && !p.wraps ? uiText('align.justify.boxOnly', 'Justify (paragraph boxes only: drag with the text tool)') : caption(label) })),
       colour: { none: !v, nullable: !!p.nullable, fills: !!p.fills, label: p.type === 'color' ? TD.fillLabel(v) : '', css: p.type === 'color' ? TD.fillCss(v) : '' },
       preview: p.type === 'dash' ? dashPreview(v, 1.2) : p.type === 'tip' ? tipPreview(v || 'none') : p.type === 'shaft' ? shaftPreview(v || 'single') : '',
       previewName: p.type === 'dash' ? dashName(v) : p.type === 'tip' ? tipName(v) : p.type === 'shaft' ? (TD.SHAFTS.find((x: any) => x[0] === v) || TD.SHAFTS[0])[1] : '',
@@ -2668,8 +2838,9 @@ import { runtime as TD } from '../runtime';
     return model;
   }
 
-  const DIR_ELBOW = [['hh', 'Sideways at both ends', 'M2 15h8V5h8'], ['vv', 'Up or down at both ends', 'M4 2v8h12v8'], ['hv', 'Sideways, then up or down', 'M2 4h14v14'], ['vh', 'Up or down, then sideways', 'M4 2v14h14']];
-  const DIR_CURVED = [['hh', 'Sideways at both ends', 'M2 15C11 15 9 5 18 5'], ['vv', 'Up or down at both ends', 'M4 2C4 11 16 9 16 18'], ['hv', 'Sideways, then up or down', 'M2 4C12 4 16 8 16 18'], ['vh', 'Up or down, then sideways', 'M4 2C4 12 8 16 18 16']];
+  const DIR_NAMES: Record<string, any> = { hh: message('dir.hh', 'Sideways at both ends'), vv: message('dir.vv', 'Up or down at both ends'), hv: message('dir.hv', 'Sideways, then up or down'), vh: message('dir.vh', 'Up or down, then sideways') };
+  const DIR_ELBOW = [['hh', DIR_NAMES.hh, 'M2 15h8V5h8'], ['vv', DIR_NAMES.vv, 'M4 2v8h12v8'], ['hv', DIR_NAMES.hv, 'M2 4h14v14'], ['vh', DIR_NAMES.vh, 'M4 2v14h14']];
+  const DIR_CURVED = [['hh', DIR_NAMES.hh, 'M2 15C11 15 9 5 18 5'], ['vv', DIR_NAMES.vv, 'M4 2C4 11 16 9 16 18'], ['hv', DIR_NAMES.hv, 'M2 4C12 4 16 8 16 18'], ['vh', DIR_NAMES.vh, 'M4 2C4 12 8 16 18 16']];
   const TIP_KEYS = ['startTip', 'endTip', 'midTip', 'bpTip'];
   const tipName = (v: any) => (TD.TIPS.find((t: any) => t[0] === v) || TD.TIPS[0])[1];
   function tipPreview(v: any) {
@@ -2683,10 +2854,11 @@ import { runtime as TD } from '../runtime';
   // keys a shape has, counting the line extras older files lack
   const SYM_XF = new Set(['angle', 'skew']), TICK_KEYS: Record<string, any> = { tick: 6 / TD.PT_PER_PX, ticksz: 6 / TD.PT_PER_PX };
   const symParams = (s: any) => (s.type === 'sym' && TD.SYMS[s.kind] && TD.SYMS[s.kind].params) || null;
-  const hasKey = (s: any, k: any) => (s.type === 'line' && (k === 'route' || (k === 'dir' && TD.routeOf(s) !== 'straight'))) || s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && (TD.ROT_TYPES.has(s.type) || s.type === 'arc')) ||
-    (s.type === 'sym' && (SYM_XF.has(k) || !!(symParams(s) && k in symParams(s)))) || (TD.LINEISH.has(s.type) && k in TICK_KEYS && keyVal(s, 'shaft') === 'ticks');
+  const hasTips = (s: any) => TD.LINEISH.has(s.type) && !(s.type === 'poly' && s.closed);
+  const hasKey = (s: any, k: any) => (!TIP_KEYS.includes(k) || hasTips(s)) && ((s.type === 'line' && (k === 'route' || (k === 'dir' && TD.routeOf(s) !== 'straight'))) || s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && (TD.ROT_TYPES.has(s.type) || s.type === 'arc')) ||
+    (s.type === 'sym' && (SYM_XF.has(k) || !!(symParams(s) && k in symParams(s)))) || (TD.LINEISH.has(s.type) && k in TICK_KEYS && keyVal(s, 'shaft') === 'ticks'));
   // text with no alignment set: centred lines, or left in a wrapping box
-  const keyVal = (s: any, k: any) => (s.type === 'line' && k === 'route' ? TD.routeOf(s) : s.type === 'line' && k === 'dir' ? TD.routeDir(s) : undefined) ?? s[k] ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
+  const keyVal = (s: any, k: any) => (s.type === 'line' && k === 'route' ? TD.routeOf(s) : s.type === 'line' && k === 'dir' ? TD.routeDir(s) : undefined) ?? s[k] ?? (k === 'hatchWidth' && symParams(s)?.hatchWidth != null ? s.width ?? 1 : undefined) ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
   const dashName = (v: any) => (TD.DASHES.find((d: any) => d[0] === v) || [0, TD.dashPat(v) ? 'Custom' : 'Solid'])[1];
   function dashPreview(v: any, w: any) {
     const da = TD.dashArray(v, w);
@@ -2705,15 +2877,15 @@ import { runtime as TD } from '../runtime';
     const curS = selected().find((s: any) => hasKey(s, kind));
     const cur = target === 'defaults' ? state.defaults[kind] : curS && keyVal(curS, kind);
     if (TIP_KEYS.includes(kind)) {
-      ddPop.innerHTML = `<div class="tipgrid">${TD.TIPS.map(([k, n]: any) => `<button type="button" data-ddv="${k}" class="${k === (cur || 'none') ? 'on' : ''}" title="${n}">${k === 'none' ? '<span class="none">None</span>' : tipPreview(k)}</button>`).join('')}</div>`;
+      ddPop.innerHTML = `<div class="tipgrid">${TD.TIPS.map(([k, n]: any) => `<button type="button" data-ddv="${k}" class="${k === (cur || 'none') ? 'on' : ''}" title="${n}">${k === 'none' ? `<span class="none">${esc(caption(captions["ui.none"]))}</span>` : tipPreview(k)}</button>`).join('')}</div>`;
     } else if (kind === 'shaft') {
       ddPop.innerHTML = TD.SHAFTS.map(([k, n]: any) => `<button type="button" data-ddv="${k}" class="${k === (cur || 'single') ? 'on' : ''}">${shaftPreview(k)}<span>${n}</span></button>`).join('');
-    } else if (kind === 'width') {
+    } else if (kind === 'width' || kind === 'hatchWidth') {
       ddPop.innerHTML = TD.WIDTHS.map((w: any) => `<button type="button" data-ddv="${w}" class="${w === cur ? 'on' : ''}"><svg viewBox="0 0 60 10"><path d="M2 5H58" stroke="currentColor" stroke-width="${w}"/></svg><span>${w} px</span><i>${r2(w * TD.PT_PER_PX)}pt</i></button>`).join('');
     } else {
       const custom = TD.dashPat(cur) && !TD.DASHES.some((d: any) => d[0] === cur);
       ddPop.innerHTML = TD.DASHES.map(([k, n]: any) => `<button type="button" data-ddv="${k}" class="${k === cur ? 'on' : ''}">${dashPreview(k, 1.5)}<span>${n}</span></button>`).join('') +
-        `<div class="dd-custom${custom ? ' on' : ''}"><label>Custom…</label><input data-ddcustom placeholder="on off … (pt)" value="${custom ? esc(cur.slice(2)) : ''}" title="Dash lengths in pt, e.g. 4 2 or 6 2 1 2"></div>`;
+        `<div class="dd-custom${custom ? ' on' : ''}"><label>${esc(uiText('dd.custom', 'Custom…'))}</label><input data-ddcustom placeholder="on off … (pt)" value="${custom ? esc(cur.slice(2)) : ''}" title="${esc(uiText('dd.dash.title', 'Dash lengths in pt, e.g. 4 2 or 6 2 1 2'))}"></div>`;
     }
     ddPop.hidden = false;
     const r = btn.getBoundingClientRect(), w = ddPop.offsetWidth, h = ddPop.offsetHeight;
@@ -2729,7 +2901,7 @@ import { runtime as TD } from '../runtime';
     const b = (e.target! as Element).closest('[data-ddv]');
     if (!b || !ddAnchor) return;
     const kind = ddAnchor.dataset.dd;
-    pickDd(kind, kind === 'width' ? parseFloat((b as HTMLElement).dataset.ddv!) : (b as HTMLElement).dataset.ddv);
+    pickDd(kind, (kind === 'width' || kind === 'hatchWidth') ? parseFloat((b as HTMLElement).dataset.ddv!) : (b as HTMLElement).dataset.ddv);
   });
   ddPop.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { closeDd(); return; }
@@ -2739,7 +2911,9 @@ import { runtime as TD } from '../runtime';
   });
   document.addEventListener('pointerdown', (e) => { if (!ddPop.hidden && !ddPop.contains((e.target as Node)) && !(e.target! as Element).closest('[data-dd]')) closeDd(); }, true);
   let panelView: any = null, panelType = '', propertiesView: any = null;
-  function renderProps() {
+  function renderProps(): void {
+    clearFormatPreview();
+    if (!TD.math.previewing) return TD.math.preview(renderProps);
     if (panelView) { panelView.destroy(); panelView = null; }
     if (propertiesView) { void unmount(propertiesView); propertiesView = null; }
     if (TD.closeColorPicker) TD.closeColorPicker();
@@ -2752,17 +2926,17 @@ import { runtime as TD } from '../runtime';
     if (!sel.length) {
       const d = state.defaults, keys = ['stroke', 'fill', 'width', 'dash', 'color', 'size', 'font', 'ballColor'];
       const shortcuts = [
-        ['V L A C P', 'select · line · arrow · curve · polyline'], ['O S R E', 'arc · spring · rect · ellipse'], ['B D T', 'ball · dot · text'],
-        ['Shift', 'constrain angle / square'], ['Alt', 'drag without snapping'], ...(state.mode === 'board' ? [['H', 'hand: drag the board'], ['wheel', 'move around']] : state.mode === 'page' ? [['H', 'hand: drag the page']] : []), ['Space+drag', 'pan (or middle mouse)'], ['Ctrl+wheel', 'zoom'],
-        ['Ctrl+G', 'group (Shift: ungroup)'], ['Ctrl+R', 'rotate 90°'], ['Ctrl+] / [', 'forward / backward'], ['Ctrl+D', 'duplicate'],
-        ['Enter', 'label a box'], ['Ctrl+C', 'copy, also as TikZ code'], ['Ctrl+V', 'paste; TikZ code imports'], ['Ctrl+Alt+K', 'make component'],
-        ['Ctrl+E', 'TikZ code'], ['Ctrl+O', 'open file'], ['Right-click', 'object menu'],
+        ['V L A C P', uiText('sc.tools1', 'select · line · arrow · curve · polyline')], ['O S R E', uiText('sc.tools2', 'arc · spring · rect · ellipse')], ['B D T', uiText('sc.tools3', 'ball · dot · text')],
+        ['Shift', uiText('sc.shift', 'constrain angle / square')], ['Alt', uiText('sc.alt', 'drag without snapping')], ...(state.mode === 'board' ? [['H', uiText('sc.handBoard', 'hand: drag the board')], ['wheel', uiText('sc.wheel', 'move around')]] : state.mode === 'page' ? [['H', uiText('sc.handPage', 'hand: drag the page')]] : []), ['Space+drag', uiText('sc.pan', 'pan (or middle mouse)')], ['Ctrl+wheel', uiText('sc.zoom', 'zoom')],
+        ['Ctrl+G', uiText('sc.group', 'group (Shift: ungroup)')], ['Ctrl+R', uiText('sc.rotate', 'rotate 90°')], ['Ctrl+] / [', uiText('sc.order', 'forward / backward')], ['Ctrl+D', uiText('sc.dup', 'duplicate')],
+        ['Enter', uiText('sc.enter', 'label a box')], ['Ctrl+C', uiText('sc.copy', 'copy, also as TikZ code')], ['Ctrl+V', uiText('sc.paste', 'paste; TikZ code imports')], ['Ctrl+Alt+K', uiText('sc.comp', 'make component')],
+        ['Ctrl+E', uiText('sc.tikz', 'TikZ code')], ['Ctrl+O', uiText('sc.open', 'open file')], ['Right-click', uiText('sc.ctx', 'object menu')],
       ].map(([keys, description]) => ({ keys: keys.split(' ').map(kb), description }));
-      propertiesView = mountFrame(el, MainProperties, { defaults: true, title: 'Default style', fields: PROPS.filter(p => keys.includes(p.key)).map(p => fieldModel(p, d[p.key])), ...(state.mode === 'page' ? { page: pageModel() } : {}), variables: variablesModel(), before: compLibrary(), after: [], geometry: false, shortcuts });
+      propertiesView = mountFrame(el, MainProperties, { defaults: true, title: uiText('props.defaultStyle', 'Default style'), fields: PROPS.filter(p => keys.includes(p.key)).map(p => fieldModel(p, d[p.key])), ...(state.mode === 'page' ? { page: pageModel() } : {}), variables: variablesModel(), before: compLibrary(), after: [], geometry: false, shortcuts });
       return;
     }
     const types = [...new Set(sel.map((s: any) => s.type))];
-    const title = sel.length === 1 ? TYPES[sel[0].type].name : (sel[0].g && sel.every((q: any) => q.g === sel[0].g) ? `Group of ${sel.length}` : `${sel.length} objects`);
+    const title = sel.length === 1 ? (sel[0].type === 'sym' && TD.SYMS[sel[0].kind]?.hatchPreset ? uiText('shape.hatch', 'Hatch') : typeName(sel[0].type)) : (sel[0].g && sel.every((q: any) => q.g === sel[0].g) ? uiText('props.groupOf', 'Group of {n}', { n: sel.length }) : uiText('props.nObjects', '{n} objects', { n: sel.length }));
     const has = (k: any) => sel.some((s: any) => hasKey(s, k)), first = (k: any) => keyVal(sel.find((s: any) => hasKey(s, k)), k), isText = types.includes('text');
     for (const p of PROPS) {
       if (p.key === 'mathStyle') { const ms = mathStyleOf(sel); if (ms) fields.push(fieldModel(p, ms, p.label)); continue; }
@@ -2779,9 +2953,9 @@ import { runtime as TD } from '../runtime';
       }
       if (['stroke', 'fill', 'width', 'dash', 'radius'].includes(p.key) && sel.every(s => s.type === 'text' && !s.boxed)) continue;
       let label = p.label;
-      if (!isText && p.key === 'size') label = 'Label size';
-      if (!isText && p.key === 'color' && !types.includes('dot')) label = 'Label color';
-      if (types.length === 1 && types[0] === 'dot' && p.key === 'color') label = 'Color';
+      if (!isText && p.key === 'size') label = uiText('prop.labelSize', 'Label size');
+      if (!isText && p.key === 'color' && !types.includes('dot')) label = uiText('prop.labelColor', 'Label color');
+      if (types.length === 1 && types[0] === 'dot' && p.key === 'color') label = caption(captions["ui.color"]);
       if (p.type === 'bi') fields.push(fieldModel({ ...p, italic: first('italic') }, first('bold')));
       else if (p.type === 'align') fields.push(fieldModel({ ...p, wraps: sel.some(s => s.tw > 0) }, first('align')));
       else fields.push(fieldModel(p, first(p.key), label));
@@ -2789,21 +2963,21 @@ import { runtime as TD } from '../runtime';
     const before: FormSection[] = [], after: FormSection[] = [];
     if (sel.length === 1 && sel[0].type === 'poly') {
       const s = sel[0], vi = state.vertex && state.vertex.id === s.id ? state.vertex.i : -1;
-      before.push({ ...section('Points', [{ kind: 'actions', class: 'btns', buttons: [{ text: 'Add Point', attrs: { 'data-act': 'pt:add', title: 'Add a point after the chosen one (or on the longest segment). You can also drag a + on the shape.' } }, { text: `Remove Point${vi >= 0 ? ' ' + (vi + 1) : ''}`, attrs: { 'data-act': 'pt:rm', title: 'Remove the chosen point. You can also double-click a point.', ...(vi < 0 ? { disabled: true } : {}) } }] }, { kind: 'hint', text: ['Click a point to choose it. Drag a + to add a point there; double-click a point to remove it.'] }], 'sec'), summary: String(s.pts.length) });
+      before.push({ ...section(captions["ui.points"], [{ kind: 'actions', class: 'btns', buttons: [{ text: uiText('pt.add', 'Add Point'), attrs: { 'data-act': 'pt:add', title: uiText('pt.add.title', 'Add a point after the chosen one (or on the longest segment). You can also drag a + on the shape.') } }, { text: vi >= 0 ? uiText('pt.removeN', 'Remove Point {n}', { n: vi + 1 }) : uiText('pt.remove', 'Remove Point'), attrs: { 'data-act': 'pt:rm', title: uiText('pt.remove.title', 'Remove the chosen point. You can also double-click a point.'), ...(vi < 0 ? { disabled: true } : {}) } }] }, { kind: 'hint', text: [uiText('pt.help', 'Click a point to choose it. Drag a + to add a point there; double-click a point to remove it.')] }], 'sec'), summary: String(s.pts.length) });
     }
-    if (units().length > 1) after.push(section('Align', [{ kind: 'controls', class: 'align-row', controls: [
-      ['left', 'M3 2v16M6 5h10v3.5H6zM6 11.5h6V15H6z', 'Align left'], ['center', 'M10 2v16M4 5h12v3.5H4zM7 11.5h6V15H7z', 'Align centres'], ['right', 'M17 2v16M4 5h10v3.5H4zM8 11.5h6V15H8z', 'Align right'],
-      ['top', 'M2 3h16M5 6v10h3.5V6zM11.5 6v6H15V6z', 'Align top'], ['middle', 'M2 10h16M5 4v12h3.5V4zM11.5 7v6H15V7z', 'Align middles'], ['bottom', 'M2 17h16M5 4v10h3.5V4zM11.5 8v6H15V8z', 'Align bottom'],
+    if (units().length > 1) after.push(section(captions["ui.align"], [{ kind: 'controls', class: 'align-row', controls: [
+      ['left', 'M3 2v16M6 5h10v3.5H6zM6 11.5h6V15H6z', uiText('arr.left', 'Align left')], ['center', 'M10 2v16M4 5h12v3.5H4zM7 11.5h6V15H7z', uiText('arr.centres', 'Align centres')], ['right', 'M17 2v16M4 5h10v3.5H4zM8 11.5h6V15H8z', uiText('arr.right', 'Align right')],
+      ['top', 'M2 3h16M5 6v10h3.5V6zM11.5 6v6H15V6z', uiText('arr.top', 'Align top')], ['middle', 'M2 10h16M5 4v12h3.5V4zM11.5 7v6H15V7z', uiText('arr.middles', 'Align middles')], ['bottom', 'M2 17h16M5 4v10h3.5V4zM11.5 8v6H15V8z', uiText('arr.bottom', 'Align bottom')],
     ].map(([key, path, title]) => ({ kind: 'button', text: '', svg: `<svg viewBox="0 0 20 20"><path d="${path}"/></svg>`, attrs: { class: 'icon', 'data-act': 'l:' + key, title } })) }], 'sec'));
-    if (combinable()) after.push(section('Combine', [{ kind: 'controls', class: 'align-row', controls: COMBINE.map(([key, title]) => ({ kind: 'button', text: '', svg: `<svg viewBox="0 0 20 20">${COMBINE_IC[key]}</svg>`, attrs: { class: 'icon', 'data-act': 'cb:' + key, title: title + (key === 'subtract' ? ': cut the shapes above out of the bottom one' : key === 'divide' ? ': split into every overlap piece' : '') } })) }], 'sec'));
+    if (combinable()) after.push(section(uiText('combine.title', 'Combine'), [{ kind: 'controls', class: 'align-row', controls: COMBINE.map(([key]) => ({ kind: 'button', text: '', svg: `<svg viewBox="0 0 20 20">${COMBINE_IC[key]}</svg>`, attrs: { class: 'icon', 'data-act': 'cb:' + key, title: key === 'subtract' ? uiText('combine.subtract.title', '{name}: cut the shapes above out of the bottom one', { name: combineName(key) }) : key === 'divide' ? uiText('combine.divide.title', '{name}: split into every overlap piece', { name: combineName(key) }) : combineName(key) } })) }], 'sec'));
     after.push(...componentSections(sel));
     const buttons = [
-      ...(canGroup() ? [{ text: 'Group', attrs: { 'data-act': 'group', title: 'Ctrl+G' } }] : []),
-      ...(sel.length > 1 && !sel.some(q => q.cpart) ? [{ text: 'Make Component', attrs: { 'data-act': 'comp:make', title: 'Save these as one reusable part: copies stay linked' } }] : []),
-      ...(canUngroup() ? [{ text: 'Ungroup', attrs: { 'data-act': 'ungroup', title: 'Ctrl+Shift+G' } }] : []),
-      ...[['front', 'Bring to Front'], ['back', 'Send to Back'], ['dup', 'Duplicate'], ['del', 'Delete']].map(([key, text]) => ({ text, attrs: { 'data-act': key } })),
+      ...(canGroup() ? [{ text: caption(captions["ui.group"]), attrs: { 'data-act': 'group', title: 'Ctrl+G' } }] : []),
+      ...(sel.length > 1 && !sel.some(q => q.cpart) ? [{ text: uiText('comp.make', 'Make Component'), attrs: { 'data-act': 'comp:make', title: uiText('comp.make.title', 'Save these as one reusable part: copies stay linked') } }] : []),
+      ...(canUngroup() ? [{ text: caption(captions["ui.ungroup"]), attrs: { 'data-act': 'ungroup', title: 'Ctrl+Shift+G' } }] : []),
+      ...[['front', caption(captions["ui.bring.to.front"])], ['back', caption(captions["ui.send.to.back"])], ['dup', caption(captions["ui.duplicate"])], ['del', caption(captions["ui.delete"])]].map(([key, text]) => ({ text, attrs: { 'data-act': key } })),
     ];
-    after.push({ class: 'sec', rows: [{ kind: 'actions', class: 'btns', buttons }, { kind: 'hint', text: [`Right-click for more: ${turnable(sel) ? 'rotate, flip, ' : rotatable(sel) ? 'flip, ' : ''}arrange, distribute.`] }] });
+    after.push({ class: 'sec', rows: [{ kind: 'actions', class: 'btns', buttons }, { kind: 'hint', text: [turnable(sel) ? uiText('props.more.turn', 'Right-click for more: rotate, flip, arrange, distribute.') : rotatable(sel) ? uiText('props.more.flip', 'Right-click for more: flip, arrange, distribute.') : uiText('props.more', 'Right-click for more: arrange, distribute.')] }] });
     const panel = sel.length === 1 && TD.panels[sel[0].type];
     propertiesView = mountFrame(el, MainProperties, { defaults: false, title, fields, before, after, ...(panel ? { panel: sel[0].type } : {}), geometry: sel.length === 1 && !!GEOM[sel[0].type] });
     if (panel) panelType = sel[0].type, panelView = TD.panelViews[sel[0].type].mount(el.querySelector('[data-panel]'), sel[0] as Shape & { src: string });
@@ -2811,7 +2985,7 @@ import { runtime as TD } from '../runtime';
   }
   function pageModel(): PageModel {
     const G = pageGeom();
-    return { paper: G.paper, paperName: TD.PAPERS[G.paper]?.name || 'Custom', widthCm: G.W, heightCm: G.H, rawWidthCm: G.w / PX, rawHeightCm: G.h / PX, width: G.w, height: G.h, orient: G.orient, mt: G.mt, ml: G.ml, current: currentPage(), papers: Object.entries<any>(TD.PAPERS).map(([key, v]) => ({ key, name: v.name })), pages: Array.from({ length: G.n }, (_, k) => ({ objects: onPage(k, G).length, thumbnail: pageThumb(k, G) })) };
+    return { paper: G.paper, paperName: TD.PAPERS[G.paper]?.name || uiText('page.paper.custom', 'Custom'), widthCm: G.W, heightCm: G.H, rawWidthCm: G.w / PX, rawHeightCm: G.h / PX, width: G.w, height: G.h, orient: G.orient, mt: G.mt, ml: G.ml, current: currentPage(), papers: Object.entries<any>(TD.PAPERS).map(([key, v]) => ({ key, name: v.name })), pages: Array.from({ length: G.n }, (_, k) => ({ objects: onPage(k, G).length, thumbnail: pageThumb(k, G) })) };
   }
   propsEl0().addEventListener('change', (e: any) => {
     const k = e.target.dataset.pp;
@@ -2838,11 +3012,11 @@ import { runtime as TD } from '../runtime';
     if (!sec || sel.length !== 1 || !propertiesView) return;
     if (!force && sec.contains(document.activeElement)) return;
     const s = sel[0], ex = s.ex || {};
-    propertiesView.updateGeometry({ title: `Geometry (TikZ ${GEOM[s.type].some((g: any) => g[1] === 'deg') ? 'cm / °' : 'cm'})`, rows: GEOM[s.type].map(([k, kind]: string[]) => {
+    propertiesView.updateGeometry({ title: GEOM[s.type].some((g: any) => g[1] === 'deg') ? uiText('geom.title.deg', 'Geometry (TikZ cm / °)') : uiText('geom.title', 'Geometry (TikZ cm)'), rows: GEOM[s.type].map(([k, kind]: string[]) => {
       const e = ex[k] != null ? paramErr.get(s.id + ':' + k) : null;
       const gv = (s.type === 'arc' && k === 'ry' ? s.ry || s.r : s[k]) ?? 0;
-      const tip = ex[k] != null ? (e || `= ${toUnit(gv, kind)}${kind === 'deg' ? '°' : ' cm'}`) : k === 'tw' ? 'Wrap width in cm (0 = no wrapping)' : k === 'th' ? 'Paragraph box height in cm (0 = grows with the text). Needs a wrap width.' : '';
-      return row(k === 'tw' ? 'wrap width' : k === 'th' ? 'box height' : s.type === 'arc' && k === 'r' ? 'rx' : k, { kind: 'input', value: ex[k] != null ? ex[k] : String(toUnit(gv, kind)), attrs: { type: 'text', inputmode: 'decimal', spellcheck: 'false', autocomplete: 'off', 'data-geom': k, 'data-kind': kind, 'data-step': kind === 'deg' ? 5 : 0.05, class: 'geomin' + (ex[k] != null ? ' ex' : '') + (e ? ' bad' : ''), ...(tip ? { title: tip } : {}) } });
+      const tip = ex[k] != null ? (e || `= ${toUnit(gv, kind)}${kind === 'deg' ? '°' : ' cm'}`) : k === 'tw' ? uiText('geom.tw.tip', 'Wrap width in cm (0 = no wrapping)') : k === 'th' ? uiText('geom.th.tip', 'Paragraph box height in cm (0 = grows with the text). Needs a wrap width.') : '';
+      return row(k === 'tw' ? uiText('geom.tw', 'wrap width') : k === 'th' ? uiText('geom.th', 'box height') : s.type === 'arc' && k === 'r' ? 'rx' : k, { kind: 'input', value: ex[k] != null ? ex[k] : String(toUnit(gv, kind)), attrs: { type: 'text', inputmode: 'decimal', spellcheck: 'false', autocomplete: 'off', 'data-geom': k, 'data-kind': kind, 'data-step': kind === 'deg' ? 5 : 0.05, class: 'geomin' + (ex[k] != null ? ' ex' : '') + (e ? ' bad' : ''), ...(tip ? { title: tip } : {}) } });
     }) });
   }
   function variablesModel() {
@@ -2874,7 +3048,29 @@ import { runtime as TD } from '../runtime';
       return style === 'display' ? `$$${g.s.trim()}$$` : `$${g.s.trim()}$`;
     }).join('')).join('\n');
   }
+  function setTextFormat(s: any, key: string, value: any) {
+    if (key === 'mathStyle') setMathStyle(s, value);
+    else {
+      s[key] = value;
+      if (key === 'boxed' && value && s.type === 'text') { s.stroke ??= '#000000'; s.fill ??= null; s.width ??= 1; s.dash ??= 'solid'; s.radius ??= 0; }
+    }
+  }
+  function clearFormatPreview(paint = true) {
+    if (formatPreviewFrame) cancelAnimationFrame(formatPreviewFrame);
+    formatPreviewFrame = 0;
+    const hadPreview = !!formatPreview;
+    formatPreview = null;
+    if (hadPreview && paint) render();
+  }
+  function previewFormat(key: string, value: any) {
+    if (!['mathStyle', 'size', 'font', 'bold', 'italic', 'align', 'valign', 'color', 'boxed'].includes(key) ||
+        !selected().some(s => s.type === 'text') || state.mode === 'document') return;
+    if (formatPreview?.key === key && formatPreview.value === value) return;
+    formatPreview = { owner: home(), ids: [...state.sel].join(','), key, value, scene: null };
+    if (!formatPreviewFrame) formatPreviewFrame = requestAnimationFrame(() => { formatPreviewFrame = 0; render(); });
+  }
   function applyProp(key: any, value: any, isFinal: any) {
+    clearFormatPreview(false);
     const target = $('#props .sec[data-target]')?.dataset.target;
     if (target === 'defaults') { state.defaults[key] = value; savePrefs(); return; }
     if (key === 'mathStyle') {
@@ -2884,8 +3080,7 @@ import { runtime as TD } from '../runtime';
     }
     begin();
     for (const s of selected()) if (hasKey(s, key)) TD.textHold(s, () => {
-      s[key] = value;
-      if (key === 'boxed' && value && s.type === 'text') { s.stroke ??= '#000000'; s.fill ??= null; s.width ??= 1; s.dash ??= 'solid'; s.radius ??= 0; }
+      setTextFormat(s, key, value);
     });
     render();
     if (isFinal) commit();
@@ -2907,12 +3102,29 @@ import { runtime as TD } from '../runtime';
     const el = t.closest('[data-panel]');
     return el && selected().length === 1 ? { panel: TD.panels[el.dataset.panel], s: selected()[0] } : null;
   };
+  const formatButton = (t: any) => t.closest?.('[data-alignv], [data-valign]');
+  propsEl.addEventListener('pointerover', (e: any) => {
+    const b = formatButton(e.target);
+    if (b) previewFormat(b.dataset.alignv ? 'align' : 'valign', b.dataset.alignv || b.dataset.valign);
+  });
+  propsEl.addEventListener('pointerout', (e: any) => {
+    const b = formatButton(e.target);
+    if (b && !b.contains(e.relatedTarget)) clearFormatPreview();
+  });
+  propsEl.addEventListener('optionpreview', (e: any) => {
+    const t = e.target, key = t.dataset.key;
+    if (key === 'size' && e.detail.value === 'custom') return clearFormatPreview();
+    previewFormat(key, e.detail.value);
+  });
+  propsEl.addEventListener('optionpreviewend', () => clearFormatPreview());
+  // Numeric sizes preview on each keystroke, with a single committed edit on change.
   propsEl.addEventListener('input', (e: any) => {
     const t = e.target;
     const pn = panelOf(t);
     // the panel follows each keystroke: other fields show what this one changed (the Svelte view preserves the active field)
     if (pn) { begin(); pn.panel.apply!(pn.s, t); render(); renderPanel(); return; }
-    if (t.dataset.geom || t.dataset.sizepx) return;
+    if (t.dataset.sizepx) { const r = readField(t); if (r) previewFormat(r.key, r.v); else clearFormatPreview(); return; }
+    if (t.dataset.geom) return;
     const r = readField(t);
     if (r) applyProp(r.key, r.v, false);
   });
@@ -2941,7 +3153,7 @@ import { runtime as TD } from '../runtime';
     if (t.dataset.vname != null) {
       const from = t.dataset.vname, to = t.value.trim();
       if (to === from) return;
-      if (!TD.params.okName(to) || (home().vars && to in home().vars!)) { showHint(!TD.params.okName(to) ? 'A name is letters, digits and _, starting with a letter (and not a function such as sin)' : `There is already a variable called ${to}`, 2400); t.value = from; return; }
+      if (!TD.params.okName(to) || (home().vars && to in home().vars!)) { showHint(!TD.params.okName(to) ? uiText('hint.varName.bad', 'A name is letters, digits and _, starting with a letter (and not a function such as sin)') : uiText('hint.varName.taken', 'There is already a variable called {name}', { name: to }), 2400); t.value = from; return; }
       begin(); renameVar(from, to); render(); commit(); renderProps(); return;
     }
     if (t.dataset.geom) {
@@ -3074,12 +3286,20 @@ import { runtime as TD } from '../runtime';
     if (act === 'pt:add' || act === 'pt:rm') { const s = selected()[0]; if (s && s.type === 'poly') TD.polyPoints[act === 'pt:add' ? 'add' : 'remove'](s); }
   });
   propsEl.addEventListener('focusin', (e: any) => {
+    const b = formatButton(e.target);
+    if (b) previewFormat(b.dataset.alignv ? 'align' : 'valign', b.dataset.alignv || b.dataset.valign);
     const t = e.target;
     if (!t.matches || !t.matches('input.geomin')) return;
     t.select(); t._keepSel = true; // the mouseup of the click that focused it would put a caret instead
   });
+  propsEl.addEventListener('focusout', (e: any) => { if (formatButton(e.target)) clearFormatPreview(); });
   propsEl.addEventListener('mouseup', (e: any) => { if (e.target._keepSel) { e.target._keepSel = false; if (e.target.selectionStart !== e.target.selectionEnd) e.preventDefault(); } });
   propsEl.addEventListener('keydown', (e: any) => {
+    if (e.key === 'Escape' && e.target.dataset.sizepx) {
+      e.preventDefault(); e.stopPropagation(); clearFormatPreview();
+      e.target.value = r2(TD.sizePx(selected()[0]?.size ?? state.defaults.size));
+      return;
+    }
     if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur();
     const t = e.target;
     if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && t.dataset.geom && /^\s*[-+]?(?:\d+\.?\d*|\.\d+)\s*$/.test(t.value)) {
@@ -3160,7 +3380,7 @@ import { runtime as TD } from '../runtime';
     const t = Date.now();
     clipboard = { shapes: clone(list), n: 0, t };
     store.set(LS_CLIP, { shapes: clipboard.shapes, t, code });
-    navigator.clipboard.writeText(code).then(() => { codeFailed = 0; if (!state.sel.size) showHint('Copied the TikZ code of this diagram', 1500); }, () => { codeFailed = t; });
+    navigator.clipboard.writeText(code).then(() => { codeFailed = 0; if (!state.sel.size) showHint(uiText('hint.copiedDiagramTikz', 'Copied the TikZ code of this diagram'), 1500); }, () => { codeFailed = t; });
   }
   // ⌘V: what the system clipboard holds decides. A copy made in this app (in any of its windows) pastes its
   // shapes; anything else comes in through takeIn below. A browser that sends no paste event gets the shapes.
@@ -3196,18 +3416,18 @@ import { runtime as TD } from '../runtime';
     if (state.mode !== 'document') {
       const sheet = files.find(TABLE_FILE);
       if (sheet && !pics.length) {
-        try { const r = await TD.table.importFile(sheet); placeTable(r.table, at, `Inserted ${sheet.name} as a table`); } catch (err: any) { showHint(`Couldn't read ${sheet.name}: ${err.message || err}`, 2600); }
+        try { const r = await TD.table.importFile(sheet); placeTable(r.table, at, uiText('hint.insertedTable', 'Inserted {name} as a table', { name: sheet.name })); } catch (err: any) { showHint(uiText('hint.couldntRead', "Couldn't read {name}: {error}", { name: sheet.name, error: err.message || err }), 2600); }
         return;
       }
       const tb = files.every(PIC_FILE) && tableFrom(html, text); // a spreadsheet's copy may carry a picture of the cells too
-      if (tb) { placeTable(tb, at, 'Pasted as a table · double-click to edit it'); return; }
+      if (tb) { placeTable(tb, at, uiText('hint.pastedTable', 'Pasted as a table · double-click to edit it')); return; }
     }
     // a picture copied from a file manager or a web page carries its file name or address as text too
     const nameOnly = !t || (!t.includes('\n') && (/^https?:\/\/\S+$/.test(t) || /^[^\s\\$]+\.\w{2,5}$/.test(t) || pics.some((f) => f.name === t)));
     if (pics.length && nameOnly) return takePictures(pics.map((f) => ({ blob: f, name: f.name })), at, docAt);
     if (t) return takeText(text, at, docAt);
-    if (texts.length) { try { return takeText(await texts[0].text(), at, docAt); } catch (err: any) { showHint(`Couldn't read ${texts[0].name}`, 2000); return; } }
-    if (files.length) showHint(`Can't use ${files[0].name}: drop a picture (PNG, JPEG, SVG, GIF, WebP) or a .tex file`, 2600);
+    if (texts.length) { try { return takeText(await texts[0].text(), at, docAt); } catch (err: any) { showHint(uiText('hint.couldntReadFile', "Couldn't read {name}", { name: texts[0].name }), 2000); return; } }
+    if (files.length) showHint(uiText('hint.cantUse', "Can't use {name}: drop a picture (PNG, JPEG, SVG, GIF, WebP) or a .tex file", { name: files[0].name }), 2600);
   }
   const TABLE_FILE = (f: File) => /\.(csv|tsv|tab|xlsx|xlsm)$/i.test(f.name);
   /** cells copied from a spreadsheet or the Table workspace (HTML with tab-separated text), or a Markdown table: a table model */
@@ -3237,7 +3457,7 @@ import { runtime as TD } from '../runtime';
     const got: { pic: Picture; name: string }[] = [];
     for (const it of list) {
       try { got.push({ pic: await readPicture(it.blob), name: it.name }); }
-      catch (err: any) { showHint(`Couldn't open ${it.name || 'that picture'}: ${err.message}`, 2600); }
+      catch (err: any) { showHint(uiText('hint.couldntOpenFile', "Couldn't open {name}: {error}", { name: it.name || uiText('hint.thatPicture', 'that picture'), error: err.message }), 2600); }
     }
     if (!got.length) return;
     if (state.mode === 'document') {
@@ -3249,7 +3469,7 @@ import { runtime as TD } from '../runtime';
     const c = at || viewCentre(), G = TD.GRID;
     got.forEach((g, k) => state.sel.add(placeImage(g.pic, stemOf(g.name) || 'image', { x: c.x + k * G * 2, y: c.y + k * G * 2 }).id));
     commit(); render(); renderProps();
-    showHint(got.length > 1 ? `Inserted ${got.length} pictures` : 'Inserted the picture · the LaTeX names it ' + TYPES.image.fileName(selected()[0]), 2000);
+    showHint(got.length > 1 ? uiText('hint.insertedPictures', 'Inserted {n} pictures', { n: got.length }) : uiText('hint.insertedPicture', 'Inserted the picture · the LaTeX names it {file}', { file: TYPES.image.fileName(selected()[0]) }), 2000);
   }
   async function takeText(text: string, at: any, docAt?: number) {
     const P = TD.pasteIn, k = P.kind(text);
@@ -3257,7 +3477,7 @@ import { runtime as TD } from '../runtime';
     if (k === 'svg') return takePictures([{ blob: text.trim(), name: 'image.svg' }], at, docAt);
     if (k === 'image') {
       let blob: Blob;
-      try { blob = await (await fetch(text.trim())).blob(); } catch (err: any) { showHint("Couldn't read that picture", 2000); return; }
+      try { blob = await (await fetch(text.trim())).blob(); } catch (err: any) { showHint(uiText('hint.couldntReadPicture', "Couldn't read that picture"), 2000); return; }
       return takePictures([{ blob, name: 'image' }], at, docAt);
     }
     if (k === 'tex' || k === 'block') {
@@ -3269,7 +3489,8 @@ import { runtime as TD } from '../runtime';
       if (!clean) { openImport(src); return; }
       groupPictures(res);
       placeImported(res, at, docAt);
-      showHint(k === 'block' ? `Pasted as a ${(TYPES[list[0].type] || {}).name || 'block'}` : `Imported ${list.length} shape${list.length === 1 ? '' : 's'}`, 1800);
+      showHint(k === 'block' ? uiText('hint.pastedAs', 'Pasted as a {name}', { name: (TYPES[list[0].type] || {}).name ? typeName(list[0].type) : uiText('hint.block', 'block') })
+        : list.length === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: list.length }), 1800);
       return;
     }
     const body = P.asText(text, k);
@@ -3282,18 +3503,41 @@ import { runtime as TD } from '../runtime';
     conform(s);
     state.sel = new Set([s.id]);
     commit(); render(); renderProps();
-    showHint(k === 'math' ? 'Pasted as a formula' : 'Pasted as text', 1200);
+    showHint(k === 'math' ? uiText('hint.pastedFormula', 'Pasted as a formula') : uiText('hint.pastedText', 'Pasted as text'), 1200);
   }
   // Dropping: only drags from outside the page (a drag started here, like a file row in the sidebar, is not one)
   let innerDrag = false;
   document.addEventListener('dragstart', () => { innerDrag = true; });
   document.addEventListener('dragend', () => { innerDrag = false; });
   const dropZone = (e: any) => (e.target as Element).closest?.('#stage, #docview') as HTMLElement | null;
+  const projectDropFile = (file: File) => /\.diagramtex$/i.test(file.name) || file.type === 'application/vnd.diagramtex+json';
+  const canOpenProjectDrop = () => $('#modal').hidden && imp.hidden &&
+    ![...document.querySelectorAll<HTMLElement>('[aria-modal="true"]')].some(dialog => dialog.getClientRects().length > 0);
+  async function openDroppedProjects(files: File[], items: DataTransferItem[]) {
+    // Capture handle promises during the drop event: Chromium may revoke access
+    // after the first await. Other browsers simply open an unlinked project copy.
+    const handles = items.filter(item => item.kind === 'file').map(item => {
+      try { return Promise.resolve((item as any).getAsFileSystemHandle?.()).catch(() => null); }
+      catch { return Promise.resolve(null); }
+    });
+    for (const [i, file] of files.entries()) {
+      if (!projectDropFile(file)) continue;
+      try {
+        const text = await file.text(), handle = await handles[i];
+        if (await openText(text, file.name, handle?.kind === 'file' ? handle : null)) {
+          setQuick(false); setTable(false);
+        }
+      } catch (error: any) {
+        await TD.alert(uiText('dlg.openFailed.title', 'Couldn\'t open "{name}"', { name: file.name }),
+          uiText('hint.couldntRead', "Couldn't read {name}: {error}", { name: file.name, error: error.message || error }));
+      }
+    }
+  }
   const fromOutside = (e: any) => !innerDrag && !!e.dataTransfer && [...e.dataTransfer.types].some((t) => t === 'Files' || t === 'text/plain' || t === 'text/uri-list');
   document.addEventListener('dragover', (e: any) => {
     if (!fromOutside(e)) return;
     e.preventDefault(); // a file dropped anywhere else would make the browser leave the app to show it
-    const z = dropZone(e) && $('#modal').hidden && imp.hidden && !inTool();
+    const z = canOpenProjectDrop() && (e.dataTransfer.types.includes('Files') || (dropZone(e) && !inTool()));
     e.dataTransfer.dropEffect = z ? 'copy' : 'none';
     document.body.classList.toggle('drop-over', !!z);
   });
@@ -3302,8 +3546,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.remove('drop-over');
     if (!fromOutside(e)) return;
     e.preventDefault();
-    if (!dropZone(e) || !$('#modal').hidden || !imp.hidden || inTool()) return;
+    if (!canOpenProjectDrop()) return;
     const dt = e.dataTransfer, files = [...dt.files] as File[];
+    if (files.some(projectDropFile)) { void openDroppedProjects(files, [...dt.items]); return; }
+    if (!dropZone(e) || inTool()) return;
     let text = dt.getData('text/plain') || '';
     const uri = (dt.getData('text/uri-list') || '').split('\n').find((l: string) => l && !l.startsWith('#')) || '';
     let docAt: number | undefined;
@@ -3314,7 +3560,7 @@ import { runtime as TD } from '../runtime';
       fetch(uri).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status))))).then((blob) => {
         if (!/^image\//.test(blob.type)) throw new Error('not a picture');
         takePictures([{ blob, name: decodeURIComponent((uri.split(/[?#]/)[0].split('/').pop() || 'image')) }], at, docAt);
-      }).catch(() => showHint("That site doesn't let its pictures be copied: save the picture, then drop the file", 3000));
+      }).catch(() => showHint(uiText('hint.siteBlocksCopy', "That site doesn't let its pictures be copied: save the picture, then drop the file"), 3000));
       return;
     }
     takeIn(text, files, at, docAt, dt.getData('text/html') || '');
@@ -3338,7 +3584,11 @@ import { runtime as TD } from '../runtime';
     pasteShapes(c.shapes, Math.round((cx - b.x - b.w / 2) / G) * G + step, Math.round((cy - b.y - b.h / 2) / G) * G + step);
   }
   // ---------- combine (shape booleans) ----------
-  const COMBINE = [['unite', 'Unite'], ['intersect', 'Intersect'], ['subtract', 'Subtract'], ['exclude', 'Exclude'], ['divide', 'Divide']];
+  const COMBINE = [['unite'], ['intersect'], ['subtract'], ['exclude'], ['divide']];
+  function combineName(key: string) {
+    return key === 'unite' ? uiText('combine.unite', 'Unite') : key === 'intersect' ? uiText('combine.intersect', 'Intersect') : key === 'subtract' ? uiText('combine.subtract', 'Subtract')
+      : key === 'exclude' ? uiText('combine.exclude', 'Exclude') : uiText('combine.divide', 'Divide');
+  }
   const COMBINE_IC: Record<string, any> = {
     unite: '<path d="M3 3h9v5h5v9H8v-5H3z" fill="currentColor" stroke="none"/>',
     intersect: '<path d="M3 3h9v9H3zM8 8h9v9H8z" fill="none"/><path d="M8 8h4v4H8z" fill="currentColor" stroke="none"/>',
@@ -3349,12 +3599,12 @@ import { runtime as TD } from '../runtime';
   const combinable = () => { const sel = selected(); return sel.length > 1 && sel.every((s: any) => TD.canCombine && TD.canCombine(s)); };
   function combineSel(op: any) {
     const sel = selected();
-    if (sel.length < 2) return showHint('Select two or more closed shapes to combine', 1500);
-    if (!combinable()) return showHint('Combine works on closed shapes: rectangles, ellipses, closed polylines, filled symbols, regions', 2200);
+    if (sel.length < 2) return showHint(uiText('hint.combine.selectTwo', 'Select two or more closed shapes to combine'), 1500);
+    if (!combinable()) return showHint(uiText('hint.combine.closedOnly', 'Combine works on closed shapes: rectangles, ellipses, closed polylines, filled symbols, regions'), 2200);
     const all = shapes(), list = sel.slice().sort((a: any, b: any) => all.indexOf(a) - all.indexOf(b));
     let res;
     try { res = TD.combineGeom(list, op); } catch (e: any) { console.error(e); res = null; }
-    if (!res) return showHint('Could not combine these shapes', 1500);
+    if (!res) return showHint(uiText('hint.combine.failed', 'Could not combine these shapes'), 1500);
     begin();
     const at = all.indexOf(list[0]);
     const made = res.map((r: any) => ({ id: uid(), type: 'region', rings: r.rings, ...TD.regionStyle(r.from) }));
@@ -3362,7 +3612,7 @@ import { runtime as TD } from '../runtime';
     state.doc.shapes = [...rest.slice(0, pos), ...made, ...rest.slice(pos)];
     state.sel = new Set(made.map((s: any) => s.id));
     commit(); render(); renderProps();
-    showHint(made.length ? `${(COMBINE.find((c) => c[0] === op))![1]}: ${made.length} shape${made.length > 1 ? 's' : ''}` : 'Nothing left: the shapes do not overlap that way', 1500);
+    showHint(made.length ? (made.length > 1 ? uiText('hint.combine.many', '{name}: {n} shapes', { name: combineName(op), n: made.length }) : uiText('hint.combine.one', '{name}: 1 shape', { name: combineName(op) })) : uiText('hint.combine.nothing', 'Nothing left: the shapes do not overlap that way'), 1500);
   }
   // ---------- groups ----------
   function groupIds(id: any) {
@@ -3389,13 +3639,13 @@ import { runtime as TD } from '../runtime';
     all.forEach((s: any, i: any) => { if (state.sel.has(s.id)) top = i; });
     const rest = all.filter((s: any) => !state.sel.has(s.id)), at = all.slice(0, top).filter((s: any) => !state.sel.has(s.id)).length;
     state.doc.shapes = [...rest.slice(0, at), ...sel, ...rest.slice(at)];
-    commit(); render(); renderProps(); showHint(`Grouped ${sel.length} objects`, 1000);
+    commit(); render(); renderProps(); showHint(uiText('hint.grouped', 'Grouped {n} objects', { n: sel.length }), 1000);
   }
   function ungroupSel() {
     if (!canUngroup()) return;
     begin();
     for (const s of selected()) { delete s.g; delete s.gname; }
-    commit(); render(); renderProps(); showHint('Ungrouped', 1000);
+    commit(); render(); renderProps(); showHint(uiText('hint.ungrouped', 'Ungrouped'), 1000);
   }
 
   // ---------- components (src/domain/components.ts) ----------
@@ -3431,7 +3681,7 @@ import { runtime as TD } from '../runtime';
   }
   function makeComponent() {
     const all = shapes(), list = selected().slice().sort((a: any, b: any) => all.indexOf(a) - all.indexOf(b));
-    if (list.length < 2) return showHint('Select two or more objects (or a group) to make a component', 1800);
+    if (list.length < 2) return showHint(uiText('hint.comp.selectTwo', 'Select two or more objects (or a group) to make a component'), 1800);
     const b = unionBox(list), G = TD.GRID, ox = Math.round((b.x + b.w / 2) / G) * G, oy = Math.round((b.y + b.h / 2) / G) * G;
     const used = new Set(all.filter((q: any) => q.type === 'comp').map((q: any) => q.cname));
     let k = 1; while (used.has('part' + k)) k++;
@@ -3439,7 +3689,7 @@ import { runtime as TD } from '../runtime';
     const inst = { id: uid(), type: 'comp', x: ox, y: oy, ref: uid(), cname: 'part' + k, def: TD.comp.defOf(list, ox, oy) };
     replaceWith(list, [inst]);
     commit(); render(); renderProps();
-    showHint(`Made component part${k}: duplicate it for linked copies, exported as a TikZ pic`, 2400);
+    showHint(uiText('hint.comp.made', 'Made component {name}: duplicate it for linked copies, exported as a TikZ pic', { name: 'part' + k }), 2400);
   }
   function openParts(inst: any, mark: any) {
     const P = TD.comp.placed(inst), idmap = new Map(), g = uid();
@@ -3453,12 +3703,12 @@ import { runtime as TD } from '../runtime';
   function editComponent(inst: any) {
     if (!inst || inst.type !== 'comp') return;
     begin(); replaceWith([inst], openParts(inst, true)); commit(); render(); renderProps();
-    showHint(`Editing ${inst.cname}: change its parts, then Save Component to update every copy`, 2600);
+    showHint(uiText('hint.comp.editing', 'Editing {name}: change its parts, then Save Component to update every copy', { name: inst.cname }), 2600);
   }
   function detachComponent(inst: any) {
     if (!inst || inst.type !== 'comp') return;
     begin(); replaceWith([inst], openParts(inst, false)); commit(); render(); renderProps();
-    showHint('Detached: plain shapes, no longer linked', 1500);
+    showHint(uiText('hint.comp.detached', 'Detached: plain shapes, no longer linked'), 1500);
   }
   function saveComponent(ref: any) {
     const list = shapes().filter((q: any) => q.cpart && q.cpart.ref === ref);
@@ -3469,23 +3719,23 @@ import { runtime as TD } from '../runtime';
     for (const q of shapes()) if (q.type === 'comp' && q.ref === ref) { q.def = clone(def); q.cname = name; n++; }
     replaceWith(list, [{ id: uid(), type: 'comp', x: at[0], y: at[1], ref, cname: name, def }]);
     commit(); render(); renderProps();
-    showHint(n ? `Saved ${name}: ${n + 1} copies updated` : `Saved ${name}`, 1800);
+    showHint(n ? uiText('hint.comp.savedN', 'Saved {name}: {n} copies updated', { name, n: n + 1 }) : uiText('hint.comp.saved', 'Saved {name}', { name }), 1800);
   }
   function componentSections(sel: Shape[]): FormSection[] {
     const one = sel.length === 1 && sel[0].type === 'comp' ? sel[0] : null;
     if (one) {
       const n = shapes().filter((q: Shape) => q.type === 'comp' && q.ref === one.ref).length;
-      return [section('Component', [{ ...row('Name', { kind: 'input', value: one.cname || '', attrs: { type: 'text', id: 'pCname', 'data-cname': '', spellcheck: 'false', autocomplete: 'off' } }), labelFor: 'pCname' },
-        { kind: 'actions', class: 'btns', buttons: [{ text: 'Edit Parts', attrs: { 'data-act': 'comp:edit', title: 'Open the parts to change them; Save Component then updates every copy' } }, { text: 'Detach', attrs: { 'data-act': 'comp:detach', title: 'Turn this copy into plain shapes, no longer linked' } }] },
-        { kind: 'hint', text: [`${n > 1 ? `${n} linked copies in this diagram.` : 'Duplicate it for linked copies.'} The export defines it once as a TikZ pic, `, { code: `\\pic at (x,y) {${TD.comp.picBase(one.cname)}}` }, '.'] }], 'sec')];
+      return [section(uiText('comp.section', 'Component'), [{ ...row(captions["ui.name"], { kind: 'input', value: one.cname || '', attrs: { type: 'text', id: 'pCname', 'data-cname': '', spellcheck: 'false', autocomplete: 'off' } }), labelFor: 'pCname' },
+        { kind: 'actions', class: 'btns', buttons: [{ text: uiText('comp.editParts', 'Edit Parts'), attrs: { 'data-act': 'comp:edit', title: uiText('comp.editParts.title', 'Open the parts to change them; Save Component then updates every copy') } }, { text: uiText('comp.detach', 'Detach'), attrs: { 'data-act': 'comp:detach', title: uiText('comp.detach.title', 'Turn this copy into plain shapes, no longer linked') } }] },
+        { kind: 'hint', text: [uiText('comp.exportPic', '{lead} The export defines it once as a TikZ pic, ', { lead: n > 1 ? uiText('comp.linkedCopies', '{n} linked copies in this diagram.', { n }) : uiText('comp.dupForCopies', 'Duplicate it for linked copies.') }), { code: `\\pic at (x,y) {${TD.comp.picBase(one.cname)}}` }, '.'] }], 'sec')];
     }
     const c = sel.find(q => q.cpart);
-    return c ? [section('Component', [{ kind: 'actions', class: 'btns', buttons: [{ text: 'Save Component', attrs: { 'data-act': 'comp:save', title: `Write these parts back to ${c.cpart.name} and every linked copy` } }] }, { kind: 'hint', text: [`Editing ${c.cpart.name}. Save writes every shape of this group back to the component.`] }], 'sec')] : [];
+    return c ? [section(uiText('comp.section', 'Component'), [{ kind: 'actions', class: 'btns', buttons: [{ text: uiText('comp.save', 'Save Component'), attrs: { 'data-act': 'comp:save', title: uiText('comp.save.title', 'Write these parts back to {name} and every linked copy', { name: c.cpart.name }) } }] }, { kind: 'hint', text: [uiText('comp.editingHint', 'Editing {name}. Save writes every shape of this group back to the component.', { name: c.cpart.name })] }], 'sec')] : [];
   }
   function compLibrary(): FormSection[] {
     const seen = new Map<string, { name: string; n: number }>();
     for (const q of shapes()) if (q.type === 'comp') { const e = seen.get(q.ref) || { name: q.cname, n: 0 }; e.n++; seen.set(q.ref, e); }
-    return seen.size ? [section('Components', [...seen].map(([ref, e]) => row(e.name, { kind: 'text', text: `${e.n} cop${e.n === 1 ? 'y' : 'ies'}`, class: 'hint-inline' }, { kind: 'spacer' }, { kind: 'button', text: 'Insert Copy', attrs: { 'data-act': 'comp:ins:' + ref } })), 'sec')] : [];
+    return seen.size ? [section(uiText('comp.library', 'Components'), [...seen].map(([ref, e]) => row(e.name, { kind: 'text', text: e.n === 1 ? uiText('comp.copies.one', '1 copy') : uiText('comp.copies.many', '{n} copies', { n: e.n }), class: 'hint-inline' }, { kind: 'spacer' }, { kind: 'button', text: uiText('comp.insertCopy', 'Insert Copy'), attrs: { 'data-act': 'comp:ins:' + ref } })), 'sec')] : [];
   }
   // ---------- layers ----------
   // The Layers window lists the diagram's shapes from the top of the stack down, as an image editor lists its
@@ -3501,10 +3751,10 @@ import { runtime as TD } from '../runtime';
   function pruneSel() { for (const id of [...state.sel]) if (!pickable(byId(id))) state.sel.delete(id); }
   function autoName(s: any) {
     const t = ((s.type === 'text' ? s.text : s.label) || '').replace(/\s+/g, ' ').trim();
-    return t ? (t.length > 48 ? t.slice(0, 48) + '…' : t) : (TYPES[s.type] && TYPES[s.type].name) || s.type;
+    return t ? (t.length > 48 ? t.slice(0, 48) + '…' : t) : (TYPES[s.type] && typeName(s.type)) || s.type;
   }
   const layerName = (s: any) => s.name || autoName(s);
-  const groupName = (g: any) => shapes().find((q: any) => q.g === g && q.gname)?.gname || 'Group';
+  const groupName = (g: any) => shapes().find((q: any) => q.g === g && q.gname)?.gname || uiText('layers.group', 'Group');
   // a small picture of the shape, drawn as it exports; remembered against the shape's data
   const thumbs = new Map();
   function thumb(s: any) {
@@ -3517,7 +3767,7 @@ import { runtime as TD } from '../runtime';
       const body = TYPES[s.type].svg(s, { zoom: 1, hit: 0, export: true, scene: [s] }), defs = TD.takeFillDefs() || '';
       html = `<svg viewBox="${r2(b.x - pad)} ${r2(b.y - pad)} ${r2(b.w + 2 * pad)} ${r2(b.h + 2 * pad)}" aria-hidden="true">${defs}${body}</svg>`;
     } catch (err: any) { html = ''; }
-    thumbs.set(s.id, { key, html });
+    thumbs.set(s.id, { key, html, pendingIds: pendingDependencies(html) });
     return html;
   }
   const LIC = {
@@ -3543,12 +3793,13 @@ import { runtime as TD } from '../runtime';
   function rowHtml(r: any) {
     const flags = (list: any) => ({ on: list.every((q: any) => state.sel.has(q.id)), hid: list.every((q: any) => q.hidden), lk: list.every((q: any) => q.locked) });
     const cls = (f: any) => `${f.on ? ' on' : ''}${f.hid ? ' hid' : ''}${f.lk ? ' lk' : ''}`;
-    const eye = (f: any) => `<button class="ly-eye" data-la="eye" title="${f.hid ? 'Show' : 'Hide'}" aria-label="${f.hid ? 'Show' : 'Hide'}">${lsvg(IC[f.hid ? 'eyeoff' : 'eye'])}</button>`;
-    const lock = (f: any) => `<button class="ly-lock" data-la="lock" title="${f.lk ? 'Unlock' : 'Lock'}" aria-label="${f.lk ? 'Unlock' : 'Lock'}">${lsvg(IC[f.lk ? 'lock' : 'unlock'])}</button>`;
+    const eyeT = esc(caption(captions["ui.show"])), eyeF = esc(caption(captions["ui.hide"])), lockT = esc(caption(captions["ui.unlock"])), lockF = esc(caption(captions["ui.lock"]));
+    const eye = (f: any) => `<button class="ly-eye" data-la="eye" title="${f.hid ? eyeT : eyeF}" aria-label="${f.hid ? eyeT : eyeF}">${lsvg(IC[f.hid ? 'eyeoff' : 'eye'])}</button>`;
+    const lock = (f: any) => `<button class="ly-lock" data-la="lock" title="${f.lk ? lockT : lockF}" aria-label="${f.lk ? lockT : lockF}">${lsvg(IC[f.lk ? 'lock' : 'unlock'])}</button>`;
     if (r.g) {
       const f = flags(r.m), open = openGroups.has(r.g);
       return `<div class="ly-row ly-grp${cls(f)}" data-g="${r.g}" role="option" aria-selected="${f.on}" aria-expanded="${open}">${eye(f)}` +
-        `<button class="ly-chev${open ? ' open' : ''}" data-la="fold" title="${open ? 'Fold' : 'Unfold'}" aria-label="${open ? 'Fold group' : 'Unfold group'}">${lsvg(LIC.chev)}</button>` +
+        `<button class="ly-chev${open ? ' open' : ''}" data-la="fold" title="${esc(open ? uiText('layers.fold', 'Fold') : uiText('layers.unfold', 'Unfold'))}" aria-label="${esc(open ? uiText('layers.foldGroup', 'Fold group') : uiText('layers.unfoldGroup', 'Unfold group'))}">${lsvg(LIC.chev)}</button>` +
         `<span class="ly-th ly-ic">${lsvg(LIC.folder)}</span><span class="ly-nm">${esc(groupName(r.g))}</span><small>${r.m.length}</small>${lock(f)}</div>`;
     }
     const s = r.s, f = flags([s]);
@@ -3559,7 +3810,8 @@ import { runtime as TD } from '../runtime';
     if (layersRaf) return;
     layersRaf = requestAnimationFrame(() => { layersRaf = 0; renderLayers(); });
   }
-  function renderLayers() {
+  function renderLayers(): void {
+    if (!TD.math.previewing) return TD.math.preview(renderLayers);
     if (!layersEl) return;
     const n = state.mode === 'document' ? 0 : shapes().length;
     $('#layersCount').textContent = n ? String(n) : '';
@@ -3569,7 +3821,7 @@ import { runtime as TD } from '../runtime';
     if (key === layersKey) return;
     layersKey = key;
     const sc = layersEl.scrollTop;
-    layersEl.innerHTML = n ? layerRows().map(rowHtml).join('') : '<div class="ly-empty">Shapes you draw are listed here, the top one first.</div>';
+    layersEl.innerHTML = n ? layerRows().map(rowHtml).join('') : `<div class="ly-empty">${esc(uiText('layers.empty', 'Shapes you draw are listed here, the top one first.'))}</div>`;
     layersEl.scrollTop = sc;
     const sel = state.sel.size;
     $('#layersFoot [data-la="newgroup"]').disabled = !canGroup();
@@ -3584,7 +3836,7 @@ import { runtime as TD } from '../runtime';
   const keyIds = (k: any) => (k.startsWith('g:') ? shapes().filter((q: any) => q.g === k.slice(2)).map((q: any) => q.id) : [k]);
   function selectRow(row: any, e: any) {
     const ids = rowIds(row);
-    if (!ids.some((id: any) => pickable(byId(id)))) { showHint(ids.every((id: any) => (byId(id))!.hidden) ? 'Hidden: show it to select it' : 'Locked: unlock it to select it', 1400); return; }
+    if (!ids.some((id: any) => pickable(byId(id)))) { showHint(ids.every((id: any) => (byId(id))!.hidden) ? uiText('hint.hiddenSelect', 'Hidden: show it to select it') : uiText('hint.lockedSelect', 'Locked: unlock it to select it'), 1400); return; }
     const rows = [...layersEl.querySelectorAll('.ly-row')], a = rowByKey(layerAnchor);
     if (e.shiftKey && a) {
       const i = rows.indexOf(a), j = rows.indexOf(row);
@@ -3621,7 +3873,7 @@ import { runtime as TD } from '../runtime';
     if (!nm) return;
     const g = row.dataset.g, s = g ? null : byId(row.dataset.id), cur = g ? groupName(g) : layerName(s);
     const inp = document.createElement('input');
-    inp.className = 'ly-ed'; inp.value = cur; inp.spellcheck = false; inp.setAttribute('aria-label', 'Layer name');
+    inp.className = 'ly-ed'; inp.value = cur; inp.spellcheck = false; inp.setAttribute('aria-label', uiText('layers.name', 'Layer name'));
     nm.replaceWith(inp); inp.focus(); inp.select();
     let done = false;
     const end = (ok: any) => {
@@ -3879,35 +4131,71 @@ import { runtime as TD } from '../runtime';
     }
     commit(); render(); renderGeom();
   }
+  const outputWait = () => uiText('output.waitForRendering', 'Rendering is still in progress. Wait until it finishes before printing or exporting.');
+  // Probe only the selected objects, including nested labels. Force deferred
+  // compilation so checking an offscreen/cold object cannot block the UI.
+  function outputReady(list?: any[]): boolean {
+    if (!list) return !TD.math.pending;
+    // A compiled result can still be decoding or fading into the mounted object.
+    for (const shape of list) {
+      const mounted = content.querySelector(`[data-id="${CSS.escape(shape.id || '')}"]`);
+      if (mounted?.querySelector('.math-pending')) return false;
+      if (mounted?.getAnimations({ subtree: true }).some((animation: Animation) =>
+        (animation as CSSTransition).transitionProperty === 'opacity' && animation.playState === 'running')) return false;
+    }
+    return TD.math.preview(() => {
+      const html = fillDefsAround(() => list.filter(s => !s.hidden).map(s => TYPES[s.type].svg(s, { zoom: 1, hit: 0, export: true, scene: list })).join(''));
+      return !pendingDependencies(html).some(id => TD.math.hasPendingJob(id));
+    }, true);
+  }
+  function outputAllowed(list?: any[]): boolean {
+    if (outputReady(list)) return true;
+    showHint(outputWait(), 2200); return false;
+  }
+  function updateOutputAvailability(): void {
+    const busy = !!TD.math.pending;
+    document.querySelectorAll<HTMLButtonElement>('#topbar [data-cmd="export"], #topbar [data-cmd="print"], #topbar [data-cmd="tikz"], #quick [data-q], #tableview button[data-o]').forEach(b => { if (b.disabled !== busy) b.disabled = busy; });
+    if (busy) expPop.hidden = true;
+    if (!ctx.hidden) {
+      const objectButtons = ctx.querySelectorAll<HTMLButtonElement>('[data-ctx^="img:"], [data-ctx="copytikz"]');
+      if (objectButtons.length) {
+        const ready = outputReady(selected());
+        objectButtons.forEach(b => { if (b.disabled === ready) b.disabled = !ready; });
+      }
+      ctx.querySelectorAll<HTMLButtonElement>('[data-ctx="doc:print"], [data-ctx="doc:html"], [data-ctx="doc:latex"], [data-ctx="doc:tikz"], [data-ctx="doc:image"]').forEach(b => { if (b.disabled !== busy) b.disabled = busy; });
+    }
+  }
   async function copyTikz() {
-    if (!state.sel.size) return;
+    if (!state.sel.size || !outputAllowed(selected())) return;
     copySel();
     const code = TD.toTikz(selected());
-    try { await navigator.clipboard.writeText(code); showHint('TikZ code copied', 1200); }
+    try { await navigator.clipboard.writeText(code); showHint(uiText('hint.tikzCopied', 'TikZ code copied'), 1200); }
     catch (e: any) { openTikz(); }
   }
 
   // The selection as a picture, from the right-click menu: copied (PNG, or SVG as image and text) or saved
   // like an export (into the file's export folder, else downloaded). PNG comes on a white background or
-  // transparent (the item says which; `-t` is transparent) at the Export menu's DPI; an SVG, copied or saved,
+  // transparent (the item says which; `-t` is transparent) at 4× the Export menu's DPI; an SVG, copied or saved,
   // carries its maths fonts, so it shows the same wherever it is pasted.
   async function selImage(what: any) {
     const list = selected().filter((s: any) => !s.hidden);
-    if (!list.length) { showHint('Nothing visible is selected', 1200); return; }
+    if (!list.length) { showHint(uiText('hint.nothingVisible', 'Nothing visible is selected'), 1200); return; }
+    if (!outputAllowed(list)) return;
     const name = slug() + '-selection';
     const clear = what.endsWith('-t'), kind = what.replace(/-t$/, '');
-    const png = () => TD.app.pngOf(list, expOpts.dpi, clear);
+    const dpi = expOpts.dpi * 4;
+    const png = () => TD.app.pngOf(list, dpi, clear, true);
     const svg = () => svgWithFonts(TD.app.svgOf(list));
     try {
       if (kind === 'copy-png') {
         // the item is made during the click with the picture still to come: Safari allows a copy only then
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': png() })]);
-        showHint(`Copied as PNG at ${expOpts.dpi} DPI${clear ? ', transparent' : ''}`, 1400);
+        showHint(clear ? uiText('hint.copiedPngClear', 'Copied as PNG at {dpi} DPI, transparent', { dpi }) : uiText('hint.copiedPng', 'Copied as PNG at {dpi} DPI', { dpi }), 1400);
       } else if (kind === 'copy-svg') {
         const text = svg(), item: Record<string, any> = { 'text/plain': text.then((t: string) => new Blob([t], { type: 'text/plain' })) };
         if (ClipboardItem.supports && ClipboardItem.supports('image/svg+xml')) item['image/svg+xml'] = text.then((t: string) => new Blob([t], { type: 'image/svg+xml' }));
         await navigator.clipboard.write([new ClipboardItem(item)]);
-        showHint('Copied as SVG', 1200);
+        showHint(uiText('hint.copiedSvg', 'Copied as SVG'), 1200);
       } else if (kind === 'save-png') {
         await askDir();
         await out(name + '.png', await png());
@@ -3916,7 +4204,7 @@ import { runtime as TD } from '../runtime';
         await out(name + '.svg', await svg(), 'image/svg+xml');
       }
     } catch (e: any) {
-      showHint(`Couldn't ${kind.startsWith('copy') ? 'copy' : 'save'} the picture (${e.message || e})`, 3000);
+      showHint(kind.startsWith('copy') ? uiText('hint.couldntCopyPic', "Couldn't copy the picture ({error})", { error: e.message || e }) : uiText('hint.couldntSavePic', "Couldn't save the picture ({error})", { error: e.message || e }), 3000);
     }
   }
 
@@ -3971,6 +4259,7 @@ import { runtime as TD } from '../runtime';
   };
   const icon = (n: any) => (n ? `<svg viewBox="0 0 20 20">${IC[n]}</svg>` : '<span class="ic"></span>');
   function item(label: any, act: any, { ic, key, dis, sub, danger }: Record<string, any> = {}) {
+    label = caption(label);
     if (sub) return `<div class="ctx-item has-sub${dis ? ' dis' : ''}">${icon(ic)}<span class="lb">${label}</span><span class="arr">›</span><div class="ctx sub">${sub}</div></div>`;
     return `<button class="ctx-item${danger ? ' danger' : ''}" data-ctx="${act}"${dis ? ' disabled' : ''}>${icon(ic)}<span class="lb">${label}</span>${key ? `<kbd>${kb(key)}</kbd>` : ''}</button>`;
   }
@@ -3982,46 +4271,46 @@ import { runtime as TD } from '../runtime';
     let h = '';
     if (layer) {
       const ls = layer.ids.map(byId).filter(Boolean), hid = ls.every((q: any) => q.hidden), lk = ls.every((q: any) => q.locked);
-      h += item('Rename', 'layer:rename', { ic: 'rename' }) +
-        item(hid ? 'Show' : 'Hide', 'layer:' + (hid ? 'show' : 'hide'), { ic: hid ? 'eye' : 'eyeoff' }) +
-        item(lk ? 'Unlock' : 'Lock', 'layer:' + (lk ? 'unlock' : 'lock'), { ic: lk ? 'unlock' : 'lock' }) + hr;
+      h += item(captions["ui.rename"], 'layer:rename', { ic: 'rename' }) +
+        item(hid ? captions["ui.show"] : captions["ui.hide"], 'layer:' + (hid ? 'show' : 'hide'), { ic: hid ? 'eye' : 'eyeoff' }) +
+        item(lk ? captions["ui.unlock"] : captions["ui.lock"], 'layer:' + (lk ? 'unlock' : 'lock'), { ic: lk ? 'unlock' : 'lock' }) + hr;
       if (ls.some((q: any) => q.hidden || q.locked)) {
-        ctx.innerHTML = h + item('Delete', 'layer:del', { ic: 'del', key: 'Del' });
+        ctx.innerHTML = h + item(captions["ui.delete"], 'layer:del', { ic: 'del', key: 'Del' });
         ctx.dataset.doc = ''; ctx.dataset.layer = layer.key;
         placeCtx(x, y); return;
       }
     }
     if (n) {
       const one = n === 1 ? sel[0] : null;
-      if (one && (one.type === 'text' || one.label !== undefined)) h += item(one.type === 'text' ? 'Edit Text' : 'Edit Label', 'edit', { ic: 'edit', key: 'Enter' }) + hr;
-      h += item('Copy', 'copy', { ic: 'copy', key: 'Ctrl+C' }) +
-        item('Copy TikZ Code', 'copytikz', { ic: 'tikz' }) +
-        item('Copy as Image', '', { ic: 'image', sub: item('PNG (Background)', 'img:copy-png') + item('PNG (Transparent)', 'img:copy-png-t') + item('SVG', 'img:copy-svg') }) +
-        item('Save as Image', '', { ic: 'exp', sub: item('PNG (Background)', 'img:save-png') + item('PNG (Transparent)', 'img:save-png-t') + item('SVG', 'img:save-svg') }) +
-        (sel.some((s: any) => (s.text || s.label || '').trim()) ? item('Copy Text', 'copytext', { ic: 'copy' }) : '') +
-        item('Cut', 'cut', { ic: 'cut', key: 'Ctrl+X' }) +
-        item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
-        item('Duplicate', 'dup', { ic: 'dup', key: 'Ctrl+D' }) +
-        item('Delete', 'del', { ic: 'del', key: 'Del' }) + hr;
-      if (canGroup()) h += item('Group', 'group', { ic: 'group', key: 'Ctrl+G' });
-      if (canUngroup()) h += item('Ungroup', 'ungroup', { ic: 'ungroup', key: 'Ctrl+Shift+G' });
-      if (n > 1) h += item('Make Component', 'comp:make', { ic: 'group' });
-      if (n > 1) h += item('Combine', '', { ic: 'group', dis: !combinable(), sub: COMBINE.map(([k, t]) => item(t, 'cb:' + k)).join('') });
-      h += item('Arrange', '', { ic: 'arrange', sub:
-          item('Bring to Front', 'a:front', { key: 'Ctrl+Shift+]' }) + item('Bring Forward', 'a:forward', { key: 'Ctrl+]' }) +
-          item('Send Backward', 'a:backward', { key: 'Ctrl+[' }) + item('Send to Back', 'a:back', { key: 'Ctrl+Shift+[' }) }) +
-        (rotatable() ? item('Rotate', '', { ic: 'rotate', sub:
-          item('Rotate 90° Clockwise', 'r:cw', { key: 'Ctrl+R', dis: !turnable() }) + item('Rotate 90° Counterclockwise', 'r:ccw', { key: 'Ctrl+Shift+R', dis: !turnable() }) + hr +
-          item('Flip Horizontal', 'r:fliph') + item('Flip Vertical', 'r:flipv') }) : '') +
-        item('Align', '', { ic: 'align', dis: nu < 2, sub:
-          item('Left', 'l:left') + item('Center', 'l:center') + item('Right', 'l:right') + hr +
-          item('Top', 'l:top') + item('Middle', 'l:middle') + item('Bottom', 'l:bottom') }) +
-        item('Distribute', '', { ic: 'dist', dis: nu < 3, sub: item('Horizontally', 'd:h') + item('Vertically', 'd:v') });
+      if (one && (one.type === 'text' || one.label !== undefined)) h += item(one.type === 'text' ? uiText('ctx.editText', 'Edit Text') : uiText('ctx.editLabel', 'Edit Label'), 'edit', { ic: 'edit', key: 'Enter' }) + hr;
+      h += item(captions["ui.copy"], 'copy', { ic: 'copy', key: 'Ctrl+C' }) +
+        item(captions["ui.copy.tikz.code"], 'copytikz', { ic: 'tikz' }) +
+        item(uiText('ctx.copyImage', 'Copy as Image'), '', { ic: 'image', sub: item(uiText('ctx.pngBg', 'PNG (Background)'), 'img:copy-png') + item(uiText('ctx.pngClear', 'PNG (Transparent)'), 'img:copy-png-t') + item('SVG', 'img:copy-svg') }) +
+        item(uiText('ctx.saveImage', 'Save as Image'), '', { ic: 'save', sub: item(uiText('ctx.pngBg', 'PNG (Background)'), 'img:save-png') + item(uiText('ctx.pngClear', 'PNG (Transparent)'), 'img:save-png-t') + item('SVG', 'img:save-svg') }) +
+        (sel.some((s: any) => (s.text || s.label || '').trim()) ? item(uiText('ctx.copyText', 'Copy Text'), 'copytext', { ic: 'copy' }) : '') +
+        item(captions["ui.cut"], 'cut', { ic: 'cut', key: 'Ctrl+X' }) +
+        item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
+        item(captions["ui.duplicate"], 'dup', { ic: 'dup', key: 'Ctrl+D' }) +
+        item(captions["ui.delete"], 'del', { ic: 'del', key: 'Del' }) + hr;
+      if (canGroup()) h += item(captions["ui.group"], 'group', { ic: 'group', key: 'Ctrl+G' });
+      if (canUngroup()) h += item(captions["ui.ungroup"], 'ungroup', { ic: 'ungroup', key: 'Ctrl+Shift+G' });
+      if (n > 1) h += item(uiText('comp.make', 'Make Component'), 'comp:make', { ic: 'group' });
+      if (n > 1) h += item(uiText('combine.title', 'Combine'), '', { ic: 'group', dis: !combinable(), sub: COMBINE.map(([k]) => item(combineName(k), 'cb:' + k)).join('') });
+      h += item(uiText('ctx.arrange', 'Arrange'), '', { ic: 'arrange', sub:
+          item(uiText('ctx.front', 'Bring to Front'), 'a:front', { key: 'Ctrl+Shift+]' }) + item(uiText('ctx.forward', 'Bring Forward'), 'a:forward', { key: 'Ctrl+]' }) +
+          item(uiText('ctx.backward', 'Send Backward'), 'a:backward', { key: 'Ctrl+[' }) + item(uiText('ctx.back', 'Send to Back'), 'a:back', { key: 'Ctrl+Shift+[' }) }) +
+        (rotatable() ? item(uiText('ctx.rotate', 'Rotate'), '', { ic: 'rotate', sub:
+          item(uiText('ctx.cw', 'Rotate 90° Clockwise'), 'r:cw', { key: 'Ctrl+R', dis: !turnable() }) + item(uiText('ctx.ccw', 'Rotate 90° Counterclockwise'), 'r:ccw', { key: 'Ctrl+Shift+R', dis: !turnable() }) + hr +
+          item(uiText('ctx.flipH', 'Flip Horizontal'), 'r:fliph') + item(uiText('ctx.flipV', 'Flip Vertical'), 'r:flipv') }) : '') +
+        item(captions["ui.align"], '', { ic: 'align', dis: nu < 2, sub:
+          item(captions["ui.left"], 'l:left') + item(captions["ui.center"], 'l:center') + item(captions["ui.right"], 'l:right') + hr +
+          item(captions["ui.top"], 'l:top') + item(uiText('ctx.middle', 'Middle'), 'l:middle') + item(captions["ui.bottom"], 'l:bottom') }) +
+        item(uiText('ctx.distribute', 'Distribute'), '', { ic: 'dist', dis: nu < 3, sub: item(uiText('ctx.horizontally', 'Horizontally'), 'd:h') + item(uiText('ctx.vertically', 'Vertically'), 'd:v') });
     } else {
-      h += item('Paste', 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
-        item('Select All', 'all', { ic: 'all', key: 'Ctrl+A', dis: !shapes().length }) + hr +
-        item('Zoom to Fit', 'fit', { ic: 'fit' }) + item('Zoom to Fit Width', 'fitw') +
-        item(state.grid ? 'Hide Grid' : 'Show Grid', 'grid', { key: 'G' });
+      h += item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
+        item(uiText('ctx.selectAll', 'Select All'), 'all', { ic: 'all', key: 'Ctrl+A', dis: !shapes().length }) + hr +
+        item(uiText('ctx.fit', 'Zoom to Fit'), 'fit', { ic: 'fit' }) + item(uiText('ctx.fitWidth', 'Zoom to Fit Width'), 'fitw') +
+        item(state.grid ? uiText('ctx.hideGrid', 'Hide Grid') : uiText('ctx.showGrid', 'Show Grid'), 'grid', { key: 'G' });
     }
     ctx.innerHTML = h;
     ctx.dataset.doc = ''; ctx.dataset.layer = layer ? layer.key : '';
@@ -4066,19 +4355,24 @@ import { runtime as TD } from '../runtime';
     return new TextDecoder().decode(bytes);
   }
   const shareBase = () => location.origin + location.pathname;
+  // Numbers go in the link to 6 significant digits: a drag off the grid leaves coordinates like
+  // 219.28932188134524, whose digits barely compress (a third or more of a hand-drawn board's link). 6 digits is
+  // far finer than anything drawn or exported (0.001 px on a 200 px coordinate), and a value someone typed
+  // (0.125, 0.0005) has fewer digits, so it goes through unchanged. Whole numbers are left alone.
+  const shareNum = (_k: any, v: any) => (typeof v === 'number' && Number.isFinite(v) && !Number.isInteger(v) ? Number(v.toPrecision(6)) : v);
   async function shareLink(id: any) {
     finishEdit(); commit();
     const it: any = docEntry(id), json = docJson(id);
     if (!it || !json) return;
     // the link carries the file without its folder: the folder is how the sender files it
     const p = JSON.parse(json); p.name = leafOf(p.name);
-    const url = shareBase() + '#' + SHARE_KEY + (await packShare(JSON.stringify(p)));
+    const url = shareBase() + '#' + SHARE_KEY + (await packShare(JSON.stringify(p, shareNum)));
     if (url.length > SHARE_MAX) {
-      TD.alert('Too large to share as a link', `"${leafOf(it.name)}" needs a link of ${Math.ceil(url.length / 1000)}k characters; links are kept under ${SHARE_MAX / 1000}k so browsers, chat apps and firewalls don't cut them off. Save it to a .diagramtex file and send the file instead.`);
+      TD.alert(uiText('dlg.shareTooLarge.title', 'Too large to share as a link'), uiText('dlg.shareTooLarge.body', '"{name}" needs a link of {k}k characters; links are kept under {max}k so browsers, chat apps and firewalls don\'t cut them off. Save it to a .diagramtex file and send the file instead.', { name: leafOf(it.name), k: Math.ceil(url.length / 1000), max: SHARE_MAX / 1000 }));
       return;
     }
-    try { await navigator.clipboard.writeText(url); showHint(`Share link copied (${url.length.toLocaleString()} characters). Whoever opens it gets their own copy of "${leafOf(it.name)}".`, 3200); }
-    catch (e: any) { TD.prompt('Share Link', url, { ok: 'Done', cancel: null }); }
+    try { await navigator.clipboard.writeText(url); showHint(uiText('hint.shareCopied', 'Share link copied ({n} characters). Whoever opens it gets their own copy of "{name}".', { n: url.length.toLocaleString(), name: leafOf(it.name) }), 3200); }
+    catch (e: any) { TD.prompt(uiText('dlg.shareLink.title', 'Share Link'), url, { ok: caption(captions["ui.done"]), cancel: null }); }
   }
   // Open the file in a share link as a new file. The same link opened again opens the copy made the
   // first time, if it is still here unchanged.
@@ -4091,18 +4385,18 @@ import { runtime as TD } from '../runtime';
       const text = await unpackShare(h.slice(SHARE_KEY.length));
       p = parseProject(text, 'Shared');
       if (!p) throw new Error('it holds no DiagramTeX file');
-    } catch (e: any) { TD.alert('Couldn\'t open the shared file', `This share link is damaged or cut short (${e.message}). Ask for the link again, or for the .diagramtex file.`); return true; }
+    } catch (e: any) { TD.alert(uiText('dlg.sharedFailed.title', "Couldn't open the shared file"), uiText('dlg.sharedFailed.body', 'This share link is damaged or cut short ({error}). Ask for the link again, or for the .diagramtex file.', { error: e.message })); return true; }
     const same = projectJson(p);
     for (const x of index()) {
       if (leafOf((x as any).name) !== p.name) continue;
       const d = store.get<Record<string, any> | null>(LS_DOC + (x as any).id, null);
       let q: any = null; try { q = d && parseProject(projectJson({ ...d, name: p.name })); } catch (e: any) { q = null; }
-      if (q && projectJson(q) === same) { openDoc((x as any).id); showHint(`"${p.name}" is already here`, 1600); return true; }
+      if (q && projectJson(q) === same) { openDoc((x as any).id); showHint(uiText('hint.alreadyHere', '"{name}" is already here', { name: p.name }), 1600); return true; }
     }
     const name = index().some((x) => (x as any).name === p.name) ? copyName(p.name) : p.name;
     if (p.kind === 'page') newDoc(name, null, null, null, p.page, 'page', p.sheet);
     else { newDoc(name, null, null, p.blocks, p.page, p.kind); zoomFit(); }
-    showHint(`Opened the shared file "${name}". It is now saved in this browser.`, 3000);
+    showHint(uiText('hint.openedShared', 'Opened the shared file "{name}". It is now saved in this browser.', { name }), 3000);
     return true;
   }
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#' + SHARE_KEY)) { setQuick(false); setTable(false); openShared(); } });
@@ -4110,7 +4404,7 @@ import { runtime as TD } from '../runtime';
   function storeCopy(d: any, name: any, afterId: any) {
     const id = uid(), kind = normKind(d.kind);
     store.set(LS_DOC + id, { ...JSON.parse(JSON.stringify(d)), kind, name });
-    const idx: any[] = index(), at = idx.findIndex((x) => x.id === afterId), it = { id, name, kind, updated: Date.now() };
+    const idx: any[] = index(), at = idx.findIndex((x) => x.id === afterId), it = { id, name, kind, updated: Date.now(), created: Date.now() };
     if (at >= 0) idx.splice(at + 1, 0, it); else idx.push(it);
     store.set(LS_INDEX, idx);
     return id;
@@ -4154,9 +4448,9 @@ import { runtime as TD } from '../runtime';
   function exportAll() {
     finishEdit();
     const { text, n } = bundleJson();
-    if (!n) { showHint('No files to export', 1400); return; }
+    if (!n) { showHint(uiText('hint.noFilesExport', 'No files to export'), 1400); return; }
     download(`DiagramTeX files ${new Date().toISOString().slice(0, 10)}${FILE_EXT}`, text, FILE_TYPE);
-    showHint(`Exported ${n} file${n === 1 ? '' : 's'} in one bundle`, 1600);
+    showHint(n === 1 ? uiText('hint.exportedBundle.one', 'Exported 1 file in one bundle') : uiText('hint.exportedBundle.many', 'Exported {n} files in one bundle', { n }), 1600);
   }
   const isBundle = (d: any) => !!d && typeof d === 'object' && d.kind === 'bundle' && Array.isArray(d.files);
   // Each file of a bundle goes to the list of its kind. A file already here with the same name and contents is
@@ -4179,17 +4473,17 @@ import { runtime as TD } from '../runtime';
       store.set(LS_DOC + id, p.kind === 'page'
         ? { kind: 'page', name, page: p.page, sheet: p.sheet, mode: 'page' }
         : { kind: p.kind, name, blocks: p.blocks, active: 0, page: p.page, mode: p.kind === 'board' ? 'board' : 'document' });
-      idx.push({ id, name, kind: p.kind, updated: Date.now() });
+      idx.push({ id, name, kind: p.kind, updated: Date.now(), created: Date.now() });
       have.set(projectJson({ ...p, name }), id);
       n[p.kind]++;
       if (!first) first = id;
     }
     store.set(LS_INDEX, idx);
     renderDocList();
-    const parts = [[n.page, 'Pages'], [n.classic, 'Classic'], [n.board, 'Whiteboard']].filter(([k]) => k).map(([k, w]) => `${k} ${w}`);
+    const parts = [n.page ? uiText('bundle.pages', '{n} Pages', { n: n.page }) : '', n.classic ? uiText('bundle.classic', '{n} Classic', { n: n.classic }) : '', n.board ? uiText('bundle.board', '{n} Whiteboard', { n: n.board }) : ''].filter(Boolean);
     const added = n.page + n.classic + n.board;
-    const msg = (added ? `Added ${added} file${added === 1 ? '' : 's'}: ${parts.join(', ')}` : 'No new files')
-      + (same ? `; ${same} already here` : '') + (bad ? `; ${bad} not readable` : '');
+    const msg = (added ? (added === 1 ? uiText('bundle.added.one', 'Added 1 file: {parts}', { parts: parts.join(', ') }) : uiText('bundle.added.many', 'Added {n} files: {parts}', { n: added, parts: parts.join(', ') })) : uiText('bundle.none', 'No new files'))
+      + (same ? uiText('bundle.same', '; {n} already here', { n: same }) : '') + (bad ? uiText('bundle.bad', '; {n} not readable', { n: bad }) : '');
     showHint(msg, 3000);
     return { ...n, same, bad, first };
   }
@@ -4197,13 +4491,14 @@ import { runtime as TD } from '../runtime';
     let text = null;
     try { text = await navigator.clipboard.readText(); } catch { /* permission denied: use our own copy */ }
     try {
-      if (text && /^\s*\{/.test(text) && openProjectText(text, null, true)) { showHint('Pasted as a new file', 1200); return; }
-      if (docClip && openProjectText(docClip, null, true)) { showHint('Pasted as a new file', 1200); return; }
-    } catch (err: any) { showHint('Could not paste: ' + err.message, 2000); return; }
-    showHint('Nothing to paste: copy a file first', 1600);
+      if (text && /^\s*\{/.test(text) && openProjectText(text, null, true)) { showHint(uiText('hint.pastedNewFile', 'Pasted as a new file'), 1200); return; }
+      if (docClip && openProjectText(docClip, null, true)) { showHint(uiText('hint.pastedNewFile', 'Pasted as a new file'), 1200); return; }
+    } catch (err: any) { showHint(uiText('hint.couldNotPaste', 'Could not paste: {error}', { error: err.message }), 2000); return; }
+    showHint(uiText('hint.nothingToPaste', 'Nothing to paste: copy a file first'), 1600);
   }
   function placeCtx(x: any, y: any) {
     ctx.hidden = false;
+    updateOutputAvailability();
     const r = ctx.getBoundingClientRect();
     ctx.style.left = Math.min(x, innerWidth - r.width - 6) + 'px';
     ctx.style.top = Math.min(y, innerHeight - r.height - 6) + 'px';
@@ -4213,34 +4508,34 @@ import { runtime as TD } from '../runtime';
     const it = id && docEntry(id), page = state.doc.kind === 'page', d = (k: any) => 'doc:' + k, lf = id && TD.files.fileOf(id);
     let h;
     if (it) {
-      h = (id !== state.docId ? item('Open', d('open'), { ic: 'open' }) + hr : '') +
-        item('Rename…', d('rename'), { ic: 'rename' }) +
-        item('Move to Folder…', d('move'), { ic: 'folder' }) +
-        item('Duplicate', d('dup'), { ic: 'dup' }) +
-        item('Save a Copy…', d('saveas'), { ic: 'dup' }) +
-        item('Recovery Copies…', d('recovery'), { ic: 'history' }) + hr +
-        item('Copy', d('copy'), { ic: 'copy' }) +
-        item('Paste', d('paste'), { ic: 'paste' }) +
-        item('Copy Share Link', d('share'), { ic: 'link' }) + hr +
-        (!TD.files.can ? item('Download (.diagramtex)', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })
-          : (lf ? item(`Save to ${esc(lf.name)}`, d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+S' : '' })
-            : item('Save to File…', d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })) +
-            item(lf ? 'Save to Another File…' : 'Save to New File…', d('savenew'), { ic: 'saveas' }) +
-            (lf ? item(`Unlink ${esc(lf.name)}`, d('unlink'), { ic: 'unlink' }) : '')) +
-        item('Export', '', { ic: 'exp', sub:
-          item('LaTeX Document (.tex)', d('latex'), { key: id === state.docId ? 'Ctrl+Shift+E' : '' }) +
-          (page ? '' : item('TikZ Code…', d('tikz'), { key: id === state.docId ? 'Ctrl+E' : '' })) +
-          item('Web Page (.html)', d('html')) +
-          item('Image (PNG, SVG, PDF)…', d('image')) + hr +
-          item('Print or Save as PDF…', d('print'), { key: id === state.docId ? 'Ctrl+P' : '' }) }) + hr +
-        item('Move to Recycle Bin', d('del'), { ic: 'del' });
+      h = (id !== state.docId ? item(captions["ui.open"], d('open'), { ic: 'open' }) + hr : '') +
+        item(uiText('ctx.renameDots', 'Rename…'), d('rename'), { ic: 'rename' }) +
+        item(uiText('ctx.moveToFolder', 'Move to Folder…'), d('move'), { ic: 'folder' }) +
+        item(captions["ui.duplicate"], d('dup'), { ic: 'dup' }) +
+        item(uiText('ctx.saveCopy', 'Save a Copy…'), d('saveas'), { ic: 'dup' }) +
+        item(uiText('ctx.recovery', 'Recovery Copies…'), d('recovery'), { ic: 'history' }) + hr +
+        item(captions["ui.copy"], d('copy'), { ic: 'copy' }) +
+        item(captions["ui.paste"], d('paste'), { ic: 'paste' }) +
+        item(uiText('ctx.copyShare', 'Copy Share Link'), d('share'), { ic: 'link' }) + hr +
+        (!TD.files.can ? item(uiText('ctx.download', 'Download (.diagramtex)'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })
+          : (lf ? item(uiText('ctx.saveTo', 'Save to {file}', { file: esc(lf.name) }), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+S' : '' })
+            : item(uiText('ctx.saveToFile', 'Save to File…'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })) +
+            item(lf ? uiText('ctx.saveToAnother', 'Save to Another File…') : uiText('ctx.saveToNew', 'Save to New File…'), d('savenew'), { ic: 'saveas' }) +
+            (lf ? item(uiText('ctx.unlink', 'Unlink {file}', { file: esc(lf.name) }), d('unlink'), { ic: 'unlink' }) : '')) +
+        item(captions["ui.export"], '', { ic: 'exp', sub:
+          item(uiText('ctx.latexDoc', 'LaTeX Document (.tex)'), d('latex'), { key: id === state.docId ? 'Ctrl+Shift+E' : '' }) +
+          (page ? '' : item(uiText('ctx.tikzCode', 'TikZ Code…'), d('tikz'), { key: id === state.docId ? 'Ctrl+E' : '' })) +
+          item(uiText('ctx.webPage', 'Web Page (.html)'), d('html')) +
+          item(uiText('ctx.image', 'Image (PNG, SVG, PDF)…'), d('image')) + hr +
+          item(uiText('ctx.print', 'Print or Save as PDF…'), d('print'), { key: id === state.docId ? 'Ctrl+P' : '' }) }) + hr +
+        item(uiText('ctx.moveToBin', 'Move to Recycle Bin'), d('del'), { ic: 'del' });
     } else {
-      h = item(page ? 'New Page' : 'New Document', d('new'), { ic: 'newdoc' }) +
-        item('New Folder…', d('newfolder'), { ic: 'folder' }) +
-        item('Open File…', d('openfile'), { ic: 'open', key: 'Ctrl+O' }) + hr +
-        item('Paste', d('paste'), { ic: 'paste' }) + hr +
-        item('Export All Files…', d('exportall'), { ic: 'save' }) +
-        item('Recycle Bin…', d('bin'), { ic: 'del' });
+      h = item(page ? uiText('ctx.newPage', 'New Page') : uiText('ctx.newDocument', 'New Document'), d('new'), { ic: 'newdoc' }) +
+        item(uiText('ctx.newFolder', 'New Folder…'), d('newfolder'), { ic: 'folder' }) +
+        item(uiText('ctx.openFile', 'Open File…'), d('openfile'), { ic: 'open', key: 'Ctrl+O' }) + hr +
+        item(captions["ui.paste"], d('paste'), { ic: 'paste' }) + hr +
+        item(uiText('ctx.exportAll', 'Export All Files…'), d('exportall'), { ic: 'save' }) +
+        item(uiText('ctx.bin', 'Recycle Bin…'), d('bin'), { ic: 'del' });
     }
     ctx.innerHTML = h;
     ctx.dataset.doc = id || '';
@@ -4248,18 +4543,18 @@ import { runtime as TD } from '../runtime';
   }
   function openFolderCtx(path: any, x: any, y: any) {
     const d = (k: any) => 'doc:' + k, shut = folded.has(foldKey(path));
-    ctx.innerHTML = item(state.doc.kind === 'page' ? 'New Page Here' : state.doc.kind === 'board' ? 'New Whiteboard Here' : 'New Document Here', d('newin'), { ic: 'newdoc' }) +
-      item('New Folder Inside…', d('newfolderin'), { ic: 'folder' }) + hr +
-      item('Rename Folder…', d('renamefolder'), { ic: 'rename' }) +
-      item(shut ? 'Unfold' : 'Fold', d('fold'), { ic: 'fold' }) + hr +
-      item('Delete Folder…', d('delfolder'), { ic: 'del', danger: true });
+    ctx.innerHTML = item(state.doc.kind === 'page' ? uiText('ctx.newPageHere', 'New Page Here') : state.doc.kind === 'board' ? uiText('ctx.newBoardHere', 'New Whiteboard Here') : uiText('ctx.newDocHere', 'New Document Here'), d('newin'), { ic: 'newdoc' }) +
+      item(uiText('ctx.newFolderInside', 'New Folder Inside…'), d('newfolderin'), { ic: 'folder' }) + hr +
+      item(uiText('ctx.renameFolder', 'Rename Folder…'), d('renamefolder'), { ic: 'rename' }) +
+      item(shut ? uiText('layers.unfold', 'Unfold') : uiText('layers.fold', 'Fold'), d('fold'), { ic: 'fold' }) + hr +
+      item(uiText('ctx.deleteFolder', 'Delete Folder…'), d('delfolder'), { ic: 'del', danger: true });
     ctx.dataset.doc = '';
     ctx.dataset.folder = path;
     placeCtx(x, y);
   }
   // Rename in place: the row's name becomes a field. Enter or leaving keeps it, Esc cancels; the file stays closed.
   function renameDoc(id: any, name: any) {
-    if (id === state.docId) { state.doc.name = name; $('#docName').value = name; saveNow(); return; }
+    if (id === state.docId) { state.doc.name = name; $('#docName').value = name; TD.docview?.updateTitle(); saveNow(); return; }
     const d = store.get<Record<string, any> | null>(LS_DOC + id, null);
     if (d) store.set(LS_DOC + id, { ...d, name });
     const idx = index(), it: any = idx.find((x) => (x as any).id === id);
@@ -4273,7 +4568,7 @@ import { runtime as TD } from '../runtime';
     }
     const full = docEntry(id)?.name || nm.textContent, old = leafOf(full);
     const inp = document.createElement('input');
-    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', 'File name'); inp.spellcheck = false;
+    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', uiText('files.fileName', 'File name')); inp.spellcheck = false;
     nm.replaceWith(inp);
     li.classList.add('renaming');
     let done = false;
@@ -4308,16 +4603,16 @@ import { runtime as TD } from '../runtime';
       case 'fold': setFolded(ctx.dataset.folder, !folded.has(foldKey(ctx.dataset.folder))); break;
       case 'move': {
         if (!it) break;
-        TD.prompt('Move to Folder', folderOf(it.name), { ok: 'Move', placeholder: 'Folder, e.g. Physics/Labs (empty: top level)' }).then((f: any) => { if (f != null) moveToFolder(id, f); });
+        TD.prompt(uiText('dlg.moveToFolder.title', 'Move to Folder'), folderOf(it.name), { ok: uiText('dlg.moveToFolder.ok', 'Move'), placeholder: uiText('dlg.moveToFolder.placeholder', 'Folder, e.g. Physics/Labs (empty: top level)') }).then((f: any) => { if (f != null) moveToFolder(id, f); });
         break;
       }
       case 'share': shareLink(id); break;
       case 'openfile': openFile(); break;
       case 'rename': renameInList(id); break;
-      case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(`Duplicated as "${n}"`, 1200); } break; }
+      case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(uiText('hint.duplicatedAs', 'Duplicated as "{name}"', { name: n }), 1200); } break; }
       case 'saveas': {
         const src = docData(id); if (!src) break;
-        TD.prompt('Save a Copy As', copyName(it.name), { ok: 'Save' }).then((name: any) => {
+        TD.prompt(uiText('dlg.saveCopyAs.title', 'Save a Copy As'), copyName(it.name), { ok: caption(captions["ui.save"]) }).then((name: any) => {
           if (name != null && name.trim()) openDoc(storeCopy(src, name.trim(), id));
         });
         break;
@@ -4325,18 +4620,18 @@ import { runtime as TD } from '../runtime';
       case 'copy': {
         docClip = docJson(id);
         if (!docClip) break;
-        navigator.clipboard.writeText(docClip).then(() => showHint(`Copied "${it.name}"`, 1000), () => showHint(`Copied "${it.name}" (in this tab only)`, 1400));
+        navigator.clipboard.writeText(docClip).then(() => showHint(uiText('hint.copiedFile', 'Copied "{name}"', { name: it.name }), 1000), () => showHint(uiText('hint.copiedFileTab', 'Copied "{name}" (in this tab only)', { name: it.name }), 1400));
         break;
       }
       case 'paste': pasteDoc(); break;
       case 'exportall': exportAll(); break;
       case 'save': openFirst(); saveFile(); break;
       case 'savenew': openFirst(); saveFile(true); break;
-      case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { if (id === state.docId) showSaveState(); if (f) showHint(`No longer linked to ${f.name}`, 1400); }); break; }
+      case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { if (id === state.docId) showSaveState(); if (f) showHint(uiText('hint.unlinked', 'No longer linked to {file}', { file: f.name }), 1400); }); break; }
       case 'latex': case 'tikz': case 'html': case 'print': openFirst(); runCmd(a); break;
       case 'image': {
         openFirst();
-        if (state.mode === 'document') { showHint('Image export works on a diagram: switch to Diagram view first', 2000); break; }
+        if (state.mode === 'document') { showHint(uiText('hint.imageNeedsDiagram', 'Image export works on a diagram: switch to Diagram view first'), 2000); break; }
         if (expOpts.fmt === 'html') expOpts.fmt = 'png'; // "Image…" opens on a picture format
         requestAnimationFrame(() => openExport($('#btnExport')));
         break;
@@ -4388,7 +4683,7 @@ import { runtime as TD } from '../runtime';
     if (a === 'img') selImage(arg);
     if (a === 'copytext') {
       const t = selected().map((s: any) => (s.text || s.label || '').trim()).filter(Boolean).join('\n');
-      navigator.clipboard.writeText(t).then(() => showHint('Text copied', 1000), () => showHint('Clipboard not available', 1400));
+      navigator.clipboard.writeText(t).then(() => showHint(uiText('hint.textCopied', 'Text copied'), 1000), () => showHint(uiText('hint.noClipboard', 'Clipboard not available'), 1400));
     }
     if (a === 'cut') { copySel(); deleteSel(); }
     if (a === 'paste') paste();
@@ -4450,6 +4745,7 @@ import { runtime as TD } from '../runtime';
   }, true);
   document.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey;
+    if (mod && !e.altKey && e.key.toLowerCase() === 'p' && !outputAllowed()) { e.preventDefault(); return; }
     // Ctrl/⌘ + = − 0 zoom the canvas (the Document view handles its own, in docview.ts)
     const z = zoomKey(e);
     if (inTool()) return; // Quick and Table handle their own keys (nothing to zoom there)
@@ -4472,9 +4768,9 @@ import { runtime as TD } from '../runtime';
         else {
           saveNow();
           // without the File System Access API there is no file to keep in step, so remind people to keep one
-          const msg = `Autosaved in this browser — ${isMac ? '⇧⌘S' : 'Ctrl+Shift+S'} saves to a file`;
+          const msg = uiText('hint.autosaved', 'Autosaved in this browser — {key} saves to a file', { key: isMac ? '⇧⌘S' : 'Ctrl+Shift+S' });
           if (TD.files.can) showHint(msg, 1500);
-          else showHint(`${msg}\nRemember to occasionally save to file to prevent accidental losses.`, 4000);
+          else showHint(uiText('hint.autosaved.remind', '{msg}\nRemember to occasionally save to file to prevent accidental losses.', { msg }), 4000);
         }
         return;
       }
@@ -4561,24 +4857,46 @@ import { runtime as TD } from '../runtime';
   }
   function updateTopbar() {
     const diagrams = state.doc.blocks.map((b: any, i: any) => [b, i]).filter(([b]: any) => b.type === 'diagram');
-    const bs = $('#blockSel');
+    const bs = $('#blockSel'), nav = $('#blockNav');
     // in a classic file the picker keeps its room in Document view too, so the view switch doesn't move
-    bs.hidden = (state.mode !== 'diagram' && state.mode !== 'document') || diagrams.length < 2;
-    bs.style.visibility = state.mode === 'document' ? 'hidden' : '';
-    const what = state.mode === 'board' ? 'this whiteboard' : 'this diagram';
-    $('#btnExport').title = state.mode === 'page' ? 'Export the page as PNG (choose DPI), SVG or PDF' : `Export ${what} as PNG (choose DPI), SVG or PDF`;
-    $('#btnTikz').title = state.mode === 'page' ? 'LaTeX for this page, to copy or download (Ctrl+E)' : `LaTeX code for ${what} or the whole document, to copy or download (Ctrl+E)`;
-    bs.innerHTML = diagrams.map(([b, i]: any, n: any) => `<option value="${i}"${i === state.doc.active ? ' selected' : ''}>Diagram ${n + 1} of ${diagrams.length}</option>`).join('');
+    nav.hidden = bs.hidden = (state.mode !== 'diagram' && state.mode !== 'document') || !diagrams.length;
+    nav.style.visibility = state.mode === 'document' ? 'hidden' : '';
+    const board = state.mode === 'board';
+    $('#btnExport').title = state.mode === 'page' ? uiText('top.export.page', 'Export the page as PNG (choose DPI), SVG or PDF') : board ? uiText('top.export.board', 'Export this whiteboard as PNG (choose DPI), SVG or PDF') : uiText('top.export.diagram', 'Export this diagram as PNG (choose DPI), SVG or PDF');
+    $('#btnTikz').title = state.mode === 'page' ? uiText('top.tikz.page', 'LaTeX for this page, to copy or download (Ctrl+E)') : board ? uiText('top.tikz.board', 'LaTeX code for this whiteboard or the whole document, to copy or download (Ctrl+E)') : caption(captions["ui.latex.code.for.this.diagram.or.the.whole.document.to.copy.or.download.ctrl.e"]);
+    bs.innerHTML = diagrams.map(([b, i]: any, n: any) => `<option value="${i}"${i === state.doc.active ? ' selected' : ''}>${esc(typeof b.name === 'string' && b.name.trim() ? b.name : uiText('top.blockSel', 'Diagram {n} of {total}', { n: n + 1, total: diagrams.length }))}</option>`).join('');
+    const diagramIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
+    $('#blockPrev').disabled = diagramIndex <= 0;
+    $('#blockNext').disabled = diagramIndex < 0 || diagramIndex >= diagrams.length - 1;
     $('#btnUndo').disabled = !state.undo.length && !canUndoFile();
     $('#btnRedo').disabled = !state.redo.length && !canRedoFile();
-    for (const [id, on] of [['#btnGrid', state.grid], ['#btnSnap', state.snap]] as const) { const b = $(id); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
+    for (const [id, on] of [['#btnSnap', state.snap]] as const) { const b = $(id); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
     $('#stage').classList.toggle('hide-grid', !state.grid);
+    updateGridSelection();
     updateStatus();
   }
   function toggleGrid() { state.grid = !state.grid; savePrefs(); updateTopbar(); }
   $('#btnUndo').onclick = undo;
   $('#btnRedo').onclick = redo;
-  $('#btnGrid').onclick = toggleGrid;
+  function chooseGridStyle(style: any, toggle = false) {
+    if (!GRID_STYLES.includes(style)) return;
+    state.grid = !(toggle && state.grid && state.gridStyle === style); state.gridStyle = style;
+    savePrefs(); updateGridPattern(); updateTopbar();
+  }
+  $('#gridStyle').onclick = (e: MouseEvent) => {
+    const button = (e.target as Element).closest<HTMLButtonElement>('[data-grid-style]');
+    if (button) chooseGridStyle(button.dataset.gridStyle, true);
+  };
+  $('#gridStyle').addEventListener('keydown', (e: KeyboardEvent) => {
+    const button = (e.target as Element).closest<HTMLButtonElement>('[data-grid-style]');
+    if (button && (e.key === ' ' || e.key === 'Enter')) { e.stopPropagation(); return; }
+    if (!button || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault(); e.stopPropagation();
+    const index = GRID_STYLES.indexOf(button.dataset.gridStyle as any), delta = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? GRID_STYLES.length - 1 : (index + delta + GRID_STYLES.length) % GRID_STYLES.length;
+    chooseGridStyle(GRID_STYLES[next]);
+    $('#gridStyle').querySelector(`[data-grid-style="${GRID_STYLES[next]}"]`)?.focus();
+  });
   $('#btnSnap').onclick = () => { state.snap = !state.snap; savePrefs(); updateTopbar(); };
   $('#zoomIn').onclick = () => { const r = stageSize(); zoomAt(1.25, r.w / 2, r.h / 2); };
   $('#zoomOut').onclick = () => { const r = stageSize(); zoomAt(0.8, r.w / 2, r.h / 2); };
@@ -4617,19 +4935,52 @@ import { runtime as TD } from '../runtime';
   $('#zoomFitW').onclick = zoomFitWidth;
   document.querySelectorAll('#tools button[data-tool]').forEach((b) => ((b as HTMLElement).onclick = () => setTool((b as HTMLElement).dataset.tool)));
 
-  $('#docName').addEventListener('input', (e: any) => { state.doc.name = e.target.value || 'Untitled'; scheduleSave(); });
+  $('#docName').addEventListener('input', (e: any) => { state.doc.name = e.target.value || 'Untitled'; TD.docview?.updateTitle(); scheduleSave(); });
   $('#docName').addEventListener('keydown', (e: any) => { if (e.key === 'Enter') e.target.blur(); });
   $('#btnNewDoc').onclick = () => newDoc(null, null, null, null, null, state.doc.kind);
   $('#binRow').onclick = openBin;
+  let lastDocClick: { t: number; folder?: string; doc?: string; shut?: boolean } = { t: 0 };
   $('#docList').addEventListener('click', (e: any) => {
+    if (e.target.closest('input')) return;
     const del = e.target.closest('[data-del]');
     if (del) { e.stopPropagation(); deleteDoc(del.dataset.del); return; }
     const delF = e.target.closest('[data-delfolder]');
     if (delF) { e.stopPropagation(); deleteFolder(delF.dataset.delfolder); return; }
     const fo = e.target.closest('[data-folder]');
-    if (fo) { setFolded(fo.dataset.folder, !fo.classList.contains('shut')); return; }
+    if (fo) {
+      if (fo.classList.contains('renaming')) return;
+      const path = fo.dataset.folder, now = Date.now();
+      if (!e.target.closest('.chev') && (e.detail >= 2 || (lastDocClick.folder === path && now - lastDocClick.t < 400))) {
+        const shut = lastDocClick.folder === path ? lastDocClick.shut! : fo.classList.contains('shut');
+        lastDocClick = { t: 0 };
+        setFolded(path, shut);
+        renameFolderInList(path);
+        return;
+      }
+      const wasShut = fo.classList.contains('shut');
+      lastDocClick = { t: now, folder: path, shut: wasShut };
+      setFolded(path, !wasShut);
+      return;
+    }
     const li = e.target.closest('[data-doc]');
-    if (li && li.dataset.doc !== state.docId) openDoc(li.dataset.doc);
+    if (li) {
+      if (li.classList.contains('renaming')) return;
+      const id = li.dataset.doc, now = Date.now();
+      if (e.detail >= 2 || (lastDocClick.doc === id && now - lastDocClick.t < 400)) {
+        lastDocClick = { t: 0 };
+        renameInList(id);
+        return;
+      }
+      lastDocClick = { t: now, doc: id };
+      if (id !== state.docId) openDoc(id);
+    }
+  });
+  $('#docList').addEventListener('dblclick', (e: any) => {
+    if (e.target.closest('button, input, .chev')) return;
+    const fo = e.target.closest('[data-folder]');
+    if (fo) { if (!fo.classList.contains('renaming')) renameFolderInList(fo.dataset.folder); return; }
+    const li = e.target.closest('[data-doc]');
+    if (li && !li.classList.contains('renaming')) renameInList(li.dataset.doc);
   });
   // Drag a file onto a folder to move it there, or onto the list's empty part to take it out of its folder.
   {
@@ -4637,6 +4988,7 @@ import { runtime as TD } from '../runtime';
     let dragId: any = null, dragFolder: any = null;
     // a file row: the drop goes before it (upper half) or after it (lower half)
     const rowAt = (e: any) => {
+      if (fileSort.by !== 'custom') return null;
       const li = e.target.closest('[data-doc]');
       if (!li || li.dataset.doc === dragId) return null;
       const r = li.getBoundingClientRect();
@@ -4716,6 +5068,69 @@ import { runtime as TD } from '../runtime';
     ul.addEventListener('dragend', () => { clear(); dragId = null; dragFolder = null; });
   }
 
+  // The sort menu on the file list's header: opens on hover or a click; a choice closes it. A click on the button
+  // keeps a hover-opened menu open (it no longer closes when the pointer leaves); a second click closes it.
+  {
+    const btn = $('#btnSortDocs'), menu = document.createElement('div');
+    menu.id = 'sortMenu'; menu.className = 'ctx sort-menu'; menu.hidden = true;
+    menu.setAttribute('role', 'menu');
+    document.body.appendChild(menu);
+    const TICK = '<svg class="ck" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>';
+    const BY: [SortBy, any, any, string][] = [
+      ['custom', captions["ui.custom.order"], captions["ui.your.own.order.drag.files.to.rearrange.them"], '<path d="M4 6h12M4 10h12M4 14h12"/>'],
+      ['created', captions["ui.date.created"], captions["ui.when.each.file.was.made"], '<path d="M3.5 5.5h13v11h-13zM3.5 8.5h13M7 3.5v3M13 3.5v3"/>'],
+      ['modified', captions["ui.date.modified"], captions["ui.when.each.file.was.last.changed"], '<circle cx="10" cy="10" r="6.5"/><path d="M10 6.5V10l2.5 1.5"/>'],
+      ['name', captions["ui.name"], captions["ui.by.file.name.numbers.in.number.order"], '<path d="M3.5 14.5l3-9 3 9M4.5 11.5h4M11.5 5.5h5l-5 9h5"/>'],
+    ];
+    const dirLabel = (by: SortBy, d: 'asc' | 'desc') => caption(by === 'name' ? (d === 'asc' ? captions["ui.a.to.z"] : captions["ui.z.to.a"])
+      : by === 'custom' ? (d === 'asc' ? captions["ui.ascending"] : captions["ui.descending"]) : (d === 'asc' ? captions["ui.oldest.first"] : captions["ui.newest.first"]));
+    const sortTitle = () => fileSort.by === 'custom' ? uiText('files.sortTitle.custom', 'Sort: custom order (drag to rearrange)')
+      : uiText('files.sortTitle', 'Sort: {by}, {dir}', { by: caption(BY.find((b) => b[0] === fileSort.by)![1]).toLowerCase(), dir: dirLabel(fileSort.by, fileSort.dir).toLowerCase() });
+    const row = (attr: string, on: boolean, label: any, icon: string, hint: any, dis = false) =>
+      `<button class="ctx-item" role="menuitemradio" aria-checked="${on}" ${attr}${dis ? ' disabled' : ''} title="${esc(caption(hint))}"><svg viewBox="0 0 20 20">${icon}</svg><span class="lb">${esc(caption(label))}</span>${on && !dis ? TICK : '<span class="ck"></span>'}</button>`;
+    const fill = (rows = !menu.hidden) => {
+      const { by, dir } = fileSort, custom = by === 'custom';
+      btn.title = sortTitle();
+      btn.classList.toggle('on', !custom);
+      if (!rows) return; // a closed menu holds no rows (they would answer other menus' queries)
+      menu.innerHTML = BY.map(([b, label, hint, icon]) => row(`data-sort="${b}"`, b === by, label, icon, hint)).join('') + '<hr>'
+        + row('data-dir="asc"', dir === 'asc', dirLabel(by, 'asc'), '<path d="M10 15.5v-11M6 8.5l4-4 4 4"/>', custom ? captions["ui.custom.order.has.no.direction"] : captions["ui.ascending"], custom)
+        + row('data-dir="desc"', dir === 'desc', dirLabel(by, 'desc'), '<path d="M10 4.5v11M6 11.5l4 4 4-4"/>', custom ? captions["ui.custom.order.has.no.direction"] : captions["ui.descending"], custom);
+    };
+    onLocale(() => { menu.setAttribute('aria-label', caption(captions["ui.sort.files"])); fill(); });
+    let timer = 0, pinned = false;
+    const hide = () => { clearTimeout(timer); pinned = false; menu.hidden = true; menu.innerHTML = ''; btn.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
+    const show = () => {
+      clearTimeout(timer);
+      if (!menu.hidden) return;
+      TD.tooltip && TD.tooltip.hide();
+      fill(true); menu.hidden = false;
+      // under the button, its right edge on the button's (over the sidebar); kept on screen
+      const r = btn.getBoundingClientRect(), w = menu.offsetWidth;
+      menu.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+      menu.style.top = (r.bottom + 4) + 'px';
+      btn.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
+    };
+    const later = () => { clearTimeout(timer); if (!pinned) timer = setTimeout(hide, HOVER_CLOSE) as any; };
+    btn.addEventListener('pointerenter', (e: any) => { if (e.pointerType !== 'mouse') return; clearTimeout(timer); if (menu.hidden) timer = setTimeout(show, HOVER_OPEN) as any; });
+    btn.addEventListener('pointerleave', (e: any) => { if (e.pointerType === 'mouse' && !menu.contains(e.relatedTarget)) later(); });
+    btn.addEventListener('click', () => { if (menu.hidden || !pinned) { show(); pinned = true; } else hide(); });
+    menu.addEventListener('pointerenter', () => clearTimeout(timer));
+    menu.addEventListener('pointerleave', (e: any) => { if (e.pointerType === 'mouse' && !btn.contains(e.relatedTarget)) later(); });
+    menu.addEventListener('click', (e: any) => {
+      const b = e.target.closest('[data-sort],[data-dir]');
+      if (!b || b.disabled) return;
+      if (b.dataset.sort) fileSort = { ...fileSort, by: b.dataset.sort };
+      else fileSort = { ...fileSort, dir: b.dataset.dir };
+      store.set(LS_SORT, fileSort);
+      hide();
+      renderDocList();
+    });
+    document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target as Element).closest('#sortMenu, #btnSortDocs')) hide(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { e.stopPropagation(); hide(); btn.focus(); } }, true);
+    fill();
+  }
+
   const slug = () => (leafOf(state.doc.name) || 'diagram').replace(/[^\w\-]+/g, '_');
   function download(name: any, text: any, type: any) {
     const a = document.createElement('a');
@@ -4737,15 +5152,15 @@ import { runtime as TD } from '../runtime';
     if (!TD.files.can) { download(fileName(), text, FILE_TYPE); return; }
     try {
       const name = await TD.files.saveDoc(id, text, fileName(), pick);
-      if (name) showHint(`Saved to ${name}`, 1200);
+      if (name) showHint(uiText('hint.savedTo', 'Saved to {file}', { file: name }), 1200);
     } catch (e: any) {
-      showHint(`Couldn't save the file (${e.message}). Downloaded a copy instead.`, 3500);
+      showHint(uiText('hint.saveFailed', "Couldn't save the file ({error}). Downloaded a copy instead.", { error: e.message }), 3500);
       download(fileName(), text, FILE_TYPE);
     }
     if (id === state.docId) showSaveState();
   }
   const { validShapes, dropRetired, dropRetiredDoc } = TD.projectFiles;
-  const retiredHint = (n: any) => n && showHint(`Removed ${n} 3D sketch${n > 1 ? 'es' : ''}: no longer supported. Use 3D Geometry instead.`, 5000);
+  const retiredHint = (n: any) => n && showHint(n > 1 ? uiText('hint.retired.many', 'Removed {n} 3D sketches: no longer supported. Use 3D Geometry instead.', { n }) : uiText('hint.retired.one', 'Removed 1 3D sketch: no longer supported. Use 3D Geometry instead.'), 5000);
   const baseName = (n: any) => n.replace(/(\.diagramtex|(\.page|\.board)?\.json)$/i, '');
   // Open a file from disk: a project file opens as a file of the app (linked to the file on disk when the
   // browser hands over a handle), anything else goes to the LaTeX import.
@@ -4754,35 +5169,36 @@ import { runtime as TD } from '../runtime';
     try {
       let bd = null;
       try { bd = JSON.parse(text); } catch { bd = null; }
-      if (isBundle(bd)) { importBundle(bd); return; }
+      if (isBundle(bd)) { importBundle(bd); return true; }
       const known = handle && (await TD.files.docFor(handle, index().map((x) => (x as any).id)));
-      if (known) { await reopenLinked(known, text, name); return; }
+      if (known) { await reopenLinked(known, text, name); return true; }
       if (!openProjectText(text, baseName(name))) throw new Error('not valid JSON');
       // an older .json file is not linked: its first save makes a .diagramtex beside it
       if (handle && name.toLowerCase().endsWith(FILE_EXT)) { await TD.files.link(state.docId, handle, projectJson(state.doc), text); showSaveState(); }
-    } catch (err: any) { TD.alert(`Couldn't open "${name}"`, `It isn't a DiagramTeX file (${err.message}).`); }
+      return true;
+    } catch (err: any) { await TD.alert(uiText('dlg.openFailed.title', 'Couldn\'t open "{name}"', { name }), uiText('dlg.openFailed.body', "It isn't a DiagramTeX file ({error}).", { error: err.message })); return false; }
   }
   // A file already linked to one of the app's files: open that one, and take the file's contents if it
   // changed on disk since it was last saved or opened.
   async function reopenLinked(id: any, text: any, name: any) {
     const fresh = !TD.files.isOnDisk(id, text);
     if (id !== state.docId) openDoc(id);
-    if (!fresh) { showHint(`"${name}" is open`, 1200); return; }
+    if (!fresh) { showHint(uiText('hint.isOpen', '"{name}" is open', { name }), 1200); return; }
     const p = parseProject(text, baseName(name));
     if (!p) throw new Error('not valid JSON');
     if (!TD.files.isSaved(id, projectJson(state.doc)) &&
-      !(await TD.confirm(`"${name}" changed on disk`, 'This file also has changes that are not saved to it. Replace them with the version on disk?', { ok: 'Use the Version on Disk' }))) return;
+      !(await TD.confirm(uiText('dlg.changedOnDisk.title', '"{name}" changed on disk', { name }), uiText('dlg.changedOnDisk.body', 'This file also has changes that are not saved to it. Replace them with the version on disk?'), { ok: uiText('dlg.changedOnDisk.ok', 'Use the Version on Disk') }))) return;
     replaceDoc(id, p);
     await TD.files.link(id, TD.files.fileOf(id).handle, projectJson(state.doc), text);
     showSaveState();
-    showHint(`Reloaded "${name}" from disk`, 1400);
+    showHint(uiText('hint.reloaded', 'Reloaded "{name}" from disk', { name }), 1400);
   }
   async function openFile() {
     if (!TD.files.can) { $('#fileInput').click(); return; }
     try {
       const f = await TD.files.pickOpen();
       if (f) await openText(await f.file.text(), f.file.name, f.handle);
-    } catch (e: any) { showHint(`Couldn't open the file (${e.message})`, 2500); }
+    } catch (e: any) { showHint(uiText('hint.couldntOpenTheFile', "Couldn't open the file ({error})", { error: e.message }), 2500); }
   }
   $('#fileInput').onchange = async (e: any) => {
     const file = e.target.files[0];
@@ -4800,11 +5216,15 @@ import { runtime as TD } from '../runtime';
   // Render shapes, then prepend the gradient/pattern <defs> they referenced.
   function fillDefsAround(fn: any) { TD.takeFillDefs(); const body = fn(); return TD.takeFillDefs() + body; }
   // SVG string for a list of shapes (used for SVG export and the document view)
-  function shapesSvg(list: any, pad = 8, standalone = true) {
+  function shapesSvg(list: any, pad = 8, standalone = true, preview = false): string {
+    if (!preview && !TD.math.finalizing) return TD.math.synchronous(() => shapesSvg(list, pad, standalone));
+    if (preview && !TD.math.previewing) return TD.math.preview(() => shapesSvg(list, pad, standalone, true));
     list = list.filter((s: any) => !s.hidden); // a hidden layer is not exported
     if (!list.length) return '';
     const ctx = { zoom: 1, hit: 0, export: true, scene: list };
     const b = TD.bboxOf(list.flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }), pad);
+    if (preview) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(b.x)} ${r2(b.y)} ${r2(b.w)} ${r2(b.h)}" width="${r2(b.w)}" height="${r2(b.h)}">` +
+      fillDefsAround(() => list.map((s: any) => TYPES[s.type].svg(s, ctx)).join('')) + '</svg>';
     const host = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     host.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     host.setAttribute('viewBox', `${r2(b.x)} ${r2(b.y)} ${r2(b.w)} ${r2(b.h)}`);
@@ -4828,13 +5248,14 @@ import { runtime as TD } from '../runtime';
     if (c) runCmd(c);
   });
   function runCmd(c: any) {
+    if (['print', 'export', 'svg', 'html', 'latex', 'tikz'].includes(c) && !outputAllowed()) return;
     if (c === 'new') newDoc(null, null, null, null, null, state.doc.kind);
     if (c === 'open') openFile();
     if (c === 'save') saveFile();
     if (c === 'saveas') saveFile(true);
     if (c === 'tikz') openTikz();
-    if (c === 'latex') { const r = TD.texImages.collect(() => (state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc))); showHint(NO_RESTORE, 6000); downloadLatex(r.result, r.files); } // a failed export's hint replaces the warning
-    if (c === 'svg') { if (state.mode === 'page') exportPageSvg(); else if (shapes().length) exportSvg(); else showHint('This diagram is empty', 1200); }
+    if (c === 'latex') { const r = TD.texImages.collect(() => (state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc))); showHint(noRestore(), 6000); downloadLatex(r.result, r.files); } // a failed export's hint replaces the warning
+    if (c === 'svg') { if (state.mode === 'page') exportPageSvg(); else if (shapes().length) exportSvg(); else showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200); }
     if (c === 'import') openImport('');
     if (c === 'print') printDoc();
     if (c === 'html') exportHtml();
@@ -4842,7 +5263,9 @@ import { runtime as TD } from '../runtime';
   }
   // One self-contained web page (fonts and pictures embedded) of the whole file.
   async function exportHtml() {
+    if (!outputAllowed()) return;
     finishEdit();
+    if (!outputAllowed()) return;
     let body;
     if (state.doc.kind === 'page') {
       const G = pageGeom(), [defs, sh] = pageSvgs();
@@ -4850,12 +5273,12 @@ import { runtime as TD } from '../runtime';
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${r2(pageTop(k, G))} ${r2(G.w)} ${r2(G.h)}" style="width:${G.W}cm;max-width:100%;height:auto;display:block;margin:0 auto 24px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08),0 6px 20px rgba(0,0,0,.06)">${defs}${sh}</svg>`).join('')}</div>`;
     }
     await askDir();
-    showHint('Building HTML…', 800);
+    showHint(uiText('hint.buildingHtml', 'Building HTML…'), 800);
     try {
       await out(slug() + '.html', await TD.docToHtml(body), 'text/html');
-      if (TD.mathFontsLinked) showHint('Saved. Maths fonts could not be embedded, so the file loads them online.', 3200);
+      if (TD.mathFontsLinked) showHint(uiText('hint.htmlFontsOnline', 'Saved. Maths fonts could not be embedded, so the file loads them online.'), 3200);
     }
-    catch (e: any) { showHint('Could not build the HTML file: ' + e.message, 2500); }
+    catch (e: any) { showHint(uiText('hint.htmlFailed', 'Could not build the HTML file: {error}', { error: e.message }), 2500); }
   }
   // Quick: a formula box on its own, over whatever file is open. Picking a file kind leaves it.
   const QUICK_KEY = 'diagramtex.quick', TABLE_KEY = 'diagramtex.tablemode';
@@ -4868,6 +5291,7 @@ import { runtime as TD } from '../runtime';
   function setTable(on: any) {
     if (on === inTable()) return;
     if (on) { setQuick(false); leaveFile(); }
+    TD.math.cancelPending();
     document.body.classList.toggle('mode-table', on);
     try { on ? localStorage.setItem(TABLE_KEY, '1') : localStorage.removeItem(TABLE_KEY); } catch (e: any) { /* storage blocked */ }
     if (on) {
@@ -4885,6 +5309,7 @@ import { runtime as TD } from '../runtime';
   function setQuick(on: any) {
     if (on === inQuick()) return;
     if (on) { setTable(false); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); }
+    TD.math.cancelPending();
     document.body.classList.toggle('mode-quick', on);
     try { on ? localStorage.setItem(QUICK_KEY, '1') : localStorage.removeItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
     if (on) {
@@ -4905,10 +5330,28 @@ import { runtime as TD } from '../runtime';
   document.querySelectorAll('[data-mode]').forEach((b) => ((b as HTMLElement).onclick = () => { setQuick(false); setTable(false); setMode((b as HTMLElement).dataset.mode); }));
   // Classic reopens the last Classic file in the view it was left in (Diagram or Document).
   document.querySelectorAll('[data-kind]').forEach((b) => ((b as HTMLElement).onclick = () => { setQuick(false); setTable(false); if (state.doc.kind !== (b as HTMLElement).dataset.kind) { finishEdit(); finishPoly(); commit(); switchKind((b as HTMLElement).dataset.kind); } }));
+  for (const [id, step] of [['#blockPrev', -1], ['#blockNext', 1]] as const) $(id).onclick = () => {
+    const indices = state.doc.blocks.flatMap((b: any, i: number) => b.type === 'diagram' ? [i] : []);
+    const next = indices[indices.indexOf(state.doc.active) + step];
+    if (next != null) setActiveBlock(next);
+  };
+  $('#blockRename').onclick = async () => {
+    const doc = state.doc, block = doc.blocks[doc.active];
+    if (doc.kind !== 'classic' || block?.type !== 'diagram') return;
+    const name = await TD.prompt(uiText('ui.renameDiagram', 'Rename diagram'), block.name || '', {
+      ok: caption(captions["ui.save"]), placeholder: uiText('diagram.name.placeholder', 'Diagram name (empty for automatic numbering)'),
+    });
+    if (name === null || state.doc !== doc || home() !== block) return;
+    begin();
+    const value = name.trim().slice(0, 200);
+    if (value) block.name = value; else delete block.name;
+    commit(); updateTopbar();
+  };
   $('#blockSel').onchange = (e: any) => setActiveBlock(+e.target.value);
 
   // Page mode: the sheet as SVG, one <svg> per page (for print) or one tall SVG (for download).
-  function pageSvgs() {
+  function pageSvgs(): any {
+    if (!TD.math.finalizing) return TD.math.synchronous(pageSvgs);
     const G = pageGeom(), ctx = { zoom: 1, hit: 0, export: true, scene: shapes() };
     return fillDefsAround(() => '<!--body-->' + shapes().map((s: any) => TYPES[s.type].svg(s, ctx)).join('')).split('<!--body-->');
   }
@@ -4948,7 +5391,8 @@ import { runtime as TD } from '../runtime';
   // copy of the formula, so it is left out.
   const noMathml = (svg: any) => svg.replace(/<span class="katex-mathml">[\s\S]*?<\/math><\/span>/g, '');
   // what to export: one entry per output page, each { vb: [x,y,w,h] in canvas px, inner: svg markup, bg }
-  function exportSources() {
+  function exportSources(): any {
+    if (!TD.math.finalizing) return TD.math.synchronous(exportSources);
     if (state.mode === 'page') {
       const G = pageGeom(), [defs, body] = pageSvgs();
       return Array.from<any, any>({ length: G.n }, (_, k) => ({ vb: [0, pageTop(k, G), G.w, G.h], inner: defs + body, page: true }));
@@ -5021,66 +5465,74 @@ import { runtime as TD } from '../runtime';
   // Ask for the export folder's access while the click is fresh, before slow work.
   const askDir = () => (TD.files.dirOf(state.docId) ? TD.files.exportDir(state.docId) : null);
   async function runExport() {
+    if (!outputAllowed()) return;
     finishEdit(); finishPoly();
+    if (!outputAllowed()) return;
     const fmt = expOpts.fmt;
     if (fmt === 'svg') { runCmd('svg'); return; }
     const srcs = exportSources();
-    if (!srcs.length) { showHint('This diagram is empty', 1200); return; }
+    if (!srcs.length) { showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200); return; }
     if (fmt === 'pdf' && !expOpts.flat) { printVector(srcs); return; }
     await askDir();
     if (fmt === 'pdf') {
-      showHint(`Exporting a flattened PDF at ${expOpts.flatDpi} DPI…`, 1500);
-      try { await out(slug() + '.pdf', await flatPdf(srcs, expOpts.flatDpi)); } catch (e: any) { showHint('Export failed: ' + (e.message || e), 3000); }
+      showHint(uiText('hint.exportingFlatPdf', 'Exporting a flattened PDF at {dpi} DPI…', { dpi: expOpts.flatDpi }), 1500);
+      try { await out(slug() + '.pdf', await flatPdf(srcs, expOpts.flatDpi)); } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
       return;
     }
-    showHint(`Exporting ${fmt.toUpperCase()} at ${expOpts.dpi} DPI…`, 1500);
+    showHint(uiText('hint.exportingAt', 'Exporting {fmt} at {dpi} DPI…', { fmt: fmt.toUpperCase(), dpi: expOpts.dpi }), 1500);
     try {
       for (let k = 0; k < srcs.length; k++) {
         const c = await rasterise(srcs[k], expOpts.transparent && !srcs[k].page);
         await out(slug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
       }
-    } catch (e: any) { showHint('Export failed: ' + (e.message || e), 3000); }
+    } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
   }
   const expPop = document.createElement('div');
   expPop.className = 'popover exp-pop'; expPop.hidden = true;
-  expPop.setAttribute('role', 'dialog'); expPop.setAttribute('aria-label', 'Export');
+  expPop.setAttribute('role', 'dialog');
   document.body.appendChild(expPop);
   const DPIS = [72, 96, 150, 300, 600];
   // Formats: pictures of the diagram or pages, plus the whole file as one web page (the only one in Document view).
-  const expFmts = () => (state.mode === 'document' ? [['html', 'Web page']] : [['png', 'PNG'], ['svg', 'SVG'], ['pdf', 'PDF'], ['html', 'Web page']]);
+  const expFmts = () => (state.mode === 'document' ? [['html', uiText('exp.webPage', 'Web page')]] : [['png', 'PNG'], ['svg', 'SVG'], ['pdf', 'PDF'], ['html', uiText('exp.webPage', 'Web page')]]);
   const expFmt = () => (expFmts().some(([k]) => k === expOpts.fmt) ? expOpts.fmt : expFmts()[0][0]);
   function renderExpPop() {
+    if (TD.math.pending) { expPop.hidden = true; return; }
     const o = expOpts, fmt = expFmt();
+    expPop.setAttribute('aria-label', caption(captions["ui.export"]));
     if (fmt === 'html') {
-      expPop.innerHTML = `<div class="exp-h">Export ${state.doc.kind === 'classic' ? 'document' : 'file'}</div>
-        <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${fmt === k}" data-efmt="${k}" class="${fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-        <div class="exp-note">The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.</div>
-        ${dirRow()}<button type="button" class="primary exp-go" data-ego>${TD.files.dirOf(state.docId) ? 'Save' : 'Download'} web page</button>`;
+      expPop.innerHTML = `<div class="exp-h">${esc(state.doc.kind === 'classic' ? uiText('exp.h.document', 'Export document') : uiText('exp.h.file', 'Export file'))}</div>
+        <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${fmt === k}" data-efmt="${k}" class="${fmt === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
+        <div class="exp-note">${esc(uiText('exp.htmlNote', 'The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.'))}</div>
+        ${dirRow()}<button type="button" class="primary exp-go" data-ego>${esc(TD.files.dirOf(state.docId) ? uiText('exp.saveWeb', 'Save web page') : uiText('exp.downloadWeb', 'Download web page'))}</button>`;
       return;
     }
     const flat = o.fmt === 'pdf' && o.flat, dpi = flat ? o.flatDpi : o.dpi;
     const srcs = exportSources(), sc = expScale(dpi);
-    const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : 'empty';
+    const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : uiText('exp.empty', 'empty');
     const cm = srcs.length ? `${r2(srcs[0].vb[2] / PX)} × ${r2(srcs[0].vb[3] / PX)} cm` : '';
     const raster = o.fmt === 'png' || flat;
-    expPop.innerHTML = `<div class="exp-h">Export ${state.mode === 'page' ? 'page' + (srcs.length > 1 ? 's' : '') : state.mode === 'board' ? 'whiteboard' : 'diagram'}</div>
-      <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      ${o.fmt === 'pdf' ? `<label class="exp-row exp-sw"><span>Flatten</span><input type="checkbox" role="switch" id="expFlat"${flat ? ' checked' : ''} title="Pages as images at a set DPI, instead of vector with selectable text"></label>` : ''}
-      ${raster ? `<div class="exp-row"><label for="expDpi">Resolution</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(dpi) ? '' : `<option value="${dpi}" selected>${dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${dpi}" aria-label="DPI"></span></div>
-      <div class="exp-meta">${dim}${srcs.length > 1 ? ` per page · ${srcs.length} ${o.fmt === 'pdf' ? 'pages' : 'files'}` : ''}<span>${cm}</span></div>` : `<div class="exp-meta">Vector, scales to any size<span>${cm}</span></div>`}
-      ${o.fmt === 'png' && state.mode !== 'page' ? `<label class="exp-chk"><input type="checkbox" id="expTr"${o.transparent ? ' checked' : ''}> Transparent background</label>` : ''}
-      ${flat ? `<div class="exp-note">Each ${srcs.length > 1 ? 'page' : 'sheet'} becomes one image; text can't be selected.</div>` : ''}
-      ${o.fmt === 'pdf' && !flat ? `<div class="exp-note">Vector PDF with selectable text${srcs.length > 1 ? `, ${srcs.length} pages` : ''}. In the print window, choose <b>Save as PDF</b> as the destination.</div>` : ''}
-      ${o.fmt === 'pdf' && !flat ? '' : dirRow()}<button type="button" class="primary exp-go" data-ego>${o.fmt === 'pdf' && !flat ? 'Save PDF…' : (TD.files.dirOf(state.docId) ? 'Save ' : 'Download ') + o.fmt.toUpperCase()}</button>`;
+    const head = state.mode === 'page' ? (srcs.length > 1 ? uiText('exp.h.pages', 'Export pages') : uiText('exp.h.page', 'Export page')) : state.mode === 'board' ? uiText('exp.h.board', 'Export whiteboard') : uiText('exp.h.diagram', 'Export diagram');
+    const B = '\u0000', bold = (s: string) => esc(s).replace(B, `<b>${esc(uiText('exp.saveAsPdf', 'Save as PDF'))}</b>`);
+    expPop.innerHTML = `<div class="exp-h">${esc(head)}</div>
+      <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
+      ${o.fmt === 'pdf' ? `<label class="exp-row exp-sw"><span>${esc(uiText('exp.flatten', 'Flatten'))}</span><input type="checkbox" role="switch" id="expFlat"${flat ? ' checked' : ''} title="${esc(uiText('exp.flatten.title', 'Pages as images at a set DPI, instead of vector with selectable text'))}"></label>` : ''}
+      ${raster ? `<div class="exp-row"><label for="expDpi">${esc(uiText('exp.resolution', 'Resolution'))}</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(dpi) ? '' : `<option value="${dpi}" selected>${dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${dpi}" aria-label="DPI"></span></div>
+      <div class="exp-meta">${dim}${srcs.length > 1 ? ' ' + esc(o.fmt === 'pdf' ? uiText('exp.perPage.pages', 'per page · {n} pages', { n: srcs.length }) : uiText('exp.perPage.files', 'per page · {n} files', { n: srcs.length })) : ''}<span>${cm}</span></div>` : `<div class="exp-meta">${esc(uiText('exp.vector', 'Vector, scales to any size'))}<span>${cm}</span></div>`}
+      ${o.fmt === 'png' && state.mode !== 'page' ? `<label class="exp-chk"><input type="checkbox" id="expTr"${o.transparent ? ' checked' : ''}> ${esc(uiText('exp.transparent', 'Transparent background'))}</label>` : ''}
+      ${flat ? `<div class="exp-note">${esc(srcs.length > 1 ? uiText('exp.flatNote.page', "Each page becomes one image; text can't be selected.") : uiText('exp.flatNote.sheet', "Each sheet becomes one image; text can't be selected."))}</div>` : ''}
+      ${o.fmt === 'pdf' && !flat ? `<div class="exp-note">${bold(srcs.length > 1 ? uiText('exp.pdfNote.pages', 'Vector PDF with selectable text, {n} pages. In the print window, choose {b} as the destination.', { n: srcs.length, b: B }) : uiText('exp.pdfNote', 'Vector PDF with selectable text. In the print window, choose {b} as the destination.', { b: B }))}</div>` : ''}
+      ${o.fmt === 'pdf' && !flat ? '' : dirRow()}<button type="button" class="primary exp-go" data-ego>${esc(o.fmt === 'pdf' && !flat ? uiText('exp.savePdf', 'Save PDF…') : TD.files.dirOf(state.docId) ? uiText('exp.save', 'Save {fmt}', { fmt: o.fmt.toUpperCase() }) : uiText('exp.download', 'Download {fmt}', { fmt: o.fmt.toUpperCase() }))}</button>`;
   }
   // Where exports go: Downloads, or a folder picked once for this file (where the browser allows it).
   function dirRow() {
     if (!TD.files.can) return '';
     const f = TD.files.dirOf(state.docId);
-    return `<div class="exp-row exp-dir"><label>Save to</label><span class="exp-dirv">
-      <button type="button" class="exp-dirb" data-edir title="${f ? `Exports of this file go to the folder ${esc(f.name)}, replacing files of the same name. Click to pick another folder.` : 'Exports are downloaded. Click to pick a folder for this file’s exports instead.'}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5.5v10h15v-8H9L7.5 5.5z"/></svg><span>${f ? esc(f.name) : 'Downloads'}</span></button>${f ? `<button type="button" class="icon flat exp-dirx" data-edirx title="Download exports instead" aria-label="Download exports instead"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>` : ''}</span></div>`;
+    const clearT = esc(uiText('exp.dirClear', 'Download exports instead'));
+    return `<div class="exp-row exp-dir"><label>${esc(uiText('exp.saveTo', 'Save to'))}</label><span class="exp-dirv">
+      <button type="button" class="exp-dirb" data-edir title="${esc(f ? uiText('exp.dir.title', 'Exports of this file go to the folder {folder}, replacing files of the same name. Click to pick another folder.', { folder: f.name }) : uiText('exp.dir.none', 'Exports are downloaded. Click to pick a folder for this file’s exports instead.'))}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5.5v10h15v-8H9L7.5 5.5z"/></svg><span>${f ? esc(f.name) : esc(uiText('exp.downloads', 'Downloads'))}</span></button>${f ? `<button type="button" class="icon flat exp-dirx" data-edirx title="${clearT}" aria-label="${clearT}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>` : ''}</span></div>`;
   }
   function openExport(btn: any) {
+    if (!outputAllowed()) return;
     if (!expPop.hidden) { expPop.hidden = true; return; }
     renderExpPop();
     expPop.hidden = false;
@@ -5091,7 +5543,7 @@ import { runtime as TD } from '../runtime';
   expPop.addEventListener('click', (e) => {
     const f = (e.target! as Element).closest('[data-efmt]');
     if (f) { expOpts.fmt = (f as HTMLElement).dataset.efmt; saveExpOpts(); renderExpPop(); return; }
-    if ((e.target! as Element).closest('[data-edir]')) { TD.files.pickDir(state.docId).then(() => { if (!expPop.hidden) renderExpPop(); }, (err: any) => showHint(`Couldn't use that folder (${err.message})`, 2500)); return; }
+    if ((e.target! as Element).closest('[data-edir]')) { TD.files.pickDir(state.docId).then(() => { if (!expPop.hidden) renderExpPop(); }, (err: any) => showHint(uiText('hint.folderFailed', "Couldn't use that folder ({error})", { error: err.message }), 2500)); return; }
     if ((e.target! as Element).closest('[data-edirx]')) { TD.files.clearDir(state.docId).then(() => { if (!expPop.hidden) renderExpPop(); }); return; }
     if ((e.target! as Element).closest('[data-ego]')) { expPop.hidden = true; if (expFmt() === 'html') exportHtml(); else runExport(); }
   });
@@ -5105,15 +5557,17 @@ import { runtime as TD } from '../runtime';
   // Print one sheet per export source, each sized exactly to it: the browser's PDF output is vector,
   // with the fonts embedded, so "Save as PDF" here is the vector PDF export.
   function printVector(srcs: any) {
+    if (!outputAllowed()) return;
     let host = $('#pagePrint');
     if (!host) { host = document.createElement('div'); host.id = 'pagePrint'; document.body.appendChild(host); }
     const cm = (v: any) => r2(v / PX);
     // the live canvas (hidden while printing) holds the same gradient / clip / marker ids, and url(#id)
     // would resolve to those hidden copies, so the printed copy gets ids of its own
     const own = (m: any, k: any) => m.replace(/\bid="([^"]+)"/g, `id="pp${k}-$1"`).replace(/url\(#([^)]+)\)/g, `url(#pp${k}-$1)`).replace(/href="#([^"]+)"/g, `href="#pp${k}-$1"`);
-    // one @page size per sheet (named pages), so whiteboard diagrams and pages both print edge to edge
+    // Paper dimensions belong to @page. The HTML sheet fills the actual print
+    // page area; a physical-height SVG in normal flow can overflow it in WebKit.
     host.innerHTML = srcs.map((s: any, k: any) => { const [x, y, w, h] = s.vb;
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}" style="width:${cm(w)}cm;height:${cm(h)}cm;page:p${k}">${s.page ? `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="#fff"/>` : ''}${own(s.inner, k)}</svg>`; }).join('');
+      return `<section class="print-sheet" style="page:p${k}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}">${s.page ? `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="#fff"/>` : ''}${own(s.inner, k)}</svg></section>`; }).join('');
     let st = $('#pageStyle');
     if (!st) { st = document.createElement('style'); st.id = 'pageStyle'; document.head.appendChild(st); }
     st.textContent = srcs.map((s: any, k: any) => `@page p${k} { size: ${cm(s.vb[2])}cm ${cm(s.vb[3])}cm; margin: 0; }`).join('\n') +
@@ -5121,16 +5575,28 @@ import { runtime as TD } from '../runtime';
     const title = document.title;
     document.title = slug(); // the default file name in "Save as PDF"
     document.body.classList.add('printing-page');
-    setTimeout(() => { window.print(); document.body.classList.remove('printing-page'); host.innerHTML = ''; document.title = title; }, 300);
+    setTimeout(() => { if (outputAllowed()) window.print(); document.body.classList.remove('printing-page'); host.innerHTML = ''; document.title = title; }, 300);
   }
   const printPage = () => printVector(exportSources());
   function printDoc() {
+    if (!outputAllowed()) return;
     finishEdit(); finishPoly(); commit();
+    if (!outputAllowed()) return;
     if (state.mode === 'page') { printPage(); return; }
     if (TD.docview) TD.docview.render(true);
     document.body.classList.add('printing');
-    setTimeout(() => { window.print(); document.body.classList.remove('printing'); if (state.mode === 'document' && TD.docview) TD.docview.render(); }, 300);
+    setTimeout(() => { if (outputAllowed()) window.print(); document.body.classList.remove('printing'); if (state.mode === 'document' && TD.docview) TD.docview.render(); }, 300);
   }
+
+  // Browser-menu printing bypasses our keyboard handler. beforeprint cannot
+  // cancel the native dialog, so never expose provisional content to it.
+  window.addEventListener('beforeprint', () => {
+    if (!TD.math.pending) return;
+    let note = document.getElementById('printBlocked');
+    if (!note) { note = document.createElement('div'); note.id = 'printBlocked'; document.body.append(note); }
+    note.textContent = outputWait(); document.body.classList.add('print-blocked');
+  });
+  window.addEventListener('afterprint', () => document.body.classList.remove('print-blocked'));
 
   // ---------------- import ----------------
   const imp = $('#importModal');
@@ -5155,20 +5621,20 @@ import { runtime as TD } from '../runtime';
     msg.classList.remove('report'); msg.textContent = '';
     if (!src.trim()) return;
     let res, conv = [];
-    try { res = TD.importLatex(src); if (impHow === 'shapes') { conv = (res.kept || []).filter((k: any) => k.preview); res = importAs(src); } } catch (err: any) { msg.textContent = 'Could not parse: ' + err.message; return; }
+    try { res = TD.importLatex(src); if (impHow === 'shapes') { conv = (res.kept || []).filter((k: any) => k.preview); res = importAs(src); } } catch (err: any) { msg.textContent = uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message }); return; }
     const shapes = res.blocks.flatMap((b: any) => b.shapes || []);
     const n = shapes.filter((x: any) => x.type !== 'tikz').length, kept = [...conv.map((k: any) => ({ ...k, conv: true })), ...(res.kept || [])].sort((a, b) => (a.line || 0) - (b.line || 0));
     const nConv = conv.length, nCode = kept.length - nConv;
     if (!kept.length && !res.warnings.length && !(TD.lint && TD.lint(src).length)) return;
     const first = (c: any) => { const l = String(c).split('\n').find((x) => x.trim() && !/^\s*%/.test(x)) || ''; return l.trim().length > 60 ? l.trim().slice(0, 59) + '…' : l.trim(); };
-    const rows = kept.slice(0, 40).map((k) => `<li><span class="ln">${k.line ? 'line ' + k.line : ''}</span><code>${esc(first(k.code))}</code><span class="why">${esc(k.issues.join('; '))}</span></li>`);
+    const rows = kept.slice(0, 40).map((k) => `<li><span class="ln">${k.line ? esc(uiText('imp.line', 'line {n}', { n: k.line })) : ''}</span><code>${esc(first(k.code))}</code><span class="why">${esc(k.issues.join('; '))}</span></li>`);
     msg.classList.add('report');
     const lint = TD.lint ? TD.lint(src) : [];
     if (lint.length) msg.classList.add('report');
-    msg.innerHTML = (lint.length ? TD.lint.html(lint, 8) : '') + `<div>${n} shape${n === 1 ? '' : 's'}`
-      + (nConv ? ` · ${nConv} statement${nConv === 1 ? '' : 's'} converted to shapes as drawn: what isn't read below is left out` : '')
-      + (nCode ? ` · ${nCode} statement${nCode === 1 ? '' : 's'} kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame` : '') + '</div>'
-      + (rows.length ? `<ul>${rows.join('')}${kept.length > 40 ? `<li>… ${kept.length - 40} more</li>` : ''}</ul>` : '')
+    msg.innerHTML = (lint.length ? TD.lint.html(lint, 8) : '') + '<div>' + esc(n === 1 ? uiText('imp.shapes.one', '1 shape') : uiText('imp.shapes.many', '{n} shapes', { n }))
+      + (nConv ? ' · ' + esc(nConv === 1 ? uiText('imp.conv.one', "1 statement converted to shapes as drawn: what isn't read below is left out") : uiText('imp.conv.many', "{n} statements converted to shapes as drawn: what isn't read below is left out", { n: nConv })) : '')
+      + (nCode ? ' · ' + esc(nCode === 1 ? uiText('imp.code.one', '1 statement kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame') : uiText('imp.code.many', '{n} statements kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame', { n: nCode })) : '') + '</div>'
+      + (rows.length ? `<ul>${rows.join('')}${kept.length > 40 ? `<li>${esc(uiText('imp.more', '… {n} more', { n: kept.length - 40 }))}</li>` : ''}</ul>` : '')
       + res.warnings.map((w: any) => `<div class="warn">${esc(w)}</div>`).join('');
   }
   let impTimer = 0;
@@ -5194,10 +5660,10 @@ import { runtime as TD } from '../runtime';
   function runImport(asNew: any) {
     const src = $('#impText').value;
     let res;
-    try { res = importAs(src); } catch (err: any) { $('#impMsg').textContent = 'Could not parse: ' + err.message; return; }
+    try { res = importAs(src); } catch (err: any) { $('#impMsg').textContent = uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message }); return; }
     groupPictures(res);
     const nShapes = res.blocks.reduce((a: any, b: any) => a + (b.shapes ? b.shapes.length : 0), 0);
-    if (!nShapes && !res.blocks.some((b: any) => b.type === 'text')) { $('#impMsg').textContent = 'Nothing recognised in this code.' + (res.warnings.length ? ' ' + res.warnings.join(' ') : ''); return; }
+    if (!nShapes && !res.blocks.some((b: any) => b.type === 'text')) { $('#impMsg').textContent = uiText('imp.nothing', 'Nothing recognised in this code.') + (res.warnings.length ? ' ' + res.warnings.join(' ') : ''); return; }
     if (asNew && state.doc.kind === 'board') { newDoc(res.title || 'Imported', null, null, res.blocks, res.page, 'board'); zoomFit(); }
     else if (asNew) {
       newDoc(res.title || 'Imported', null, null, res.blocks, res.page);
@@ -5206,7 +5672,8 @@ import { runtime as TD } from '../runtime';
     } else placeImported(res, null);
     closeImport();
     const nKept = (res.kept || []).length;
-    showHint(`Imported ${nShapes - nKept} shape${nShapes - nKept === 1 ? '' : 's'}${nKept ? ` · ${nKept} kept as TikZ code (dashed frames)` : ''}`, 3000);
+    const nIn = nShapes - nKept, inMsg = nIn === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: nIn });
+    showHint(nKept ? uiText('hint.imported.kept', '{shapes} · {n} kept as TikZ code (dashed frames)', { shapes: inMsg, n: nKept }) : inMsg, 3000);
   }
   $('#impClose').onclick = closeImport;
   $('#impNew').onclick = () => runImport(true);
@@ -5227,7 +5694,7 @@ import { runtime as TD } from '../runtime';
     if (!zip) { await out(slug() + '.tex', tex, 'text/x-tex'); return; }
     await askDir();
     try { await out(slug() + '.zip', await texBundle(slug() + '.tex', convert ? TD.texImages.noInkscape(tex) : tex, files, TD.texImages.svgFallback, convert)); }
-    catch (e: any) { showHint('Export failed: ' + (e.message || e), 3000); }
+    catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
   }
   const tikzBase = new Map(); // what was last copied or downloaded, per file, scope and selection
   const baseKey = () => [state.docId, state.mode === 'page' ? 'page' : $('#tikzScope').value, $('#tikzSelOnly').checked ? 'sel' : ''].join(':');
@@ -5269,7 +5736,7 @@ import { runtime as TD } from '../runtime';
     markSel(false);
   }
   // the LaTeX carries no copy of the diagram (a long data line stopped pdflatex), so importing it again is a best effort
-  const NO_RESTORE = 'DiagramTeX can\'t restore this LaTeX exactly: importing it again brings back lines, shapes and text, but plots, most blocks and library symbols come back as TikZ code. To keep editing, save the .diagramtex file.';
+  const noRestore = () => uiText('hint.noRestore', 'DiagramTeX can\'t restore this LaTeX exactly: importing it again brings back lines, shapes and text, but plots, most blocks and library symbols come back as TikZ code. To keep editing, save the .diagramtex file.');
   function genTikz() {
     const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value;
     $('#tikzSelWrap').style.display = state.sel.size && scope !== 'doc' ? '' : 'none';
@@ -5288,14 +5755,17 @@ import { runtime as TD } from '../runtime';
     // the menu's other .zip matters only when there is an SVG to convert
     $('#tikzZipWrap').classList.toggle('one', !svgs);
     closeZipMenu();
-    if (n) $('#tikzZip').title = `The .tex and the ${n === 1 ? 'picture' : `${n} pictures`} it uses${svgs ? '. SVGs are converted by Inkscape when the LaTeX compiles (shell escape; Overleaf has both)' : ''}`;
+    if (n) {
+      const what = n === 1 ? uiText('tikz.zip.one', 'The .tex and the picture it uses') : uiText('tikz.zip.many', 'The .tex and the {n} pictures it uses', { n });
+      $('#tikzZip').title = svgs ? uiText('tikz.zip.svg', '{files}. SVGs are converted by Inkscape when the LaTeX compiles (shell escape; Overleaf has both)', { files: what }) : what;
+    }
     const m = TD.srcMap(raw);
     tikzText = m.text; tikzSpans = m.spans;
     // what would stop pdflatex: mostly TikZ code kept as written (imported or typed in a code object)
     const L = TD.lint ? TD.lint(tikzText, { preview: false }).filter((d: any) => d.sev !== 'info') : [];
     tikzErr = new Map();
     for (const d of L) tikzErr.set(d.line, [...(tikzErr.get(d.line) || []), d.msg]);
-    $('#tikzLint').innerHTML = `<div class="lint warn">${NO_RESTORE}</div>` + (L.length ? TD.lint.html(L) : '');
+    $('#tikzLint').innerHTML = `<div class="lint warn">${esc(noRestore())}</div>` + (L.length ? TD.lint.html(L) : '');
     paintTikz();
   }
   // a click on a line selects what it draws (⇧ adds); dragging across lines selects text as usual
@@ -5337,7 +5807,7 @@ import { runtime as TD } from '../runtime';
     finishEdit(); finishPoly(); commit();
     $('#tikzScope').style.display = state.mode === 'page' ? 'none' : '';
     if (state.mode !== 'page') $('#tikzScope').value = scope || (state.mode === 'document' ? 'doc' : $('#tikzScope').value === 'doc' ? 'pic' : $('#tikzScope').value);
-    const ttl = $('#modal .modal-head strong'); if (ttl) ttl.textContent = state.mode === 'page' ? 'LaTeX for This Page' : 'LaTeX Code';
+    const ttl = $('#modal .modal-head strong'); if (ttl) ttl.textContent = caption(state.mode === 'page' ? captions["ui.latex.for.this.page"] : captions["ui.latex.code.variant1"]);
     $('#tikzSelOnly').checked = false;
     genTikz();
     $('#modal').hidden = false;
@@ -5351,8 +5821,8 @@ import { runtime as TD } from '../runtime';
   $('#tikzSelOnly').onchange = genTikz;
   $('#tikzCopy').onclick = async () => {
     try { await navigator.clipboard.writeText(tikzText); } catch (e: any) { const t = document.createElement('textarea'); t.value = tikzText; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
-    $('#tikzCopy').textContent = 'Copied';
-    setTimeout(() => ($('#tikzCopy').textContent = 'Copy'), 1200);
+    $('#tikzCopy').textContent = uiText("ui.copied", 'Copied');
+    setTimeout(() => ($('#tikzCopy').textContent = uiText("ui.copy", 'Copy')), 1200);
     taken();
   };
   $('#tikzDownload').onclick = () => { out(slug() + '.tex', tikzText, 'text/x-tex'); taken(); };
@@ -5377,9 +5847,9 @@ import { runtime as TD } from '../runtime';
     if (zipMenu) { closeZipMenu(); return; }
     const m = document.createElement('div');
     m.className = 'ctx zip-menu'; m.setAttribute('role', 'menu');
-    const row = (act: string, label: string, title: string) => `<button class="ctx-item" role="menuitem" data-zip="${act}" title="${title}"><span class="lb">${label}</span></button>`;
-    m.innerHTML = row('ink', 'Download .zip: SVG through Inkscape', 'The SVGs as they are: the svg package has Inkscape convert them when the LaTeX compiles. Needs shell escape and Inkscape; Overleaf has both.')
-      + row('pdf', 'Download .zip: SVG as PDF, no Inkscape', 'Each SVG also comes as a vector PDF made here, and the LaTeX tells the svg package to use it instead of calling Inkscape. Compiles with plain pdflatex.');
+    const row = (act: string, label: string, title: string) => `<button class="ctx-item" role="menuitem" data-zip="${act}" title="${esc(title)}"><span class="lb">${esc(label)}</span></button>`;
+    m.innerHTML = row('ink', uiText('tikz.zip.ink', 'Download .zip: SVG through Inkscape'), uiText('tikz.zip.ink.title', 'The SVGs as they are: the svg package has Inkscape convert them when the LaTeX compiles. Needs shell escape and Inkscape; Overleaf has both.'))
+      + row('pdf', uiText('tikz.zip.pdf', 'Download .zip: SVG as PDF, no Inkscape'), uiText('tikz.zip.pdf.title', 'Each SVG also comes as a vector PDF made here, and the LaTeX tells the svg package to use it instead of calling Inkscape. Compiles with plain pdflatex.'));
     m.addEventListener('click', async (e) => {
       const b = (e.target as Element).closest<HTMLElement>('[data-zip]');
       if (!b) return;
@@ -5460,12 +5930,13 @@ import { runtime as TD } from '../runtime';
     '- \\textbf{Export} saves a PNG, SVG or PDF. ' + key('Mod+P') + ' prints.',
   ].join('\n');
   function sampleBlocks() {
-    return [
+    return applyWelcomeEdits([
       { type: 'text', text: SAMPLE_INTRO },
       { type: 'diagram', shapes: sample() },
       { type: 'diagram', shapes: sampleMore() },
       { type: 'text', text: SAMPLE_OUTRO },
-    ];
+      ...exampleDiagramBlocks(uid),
+    ], uid);
   }
   function sample() {
     const s: any[] = [], D = { ...state.defaults, stroke: '#000000', color: '#000000', size: 'normalsize' };
@@ -5571,7 +6042,7 @@ import { runtime as TD } from '../runtime';
       if (hasSheet && hasBlocks) {
         const id = uid();
         store.set(LS_DOC + id, { kind: 'page', name: (d.name || 'Untitled') + ' (page)', page: d.page, sheet: d.sheet, view: (d.views || {}).page, mode: 'page' });
-        idx.push({ id, name: (d.name || 'Untitled') + ' (page)', kind: 'page', updated: Date.now() });
+        idx.push({ id, name: (d.name || 'Untitled') + ' (page)', kind: 'page', updated: Date.now(), created: Date.now() });
       }
       it.kind = hasSheet && !hasBlocks ? 'page' : 'classic';
       if (it.kind === 'page') { d.view = (d.views || {}).page || (d.mode === 'page' ? d.view : null); d.mode = 'page'; }
@@ -5590,7 +6061,7 @@ import { runtime as TD } from '../runtime';
     const id = state.docId, d: any = store.get<Record<string, any> | null>(LS_DOC + id, null);
     if (!id || !d || editing || drag) return;
     if (autosave.isDirty()) {
-      if (warnedConflict !== id) { warnedConflict = id; showHint('This file was also changed in another tab. Your changes here will replace those when saved.', 6000); }
+      if (warnedConflict !== id) { warnedConflict = id; showHint(uiText('hint.conflict', 'This file was also changed in another tab. Your changes here will replace those when saved.'), 6000); }
       return;
     }
     const kind = normKind(d.kind);
@@ -5607,6 +6078,7 @@ import { runtime as TD } from '../runtime';
 
   // ---------------- init ----------------
   async function init() {
+    await labelFontsReady;
     await TD.files.ready; // which files are linked to files on disk
     if (DS) {
       await DS.ready;
@@ -5622,19 +6094,21 @@ import { runtime as TD } from '../runtime';
     }
     const prefs: any = store.get(LS_PREFS, null);
     if (prefs) {
+      const savedGridStyle = prefs.gridStyle || prefs.gridStyles?.diagram;
+      if (GRID_STYLES.includes(savedGridStyle)) state.gridStyle = savedGridStyle;
       state.grid = prefs.grid ?? true; state.snap = prefs.snap ?? true;
       if (prefs.gridCm >= 0.05 && prefs.gridCm <= 5) state.gridCm = prefs.gridCm;
       Object.assign(state.defaults, prefs.defaults || {});
       if (prefs.sidebar === false) document.body.classList.add('no-files');
       if (prefs.props === false) setPropsOpen(false);
-      if (prefs.layers === false) { $('#layersWin').classList.add('collapsed'); $('#layersToggle').setAttribute('aria-expanded', 'false'); $('#layersToggle').title = 'Expand panel'; }
+      if (prefs.layers === false) { $('#layersWin').classList.add('collapsed'); $('#layersToggle').setAttribute('aria-expanded', 'false'); $('#layersToggle').title = uiText('panel.expand', 'Expand panel'); }
     }
     // The document list folds open and shut (CSS). The drawing stays where it is on screen, at the same
     // scale: as the canvas's left edge moves, the view moves the other way by as much, so the list just
     // covers or uncovers the drawing's left side. It draws once at the new size when the fold ends.
     let filesAnim = 0, canvasLeft = 0;
     const holdView = () => {
-      if (state.mode === 'document') return;
+      if (state.mode === 'document' || inTool()) return;
       const l = stageSize().left;
       state.view.x -= (canvasLeft - l) / state.view.zoom;
       canvasLeft = l;
@@ -5644,7 +6118,7 @@ import { runtime as TD } from '../runtime';
     // A top bar too narrow for its controls scrolls sideways; a plain mouse wheel scrolls it too, and the
     // side with more to see fades (more-l / more-r).
     {
-      const bar = $('#topbar');
+      const bar = $('#topbarTools') || $('#topbar');
       const edges = () => {
         const max = bar.scrollWidth - bar.clientWidth;
         bar.classList.toggle('more-l', bar.scrollLeft > 1);
@@ -5653,7 +6127,7 @@ import { runtime as TD } from '../runtime';
       bar.addEventListener('scroll', edges, { passive: true });
       const ro = new ResizeObserver(edges);
       ro.observe(bar);
-      for (const c of bar.children) ro.observe(c); // the name field and hidden groups change the content's width
+      for (const c of bar.children) ro.observe(c); // hidden groups change the content's width
       bar.addEventListener('wheel', (e: any) => {
         if (bar.scrollWidth <= bar.clientWidth || Math.abs(e.deltaX) >= Math.abs(e.deltaY) || e.ctrlKey) return;
         bar.scrollLeft += e.deltaY;
@@ -5663,7 +6137,7 @@ import { runtime as TD } from '../runtime';
     }
     $('#propsHead').onclick = () => { setPropsOpen($('#propsWin').classList.contains('collapsed'), true); savePrefs(); };
     $('#btnSidebar').onclick = () => {
-      const b = document.body, done = () => { if (state.mode !== 'document') render(); else TD.docview.render(); };
+      const b = document.body, done = () => { if (inTool()) return; if (state.mode !== 'document') render(); else TD.docview.render(); };
       cancelAnimationFrame(filesAnim);
       if (state.mode !== 'document') canvasLeft = stageSize().left;
       const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -5699,11 +6173,10 @@ import { runtime as TD } from '../runtime';
     if (!state.docId) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); } // a broken link and no files
     setTool('select');
     updateTopbar();
-    // KaTeX fonts change metrics once loaded: re-measure.
-    if (document.fonts) {
-      document.fonts.ready.then(() => { TD.clearTextCache(); render(); });
-      document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { TD.clearTextCache(); render(); });
-    }
+    // init awaits labelFontsReady before measuring any drawing. UI and editor
+    // fonts can load later; they must not invalidate the drawing's text caches.
+    // In particular, inserting formula styles can emit further loadingdone
+    // events, turning a blanket font listener into a full-document redraw loop.
   }
   window.addEventListener('beforeunload', (e) => {
     commit(); saveNow();
@@ -5712,15 +6185,106 @@ import { runtime as TD } from '../runtime';
   });
   // a tab put away (or closed on a phone, where beforeunload may not come) saves what it has
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { commit(); if (state.docId) saveNow(); } });
-  // Switching the maths engine re-measures every text box, so redraw whatever view is open.
+  // Sidebar previews are exports of the current model, without canvas hit areas.
+  // Stage them separately so offscreen/cull-excluded objects also update without
+  // rebuilding the entire Properties or Layers panel (and losing input focus).
+  function renderSidebarMath(id: string): void {
+    const shape = byId(id); if (!shape) return;
+    const escaped = CSS.escape(id);
+    const pages = document.querySelectorAll<HTMLElement>(`#props [data-thumb-id="${escaped}"]`);
+    const layers = shape.type === 'text' ? [] : document.querySelectorAll<HTMLElement>(`#layers .ly-row[data-id="${escaped}"] .ly-th`);
+    const pending: number[] = [];
+    if (pages.length) {
+      const html = fillDefsAround(() => TYPES[shape.type].svg(shape, { zoom: 1, hit: 0, export: true, scene: shapes() }));
+      for (const target of pages) { updateSvg(target, html); target.classList.remove('math-pending'); }
+      pending.push(...pendingDependencies(html));
+    }
+    if (layers.length) {
+      thumbs.delete(id); const html = thumb(shape);
+      for (const target of layers) { updateSvg(target, html); target.classList.remove('math-pending'); }
+      pending.push(...pendingDependencies(html));
+    }
+    if (pending.length) sidebarPending.set(id, pending); else sidebarPending.delete(id);
+  }
+  function captureMathPriorities(): void {
+    capturedMathPriorities.clear();
+    if (inTool() || state.mode === 'document') return;
+    const viewport = svg.getBoundingClientRect(), onScreen = new Set<string>();
+    for (const element of (content as Element).querySelectorAll<SVGGElement>(':scope > [data-id]')) {
+      const rect = element.getBoundingClientRect();
+      if (rect.right >= viewport.left && rect.left <= viewport.right && rect.bottom >= viewport.top && rect.top <= viewport.bottom) onScreen.add(element.dataset.id!);
+    }
+    const G = state.mode === 'page' ? pageGeom() : null, current = G ? currentPage() : -1;
+    // Snapshot the old engine's measured geometry before clearing its caches.
+    // Page membership must not depend on whether thumbnails are mounted.
+    TD.withCachedGeometry(() => TD.math.preview(() => {
+      for (const shape of shapes()) {
+        let rank = onScreen.has(shape.id) ? 0 : 2;
+        if (rank && G) { try { if (pageOf(shape, G) === current) rank = 1; } catch { /* an incomplete edit keeps background priority */ } }
+        capturedMathPriorities.set(shape.id, rank);
+      }
+    }, true));
+  }
+  function prioritizeCurrentView(): void {
+    mathPriorities.clear();
+    for (const [id, rank] of capturedMathPriorities) mathPriorities.set(id, rank);
+    capturedMathPriorities.clear();
+    const scene = shapes();
+    // Request visible/current-page dependencies before any top-to-bottom bounds
+    // or sidebar pass. Other shapes remain deferred to the ordinary renderer.
+    TD.math.preview(() => {
+      for (const shape of [...scene].filter(s => !s.hidden && mathPriorities.get(s.id)! < 2).sort((a, b) => mathPriorities.get(a.id)! - mathPriorities.get(b.id)!)) {
+        const rank = mathPriorities.get(shape.id)!;
+        try {
+          const html = TD.math.withPriority(rank, () => fillDefsAround(() => TYPES[shape.type].svg(shape, { zoom: 1, hit: 0, export: true, scene })));
+          TD.math.prioritize(pendingDependencies(html), rank);
+        } catch { /* the ordinary renderer handles incomplete edits */ }
+      }
+    });
+  }
+  function stageSidebarMath(): void {
+    const ids = new Set<string>();
+    for (const target of document.querySelectorAll<HTMLElement>('#props [data-thumb-id], #layers .ly-th')) {
+      if (!target.querySelector('image.svg-label')) continue;
+      const id = target.dataset.thumbId || (target.closest('[data-id]') as HTMLElement)?.dataset.id;
+      if (id) { ids.add(id); target.querySelectorAll('image.svg-label').forEach(image => image.classList.add('math-pending')); }
+    }
+    if (!ids.size) return;
+    const list = [...ids].sort((a, b) => (mathPriorities.get(a) ?? 2) - (mathPriorities.get(b) ?? 2)), docId = state.docId, engine = TD.math.engine, version = sidebarVersion;
+    let index = 0;
+    TD.math.trackView(new Promise<void>(resolve => {
+      const step = () => {
+        if (version !== sidebarVersion || state.docId !== docId || TD.math.engine !== engine || inTool()) { resolve(); return; }
+        try { TD.math.preview(() => {
+          for (let n = 0; n < 2 && index < list.length; n++) {
+            const id = list[index++]; TD.math.withPriority(mathPriorities.get(id) ?? 2, () => renderSidebarMath(id));
+          }
+        }); } catch (error) { resolve(); throw error; }
+        if (index < list.length) requestAnimationFrame(step); else resolve();
+      };
+      requestAnimationFrame(step);
+    }));
+  }
+  TD.math.onProgress(() => TD.math.preview(() => {
+    if (inTool()) { changedMathShapes.clear(); return; }
+    mathProgressPainting = true;
+    try { if (state.mode === 'document') TD.docview?.renderProgress(); else render(); } finally { mathProgressPainting = false; }
+    for (const id of changedMathShapes) renderSidebarMath(id);
+    changedMathShapes.clear();
+  }));
+  TD.math.onBeforeChange(captureMathPriorities);
   TD.math.onChange(() => {
-    if (state.mode === 'document') { if (TD.docview) TD.docview.render(); }
-    else render();
-    renderProps();
-    showHint(`Maths now rendered with ${TD.math.ENGINES[TD.math.engine].name}`, 1400);
+    sidebarPending.clear(); changedMathShapes.clear();
+    if (inTool()) return;
+    if (state.mode === 'document') TD.docview?.beginEngineChange(); else { prioritizeCurrentView(); render(); }
+    thumbs.clear(); stageSidebarMath();
+    showHint(TD.math.pending ? uiText('engine.loading', 'Rendering {name}… You can keep editing.', { name: TD.math.ENGINES[TD.math.engine].name }) : uiText('hint.mathEngine', 'Maths now rendered with {name}', { name: TD.math.ENGINES[TD.math.engine].name }), 1400);
   });
+  TD.math.onReadiness(updateOutputAvailability);
   TD.state = state; // for debugging
   TD.app = {
+    outputReady, outputAllowed, updateOutputAvailability,
+    cancelMathViews: () => { sidebarVersion++; sidebarPending.clear(); changedMathShapes.clear(); mathPriorities.clear(); },
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
     parseProject, projectJson, // project files, for the tests
     recovery, restoreRecovery, openRecoveryCopy, // recovery copies, for the tests
@@ -5732,7 +6296,8 @@ import { runtime as TD } from '../runtime';
     get slug() { return slug(); },
     // pictures of shapes that are not on the canvas (Quick): a standalone SVG, or a PNG at `dpi`
     svgOf: (list: any) => shapesSvg(list, 4),
-    async pngOf(list: any, dpi: any, transparent: any) {
+    async pngOf(list: any, dpi: any, transparent: any, objectOnly = false) {
+      if (!outputReady(objectOnly ? list : undefined)) throw new Error(outputWait());
       const b = TD.bboxOf(list.flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }), 4);
       const inner = shapesSvg(list, 4, false).replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
       return pngWithDpi(await rasterise({ vb: [b.x, b.y, b.w, b.h], inner }, transparent, dpi), dpi);
@@ -5755,5 +6320,21 @@ import { runtime as TD } from '../runtime';
     if (q) { if (TD.quick) setQuick(true); else document.addEventListener('DOMContentLoaded', () => setQuick(true), { once: true }); }
     let t = null; try { t = localStorage.getItem(TABLE_KEY); } catch (e: any) { /* storage blocked */ }
     if (t && !q) { if (TD.tableWs) setTable(true); else document.addEventListener('DOMContentLoaded', () => setTable(true), { once: true }); }
+    // Refresh controller-owned UI captions too. This does not commit or alter document content.
+    // AppShell's reactive titles update on the same change: the ones this file sets from state are put back after it
+    let localeRun = false;
+    onLocale(() => {
+      renderDocList(); updateStatus();
+      if (!localeRun) { localeRun = true; return; }
+      setTimeout(() => {
+        showSaveState(); updateTopbar(); updatePageNav();
+        for (const id of ['#propsToggle', '#layersToggle']) {
+          const b = $(id);
+          if (b) b.title = b.getAttribute('aria-expanded') === 'false' ? uiText('panel.expand', 'Expand panel') : caption(captions["ui.collapse.panel"]);
+        }
+        layersKey = ''; renderLayers(); renderProps();
+        if (!expPop.hidden) renderExpPop();
+      });
+    });
   });
 })();

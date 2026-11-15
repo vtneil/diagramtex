@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t, message as msg, type Message } from '../../i18n';
 import { panelServices } from '../../domain/bloch.ts';
 const { layout, colorsOf, r2, lengthPt, UNITS, num, states, setEnvKey, setColor, stateCode, cut, fullCode } = panelServices;
 
@@ -10,7 +11,7 @@ TD.panels.bloch = {
         src: s.src,
         radius: r2(lengthPt(o.radius) / UNITS.cm), tilt: num(o.tilt), rotation: num(o.rotation),
         ball: ['3d', 'circle'].includes(o.ball) ? o.ball : 'none',
-        colours: [['ball', 'Ball'], ['lines', 'Lines'], ['states', 'States'], ['labels', 'Labels']]
+        colours: ([['ball', msg('bloch.ball', 'Ball')], ['lines', msg('bloch.lines', 'Lines')], ['states', msg('bloch.states', 'States')], ['labels', msg('ui.labels', 'Labels')]] as [string, Message][])
           .map(([key, name]) => ({ key, name, value: C[key], label: TD.texColor.label(C[key]), swatch: TD.texColor.swatch(C[key]) })),
         states: states(s.src).map((x: any) => ({ name: x.name, label: x.label ? x.label.math : '', theta: x.theta, phi: x.phi })),
         warnings: L.warnings,
@@ -75,7 +76,7 @@ TD.panels.bloch = {
       }
       if (act !== 'copybloch') return;
       const txt = fullCode(s.src) + '\n';
-      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt('blochsphere Code', txt, { multiline: true, readonly: true, message: 'Copying failed: select the code and copy it yourself.', ok: 'Done', cancel: null }));
-      return 'Copied blochsphere code';
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt(t('model.blochsphere.code', 'blochsphere Code'), txt, { multiline: true, readonly: true, message: t('model.copyFailed', 'Copying failed: select the code and copy it yourself.'), ok: t('ui.done', 'Done'), cancel: null }));
+      return t('model.copied.blochsphere.code', 'Copied blochsphere code');
     },
   };

@@ -140,6 +140,11 @@ import { runtime as TD } from '../../runtime';
     ov.className = 'tx-hl';
     ov.setAttribute('aria-hidden', 'true');
     el.after(ov);
+    // the copy and the caret take the field's own text colour (read before it goes transparent): a field on
+    // the paper (a Table cell, a label) keeps black text in dark mode, where the interface ink is light
+    const ink = getComputedStyle(el).color;
+    ov.style.color = ink;
+    el.style.setProperty('--tx-ink', ink);
     el.classList.add('tx-hl-on');
     last = null;
     tick();
@@ -147,7 +152,7 @@ import { runtime as TD } from '../../runtime';
   function detach() {
     cancelAnimationFrame(raf);
     if (ov) ov.remove();
-    if (ta) ta.classList.remove('tx-hl-on');
+    if (ta) { ta.classList.remove('tx-hl-on'); ta.style.removeProperty('--tx-ink'); }
     ta = ov = null;
   }
   function tick() {

@@ -1,3 +1,4 @@
+import { labelImage } from '../label-image';
 // Table model → a picture, laid out the way LaTeX sets the table: column widths from the widest cell (or the
 // width given), \tabcolsep on both sides of each column, rows at least \arraystretch × the baseline, booktabs
 // rules with their space above and below, numbers aligned on the decimal marker. Drawn as SVG with the app's
@@ -258,5 +259,11 @@ function fo(text: string, st: any, color: string, x: number, y: number, w: numbe
   const b = TD.textBox(text, st);
   const ns = ctx.export ? ' xmlns="http://www.w3.org/1999/xhtml"' : '';
   const html = ctx.export ? TD.math.forXml(b.html) : b.html;
+  if (/<math\b|class="td-math/.test(b.html)) {
+    const width = r2(Math.max(w, b.w)), height = r2(Math.max(h, b.h));
+    const pending = TD.math.isPending(b.html), html = TD.math.cleanPreview(b.html);
+    const image = labelImage(/class="katex(?:\s|")/.test(html) ? 'katex' : /class="td-math/.test(html) ? 'temml' : TD.math.engine, html, b.css, color, width, height, align);
+    return `<image class="svg-label${pending ? ' math-pending' : ''}"${pending ? ` data-math-pending="${TD.math.pendingIds(b.html).join(',')}"` : ''} x="${r2(x) + image.x}" y="${r2(y) + image.y}" width="${image.width}" height="${image.height}" href="${image.href}" aria-label="${escAttr(text)}"/>`;
+  }
   return `<foreignObject x="${r2(x)}" y="${r2(y)}" width="${r2(Math.max(w, b.w))}" height="${r2(Math.max(h, b.h))}" style="overflow:visible;font-size:0;text-align:${align}"><div${ns} class="tx" style="${escAttr(b.css)}color:${color};text-align:${align}">${html}</div></foreignObject>`;
 }

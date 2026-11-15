@@ -18,6 +18,24 @@
         throw new Error(`${msg ? msg + ': ' : ''}values differ at character ${i}\n  got:      …${A.slice(Math.max(0, i - 60), i + 120)}\n  expected: …${B.slice(Math.max(0, i - 60), i + 120)}`);
       }
     },
+    // Gecko creates a separate clipboard for synthetic ClipboardEvents. Supply
+    // the fixture explicitly, so these handler tests exercise identical data in every engine.
+    clipboardEvent(type, { clipboardData, ...options }) {
+      const event = new ClipboardEvent(type, options);
+      Object.defineProperty(event, 'clipboardData', { value: clipboardData });
+      return event;
+    },
+    async expectInlineHandlerCsp(action) {
+      const name = cur.name;
+      await window.__testInlineHandlerCsp('begin', name);
+      try {
+        const result = await action();
+        // Allow parser/image callbacks and their console events to finish while
+        // the scope is active; the caller checks that no handler executed.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        return result;
+      } finally { await window.__testInlineHandlerCsp('end', name); }
+    },
     golden(name, text) { cur.goldens.push({ name, text }); },
     tex(name, src, files) { cur.tex.push({ name, src, files: files || null }); },
     // a shape of `type` with the app's defaults, at (x, y) in cm
@@ -32,7 +50,7 @@
         if (filter && !t.name.includes(filter)) continue;
         cur = { name: t.name, ok: true, err: null, goldens: [], tex: [] };
         const t0 = performance.now();
-        try { await t.fn(); } catch (e) { cur.ok = false; cur.err = (e && e.stack) || String(e); }
+        try { await t.fn(); } catch (e) { cur.ok = false; cur.err = e?.stack ? (e.stack.includes(e.message) ? e.stack : `${e.name}: ${e.message}\n${e.stack}`) : String(e); }
         cur.ms = Math.round(performance.now() - t0);
         out.push(cur);
       }

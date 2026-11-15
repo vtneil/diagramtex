@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { consoleErrors } from './console-errors.mjs';
+const csp = "Executing inline event handler violates the following Content Security Policy directive 'script-src 'self''. The action has been blocked.";
+const errors = consoleErrors();
+errors.record(csp);
+assert.equal(errors.logs.length, 1, 'CSP outside the declared test still fails');
+errors.beginInlineHandlerCsp('hostile HTML import');
+errors.record('ordinary application error');
+errors.record("Executing inline script violates the following Content Security Policy directive 'script-src'. The action has been blocked.");
+errors.record(csp);
+errors.record(csp);
+assert.equal(errors.expected.length, 1, 'only one explicitly expected rejection is consumed');
+assert.equal(errors.logs.length, 4, 'unrelated errors, other CSP violations and duplicates still fail');
+assert.throws(() => errors.beginInlineHandlerCsp('nested'));
+assert.throws(() => errors.endInlineHandlerCsp('wrong test'));
+errors.endInlineHandlerCsp('hostile HTML import');
+errors.record(csp);
+assert.equal(errors.logs.length, 5, 'expectation ends with its test');
+errors.beginInlineHandlerCsp('inert parser');
+errors.endInlineHandlerCsp('inert parser'); // some browsers emit no diagnostic
+console.log('Scoped console expectations: unrelated, out-of-scope and duplicate errors remain fatal');

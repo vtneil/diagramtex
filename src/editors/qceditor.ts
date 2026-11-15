@@ -1,3 +1,6 @@
+import { isSwapGate, boundedSpan } from './qc-span';
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { onLocale, t } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { row, section } from '../ui/forms';
@@ -43,9 +46,11 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     svg(g: any, del: any, hover: any, names: any) {
       if (!g || !g.R || !g.C) return '';
       const { sx, sy, R, C } = g, rx = r2(g.left - GUT / 2 - 2), cy = r2(g.top - GUT / 2 - 2);
-      const bin = (x: any, y: any, on: any, title: any) => `<g class="qe-del${on ? ' on' : ''}" transform="translate(${x},${y})"><title>${title}</title><circle r="9"/><svg x="-6" y="-6" width="12" height="12" viewBox="0 0 20 20"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/></svg></g>`;
-      const row = (i: any, on: any) => bin(rx, r2((sy[i] + sy[i + 1]) / 2), on, `Delete ${names[0]} ${i + 1}`);
-      const col = (i: any, on: any) => bin(r2((sx[i] + sx[i + 1]) / 2), cy, on, `Delete ${names[1]} ${i + 1}`);
+      const bin = (x: any, y: any, on: any, title: any) => `<g class="qe-del${on ? ' on' : ''}" transform="translate(${x},${y})"><title>${esc(title)}</title><circle r="9"/><svg x="-6" y="-6" width="12" height="12" viewBox="0 0 20 20"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/></svg></g>`;
+      // names: a whole title with {n} for the number ("Delete wire {n}"), or just the noun ("wire")
+      const name = (k: number, i: number) => (/\{n\}/.test(names[k]) ? names[k].replace('{n}', String(i + 1)) : `Delete ${names[k]} ${i + 1}`);
+      const row = (i: any, on: any) => bin(rx, r2((sy[i] + sy[i + 1]) / 2), on, name(0, i));
+      const col = (i: any, on: any) => bin(r2((sx[i] + sx[i + 1]) / 2), cy, on, name(1, i));
       if (del) {
         const band = del.kind === 'row'
           ? `<rect class="qe-delband" x="${r2(sx[0])}" y="${r2(sy[del.i])}" width="${r2(sx[C] - sx[0])}" height="${r2(sy[del.i + 1] - sy[del.i])}"/>`
@@ -69,6 +74,31 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     metercw: 'Meter to classical', inputD: 'Input (D)', trash: 'Discard', permute: 'Permutation', makeebit: 'Entangled pair', phantomgate: 'Space', hphantomgate: 'Space',
     linethrough: 'Line through', ghost: 'Height of', gateinput: 'Gate input', gateoutput: 'Gate output', wave: 'Wave', wireoverride: 'Wire override',
   };
+  // an element's or palette item's name as shown (the tables keep the English, which search also matches;
+  // gate names such as Hadamard, CNOT or Pauli X stay as they are)
+  const say = (en: string): string => (({
+    Gate: () => t('editor.qc.n.gate', 'Gate'), Meter: () => t('editor.qc.n.meter', 'Meter'), 'Measurement (D)': () => t('editor.qc.n.measurementD', 'Measurement (D)'),
+    'Measurement tab': () => t('editor.qc.n.measuretab', 'Measurement tab'), Measurement: () => t('editor.qc.n.measurement', 'Measurement'), Control: () => t('editor.qc.n.control', 'Control'),
+    'Open control': () => t('editor.qc.n.octrl', 'Open control'), 'Control (no line)': () => t('editor.qc.n.controlNoLine', 'Control (no line)'), 'Open control (no line)': () => t('editor.qc.n.ocontrolNoLine', 'Open control (no line)'),
+    Target: () => t('editor.qc.n.target', 'Target'), 'Swap end': () => t('editor.qc.n.swapEnd', 'Swap end'), Swap: () => t('editor.qc.n.swap', 'Swap'), Phase: () => t('editor.qc.n.phase', 'Phase'),
+    Text: () => t('ui.text', 'Text'), 'Middle label': () => t('editor.qc.n.midstick', 'Middle label'), 'Input label': () => t('editor.qc.n.lstick', 'Input label'), 'Output label': () => t('editor.qc.n.rstick', 'Output label'),
+    Ground: () => t('editor.qc.n.ground', 'Ground'), Bundle: () => t('editor.qc.n.bundle', 'Bundle'), Slice: () => t('editor.qc.n.slice', 'Slice'), Group: () => t('editor.qc.group', 'Group'),
+    'Wire type': () => t('editor.qc.n.wiretype', 'Wire type'), 'Meter to classical': () => t('editor.qc.n.metercw', 'Meter to classical'), 'Input (D)': () => t('editor.qc.n.inputD', 'Input (D)'),
+    Discard: () => t('editor.qc.n.trash', 'Discard'), Permutation: () => t('editor.qc.n.permute', 'Permutation'), 'Entangled pair': () => t('editor.qc.n.ebit', 'Entangled pair'), Space: () => t('editor.qc.n.space', 'Space'),
+    'Line through': () => t('editor.qc.n.linethrough', 'Line through'), 'Height of': () => t('editor.qc.n.ghost', 'Height of'), 'Gate input': () => t('editor.qc.n.gateinput', 'Gate input'),
+    'Gate output': () => t('editor.qc.n.gateoutput', 'Gate output'), Wave: () => t('editor.qc.n.wave', 'Wave'), 'Wire override': () => t('editor.qc.n.wireoverride', 'Wire override'),
+    'Gate U': () => t('editor.qc.n.gateU', 'Gate {name}', { name: 'U' }), 'Two-wire gate': () => t('editor.qc.n.u2', 'Two-wire gate'), 'Swap gate': () => t('editor.qc.n.swapg', 'Swap gate'),
+    'Controlled Z': () => t('editor.qc.n.controlled', 'Controlled {name}', { name: 'Z' }), 'Controlled U': () => t('editor.qc.n.controlled', 'Controlled {name}', { name: 'U' }),
+    'Input |0⟩': () => t('editor.qc.n.input', 'Input {ket}', { ket: '|0⟩' }), 'Classical from here': () => t('editor.qc.n.wc', 'Classical from here'), 'Quantum from here': () => t('editor.qc.n.wq', 'Quantum from here'),
+    'No wire from here': () => t('editor.qc.n.wn', 'No wire from here'), 'Wire down': () => t('editor.qc.n.vqw', 'Wire down'), 'Classical wire down': () => t('editor.qc.n.vcw', 'Classical wire down'),
+    'Label above': () => t('editor.qc.n.glabel', 'Label above'),
+  } as Record<string, () => string>)[en]?.() ?? en);
+  const catName = (en: string): string => (({
+    Gates: () => t('editor.qc.cat.gates', 'Gates'), Controls: () => t('editor.qc.cat.controls', 'Controls'), Measure: () => t('editor.qc.cat.measure', 'Measure'),
+    Labels: () => t('editor.qc.cat.labels', 'Labels'), Wires: () => t('editor.qc.cat.wires', 'Wires'), Annotations: () => t('editor.qc.cat.annotations', 'Annotations'),
+  } as Record<string, () => string>)[en]?.() ?? en);
+  const wiresText = (n: number) => (n === 1 ? t('editor.qc.oneWire', '1 wire') : t('editor.qc.nWires', '{n} wires', { n }));
+  const stepsText = (n: number) => (n === 1 ? t('editor.qc.oneStep', '1 step') : t('editor.qc.nSteps', '{n} steps', { n }));
   // palette: [key, name, cells: [[row offset, code]], shortcut]
   const PAL = [
     ['Gates', [
@@ -146,6 +176,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   const intArg = (v: any) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : 0; };
   // [wires=n] in an option list: read / write (1 drops it)
   function spanOf(it: any) {
+    if (isSwapGate(it, Q.opts)) return 2;
     if (!it.o.length) return 1;
     const o = Q.opts(it.o[0]);
     if (o.map.wires) return Math.max(1, intArg(o.map.wires));
@@ -154,6 +185,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   }
   function setSpan(it: any, n: any) {
     const list = it.o.length ? Q.opts(it.o[0]).list.filter((x: any) => !/^\d+$/.test(x) && !/^wires\s*=/.test(x)) : [];
+    if (isSwapGate(it, Q.opts)) n = 2;
     if (n > 1) list.unshift(String(n));
     if (list.length) it.o[0] = list.join(', '); else if (it.o.length > 1) it.o[0] = ''; else it.o.splice(0, 1);
   }
@@ -364,7 +396,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
         }
       }
     }
-    ensure(M, r2 + 1, c2 + 1);
+    ensure(M, r2 + spanAt(r1, c1), c2 + 1);
     const src = M.rows[r1][c1], dst = M.rows[r2][c2];
     const moved = JSON.parse(JSON.stringify(src));
     const shift = (cell: any, from: any, to: any) => {
@@ -401,11 +433,11 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     const q = search.value.trim().toLowerCase();
     let html = '';
     for (const [title, items] of PAL) {
-      const hits = (items as any).filter((it: any) => !q || `${it[1]} ${it[2].map((c: any) => c[1]).join(' ')} ${title}`.toLowerCase().includes(q));
+      const hits = (items as any).filter((it: any) => !q || `${it[1]} ${it[2].map((c: any) => c[1]).join(' ')} ${title} ${say(it[1])} ${catName(title as string)}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(name)}${key ? ` (${key})` : ''}" ><span class="qe-fig">${TD.qcMini(miniSrc(ITEM[k]), 1e3, 'var(--qe-paper)')}</span><span>${esc(name)}</span></button>`).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(catName(title as string))}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(say(name))}${key ? ` (${key})` : ''}" ><span class="qe-fig">${TD.qcMini(miniSrc(ITEM[k]), 1e3, 'var(--qe-paper)')}</span><span>${esc(say(name))}</span></button>`).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     // one scale for every drawing, so wires and gates keep the same weight; wide ones shrink to fit
     for (const m of list.querySelectorAll('.qcmini')) {
       const [, , w, h] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(1.5, 64 / w, 44 / h);
@@ -447,7 +479,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     if (s && !E.arm) { put(k, s.r1, s.c1, true); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${ITEM[k].name}: ${GROUPING.has(k) ? 'drag across the cells it should cover' : 'click a cell to place it'}. Esc when done.` : '');
+    setTip(E.arm ? (GROUPING.has(k) ? t('editor.qc.tip.armGroup', '{name}: drag across the cells it should cover. Esc when done.', { name: say(ITEM[k].name) }) : t('editor.qc.tip.arm', '{name}: click a cell to place it. Esc when done.', { name: say(ITEM[k].name) })) : '');
   }
   function put(k: any, r: any, c: any, step: any) {
     edit(() => place(k, r, c));
@@ -530,7 +562,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     const v = E.view, [sx, sy] = pos(e);
     E.fitted = false;
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.4, Math.min(6, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(0.4, Math.min(6, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -566,7 +598,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${R && C ? Q.draw({ ...G.s, x: G.L.bb.x, y: G.L.bb.y }, { paper: PAPER, export: true }) : ''}</g>`;
     // a group whose border isn't drawn (draw=none, a label above): its box outlined here only, never exported
     if (!G.empty && G.L.groups) for (const g of G.L.groups) if (g.bare) out += `<rect class="qe-gbare" x="${X(g.x)}" y="${Y(g.y)}" width="${r2(g.w * k)}" height="${r2(g.h * k)}" rx="${r2(g.rx * k)}"/>`;
-    if (G.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[1]) / 2)}" y="${Y(ys[0]) - 14}">Drop or click an element to start</text>`;
+    if (G.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[1]) / 2)}" y="${Y(ys[0]) - 14}">${esc(t('editor.qc.empty', 'Drop or click an element to start'))}</text>`;
     const box = (r1: any, c1: any, r2_?: any, c2?: any, cls?: any) => `<rect class="${cls}" x="${X(xs[c1])}" y="${Y(ys[r1])}" width="${r2((xs[c2 + 1] - xs[c1]) * k)}" height="${r2((ys[r2_ + 1] - ys[r1]) * k)}"/>`;
     const h = E.hover;
     if (h) {
@@ -600,18 +632,32 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       out += `<rect class="qe-gbox" x="${x1}" y="${y1}" width="${r2(x2 - x1)}" height="${r2(y2 - y1)}"/>`;
       // bars on the top and bottom edges: drag to reach up to earlier wires or down to later ones
       const bx = r2((x1 + x2) / 2 - 8);
-      out += `<rect class="qe-span" data-e="t" x="${bx}" y="${r2(y1 - 3)}" width="16" height="6" rx="2"/><rect class="qe-span" data-e="b" x="${bx}" y="${r2(y2 - 3)}" width="16" height="6" rx="2"/>`;
+      if (!gb.fixedSpan) out += `<rect class="qe-span" data-e="t" x="${bx}" y="${r2(y1 - 3)}" width="16" height="6" rx="2"/><rect class="qe-span" data-e="b" x="${bx}" y="${r2(y2 - 3)}" width="16" height="6" rx="2"/>`;
       out += `<rect class="qe-size" x="${r2(x2 - 4)}" y="${r2(y2 - 4)}" width="8" height="8"/>`;
     }
     // the delete gutters left of the wires and above the steps
     E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
-    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, ['wire', 'step']);
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, [t('editor.qc.deleteWireN', 'Delete wire {n}'), t('editor.qc.deleteStepN', 'Delete step {n}')]);
     // what is being dragged, under the pointer
     const dragKey = E.ghost && E.ghost.k, mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if (dragKey || mv) {
-      const src = dragKey ? miniSrc(ITEM[dragKey]) : `& ${cellText(at(E.drag.r, E.drag.c))} &`;
       const [gx, gy] = dragKey ? E.ghost.e : E.drag.e;
-      out += `<g class="qe-ghost" transform="translate(${gx + 12},${gy + 12})">${TD.qcMini(src, 34, PAPER)}</g>`;
+      let preview;
+      if (mv) {
+        // Crop the actual circuit drawing, preserving its spacing, size and style.
+        // Linked controls/targets and all wires of a tall gate travel in the preview.
+        const d = E.drag, rows = linkGroup(d.r, d.c);
+        const first = Math.min(d.r, ...rows), last = Math.min(R - 1, Math.max(d.r + spanAt(d.r, d.c) - 1, ...rows));
+        let x = G.xs[d.c], y = G.ys[first], right = G.xs[d.c + 1], bottom = G.ys[last + 1];
+        const gate = G.L.ops.find((o: any) => o.gate && o.gate[0] === d.r && o.gate[1] === d.c);
+        if (gate) { x = Math.min(x, gate.x - 2); y = Math.min(y, gate.y - 2); right = Math.max(right, gate.x + gate.w + 2); bottom = Math.max(bottom, gate.y + gate.h + 2); }
+        const w = right - x, h = bottom - y;
+        preview = `<svg class="qe-drag-preview" width="${r2(w * k)}" height="${r2(h * k)}" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}">${Q.draw({ ...G.s, x: G.L.bb.x, y: G.L.bb.y }, { paper: PAPER, export: true })}</svg>`;
+      } else {
+        const s = { ...G.s, src: miniSrc(ITEM[dragKey]) }, L = Q.layout(s);
+        preview = `<svg class="qe-drag-preview" width="${r2(L.bb.w * k)}" height="${r2(L.bb.h * k)}" viewBox="0 0 ${r2(L.bb.w)} ${r2(L.bb.h)}">${Q.draw({ ...s, x: 0, y: 0 }, { paper: PAPER, export: true })}</svg>`;
+      }
+      out += `<g class="qe-ghost" transform="translate(${gx + 12},${gy + 12})">${preview}</g>`;
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = out;
@@ -626,7 +672,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     if (!m || m.name !== 'gate') return null;
     const o = G.L.ops.find((o: any) => o.gate && o.gate[0] === s.r1 && o.gate[1] === s.c1);
     if (!o) return null;
-    return { x: o.x, y: o.y, w: o.w, h: o.h, fit: o.fit, multi: spanOf(m) > 1 };
+    return { x: o.x, y: o.y, w: o.w, h: o.h, fit: o.fit, multi: spanOf(m) > 1, fixedSpan: isSwapGate(m, Q.opts) };
   }
   // ---------------------------------------------------------------- pointer
   svg.addEventListener('pointerdown', (e: any) => {
@@ -691,7 +737,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       // back at (or below) the fitted size: auto again
       const wcm = w <= d.fit[0] + 2 ? 0 : snap(w / PX), hcm = d.multi ? gateSize(m).h : h <= d.fit[1] + 2 ? 0 : snap(h / PX);
       setGateSize(m, wcm, hcm); cell.dirty = true;
-      setTip(`Min width ${wcm ? wcm + ' cm' : 'auto'} · min height ${hcm ? hcm + ' cm' : 'auto'}`);
+      setTip(t('editor.qc.tip.size', 'Min width {w} · min height {h}', { w: wcm ? wcm + ' cm' : t('editor.qc.auto', 'auto'), h: hcm ? hcm + ' cm' : t('editor.qc.auto', 'auto') }));
       draw();
       // the panel follows live: size fields and the cell's code
       const gw = $('[data-f="gw"]', props), gh = $('[data-f="gh"]', props), cf = $('[data-f="code"]', props);
@@ -708,14 +754,14 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       if (b.r1 === d.b.r1 && b.c1 === d.b.c1 && b.r2 === d.b.r2 && b.c2 === d.b.c2) return;
       const from = at(d.b.r1, d.b.c1), to = at(b.r1, b.c1);
       if (to !== from) {
-        if (!to || to.opaque) { setTip('That cell is written as raw code: a group can\'t start there'); return; }
+        if (!to || to.opaque) { setTip(t('editor.qc.tip.rawCell', "That cell is written as raw code: a group can't start there")); return; }
         setItems(from, from.items.filter((q: any) => q !== d.it)); setItems(to, [...to.items, d.it]);
       }
       setGroupDims(d.it, b.r2 - b.r1 + 1, b.c2 - b.c1 + 1); to.dirty = true;
       d.b = b;
       const k = single();
       if (!k || k.r1 < b.r1 || k.r1 > b.r2 || k.c1 < b.c1 || k.c1 > b.c2) E.sel = { r1: b.r1, c1: b.c1, r2: b.r1, c2: b.c1 };
-      setTip(`Group · ${b.r2 - b.r1 + 1} wire${b.r2 > b.r1 ? 's' : ''} × ${b.c2 - b.c1 + 1} step${b.c2 > b.c1 ? 's' : ''}`);
+      setTip(`${t('editor.qc.group', 'Group')} · ${wiresText(b.r2 - b.r1 + 1)} × ${stepsText(b.c2 - b.c1 + 1)}`);
       draw();
       return;
     }
@@ -724,11 +770,16 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       const [, y] = toL(e), G = E.G, R = nR(E.M), c = d.c;
       let wire = 0, dist = Infinity;
       for (let i = 0; i < G.R; i++) { const dd = Math.abs(G.cy(i) - y); if (dd < dist) { dist = dd; wire = i; } }
+      if (d.edge === 'b' && y > G.cy(R - 1)) {
+        const pitch = R > 1 ? G.cy(R - 1) - G.cy(R - 2) : G.ys[1] - G.ys[0];
+        wire = R - 1 + Math.max(0, Math.round((y - G.cy(R - 1)) / Math.max(1, pitch)));
+      }
       // a cell with nothing but its wire (\qw, \cw) is free: the gate is drawn over it
       const free = (r: any) => wireOnly(at(r, c));
       if (d.edge === 'b') {
-        let lim = d.top; while (lim + 1 < R && (lim + 1 <= d.bot || free(lim + 1))) lim++;
+        const lim = d.top + boundedSpan(d.top, wire - d.top + 1, d.bot - d.top + 1, Math.max(R, wire + 1), free) - 1;
         d.bot = Math.max(d.top, Math.min(wire, lim));
+        ensure(E.M, d.bot + 1, c + 1);
       } else {
         let lim = d.top; while (lim - 1 >= 0 && free(lim - 1)) lim--;
         const top = Math.max(lim, Math.min(wire, d.bot));
@@ -736,7 +787,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       }
       const cell = at(d.top, c), m = mainOf(cell);
       setSpan(m, d.bot - d.top + 1); cell.dirty = true;
-      setTip(d.bot > d.top ? `Wires ${d.top + 1}–${d.bot + 1}` : `Wire ${d.top + 1}`);
+      setTip(d.bot > d.top ? t('editor.qc.tip.wires', 'Wires {from}–{to}', { from: d.top + 1, to: d.bot + 1 }) : t('editor.qc.tip.wire', 'Wire {n}', { n: d.top + 1 }));
       draw();
       const sf = $('[data-f="span"]', props), cf = $('[data-f="code"]', props);
       if (sf) sf.value = d.bot - d.top + 1; if (cf) cf.value = cellText(cell);
@@ -812,7 +863,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     const f = $(`[data-f="Gx${s.r1}_${s.c1}_${cell.items.indexOf(it)}"]`, props);
     if (f) { f.scrollIntoView({ block: 'nearest' }); f.focus({ preventScroll: true }); f.select(); }
   }
-  const mItem = (act: any, label: any, ic: any, key?: any, off?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|gdel)/.test(act) ? ' danger' : ''}" data-qm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, ic: any, key?: any, off?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|gdel)/.test(act) ? ' danger' : ''}" data-qm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -823,19 +874,19 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     if (!b || h.r < b.r1 || h.r > b.r2 || h.c < b.c1 || h.c > b.c2) E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c };
     draw(); renderProps();
     const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
-    menu.innerHTML = mItem('rowabove', 'Insert Wire Above', 'above') + mItem('rowbelow', 'Insert Wire Below', 'below') + '<hr>' +
-      mItem('colbefore', 'Insert Step Before', 'before') + mItem('colafter', 'Insert Step After', 'after') + '<hr>' +
-      mItem('colleft', nc > 1 ? `Move ${nc} Steps Left` : 'Move Step Left', 'left', '', s.c1 === 0) +
-      mItem('colright', nc > 1 ? `Move ${nc} Steps Right` : 'Move Step Right', 'right', '', s.c2 >= nC(E.M) - 1) + '<hr>' +
-      mItem('rowdel', nr > 1 ? `Delete ${nr} Wires` : 'Delete Wire', 'rowdel') + mItem('coldel', nc > 1 ? `Delete ${nc} Steps` : 'Delete Step', 'coldel') + '<hr>' +
-      mItem('delete', nr * nc > 1 ? 'Clear Cells' : 'Clear Cell', 'clear', 'Del');
+    menu.innerHTML = mItem('rowabove', t('editor.qc.menu.wireAbove', 'Insert Wire Above'), 'above') + mItem('rowbelow', t('editor.qc.menu.wireBelow', 'Insert Wire Below'), 'below') + '<hr>' +
+      mItem('colbefore', t('editor.qc.menu.stepBefore', 'Insert Step Before'), 'before') + mItem('colafter', t('editor.qc.menu.stepAfter', 'Insert Step After'), 'after') + '<hr>' +
+      mItem('colleft', nc > 1 ? t('editor.qc.menu.moveLeftN', 'Move {n} Steps Left', { n: nc }) : t('editor.qc.menu.moveLeft', 'Move Step Left'), 'left', '', s.c1 === 0) +
+      mItem('colright', nc > 1 ? t('editor.qc.menu.moveRightN', 'Move {n} Steps Right', { n: nc }) : t('editor.qc.menu.moveRight', 'Move Step Right'), 'right', '', s.c2 >= nC(E.M) - 1) + '<hr>' +
+      mItem('rowdel', nr > 1 ? t('editor.qc.menu.deleteWiresN', 'Delete {n} Wires', { n: nr }) : t('editor.qc.menu.deleteWire', 'Delete Wire'), 'rowdel') + mItem('coldel', nc > 1 ? t('editor.qc.menu.deleteStepsN', 'Delete {n} Steps', { n: nc }) : t('editor.qc.menu.deleteStep', 'Delete Step'), 'coldel') + '<hr>' +
+      mItem('delete', nr * nc > 1 ? t('editor.qc.menu.clearCells', 'Clear Cells') : t('editor.qc.menu.clearCell', 'Clear Cell'), 'clear', 'Del');
     // groups: frame or label the selection; delete any group whose box covers the clicked cell
     const gb = shownBox(s), anchor = at(s.r1, s.c1), here = groupsAt(h.r, h.c), many = (gb.r2 - gb.r1 + 1) * nc > 1;
-    let gh = mItem('gadd', many ? 'Group Selection' : 'Group Cell', 'group', '', !anchor || anchor.opaque) +
-      mItem('glabel', many ? 'Label Above Selection' : 'Label Above', 'glabel', '', !anchor || anchor.opaque);
+    let gh = mItem('gadd', many ? t('editor.qc.menu.groupSel', 'Group Selection') : t('editor.qc.menu.groupCell', 'Group Cell'), 'group', '', !anchor || anchor.opaque) +
+      mItem('glabel', many ? t('editor.qc.menu.labelAboveSel', 'Label Above Selection') : t('editor.qc.menu.labelAbove', 'Label Above'), 'glabel', '', !anchor || anchor.opaque);
     here.forEach((g) => {
-      const t = (g.it.a[0] || '').trim(), name = t ? `“${t.length > 24 ? t.slice(0, 23) + '…' : t}”` : '';
-      gh += mItem(`gdel:${g.r},${g.c},${g.i}`, here.length > 1 || name ? `Delete Group ${name}`.trim() : 'Delete Group', 'gdel');
+      const lb = (g.it.a[0] || '').trim(), name = lb ? `“${lb.length > 24 ? lb.slice(0, 23) + '…' : lb}”` : '';
+      gh += mItem(`gdel:${g.r},${g.c},${g.i}`, here.length > 1 || name ? t('editor.qc.menu.deleteGroupNamed', 'Delete Group {name}', { name }).trim() : t('editor.qc.menu.deleteGroup', 'Delete Group'), 'gdel');
     });
     menu.innerHTML = menu.innerHTML.replace(/<hr>(?=<button[^>]*data-qm="delete")/, '<hr>' + gh + '<hr>');
     menu.hidden = false;
@@ -1035,7 +1086,9 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     cell.dirty = true;
   }
 
-  const AT = [['top', 'Top'], ['bottom', 'Bottom'], ['both', 'Both']];
+  const AT = () => [['top', t('ui.top', 'Top')], ['bottom', t('editor.qc.bottom', 'Bottom')], ['both', t('editor.commonA.both', 'Both')]];
+  // a label field's name, as the panel shows it
+  const labelName = (en: string): string => (({ Label: () => t('ui.label', 'Label'), Angle: () => t('ui.angle', 'Angle'), Order: () => t('editor.qc.order', 'Order'), 'Width of': () => t('editor.qc.widthOf', 'Width of'), Text: () => t('ui.text', 'Text') } as Record<string, () => string>)[en]?.() ?? en);
 
   // ---------------------------------------------------------------- circuit-wide spacing
   // quantikz's row sep / column sep in the environment's options: a gap between rows (steps), or, with
@@ -1071,56 +1124,56 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     const one = (axis: string, label: string, pitch: string): FormRow[] => {
       const v = sepOf(axis);
       return [numField(label, `E${axis}`, v.cm ?? '', 'cm', { min: '0', step: '0.05', placeholder: v.cm == null && v.raw ? v.raw : v.between ? '' : '0.5' }),
-        { ...row('Measured', ...[['gap', 'Gap'], ['pitch', pitch]].map(([k, n]) => ({ kind: 'button' as const, text: n, attrs: { 'data-qe': 'sepmode', 'data-axis': axis, 'data-v': k, class: (k === 'pitch') === v.between ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' }];
+        { ...row(t('editor.qc.measured', 'Measured'), ...[['gap', t('editor.qc.gap', 'Gap')], ['pitch', pitch]].map(([k, n]) => ({ kind: 'button' as const, text: n, attrs: { 'data-qe': 'sepmode', 'data-axis': axis, 'data-v': k, class: (k === 'pitch') === v.between ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' }];
     };
-    return section('Circuit', [...one('row', 'Wire spacing', 'Wire to wire'), ...one('col', 'Step spacing', 'Step to step'), note('Gap: the space between rows, which grow with what they hold. Wire to wire: every wire the same distance from the next.')], 'sec');
+    return section(t('ui.circuit', 'Circuit'), [...one('row', t('editor.qc.wireSpacing', 'Wire spacing'), t('editor.qc.wireToWire', 'Wire to wire')), ...one('col', t('editor.qc.stepSpacing', 'Step spacing'), t('editor.qc.stepToStep', 'Step to step')), note(t('editor.qc.help.spacing', 'Gap: the space between rows, which grow with what they hold. Wire to wire: every wire the same distance from the next.'))], 'sec');
   }
   function renderProps() {
     if (!E) return;
     const b = selBox();
     const show = (sections: FormSection[]) => { props.hidden = false; renderView(props, FormPanel, { sections }); };
     const num = (label: string, key: string, value: number, max?: number) => numField(label, key, value, '', { min: '1', step: '1', ...(max ? { max: String(max) } : {}) });
-    const dec = (label: string, key: string, value: number) => numField(label, key, value || '', 'cm', { min: '0', step: '0.1', placeholder: 'auto' });
+    const dec = (label: string, key: string, value: number) => numField(label, key, value || '', 'cm', { min: '0', step: '0.1', placeholder: t('editor.qc.auto', 'auto') });
     const sg = (label: string, action: string, attrs: Attributes, current: string, options: string[][]): FormRow => ({ ...row(label, ...options.map(([value, text]) => ({ kind: 'button' as const, text, attrs: { 'data-qe': action, ...attrs, 'data-v': value, class: current === value ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' });
     const hidden = (visible: boolean, rows: FormRow[]): FormRow => ({ kind: 'group', style: visible ? undefined : 'visibility:hidden', rows });
-    const remove = (action: string, attrs: Attributes) => ({ text: '×', attrs: { class: 'flat qe-x', 'data-qe': action, ...attrs, title: 'Remove' } });
+    const remove = (action: string, attrs: Attributes) => ({ text: '×', attrs: { class: 'flat qe-x', 'data-qe': action, ...attrs, title: t('editor.qc.remove', 'Remove') } });
     if (!b) { show([circuitProps()]); return; }
     if (!single()) {
       const n = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1);
-      show([section(`${n} cells`, [note(`Wires ${b.r1 + 1}–${b.r2 + 1}, steps ${b.c1 + 1}–${b.c2 + 1}.`), note('Right-click for wires and steps.')], 'sec')]); return;
+      show([section(t('editor.qc.nCells', '{n} cells', { n }), [note(t('editor.qc.help.range', 'Wires {r1}–{r2}, steps {c1}–{c2}.', { r1: b.r1 + 1, r2: b.r2 + 1, c1: b.c1 + 1, c2: b.c2 + 1 })), note(t('editor.qc.help.rightClick', 'Right-click for wires and steps.'))], 'sec')]); return;
     }
     const cell = at(b.r1, b.c1), m = !cell.opaque && mainOf(cell), rows: FormRow[] = [];
-    const sections: FormSection[] = [{ ...section(cell.opaque ? 'Custom cell' : m ? NAMES[m.name] || m.name : cell.items.length ? 'Cell' : 'Empty cell', rows, 'sec'), summary: `wire ${b.r1 + 1} · step ${b.c1 + 1}` }];
+    const sections: FormSection[] = [{ ...section(cell.opaque ? t('editor.qc.customCell', 'Custom cell') : m ? say(NAMES[m.name] || m.name) : cell.items.length ? t('editor.qc.cell', 'Cell') : t('editor.qc.emptyCell', 'Empty cell'), rows, 'sec'), summary: t('editor.qc.at', 'wire {r} · step {c}', { r: b.r1 + 1, c: b.c1 + 1 }) }];
     if (m) {
       const label = LABEL[m.name];
-      if (label) rows.push(field(label, 'arg', m.plain ? m.a[0] : m.a[0] || '', m.name === 'permute' ? { class: 'mono', placeholder: '2, 1' } : { 'data-tx': MATH_LABEL.has(m.name) ? 'math' : 'text' }));
-      if (SPANS.has(m.name)) rows.push(num('Wires', 'span', spanOf(m)));
-      if (COLOURED.has(m.name)) { const st = styleOf(m); if (FILLED.has(m.name)) rows.push(hueSel('Fill', 'cfill', st.fill || '', true)); rows.push(hueSel(FILLED.has(m.name) ? 'Line' : 'Colour', 'cdraw', st.draw || st.color || '', false)); }
-      if (m.name === 'gate') { const z = gateSize(m); rows.push(dec('Min width', 'gw', z.w)); if (spanOf(m) <= 1) rows.push(dec('Min height', 'gh', z.h)); }
+      if (label) rows.push(field(labelName(label), 'arg', m.plain ? m.a[0] : m.a[0] || '', m.name === 'permute' ? { class: 'mono', placeholder: '2, 1' } : { 'data-tx': MATH_LABEL.has(m.name) ? 'math' : 'text' }));
+      if (SPANS.has(m.name) && !isSwapGate(m, Q.opts)) rows.push(num(t('editor.qc.cat.wires', 'Wires'), 'span', spanOf(m)));
+      if (COLOURED.has(m.name)) { const st = styleOf(m); if (FILLED.has(m.name)) rows.push(hueSel(t('ui.fill', 'Fill'), 'cfill', st.fill || '', true)); rows.push(hueSel(FILLED.has(m.name) ? t('ui.line', 'Line') : t('ui.colour', 'Colour'), 'cdraw', st.draw || st.color || '', false)); }
+      if (m.name === 'gate') { const z = gateSize(m); rows.push(dec(t('editor.qc.minWidth', 'Min width'), 'gw', z.w)); if (spanOf(m) <= 1) rows.push(dec(t('editor.qc.minHeight', 'Min height'), 'gh', z.h)); }
       if (LINKS.has(m.name)) {
-        const n = intArg(m.a[0]), options = [['0', 'None']];
-        for (let i = 0; i < nR(E.M); i++) if (i !== b.r1) options.push([String(i - b.r1), `Wire ${i + 1}`]);
-        rows.push(row('Line to', { kind: 'select', value: String(n || 0), options, attrs: { 'data-f': 'link' } }));
+        const n = intArg(m.a[0]), options = [['0', t('ui.none', 'None')]];
+        for (let i = 0; i < nR(E.M); i++) if (i !== b.r1) options.push([String(i - b.r1), t('editor.qc.tip.wire', 'Wire {n}', { n: i + 1 })]);
+        rows.push(row(t('editor.qc.lineTo', 'Line to'), { kind: 'select', value: String(n || 0), options, attrs: { 'data-f': 'link' } }));
       }
-    } else if (!cell.opaque && !cell.items.length) rows.push(note('Pick an element on the left, or type ', { kbd: 'H' }, ' ', { kbd: 'X' }, ' ', { kbd: 'Z' }, ' ', { kbd: 'C' }, ' ', { kbd: 'M' }, '…'));
+    } else if (!cell.opaque && !cell.items.length) rows.push(note(t('editor.qc.help.pick', 'Pick an element on the left, or type '), { kbd: 'H' }, ' ', { kbd: 'X' }, ' ', { kbd: 'Z' }, ' ', { kbd: 'C' }, ' ', { kbd: 'M' }, '…'));
     if (!cell.opaque) cell.items.forEach((it: any, i: number) => {
       if (it.name === 'slice') {
         const { main, comp } = slicePair(cell); if (it === comp) return;
         const mode = it === main && comp ? 'both' : sliceBottom(it) ? 'bottom' : 'top', w = it === main ? sliceWires(it) : null, R = nR(E.M);
-        const rows: FormRow[] = [field('Label', 'x' + i, it.a[0] || '', { 'data-tx': 'text' })];
-        if (it === main) rows.push(sg('Label at', 'sl', { 'data-i': i }, mode, AT), hidden(!!comp, [field('Bottom label', 'xb' + i, comp ? comp.a[0] || '' : '', { 'data-tx': 'text' })]), num('From wire', 'sa' + i, w![0] + 1, R), num('To wire', 'sz' + i, w![1] + 1, R));
-        rows.push(hueSel('Colour', 'cd' + i, styleOf(it).draw || styleOf(it).color || '', false));
-        sections.push({ ...section('Slice', rows, 'sec'), titleAction: remove('drop', { 'data-i': i }) });
+        const rows: FormRow[] = [field(t('ui.label', 'Label'), 'x' + i, it.a[0] || '', { 'data-tx': 'text' })];
+        if (it === main) rows.push(sg(t('editor.qc.labelAt', 'Label at'), 'sl', { 'data-i': i }, mode, AT()), hidden(!!comp, [field(t('editor.qc.bottomLabel', 'Bottom label'), 'xb' + i, comp ? comp.a[0] || '' : '', { 'data-tx': 'text' })]), num(t('editor.qc.fromWire', 'From wire'), 'sa' + i, w![0] + 1, R), num(t('editor.qc.toWire', 'To wire'), 'sz' + i, w![1] + 1, R));
+        rows.push(hueSel(t('ui.colour', 'Colour'), 'cd' + i, styleOf(it).draw || styleOf(it).color || '', false));
+        sections.push({ ...section(t('editor.qc.n.slice', 'Slice'), rows, 'sec'), titleAction: remove('drop', { 'data-i': i }) });
       } else if (it.name === 'setwiretype') {
-        const t = (it.a[0] || 'q').trim();
-        sections.push({ ...section('Wire from here', [{ kind: 'group', class: 'row', rows: [{ kind: 'controls', class: 'ctl seg-ctl', controls: [['q', 'Quantum'], ['c', 'Classical'], ['n', 'None']].map(([value, text]) => ({ kind: 'button', text, attrs: { 'data-qe': 'wt', 'data-i': i, 'data-v': value, class: t === value ? 'on' : '' } })) }] }], 'sec'), titleAction: remove('drop', { 'data-i': i }) });
+        const wt = (it.a[0] || 'q').trim();
+        sections.push({ ...section(t('editor.qc.wireFromHere', 'Wire from here'), [{ kind: 'group', class: 'row', rows: [{ kind: 'controls', class: 'ctl seg-ctl', controls: [['q', t('editor.qc.quantum', 'Quantum')], ['c', t('editor.qc.classical', 'Classical')], ['n', t('ui.none', 'None')]].map(([value, text]) => ({ kind: 'button', text, attrs: { 'data-qe': 'wt', 'data-i': i, 'data-v': value, class: wt === value ? 'on' : '' } })) }] }], 'sec'), titleAction: remove('drop', { 'data-i': i }) });
       }
     });
     for (const g of groupsAt(b.r1, b.c1)) {
       const k = `${g.r}_${g.c}_${g.i}`, d = groupDims(g.it), st = styleOf(g.it), away = g.r !== b.r1 || g.c !== b.c1, off = /^none$/i.test((st.draw || '').trim());
-      sections.push({ ...section('Group', [field('Label', 'Gx' + k, g.it.a[0] || '', { 'data-tx': 'text' }), sg('Label at', 'gl', { 'data-g': k }, groupMode(g.it), AT), hidden(groupMode(g.it) === 'both', [field('Bottom label', 'Gb' + k, groupLow(g.it), { 'data-tx': 'text' })]), num('Wires', 'Gw' + k, d.wires), num('Steps', 'Gs' + k, d.steps), hueSel('Fill', 'Gf' + k, st.fill || '', true), sg('Border', 'gb', { 'data-g': k }, off ? '0' : '1', [['1', 'Shown'], ['0', 'None']]), hidden(!off, [hueSel('Line', 'Gd' + k, off ? '' : st.draw || st.color || '', false)])], 'sec'), titleSpan: true, ...(away ? { summary: `from wire ${g.r + 1} · step ${g.c + 1}` } : {}), titleAction: remove('gdrop', { 'data-g': k }) });
+      sections.push({ ...section(t('editor.qc.group', 'Group'), [field(t('ui.label', 'Label'), 'Gx' + k, g.it.a[0] || '', { 'data-tx': 'text' }), sg(t('editor.qc.labelAt', 'Label at'), 'gl', { 'data-g': k }, groupMode(g.it), AT()), hidden(groupMode(g.it) === 'both', [field(t('editor.qc.bottomLabel', 'Bottom label'), 'Gb' + k, groupLow(g.it), { 'data-tx': 'text' })]), num(t('editor.qc.cat.wires', 'Wires'), 'Gw' + k, d.wires), num(t('editor.qc.steps', 'Steps'), 'Gs' + k, d.steps), hueSel(t('ui.fill', 'Fill'), 'Gf' + k, st.fill || '', true), sg(t('editor.qc.border', 'Border'), 'gb', { 'data-g': k }, off ? '0' : '1', [['1', t('editor.qc.shown', 'Shown')], ['0', t('ui.none', 'None')]]), hidden(!off, [hueSel(t('ui.line', 'Line'), 'Gd' + k, off ? '' : st.draw || st.color || '', false)])], 'sec'), titleSpan: true, ...(away ? { summary: t('editor.qc.fromAt', 'from wire {r} · step {c}', { r: g.r + 1, c: g.c + 1 }) } : {}), titleAction: remove('gdrop', { 'data-g': k }) });
     }
-    sections.push({ class: 'sec', rows: [field('Code', 'code', cellText(cell), { class: 'mono' }), ...(cell.opaque ? [note('This cell has commands the editor doesn’t draw; they are kept as written.')] : [])] }); show(sections);
+    sections.push({ class: 'sec', rows: [field(t('editor.commonA.code', 'Code'), 'code', cellText(cell), { class: 'mono' }), ...(cell.opaque ? [note(t('editor.qc.help.opaque', 'This cell has commands the editor doesn’t draw; they are kept as written.'))] : [])] }); show(sections);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
@@ -1153,7 +1206,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       const m = mainOf(cell);
       if (f === 'arg') { m.a[0] = t.value; cell.dirty = true; }
       else if (f === 'gw' || f === 'gh') { const z = gateSize(m), v = Math.max(0, parseFloat(t.value) || 0); setGateSize(m, f === 'gw' ? v : z.w, f === 'gh' ? v : z.h); cell.dirty = true; }
-      else if (f === 'span') { setSpan(m, Math.max(1, intArg(t.value) || 1)); cell.dirty = true; clearUnder(s.r1, s.c1); }
+      else if (f === 'span' && !isSwapGate(m, Q.opts)) { setSpan(m, boundedSpan(s.r1, intArg(t.value) || 1, spanOf(m), nR(E.M), (r) => wireOnly(at(r, s.c1)))); cell.dirty = true; clearUnder(s.r1, s.c1); }
       else if (f === 'link') { const n = intArg(t.value); m.a[0] = n ? String(n) : ''; cell.dirty = true; }
       else if (f === 'cfill' || f === 'cdraw') { if (f === 'cdraw') setStyle(m, 'color', ''); setStyle(m, f === 'cfill' ? 'fill' : 'draw', TD.texColor.wrap(t.value)); cell.dirty = true; }
       else if (/^cd\d+$/.test(f)) { const it = cell.items[+f.slice(2)]; setStyle(it, 'color', ''); setStyle(it, 'draw', TD.texColor.wrap(t.value)); cell.dirty = true; } // a slice's colour
@@ -1191,7 +1244,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     else if (a === 'done') finish(true);
     else if (a === 'cancel') finish(false);
     else if (a === 'delete') clearSel();
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
     else if (a === 'addrow') edit(() => ensure(M, nR(M) + 1, Math.max(nC(M), 1)));
     else if (a === 'addcol') edit(() => ensure(M, Math.max(nR(M), 1), nC(M) + 1));
     else if (a === 'sepmode') {
@@ -1222,7 +1275,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const R = nR(E.M), C = nC(E.M);
-    count.textContent = `${R} wire${R === 1 ? '' : 's'} · ${C} step${C === 1 ? '' : 's'}`;
+    count.textContent = `${wiresText(R)} · ${stepsText(C)}`;
     if (document.activeElement === codeTa) return;
     const c = snap();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -1313,7 +1366,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     flashSaved();
   }
   let savedT = 0;
-  function flashSaved() { setTip('Saved to the page'); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500); }
+  function flashSaved() { const saved = t('editor.commonA.saved', 'Saved to the page'); setTip(saved); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500); }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snap() !== E.start);
   async function finish(ok: any) {
@@ -1324,13 +1377,15 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     commit();
     const src = E.codeAt != null && document.activeElement === codeTa ? codeTa.value : snap();
     const changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this circuit?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(t('editor.qc.discard', 'Discard changes to this circuit?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
     root.hidden = true;
     document.body.classList.remove('cz-open');
+    localeOff?.(); localeOff = undefined;
     E = null;
     if (ok && changed) done({ src });
   }
+  let localeOff: (() => void) | undefined;
   function open(block: any, done: any) {
     const M = load(block.src);
     E = { M, sel: null, arm: null, view: { ox: 0, oy: 0, k: 1.5 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, ghost: null, st: { size: block.size || 'normalsize', font: block.font || 'default' }, codeAt: null, codeTimer: null, clip: null };
@@ -1340,6 +1395,10 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, properties and drawing's hints follow the interface language while the editor is open
+    let first = true;
+    localeOff?.();
+    localeOff = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); syncCode(); } });
     requestAnimationFrame(fit);
   }
   TD.qcEditor = { open };

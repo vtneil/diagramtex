@@ -1,0 +1,22 @@
+{
+  "description": "Measured pdfLaTeX Computer Modern 10pt advances and PDF baselines; no browser-derived values",
+  "sourceHash": "7ddba5df42e31f8e0332122e100fa8e678d34d25b7caa3d95b3c8fc4a8ea2313",
+  "measurements": {
+    "word-permutes": 4.008334337868747,
+    "word-unitary": 3.1972271770825547,
+    "case-unitary": 15.326207998339846,
+    "case-permute-row": 14.301356046514822,
+    "case-permute-col": 15.311068250933454
+  },
+  "unitaryBaselineDifferenceEm": 0,
+  "pageSizeEm": [
+    18.59293739565328,
+    11.38999877758604
+  ],
+  "originXEm": 2.4666251792578655,
+  "baselinesEm": [
+    1.7041733327474935,
+    5.972035342217995,
+    10.239997671957125
+  ]
+}

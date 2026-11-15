@@ -7,7 +7,14 @@ const { compile } = require('svelte/compiler');
 async function renderIndex() {
   const filename = path.resolve(__dirname, '../src/ui/AppShell.svelte');
   const source = compile(fs.readFileSync(filename, 'utf8'), { filename, generate: 'server', preserveWhitespace: true }).js.code;
-  const result = await esbuild.build({ stdin: { contents: source, resolveDir: path.dirname(filename) }, bundle: true, platform: 'node', format: 'cjs', write: false });
+  const result = await esbuild.build({ stdin: { contents: source, resolveDir: path.dirname(filename) }, bundle: true, platform: 'node', format: 'cjs', write: false,
+    plugins: [{ name: 'svelte-server', setup(build) {
+      build.onLoad({ filter: /\.svelte$/ }, ({ path: filename }) => ({
+        contents: compile(fs.readFileSync(filename, 'utf8'), { filename, generate: 'server', preserveWhitespace: true }).js.code,
+        loader: 'js', resolveDir: path.dirname(filename),
+      }));
+    } }],
+  });
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', result.outputFiles[0].text)(require, mod, mod.exports);
   const { render } = require('svelte/server');

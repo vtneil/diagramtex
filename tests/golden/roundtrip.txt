@@ -36,7 +36,7 @@ blk_physics: 4/24 modelled · regenerated differs from line 6 (physics → tikz)
 sym_basic: 1/53 modelled · regenerated differs from line 3 (sym → tikz)
 sym_flow: 5/69 modelled · regenerated differs from line 3 (sym → poly,tikz)
 sym_elec: 3/58 modelled · regenerated differs from line 3 (sym → poly,tikz)
-sym_phys: 12/36 modelled · regenerated differs from line 3 (sym → poly,text,tikz)
+sym_phys: 129/152 modelled · regenerated differs from line 3 (sym → line,poly,text,tikz)
 tip_w04: 27/27 modelled · regenerated same
 tip_w1: 27/27 modelled · regenerated same
 tip_w2: 27/27 modelled · regenerated same

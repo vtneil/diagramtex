@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t, message as msg } from '../../i18n';
 import { panelServices } from '../../domain/circuit.ts';
 const { isWire, fullCode } = panelServices;
 
@@ -13,7 +14,7 @@ TD.panels.cz = {
       if (act === 'editcz') { TD.czOpen && TD.czOpen(s.id); return; }
       if (act !== 'copycz') return;
       const txt = `\\begin{circuitikz}\n${fullCode(s)}\n\\end{circuitikz}\n`;
-      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt('circuitikz Code', txt, { multiline: true, readonly: true, message: 'Copying failed: select the code and copy it yourself.', ok: 'Done', cancel: null }));
-      return 'Copied circuitikz code';
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt(t('model.circuitikz.code', 'circuitikz Code'), txt, { multiline: true, readonly: true, message: t('model.copyFailed', 'Copying failed: select the code and copy it yourself.'), ok: t('ui.done', 'Done'), cancel: null }));
+      return t('model.copied.circuitikz.code', 'Copied circuitikz code');
     },
   };

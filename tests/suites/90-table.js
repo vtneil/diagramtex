@@ -116,7 +116,7 @@ T.test('table import: Markdown (alignment, emphasis, code, maths)', () => {
   T.eq(TD.table.importText('| a |\n|---|\n| **b** and `c` |').table.cells[1][0].t, '\\textbf{b} and \\texttt{c}');
 });
 
-T.test('table import: HTML from Excel and Google Sheets (spans, styles, borders)', () => {
+T.test('table import: HTML from Excel and Google Sheets (spans, styles, borders)', async () => {
   const t = TB();
   const excel = `<html><head><style>.xl65{font-weight:700;text-align:center;border-bottom:1.5pt solid windowtext}.xl66{background:#FFFF00;color:#FF0000}</style></head><body><table>
     <tr><td class=xl65 colspan=2>Head</td><td class=xl65>C</td></tr>
@@ -130,7 +130,7 @@ T.test('table import: HTML from Excel and Google Sheets (spans, styles, borders)
   const sheets = '<google-sheets-html-origin><table><tbody><tr><td style="font-weight:bold;text-align:right">x</td><td style="background-color:#cfe2f3">y &amp; z</td></tr></tbody></table>';
   const s = t.importText(sheets).table;
   T.eq([s.cells[0][0].b || s.headBold, s.cells[0][0].al === 'r' || s.cols[0].al === 'r', s.cells[0][1].bg, s.cells[0][1].t], [true, true, '#cfe2f3', 'y \\& z']);
-  const evil = t.importText('<table><tr><td><img src=x onerror="window.__pwn=1">a<script>window.__pwn=1</script></td></tr></table>').table;
+  const evil = await T.expectInlineHandlerCsp(() => t.importText('<table><tr><td><img src=x onerror="window.__pwn=1">a<script>window.__pwn=1</script></td></tr></table>').table);
   T.ok(!window.__pwn && !/script|img/i.test(evil.cells[0][0].t), 'no markup or scripts get through');
 });
 
@@ -609,7 +609,7 @@ T.test('table workspace: open, import, type, keys, undo, paste, leave', async ()
   // copy carries the cells for this tool and for spreadsheets
   W().select([0, 0], [1, 1]);
   const dt = new DataTransfer();
-  grid.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+  grid.dispatchEvent(T.clipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
   T.eq(dt.getData('text/plain'), 'P\tQ\n1\t2');
   T.ok(/data-diagramtex-table/.test(dt.getData('text/html')), 'workspace check 3');
   // the panel drives the model
@@ -628,7 +628,7 @@ T.test('table workspace: open, import, type, keys, undo, paste, leave', async ()
   const selText = getSelection().toString();
   T.ok(selText.length > 0 && selText.length < document.body.innerText.length / 2 && /\\begin\{tabular\}/.test(selText), '⌘A in the LaTeX view selects only the code');
   const cdt = new DataTransfer();
-  codeEl.dispatchEvent(new ClipboardEvent('copy', { clipboardData: cdt, bubbles: true, cancelable: true }));
+  codeEl.dispatchEvent(T.clipboardEvent('copy', { clipboardData: cdt, bubbles: true, cancelable: true }));
   T.ok(cdt.getData('text/plain').includes('\\caption{Hello}') && !/^ $/m.test(cdt.getData('text/plain')), 'copying all the code gives its exact text');
   getSelection().removeAllRanges();
   document.querySelector(`[data-tab="${tabWas}"]`).click();

@@ -14,6 +14,8 @@ T.test('copy image: the context menu offers Copy as Image and Save as Image, PNG
   const menu = document.querySelector('#ctxMenu');
   for (const a of ['copy-png', 'copy-png-t', 'copy-svg', 'save-png', 'save-png-t', 'save-svg']) T.ok(menu.querySelector(`[data-ctx="img:${a}"]`), a);
   T.ok(/Copy as Image/.test(menu.textContent) && /Save as Image/.test(menu.textContent), 'labels');
+  const saveRow = menu.querySelector('[data-ctx="img:save-png"]').closest('.has-sub');
+  T.ok(saveRow && /M10 3v9/.test(saveRow.querySelector('svg').innerHTML), 'Save as Image uses the download (down-arrow) icon');
   T.eq(menu.querySelector('[data-ctx="img:copy-png"]').textContent.trim(), 'PNG (Background)');
   T.eq(menu.querySelector('[data-ctx="img:save-png-t"]').textContent.trim(), 'PNG (Transparent)');
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -39,11 +41,17 @@ T.test('copy image: copies and saves the selection only', async () => {
     ctxClick('img:copy-png'); await until(() => writes.length > 1);
     const png = await writes[1][0].getType('image/png');
     T.eq(png.type, 'image/png'); T.ok(png.size > 100, 'PNG has content');
-    // corner pixel: white with a background, see-through when transparent
+    // corner pixel: white with a background, see-through when transparent; 4× the export resolution (1200 DPI at default 300 DPI)
+    const exp4xBm = await createImageBitmap(await TD.app.pngOf([a], 1200, false));
+    const copyBm = await createImageBitmap(png);
+    T.eq([copyBm.width, copyBm.height], [exp4xBm.width, exp4xBm.height], 'Copy as Image PNG is 4x export resolution');
     const corner = async (blob) => { const bm = await createImageBitmap(blob), c = new OffscreenCanvas(bm.width, bm.height), g = c.getContext('2d'); g.drawImage(bm, 0, 0); return [...g.getImageData(0, 0, 1, 1).data]; };
     T.eq(await corner(png), [255, 255, 255, 255], 'PNG (Background) is white behind');
     ctxClick('img:copy-png-t'); await until(() => writes.length > 2);
-    T.eq((await corner(await writes[2][0].getType('image/png')))[3], 0, 'PNG (Transparent) is see-through');
+    const pngT = await writes[2][0].getType('image/png');
+    const copyTBm = await createImageBitmap(pngT);
+    T.eq([copyTBm.width, copyTBm.height], [exp4xBm.width, exp4xBm.height], 'Copy as Image PNG (Transparent) is 4x export resolution');
+    T.eq((await corner(pngT))[3], 0, 'PNG (Transparent) is see-through');
     writes.pop();
 
     ctxClick('img:save-svg'); await until(() => saved.length);
@@ -53,8 +61,12 @@ T.test('copy image: copies and saves the selection only', async () => {
     ctxClick('img:save-png'); await until(() => saved.length > 1);
     T.ok(/-selection\.png$/.test(saved[1].fileName), 'PNG file name');
     T.eq(saved[1].type, 'image/png');
+    const saveBm = await createImageBitmap(saved[1]);
+    T.eq([saveBm.width, saveBm.height], [exp4xBm.width, exp4xBm.height], 'Save as Image PNG is 4x export resolution');
     ctxClick('img:save-png-t'); await until(() => saved.length > 2);
     T.ok(/-selection\.png$/.test(saved[2].fileName) && saved[2].type === 'image/png', 'transparent PNG saved');
+    const saveTBm = await createImageBitmap(saved[2]);
+    T.eq([saveTBm.width, saveTBm.height], [exp4xBm.width, exp4xBm.height], 'Save as Image PNG (Transparent) is 4x export resolution');
 
     TD.state.sel = new Set(); const n = writes.length;
     ctxClick('img:copy-png'); await new Promise((r) => setTimeout(r, 50));

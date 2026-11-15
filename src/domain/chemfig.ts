@@ -1,3 +1,4 @@
+import { measurementElement } from './measurement';
 export let panelServices: any;
 import { runtime as TD } from '../runtime';
 // Chemistry with the chemfig package: structural formulas (\chemfig{…}) and reaction schemes
@@ -458,7 +459,7 @@ import { runtime as TD } from '../runtime';
   function baseOff(st: any) {
     const b = TD.textBox(atomTex('H'), st);
     if (baseCache.has(b.css)) return baseCache.get(b.css);
-    const m = document.getElementById('measure');
+    const m = measurementElement();
     let v = b.h * 0.72;
     if (m && !(TD.measuring && TD.measuring())) {
       m.setAttribute('style', b.css);

@@ -1,3 +1,4 @@
+import type { Message } from './i18n';
 import type { createBlocks } from './core/blocks';
 import type { createProjectFiles } from './core/project-files';
 import type { createDocumentFactory } from './core/document';
@@ -17,7 +18,7 @@ export interface Runtime {
   TYPES: Record<string, any>;
   projectFiles: ReturnType<typeof createProjectFiles>;
   unsaved: (() => boolean)[];
-  confirm(title: string, message: string, options: { ok?: string; danger?: boolean }): Promise<boolean>;
+  confirm(title: string | Message, message: string | Message, options: { ok?: string | Message; danger?: boolean }): Promise<boolean>;
   createDocumentFactory: typeof createDocumentFactory;
   createDocumentHistory: typeof createDocumentHistory;
   editorSession: ReturnType<typeof createEditorSession>;

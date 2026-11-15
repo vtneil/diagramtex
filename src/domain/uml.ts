@@ -1,3 +1,4 @@
+import { measurementElement } from './measurement';
 export let panelServices: any;
 import { runtime as TD } from '../runtime';
 // UML class diagrams written for pgf-umlcd. The source is the object: a tikzpicture of class, interface,
@@ -544,7 +545,7 @@ import { runtime as TD } from '../runtime';
   function baseOff(st: any) {
     const b = TD.textBox('Hg', st);
     if (baseCache.has(b.css)) return baseCache.get(b.css);
-    const m = typeof document !== 'undefined' ? document.getElementById('measure') : null;
+    const m = typeof document !== 'undefined' ? measurementElement() : null;
     let v = b.h * 0.78;
     if (m && !(TD.measuring && TD.measuring())) {
       m.setAttribute('style', b.css);

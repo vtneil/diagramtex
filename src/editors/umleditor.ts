@@ -1,3 +1,5 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { message, onLocale, t } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note, texColour } from '../ui/editor-fields';
@@ -60,6 +62,43 @@ import { runtime as TD } from '../runtime';
   const CMD_KIND: Record<string, string> = { association: 'association', unidirectionalAssociation: 'uni', aggregation: 'aggregation', composition: 'composition' };
   const ENV_NAMES: Record<string, string> = { class: 'Class', interface: 'Interface', abstractclass: 'Abstract class', staticclass: 'Static class', object: 'Object' };
   const DEP_O = 'umlcd style dashed line, ->', LINK_O = 'umlcd style dashed line';
+  // the names as shown (the tables above keep the English for search)
+  const palText = (k: string): [string, string | undefined] => (({
+    'n:class': () => [t('editor.uml.env.class', 'Class'), undefined], 'n:interface': () => [t('editor.uml.env.interface', 'Interface'), undefined],
+    'n:abstractclass': () => [t('editor.uml.env.abstractclass', 'Abstract class'), t('editor.uml.short.abstract', 'Abstract')],
+    'n:staticclass': () => [t('editor.uml.env.staticclass', 'Static class'), t('editor.uml.short.static', 'Static')],
+    'n:object': () => [t('editor.uml.env.object', 'Object'), undefined], 'n:note': () => [t('editor.uml.note', 'Note'), undefined],
+    'r:inherit': () => [t('editor.uml.pal.inherit', 'Inheritance (generalisation)'), t('editor.uml.short.inherit', 'Inherit')],
+    'r:implement': () => [t('editor.uml.pal.implement', 'Realisation (implements)'), t('editor.uml.short.implement', 'Implement')],
+    'r:association': () => [t('editor.uml.kindTitle.association', 'Association'), t('editor.uml.kindTitle.association', 'Association')],
+    'r:uni': () => [t('editor.uml.kindTitle.uni', 'Directed association'), t('editor.uml.short.uni', 'Directed')],
+    'r:aggregation': () => [t('editor.uml.kindTitle.aggregation', 'Aggregation'), t('editor.uml.kindTitle.aggregation', 'Aggregation')],
+    'r:composition': () => [t('editor.uml.kindTitle.composition', 'Composition'), t('editor.uml.kindTitle.composition', 'Composition')],
+    'r:dependency': () => [t('editor.uml.kindTitle.dependency', 'Dependency'), t('editor.uml.kindTitle.dependency', 'Dependency')],
+    'r:notelink': () => [t('editor.uml.pal.notelink', 'Link to a note'), t('editor.uml.kindTitle.notelink', 'Note link')],
+  } as Record<string, () => [string, string | undefined]>)[k]?.() ?? [ITEM[k].name, ITEM[k].short]);
+  const palTitle = (title: string) => (title === 'Elements' ? t('editor.uml.pal.elements', 'Elements') : t('editor.uml.pal.relations', 'Relations'));
+  const envName = (env: string) => (({
+    class: () => t('editor.uml.env.class', 'Class'), interface: () => t('editor.uml.env.interface', 'Interface'), abstractclass: () => t('editor.uml.env.abstractclass', 'Abstract class'),
+    staticclass: () => t('editor.uml.env.staticclass', 'Static class'), object: () => t('editor.uml.env.object', 'Object'),
+  } as Record<string, () => string>)[env]?.() ?? ENV_NAMES[env]);
+  // a relation kind: its name as a title ("Directed association"), and with its article ("a directed association")
+  const kindTitle = (k: string) => (({
+    inherit: () => t('editor.uml.kindTitle.inherit', 'Inheritance'), implement: () => t('editor.uml.kindTitle.implement', 'Realisation'), association: () => t('editor.uml.kindTitle.association', 'Association'),
+    uni: () => t('editor.uml.kindTitle.uni', 'Directed association'), aggregation: () => t('editor.uml.kindTitle.aggregation', 'Aggregation'), composition: () => t('editor.uml.kindTitle.composition', 'Composition'),
+    dependency: () => t('editor.uml.kindTitle.dependency', 'Dependency'), notelink: () => t('editor.uml.kindTitle.notelink', 'Note link'),
+  } as Record<string, () => string>)[k]?.() ?? k);
+  const kindA = (k: string) => (({
+    inherit: () => t('editor.uml.kindA.inherit', 'an inheritance'), implement: () => t('editor.uml.kindA.implement', 'a realisation'), association: () => t('editor.uml.kindA.association', 'an association'),
+    uni: () => t('editor.uml.kindA.uni', 'a directed association'), aggregation: () => t('editor.uml.kindA.aggregation', 'an aggregation'), composition: () => t('editor.uml.kindA.composition', 'a composition'),
+    dependency: () => t('editor.uml.kindA.dependency', 'a dependency'), notelink: () => t('editor.uml.kindA.notelink', 'a note link'),
+  } as Record<string, () => string>)[k]?.() ?? k);
+  // a label's side, as the tip names it
+  const sideName = (p: string | null) => (({
+    right: () => t('editor.commonA.side.right', 'Right'), 'above right': () => t('editor.commonA.side.aboveRight', 'Above right'), above: () => t('editor.commonA.side.above', 'Above'),
+    'above left': () => t('editor.commonA.side.aboveLeft', 'Above left'), left: () => t('editor.commonA.side.left', 'Left'), 'below left': () => t('editor.commonA.side.belowLeft', 'Below left'),
+    below: () => t('editor.commonA.side.below', 'Below'), 'below right': () => t('editor.commonA.side.belowRight', 'Below right'),
+  } as Record<string, () => string>)[p || '']?.() ?? (p ? p[0].toUpperCase() + p.slice(1) : t('editor.uml.side.on', 'On the line')));
 
   // ---------------------------------------------------------------- model
   // M = TD.uml.parse(src) plus { raw, dirty }: the code is M.raw until something is edited
@@ -217,7 +256,7 @@ import { runtime as TD } from '../runtime';
     const from = items()[fromIdx], to = items()[toIdx];
     if (!from || !to || from === to) return;
     if ((kind === 'inherit' || kind === 'implement') && (from.k !== 'class' || to.k !== 'class')) kind = 'notelink';
-    if ((kind === 'inherit' || kind === 'implement') && (kind === 'inherit' ? from.inherits : from.implements).includes(to.name)) { setTip(`${from.name} already ${kind === 'inherit' ? 'inherits from' : 'implements'} ${to.name}`); return; }
+    if ((kind === 'inherit' || kind === 'implement') && (kind === 'inherit' ? from.inherits : from.implements).includes(to.name)) { setTip(kind === 'inherit' ? t('editor.uml.tip.alreadyInherits', '{from} already inherits from {to}', { from: from.name, to: to.name }) : t('editor.uml.tip.alreadyImplements', '{from} already implements {to}', { from: from.name, to: to.name })); return; }
     let sel: any = null;
     edit(() => { sel = makeLink(from, to, kind); });
     E.sel = sel; draw(); renderProps();
@@ -234,7 +273,7 @@ import { runtime as TD } from '../runtime';
     if (r && r.k === 'draw' && (kind === 'dependency' || kind === 'notelink')) { edit(() => { r.o = kind === 'dependency' ? DEP_O : LINK_O; }); return; }
     const from = byName(baseName(L.from)), to = byName(baseName(L.to));
     if (!from || !to) return;
-    if ((kind === 'inherit' || kind === 'implement') && (from.k !== 'class' || to.k !== 'class')) { setTip('Inheritance and realisation go between classes'); return; }
+    if ((kind === 'inherit' || kind === 'implement') && (from.k !== 'class' || to.k !== 'class')) { setTip(t('editor.uml.tip.betweenClasses', 'Inheritance and realisation go between classes')); return; }
     let next: any = null;
     edit(() => { removeLink(sel); next = makeLink(from, to, kind); });
     E.sel = next; draw(); renderProps();
@@ -252,7 +291,7 @@ import { runtime as TD } from '../runtime';
     }
     const r = selR();
     if (!r) return;
-    if (r.steps) { setTip('This line is routed in the code: reverse it there'); return; }
+    if (r.steps) { setTip(t('editor.uml.tip.routed', 'This line is routed in the code: reverse it there')); return; }
     edit(() => {
       const t = r.a; r.a = r.b; r.b = t;
       if (r.k === 'rel' && r.cmd === 'association') { [r.ra, r.rb] = [r.rb, r.ra]; [r.ma, r.mb] = [r.mb, r.ma]; }
@@ -320,14 +359,14 @@ import { runtime as TD } from '../runtime';
     const q = search.value.trim().toLowerCase();
     let html = '';
     for (const [title, its] of PAL) {
-      const hits = its.filter(([k, name, , , short]: any) => !q || `${name} ${short || ''} ${k.slice(2)} ${title}`.toLowerCase().includes(q));
+      const hits = its.filter(([k, name, , , short]: any) => !q || `${name} ${short || ''} ${k.slice(2)} ${title} ${palText(k).join(' ')} ${palTitle(title)}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => {
-        const on = E && (E.arm === k || k === `r:${E.kind}`);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${mini(k)}</span><span>${esc(ITEM[k].short || name)}</span></button>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(palTitle(title))}</div><div class="qe-grid">${hits.map(([k, , , key]: any) => {
+        const on = E && (E.arm === k || k === `r:${E.kind}`), [name, short] = palText(k);
+        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${mini(k)}</span><span>${esc(short || name)}</span></button>`;
       }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 64, 44, 1.2);
   }
   search.addEventListener('input', buildPalette);
@@ -364,14 +403,14 @@ import { runtime as TD } from '../runtime';
       const linked = E.sel && E.sel.n == null;
       if (linked) setLinkKind(E.kind);
       buildPalette();
-      setTip(linked ? '' : `${ITEM[k].name}: point at a class, then drag its blue handle to another one`);
+      setTip(linked ? '' : t('editor.uml.tip.relation', '{kind}: point at a class, then drag its blue handle to another one', { kind: palText(k)[0] }));
       return;
     }
     const n = selN();
     if (n && n.k === 'class' && k !== 'n:note' && !E.arm) { edit(() => setEnv(n, k.slice(2))); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${ITEM[k].name}: click the grid to place it. Esc when done.` : '');
+    setTip(E.arm ? t('editor.uml.tip.place', '{kind}: click the grid to place it. Esc when done.', { kind: palText(k)[0] }) : '');
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -425,7 +464,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -459,7 +498,7 @@ import { runtime as TD } from '../runtime';
       out += `<path class="ze-wsel" d="${ln.d.map((p: number[], i: number) => { const [X, Y] = P(p[0], p[1]); return `${i ? 'L' : 'M'}${r2(X)},${r2(Y)}`; }).join('')}" stroke-width="10"/>`;
     }
     if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${U.draw({ type: 'uml', x: L.bb.x, y: L.bb.y, src: snapCode() }, { export: true })}</g>`;
-    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Place a class from the left to start</text>`;
+    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(t('editor.uml.empty', 'Place a class from the left to start'))}</text>`;
     const dragE = E.drag && E.drag.mode === 'edge';
     for (const B of L.boxes) {
       const s = boxScr(B), at = `x="${r2(s.l - 3)}" y="${r2(s.t - 3)}" width="${r2(s.r - s.l + 6)}" height="${r2(s.b - s.t + 6)}" rx="3"`;
@@ -485,7 +524,7 @@ import { runtime as TD } from '../runtime';
     if (KB) {
       const s = boxScr(KB), kx = r2(s.r + 14), ky = r2(Math.min(s.t + 16, (s.t + s.b) / 2));
       E.knobPos = { i: ki, X: s.r, Y: ky, kx, ky };
-      out += `<g class="ze-knob" data-i="${ki}"><title>Drag to another class to draw ${KB.note ? 'a line to it' : `a${/^[aeiou]/.test(KIND_NAMES[E.kind]) ? 'n' : ''} ${esc(KIND_NAMES[E.kind])}`}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
+      out += `<g class="ze-knob" data-i="${ki}"><title>${esc(t('editor.uml.knob', 'Drag to another class to draw {what}', { what: KB.note ? t('editor.uml.knob.line', 'a line to it') : kindA(E.kind) }))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
     }
     // placing: where it lands
     if ((E.arm || E.ghost) && E.hover && E.hover.at) { const [X, Y] = m(...(E.hover.at as [any, any])); out += `<circle class="cz-snap on" cx="${r2(X)}" cy="${r2(Y)}" r="5"/>`; }
@@ -557,7 +596,7 @@ import { runtime as TD } from '../runtime';
       const B = boxAt(e, 6);
       E.hover = B ? { i: B.idx } : { at: toCm(e, !e.altKey) };
       const to = B && items()[B.idx];
-      setTip(B && B.idx === d.from ? 'Drop on another class' : to ? `${KIND_NAMES[E.kind][0].toUpperCase() + KIND_NAMES[E.kind].slice(1)} to ${to.name || 'the note'}` : 'Drop on a class, or on the grid for a new one');
+      setTip(B && B.idx === d.from ? t('editor.uml.tip.dropOther', 'Drop on another class') : to ? t('editor.uml.tip.kindTo', '{kind} to {name}', { kind: kindTitle(E.kind), name: to.name || t('editor.uml.theNote', 'the note') }) : t('editor.uml.tip.dropClass', 'Drop on a class, or on the grid for a new one'));
       draw(); return;
     }
     if (d.mode === 'label') {
@@ -568,7 +607,7 @@ import { runtime as TD } from '../runtime';
       const where = dropLabel(ln.pts, d.span, sx, sy);
       labelSlot(r, d.key).place(where.pos, where.place);
       E.M.dirty = true;
-      setTip(`${where.place ? where.place[0].toUpperCase() + where.place.slice(1) : 'On the line'} at ${where.pos}`);
+      setTip(t('editor.uml.tip.labelAt', '{side} at {pos}', { side: sideName(where.place), pos: where.pos }));
       draw(); return;
     }
     if (d.mode === 'move') {
@@ -578,7 +617,7 @@ import { runtime as TD } from '../runtime';
       it.x = snap(d.x0 + (sx - d.sx) / k, !e.altKey); it.y = snap(d.y0 - (sy - d.sy) / k, !e.altKey);
       if (it.k === 'class') it.pos = null;
       E.M.dirty = true;
-      setTip(`${it.name || 'Note'} at (${U.num(it.x)}, ${U.num(it.y)})${e.altKey ? '' : ' · ⌥ to place freely'}`);
+      setTip(`${t('editor.uml.tip.at', '{name} at ({x}, {y})', { name: it.name || t('editor.uml.note', 'Note'), x: U.num(it.x), y: U.num(it.y) })}${e.altKey ? '' : ` · ${t('editor.uml.tip.free', '⌥ to place freely')}`}`);
       draw(); return;
     }
   });
@@ -624,7 +663,7 @@ import { runtime as TD } from '../runtime';
     tri: '<path d="M3 10h9M12 6l5 4-5 4z"/>',
     dia: '<path d="M2 10l3.5-3 3.5 3-3.5 3zM9 10h8"/>',
   };
-  const mItem = (act: string, label: string, icon: string, key?: string, on?: boolean) => `<button class="ctx-item${/^(ndel|ldel)$/.test(act) ? ' danger' : ''}${on ? ' on' : ''}" data-um="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: string, label: string, icon: string, key?: string, on?: boolean) => `<button class="ctx-item${/^(ndel|ldel)$/.test(act) ? ' danger' : ''}${on ? ' on' : ''}" data-um="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -634,19 +673,19 @@ import { runtime as TD } from '../runtime';
       E.sel = { n: B.idx };
       const it = items()[B.idx];
       menu.innerHTML = it.k === 'note'
-        ? mItem('text', 'Edit Text', 'rename', '↩') + '<hr>' + mItem('ndel', 'Delete Note', 'del', '⌫')
-        : mItem('rename', 'Rename', 'rename', '↩') + mItem('attr', 'Edit Attributes', 'attr') + mItem('op', 'Edit Operations', 'op') + mItem('fitw', 'Fit Width to Text', 'fit') + '<hr>' + mItem('ndel', `Delete ${ENV_NAMES[it.env]}`, 'del', '⌫');
+        ? mItem('text', t('editor.uml.menu.editText', 'Edit Text'), 'rename', '↩') + '<hr>' + mItem('ndel', t('editor.uml.deleteNote', 'Delete Note'), 'del', '⌫')
+        : mItem('rename', t('ui.rename', 'Rename'), 'rename', '↩') + mItem('attr', t('editor.uml.menu.attrs', 'Edit Attributes'), 'attr') + mItem('op', t('editor.uml.menu.ops', 'Edit Operations'), 'op') + mItem('fitw', t('editor.uml.fitWidth', 'Fit Width to Text'), 'fit') + '<hr>' + mItem('ndel', t('editor.uml.deleteKind', 'Delete {kind}', { kind: envName(it.env) }), 'del', '⌫');
     } else if (ln) {
       E.sel = ln;
       const L = linkEnds(ln)!, ck = L.kind;
-      const kinds = [['association', 'Association', 'line'], ['uni', 'Directed Association', 'tri'], ['aggregation', 'Aggregation', 'dia'], ['composition', 'Composition', 'dia'], ['inherit', 'Inheritance', 'tri'], ['implement', 'Realisation', 'tri'], ['dependency', 'Dependency', 'tri']];
+      const kinds = [['association', kindTitle('association'), 'line'], ['uni', t('editor.uml.menu.uni', 'Directed Association'), 'tri'], ['aggregation', kindTitle('aggregation'), 'dia'], ['composition', kindTitle('composition'), 'dia'], ['inherit', kindTitle('inherit'), 'tri'], ['implement', kindTitle('implement'), 'tri'], ['dependency', kindTitle('dependency'), 'tri']];
       const ends = [byName(baseName(L.from)), byName(baseName(L.to))], classes = ends.every((x: any) => x && x.k === 'class');
       // a path routed in the code keeps its route: it changes kind only as a line does, and isn't reversed
       const routed = !!(selR() && selR().steps);
-      menu.innerHTML = (routed ? '' : mItem('rev', 'Reverse Direction', 'rev') + '<hr>') +
-        (routed ? mItem('k:notelink', 'Plain Link', 'line', undefined, ck === 'notelink') + mItem('k:dependency', 'Dependency', 'tri', undefined, ck === 'dependency') :
-        classes ? kinds.map(([k, t, i]) => mItem('k:' + k, t, i, undefined, ck === k)).join('') : mItem('k:notelink', 'Plain Link', 'line', undefined, ck === 'notelink') + mItem('k:dependency', 'Dependency', 'tri', undefined, ck === 'dependency')) +
-        '<hr>' + mItem('ldel', 'Delete Line', 'del', '⌫');
+      const plain = mItem('k:notelink', t('editor.uml.menu.plainLink', 'Plain Link'), 'line', undefined, ck === 'notelink') + mItem('k:dependency', kindTitle('dependency'), 'tri', undefined, ck === 'dependency');
+      menu.innerHTML = (routed ? '' : mItem('rev', t('editor.uml.reverse', 'Reverse Direction'), 'rev') + '<hr>') +
+        (routed ? plain : classes ? kinds.map(([k, label, i]) => mItem('k:' + k, label, i, undefined, ck === k)).join('') : plain) +
+        '<hr>' + mItem('ldel', t('editor.uml.menu.deleteLine', 'Delete Line'), 'del', '⌫');
     } else { closeMenu(); return; }
     draw(); renderProps();
     menu.hidden = false;
@@ -822,103 +861,110 @@ import { runtime as TD } from '../runtime';
     const n = selN(), r = selR(), h = selH();
     const show = (title: string, summary: string, rows: any[]) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), summary }] });
     const colorRow = (label: string, key: string, value: string, o: Record<string, any> = {}) => ({ ...row(label, texColour(value, { 'data-f': key }, { nullable: true, title: label, defaultLabel: o.dflt, defaultSwatch: o.dfltSw })), controlClass: 'ctl tc' });
-    const area = (label: string, key: string, value: string, rows: number, placeholder: string) => ({ kind: 'column' as const, label: [label], labelTitle: 'Use $…$ for maths', value, attrs: { 'data-f': key, 'data-tx': 'text', rows, spellcheck: 'false', class: 'mono', placeholder, 'aria-label': label } });
+    const area = (label: string, key: string, value: string, rows: number, placeholder: string) => ({ kind: 'column' as const, label: [label], labelTitle: t('editor.commonA.useMaths', 'Use $…$ for maths'), value, attrs: { 'data-f': key, 'data-tx': 'text', rows, spellcheck: 'false', class: 'mono', placeholder, 'aria-label': label } });
     const sel = (label: string, key: string, value: string, options: string[][]) => row(label, { kind: 'select' as const, attrs: { 'data-f': key, 'aria-label': label }, options, value });
     // one end of a relation: its role name and multiplicity side by side
     const end = (name: string, rk: string, rv: string, mk: string, mv: string, eg: string) => {
       const inp = (key: string, value: string, placeholder: string, label: string) => ({ kind: 'input' as const, value: value || '', attrs: { type: 'text', 'data-f': key, 'data-tx': 'text', spellcheck: 'false', placeholder, 'aria-label': label, title: label } });
-      return row(`At ${name}`, inp(rk, rv, 'role', `Role at ${name}`), inp(mk, mv, eg, `Multiplicity at ${name}`));
+      return row(t('editor.uml.at', 'At {name}', { name }), inp(rk, rv, t('editor.uml.role', 'role'), t('editor.uml.roleAt', 'Role at {name}', { name })), inp(mk, mv, eg, t('editor.uml.multAt', 'Multiplicity at {name}', { name })));
     };
     const actions = (buttons: any[]) => ({ kind: 'actions' as const, class: 'row', buttons });
-    const colours = (it: any) => [colorRow('Fill', 'cfill', getOpt(it, 'fill'), { dflt: 'Yellow' }), colorRow('Line', 'cdraw', getOpt(it, 'draw'), { dflt: 'Purple' }), colorRow('Text', 'ctext', getOpt(it, 'text'), { dfltSw: TD.css('#000000') })];
+    const colours = (it: any) => [colorRow(t('ui.fill', 'Fill'), 'cfill', getOpt(it, 'fill'), { dflt: t('editor.uml.yellow', 'Yellow') }), colorRow(t('ui.line', 'Line'), 'cdraw', getOpt(it, 'draw'), { dflt: t('editor.uml.purple', 'Purple') }), colorRow(t('ui.text', 'Text'), 'ctext', getOpt(it, 'text'), { dfltSw: TD.css('#000000') })];
+    const eg = (example: string) => t('editor.commonA.eg', 'e.g. {example}', { example });
     if (n && n.k === 'class') {
       const [x, y] = posOf(n), rest = oList(n).filter((o: string) => !isOwn(o));
       const rels = items().filter((it: any) => (it.k === 'rel' || it.k === 'draw') && (baseName(it.a) === n.name || baseName(it.b) === n.name)).length + n.inherits.length + n.implements.length;
-      show(ENV_NAMES[n.env] || 'Class', `${n.attrs.length} attribute${n.attrs.length === 1 ? '' : 's'} · ${n.ops.length} operation${n.ops.length === 1 ? '' : 's'}${rels ? ` · ${rels} line${rels === 1 ? '' : 's'}` : ''}`, [
-        field('Name', 'name', n.name, { class: 'mono' }),
-        sel('Kind', 'env', n.env, U.KINDS.map((k: string) => [k, ENV_NAMES[k]])),
-        ...(n.env === 'object' ? [field('Instance of', 'inst', n.instanceOf || '', { 'data-tx': 'text', placeholder: 'class name' })] : []),
-        area('Attributes', 'attrs', n.attrs.join('\n'), Math.max(2, Math.min(8, n.attrs.length + 1)), '- name : String'),
-        area('Operations', 'ops', opsText(n), Math.max(2, Math.min(8, n.ops.length + 1)), '+ area() : double'),
-        note('One per line. A leading ', { code: '*' }, ' marks an abstract operation (', { code: '\\operation[0]' }, ', in italics).'),
-        field('Inherits from', 'inh', n.inherits.join(', '), { placeholder: 'none' }),
-        field('Implements', 'impl', n.implements.join(', '), { placeholder: 'none' }),
-        { ...numField('Text width', 'tw', U.num(twOf(n)), 'cm', { step: '0.1', min: '0.5' }) },
-        actions([{ text: 'Fit Width to Text', attrs: { 'data-ue': 'fitw', title: 'The width of the widest line' } }]),
+      const counts = [n.attrs.length === 1 ? t('editor.uml.oneAttr', '1 attribute') : t('editor.uml.nAttrs', '{n} attributes', { n: n.attrs.length }), n.ops.length === 1 ? t('editor.uml.oneOp', '1 operation') : t('editor.uml.nOps', '{n} operations', { n: n.ops.length })];
+      if (rels) counts.push(rels === 1 ? t('editor.uml.oneLine', '1 line') : t('editor.uml.nLines', '{n} lines', { n: rels }));
+      show(envName(n.env) || t('editor.uml.env.class', 'Class'), counts.join(' · '), [
+        field(t('ui.name', 'Name'), 'name', n.name, { class: 'mono' }),
+        sel(t('editor.uml.kind', 'Kind'), 'env', n.env, U.KINDS.map((k: string) => [k, envName(k)])),
+        ...(n.env === 'object' ? [field(t('editor.uml.instanceOf', 'Instance of'), 'inst', n.instanceOf || '', { 'data-tx': 'text', placeholder: t('editor.uml.className', 'class name') })] : []),
+        area(t('editor.uml.attributes', 'Attributes'), 'attrs', n.attrs.join('\n'), Math.max(2, Math.min(8, n.attrs.length + 1)), '- name : String'),
+        area(t('editor.uml.operations', 'Operations'), 'ops', opsText(n), Math.max(2, Math.min(8, n.ops.length + 1)), '+ area() : double'),
+        note(t('editor.uml.help.members', 'One per line. A leading '), { code: '*' }, t('editor.uml.help.abstract', ' marks an abstract operation ('), { code: '\\operation[0]' }, t('editor.uml.help.italics', ', in italics).')),
+        field(t('editor.uml.inheritsFrom', 'Inherits from'), 'inh', n.inherits.join(', '), { placeholder: 'none' }),
+        field(t('editor.uml.implements', 'Implements'), 'impl', n.implements.join(', '), { placeholder: 'none' }),
+        { ...numField(t('editor.uml.textWidth', 'Text width'), 'tw', U.num(twOf(n)), 'cm', { step: '0.1', min: '0.5' }) },
+        actions([{ text: t('editor.uml.fitWidth', 'Fit Width to Text'), attrs: { 'data-ue': 'fitw', title: t('editor.uml.fitWidthTitle', 'The width of the widest line') } }]),
         numField('x', 'x', U.num(x), 'cm', { step: '0.25' }), numField('y', 'y', U.num(y), 'cm', { step: '0.25' }),
-        ...(n.x == null ? [note('Its position in the code is not one the drawing reads. Moving it writes one.')] : []),
+        ...(n.x == null ? [note(t('editor.uml.help.position', 'Its position in the code is not one the drawing reads. Moving it writes one.'))] : []),
         ...colours(n),
-        field('Options', 'opts', rest.join(', '), { class: 'mono', placeholder: 'e.g. thick' }),
-        actions([{ text: `Delete ${ENV_NAMES[n.env] || 'Class'}`, attrs: { class: 'danger', 'data-ue': 'ndel' } }]),
+        field(t('ui.options', 'Options'), 'opts', rest.join(', '), { class: 'mono', placeholder: eg('thick') }),
+        actions([{ text: t('editor.uml.deleteKind', 'Delete {kind}', { kind: envName(n.env) || t('editor.uml.env.class', 'Class') }), attrs: { class: 'danger', 'data-ue': 'ndel' } }]),
       ]);
       return;
     }
     if (n && n.k === 'note') {
       const rest = oList(n).filter((o: string) => !isOwn(o));
-      show('Note', n.name ? `named ${n.name}` : 'not linked', [
-        area('Text', 'ntext', noteText(n.text), 3, 'A note'),
-        note('Each line is a line of the note (written with ', { code: '\\\\' }, ').'),
-        field('Name', 'nname', n.name, { class: 'mono', placeholder: 'given when a line goes to it' }),
-        numField('Text width', 'tw', U.num(twOf(n)), 'cm', { step: '0.1', min: '0.5' }),
+      show(t('editor.uml.note', 'Note'), n.name ? t('editor.uml.named', 'named {name}', { name: n.name }) : t('editor.uml.notLinked', 'not linked'), [
+        area(t('ui.text', 'Text'), 'ntext', noteText(n.text), 3, t('editor.uml.aNote', 'A note')),
+        note(t('editor.uml.help.noteLines', 'Each line is a line of the note (written with '), { code: '\\\\' }, t('editor.uml.help.noteLinesEnd', ').')),
+        field(t('ui.name', 'Name'), 'nname', n.name, { class: 'mono', placeholder: t('editor.uml.noteNamePh', 'given when a line goes to it') }),
+        numField(t('editor.uml.textWidth', 'Text width'), 'tw', U.num(twOf(n)), 'cm', { step: '0.1', min: '0.5' }),
         numField('x', 'x', U.num(n.x), 'cm', { step: '0.25' }), numField('y', 'y', U.num(n.y), 'cm', { step: '0.25' }),
         ...colours(n),
-        field('Options', 'opts', rest.join(', '), { class: 'mono', placeholder: 'e.g. thick' }),
-        actions([{ text: 'Delete Note', attrs: { class: 'danger', 'data-ue': 'ndel' } }]),
+        field(t('ui.options', 'Options'), 'opts', rest.join(', '), { class: 'mono', placeholder: eg('thick') }),
+        actions([{ text: t('editor.uml.deleteNote', 'Delete Note'), attrs: { class: 'danger', 'data-ue': 'ndel' } }]),
       ]);
       return;
     }
     if (r && r.k === 'rel') {
       const assoc = r.cmd === 'association';
-      show(KIND_NAMES[CMD_KIND[r.cmd]].replace(/^./, (c) => c.toUpperCase()), `${r.a} → ${r.b}`, [
-        sel('Kind', 'rkind', CMD_KIND[r.cmd], [['association', 'Association'], ['uni', 'Directed association'], ['aggregation', 'Aggregation (open diamond)'], ['composition', 'Composition (filled diamond)'], ['inherit', 'Inheritance'], ['implement', 'Realisation'], ['dependency', 'Dependency']]),
-        ...(assoc ? [end(r.a, 'ra', r.ra, 'ma', r.ma, 'e.g. 1')] : []),
-        end(r.b, 'rb', r.rb, 'mb', r.mb, 'e.g. 0..*'),
-        ...(r.cmd === 'aggregation' || r.cmd === 'composition' ? [note(`The diamond is at ${r.a}, the whole; ${r.b} is the part.`)] : []),
-        field('Options', 'ropts', r.o || '', { class: 'mono', placeholder: 'e.g. dashed' }),
-        actions([{ text: 'Reverse Direction', attrs: { 'data-ue': 'rev' } }, { text: 'Delete', attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
+      show(kindTitle(CMD_KIND[r.cmd]), `${r.a} → ${r.b}`, [
+        sel(t('editor.uml.kind', 'Kind'), 'rkind', CMD_KIND[r.cmd], [['association', kindTitle('association')], ['uni', kindTitle('uni')], ['aggregation', t('editor.uml.kindOpt.aggregation', 'Aggregation (open diamond)')], ['composition', t('editor.uml.kindOpt.composition', 'Composition (filled diamond)')], ['inherit', kindTitle('inherit')], ['implement', kindTitle('implement')], ['dependency', kindTitle('dependency')]]),
+        ...(assoc ? [end(r.a, 'ra', r.ra, 'ma', r.ma, eg('1'))] : []),
+        end(r.b, 'rb', r.rb, 'mb', r.mb, eg('0..*')),
+        ...(r.cmd === 'aggregation' || r.cmd === 'composition' ? [note(t('editor.uml.help.diamond', 'The diamond is at {whole}, the whole; {part} is the part.', { whole: r.a, part: r.b }))] : []),
+        field(t('ui.options', 'Options'), 'ropts', r.o || '', { class: 'mono', placeholder: eg('dashed') }),
+        actions([{ text: t('editor.uml.reverse', 'Reverse Direction'), attrs: { 'data-ue': 'rev' } }, { text: t('ui.delete', 'Delete'), attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
       ]);
       return;
     }
     if (r && r.k === 'draw' && r.steps) {
       // a path through several points: its route and labels are the code's
       const dk = drawKind(r), n = r.steps.filter((x: any) => x.op !== 'move').length, labs = r.steps.reduce((a: number, x: any) => a + x.labels.length, 0);
-      show(dk === 'dependency' ? 'Dependency' : dk === 'notelink' ? 'Note link' : 'Line', `${r.a} → ${r.b || 'a point'}`, [
-        ...(dk === 'line' ? [] : [segments('Arrow', 'dk', dk, [['notelink', 'None'], ['dependency', 'Dependency', 'dashed with an arrow']])]),
-        field('Options', 'dopts', r.o || '', { class: 'mono', placeholder: 'e.g. ->' }),
-        note(`Routed in ${n} steps${labs ? ` with ${labs} ${labs === 1 ? 'label' : 'labels'}` : ''}; it follows its classes when they move. Change the route and labels in the code.`),
-        actions([{ text: 'Delete', attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
+      show(drawTitle(dk), `${r.a} → ${r.b || t('editor.uml.aPoint', 'a point')}`, [
+        ...(dk === 'line' ? [] : [arrowRow(dk)]),
+        field(t('ui.options', 'Options'), 'dopts', r.o || '', { class: 'mono', placeholder: eg('->') }),
+        note(labs === 0 ? t('editor.uml.help.routed', 'Routed in {n} steps; it follows its classes when they move. Change the route and labels in the code.', { n }) : labs === 1 ? t('editor.uml.help.routedLabel', 'Routed in {n} steps with 1 label; it follows its classes when they move. Change the route and labels in the code.', { n }) : t('editor.uml.help.routedLabels', 'Routed in {n} steps with {labels} labels; it follows its classes when they move. Change the route and labels in the code.', { n, labels: labs })),
+        actions([{ text: t('ui.delete', 'Delete'), attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
       ]);
       return;
     }
     if (r && r.k === 'draw') {
       const dk = drawKind(r), first = r.labels[0];
-      show(dk === 'dependency' ? 'Dependency' : dk === 'notelink' ? 'Note link' : 'Line', `${r.a} ${r.op} ${r.b}`, [
-        ...(dk === 'line' ? [] : [segments('Arrow', 'dk', dk, [['notelink', 'None'], ['dependency', 'Dependency', 'dashed with an arrow']])]),
-        field('Label', 'dlabel', first ? first.t : '', { 'data-tx': 'text', placeholder: 'none' }),
+      show(drawTitle(dk), `${r.a} ${r.op} ${r.b}`, [
+        ...(dk === 'line' ? [] : [arrowRow(dk)]),
+        field(t('ui.label', 'Label'), 'dlabel', first ? first.t : '', { 'data-tx': 'text', placeholder: 'none' }),
         routeRow(r.op),
-        field('Options', 'dopts', r.o || '', { class: 'mono', placeholder: 'e.g. ->' }),
-        actions([{ text: 'Reverse Direction', attrs: { 'data-ue': 'rev' } }, { text: 'Delete', attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
+        field(t('ui.options', 'Options'), 'dopts', r.o || '', { class: 'mono', placeholder: eg('->') }),
+        actions([{ text: t('editor.uml.reverse', 'Reverse Direction'), attrs: { 'data-ue': 'rev' } }, { text: t('ui.delete', 'Delete'), attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
       ]);
       return;
     }
     if (h) {
-      show(h.kind === 'inherit' ? 'Inheritance' : 'Realisation', `${h.child} → ${h.parent}`, [
-        segments('Kind', 'hk', h.kind, [['inherit', 'Inherits', 'solid line: a subclass'], ['implement', 'Implements', 'dashed line: realises an interface']]),
-        note(`Written in ${h.child} as `, { code: `\\${h.kind}{${h.parent}}` }, '.'),
-        actions([{ text: 'Reverse Direction', attrs: { 'data-ue': 'rev' } }, { text: 'Delete', attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
+      show(kindTitle(h.kind === 'inherit' ? 'inherit' : 'implement'), `${h.child} → ${h.parent}`, [
+        segments(t('editor.uml.kind', 'Kind'), 'hk', h.kind, [['inherit', t('editor.uml.inherits', 'Inherits'), t('editor.uml.inheritsTitle', 'solid line: a subclass')], ['implement', t('editor.uml.implements', 'Implements'), t('editor.uml.implementsTitle', 'dashed line: realises an interface')]]),
+        note(t('editor.uml.help.writtenIn', 'Written in {name} as ', { name: h.child }), { code: `\\${h.kind}{${h.parent}}` }, t('editor.uml.help.writtenInEnd', '.')),
+        actions([{ text: t('editor.uml.reverse', 'Reverse Direction'), attrs: { 'data-ue': 'rev' } }, { text: t('ui.delete', 'Delete'), attrs: { class: 'danger', 'data-ue': 'ldel' } }]),
       ]);
       return;
     }
     const nc = items().filter((it: any) => it.k === 'class').length;
     renderView(props, FormPanel, { sections: [
-      { ...section('Class diagram', [note('Place classes from the left on the grid and drag them to move (', { kbd: '⌥' }, ' places freely); their lines follow. Select a class and drag its blue handle to another one for a relation of the kind chosen under Relations. Double-click a class’s name to rename it, an attribute or operation to edit it, or a line to edit its label; drag a line’s label to move it.')], 'sec'), summary: `${nc} class${nc === 1 ? '' : 'es'} · ${relCount()} relation${relCount() === 1 ? '' : 's'}` },
-      section('Code', [note('Written for ', { code: 'pgf-umlcd' }, '. Its style macros (', { code: '\\umldrawcolor' }, ', ', { code: '\\umlfillcolor' }, '), ', { code: '\\switchUmlcdSchool' }, ' and package environments are read and drawn; edit them in the code.')], 'sec'),
+      { ...section(message('editor.uml.title', 'Class diagram'), [note(t('editor.uml.help.diagram', 'Place classes from the left on the grid and drag them to move ('), { kbd: '⌥' }, t('editor.uml.help.diagramRest', ' places freely); their lines follow. Select a class and drag its blue handle to another one for a relation of the kind chosen under Relations. Double-click a class’s name to rename it, an attribute or operation to edit it, or a line to edit its label; drag a line’s label to move it.'))], 'sec'), summary: countText(nc, relCount()) },
+      section(t('editor.commonA.code', 'Code'), [note(t('editor.uml.help.codeFor', 'Written for '), { code: 'pgf-umlcd' }, t('editor.uml.help.macros', '. Its style macros ('), { code: '\\umldrawcolor' }, ', ', { code: '\\umlfillcolor' }, '), ', { code: '\\switchUmlcdSchool' }, t('editor.uml.help.macrosRest', ' and package environments are read and drawn; edit them in the code.'))], 'sec'),
     ] });
   }
+  const countText = (nc: number, nr: number) => `${nc === 1 ? t('editor.uml.oneClass', '1 class') : t('editor.uml.nClasses', '{n} classes', { n: nc })} · ${nr === 1 ? t('editor.uml.oneRelation', '1 relation') : t('editor.uml.nRelations', '{n} relations', { n: nr })}`;
+  const drawTitle = (dk: string) => (dk === 'dependency' ? kindTitle('dependency') : dk === 'notelink' ? kindTitle('notelink') : t('ui.line', 'Line'));
+  const arrowRow = (dk: string) => segments(t('ui.arrow', 'Arrow'), 'dk', dk, [['notelink', t('ui.none', 'None')], ['dependency', kindTitle('dependency'), t('editor.uml.dependencyTitle', 'dashed with an arrow')]]);
   // the Route control: an icon for each shape of line, each drawn centred in the same 16 × 16 box
   const ROUTE_ICON: Record<string, string> = { '--': 'M3.5 12.5 12.5 3.5', '-|': 'M3.5 3.5H12.5V12.5', '|-': 'M3.5 3.5V12.5H12.5' };
   function routeRow(op: string) {
-    const R = segments('Route', 'op', op, [['--', '', 'Straight (--)', 'Straight'], ['-|', '', 'Across, then up or down (-|)', 'Across, then up or down'], ['|-', '', 'Up or down, then across (|-)', 'Up or down, then across']]) as any;
+    const straight = t('editor.uml.route.straight', 'Straight'), across = t('editor.uml.route.across', 'Across, then up or down'), updown = t('editor.uml.route.updown', 'Up or down, then across');
+    const R = segments(t('editor.uml.route', 'Route'), 'op', op, [['--', '', `${straight} (--)`, straight], ['-|', '', `${across} (-|)`, across], ['|-', '', `${updown} (|-)`, updown]]) as any;
     for (const c of R.controls) c.svg = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${ROUTE_ICON[c.attrs['data-v']]}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>`;
     return R;
   }
@@ -993,7 +1039,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'ldel') deleteLink();
     else if (a === 'rev') reverseLink();
     else if (a.startsWith('k:')) { E.kind = a.slice(2); setLinkKind(a.slice(2)); buildPalette(); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
     else if (n) {
       if (a === 'rename') editName(E.sel.n);
       else if (a === 'text') focusField('ntext');
@@ -1006,7 +1052,7 @@ import { runtime as TD } from '../runtime';
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const nc = items().filter((it: any) => it.k === 'class').length, nr = relCount();
-    count.textContent = `${nc} class${nc === 1 ? '' : 'es'} · ${nr} relation${nr === 1 ? '' : 's'}`;
+    count.textContent = countText(nc, nr);
     updateTools();
     if (document.activeElement === codeTa) return;
     const c = snapCode();
@@ -1074,8 +1120,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = t('editor.commonA.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snapCode() !== E.start);
@@ -1086,13 +1133,15 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this class diagram?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(t('editor.uml.discard', 'Discard changes to this class diagram?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
     root.hidden = true;
     document.body.classList.remove('cz-open');
+    localeOff?.(); localeOff = undefined;
     E = null;
     if (ok && changed) done({ src });
   }
+  let localeOff: (() => void) | undefined;
   function open(block: any, done: any) {
     const M = load(block.src);
     E = { M, sel: null, arm: null, kind: 'association', view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
@@ -1101,6 +1150,9 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, properties and drawing's hints follow the interface language while the editor is open
+    localeOff?.();
+    localeOff = onLocale(() => { if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

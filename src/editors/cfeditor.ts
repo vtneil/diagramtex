@@ -1,4 +1,7 @@
+import { GRID_STYLES } from '../ui/canvas-grid';
+import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
+import { onLocale, t } from '../i18n';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note, actionRow } from '../ui/editor-fields';
 import FormPanel from '../ui/FormPanel.svelte';
@@ -21,8 +24,27 @@ import { runtime as TD } from '../runtime';
   const SEP = C.DEF.sep;
 
   // ---------------------------------------------------------------- palette
-  const BOND_NAMES: Record<string, any> = { '-': 'Single', '=': 'Double', '~': 'Triple', '>': 'Wedge', '<': 'Wedge, reversed', '>:': 'Hashed', '<:': 'Hashed, reversed', '>|': 'Hollow wedge', '<|': 'Hollow wedge, reversed', '=^': 'Double, left', '=_': 'Double, right' };
-  const ARROW_NAMES: Record<string, any> = { '->': 'Reaction', '<=>': 'Equilibrium', '<->>': 'Equilibrium, to the right', '<<->': 'Equilibrium, to the left', '<->': 'Resonance', '-/>': 'No reaction', '<-': 'Backwards', '0': 'Invisible', '-U>': 'U arrow' };
+  // the names as shown (the tables above keep the English, which search also matches)
+  const bondNames = (): Record<string, string> => ({ '-': t('editor.cf.bond.single', 'Single'), '=': t('editor.cf.bond.double', 'Double'), '~': t('editor.cf.bond.triple', 'Triple'), '>': t('editor.cf.bond.wedge', 'Wedge'), '<': t('editor.cf.bond.wedgeRev', 'Wedge, reversed'), '>:': t('editor.cf.bond.hashed', 'Hashed'), '<:': t('editor.cf.bond.hashedRev', 'Hashed, reversed'), '>|': t('editor.cf.bond.hollow', 'Hollow wedge'), '<|': t('editor.cf.bond.hollowRev', 'Hollow wedge, reversed'), '=^': t('editor.cf.bond.doubleLeft', 'Double, left'), '=_': t('editor.cf.bond.doubleRight', 'Double, right') });
+  const arrowNames = (): Record<string, string> => ({ '->': t('editor.cf.arrow.reaction', 'Reaction'), '<=>': t('editor.cf.arrow.equilibrium', 'Equilibrium'), '<->>': t('editor.cf.arrow.eqRight', 'Equilibrium, to the right'), '<<->': t('editor.cf.arrow.eqLeft', 'Equilibrium, to the left'), '<->': t('editor.cf.arrow.resonance', 'Resonance'), '-/>': t('editor.cf.arrow.none', 'No reaction'), '<-': t('editor.cf.arrow.backwards', 'Backwards'), '0': t('editor.cf.arrow.invisible', 'Invisible'), '-U>': t('editor.cf.arrow.u', 'U arrow') });
+  const say = (en: string): string => (({
+    Vertex: () => t('editor.cf.vertex', 'Vertex'), 'Hollow wedge': () => t('editor.cf.bond.hollow', 'Hollow wedge'), 'Wedge, reversed': () => t('editor.cf.bond.wedgeRev', 'Wedge, reversed'), 'Hashed, reversed': () => t('editor.cf.bond.hashedRev', 'Hashed, reversed'),
+    Single: () => t('editor.cf.bond.single', 'Single'), Double: () => t('editor.cf.bond.double', 'Double'), Triple: () => t('editor.cf.bond.triple', 'Triple'), Wedge: () => t('editor.cf.bond.wedge', 'Wedge'), Hashed: () => t('editor.cf.bond.hashed', 'Hashed'),
+    Aromatic: () => t('editor.cf.ring.aromatic', 'Aromatic'), Positive: () => t('editor.cf.charge.plus', 'Positive'), Negative: () => t('editor.cf.charge.minus', 'Negative'), 'Lone pair': () => t('editor.cf.charge.pair', 'Lone pair'), Radical: () => t('editor.cf.charge.radical', 'Radical'),
+    Arrow: () => t('editor.cf.arrow', 'Arrow'), Equilibrium: () => t('editor.cf.arrow.equilibrium', 'Equilibrium'), Resonance: () => t('editor.cf.arrow.resonance', 'Resonance'), 'No reaction': () => t('editor.cf.arrow.none', 'No reaction'),
+    Plus: () => t('editor.cf.plus', 'Plus'), Merge: () => t('editor.cf.merge', 'Merge'), 'Curved arrow': () => t('editor.cf.curved', 'Curved arrow'),
+  } as Record<string, () => string>)[en]?.() ?? en);
+  const catName = (en: string): string => (({
+    Atoms: () => t('editor.cf.cat.atoms', 'Atoms'), Bonds: () => t('editor.cf.cat.bonds', 'Bonds'), Rings: () => t('editor.cf.cat.rings', 'Rings'), Groups: () => t('editor.cf.cat.groups', 'Groups'),
+    Charges: () => t('editor.cf.cat.charges', 'Charges'), Reactions: () => t('editor.cf.cat.reactions', 'Reactions'),
+  } as Record<string, () => string>)[en]?.() ?? en);
+  const anyAngle = () => t('editor.cf.tip.anyAngle', ' · ⌥ for any angle');
+  // what the drawing holds, as the code header and the panel summary say it
+  const countsText = (L: any) => {
+    const n = L.mols.length, a = L.arrows.length;
+    if (a) return `${n === 1 ? t('editor.cf.oneMolecule', '1 molecule') : t('editor.cf.nMolecules', '{n} molecules', { n })} · ${a === 1 ? t('editor.cf.oneArrow', '1 arrow') : t('editor.cf.nArrows', '{n} arrows', { n: a })}`;
+    return t('editor.cf.atomsBonds', '{atoms} atoms · {bonds} bonds', { atoms: L.verts.filter((v: any) => v.label).length, bonds: L.bonds.length });
+  };
   // functional groups: code for a group at the end of a bond at angle a (relative angles follow the bond)
   const left = (a: any) => a > 90 && a < 270;
   const GROUPS: Record<string, any> = {
@@ -553,14 +575,14 @@ import { runtime as TD } from '../runtime';
     const q = search.value.trim().toLowerCase();
     let html = '';
     for (const [title, items] of PAL) {
-      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k.slice(2)} ${title}`.toLowerCase().includes(q));
+      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k.slice(2)} ${title} ${say(name)} ${catName(title as string)}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => {
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(catName(title as string))}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => {
         const on = E && (E.arm === k || k === `b:${E.bond}`);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.chemMini(ITEM[k].mini)}</span><span>${esc(name)}</span></button>`;
+        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(say(name))}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.chemMini(ITEM[k].mini)}</span><span>${esc(say(name))}</span></button>`;
       }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 60, 36, 1.4);
   }
   search.addEventListener('input', buildPalette);
@@ -576,7 +598,7 @@ import { runtime as TD } from '../runtime';
     if (kind === 's' && val === 'move') {
       E.arm = E.arm === k ? null : k; E.mvFrom = null;
       buildPalette(); draw();
-      setTip(E.arm ? 'Curved arrow: click the atom or bond it starts from. Esc to stop.' : '');
+      setTip(E.arm ? t('editor.cf.tip.moveFrom', 'Curved arrow: click the atom or bond it starts from. Esc to stop.') : '');
       return;
     }
     if (kind === 's') { apply(k, null); return; }
@@ -585,7 +607,8 @@ import { runtime as TD } from '../runtime';
     if (lay().empty && (kind === 'a' || kind === 'r' || kind === 'g')) { apply(k, null); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${ITEM[k].name}: click an atom${kind === 'b' || kind === 'r' ? ' or a bond' : ''}. Esc when done.` : kind === 'b' ? `${ITEM[k].name}: new bonds are of this kind` : '');
+    const name = say(ITEM[k].name);
+    setTip(E.arm ? (kind === 'b' || kind === 'r' ? t('editor.cf.tip.armBond', '{name}: click an atom or a bond. Esc when done.', { name }) : t('editor.cf.tip.arm', '{name}: click an atom. Esc when done.', { name })) : kind === 'b' ? t('editor.cf.tip.newBonds', '{name}: new bonds are of this kind', { name }) : '');
   }
   // what a palette item does to an atom ({ v }), a bond ({ b }) or the drawing (null); false: nothing
   function apply(k: any, on: any) {
@@ -615,7 +638,7 @@ import { runtime as TD } from '../runtime';
       if (kind === 'b') { if (b.hook) return false; edit(() => { b.item.sym = val; b.item.dirty = true; touch(b.mol); }); return true; }
       if (kind === 'r') {
         // fused onto this side of a ring: the new ring shares it
-        if (!b.ring || !b.item.parent || b.item.pidx < 1) { setTip(b.ring ? 'Fuse a ring onto another side: this one starts its ring' : 'Rings fuse onto a ring\'s side; pick an atom to attach a ring with a bond'); return false; }
+        if (!b.ring || !b.item.parent || b.item.pidx < 1) { setTip(b.ring ? t('editor.cf.tip.fuseOther', 'Fuse a ring onto another side: this one starts its ring') : t('editor.cf.tip.fuse', "Rings fuse onto a ring's side; pick an atom to attach a ring with a bond")); return false; }
         const n = val === 'benzene' || val === 'arom' ? 6 : +val;
         const sides = val === 'benzene' ? '=-=-=' : '-'.repeat(n - 1);
         edit(() => { b.item.parent.items.splice(b.item.pidx, 0, { t: 'ring', star: val === 'arom' ? '**' : '*', arc: '', n, chain: C.parseChain(sides, () => {}) }); touch(b.mol); });
@@ -630,7 +653,7 @@ import { runtime as TD } from '../runtime';
     if (kind === 'r') { const a = freeAngle(v); let nb; edit(() => { nb = grow(v, a, E.bond === '-' || !E.bond ? '-' : E.bond, [{ t: 'ring', star: val === 'arom' ? '**' : '*', arc: '', n: val === 'benzene' || val === 'arom' ? 6 : +val, chain: C.parseChain(RINGS[val].replace(/^\*+\d+\(|\)$/g, ''), () => {}) }]); }); E.sel = { b: nb }; draw(); renderProps(); keepInView(); return true; }
     if (kind === 'g') { const a = freeAngle(v); let nb; edit(() => { nb = grow(v, a, '-', C.parseChain(GROUPS[val](a), () => {}).items); }); E.sel = { b: nb }; draw(); renderProps(); keepInView(); return true; }
     if (kind === 'c') {
-      if (!v.g || !atomsOf(v)) { setTip('Charges go on a labelled atom: give it a label first'); return false; }
+      if (!v.g || !atomsOf(v)) { setTip(t('editor.cf.tip.charges', 'Charges go on a labelled atom: give it a label first')); return false; }
       let ok = false;
       edit(() => {
         if (val === 'plus' || val === 'minus') { const s = val === 'plus' ? '+' : '-', cur = signOf((atomsOf(v) || [])[v.k]); ok = setSign(v, cur === s ? '' : s); }
@@ -724,7 +747,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.3, Math.min(12, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(0.3, Math.min(12, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -737,14 +760,28 @@ import { runtime as TD } from '../runtime';
     if (!E) return;
     syncCode();
     const r = rect(), W = r.width, H = r.height, v = E.view, k = v.k;
+    const Lo = lay();
     // a grid for the eye: chemfig has no coordinates, so nothing snaps to it
     const step = TD.PX_PER_CM * 0.25 * k >= 7 ? TD.PX_PER_CM * 0.25 : TD.PX_PER_CM;
     let minor = '', major = '';
     const xs = Math.floor(-v.ox / k / step), xe = Math.ceil((W - v.ox) / k / step), ys = Math.floor(-v.oy / k / step), ye = Math.ceil((H - v.oy) / k / step);
     for (let i = xs; i <= xe; i++) { const X = Math.round(v.ox + i * step * k) + 0.5, maj = Math.abs(((i * step) / TD.PX_PER_CM) % 1) < 1e-6; if (maj) major += `M${X},0V${H}`; else minor += `M${X},0V${H}`; }
     for (let j = ys; j <= ye; j++) { const Y = Math.round(v.oy + j * step * k) + 0.5, maj = Math.abs(((j * step) / TD.PX_PER_CM) % 1) < 1e-6; if (maj) major += `M0,${Y}H${W}`; else minor += `M0,${Y}H${W}`; }
-    let out = `<rect width="${W}" height="${H}" class="cz-bg"/><path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/>`;
-    const Lo = lay();
+    let grid = '';
+    if (E.grid === 'grid') grid = `<g class="cf-grid" data-grid="grid"><path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/></g>`;
+    else if (E.grid !== 'off') {
+      const iso = E.grid.startsWith('isometric'), dots = E.grid === 'dot' || E.grid === 'isometric-dot';
+      // Both isometric styles use identical lattice size and zoom thinning.
+      let side = iso ? (Lo.P?.sep || SEP) * k : step * k;
+      while (side < 14) side *= 2;
+      const w = iso ? Math.sqrt(3) * side : side, h = side;
+      const atom = Lo.verts[0], ox = v.ox + (atom?.X || 0) * k, oy = v.oy + (atom?.Y || 0) * k;
+      const marks = dots
+        ? `<circle cx="${r2(w / 4)}" cy="${r2(h / 4)}" r="1.2" class="grid-dot"/>${iso ? `<circle cx="${r2(3 * w / 4)}" cy="${r2(3 * h / 4)}" r="1.2" class="grid-dot"/>` : ''}`
+        : `<path d="M0,0L${r2(w)},${r2(h)}M0,${r2(h)}L${r2(w)},0M0,0V${r2(h)}M${r2(w / 2)},0V${r2(h)}" class="cz-gmin"/>`;
+      grid = `<defs><pattern id="cf-isometric-grid" patternUnits="userSpaceOnUse" x="${r2(ox - (dots ? w / 4 : 0))}" y="${r2(oy - (dots ? h / 4 : 0))}" width="${r2(w)}" height="${r2(h)}">${marks}</pattern></defs><rect class="cf-grid" data-grid="${E.grid}" width="${W}" height="${H}" fill="url(#cf-isometric-grid)" pointer-events="none"/>`;
+    }
+    let out = `<rect width="${W}" height="${H}" class="cz-bg"/>${grid}`;
     const sb = selB(), sa = selA(), sv = selV(), sm = selM();
     const tr = `transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})"`;
     if (sb) out += `<g ${tr}><path class="ze-wsel" d="M${r2(sb.X0)},${r2(sb.Y0)}L${r2(sb.X1)},${r2(sb.Y1)}" stroke-width="${r2(10 / k)}"/></g>`;
@@ -755,7 +792,7 @@ import { runtime as TD } from '../runtime';
     if (mf && mf.b) { const fb = Lo.bonds.find((x: any) => x.item === mf.b); if (fb) out += `<g ${tr}><path class="ze-wsel" d="M${r2(fb.X0)},${r2(fb.Y0)}L${r2(fb.X1)},${r2(fb.Y1)}" stroke-width="${r2(10 / k)}"/></g>`; }
     if (E.hover && E.hover.b && (!sb || E.hover.b !== sb.item) && !E.drag) { const hb = Lo.bonds.find((b: any) => b.item === E.hover.b); if (hb) out += `<g ${tr}><path class="cf-bhov" d="M${r2(hb.X0)},${r2(hb.Y0)}L${r2(hb.X1)},${r2(hb.Y1)}" stroke-width="${r2(8 / k)}"/></g>`; }
     if (!Lo.empty) out += `<g ${tr}>${C.draw({ type: 'chemfig', x: Lo.bb.x, y: Lo.bb.y, src: '', color: INK }, { paper: PAPER, export: true }, Lo)}</g>`;
-    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Pick an atom, a ring or a group on the left to start</text>`;
+    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(t('editor.cf.empty', 'Pick an atom, a ring or a group on the left to start'))}</text>`;
     // atoms: a point on each bare vertex, rings round the selected and hovered ones
     for (const vx of Lo.verts) {
       const [X, Y] = S(vx.X, vx.Y), rr = vRadius(vx);
@@ -774,12 +811,12 @@ import { runtime as TD } from '../runtime';
     // the selected arrow's head: drag it to turn and stretch the arrow
     if (sa && sa.seg.t === 'arrow' && !isDirect(sa.seg)) {
       const [hx, hy] = S(sa.x2, sa.y2);
-      out += `<g class="ze-knob ze-ahead"><title>Drag to turn and stretch the arrow</title><circle cx="${r2(hx)}" cy="${r2(hy)}" r="5.5"/></g>`;
+      out += `<g class="ze-knob ze-ahead"><title>${esc(t('editor.cf.knob.arrow', 'Drag to turn and stretch the arrow'))}</title><circle cx="${r2(hx)}" cy="${r2(hy)}" r="5.5"/></g>`;
     }
     // the selected curved arrow's control points, on lines from the atoms they pull away from
     if (sm) for (const h of mctls(sm)) {
       const [ax, ay] = S(h.ax, h.ay), [cx, cy] = S(h.cx, h.cy);
-      out += `<path class="ze-draft" d="M${r2(ax)},${r2(ay)}L${r2(cx)},${r2(cy)}"/><g class="ze-knob ze-mctl" data-i="${h.i}"><title>Drag to bend the arrow</title><circle cx="${r2(cx)}" cy="${r2(cy)}" r="5.5"/></g>`;
+      out += `<path class="ze-draft" d="M${r2(ax)},${r2(ay)}L${r2(cx)},${r2(cy)}"/><g class="ze-knob ze-mctl" data-i="${h.i}"><title>${esc(t('editor.cf.knob.bend', 'Drag to bend the arrow'))}</title><circle cx="${r2(cx)}" cy="${r2(cy)}" r="5.5"/></g>`;
     }
     // the handle on the selected (or hovered) atom: drag it out for a new bond
     const kvx = !E.drag && !E.arm && (E.knobAt ? findV(E.knobAt) : sv);
@@ -788,7 +825,7 @@ import { runtime as TD } from '../runtime';
       const ang = freeAngle(kvx), [X, Y] = S(kvx.X, kvx.Y), off = vRadius(kvx) + 12;
       const kx = r2(X + off * Math.cos((ang * Math.PI) / 180)), ky = r2(Y - off * Math.sin((ang * Math.PI) / 180));
       E.knobPos = { v: vkey(kvx), X, Y, kx, ky, ang };
-      out += `<g class="ze-knob"><title>Drag out a ${esc(BOND_NAMES[E.bond].toLowerCase())} bond; click for one at ${Math.round(ang)}°</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6M${kx},${ky - 3}v6"/></g>`;
+      out += `<g class="ze-knob"><title>${esc(t('editor.cf.knob.bond', 'Drag out a {kind} bond; click for one at {deg}°', { kind: bondNames()[E.bond].toLowerCase(), deg: Math.round(ang) }))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6M${kx},${ky - 3}v6"/></g>`;
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = out;
@@ -828,14 +865,14 @@ import { runtime as TD } from '../runtime';
     const v = vertexAt(e), mv = v ? null : moveAt(e, 5), b = v || mv ? null : bondAt(e), a = v || b || mv ? null : arrowAt(e);
     if (E.arm === 's:move') {
       const vb = !mv && v ? v : null, bb = vertexAt(e) ? null : bondAt(e);
-      const t = vb && vb.g && (atomsOf(vb) || []).length ? { v: vkey(vb) } : !vb && bb && !bb.hook && bb.item && bb.item.t === 'bond' ? { b: bb.item } : null;
-      if (!t) { setTip('Curved arrows go from and to a labelled atom or a bond. Esc to stop.'); return; }
-      if (!E.mvFrom) { E.mvFrom = t; setTip('Curved arrow: now click the atom or bond it goes to'); draw(); return; }
-      if ((t.v && t.v === E.mvFrom.v) || (t.b && t.b === E.mvFrom.b)) return;
+      const to = vb && vb.g && (atomsOf(vb) || []).length ? { v: vkey(vb) } : !vb && bb && !bb.hook && bb.item && bb.item.t === 'bond' ? { b: bb.item } : null;
+      if (!to) { setTip(t('editor.cf.tip.moveEnds', 'Curved arrows go from and to a labelled atom or a bond. Esc to stop.')); return; }
+      if (!E.mvFrom) { E.mvFrom = to; setTip(t('editor.cf.tip.moveTo', 'Curved arrow: now click the atom or bond it goes to')); draw(); return; }
+      if ((to.v && to.v === E.mvFrom.v) || (to.b && to.b === E.mvFrom.b)) return;
       const from = E.mvFrom;
       let seg = null;
       E.mvFrom = null; E.arm = null; E.ptr = null;
-      edit(() => { seg = addMove(from, t); });
+      edit(() => { seg = addMove(from, to); });
       buildPalette(); setTip('');
       E.sel = seg ? { m: { seg, k: 0 } } : null;
       draw(); renderProps(); keepInView();
@@ -889,7 +926,7 @@ import { runtime as TD } from '../runtime';
       o[0] = !o[0] && Math.abs(C.norm360(ang - d.ang0)) < 1e-9 ? '' : num(ang);
       o[1] = Math.abs(co - 1) < 1e-9 ? '' : num(co);
       d.A.opt = o; d.A.dirty = true; E.M.dirty = true; L = null;
-      setTip(`Arrow at ${Math.round(ang)}°, ${num(co)} × compound sep${e.altKey ? '' : ' · ⌥ for any angle'}`);
+      setTip(`${t('editor.cf.tip.arrowAt', 'Arrow at {deg}°, {n} × compound sep', { deg: Math.round(ang), n: num(co) })}${e.altKey ? '' : anyAngle()}`);
       draw(); return;
     }
     if (d.mode === 'mctl') {
@@ -900,7 +937,7 @@ import { runtime as TD } from '../runtime';
       const ang = aimAt(d.ax, d.ay, e), [x, y] = D(sx, sy), r = Math.max(0.05, Math.round((Math.hypot(x - d.ax, y - d.ay) / TD.PX_PER_CM) * 20) / 20);
       if (d.i === 1) { q.out = ang; q.r1 = r; } else { q.in = ang; q.r2 = r; }
       setDraw(d.seg, d.k, { path: simplePath(q) }); L = null;
-      setTip(`${d.i === 1 ? 'Leaves' : 'Arrives'} at ${Math.round(ang)}°, pulled ${num(r)} cm${e.altKey ? '' : ' · ⌥ for any angle'}`);
+      setTip(`${d.i === 1 ? t('editor.cf.tip.leaves', 'Leaves at {deg}°, pulled {r} cm', { deg: Math.round(ang), r: num(r) }) : t('editor.cf.tip.arrives', 'Arrives at {deg}°, pulled {r} cm', { deg: Math.round(ang), r: num(r) })}${e.altKey ? '' : anyAngle()}`);
       draw(); return;
     }
     if (d.mode === 'grow') {
@@ -908,7 +945,7 @@ import { runtime as TD } from '../runtime';
       d.moved = true;
       d.ang = aimAt(d.fx, d.fy, e);
       d.tx = d.fx + SEP * Math.cos((d.ang * Math.PI) / 180); d.ty = d.fy - SEP * Math.sin((d.ang * Math.PI) / 180);
-      setTip(`${BOND_NAMES[E.bond]} bond at ${Math.round(d.ang)}°${e.altKey ? '' : ' · ⌥ for any angle'}`);
+      setTip(`${t('editor.cf.tip.kindAt', '{kind} bond at {deg}°', { kind: bondNames()[E.bond], deg: Math.round(d.ang) })}${e.altKey ? '' : anyAngle()}`);
       draw(); return;
     }
     if (d.mode === 'move') {
@@ -921,7 +958,7 @@ import { runtime as TD } from '../runtime';
       d.ang = aimAt(fx, fy, e);
       d.len = Math.max(0.25, Math.round((Math.hypot(x - fx, y - fy) / SEP) * 4) / 4);
       d.tx = fx + d.len * SEP * Math.cos((d.ang * Math.PI) / 180); d.ty = fy - d.len * SEP * Math.sin((d.ang * Math.PI) / 180);
-      setTip(`Bond at ${Math.round(d.ang)}°, ${num(d.len)} × atom sep${e.altKey ? '' : ' · ⌥ for any angle'}`);
+      setTip(`${t('editor.cf.tip.bondAt', 'Bond at {deg}°, {n} × atom sep', { deg: Math.round(d.ang), n: num(d.len) })}${e.altKey ? '' : anyAngle()}`);
       draw();
     }
   });
@@ -967,7 +1004,7 @@ import { runtime as TD } from '../runtime';
     mol: '<path d="M10 3l6 3.5v7L10 17l-6-3.5v-7z"/>',
     arrow: '<path d="M3 10h13M12 6l4 4-4 4"/>',
   };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/del/.test(act) ? ' danger' : ''}" data-cm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/del/.test(act) ? ' danger' : ''}" data-cm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -976,17 +1013,18 @@ import { runtime as TD } from '../runtime';
     const sch = inScheme();
     if (mv) {
       E.sel = { m: { seg: mv.seg, k: mv.k } };
-      menu.innerHTML = mItem('mvdel', 'Delete Curved Arrow', 'del', '⌫');
+      menu.innerHTML = mItem('mvdel', t('editor.cf.deleteCurved', 'Delete Curved Arrow'), 'del', '⌫');
     } else if (v) {
       E.sel = { v: vkey(v) };
-      menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + '<hr>' + mItem(v.inRing ? 'rdel' : 'vdel', v.inRing ? 'Delete Ring' : v.inBond ? 'Delete Atom' : 'Delete Molecule', 'del', '⌫') + (sch && v.inBond ? mItem('mdel', 'Delete Molecule', 'del') : '');
+      menu.innerHTML = mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' + mItem(v.inRing ? 'rdel' : 'vdel', delVertex(v), 'del', '⌫') + (sch && v.inBond ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
     } else if (b) {
       E.sel = { b: b.item };
-      menu.innerHTML = mItem('b:-', 'Single', 'one', '1') + mItem('b:=', 'Double', 'two', '2') + mItem('b:~', 'Triple', 'three', '3') + mItem('b:>', 'Wedge', 'wedge') + mItem('b:>:', 'Hashed', 'hash') +
-        (/^[<>]/.test(b.item.sym) ? mItem('bflip', 'Reverse Wedge', 'flip') : '') + '<hr>' + mItem(b.ring ? 'rdel' : 'bdel', b.ring ? 'Delete Ring' : 'Delete Bond', 'del', '⌫') + (sch ? mItem('mdel', 'Delete Molecule', 'del') : '');
+      const bn = bondNames();
+      menu.innerHTML = mItem('b:-', bn['-'], 'one', '1') + mItem('b:=', bn['='], 'two', '2') + mItem('b:~', bn['~'], 'three', '3') + mItem('b:>', bn['>'], 'wedge') + mItem('b:>:', bn['>:'], 'hash') +
+        (/^[<>]/.test(b.item.sym) ? mItem('bflip', t('editor.cf.reverseWedge', 'Reverse Wedge'), 'flip') : '') + '<hr>' + mItem(b.ring ? 'rdel' : 'bdel', b.ring ? t('editor.cf.deleteRing', 'Delete Ring') : t('editor.cf.deleteBond', 'Delete Bond'), 'del', '⌫') + (sch ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
     } else if (a) {
       E.sel = { a: a.seg };
-      menu.innerHTML = mItem('alabel', 'Edit Conditions', 'label', '↩') + '<hr>' + mItem('adel', a.seg.t === 'merge' ? 'Delete Merge' : 'Delete Arrow', 'del', '⌫');
+      menu.innerHTML = mItem('alabel', t('editor.cf.editConditions', 'Edit Conditions'), 'label', '↩') + '<hr>' + mItem('adel', a.seg.t === 'merge' ? t('editor.cf.deleteMerge', 'Delete Merge') : t('editor.cf.deleteArrow', 'Delete Arrow'), 'del', '⌫');
     } else { closeMenu(); return; }
     draw(); renderProps();
     menu.hidden = false;
@@ -1051,15 +1089,18 @@ import { runtime as TD } from '../runtime';
   function focusField() { const f = $('[data-f]', props); if (f) { f.focus(); if (f.select) f.select(); } }
 
   // ---------------------------------------------------------------- properties
+  const delVertex = (v: any) => (v.inRing ? t('editor.cf.deleteRing', 'Delete Ring') : v.inBond ? t('editor.cf.deleteAtom', 'Delete Atom') : t('editor.cf.deleteMolecule', 'Delete Molecule'));
+  const eg = (example: string) => t('editor.commonA.eg', 'e.g. {example}', { example });
+  const noneEg = (example: string) => t('editor.cf.noneEg', 'none, e.g. {example}', { example });
   const selectField = (label: any, key: any, value: any, options: any) => row(label, { kind: 'select' as const, value, options, attrs: { 'data-f': key } });
   const chemicalNumber = (label: any, key: any, value: any, unit: any, attrs = {}) => numField(label, key, value == null ? '' : num(value), unit, attrs);
   function molSection(mol: any) {
     if (!inScheme()) return [];
-    const lr = lrOf(mol), sub = compOf(mol).sub, bk = lr ? lr.l : '', options = [['', 'None'], ['[', '[ ]'], ['(', '( )'], ['\\{', '{ }']];
+    const lr = lrOf(mol), sub = compOf(mol).sub, bk = lr ? lr.l : '', options = [['', t('ui.none', 'None')], ['[', '[ ]'], ['(', '( )'], ['\\{', '{ }']];
     if (bk && !options.some(o => o[0] === bk)) options.push([bk, `${bk} ${lr.r}`]);
-    const group = sub ? [{ text: 'Ungroup', attrs: { 'data-ce': 'ungroup', title: 'Take its \\subscheme apart' } }] : nextStep(mol) ? [{ text: 'Group with Next', attrs: { 'data-ce': 'group', title: 'Put it, the next arrow and the compound after it in a \\subscheme' } }] : [];
-    return [{ ...section('Compound', [field('Name', 'mname', nameOf(mol), { 'data-tx': 'text', placeholder: 'none, shown under it' }), selectField('Brackets', 'brk', bk, options),
-      ...(sub ? [field('Arrows at', 'subang', sub.opt, { class: 'mono', placeholder: 'default, e.g. 90' })] : []), { kind: 'actions' as const, class: 'row', buttons: [...group, { text: 'Delete Molecule', attrs: { class: 'danger', 'data-ce': 'mdel' } }] }], 'sec'), ...(sub ? { summary: 'in a subscheme' } : {}) }];
+    const group = sub ? [{ text: t('editor.cf.ungroup', 'Ungroup'), attrs: { 'data-ce': 'ungroup', title: t('editor.cf.ungroupTitle', 'Take its {cmd} apart', { cmd: '\\subscheme' }) } }] : nextStep(mol) ? [{ text: t('editor.cf.groupNext', 'Group with Next'), attrs: { 'data-ce': 'group', title: t('editor.cf.groupNextTitle', 'Put it, the next arrow and the compound after it in a {cmd}', { cmd: '\\subscheme' }) } }] : [];
+    return [{ ...section(t('editor.cf.compound', 'Compound'), [field(t('ui.name', 'Name'), 'mname', nameOf(mol), { 'data-tx': 'text', placeholder: t('editor.cf.namePh', 'none, shown under it') }), selectField(t('editor.cf.brackets', 'Brackets'), 'brk', bk, options),
+      ...(sub ? [field(t('editor.cf.arrowsAt', 'Arrows at'), 'subang', sub.opt, { class: 'mono', placeholder: t('editor.cf.defaultEg', 'default, e.g. {example}', { example: '90' }) })] : []), { kind: 'actions' as const, class: 'row', buttons: [...group, { text: t('editor.cf.deleteMolecule', 'Delete Molecule'), attrs: { class: 'danger', 'data-ce': 'mdel' } }] }], 'sec'), ...(sub ? { summary: t('editor.cf.inSubscheme', 'in a subscheme') } : {}) }];
   }
   function renderProps() {
     if (!E) return;
@@ -1067,40 +1108,40 @@ import { runtime as TD } from '../runtime';
     const show = (title: any, summary: any, rows: any, mol?: any) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), ...(summary !== undefined ? { summary } : {}) }, ...(mol ? molSection(mol) : [])] });
     if (v) {
       const n = dirsAt(v).length, atoms = atomsOf(v), main = atoms && atoms[Math.min(v.k, atoms.length - 1)], pairs = chargesOf(main).filter((c: any) => c.what.trim() === '\\:').map((c: any) => Math.round(c.angle)), sign = signOf(main), lbl = v.g ? v.g.raw.trim() : '';
-      const pairRow: any = segments('Lone pairs', 'pair', '', [[90, '↑', 'Above'], [0, '→', 'Right'], [270, '↓', 'Below'], [180, '←', 'Left']], !main);
+      const pairRow: any = segments(t('editor.cf.lonePairs', 'Lone pairs'), 'pair', '', [[90, '↑', t('editor.commonA.side.above', 'Above')], [0, '→', t('editor.commonA.side.right', 'Right')], [270, '↓', t('editor.commonA.side.below', 'Below')], [180, '←', t('editor.commonA.side.left', 'Left')]], !main);
       for (const control of pairRow.controls) if (pairs.includes(+control.attrs['data-v'])) control.attrs.class = 'on';
-      show(lbl ? 'Atom' : 'Vertex', `${n} bond${n === 1 ? '' : 's'}`, [field('Label', 'label', lbl, { class: 'mono', 'data-tx': 'math', placeholder: 'none: a carbon vertex' }),
-        segments('Charge', 'sign', sign, [['', 'None'], ['+', '+', 'A superscript +'], ['-', '−', 'A superscript −']], !main), pairRow,
-        ...(!v.g ? [note('A vertex with no label is a carbon. Give it a label to put charges and lone pairs on it.')] : []), actionRow('ce', v.inRing ? 'rdel' : 'vdel', v.inRing ? 'Delete Ring' : v.inBond ? 'Delete Atom' : 'Delete Molecule')], v.mol); return;
+      show(lbl ? t('editor.cf.atom', 'Atom') : t('editor.cf.vertex', 'Vertex'), n === 1 ? t('editor.cf.oneBond', '1 bond') : t('editor.cf.nBonds', '{n} bonds', { n }), [field(t('ui.label', 'Label'), 'label', lbl, { class: 'mono', 'data-tx': 'math', placeholder: t('editor.cf.labelPh', 'none: a carbon vertex') }),
+        segments(t('editor.cf.charge', 'Charge'), 'sign', sign, [['', t('ui.none', 'None')], ['+', '+', t('editor.cf.superscript', 'A superscript {sign}', { sign: '+' })], ['-', '−', t('editor.cf.superscript', 'A superscript {sign}', { sign: '−' })]], !main), pairRow,
+        ...(!v.g ? [note(t('editor.cf.help.vertex', 'A vertex with no label is a carbon. Give it a label to put charges and lone pairs on it.'))] : []), actionRow('ce', v.inRing ? 'rdel' : 'vdel', delVertex(v))], v.mol); return;
     }
     if (b) {
       const it = b.item, arg = it.arg || [], inRing = !!b.ring, ang = it.angleUsed != null ? it.angleUsed : b.angle, len = arg[1] ? parseFloat(arg[1]) : 1;
-      show((BOND_NAMES[it.sym] || 'Bond') + ' bond', inRing ? `ring of ${b.ring.n}` : b.hook ? 'ring closure' : '', [selectField('Type', 'sym', it.sym, Object.entries<any>(BOND_NAMES)),
-        chemicalNumber('Angle', 'angle', inRing ? null : Math.round(ang * 100) / 100, '°', inRing || b.hook ? { disabled: true } : { step: '15' }), chemicalNumber('Length', 'len', inRing ? null : len, '×', inRing || b.hook ? { disabled: true } : { step: '0.25', min: '0.25' }),
-        field('Options', 'tikz', arg[4] || '', { class: 'mono', placeholder: 'e.g. red, line width=1pt', ...(b.hook ? { disabled: true } : {}) }),
-        note(inRing ? "A ring's sides follow the ring: they have no angle or length of their own." : 'Drag the atom at its end to turn and stretch it.'), actionRow('ce', inRing ? 'rdel' : 'bdel', inRing ? 'Delete Ring' : 'Delete Bond')], b.mol); return;
+      show(t('editor.cf.bondTitle', '{kind} bond', { kind: bondNames()[it.sym] || t('editor.cf.bond', 'Bond') }), inRing ? t('editor.cf.ringOf', 'ring of {n}', { n: b.ring.n }) : b.hook ? t('editor.cf.ringClosure', 'ring closure') : '', [selectField(t('ui.type', 'Type'), 'sym', it.sym, Object.entries<any>(bondNames())),
+        chemicalNumber(t('ui.angle', 'Angle'), 'angle', inRing ? null : Math.round(ang * 100) / 100, '°', inRing || b.hook ? { disabled: true } : { step: '15' }), chemicalNumber(t('editor.cf.length', 'Length'), 'len', inRing ? null : len, '×', inRing || b.hook ? { disabled: true } : { step: '0.25', min: '0.25' }),
+        field(t('ui.options', 'Options'), 'tikz', arg[4] || '', { class: 'mono', placeholder: eg('red, line width=1pt'), ...(b.hook ? { disabled: true } : {}) }),
+        note(inRing ? t('editor.cf.help.ringSides', "A ring's sides follow the ring: they have no angle or length of their own.") : t('editor.cf.help.bondDrag', 'Drag the atom at its end to turn and stretch it.')), actionRow('ce', inRing ? 'rdel' : 'bdel', inRing ? t('editor.cf.deleteRing', 'Delete Ring') : t('editor.cf.deleteBond', 'Delete Bond'))], b.mol); return;
     }
     if (a && a.seg.t === 'merge') {
       const M = a.seg;
-      show('Merge arrow', `from ${M.srcs.length}`, [selectField('Direction', 'mdir', M.dir, [['>', 'Right'], ['<', 'Left'], ['^', 'Up'], ['v', 'Down']]),
-        field('Above', 'above', C.unbrace(M.labels[0] || ''), { 'data-tx': 'text', placeholder: 'none' }), field('Below', 'below', C.unbrace(M.labels[1] || ''), { 'data-tx': 'text', placeholder: 'none' }), field('From', 'msrc', M.srcs.join(', '), { class: 'mono', placeholder: 'e.g. c1, c2' }), field('To', 'mtgt', M.target, { class: 'mono', placeholder: 'none, or a name for what follows' }),
-        note("From names the compounds whose lines join: c1 is a scheme's first compound, c2 the next, and so on."), actionRow('ce', 'adel', 'Delete Merge')]); return;
+      show(t('editor.cf.mergeArrow', 'Merge arrow'), t('editor.cf.fromN', 'from {n}', { n: M.srcs.length }), [selectField(t('editor.cf.direction', 'Direction'), 'mdir', M.dir, [['>', t('editor.commonA.side.right', 'Right')], ['<', t('editor.commonA.side.left', 'Left')], ['^', t('editor.cf.up', 'Up')], ['v', t('editor.cf.down', 'Down')]]),
+        field(t('editor.commonA.side.above', 'Above'), 'above', C.unbrace(M.labels[0] || ''), { 'data-tx': 'text', placeholder: 'none' }), field(t('editor.commonA.side.below', 'Below'), 'below', C.unbrace(M.labels[1] || ''), { 'data-tx': 'text', placeholder: 'none' }), field(t('editor.cf.from', 'From'), 'msrc', M.srcs.join(', '), { class: 'mono', placeholder: eg('c1, c2') }), field(t('editor.cf.to', 'To'), 'mtgt', M.target, { class: 'mono', placeholder: t('editor.cf.targetPh', 'none, or a name for what follows') }),
+        note(t('editor.cf.help.merge', "From names the compounds whose lines join: c1 is a scheme's first compound, c2 the next, and so on.")), actionRow('ce', 'adel', t('editor.cf.deleteMerge', 'Delete Merge'))]); return;
     }
     if (a) {
       const A = a.seg, direct = isDirect(A);
-      show((ARROW_NAMES[A.type] || 'Arrow') + ' arrow', undefined, [selectField('Type', 'atype', A.type, Object.entries<any>(ARROW_NAMES)), field('Above', 'above', C.unbrace(A.labels[0] || ''), { 'data-tx': 'text', placeholder: 'none, e.g. $\\Delta$' }), field('Below', 'below', C.unbrace(A.labels[1] || ''), { 'data-tx': 'text', placeholder: 'none, e.g. H$_2$O' }),
-        chemicalNumber('Angle', 'aangle', direct ? null : A.opt[0] ? parseFloat(A.opt[0]) : a.ang, '°', { step: '15', ...(direct ? { disabled: true } : {}) }), chemicalNumber('Length', 'alen', direct ? null : A.opt[1] ? parseFloat(A.opt[1]) : 1, '×', { step: '0.25', min: '0.25', ...(direct ? { disabled: true } : {}) }),
-        field('Ends', 'aends', A.names ? A.names.slice(1, -1) : '', { class: 'mono', placeholder: 'none, e.g. c1--c2 or @c1--@c3' }), field('Style', 'astyle', A.opt.slice(2).filter((x: any) => x && x.trim()).join(', '), { class: 'mono', placeholder: 'none, e.g. red, thick' }),
-        direct ? note('It joins two compounds already placed (@ names), so it has no angle or length of its own.') : note('Drag its head to turn and stretch it (15° steps; ', { kbd: '⌥' }, ' for any angle).'), actionRow('ce', 'adel', 'Delete Arrow')]); return;
+      show(t('editor.cf.arrowTitle', '{kind} arrow', { kind: arrowNames()[A.type] || t('editor.cf.arrow', 'Arrow') }), undefined, [selectField(t('ui.type', 'Type'), 'atype', A.type, Object.entries<any>(arrowNames())), field(t('editor.commonA.side.above', 'Above'), 'above', C.unbrace(A.labels[0] || ''), { 'data-tx': 'text', placeholder: noneEg('$\\Delta$') }), field(t('editor.commonA.side.below', 'Below'), 'below', C.unbrace(A.labels[1] || ''), { 'data-tx': 'text', placeholder: noneEg('H$_2$O') }),
+        chemicalNumber(t('ui.angle', 'Angle'), 'aangle', direct ? null : A.opt[0] ? parseFloat(A.opt[0]) : a.ang, '°', { step: '15', ...(direct ? { disabled: true } : {}) }), chemicalNumber(t('editor.cf.length', 'Length'), 'alen', direct ? null : A.opt[1] ? parseFloat(A.opt[1]) : 1, '×', { step: '0.25', min: '0.25', ...(direct ? { disabled: true } : {}) }),
+        field(t('editor.cf.ends', 'Ends'), 'aends', A.names ? A.names.slice(1, -1) : '', { class: 'mono', placeholder: t('editor.cf.endsPh', 'none, e.g. {a} or {b}', { a: 'c1--c2', b: '@c1--@c3' }) }), field(t('ui.style', 'Style'), 'astyle', A.opt.slice(2).filter((x: any) => x && x.trim()).join(', '), { class: 'mono', placeholder: noneEg('red, thick') }),
+        direct ? note(t('editor.cf.help.direct', 'It joins two compounds already placed (@ names), so it has no angle or length of its own.')) : note(t('editor.cf.help.arrowDrag', 'Drag its head to turn and stretch it (15° steps; '), { kbd: '⌥' }, t('editor.cf.help.anyAngle', ' for any angle).')), actionRow('ce', 'adel', t('editor.cf.deleteArrow', 'Delete Arrow'))]); return;
     }
     if (mv) {
-      const D0 = drawsOf(mv.seg)[mv.k], q = D0 && simpleOf(D0.path), tips = mv.tipS && mv.tipE ? 'stealth-stealth' : mv.tipS ? 'stealth-' : mv.tipE ? '-stealth' : '-', line = mv.dash === 'dash' ? 'dashed' : mv.dash === 'dot' ? 'dotted' : mv.dash ? 'pattern' : 'solid', lines = [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']];
-      if (line === 'pattern') lines.push(['pattern', 'Dash pattern']);
+      const D0 = drawsOf(mv.seg)[mv.k], q = D0 && simpleOf(D0.path), tips = mv.tipS && mv.tipE ? 'stealth-stealth' : mv.tipS ? 'stealth-' : mv.tipE ? '-stealth' : '-', line = mv.dash === 'dash' ? 'dashed' : mv.dash === 'dot' ? 'dotted' : mv.dash ? 'pattern' : 'solid', lines = [['solid', t('ui.solid', 'Solid')], ['dashed', t('ui.dashed', 'Dashed')], ['dotted', t('ui.dotted', 'Dotted')]];
+      if (line === 'pattern') lines.push(['pattern', t('editor.cf.dashPattern', 'Dash pattern')]);
       const colour = D0 ? (D0.opt.split(',').map(o => o.trim()).find(isColour) || '').replace(/^(color|draw)\s*=\s*/, '') : '';
-      show('Curved arrow', '\\chemmove', [selectField('Tips', 'mvtip', tips, [['-stealth', 'At the end'], ['stealth-', 'At the start'], ['stealth-stealth', 'Both ends'], ['-', 'None']]), selectField('Line', 'mvline', line, lines), field('Colour', 'mvcol', colour, { class: 'mono', placeholder: 'none, e.g. red' }),
-        ...(q ? [chemicalNumber('Leaves at', 'mvout', q.out, '°', { step: '15' }), chemicalNumber('Pull', 'mvr1', q.r1, 'cm', { step: '0.05', min: '0' }), chemicalNumber('Arrives at', 'mvin', q.in, '°', { step: '15' }), chemicalNumber('Pull', 'mvr2', q.r2, 'cm', { step: '0.05', min: '0' })] : []), field('Path', 'mvpath', D0 ? D0.path.trim() : '', { class: 'mono' }), note(q ? 'Drag the blue handles to bend it.' : "Its path isn't a single curve with two controls, so it is edited as written."), actionRow('ce', 'mvdel', 'Delete Curved Arrow')]); return;
+      show(t('editor.cf.curved', 'Curved arrow'), '\\chemmove', [selectField(t('editor.cf.tips', 'Tips'), 'mvtip', tips, [['-stealth', t('editor.cf.atEnd', 'At the end')], ['stealth-', t('editor.cf.atStart', 'At the start')], ['stealth-stealth', t('editor.cf.bothEnds', 'Both ends')], ['-', t('ui.none', 'None')]]), selectField(t('ui.line', 'Line'), 'mvline', line, lines), field(t('ui.colour', 'Colour'), 'mvcol', colour, { class: 'mono', placeholder: noneEg('red') }),
+        ...(q ? [chemicalNumber(t('editor.cf.leavesAt', 'Leaves at'), 'mvout', q.out, '°', { step: '15' }), chemicalNumber(t('editor.cf.pull', 'Pull'), 'mvr1', q.r1, 'cm', { step: '0.05', min: '0' }), chemicalNumber(t('editor.cf.arrivesAt', 'Arrives at'), 'mvin', q.in, '°', { step: '15' }), chemicalNumber(t('editor.cf.pull', 'Pull'), 'mvr2', q.r2, 'cm', { step: '0.05', min: '0' })] : []), field(t('editor.cf.path', 'Path'), 'mvpath', D0 ? D0.path.trim() : '', { class: 'mono' }), note(q ? t('editor.cf.help.bend', 'Drag the blue handles to bend it.') : t('editor.cf.help.pathAsWritten', "Its path isn't a single curve with two controls, so it is edited as written.")), actionRow('ce', 'mvdel', t('editor.cf.deleteCurved', 'Delete Curved Arrow'))]); return;
     }
-    show('Chemistry', C.counts(Lo), [note('Pick an atom and drag its blue handle to grow a bond (it snaps to 15°; ', { kbd: '⌥' }, ' for any angle). Drag an atom to turn its bond. Type a letter to relabel the picked atom; double-click to edit its label, or a bond to step it single, double, triple. Rings, groups and charges on the left go onto the picked atom or bond; Reactions add an arrow and a copy of the molecule to change, a merge, or a curved arrow from one atom or bond to another.')]);
+    show(t('editor.cf.title', 'Chemistry'), countsText(Lo), [note(t('editor.cf.help.main', 'Pick an atom and drag its blue handle to grow a bond (it snaps to 15°; '), { kbd: '⌥' }, t('editor.cf.help.mainRest', ' for any angle). Drag an atom to turn its bond. Type a letter to relabel the picked atom; double-click to edit its label, or a bond to step it single, double, triple. Rings, groups and charges on the left go onto the picked atom or bond; Reactions add an arrow and a copy of the molecule to change, a merge, or a curved arrow from one atom or bond to another.'))]);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); L = null; clampSel(); renderProps(); draw(); } });
@@ -1184,6 +1225,33 @@ import { runtime as TD } from '../runtime';
     $('[data-ce="undo"]', root).disabled = !E.undo.length;
     $('[data-ce="redo"]', root).disabled = !E.redo.length;
   }
+  function updateGridTools() {
+    root.querySelectorAll<HTMLButtonElement>('[data-grid-style]').forEach(b => {
+      const on = E.grid !== 'off' && b.dataset.gridStyle === E.gridChoice;
+      b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); b.tabIndex = b.dataset.gridStyle === E.gridChoice ? 0 : -1;
+    });
+  }
+  function saveGridChoice() {
+    try { localStorage.setItem('diagramtex.cf.grid', E.grid); localStorage.setItem('diagramtex.cf.gridChoice', E.gridChoice); } catch { /* private storage */ }
+    updateGridTools(); draw();
+  }
+  const gridButtons = $('#chemGridStyle', root);
+  gridButtons.addEventListener('click', (e: any) => {
+    const button = e.target.closest('[data-grid-style]');
+    if (!E || !button) return;
+    const style = button.dataset.gridStyle;
+    E.grid = E.grid === style ? 'off' : style; E.gridChoice = style; saveGridChoice();
+  });
+  gridButtons.addEventListener('keydown', (e: KeyboardEvent) => {
+    const button = (e.target as Element).closest<HTMLButtonElement>('[data-grid-style]');
+    if (button && (e.key === ' ' || e.key === 'Enter')) { e.stopPropagation(); return; }
+    if (!E || !button || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault(); e.stopPropagation();
+    const index = GRID_STYLES.indexOf(button.dataset.gridStyle as any), delta = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? GRID_STYLES.length - 1 : (index + delta + GRID_STYLES.length) % GRID_STYLES.length;
+    E.grid = E.gridChoice = GRID_STYLES[next]; saveGridChoice();
+    gridButtons.querySelector(`[data-grid-style="${E.gridChoice}"]`)?.focus();
+  });
   root.addEventListener('click', (e) => {
     const b = (e.target! as Element).closest('[data-ce]');
     if (!b || !E) return;
@@ -1214,14 +1282,14 @@ import { runtime as TD } from '../runtime';
     else if (x === 'mdel') { const mol = (v || b || {}).mol; if (mol) { edit(() => deleteMol(mol)); E.sel = null; L = null; draw(); renderProps(); } }
     else if (x === 'label') { if (v) editLabel(v); }
     else if (x === 'alabel') { if (a) editArrowLabel(a, 0); }
-    else if (x === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { btn.textContent = 'Copied'; setTimeout(() => (btn.textContent = 'Copy'), 1200); });
+    else if (x === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { btn.textContent = t('ui.copied', 'Copied'); setTimeout(() => (btn.textContent = t('ui.copy', 'Copy')), 1200); });
     else if (x === 'bflip' && b) edit(() => { const s = b.item.sym; b.item.sym = (s[0] === '>' ? '<' : '>') + s.slice(1); b.item.dirty = true; touch(b.mol); });
     else if (x.startsWith('b:') && b) apply(x, { b });
   }
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const Lo = lay();
-    count.textContent = C.counts(Lo);
+    count.textContent = countsText(Lo);
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -1283,8 +1351,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = t('editor.commonA.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snapCode() !== E.start);
@@ -1295,22 +1364,36 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this drawing?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(t('editor.cf.discard', 'Discard changes to this drawing?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
     root.hidden = true;
     document.body.classList.remove('cz-open');
+    localeOff?.(); localeOff = undefined;
     E = null; L = null;
     if (ok && changed) done({ src });
   }
+  let localeOff: (() => void) | undefined;
   function open(block: any, done: any) {
     const M = load(block.src);
     L = null;
     E = { M, sel: null, arm: null, bond: '-', view: { ox: 0, oy: 0, k: 2 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, codeAt: null, codeTimer: null };
+    E.grid = E.gridChoice = 'isometric';
+    try {
+      const saved = localStorage.getItem('diagramtex.cf.grid'), grid = saved === 'rectangular' ? 'grid' : saved;
+      E.grid = GRID_STYLES.includes(grid as any) || grid === 'off' ? grid : 'isometric';
+      const last = localStorage.getItem('diagramtex.cf.gridChoice');
+      E.gridChoice = E.grid === 'off' ? GRID_STYLES.includes(last as any) ? last : 'isometric' : E.grid;
+    } catch { /* private storage */ }
+    updateGridTools();
     E.start = codeOf(M);
     root.hidden = false;
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, properties and drawing's hints follow the interface language while the editor is open
+    let first = true;
+    localeOff?.();
+    localeOff = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); syncCode(); } });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

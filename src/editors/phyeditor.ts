@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, onLocale } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { row, section, txPlaceholder } from '../ui/forms';
@@ -38,6 +41,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- state
   // { src, M (parsed src), sel (line index) | null, arm (command name), view: { k, ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  let stopLocale: (() => void) | null = null;
   const snapshot = () => E.src;
   const { begin, commit, undo, redo } = TD.editorSession.history({ state: () => E, snapshot, restore: (src) => { setSrc(src); clampSel(); draw(); renderProps(); }, updateTools: () => updateTools() });
   function setSrc(src: any) { E.src = src; E.M = P.parse(src); E.poly = null; E.multi = null; }
@@ -69,17 +73,18 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const d = D();
     let html = '';
-    if (!d) html = '<div class="cz-empty">This figure names no domain: start the source with <code>\\physics{optics}</code> (or mechanics, fields, waves, spacetime, levels).</div>';
+    if (!d) html = `<div class="cz-empty">${esc(uiText('editor.phy.noDomain1', 'This figure names no domain: start the source with '))}<code>\\physics{optics}</code>${esc(uiText('editor.phy.noDomain2', ' (or mechanics, fields, waves, spacetime, levels).'))}</div>`;
     else {
       for (const [cat, items] of palette()) {
-        html += `<div class="cz-cat"><div class="cz-cat-t">${esc(cat)}</div>${items.map(([k, c]: any) =>
+        // object names and categories come from the physics domains (English); only the fallback group is ours
+        html += `<div class="cz-cat"><div class="cz-cat-t">${esc(cat === 'Objects' ? uiText('editor.phy.objects', 'Objects') : cat)}</div>${items.map(([k, c]: any) =>
           `<button class="cz-part phy-part${E.arm === k ? ' on' : ''}" data-cmd="${esc(k)}" title="${esc(c.label)}${c.argHelp ? ` ${c.argHelp}` : ''}"><code>\\${esc(k)}</code><span>${esc(c.label)}</span></button>`).join('')}</div>`;
       }
       const q = search.value.trim().toLowerCase();
       html += drawPalette(q);
       const ex = Object.keys(d.examples || {}).filter((t) => !q || t.toLowerCase().includes(q));
-      if (ex.length) html += `<div class="cz-cat"><div class="cz-cat-t">Examples <small>replace the figure</small></div>${ex.map((t) => `<button class="cz-part phy-part" data-ex="${esc(t)}"><span>${esc(t)}</span></button>`).join('')}</div>`;
-      if (!html) html = `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+      if (ex.length) html += `<div class="cz-cat"><div class="cz-cat-t">${esc(uiText('editor.phy.examples', 'Examples'))} <small>${esc(uiText('editor.phy.examplesNote', 'replace the figure'))}</small></div>${ex.map((t) => `<button class="cz-part phy-part" data-ex="${esc(t)}"><span>${esc(t)}</span></button>`).join('')}</div>`;
+      if (!html) html = `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     }
     list.innerHTML = html;
   }
@@ -132,10 +137,12 @@ import { runtime as TD } from '../runtime';
     E.tool = E.tool === t ? null : t; E.arm = null;
     buildPalette(); draw();
     const it = E.tool && TD.drawTools().flatMap((x: any) => x[1]).find((x: any) => x[0] === E.tool);
-    setTip(!E.tool ? '' : t === 'poly' || t === 'blob' ? 'Click to add points · double-click or Enter to finish · click the first point to close'
-      : t === 'pencil' ? 'Draw freehand · end near the start to close'
-      : t === 'text' || t === 'math' ? 'Click where the text goes, then type it on the right'
-      : `${it ? it[1].split(/ [(—:]/)[0] : t}: drag on the grid${/^sym:|^(rect|ellipse|ball|dot)$/.test(t) ? ', or click to place' : ''}. Esc when done.`);
+    const name = it ? it[1].split(/ [(—:]/)[0] : t;
+    setTip(!E.tool ? '' : t === 'poly' || t === 'blob' ? uiText('editor.phy.tipPoly', 'Click to add points · double-click or Enter to finish · click the first point to close')
+      : t === 'pencil' ? uiText('editor.phy.tipPencil', 'Draw freehand · end near the start to close')
+      : t === 'text' || t === 'math' ? uiText('editor.phy.tipText', 'Click where the text goes, then type it on the right')
+      : /^sym:|^(rect|ellipse|ball|dot)$/.test(t) ? uiText('editor.phy.tipDragOrClick', '{name}: drag on the grid, or click to place. Esc when done.', { name })
+      : uiText('editor.phy.tipDrag', '{name}: drag on the grid. Esc when done.', { name }));
   }
   function pick(k: any) {
     const c = D() && D().commands[k];
@@ -149,7 +156,7 @@ import { runtime as TD } from '../runtime';
     }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${c.label}: click the grid to place it. Esc when done.` : '');
+    setTip(E.arm ? uiText('editor.phy.armTip', '{name}: click the grid to place it. Esc when done.', { name: c.label }) : '');
   }
   // a new line after the selection (settings go first, after the header), selected
   function place(k: any, x: any, y: any) {
@@ -165,7 +172,7 @@ import { runtime as TD } from '../runtime';
     if (!src) return;
     edit(() => setSrc(src));
     E.sel = null; E.arm = null; buildPalette(); renderProps(); fit();
-    setTip(`Loaded “${t}”. ${CMD}Z brings your figure back.`);
+    setTip(uiText('editor.phy.loadedExample', 'Loaded “{name}”. {key} brings your figure back.', { name: t, key: `${CMD}Z` }));
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -406,7 +413,7 @@ import { runtime as TD } from '../runtime';
     if (!E) return;
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(8, Math.min(600, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(8, Math.min(600, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -443,14 +450,14 @@ import { runtime as TD } from '../runtime';
     if (!r.empty) {
       const b = r.bb;
       out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${P.draw({ src: E.src, x: b.x0 * PX, y: -b.y1 * PX }, { export: true })}</g>`;
-    } else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${D() ? 'Place an object from the left to start' : 'Name a domain in the first line of the source'}</text>`;
+    } else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(D() ? uiText('editor.phy.emptyStart', 'Place an object from the left to start') : uiText('editor.phy.emptyNoDomain', 'Name a domain in the first line of the source'))}</text>`;
     for (const i of r.bad) if (i >= 0 && i !== E.sel) out += halo(i, 'phy-bad');
     // the selected object's handles
     if (E.sel != null && !E.arm) {
       for (const h of r.handles) {
         if (h.obj !== E.sel) continue;
         const [X, Y] = m(h.at), kind = HK[h.kind] || 'move', on = E.drag && E.drag.h && E.drag.h.kind === h.kind && E.drag.h.label === h.label;
-        const t = `<title>${esc(h.label ? `Drag: ${h.label}` : 'Drag to move')}</title>`;
+        const t = `<title>${esc(h.label ? uiText('editor.phy.dragHandle', 'Drag: {name}', { name: h.label }) : uiText('editor.phy.dragToMove', 'Drag to move'))}</title>`;
         if (kind === 'move') out += `<rect class="phy-h phy-hm${on ? ' on' : ''}" x="${r2(X - 4.5)}" y="${r2(Y - 4.5)}" width="9" height="9" rx="1.5">${t}</rect>`;
         else if (kind === 'rot') out += `<circle class="phy-h phy-hr${on ? ' on' : ''}" cx="${r2(X)}" cy="${r2(Y)}" r="5">${t}</circle>`;
         else out += `<path class="phy-h phy-hs${on ? ' on' : ''}" d="M${r2(X)},${r2(Y - 6)}L${r2(X + 6)},${r2(Y)}L${r2(X)},${r2(Y + 6)}L${r2(X - 6)},${r2(Y)}Z">${t}</path>`;
@@ -572,7 +579,7 @@ import { runtime as TD } from '../runtime';
       try { d.h.drag(L, p, snapper(free)); } catch (err: any) { return; }
       flush();
       const s = specOf(L);
-      setTip(`${s ? s.label : `\\${L.cmd}`}${d.h.label ? `: ${d.h.label}` : ''} · ${L.raw.length > 64 ? L.raw.slice(0, 63) + '…' : L.raw}${free ? '' : ' · ⌥ for free'}`);
+      setTip(`${s ? s.label : `\\${L.cmd}`}${d.h.label ? `: ${d.h.label}` : ''} · ${L.raw.length > 64 ? L.raw.slice(0, 63) + '…' : L.raw}${free ? '' : uiText('editor.phy.altFree', ' · ⌥ for free')}`);
       draw(); renderProps(); return;
     }
   });
@@ -597,7 +604,7 @@ import { runtime as TD } from '../runtime';
     down: '<path d="M10 4v12M5 11l5 5 5-5"/>',
     del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
   };
-  const mItem = (a: any, label: any, icon: any, key: any, off?: any) => `<button class="ctx-item${a === 'delete' ? ' danger' : ''}" data-pm="${a}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (a: any, label: any, icon: any, key: any, off?: any) => `<button class="ctx-item${a === 'delete' ? ' danger' : ''}" data-pm="${a}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -608,8 +615,8 @@ import { runtime as TD } from '../runtime';
     if (!many) E.sel = i;
     draw(); renderProps();
     const n = E.M.lines.length;
-    menu.innerHTML = mItem('dup', 'Duplicate', 'dup', `${CMD}D`) + '<hr>' +
-      mItem('up', 'Draw Earlier', 'up', '', many || i <= firstObj()) + mItem('down', 'Draw Later', 'down', '', many || i >= n - 1) + '<hr>' + mItem('delete', 'Delete', 'del', '⌫');
+    menu.innerHTML = mItem('dup', uiText('editor.phy.duplicate', 'Duplicate'), 'dup', `${CMD}D`) + '<hr>' +
+      mItem('up', uiText('editor.phy.drawEarlier', 'Draw Earlier'), 'up', '', many || i <= firstObj()) + mItem('down', uiText('editor.phy.drawLater', 'Draw Later'), 'down', '', many || i >= n - 1) + '<hr>' + mItem('delete', uiText('editor.phy.delete', 'Delete'), 'del', '⌫');
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
     menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
@@ -669,10 +676,10 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- properties
   function paramRow(L: any, p: any): FormRow {
     const raw = P.getOpt(L, p.k), def = typeof p.def === 'function' ? null : p.def;
-    const base = (controls: Control[], controlClass = 'ctl'): FormRow => ({ kind: 'row', label: [p.label], labelTitle: p.help || (p.math ? 'Use $…$ for maths' : undefined), controlClass, controls });
+    const base = (controls: Control[], controlClass = 'ctl'): FormRow => ({ kind: 'row', label: [p.label], labelTitle: p.help || (p.math ? uiText('editor.phy.useMaths', 'Use $…$ for maths') : undefined), controlClass, controls });
     if (p.kind === 'bool') {
       const on = raw == null ? !!def && def !== 'false' : !/^(false|no|0|off)$/i.test(raw);
-      return base([[1, 'On'], [0, 'Off']].map(([v, n]) => ({ kind: 'button', text: String(n), attrs: { 'data-pb': p.k, 'data-v': v, class: +on === v ? 'on' : '' } })), 'ctl seg-ctl');
+      return base([[1, uiText('editor.phy.on', 'On')], [0, uiText('editor.phy.off', 'Off')]].map(([v, n]) => ({ kind: 'button', text: String(n), attrs: { 'data-pb': p.k, 'data-v': v, class: +on === v ? 'on' : '' } })), 'ctl seg-ctl');
     }
     if (p.kind === 'enum') return base([{ kind: 'select', value: raw != null ? raw : def, attrs: { 'data-pf': p.k }, options: p.opts.map(([v, n]: string[]) => [v, n || v]) }]);
     const ph = def == null || def === '' ? (p.kind === 'num' ? 'auto' : 'none') : p.kind === 'num' ? P.writeQ(def, { ...p, unit: p.dim ? p.unit : undefined }).replace(p.unit || '\u0000', '') : String(def);
@@ -682,26 +689,26 @@ import { runtime as TD } from '../runtime';
   function renderProps() {
     if (!E) return;
     const r = R(), d = D();
-    title.textContent = d ? `Physics: ${d.label}` : 'Physics figure';
+    title.textContent = d ? uiText('editor.phy.titleDomain', 'Physics: {name}', { name: d.label }) : uiText('ui.physics.figure', 'Physics figure');
     const show = (sections: FormSection[]) => renderView(props, FormPanel, { sections });
     const warnings = (only?: number): FormRow[] => r.warnings.filter((w: any) => only == null || w.obj === only).map((w: any) => ({ kind: 'error', text: w.msg }));
     const results = (only?: number): Extract<FormRow, {kind: 'physicsResults'}> => ({ kind: 'physicsResults', results: r.results.filter((q: any) => only == null || q.obj === only).map((q: any) => ({ ...q, status: (P.KIND[q.kind] || P.KIND.exact)[0], title: (P.KIND[q.kind] || P.KIND.exact)[1] + (q.note ? ' — ' + q.note : '') })) });
     if (E.multi) {
-      show([section(`${E.multi.length} objects selected`, [note('Drag any of them to move them together, or use the arrow keys. ', { kbd: '⇧' }, '-click adds or removes one; ', { kbd: '⌫' }, ' deletes them, ', { kbd: `${CMD}D` }, ' duplicates them.')], 'sec')]); return;
+      show([section(uiText('editor.phy.nSelected', '{n} objects selected', { n: E.multi.length }), [note(uiText('editor.phy.multiHelp1', 'Drag any of them to move them together, or use the arrow keys. '), { kbd: '⇧' }, uiText('editor.phy.multiHelp2', '-click adds or removes one; '), { kbd: '⌫' }, uiText('editor.phy.multiHelp3', ' deletes them, '), { kbd: `${CMD}D` }, uiText('editor.phy.multiHelp4', ' duplicates them.'))], 'sec')]); return;
     }
     const L = lineAt(E.sel);
     if (L && L.kind === 'shape') { show([shapeProps(L.shape)]); return; }
     if (L) {
       const s = specOf(L);
       if (s) {
-        const args: FormRow[] = L.args.map((a: any, k: number) => ({ ...row(k === 0 ? (s.args > 1 ? 'From' : 'Position') : k === 1 ? 'To' : `Point ${k + 1}`, { kind: 'input', value: a.join(', '), attrs: { type: 'text', class: 'mono', 'data-pa': k, spellcheck: 'false' } }), labelTitle: s.argHelp || 'x, y in cm, or a name' }));
+        const args: FormRow[] = L.args.map((a: any, k: number) => ({ ...row(k === 0 ? (s.args > 1 ? uiText('editor.phy.from', 'From') : uiText('editor.phy.position', 'Position')) : k === 1 ? uiText('editor.phy.to', 'To') : uiText('editor.phy.pointN', 'Point {n}', { n: k + 1 }), { kind: 'input', value: a.join(', '), attrs: { type: 'text', class: 'mono', 'data-pa': k, spellcheck: 'false' } }), labelTitle: s.argHelp || uiText('editor.phy.argHelp', 'x, y in cm, or a name') }));
         const known = new Set(s.params.map((p: any) => p.k)), extra = L.opts.filter((o: any) => !known.has(o.k)), computed = results(E.sel);
-        show([{ ...section(s.label, [...args, ...s.params.map((p: any) => paramRow(L, p)), ...(extra.length ? [note('Kept as written: ', { code: extra.map((o: any) => o.v == null ? o.k : `${o.k}=${o.v}`).join(', ') })] : []), ...warnings(E.sel)], 'sec'), summary: `\\${L.cmd} · line ${E.sel + 1}` }, ...(computed.results.length ? [section('Computed', [computed], 'sec')] : [])]);
-      } else show([{ ...section(L.kind === 'tikz' ? 'TikZ' : L.kind === 'comment' ? 'Comment' : 'Not understood', [note(L.kind === 'tikz' ? 'Plain TikZ: drawn here and exported as written.' : 'Kept in the code as written. Edit it in the source below.'), ...warnings(E.sel)], 'sec'), summary: `line ${E.sel + 1}` }]);
+        show([{ ...section(s.label, [...args, ...s.params.map((p: any) => paramRow(L, p)), ...(extra.length ? [note(uiText('editor.phy.keptAsWritten', 'Kept as written: '), { code: extra.map((o: any) => o.v == null ? o.k : `${o.k}=${o.v}`).join(', ') })] : []), ...warnings(E.sel)], 'sec'), summary: uiText('editor.phy.cmdLine', '{cmd} · line {n}', { cmd: `\\${L.cmd}`, n: E.sel + 1 }) }, ...(computed.results.length ? [section(uiText('editor.phy.computed', 'Computed'), [computed], 'sec')] : [])]);
+      } else show([{ ...section(L.kind === 'tikz' ? 'TikZ' : L.kind === 'comment' ? uiText('editor.phy.comment', 'Comment') : uiText('editor.phy.notUnderstood', 'Not understood'), [note(L.kind === 'tikz' ? uiText('editor.phy.plainTikz', 'Plain TikZ: drawn here and exported as written.') : uiText('editor.phy.keptInCode', 'Kept in the code as written. Edit it in the source below.')), ...warnings(E.sel)], 'sec'), summary: uiText('editor.phy.lineN', 'line {n}', { n: E.sel + 1 }) }]);
       return;
     }
     const n = E.M.lines.filter((x: any) => x.kind === 'cmd' || x.kind === 'tikz' || x.kind === 'shape').length;
-    show([{ ...section('Figure', [...warnings(-1), note('Place objects from the left; select one to change it or drag its handles (', { kbd: '⌥' }, ' turns snapping off). Values take units (', { code: '500nm' }, ', ', { code: '30deg' }, ', ', { code: '2kg' }, '); a plain number is in the unit shown.')], 'sec'), summary: `${n} object${n === 1 ? '' : 's'}` }, ...(r.results.length ? [section('Computed', [results(), note('Hover a result for its model. ', { bold: 'exact' }, ': from the model as stated · ', { bold: 'ideal' }, ': exact for an idealised setup · ', { bold: 'approx.' }, ': an approximation · ', { bold: 'schematic' }, ': drawn, not computed.')], 'sec')] : [])]);
+    show([{ ...section(uiText('editor.phy.figure', 'Figure'), [...warnings(-1), note(uiText('editor.phy.figureHelp1', 'Place objects from the left; select one to change it or drag its handles ('), { kbd: '⌥' }, uiText('editor.phy.figureHelp2', ' turns snapping off). Values take units ('), { code: '500nm' }, ', ', { code: '30deg' }, ', ', { code: '2kg' }, uiText('editor.phy.figureHelp3', '); a plain number is in the unit shown.'))], 'sec'), summary: n === 1 ? uiText('editor.phy.oneObject', '1 object') : uiText('editor.phy.nObjects', '{n} objects', { n }) }, ...(r.results.length ? [section(uiText('editor.phy.computed', 'Computed'), [results(), note(uiText('editor.phy.resultsHelp1', 'Hover a result for its model. '), { bold: 'exact' }, uiText('editor.phy.resultsHelp2', ': from the model as stated · '), { bold: 'ideal' }, uiText('editor.phy.resultsHelp3', ': exact for an idealised setup · '), { bold: 'approx.' }, uiText('editor.phy.resultsHelp4', ': an approximation · '), { bold: 'schematic' }, uiText('editor.phy.resultsHelp5', ': drawn, not computed.'))], 'sec')] : [])]);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
@@ -729,23 +736,23 @@ import { runtime as TD } from '../runtime';
     edit(() => P.setOpt(L, b.dataset.pb, on === def ? '' : on ? 'true' : 'false'));
   });
   // ---------------------------------------------------------------- a drawn shape's properties (the main editor's names)
-  const SHAPE_NAMES: Record<string, any> = { line: 'Line', curve: 'Curve', poly: 'Polyline', arc: 'Arc', rect: 'Rectangle', ellipse: 'Ellipse', text: 'Text', sym: 'Symbol', ball: 'Ball', dot: 'Dot', spring: 'Spring' };
+  const SHAPE_NAMES = (type: string) => (({ line: () => uiText('editor.phy.shape.line', 'Line'), curve: () => uiText('editor.phy.shape.curve', 'Curve'), poly: () => uiText('editor.phy.shape.poly', 'Polyline'), arc: () => uiText('editor.phy.shape.arc', 'Arc'), rect: () => uiText('editor.phy.shape.rect', 'Rectangle'), ellipse: () => uiText('editor.phy.shape.ellipse', 'Ellipse'), text: () => uiText('editor.phy.shape.text', 'Text'), sym: () => uiText('editor.phy.shape.sym', 'Symbol'), ball: () => uiText('editor.phy.shape.ball', 'Ball'), dot: () => uiText('editor.phy.shape.dot', 'Dot'), spring: () => uiText('editor.phy.shape.spring', 'Spring') }) as Record<string, () => string>)[type]?.();
   function shapeProps(sh: any): FormSection {
     const has = (k: string) => Object.prototype.hasOwnProperty.call(sh, k);
-    const input = (label: string, key: string) => ({ ...row(label, { kind: 'input' as const, value: sh[key] || '', attrs: { type: 'text', 'data-sf': key, 'data-tx': 'text', placeholder: 'Text, $math$', spellcheck: 'false' } }), labelTitle: 'Use $…$ for maths' });
+    const input = (label: string, key: string) => ({ ...row(label, { kind: 'input' as const, value: sh[key] || '', attrs: { type: 'text', 'data-sf': key, 'data-tx': 'text', placeholder: uiText('editor.phy.textPlaceholder', 'Text, $math$'), spellcheck: 'false' } }), labelTitle: uiText('editor.phy.useMaths', 'Use $…$ for maths') });
     const select = (label: string, key: string, options: string[][]) => row(label, { kind: 'select', value: sh[key], attrs: { 'data-sf': key }, options });
     const color = (label: string, key: string, nullable: boolean, fills: boolean) => row(label, { kind: 'fillColour', none: !sh[key], label: TD.fillLabel(sh[key]), css: TD.fillCss(sh[key]), attrs: { 'data-sc': key, ...(nullable ? { 'data-nullable': '1' } : {}), ...(fills ? { 'data-fills': '1' } : {}), title: TD.fillLabel(sh[key]) } });
     const rows: FormRow[] = [];
-    if (sh.type === 'text') rows.push(input('Text', 'text')); else if (has('label')) rows.push(input('Label', 'label'));
-    if (has('stroke')) rows.push(color('Stroke', 'stroke', true, false));
-    if (has('fill')) rows.push(color('Fill', 'fill', true, true));
-    if (has('color') && (sh.type === 'text' || has('label'))) rows.push(color('Text colour', 'color', false, false));
-    if (has('width')) rows.push(row('Width', { kind: 'input', value: r2(sh.width), attrs: { type: 'number', class: 'mono', 'data-sf': 'width', min: '0.25', step: '0.25' } }, { kind: 'text', text: 'px', class: 'val' }));
-    if (has('dash')) rows.push(select('Dash', 'dash', TD.DASHES));
-    if (has('startTip')) rows.push(select('Start tip', 'startTip', TD.TIPS), select('End tip', 'endTip', TD.TIPS));
-    if (has('size')) rows.push(select('Text size', 'size', TD.SIZES.map((x: any) => [x[0], x[0]])));
-    rows.push(note('Drawn like on the main canvas: drag it to move it, its handles to reshape it. Exported as TikZ with the figure.'));
-    return { ...section(SHAPE_NAMES[sh.type] || sh.type, rows, 'sec'), summary: `\\shape · line ${E.sel + 1}` };
+    if (sh.type === 'text') rows.push(input(uiText('editor.phy.text', 'Text'), 'text')); else if (has('label')) rows.push(input(uiText('editor.phy.label', 'Label'), 'label'));
+    if (has('stroke')) rows.push(color(uiText('editor.phy.stroke', 'Stroke'), 'stroke', true, false));
+    if (has('fill')) rows.push(color(uiText('editor.phy.fill', 'Fill'), 'fill', true, true));
+    if (has('color') && (sh.type === 'text' || has('label'))) rows.push(color(uiText('editor.phy.textColour', 'Text colour'), 'color', false, false));
+    if (has('width')) rows.push(row(captions["ui.width"], { kind: 'input', value: r2(sh.width), attrs: { type: 'number', class: 'mono', 'data-sf': 'width', min: '0.25', step: '0.25' } }, { kind: 'text', text: 'px', class: 'val' }));
+    if (has('dash')) rows.push(select(uiText('editor.phy.dash', 'Dash'), 'dash', TD.DASHES));
+    if (has('startTip')) rows.push(select(uiText('editor.phy.startTip', 'Start tip'), 'startTip', TD.TIPS), select(uiText('editor.phy.endTip', 'End tip'), 'endTip', TD.TIPS));
+    if (has('size')) rows.push(select(uiText('editor.phy.textSize', 'Text size'), 'size', TD.SIZES.map((x: any) => [x[0], x[0]])));
+    rows.push(note(uiText('editor.phy.shapeNote', 'Drawn like on the main canvas: drag it to move it, its handles to reshape it. Exported as TikZ with the figure.')));
+    return { ...section(SHAPE_NAMES(sh.type) || sh.type, rows, 'sec'), summary: uiText('editor.phy.cmdLine', '{cmd} · line {n}', { cmd: '\\shape', n: E.sel + 1 }) };
   }
   props.addEventListener('input', (ev: any) => {
     const t = ev.target, sh = E && shapeOf(E.sel);
@@ -784,13 +791,14 @@ import { runtime as TD } from '../runtime';
     else if (a === 'dup') duplicate();
     else if (a === 'up') shift(-1);
     else if (a === 'down') shift(1);
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     updateTools();
   }
   function syncCode() {
     const r = R(), n = E.M.lines.filter((x: any) => x.kind === 'cmd' || x.kind === 'tikz' || x.kind === 'shape').length;
-    count.textContent = `${n} object${n === 1 ? '' : 's'} · ${r.results.length} result${r.results.length === 1 ? '' : 's'}`;
-    codeMsg.innerHTML = r.warnings.length ? r.warnings.slice(0, 4).map((w: any) => `<div>${w.obj >= 0 ? `Line ${w.obj + 1}: ` : ''}${esc(w.msg)}</div>`).join('') + (r.warnings.length > 4 ? `<div>and ${r.warnings.length - 4} more</div>` : '') : '';
+    const nr = r.results.length;
+    count.textContent = `${n === 1 ? uiText('editor.phy.oneObject', '1 object') : uiText('editor.phy.nObjects', '{n} objects', { n })} · ${nr === 1 ? uiText('editor.phy.oneResult', '1 result') : uiText('editor.phy.nResults', '{n} results', { n: nr })}`;
+    codeMsg.innerHTML = r.warnings.length ? r.warnings.slice(0, 4).map((w: any) => `<div>${w.obj >= 0 ? esc(uiText('editor.phy.warnLine', 'Line {n}: ', { n: w.obj + 1 })) : ''}${esc(w.msg)}</div>`).join('') + (r.warnings.length > 4 ? `<div>${esc(uiText('editor.phy.andMore', 'and {n} more', { n: r.warnings.length - 4 }))}</div>` : '') : '';
     updateTools();
     if (document.activeElement === codeTa) return;
     if (E.src !== E.codeAt) { E.codeAt = E.src; codeTa.value = E.src; }
@@ -859,8 +867,8 @@ import { runtime as TD } from '../runtime';
 
   // ---------------------------------------------------------------- open / close
   const { save, finish } = TD.editorSession.lifecycle({
-    state: () => E, clear: () => { E = null; }, snapshot, commit, root, code: codeTa, readCode, setTip, tip,
-    discardTitle: 'Discard changes to this figure?', beforeClose: closeMenu,
+    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot, commit, root, code: codeTa, readCode, setTip, tip,
+    discardTitle: () => uiText('editor.phy.discard', 'Discard changes to this figure?'), beforeClose: closeMenu,
   });
   function open(block: any, done: any) {
     E = { src: '', M: null, arm: null, view: { ox: 0, oy: 0, k: 40 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, ghost: null, tool: null, poly: null, multi: null, codeAt: null, codeTimer: null };
@@ -873,6 +881,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, panel and drawing's captions follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
     requestAnimationFrame(fit);
   }

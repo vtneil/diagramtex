@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t } from '../../i18n';
 // The welcome tour: a few cards shown once, on the very first visit (no files yet), and again from the command
 // search (Welcome Tour). Each card has a small map of the window with the part it talks about marked in blue
 // pen, so nothing on the page itself moves or is covered. Previous / Next (← →), "I’m All Good" skips (Esc too).
@@ -9,6 +10,10 @@ import { runtime as TD } from '../../runtime';
   const seen = () => { try { return !!localStorage.getItem(KEY); } catch (e: any) { return true; } };
   const markSeen = () => { try { localStorage.setItem(KEY, 'seen'); } catch (e: any) { /* storage blocked */ } };
   const kb = (k: string) => (TD.app && TD.app.cmd ? TD.app.cmd.kb(k) : k);
+  const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  // translated text, escaped, with {name} slots filled by markup built here (the text itself never holds markup)
+  const fill = (text: string, slots: Record<string, string>) => esc(text).replace(/\{([a-zA-Z]+)\}/g, (m, k) => (k in slots ? slots[k] : m));
+  const b = (s: string) => `<b>${esc(s)}</b>`;
 
   // the window in miniature: top bar, file list, tool rail, canvas with a sheet, floating panel
   function map(on: string | null) {
@@ -28,21 +33,21 @@ import { runtime as TD } from '../../runtime';
   }
 
   const STEPS = () => [
-    { at: null, title: 'Welcome to DiagramTeX',
-      body: `<p>Draw diagrams, write around them, and take them to LaTeX as TikZ code that compiles. Here’s a quick look around.</p>` },
-    { at: 'left', title: 'Files and tools on the left',
-      body: `<p>Your files are listed on the left, and next to them is the tool rail: shapes, lines, plots and <b>Blocks</b>, which are ready-made editors such as:</p>
-        <div class="tour-tags"><span>Quantum circuit</span><span>Circuit</span><span>Chemistry</span><span>Tree</span><span>Timing</span><span>Bloch sphere</span></div>
-        <p>Pick one, click the canvas to place it, then double-click it to edit.</p>` },
-    { at: 'top', title: 'What you’re making, on top',
-      body: `<p>The top bar picks the kind of work: <b>Classic</b> diagrams and documents, a <b>Page</b>, a <b>Whiteboard</b>, a <b>Table</b> or a <b>Quick</b> formula.</p>
-        <p>Export and LaTeX on the right take it out as a picture, a PDF or code.</p>` },
-    { at: 'right', title: 'Settings on the right',
-      body: `<p>The panel on the right shows the settings of whatever you select: colours, line styles, labels, a block’s options.</p>
-        <p>Click its heading to fold it out of the way.</p>` },
-    { at: 'save', title: 'Keep a copy of what matters', warn: true,
-      body: `<p>Your work is saved in this browser as you go. Clearing the browser’s data, or using a private window, wipes it.</p>
-        <p>For anything important, <b>Save</b> it as a <code>.diagramtex</code> file (<kbd>${kb('Ctrl+Shift+S')}</kbd>) and keep it somewhere safe.</p>` },
+    { at: null, title: t('tour.welcome.title', 'Welcome to DiagramTeX'),
+      body: `<p>${esc(t('tour.welcome.body', 'Draw diagrams, write around them, and take them to LaTeX as TikZ code that compiles. Here’s a quick look around.'))}</p>` },
+    { at: 'left', title: t('tour.left.title', 'Files and tools on the left'),
+      body: `<p>${fill(t('tour.left.body', 'Your files are listed on the left, and next to them is the tool rail: shapes, lines, plots and {blocks}, which are ready-made editors such as:'), { blocks: b(t('ui.blocks', 'Blocks')) })}</p>
+        <div class="tour-tags"><span>${esc(t('ui.quantum.circuit', 'Quantum circuit'))}</span><span>${esc(t('ui.circuit', 'Circuit'))}</span><span>${esc(t('ui.chemistry', 'Chemistry'))}</span><span>${esc(t('ui.tree', 'Tree'))}</span><span>${esc(t('tour.tag.timing', 'Timing'))}</span><span>${esc(t('ui.bloch.sphere', 'Bloch sphere'))}</span></div>
+        <p>${esc(t('tour.left.pick', 'Pick one, click the canvas to place it, then double-click it to edit.'))}</p>` },
+    { at: 'top', title: t('tour.top.title', 'What you’re making, on top'),
+      body: `<p>${fill(t('tour.top.body', 'The top bar picks the kind of work: {classic} diagrams and documents, a {page}, a {whiteboard}, a {table} or a {quick} formula.'), { classic: b(t('ui.classic', 'Classic')), page: b(t('ui.page', 'Page')), whiteboard: b(t('ui.whiteboard', 'Whiteboard')), table: b(t('ui.table', 'Table')), quick: b(t('ui.quick', 'Quick')) })}</p>
+        <p>${esc(t('tour.top.export', 'Export and LaTeX on the right take it out as a picture, a PDF or code.'))}</p>` },
+    { at: 'right', title: t('tour.right.title', 'Settings on the right'),
+      body: `<p>${esc(t('tour.right.body', 'The panel on the right shows the settings of whatever you select: colours, line styles, labels, a block’s options.'))}</p>
+        <p>${esc(t('tour.right.fold', 'Click its heading to fold it out of the way.'))}</p>` },
+    { at: 'save', title: t('tour.save.title', 'Keep a copy of what matters'), warn: true,
+      body: `<p>${esc(t('tour.save.body', 'Your work is saved in this browser as you go. Clearing the browser’s data, or using a private window, wipes it.'))}</p>
+        <p>${fill(t('tour.save.how', 'For anything important, {save} it as a {file} file ({key}) and keep it somewhere safe.'), { save: b(t('ui.save', 'Save')), file: '<code>.diagramtex</code>', key: `<kbd>${kb('Ctrl+Shift+S')}</kbd>` })}</p>` },
   ];
 
   let open: (() => void) | null = null;
@@ -56,9 +61,9 @@ import { runtime as TD } from '../../runtime';
       <div class="tour-pic"></div>
       <h2 id="tourTitle"></h2><div class="tour-body" aria-live="polite"></div>
       <div class="tdd-btns">
-        <button type="button" class="tour-skip" data-t="skip">I’m All Good</button>
+        <button type="button" class="tour-skip" data-t="skip">${esc(t('tour.skip', 'I’m All Good'))}</button>
         <span class="tour-dots" aria-hidden="true">${steps.map(() => '<i></i>').join('')}</span>
-        <button type="button" data-t="prev">Previous</button>
+        <button type="button" data-t="prev">${esc(t('tour.prev', 'Previous'))}</button>
         <button type="button" class="primary" data-t="next"></button>
       </div></div>`;
     const $ = (s: string) => root.querySelector(s) as HTMLElement;
@@ -71,8 +76,8 @@ import { runtime as TD } from '../../runtime';
       root.querySelectorAll('.tour-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
       $('[data-t="prev"]').style.visibility = i ? '' : 'hidden';
       $('[data-t="skip"]').style.visibility = last ? 'hidden' : '';
-      $('[data-t="next"]').textContent = last ? 'Got It' : 'Next';
-      $('.tour-box').setAttribute('aria-label', `${s.title}, step ${i + 1} of ${steps.length}`);
+      $('[data-t="next"]').textContent = last ? t('tour.done', 'Got It') : t('tour.next', 'Next');
+      $('.tour-box').setAttribute('aria-label', t('tour.step', '{title}, step {n} of {count}', { title: s.title, n: i + 1, count: steps.length }));
     }
     function close() {
       if (!root.isConnected) return;

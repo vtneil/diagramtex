@@ -1,12 +1,15 @@
+import { MathRenderQueue } from '../platform/math-render-queue';
+import { mathmlSvg } from './mathml-svg';
 import { runtime as TD } from '../runtime';
-// Maths renderer: KaTeX (HTML + CSS, looks the same in every browser) or Temml (MathML laid out
-// by the browser with Latin Modern Math: wider LaTeX coverage, closer to MathJax / TeX).
+import { t, onLocale } from '../i18n';
+// Maths parsing: KaTeX HTML or Temml MathML with deterministic SVG layout.
+// Scene labels isolate the resulting layout before applying SVG scene transforms.
 // Everything that draws maths calls TD.math.render(); the choice is a per-browser preference.
 (function () {
   const KEY = 'diagramtex.engine';
   const ENGINES: Record<string, any> = {
-    katex: { name: 'KaTeX', note: 'Same look in every browser' },
-    temml: { name: 'Temml', note: 'MathML: more LaTeX, closer to TeX output' },
+    katex: { name: 'KaTeX', note: () => t('engine.katex.note', 'Thicker text, better for displays') },
+    temml: { name: 'Temml', note: () => t('engine.temml.note', 'Closer to CMU, better for print') },
   };
   let engine = 'katex';
   try { const v = localStorage.getItem(KEY); if (v && ENGINES[v]) engine = v; } catch (e: any) { /* storage blocked */ }
@@ -71,56 +74,146 @@ import { runtime as TD } from '../runtime';
   // \textsc{Small caps} where the engine has no small caps: lowercase letters as smaller capitals
   const smallCaps = (tex: any) => tex.replace(/\\textsc\s*\{([^{}\\$]*)\}/g, (all: any, s: any) =>
     `\\text{${s.replace(/[a-z]+/g, (w: any) => `{\\footnotesize ${w.toUpperCase()}}`)}}`);
-  // TeX → HTML string. With throwOnError, a parse error throws; otherwise it is shown in red.
+  let transitioning = false;
+  const progress: (() => void)[] = [];
+  const readiness: (() => void)[] = [];
+  const viewWork = new Set<Promise<void>>();
+  const liveStyles = new Set<string>();
+  function liveMarkup(html: string): string {
+    return html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/g, (_, css: string) => {
+      if (!liveStyles.has(css)) {
+        liveStyles.add(css); const style = document.createElement('style');
+        style.dataset.mathPreview = ''; style.textContent = css; document.head.append(style);
+      }
+      return '';
+    });
+  }
+  let previewDepth = 0, finalDepth = 0, deferDepth = 0, priority = 2;
+  const pendingIds = (html: string): number[] => [...html.matchAll(/<!--td-math-pending:(\d+)-->/g)].map(match => +match[1]);
+  const isPending = (html: string) => html.includes('<!--td-math-pending:');
+  const cleanPreview = (html: string) => html.replace(/<!--td-math-pending:\d+-->/g, '');
+  const languageNeutral = (html: string) => html.replace(/^<([a-z][\w-]*)(?=[\s>])/i, '<$1 lang=""');
+  function compileResult(work: { engine: 'katex' | 'temml'; tex: string; display: boolean; macros: Record<string, string> }) {
+    const options = { displayMode: work.display, macros: { ...work.macros }, throwOnError: true };
+    try {
+      const html = lib(work.engine).renderToString(work.tex, options);
+      return { html: work.engine === 'temml' ? mathmlSvg(html) : html };
+    } catch (error) {
+      const html = lib(work.engine).renderToString(work.tex, { ...options, throwOnError: false });
+      return { html: /(?:temml|katex)-error/.test(html) ? html : `<i>${esc(work.tex)}</i>`, error: String((error as Error).message || error) };
+    }
+  }
+  const queue = new MathRenderQueue(compileResult, ids => {
+    try { if (ids.length) { TD.clearPendingTextCache?.(ids); for (const fn of progress) fn(); } } finally { if (!queue.pending && !viewWork.size) transitioning = false; updateNote(); }
+  });
+  const resultKey = (e: string, source: string, display: boolean) => e + ':' + JSON.stringify([source, display]);
+  function markup(e: string, result: { html: string; error?: string }, prepared: string, display: boolean) {
+    return languageNeutral(e === 'temml' && !result.error
+      ? `<span class="td-math${display ? ' td-math-display' : ''}" role="math" aria-label="${esc(prepared)}">${result.html}</span>` : result.html);
+  }
   function render(tex: any, opts: Record<string, any> = {}) {
-    const L = lib(engine);
-    if (!L) return `<i>${esc(tex)}</i>`;
-    tex = colors(String(tex));
+    const source = String(tex), display = !!opts.display, key = resultKey(engine, source, display);
+    if (!lib(engine)) return `<i>${esc(source)}</i>`;
+    let prepared = colors(source);
     const M = macros(engine);
-    if (M['\\textsc']) tex = smallCaps(tex);
-    try { return L.renderToString(tex, { displayMode: !!opts.display, throwOnError: !!opts.throwOnError, macros: { ...M } }); }
-    catch (e: any) { if (opts.throwOnError) throw e; return `<i>${esc(tex)}</i>`; }
+    if (M['\\textsc']) prepared = smallCaps(prepared);
+    let result = queue.results.get(key);
+    if (!result && previewDepth && (engine === 'temml' || transitioning || deferDepth > 0)) {
+      const id = queue.request(key, { engine: engine as 'katex' | 'temml', tex: prepared, display, macros: M }, priority);
+      const previousEngine = engine === 'temml' ? 'katex' : 'temml';
+      const previous = queue.cached(resultKey(previousEngine, source, display));
+      return (previous ? markup(previousEngine, previous, prepared, display)
+        : `<span class="td-math-placeholder" style="display:inline-block;width:${Math.min(24, Math.max(2, source.length * .35))}em;height:1em" aria-label="${esc(source)}"></span>`) + `<!--td-math-pending:${id}-->`;
+    }
+    if (!result) {
+      result = { id: 0, ...compileResult({ engine: engine as 'katex' | 'temml', tex: prepared, display, macros: M }) };
+      queue.results.set(key, result);
+      if (queue.results.size > 1024) queue.results.delete(queue.results.keys().next().value!);
+    }
+    if (result.error && opts.throwOnError) throw new Error(result.error);
+    return markup(engine, result, prepared, display);
+  }
+  function preview<T>(draw: () => T, defer = false): T {
+    previewDepth++; if (defer) deferDepth++;
+    try { return draw(); } finally { previewDepth--; if (defer) deferDepth--; }
+  }
+  function synchronous<T>(draw: () => T): T {
+    const previous = previewDepth; previewDepth = 0; finalDepth++;
+    try { return draw(); } finally { previewDepth = previous; finalDepth--; }
   }
   // Standalone SVG files carry their own stylesheet. No fonts are linked from anywhere: the exports embed the
   // local copies (TD.inlineMathCss in src/application/docview.ts), so nothing is requested from another site.
   const CSS: Record<string, any> = {
     katex: '.tx{font-family:KaTeX_Main,"Times New Roman",serif;line-height:1.2;white-space:pre;text-align:center;display:inline-block}.tx .katex{font-size:1em}',
-    temml: '.tx{font-family:"Latin Modern Roman","Latin Modern Math","Times New Roman",serif;line-height:1.2;white-space:pre;text-align:center;display:inline-block}',
+    temml: '.tx{font-family:KaTeX_Main,"Times New Roman",serif;line-height:1.2;white-space:pre;text-align:center;display:inline-block}',
   };
-  const exportStyle = () => `<style>${CSS[engine]}</style>`;
-  // In a standalone SVG (XML), <math> needs its namespace to be rendered as MathML.
+  const exportStyle = () => `<style>${CSS[engine]}.td-math{display:inline-block;line-height:0;white-space:nowrap}.td-math-display{display:block;text-align:center;margin:1em 0}</style>`;
+
+  // Standalone SVGs need the MathML namespace on their embedded formulae.
   const forXml = (html: any) => html.replace(/<math(?![^>]*\bxmlns=)/g, '<math xmlns="http://www.w3.org/1998/Math/MathML"');
 
   const listeners: any[] = [];
+  const beforeChange: (() => void)[] = [];
   function set(e: any) {
     if (!ENGINES[e] || e === engine || !lib(e)) return;
+    for (const fn of beforeChange) fn();
+    queue.cancel(); TD.docview?.cancelProgress?.(); TD.app?.cancelMathViews?.(); viewWork.clear();
+    TD.retainPreviewSizes?.();
+    transitioning = true;
+    queue.deferCached(e + ':');
     engine = e;
     try { localStorage.setItem(KEY, e); } catch (err: any) { /* ignore */ }
     document.documentElement.dataset.engine = e;
     if (TD.clearTextCache) TD.clearTextCache();
     for (const fn of listeners) fn(e);
+    updateNote();
   }
   document.documentElement.dataset.engine = engine;
 
   // Picker in the left sidebar, under the file list: one segmented switch, the active engine's note below.
+  function updateNote() {
+    for (const fn of readiness) fn();
+    const box = document.getElementById('engineBox'), note = box?.querySelector('.eng-note');
+    if (!box || !note) return;
+    box.setAttribute('aria-busy', String(queue.pending > 0 || viewWork.size > 0));
+    const text = (queue.pending || viewWork.size)
+      ? t('engine.loading', 'Rendering {name}… You can keep editing.', { name: ENGINES[engine].name })
+      : t('engine.note', '{note}. Exported LaTeX is the same for both engines.', { note: ENGINES[engine].note() });
+    if (note.textContent !== text) note.textContent = text;
+  }
   function mount() {
     const box = document.getElementById('engineBox');
     if (!box) return;
-    box.innerHTML = `<div class="eng-head">LaTeX engine</div>
+    box.innerHTML = `<div class="eng-head">${esc(t('ui.latex.engine', 'LaTeX engine'))}</div>
       <div class="eng-seg" role="radiogroup">${Object.entries<any>(ENGINES).map(([k, v]) =>
-        `<button type="button" role="radio" data-engine="${k}" aria-checked="${k === engine}" class="${k === engine ? 'on' : ''}"${lib(k) ? '' : ' disabled'} title="${v.note}">${v.name}</button>`).join('')}</div>
-      <div class="eng-note">${ENGINES[engine].note}. Preview only: the exported LaTeX is the same.</div>`;
+        `<button type="button" role="radio" data-engine="${k}" aria-checked="${k === engine}" class="${k === engine ? 'on' : ''}"${lib(k) ? '' : ' disabled'} title="${esc(v.note())}">${v.name}</button>`).join('')}</div>
+      <div class="eng-note" role="status">${esc(t('engine.note', '{note}. Exported LaTeX is the same for both engines.', { note: ENGINES[engine].note() }))}</div>`;
   }
   document.addEventListener('click', (e) => { const b = (e.target! as Element).closest && (e.target! as Element).closest('#engineBox [data-engine]'); if (b) set((b as HTMLElement).dataset.engine); });
-  listeners.push(mount);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
+  listeners.push(() => { mount(); updateNote(); });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => onLocale(() => { mount(); updateNote(); })); else onLocale(() => { mount(); updateNote(); });
 
   TD.xcolorExpr = xcolorExpr;
   TD.math = {
-    render, set, exportStyle, forXml, ENGINES,
+    render, set, exportStyle, forXml, ENGINES, preview, synchronous, isPending, cleanPreview, pendingIds, liveMarkup,
+    get previewing() { return previewDepth > 0; },
+    get finalizing() { return finalDepth > 0; },
+    get pending() { return queue.pending + viewWork.size; },
+    hasPendingJob: (id: number) => queue.has(id),
+    trackView(work: Promise<void>) { viewWork.add(work); void work.finally(() => { viewWork.delete(work); if (!queue.pending && !viewWork.size) { transitioning = false; TD.clearPendingTextCache?.([]); } updateNote(); }); },
+    get usingWorker() { return queue.usingWorker; },
+    async whenReady() { do { await queue.ready(); await Promise.all([...viewWork]); } while (queue.pending || viewWork.size); }, cancelPending: () => { transitioning = false; queue.cancel(); TD.docview?.cancelProgress?.(); TD.app?.cancelMathViews?.(); viewWork.clear(); TD.clearPendingTextCache?.(); updateNote(); },
+    withPriority<T>(rank: number, draw: () => T): T {
+      const previous = priority; priority = rank;
+      try { return draw(); } finally { priority = previous; }
+    },
+    prioritize: (ids: number[], rank: number) => queue.promote(ids, rank),
+    onReadiness(fn: () => void) { readiness.push(fn); fn(); },
+    onProgress(fn: () => void) { progress.push(fn); },
     // a command the engine in use lacks but draws with a stand-in (STAND_INS)
     drawsAs: (name: any) => !!macros(engine)['\\' + name],
     get engine() { return engine; },
+    onBeforeChange(fn: () => void) { beforeChange.push(fn); },
     onChange(fn: any) { listeners.push(fn); },
   };
 })();

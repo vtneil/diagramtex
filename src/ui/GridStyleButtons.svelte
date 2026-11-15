@@ -1,0 +1,10 @@
+<script lang="ts">
+  import { t, locale } from '../i18n';
+  let { id }: { id: string } = $props();
+</script>
+      <div {id} class="grid-style-buttons" title={t('ui.gridStyleToggleHint', 'Choose a grid style; click the active style again to hide the grid', {}, $locale)} role="radiogroup" aria-label={t('ui.gridStyle', 'Grid style', {}, $locale)}>
+        <button type="button" role="radio" data-grid-style="grid" aria-checked="true" tabindex="0" class="on" title={t('ui.grid', 'Grid', {}, $locale)} aria-label={t('ui.grid', 'Grid', {}, $locale)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h14v14H3zM3 7.7h14M3 12.3h14M7.7 3v14M12.3 3v14"/></svg></button>
+        <button type="button" role="radio" data-grid-style="dot" aria-checked="false" tabindex="-1" title={t('ui.gridDot', 'Dot', {}, $locale)} aria-label={t('ui.gridDot', 'Dot', {}, $locale)}><svg viewBox="0 0 20 20" aria-hidden="true"><g fill="currentColor" stroke="none"><circle cx="4" cy="4" r="1.3"/><circle cx="10" cy="4" r="1.3"/><circle cx="16" cy="4" r="1.3"/><circle cx="4" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="16" cy="10" r="1.3"/><circle cx="4" cy="16" r="1.3"/><circle cx="10" cy="16" r="1.3"/><circle cx="16" cy="16" r="1.3"/></g></svg></button>
+        <button type="button" role="radio" data-grid-style="isometric" aria-checked="false" tabindex="-1" title={t('ui.gridIsometric', 'Isometric', {}, $locale)} aria-label={t('ui.gridIsometric', 'Isometric', {}, $locale)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5L17 16H3Z"/></svg></button>
+        <button type="button" role="radio" data-grid-style="isometric-dot" aria-checked="false" tabindex="-1" title={t('ui.gridIsometricDot', 'Isometric Dot', {}, $locale)} aria-label={t('ui.gridIsometricDot', 'Isometric Dot', {}, $locale)}><svg viewBox="0 0 20 20" aria-hidden="true"><g fill="currentColor" stroke="none"><circle cx="10" cy="4.5" r="1.7"/><circle cx="4" cy="15" r="1.7"/><circle cx="16" cy="15" r="1.7"/></g></svg></button>
+      </div>

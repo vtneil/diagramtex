@@ -1,3 +1,4 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note, actionRow } from '../ui/editor-fields';
@@ -5,6 +6,7 @@ import FormPanel from '../ui/FormPanel.svelte';
 import FyeditorFrame from '../ui/editors/FyeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { t as uiText, message, caption, onLocale } from '../i18n';
 // Feynman editor: the overlay that opens on a Feynman block. A palette of vertices and propagators; the
 // diagram drawn by the canvas renderer on a centimetre grid, where vertices are placed and moved and
 // propagators are dragged from vertex to vertex; the selected vertex's or line's properties; and beside
@@ -19,26 +21,29 @@ import { runtime as TD } from '../runtime';
   const PX = TD.PX_PER_CM, GRID = 0.25;
 
   // ---------------------------------------------------------------- palette
+  // names in the interface language, looked up when shown
   const TYPE_NAMES: Record<string, any> = {
-    plain: 'Plain', fermion: 'Fermion', 'anti fermion': 'Antifermion', photon: 'Photon', boson: 'Boson', 'charged boson': 'Charged boson',
-    'anti charged boson': 'Anti charged boson', gluon: 'Gluon', scalar: 'Scalar', 'charged scalar': 'Charged scalar',
-    'anti charged scalar': 'Anti charged scalar', ghost: 'Ghost', majorana: 'Majorana', 'anti majorana': 'Anti Majorana',
+    plain: message('editor.fy.plain', 'Plain'), fermion: message('editor.fy.fermion', 'Fermion'), 'anti fermion': message('editor.fy.antifermion', 'Antifermion'), photon: message('editor.fy.photon', 'Photon'), boson: message('editor.fy.boson', 'Boson'), 'charged boson': message('editor.fy.chargedBoson', 'Charged boson'),
+    'anti charged boson': message('editor.fy.antiChargedBoson', 'Anti charged boson'), gluon: message('editor.fy.gluon', 'Gluon'), scalar: message('editor.fy.scalar', 'Scalar'), 'charged scalar': message('editor.fy.chargedScalar', 'Charged scalar'),
+    'anti charged scalar': message('editor.fy.antiChargedScalar', 'Anti charged scalar'), ghost: message('editor.fy.ghost', 'Ghost'), majorana: message('editor.fy.majorana', 'Majorana'), 'anti majorana': message('editor.fy.antiMajorana', 'Anti Majorana'),
   };
-  const STYLE_NAMES: Record<string, any> = { '': 'Vertex', dot: 'Dot', 'empty dot': 'Empty dot', 'square dot': 'Square dot', 'crossed dot': 'Crossed dot', blob: 'Blob' };
+  const STYLE_NAMES: Record<string, any> = { '': message('editor.fy.vertex', 'Vertex'), dot: message('editor.fy.dot', 'Dot'), 'empty dot': message('editor.fy.emptyDot', 'Empty dot'), 'square dot': message('editor.fy.squareDot', 'Square dot'), 'crossed dot': message('editor.fy.crossedDot', 'Crossed dot'), blob: message('editor.fy.blob', 'Blob') };
+  const typeName = (k: any) => (TYPE_NAMES[k] ? caption(TYPE_NAMES[k]) : undefined);
+  const styleName = (k: any) => (STYLE_NAMES[k] ? caption(STYLE_NAMES[k]) : undefined);
   const fey = (body: any) => `\\begin{feynman}${body}\\end{feynman}`;
   const vMini = (st: any) => fey(`\\vertex${st ? ` [${st}]` : ''} (a) at (0,0)${st ? ' {}' : ''};\\vertex (l) at (-.7,.45);\\vertex (r) at (.7,.45);\\vertex (d) at (0,-.7);\\diagram*{(l)--(a)--(r),(a)--(d)};`);
   const eMini = (t: any) => fey(`\\vertex (a) at (0,0);\\vertex (b) at (1.6,0);\\diagram*{(a) -- [${t}] (b)};`);
-  const PAL = [
-    ['Vertices', [
-      ['v:', 'Vertex', vMini(''), 'V'], ['v:dot', 'Dot', vMini('dot'), 'D'], ['v:empty dot', 'Empty dot', vMini('empty dot')],
-      ['v:square dot', 'Square dot', vMini('square dot')], ['v:crossed dot', 'Crossed dot', vMini('crossed dot')], ['v:blob', 'Blob', vMini('blob')],
-      ['v:particle', 'Particle', fey('\\vertex (a) at (0,0) {\\(e^-\\)};\\vertex (b) at (1.2,0);\\diagram*{(a) -- [fermion] (b)};'), 'T'],
+  const PAL: any[] = [
+    [message('editor.fy.cat.vertices', 'Vertices'), [
+      ['v:', STYLE_NAMES[''], vMini(''), 'V'], ['v:dot', STYLE_NAMES.dot, vMini('dot'), 'D'], ['v:empty dot', STYLE_NAMES['empty dot'], vMini('empty dot')],
+      ['v:square dot', STYLE_NAMES['square dot'], vMini('square dot')], ['v:crossed dot', STYLE_NAMES['crossed dot'], vMini('crossed dot')], ['v:blob', STYLE_NAMES.blob, vMini('blob')],
+      ['v:particle', message('editor.fy.particle', 'Particle'), fey('\\vertex (a) at (0,0) {\\(e^-\\)};\\vertex (b) at (1.2,0);\\diagram*{(a) -- [fermion] (b)};'), 'T'],
     ]],
-    ['Propagators', [
-      ['e:fermion', 'Fermion', eMini('fermion'), 'F'], ['e:anti fermion', 'Antifermion', eMini('anti fermion')], ['e:photon', 'Photon', eMini('photon'), 'P'],
-      ['e:gluon', 'Gluon', eMini('gluon'), 'G'], ['e:scalar', 'Scalar', eMini('scalar'), 'S'], ['e:charged scalar', 'Charged scalar', eMini('charged scalar')],
-      ['e:ghost', 'Ghost', eMini('ghost')], ['e:majorana', 'Majorana', eMini('majorana'), 'M'], ['e:boson', 'Boson', eMini('boson'), 'B'],
-      ['e:charged boson', 'Charged boson', eMini('charged boson')], ['e:plain', 'Plain', eMini('plain'), 'L'],
+    [message('editor.fy.cat.propagators', 'Propagators'), [
+      ['e:fermion', TYPE_NAMES.fermion, eMini('fermion'), 'F'], ['e:anti fermion', TYPE_NAMES['anti fermion'], eMini('anti fermion')], ['e:photon', TYPE_NAMES.photon, eMini('photon'), 'P'],
+      ['e:gluon', TYPE_NAMES.gluon, eMini('gluon'), 'G'], ['e:scalar', TYPE_NAMES.scalar, eMini('scalar'), 'S'], ['e:charged scalar', TYPE_NAMES['charged scalar'], eMini('charged scalar')],
+      ['e:ghost', TYPE_NAMES.ghost, eMini('ghost')], ['e:majorana', TYPE_NAMES.majorana, eMini('majorana'), 'M'], ['e:boson', TYPE_NAMES.boson, eMini('boson'), 'B'],
+      ['e:charged boson', TYPE_NAMES['charged boson'], eMini('charged boson')], ['e:plain', TYPE_NAMES.plain, eMini('plain'), 'L'],
     ]],
   ];
   const ITEM: Record<string, any> = {}, KEYS: Record<string, any> = {};
@@ -123,6 +128,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- state
   // { M, sel: { v: name } | { e: index } | null, arm, prop, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  let stopLocale: (() => void) | null = null;
   const snapCode = () => codeOf(E.M);
   function begin() { if (E.pending == null) E.pending = snapCode(); }
   function commit() {
@@ -208,15 +214,18 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k.slice(2)} ${title}`.toLowerCase().includes(q));
+    for (const [cat, items] of PAL) {
+      // search the shown name and the English one
+      const title = caption(cat);
+      const hits = (items as any).filter(([k, label]: any) => !q || `${caption(label)} ${label.fallback} ${k.slice(2)} ${title} ${cat.fallback}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => {
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => {
+        const name = caption(label);
         const on = E && (E.arm === k || (k === `e:${E.prop}`));
         return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.feynMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`;
       }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 64, 40, 1.6);
   }
   search.addEventListener('input', buildPalette);
@@ -253,14 +262,14 @@ import { runtime as TD } from '../runtime';
       const e = selE();
       if (e) edit(() => setType(e, E.prop));
       buildPalette();
-      setTip(e ? '' : `${ITEM[k].name}: point at a vertex, then drag its blue handle to another vertex`);
+      setTip(e ? '' : uiText('editor.fy.propTip', '{name}: point at a vertex, then drag its blue handle to another vertex', { name: caption(ITEM[k].name) }));
       return;
     }
     const v = selV(), st = k.slice(2);
     if (v && !E.arm && st !== 'particle') { edit(() => setVStyle(v, st)); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${ITEM[k].name}: click the grid to place it. Esc when done.` : '');
+    setTip(E.arm ? uiText('editor.fy.armTip', '{name}: click the grid to place it. Esc when done.', { name: caption(ITEM[k].name) }) : '');
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -309,7 +318,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -333,7 +342,7 @@ import { runtime as TD } from '../runtime';
     const se = selE(), sl = se && L.edges.find((x: any) => x.i === E.sel.e);
     if (sl) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})"><path class="ze-wsel" d="${sl.d}" stroke-width="${r2(10 / kk)}"/></g>`;
     if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${F.draw({ type: 'feynman', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
-    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Place a vertex from the left to start</text>`;
+    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(uiText('editor.fy.emptyStart', 'Place a vertex from the left to start'))}</text>`;
     // every vertex has a point to grab, coordinates included
     const sv = selV(), dragE = E.drag && E.drag.mode === 'edge';
     for (const [name, n] of L.nodes) {
@@ -375,7 +384,7 @@ import { runtime as TD } from '../runtime';
       }
       const [X, Y] = S(kn.x, kn.y), off = Math.max(4, nodeR(kn)) + 12, kx = r2(X + off * Math.cos(ang)), ky = r2(Y + off * Math.sin(ang));
       E.knobPos = { v: kv_, X, Y, kx, ky };
-      out += `<g class="ze-knob" data-v="${esc(kv_)}"><title>Drag to another vertex to draw a ${esc(TYPE_NAMES[E.prop].toLowerCase())}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
+      out += `<g class="ze-knob" data-v="${esc(kv_)}"><title>${esc(uiText('editor.fy.knobTitle', 'Drag to another vertex to draw a {type}', { type: (typeName(E.prop) || E.prop).toLowerCase() }))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
     }
     // placing: where it lands
     if ((E.arm || E.ghost) && E.hover && E.hover.at) { const [X, Y] = m(...(E.hover.at as [any, any])); out += `<circle class="cz-snap on" cx="${r2(X)}" cy="${r2(Y)}" r="5"/>`; }
@@ -438,7 +447,7 @@ import { runtime as TD } from '../runtime';
     if (d.mode === 'edge') {
       const vn = vertexAt(e, 14);
       E.hover = vn && vn !== d.from ? { v: vn } : { at: toCm(e, !e.altKey) };
-      setTip(vn && vn !== d.from ? `${TYPE_NAMES[E.prop]} to ${vn}` : `Drop on a vertex, or on the grid for a new one`);
+      setTip(vn && vn !== d.from ? uiText('editor.fy.edgeTo', '{type} to {vertex}', { type: typeName(E.prop) || E.prop, vertex: vn }) : uiText('editor.fy.dropEdge', 'Drop on a vertex, or on the grid for a new one'));
       draw(); return;
     }
     if (d.mode === 'move') {
@@ -447,7 +456,7 @@ import { runtime as TD } from '../runtime';
       const v = vOf(d.v), k = E.view.k;
       v.x = snap(d.x0 + (sx - d.sx) / k, !e.altKey); v.y = snap(d.y0 - (sy - d.sy) / k, !e.altKey); v.rel = null;
       E.M.dirty = true;
-      setTip(`${d.v} at (${F.num(v.x)}, ${F.num(v.y)})${e.altKey ? '' : ' · ⌥ to place freely'}`);
+      setTip(e.altKey ? uiText('editor.fy.moveTip', '{name} at ({x}, {y})', { name: d.v, x: F.num(v.x), y: F.num(v.y) }) : uiText('editor.fy.moveTipSnap', '{name} at ({x}, {y}) · ⌥ to place freely', { name: d.v, x: F.num(v.x), y: F.num(v.y) }));
       draw(); return;
     }
   });
@@ -483,17 +492,17 @@ import { runtime as TD } from '../runtime';
     right: '<path d="M3 5c2 9 12 9 14 0"/>',
     straight: '<path d="M3 10h14"/>',
   };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(vdel|edel)$/.test(act) ? ' danger' : ''}" data-fm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(vdel|edel)$/.test(act) ? ' danger' : ''}" data-fm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
     if (!E) return;
     const vn = vertexAt(e), ei = vn == null ? edgeAt(e) : null;
-    if (vn != null) { E.sel = { v: vn }; menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + '<hr>' + mItem('vdel', 'Delete Vertex', 'del', '⌫'); }
+    if (vn != null) { E.sel = { v: vn }; menu.innerHTML = mItem('label', uiText('editor.fy.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' + mItem('vdel', uiText('editor.fy.deleteVertex', 'Delete Vertex'), 'del', '⌫'); }
     else if (ei != null) {
       E.sel = { e: ei };
-      menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + mItem('rev', 'Reverse Direction', 'rev') + '<hr>' +
-        mItem('bleft', 'Bend Left', 'left') + mItem('bright', 'Bend Right', 'right') + mItem('bnone', 'Straight', 'straight') + '<hr>' + mItem('edel', 'Delete Line', 'del', '⌫');
+      menu.innerHTML = mItem('label', uiText('editor.fy.editLabel', 'Edit Label'), 'label', '↩') + mItem('rev', uiText('editor.fy.reverse', 'Reverse Direction'), 'rev') + '<hr>' +
+        mItem('bleft', uiText('editor.fy.bendLeft', 'Bend Left'), 'left') + mItem('bright', uiText('editor.fy.bendRight', 'Bend Right'), 'right') + mItem('bnone', uiText('editor.fy.straight', 'Straight'), 'straight') + '<hr>' + mItem('edel', uiText('editor.fy.deleteLine', 'Delete Line'), 'del', '⌫');
     } else { closeMenu(); return; }
     draw(); renderProps();
     menu.hidden = false;
@@ -554,29 +563,30 @@ import { runtime as TD } from '../runtime';
       const x = v.x != null ? v.x : n ? n.x / PX : null, y = v.y != null ? v.y : n ? -n.y / PX : null;
       const rest = v.o.filter((it: any) => !F.VERTEX_STYLES.includes(kv(it).k));
       const links = M.edges.filter((ed: any) => ed.a === v.name || ed.b === v.name).length;
-      show(STYLE_NAMES[st] || 'Vertex', `${links} line${links === 1 ? '' : 's'}`, [
-        field('Name', 'name', v.name, { class: 'mono' }), selectField('Shape', 'style', Object.entries<any>(STYLE_NAMES), st),
-        field('Label', 'text', mathOf(v.text || ''), { 'data-tx': 'math', placeholder: 'none' }),
+      show(styleName(st) || caption(STYLE_NAMES['']), links === 1 ? uiText('editor.fy.oneLine', '1 line') : uiText('editor.fy.nLines', '{n} lines', { n: links }), [
+        field(uiText('editor.fy.name', 'Name'), 'name', v.name, { class: 'mono' }), selectField(uiText('editor.fy.shape', 'Shape'), 'style', Object.entries<any>(STYLE_NAMES).map(([k, m]) => [k, caption(m)]), st),
+        field(uiText('editor.fy.label', 'Label'), 'text', mathOf(v.text || ''), { 'data-tx': 'math', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }),
         numField('x', 'x', x == null ? '' : F.num(x), 'cm', { step: '0.25' }), numField('y', 'y', y == null ? '' : F.num(y), 'cm', { step: '0.25' }),
-        ...(v.x == null ? [note(v.rel ? `Placed ${v.rel.dir} of ${v.rel.of}. Moving it writes its position.` : 'No position in the code: moving it writes one.')] : []),
-        field('Options', 'vopts', rest.join(', '), { class: 'mono', placeholder: 'e.g. label=above:\\(x\\)' }), actionRow('fe', 'vdel', 'Delete Vertex'),
+        ...(v.x == null ? [note(v.rel ? uiText('editor.fy.placedRel', 'Placed {dir} of {of}. Moving it writes its position.', { dir: v.rel.dir, of: v.rel.of }) : uiText('editor.fy.noPosition', 'No position in the code: moving it writes one.'))] : []),
+        field(uiText('editor.commonB.options', 'Options'), 'vopts', rest.join(', '), { class: 'mono', placeholder: uiText('editor.fy.vOptsPlaceholder', 'e.g. {example}', { example: 'label=above:\\(x\\)' }) }), actionRow('fe', 'vdel', uiText('editor.fy.deleteVertex', 'Delete Vertex')),
       ]); return;
     }
     if (edge) {
       const e = edge, t = typeOf(e), lb = labelOf(e), mo = momOf(e), b = bendOf(e), ins = e.o.some(isIns);
       const rest = e.o.filter((it: any) => !isType(it) && !isLabel(it) && !isMom(it) && !isBend(it) && !isIns(it));
       const bending = b.kind === 'left' || b.kind === 'right';
-      show(TYPE_NAMES[t] || t, `${e.a} → ${e.b}`, [selectField('Type', 'type', F.EDGE_TYPES.map((k: any) => [k, TYPE_NAMES[k]]), t),
-        field('Label', 'label', lb.t, { 'data-tx': 'math', placeholder: 'none' }), segments('Label side', 'lside', lb.side, [[1, 'Left'], [-1, 'Right']], !lb.t),
-        field('Momentum', 'mom', mo ? mo.t : '', { 'data-tx': 'math', placeholder: 'none' }), segments('Arrow side', 'mside', mo ? mo.side : 1, [[1, 'Left'], [-1, 'Right']], !mo),
-        segments('Points', 'mrev', mo && mo.rev ? 1 : 0, [[0, 'Along', 'In the line’s direction'], [1, 'Against', 'reversed momentum']], !mo),
-        segments('Bend', 'bend', b.kind === 'custom' ? '' : b.kind, [['', 'Straight'], ['left', 'Left'], ['right', 'Right'], ['half left', 'Half L', 'half left: a semicircle'], ['half right', 'Half R', 'half right: a semicircle']]),
-        numField('Angle', 'angle', bending ? F.num(b.a) : '', '°', { min: '5', max: '90', step: '5', ...(!bending ? { disabled: true } : {}) }),
-        segments('Insertion', 'ins', ins ? 1 : 0, [[0, 'None'], [1, 'Cross', 'insertion: a × at the middle']]), field('Options', 'eopts', rest.join(', '), { class: 'mono' }),
-        { kind: 'actions' as const, class: 'row', buttons: [{ text: 'Reverse Direction', attrs: { 'data-fe': 'rev' } }, { text: 'Delete Line', attrs: { class: 'danger', 'data-fe': 'edel' } }] },
+      const left = uiText('editor.fy.left', 'Left'), right = uiText('editor.fy.right', 'Right');
+      show(typeName(t) || t, `${e.a} → ${e.b}`, [selectField(uiText('editor.fy.type', 'Type'), 'type', F.EDGE_TYPES.map((k: any) => [k, typeName(k)]), t),
+        field(uiText('editor.fy.label', 'Label'), 'label', lb.t, { 'data-tx': 'math', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }), segments(uiText('editor.fy.labelSide', 'Label side'), 'lside', lb.side, [[1, left], [-1, right]], !lb.t),
+        field(uiText('editor.fy.momentum', 'Momentum'), 'mom', mo ? mo.t : '', { 'data-tx': 'math', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }), segments(uiText('editor.fy.arrowSide', 'Arrow side'), 'mside', mo ? mo.side : 1, [[1, left], [-1, right]], !mo),
+        segments(uiText('editor.fy.points', 'Points'), 'mrev', mo && mo.rev ? 1 : 0, [[0, uiText('editor.fy.along', 'Along'), uiText('editor.fy.alongTitle', 'In the line’s direction')], [1, uiText('editor.fy.against', 'Against'), 'reversed momentum']], !mo),
+        segments(uiText('editor.fy.bend', 'Bend'), 'bend', b.kind === 'custom' ? '' : b.kind, [['', uiText('editor.fy.straight', 'Straight')], ['left', left], ['right', right], ['half left', uiText('editor.fy.halfL', 'Half L'), uiText('editor.fy.halfLeftTitle', '{option}: a semicircle', { option: 'half left' })], ['half right', uiText('editor.fy.halfR', 'Half R'), uiText('editor.fy.halfRightTitle', '{option}: a semicircle', { option: 'half right' })]]),
+        numField(uiText('editor.fy.angle', 'Angle'), 'angle', bending ? F.num(b.a) : '', '°', { min: '5', max: '90', step: '5', ...(!bending ? { disabled: true } : {}) }),
+        segments(uiText('editor.fy.insertion', 'Insertion'), 'ins', ins ? 1 : 0, [[0, uiText('editor.fy.none', 'None')], [1, uiText('editor.fy.cross', 'Cross'), uiText('editor.fy.crossTitle', '{option}: a × at the middle', { option: 'insertion' })]]), field(uiText('editor.commonB.options', 'Options'), 'eopts', rest.join(', '), { class: 'mono' }),
+        { kind: 'actions' as const, class: 'row', buttons: [{ text: uiText('editor.fy.reverse', 'Reverse Direction'), attrs: { 'data-fe': 'rev' } }, { text: uiText('editor.fy.deleteLine', 'Delete Line'), attrs: { class: 'danger', 'data-fe': 'edel' } }] },
       ]); return;
     }
-    show('Diagram', `${M.vertices.length} vertices · ${M.edges.length} lines`, [note('Place vertices from the left on the grid; drag them to move (', { kbd: '⌥' }, ' places freely). Select a vertex and drag its blue handle to another vertex to draw a line of the kind chosen on the left. Double-click a vertex or line to label it.')]);
+    show(uiText('editor.fy.diagram', 'Diagram'), uiText('editor.fy.diagramSummary', '{v} vertices · {e} lines', { v: M.vertices.length, e: M.edges.length }), [note(uiText('editor.fy.help1', 'Place vertices from the left on the grid; drag them to move ('), { kbd: '⌥' }, uiText('editor.fy.help2', ' places freely). Select a vertex and drag its blue handle to another vertex to draw a line of the kind chosen on the left. Double-click a vertex or line to label it.'))]);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { if (e.target.dataset.f === 'name') { const v = selV(); if (v && v.name !== e.target.value.trim()) e.target.value = v.name; } commit(); renderProps(); } });
@@ -639,7 +649,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'vdel') { const v = selV(); if (v) deleteVertex(v.name); }
     else if (a === 'edel') { if (e) deleteEdge(E.sel.e); }
     else if (a === 'label') { if (E.sel) editLabel(E.sel); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     else if (!e) return;
     else if (a === 'rev') edit(() => reverseEdge(e));
     else if (a === 'bleft') edit(() => setBend(e, 'left'));
@@ -649,7 +659,7 @@ import { runtime as TD } from '../runtime';
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const M = E.M;
-    count.textContent = `${M.vertices.length} vert${M.vertices.length === 1 ? 'ex' : 'ices'} · ${M.edges.length} line${M.edges.length === 1 ? '' : 's'}`;
+    count.textContent = `${M.vertices.length === 1 ? uiText('editor.fy.oneVertex', '1 vertex') : uiText('editor.fy.nVertices', '{n} vertices', { n: M.vertices.length })} · ${M.edges.length === 1 ? uiText('editor.fy.oneLine', '1 line') : uiText('editor.fy.nLines', '{n} lines', { n: M.edges.length })}`;
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -716,8 +726,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = uiText('editor.commonB.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snapCode() !== E.start);
@@ -728,8 +739,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this diagram?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(uiText('editor.commonB.discardDiagram', 'Discard changes to this diagram?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
+    stopLocale?.(); stopLocale = null;
     root.hidden = true;
     document.body.classList.remove('cz-open');
     E = null;
@@ -743,6 +755,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, panel and drawing's captions follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
     requestAnimationFrame(fit);
   }

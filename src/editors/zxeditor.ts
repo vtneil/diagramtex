@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, message, caption, onLocale } from '../i18n';
 import type { FormSection } from '../ui/forms';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
@@ -23,31 +26,32 @@ import { runtime as TD } from '../runtime';
   // [key, name, cell code, key shortcut, preview]. Nodes replace the cell's node and keep its wires;
   // 'loop' adds a wire.
   const zxw = (body: any) => `\\begin{ZX}${body}\\end{ZX}`;
-  const PAL = [
-    ['Spiders', [
-      ['z', 'Z spider', '\\zxZ{}', 'Z'], ['x', 'X spider', '\\zxX{}', 'X'],
-      ['za', 'Z phase', '\\zxZ{\\alpha}'], ['xa', 'X phase', '\\zxX{\\alpha}'],
-      ['zm', 'Z −phase', '\\zxZ-{\\alpha}'], ['xm', 'X −phase', '\\zxX-{\\alpha}'],
+  // names are caption descriptors, shown in the interface language when the palette is drawn
+  const PAL: any[] = [
+    [message('editor.zx.cat.spiders', 'Spiders'), [
+      ['z', message('editor.zx.zSpider', 'Z spider'), '\\zxZ{}', 'Z'], ['x', message('editor.zx.xSpider', 'X spider'), '\\zxX{}', 'X'],
+      ['za', message('editor.zx.zPhase', 'Z phase'), '\\zxZ{\\alpha}'], ['xa', message('editor.zx.xPhase', 'X phase'), '\\zxX{\\alpha}'],
+      ['zm', message('editor.zx.zMinusPhase', 'Z −phase'), '\\zxZ-{\\alpha}'], ['xm', message('editor.zx.xMinusPhase', 'X −phase'), '\\zxX-{\\alpha}'],
       ['zpi', 'Z π', '\\zxZ{\\pi}'], ['xpi', 'X π', '\\zxX{\\pi}'],
       ['zf', 'Z π/2', '\\zxFracZ{\\pi}{2}'], ['xf', 'X π/2', '\\zxFracX{\\pi}{2}'],
       ['zfm', 'Z −π/2', '\\zxFracZ-{\\pi}{2}'], ['xfm', 'X −π/2', '\\zxFracX-{\\pi}{2}'],
     ]],
-    ['Boxes and points', [
-      ['h', 'Hadamard', '\\zxH{}', 'H'], ['n', 'Point', '\\zxN{}', 'N', zxw('\\zxN{} \\rar & \\zxZ{} \\rar & \\zxN{}')],
-      ['in', 'Input', '\\zxN{} \\rar', null, zxw('\\zxN{} \\rar &[\\zxwCol] \\zxZ{}')], ['out', 'Output', '\\zxN{} \\ar[l]', null, zxw('\\zxZ{} &[\\zxwCol] \\zxN{} \\ar[l]')],
-      ['loop', 'Loop', '\\zxLoop{}', 'L', zxw('\\zxZ{} \\zxLoop{}')], ['empty', 'Empty diagram', '\\zxEmptyDiagram{}'],
-      ['text', 'Text', '\\cdots'],
+    [message('editor.zx.cat.boxes', 'Boxes and points'), [
+      ['h', message('editor.zx.hadamard', 'Hadamard'), '\\zxH{}', 'H'], ['n', message('editor.zx.point', 'Point'), '\\zxN{}', 'N', zxw('\\zxN{} \\rar & \\zxZ{} \\rar & \\zxN{}')],
+      ['in', message('editor.zx.input', 'Input'), '\\zxN{} \\rar', null, zxw('\\zxN{} \\rar &[\\zxwCol] \\zxZ{}')], ['out', message('editor.zx.output', 'Output'), '\\zxN{} \\ar[l]', null, zxw('\\zxZ{} &[\\zxwCol] \\zxN{} \\ar[l]')],
+      ['loop', message('editor.zx.loop', 'Loop'), '\\zxLoop{}', 'L', zxw('\\zxZ{} \\zxLoop{}')], ['empty', message('editor.zx.emptyDiagram', 'Empty diagram'), '\\zxEmptyDiagram{}'],
+      ['text', message('editor.zx.text', 'Text'), '\\cdots'],
     ]],
   ];
   const ITEM: Record<string, any> = {}, KEYS: Record<string, any> = {};
   for (const [, items] of PAL) for (const [k, name, code, key, mini] of items) { ITEM[(k as any)] = { k, name, code, key, mini: mini || zxw(code) }; if (key) KEYS[key.toLowerCase()] = k; }
 
   // wire shapes offered as pictures; the rest are in a list
-  const SHAPES = [['', 'Straight'], ["o'", 'Arc up'], ['o.', 'Arc down'], ['-o', 'Arc right'], ['o-', 'Arc left'], [')', 'Bend left'], ['(', 'Bend right'],
-    ['s', 'S-curve'], ['N', 'N-curve'], ['C', 'Round left'], ['C-', 'Round right'], ["C'", 'Round top'], ['C.', 'Round bottom']];
+  const SHAPES: [string, any][] = [['', message('editor.zx.shape.straight', 'Straight')], ["o'", message('editor.zx.shape.arcUp', 'Arc up')], ['o.', message('editor.zx.shape.arcDown', 'Arc down')], ['-o', message('editor.zx.shape.arcRight', 'Arc right')], ['o-', message('editor.zx.shape.arcLeft', 'Arc left')], [')', message('editor.zx.shape.bendLeft', 'Bend left')], ['(', message('editor.zx.shape.bendRight', 'Bend right')],
+    ['s', message('editor.zx.shape.sCurve', 'S-curve')], ['N', message('editor.zx.shape.nCurve', 'N-curve')], ['C', message('editor.zx.shape.roundLeft', 'Round left')], ['C-', message('editor.zx.shape.roundRight', 'Round right')], ["C'", message('editor.zx.shape.roundTop', 'Round top')], ['C.', message('editor.zx.shape.roundBottom', 'Round bottom')]];
   const SHAPE_SET = new Set(TD.ZX_WIRES);
-  const LOOP_DIRS = [[90, 'Up'], [0, 'Right'], [270, 'Down'], [180, 'Left']];
-  const GAPS = [['', 'Default'], ['\\zxwCol', '\\zxwCol (1mm)'], ['\\zxHCol', '\\zxHCol'], ['\\zxSCol', '\\zxSCol'], ['\\zxWCol', '\\zxWCol (2mm)'], ['\\zxDotsCol', '\\zxDotsCol (3mm)'], ['\\zxNCol', '\\zxNCol (tight)'], ['\\zxZeroCol', '\\zxZeroCol (none)']];
+  const LOOP_DIRS = () => [[90, uiText('editor.zx.up', 'Up')], [0, uiText('editor.zx.right', 'Right')], [270, uiText('editor.zx.down', 'Down')], [180, uiText('editor.zx.left', 'Left')]];
+  const GAPS = () => [['', uiText('editor.zx.gapDefault', 'Default')], ['\\zxwCol', '\\zxwCol (1mm)'], ['\\zxHCol', '\\zxHCol'], ['\\zxSCol', '\\zxSCol'], ['\\zxWCol', '\\zxWCol (2mm)'], ['\\zxDotsCol', '\\zxDotsCol (3mm)'], ['\\zxNCol', uiText('editor.zx.gapTight', '{cmd} (tight)', { cmd: '\\zxNCol' })], ['\\zxZeroCol', uiText('editor.zx.gapNone', '{cmd} (none)', { cmd: '\\zxZeroCol' })]];
 
   // ---------------------------------------------------------------- model
   // M: { wrapped, env, rows: [{ cells: [cell], sep }] }; cell: { text, sep (the &[…] before it), node, edges,
@@ -175,6 +179,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- state
   // { M, sel: {r1, c1, r2, c2} | null, wire: [r, c, i] | null, arm, view, undo, redo, pending, start, done, drag, hover, ghost, codeAt, codeTimer, clip, G }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  let stopLocale: (() => void) | null = null;
   const snap = () => codeOf(E.M);
   function begin() { if (E.pending == null) E.pending = snap(); }
   function commit() {
@@ -308,12 +313,14 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter((it: any) => !q || `${it[1]} ${it[2]} ${title}`.toLowerCase().includes(q));
+    for (const [cat, items] of PAL) {
+      // search the shown name and the English one
+      const title = caption(cat);
+      const hits = (items as any).filter((it: any) => !q || `${caption(it[1])} ${it[1].fallback} ${it[2]} ${title} ${cat.fallback}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.zxMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => { const name = caption(label); return `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.zxMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`; }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     // one scale for every drawing, so nodes keep the same size; wide ones shrink to fit
     sizeMinis(list, 64, 40, 2.4);
   }
@@ -351,7 +358,7 @@ import { runtime as TD } from '../runtime';
     if (!nR(E.M) && !E.arm) { put(k, 0, 0, k !== 'loop'); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${ITEM[k].name}: click a cell to place it. Esc when done.` : '');
+    setTip(E.arm ? uiText('editor.zx.armTip', '{name}: click a cell to place it. Esc when done.', { name: caption(ITEM[k].name) }) : '');
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -423,7 +430,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.5, Math.min(14, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(0.5, Math.min(14, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -466,7 +473,7 @@ import { runtime as TD } from '../runtime';
       out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})"><path class="ze-wsel" d="${sw.segs.map((sg: any, i: any) => (i ? '' : `M${r2(sg.p0.x)},${r2(sg.p0.y)}`) + `C${r2(sg.c1.x)},${r2(sg.c1.y)} ${r2(sg.c2.x)},${r2(sg.c2.y)} ${r2(sg.p1.x)},${r2(sg.p1.y)}`).join('')}" stroke-width="${r2(8 / k)}"/></g>`;
     }
     if (R && C && !L.ops) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${Z.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true })}</g>`;
-    if (!R || !C || L.ops) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${R && C ? 'Drop a spider in a cell' : 'Drop a spider here to start'}</text>`;
+    if (!R || !C || L.ops) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${esc(R && C ? uiText('editor.zx.dropInCell', 'Drop a spider in a cell') : uiText('editor.zx.dropToStart', 'Drop a spider here to start'))}</text>`;
     // a wire being drawn
     if (E.drag && E.drag.mode === 'wire') {
       const d = E.drag, x0 = X(G.cx(d.c)), y0 = Y(G.cy(d.r));
@@ -479,12 +486,12 @@ import { runtime as TD } from '../runtime';
       const n = L.nodes.find((x: any) => x.cell && x.cell[0] === knobCell.r && x.cell[1] === knobCell.c);
       if (n) {
         const kx = r2(X(n.x + Math.max(n.w, 2 * MM) / 2) + 9), ky = r2(Y(n.y));
-        out += `<g class="ze-knob" data-r="${knobCell.r}" data-c="${knobCell.c}"><title>Drag to another cell to draw a wire</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
+        out += `<g class="ze-knob" data-r="${knobCell.r}" data-c="${knobCell.c}"><title>${esc(uiText('editor.zx.knobTitle', 'Drag to another cell to draw a wire'))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
       }
     }
     // the delete gutters left of the rows and above the columns
     E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
-    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, ['row', 'column']);
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, [uiText('editor.zx.deleteRowN', 'Delete row {n}'), uiText('editor.zx.deleteColumnN', 'Delete column {n}')]);
     // what is being dragged, under the pointer
     const mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if ((E.ghost && E.ghost.k) || mv) {
@@ -547,13 +554,13 @@ import { runtime as TD } from '../runtime';
     if (d.mode === 'wire') {
       d.e = [sx, sy]; E.hover = cellAt(e);
       const h = E.hover;
-      setTip(h && (h.r !== d.r || h.c !== d.c) ? `Wire to row ${h.r + 1}, column ${h.c + 1}${h.r >= nR(E.M) || h.c >= nC(E.M) || isEmpty(at(h.r, h.c)) ? ' (a point is added there)' : ''}` : 'Drop on another cell');
+      setTip(h && (h.r !== d.r || h.c !== d.c) ? (h.r >= nR(E.M) || h.c >= nC(E.M) || isEmpty(at(h.r, h.c)) ? uiText('editor.zx.wireToPoint', 'Wire to row {row}, column {col} (a point is added there)', { row: h.r + 1, col: h.c + 1 }) : uiText('editor.zx.wireTo', 'Wire to row {row}, column {col}', { row: h.r + 1, col: h.c + 1 })) : uiText('editor.zx.dropOnOther', 'Drop on another cell'));
       draw(); return;
     }
     if (d.mode === 'move') {
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
       d.moved = true; d.e = [sx, sy]; E.hover = cellAt(e);
-      setTip(e.altKey ? 'Copy to this cell' : 'Move here; a full cell swaps places. ⌥ copies.');
+      setTip(e.altKey ? uiText('editor.zx.copyHere', 'Copy to this cell') : uiText('editor.zx.moveHere', 'Move here; a full cell swaps places. ⌥ copies.'));
       draw(); return;
     }
     if (d.mode === 'range') { const h = cellAt(e); if (h && h.r < nR(E.M) && h.c < nC(E.M)) { E.sel.r2 = h.r; E.sel.c2 = h.c; draw(); renderProps(); } }
@@ -584,7 +591,7 @@ import { runtime as TD } from '../runtime';
 
   // right-click: rows and columns around the cell (or range) under the pointer; on a wire, the wire
   const MI: Record<string, any> = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>', loop: '<path class="qo" d="M8 14a4 4 0 1 1 4 0"/><circle class="qf" cx="10" cy="15" r="2.5"/>' };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|wiredel)$/.test(act) ? ' danger' : ''}" data-zm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|wiredel)$/.test(act) ? ' danger' : ''}" data-zm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -592,7 +599,7 @@ import { runtime as TD } from '../runtime';
     const n = nodeAt(e), w = !n && wireAt(e);
     if (w) {
       selectWire(w); draw(); renderProps();
-      menu.innerHTML = mItem('wiredel', 'Delete Wire', 'del', '⌫');
+      menu.innerHTML = mItem('wiredel', uiText('editor.zx.deleteWire', 'Delete Wire'), 'del', '⌫');
     } else {
       const h = cellAt(e);
       if (!h || h.r >= nR(E.M) || h.c >= nC(E.M)) { closeMenu(); return; }
@@ -600,11 +607,11 @@ import { runtime as TD } from '../runtime';
       if (!b || h.r < b.r1 || h.r > b.r2 || h.c < b.c1 || h.c > b.c2) selectCell(h.r, h.c);
       draw(); renderProps();
       const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
-      menu.innerHTML = mItem('rowabove', 'Insert Row Above', 'above') + mItem('rowbelow', 'Insert Row Below', 'below') + '<hr>' +
-        mItem('colbefore', 'Insert Column Before', 'before') + mItem('colafter', 'Insert Column After', 'after') + '<hr>' +
-        (single() && at(s.r1, s.c1).node ? mItem('loop', 'Add Loop', 'loop', 'L') + '<hr>' : '') +
-        mItem('rowdel', nr > 1 ? `Delete ${nr} Rows` : 'Delete Row', 'rowdel') + mItem('coldel', nc > 1 ? `Delete ${nc} Columns` : 'Delete Column', 'coldel') + '<hr>' +
-        mItem('delete', nr * nc > 1 ? 'Clear Cells' : 'Clear Cell', 'clear', '⌫');
+      menu.innerHTML = mItem('rowabove', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above') + mItem('rowbelow', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below') + '<hr>' +
+        mItem('colbefore', uiText('editor.commonB.insertColumnBefore', 'Insert Column Before'), 'before') + mItem('colafter', uiText('editor.commonB.insertColumnAfter', 'Insert Column After'), 'after') + '<hr>' +
+        (single() && at(s.r1, s.c1).node ? mItem('loop', uiText('editor.zx.addLoop', 'Add Loop'), 'loop', 'L') + '<hr>' : '') +
+        mItem('rowdel', nr > 1 ? uiText('editor.commonB.deleteRows', 'Delete {n} Rows', { n: nr }) : uiText('editor.commonB.deleteRow', 'Delete Row'), 'rowdel') + mItem('coldel', nc > 1 ? uiText('editor.commonB.deleteColumns', 'Delete {n} Columns', { n: nc }) : uiText('editor.commonB.deleteColumn', 'Delete Column'), 'coldel') + '<hr>' +
+        mItem('delete', nr * nc > 1 ? uiText('editor.commonB.clearCells', 'Clear Cells') : uiText('editor.commonB.clearCell', 'Clear Cell'), 'clear', '⌫');
     }
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
@@ -646,8 +653,8 @@ import { runtime as TD } from '../runtime';
   function focusField() { const f = $('[data-f]', props); if (f) { f.focus(); if (f.select) f.select(); } }
 
   // ---------------------------------------------------------------- properties
-  const KIND: Record<string, any> = { Z: 'Z spider', X: 'X spider', H: 'Hadamard box', N: 'Point', E: 'Empty diagram', T: 'Text' };
-  const LABELS = [['', 'In node'], ['above', 'Above'], ['below', 'Below'], ['left', 'Left'], ['right', 'Right']];
+  const KIND = (k: string) => (({ Z: () => uiText('editor.zx.zSpider', 'Z spider'), X: () => uiText('editor.zx.xSpider', 'X spider'), H: () => uiText('editor.zx.hadamardBox', 'Hadamard box'), N: () => uiText('editor.zx.point', 'Point'), E: () => uiText('editor.zx.emptyDiagram', 'Empty diagram'), T: () => uiText('editor.zx.text', 'Text') }) as Record<string, () => string>)[k]?.();
+  const LABELS = () => [['', uiText('editor.zx.inNode', 'In node')], ['above', uiText('editor.zx.above', 'Above')], ['below', uiText('editor.zx.below', 'Below')], ['left', uiText('editor.zx.left', 'Left')], ['right', uiText('editor.zx.right', 'Right')]];
   const PIL: Record<string, any> = { above: 'pil', below: 'pilb', left: 'pill', right: 'pilr' };
   const PIL_RE = /^(pil|pila|pilb|pilr|pill|phase in label( above| below| right| left)?)$/;
   const PIL_POS: Record<string, any> = { pil: 'above', pila: 'above', pilb: 'below', pilr: 'right', pill: 'left', 'phase in label': 'above', 'phase in label above': 'above', 'phase in label below': 'below', 'phase in label right': 'right', 'phase in label left': 'left' };
@@ -694,38 +701,38 @@ import { runtime as TD } from '../runtime';
       const cell = at(E.wire[0], E.wire[1]), e = wireOf(E.wire);
       if (!e) { E.wire = null; renderProps(); return; }
       if (e.loop) {
-        show('Loop', `row ${E.wire[0] + 1} · column ${E.wire[1] + 1}`, [zs('Side', 'loopdir', e.dir, LOOP_DIRS), numField('Opening', 'open', e.open, '°', { min: '0', max: '80', step: '5' }), field('Options', 'wstyles', e.styles.join(', '), { class: 'mono' }), actionRow('ze', 'wiredel', 'Delete Loop')]); return;
+        show(uiText('editor.zx.loop', 'Loop'), uiText('editor.commonB.rowColumn', 'row {row} · column {col}', { row: E.wire[0] + 1, col: E.wire[1] + 1 }), [zs(uiText('editor.zx.side', 'Side'), 'loopdir', e.dir, LOOP_DIRS()), numField(uiText('editor.zx.opening', 'Opening'), 'open', e.open, '°', { min: '0', max: '80', step: '5' }), field(uiText('editor.commonB.options', 'Options'), 'wstyles', e.styles.join(', '), { class: 'mono' }), actionRow('ze', 'wiredel', uiText('editor.zx.deleteLoop', 'Delete Loop'))]); return;
       }
       const [dr, dc] = delta(e.dirs), shape = shapeOfWire(e), mark = markOf(e).trim(), more = TD.ZX_WIRES.filter((name: any) => !SHAPES.some(([v]) => v === name));
-      const pics = SHAPES.map(([value, label]) => ({ kind: 'button' as const, text: '', svg: shapeMini(dr, dc, value), attrs: { class: 'ze-shape' + (shape === value ? ' on' : ''), 'data-zs': 'shape', 'data-v': value, title: label + (value ? ` (${value})` : '') } }));
-      const flags = [['cl', has(e, /^(cl|classical)$/), 'Classical', 'Doubled line (cl)'], ['B', has(e, /^(B|bold)$/), 'Bold', 'Thick line (B)'], ['dash', has(e, /^dashed$/), 'Dashed', 'dashed']].map(([key, on, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-zs': key, 'data-v': on ? '0' : '1', class: on ? 'on' : '', title } }));
-      show('Wire', `row ${E.wire[0] + 1}, col ${E.wire[1] + 1} → row ${E.wire[0] + dr + 1}, col ${E.wire[1] + dc + 1}`, [
-        { kind: 'controls' as const, class: 'ze-shapes', controls: pics }, selectField('More shapes', 'shape', shape && more.includes(shape) ? shape : '', [['', '—'], ...more.map((name: any) => [name, name])]), zs('Marker', 'mark', mark, [['', 'None'], ['H', 'H box'], ['Z', 'Z'], ['X', 'X']]),
-        { ...row('Line', ...flags), controlClass: 'ctl seg-ctl ze-flags' }, field('Options', 'wstyles', e.styles.join(', '), { class: 'mono' }), actionRow('ze', 'wiredel', 'Delete Wire'),
+      const pics = SHAPES.map(([value, label]) => ({ kind: 'button' as const, text: '', svg: shapeMini(dr, dc, value), attrs: { class: 'ze-shape' + (shape === value ? ' on' : ''), 'data-zs': 'shape', 'data-v': value, title: caption(label) + (value ? ` (${value})` : '') } }));
+      const flags = [['cl', has(e, /^(cl|classical)$/), uiText('editor.zx.classical', 'Classical'), uiText('editor.zx.classicalTitle', 'Doubled line (cl)')], ['B', has(e, /^(B|bold)$/), uiText('editor.zx.bold', 'Bold'), uiText('editor.zx.boldTitle', 'Thick line (B)')], ['dash', has(e, /^dashed$/), uiText('editor.zx.dashed', 'Dashed'), 'dashed']].map(([key, on, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-zs': key, 'data-v': on ? '0' : '1', class: on ? 'on' : '', title } }));
+      show(uiText('editor.zx.wire', 'Wire'), uiText('editor.zx.wireSummary', 'row {r1}, col {c1} → row {r2}, col {c2}', { r1: E.wire[0] + 1, c1: E.wire[1] + 1, r2: E.wire[0] + dr + 1, c2: E.wire[1] + dc + 1 }), [
+        { kind: 'controls' as const, class: 'ze-shapes', controls: pics }, selectField(uiText('editor.zx.moreShapes', 'More shapes'), 'shape', shape && more.includes(shape) ? shape : '', [['', '—'], ...more.map((name: any) => [name, name])]), zs(uiText('editor.zx.marker', 'Marker'), 'mark', mark, [['', uiText('editor.zx.markerNone', 'None')], ['H', uiText('editor.zx.hBox', 'H box')], ['Z', 'Z'], ['X', 'X']]),
+        { ...row(captions["ui.line"], ...flags), controlClass: 'ctl seg-ctl ze-flags' }, field(uiText('editor.commonB.options', 'Options'), 'wstyles', e.styles.join(', '), { class: 'mono' }), actionRow('ze', 'wiredel', uiText('editor.zx.deleteWire', 'Delete Wire')),
       ]); sizeMinis(props, 48, 30, 2); return;
     }
     const b = selBox();
     if (!b) {
-      show('Diagram', `${nR(M)} × ${nC(M)}`, [field('Options', 'env', M.env, { class: 'mono', placeholder: 'e.g. row sep=3mm' }), note('Drop spiders from the left into cells. Select a node and drag its blue handle to another cell to draw a wire; click a wire to shape it. Type ', { kbd: 'Z' }, ' ', { kbd: 'X' }, ' ', { kbd: 'H' }, ' ', { kbd: 'N' }, ' on a cell; ', { kbd: 'Enter' }, ' edits a phase.')]); return;
+      show(uiText('editor.zx.diagram', 'Diagram'), `${nR(M)} × ${nC(M)}`, [field(uiText('editor.commonB.options', 'Options'), 'env', M.env, { class: 'mono', placeholder: uiText('editor.zx.envPlaceholder', 'e.g. row sep=3mm') }), note(uiText('editor.zx.help1', 'Drop spiders from the left into cells. Select a node and drag its blue handle to another cell to draw a wire; click a wire to shape it. Type '), { kbd: 'Z' }, ' ', { kbd: 'X' }, ' ', { kbd: 'H' }, ' ', { kbd: 'N' }, uiText('editor.zx.help2', ' on a cell; '), { kbd: 'Enter' }, uiText('editor.zx.help3', ' edits a phase.'))]); return;
     }
     if (!single()) {
       const count = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1);
-      renderView(props, FormPanel, { sections: [section(`${count} cells`, [note(`Rows ${b.r1 + 1}–${b.r2 + 1}, columns ${b.c1 + 1}–${b.c2 + 1}. Right-click for rows and columns.`)], 'sec')] }); return;
+      renderView(props, FormPanel, { sections: [section(uiText('editor.commonB.nCells', '{n} cells', { n: count }), [note(uiText('editor.zx.rangeNote', 'Rows {r1}–{r2}, columns {c1}–{c2}. Right-click for rows and columns.', { r1: b.r1 + 1, r2: b.r2 + 1, c1: b.c1 + 1, c2: b.c2 + 1 }))], 'sec')] }); return;
     }
     const cell = at(b.r1, b.c1), n = !cell.opaque && cell.node, rows = [];
     if (n && (n.k === 'Z' || n.k === 'X')) {
-      rows.push(zs('Colour', 'kind', n.k, [['Z', 'Z (green)'], ['X', 'X (red)']]), zs('Phase', 'form', n.frac ? 'frac' : 'plain', [['plain', 'Plain'], ['frac', 'Fraction']]));
-      if (n.frac) rows.push(field('Numerator', 'num', n.num, { 'data-tx': 'math' }), field('Denominator', 'den', n.den, { 'data-tx': 'math' }));
-      else rows.push(field('Phase', 'phase', n.phase, { 'data-tx': 'math', placeholder: 'none' }));
-      rows.push(zs('Sign', 'minus', n.minus ? '1' : '0', [['0', '+'], ['1', '−']]), zs('Phase at', 'label', labelOf(n), LABELS));
-    } else if (n && n.k === 'N') rows.push(zs('Size', 'nv', n.v || '', [['', 'Point'], ['+', 'Square', '\\zxN+: 2mm both ways'], ['-', 'Wide', '\\zxN-: 2mm wide'], ['|', 'Tall', '\\zxN|: 2mm tall']]));
-    else if (n && n.k === 'T') rows.push(field('Text', 't', n.t, { 'data-tx': 'math' }));
-    else if (!n && !cell.opaque) rows.push(note('Pick an element on the left, or type ', { kbd: 'Z' }, ' ', { kbd: 'X' }, ' ', { kbd: 'H' }, ' ', { kbd: 'N' }, '.'));
-    if (n && n.k !== 'E') rows.push({ ...row('Change to', ...[['Z', 'Z'], ['X', 'X'], ['H', 'H'], ['N', 'Point']].filter(([key]) => key !== n.k || n.frac).map(([key, text]) => ({ kind: 'button' as const, text, attrs: { 'data-zs': 'conv', 'data-v': key } }))), controlClass: 'ctl ze-conv' });
-    if (b.c1 > 0) rows.push(selectField('Gap before', 'gap', cell.sep || GAPS[0][0], [...GAPS, ...(cell.sep && !GAPS.some(([v]) => v === cell.sep) ? [[cell.sep, cell.sep]] : [])]));
-    const sections: FormSection[] = [{ ...section(cell.opaque ? 'Custom cell' : n ? (n.frac ? `${n.k} spider` : KIND[n.k]) : 'Empty cell', rows, 'sec'), summary: `row ${b.r1 + 1} · column ${b.c1 + 1}` }];
-    if (n && cell.edges.length) sections.push(section('Wires from here', [{ kind: 'codeButtons' as const, class: 'ze-wires', items: cell.edges.map((edge: any, index: any) => { const [dr, dc] = delta(edge.dirs); return { attrs: { 'data-ze': 'pickwire', 'data-i': index }, label: edge.loop ? 'Loop' : `→ row ${b.r1 + dr + 1}, col ${b.c1 + dc + 1}`, code: edgeCode(edge) }; }) }], 'sec'));
-    sections.push({ class: 'sec', rows: [field('Code', 'code', cellText(cell), { class: 'mono' }), ...(cell.opaque ? [note('This cell has commands the editor doesn’t draw; they are kept as written.')] : [])] });
+      rows.push(zs(uiText('editor.zx.colour', 'Colour'), 'kind', n.k, [['Z', uiText('editor.zx.zGreen', 'Z (green)')], ['X', uiText('editor.zx.xRed', 'X (red)')]]), zs(uiText('editor.zx.phase', 'Phase'), 'form', n.frac ? 'frac' : 'plain', [['plain', uiText('editor.zx.plain', 'Plain')], ['frac', uiText('editor.zx.fraction', 'Fraction')]]));
+      if (n.frac) rows.push(field(uiText('editor.zx.numerator', 'Numerator'), 'num', n.num, { 'data-tx': 'math' }), field(uiText('editor.zx.denominator', 'Denominator'), 'den', n.den, { 'data-tx': 'math' }));
+      else rows.push(field(uiText('editor.zx.phase', 'Phase'), 'phase', n.phase, { 'data-tx': 'math', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }));
+      rows.push(zs(uiText('editor.zx.sign', 'Sign'), 'minus', n.minus ? '1' : '0', [['0', '+'], ['1', '−']]), zs(uiText('editor.zx.phaseAt', 'Phase at'), 'label', labelOf(n), LABELS()));
+    } else if (n && n.k === 'N') rows.push(zs(uiText('editor.zx.size', 'Size'), 'nv', n.v || '', [['', uiText('editor.zx.point', 'Point')], ['+', uiText('editor.zx.square', 'Square'), uiText('editor.zx.squareTitle', '{cmd}: 2mm both ways', { cmd: '\\zxN+' })], ['-', uiText('editor.zx.wide', 'Wide'), uiText('editor.zx.wideTitle', '{cmd}: 2mm wide', { cmd: '\\zxN-' })], ['|', uiText('editor.zx.tall', 'Tall'), uiText('editor.zx.tallTitle', '{cmd}: 2mm tall', { cmd: '\\zxN|' })]]));
+    else if (n && n.k === 'T') rows.push(field(uiText('editor.zx.text', 'Text'), 't', n.t, { 'data-tx': 'math' }));
+    else if (!n && !cell.opaque) rows.push(note(uiText('editor.zx.pickHelp', 'Pick an element on the left, or type '), { kbd: 'Z' }, ' ', { kbd: 'X' }, ' ', { kbd: 'H' }, ' ', { kbd: 'N' }, uiText('editor.zx.pickHelpEnd', '.')));
+    if (n && n.k !== 'E') rows.push({ ...row(uiText('editor.zx.changeTo', 'Change to'), ...[['Z', 'Z'], ['X', 'X'], ['H', 'H'], ['N', uiText('editor.zx.point', 'Point')]].filter(([key]) => key !== n.k || n.frac).map(([key, text]) => ({ kind: 'button' as const, text, attrs: { 'data-zs': 'conv', 'data-v': key } }))), controlClass: 'ctl ze-conv' });
+    if (b.c1 > 0) { const gaps = GAPS(); rows.push(selectField(uiText('editor.zx.gapBefore', 'Gap before'), 'gap', cell.sep || gaps[0][0], [...gaps, ...(cell.sep && !gaps.some(([v]) => v === cell.sep) ? [[cell.sep, cell.sep]] : [])])); }
+    const sections: FormSection[] = [{ ...section(cell.opaque ? uiText('editor.zx.customCell', 'Custom cell') : n ? (n.frac ? uiText('editor.zx.kSpider', '{k} spider', { k: n.k }) : KIND(n.k)) : uiText('editor.zx.emptyCell', 'Empty cell'), rows, 'sec'), summary: uiText('editor.commonB.rowColumn', 'row {row} · column {col}', { row: b.r1 + 1, col: b.c1 + 1 }) }];
+    if (n && cell.edges.length) sections.push(section(uiText('editor.zx.wiresFromHere', 'Wires from here'), [{ kind: 'codeButtons' as const, class: 'ze-wires', items: cell.edges.map((edge: any, index: any) => { const [dr, dc] = delta(edge.dirs); return { attrs: { 'data-ze': 'pickwire', 'data-i': index }, label: edge.loop ? uiText('editor.zx.loop', 'Loop') : uiText('editor.zx.wireToShort', '→ row {row}, col {col}', { row: b.r1 + dr + 1, col: b.c1 + dc + 1 }), code: edgeCode(edge) }; }) }], 'sec'));
+    sections.push({ class: 'sec', rows: [field(uiText('editor.commonB.code', 'Code'), 'code', cellText(cell), { class: 'mono' }), ...(cell.opaque ? [note(uiText('editor.zx.opaqueNote', 'This cell has commands the editor doesn’t draw; they are kept as written.'))] : [])] });
     renderView(props, FormPanel, { sections });
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
@@ -816,7 +823,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'cancel') finish(false);
     else if (a === 'delete') deleteSel();
     else if (a === 'wiredel') { if (E.wire) deleteWire(E.wire); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     else if (a === 'addrow') edit(() => ensure(M, nR(M) + 1, Math.max(nC(M), 1)));
     else if (a === 'addcol') edit(() => ensure(M, Math.max(nR(M), 1), nC(M) + 1));
     else if (a === 'pickwire' && single()) { selectWire([single().r1, single().c1, +b.dataset.i]); draw(); renderProps(); }
@@ -832,7 +839,7 @@ import { runtime as TD } from '../runtime';
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const R = nR(E.M), C = nC(E.M);
-    count.textContent = `${R} row${R === 1 ? '' : 's'} · ${C} column${C === 1 ? '' : 's'}`;
+    count.textContent = `${R === 1 ? uiText('editor.commonB.oneRow', '1 row') : uiText('editor.commonB.nRows', '{n} rows', { n: R })} · ${C === 1 ? uiText('editor.commonB.oneColumn', '1 column') : uiText('editor.commonB.nColumns', '{n} columns', { n: C })}`;
     if (document.activeElement === codeTa) return;
     const c = snap();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -918,8 +925,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snap();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = uiText('editor.commonB.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snap() !== E.start);
@@ -930,8 +938,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snap(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this diagram?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(uiText('editor.commonB.discardDiagram', 'Discard changes to this diagram?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
+    stopLocale?.(); stopLocale = null;
     root.hidden = true;
     document.body.classList.remove('cz-open');
     E = null;
@@ -946,6 +955,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, panel and drawing's captions follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     requestAnimationFrame(fit);
   }
   TD.zxEditor = { open };

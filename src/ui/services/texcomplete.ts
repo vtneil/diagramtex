@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t, message as msg, caption, type Message } from '../../i18n';
 // LaTeX command suggestions: type "\" in any text field that takes LaTeX (the canvas text editor,
 // the Text / Label fields in the properties panel, Document text blocks) and a list of matching
 // commands appears at the caret with a rendered preview. ↑↓ choose, Enter / Tab insert, Esc close.
@@ -238,6 +239,14 @@ import { runtime as TD } from '../../runtime';
     }
     return [...exact, ...pre, ...preCI, ...sub].slice(0, 40);
   }
+  // the group shown beside each suggestion (the lists above keep the English names)
+  const GROUP: Record<string, Message> = {
+    Arrow: msg('tex.group.arrow', 'Arrow'), 'Big operator': msg('tex.group.bigop', 'Big operator'), Control: msg('tex.group.control', 'Control'),
+    Environment: msg('tex.group.env', 'Environment'), Font: msg('ui.font', 'Font'), Function: msg('ui.function', 'Function'), Gate: msg('tex.group.gate', 'Gate'),
+    Greek: msg('tex.group.greek', 'Greek'), Group: msg('ui.group', 'Group'), Label: msg('ui.label', 'Label'), Measure: msg('tex.group.measure', 'Measure'),
+    Operator: msg('tex.group.operator', 'Operator'), Relation: msg('tex.group.relation', 'Relation'), Spacing: msg('tex.group.spacing', 'Spacing'),
+    Structure: msg('tex.group.structure', 'Structure'), Symbol: msg('tex.group.symbol', 'Symbol'), Text: msg('ui.text', 'Text'), Wire: msg('tex.group.wire', 'Wire'),
+  };
   function update(el: any) {
     const cur = current(el);
     if (!cur) return close();
@@ -249,8 +258,8 @@ import { runtime as TD } from '../../runtime';
     if (!items.length) return close();
     field = el; start = cur.at; idx = 0;
     pop.innerHTML = '<ul>' + items.map((c: any, i: any) => `<li role="option" data-i="${i}"${i === 0 ? ' class="on" aria-selected="true"' : ''}>` +
-      `<span class="tc-name">\\${esc(c.name)}</span><span class="tc-prev">${c.ex ? qcPrev(c.ex) : c.prev ? render1(c.prev) : ''}</span><span class="tc-grp">${c.group}</span></li>`).join('') +
-      '</ul><div class="tc-foot"><kbd>↑</kbd><kbd>↓</kbd> choose · <kbd>Enter</kbd> / <kbd>Tab</kbd> insert · <kbd>Esc</kbd> close</div>';
+      `<span class="tc-name">\\${esc(c.name)}</span><span class="tc-prev">${c.ex ? qcPrev(c.ex) : c.prev ? render1(c.prev) : ''}</span><span class="tc-grp">${esc(GROUP[c.group] ? caption(GROUP[c.group]) : c.group)}</span></li>`).join('') +
+      `</ul><div class="tc-foot"><kbd>↑</kbd><kbd>↓</kbd> ${esc(t('pal.foot.choose', 'choose'))} · <kbd>Enter</kbd> / <kbd>Tab</kbd> ${esc(t('tex.foot.insert', 'insert'))} · <kbd>Esc</kbd> ${esc(t('pal.foot.close', 'close'))}</div>`;
     pop.hidden = false;
     place(el, cur.at);
   }

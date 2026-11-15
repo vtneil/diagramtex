@@ -11,7 +11,7 @@ const board = (name) => { TD.app.newDoc(name, null, null, null, null, 'board'); 
 const pasteEvent = (dt) => {
   document.body.focus();
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', metaKey: true, ctrlKey: true, bubbles: true }));
-  document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  document.dispatchEvent(T.clipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
 };
 const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 // the entries of a stored (uncompressed) .zip
@@ -284,4 +284,110 @@ T.test('SVG to PDF: vectors for shapes, gradients, clips, <use>, faded groups an
   T.eq(await TD.app.svgVectorPdf(blur, 100, 50), null, 'a filter is not written as vectors');
   T.ok(/\/Subtype \/Image/.test(dec(await TD.app.svgFilePdf('data:image/svg+xml;base64,' + btoa(blur)))), 'the .zip gets it as a picture');
   T.ok(!/\/Subtype \/Image/.test(dec(await TD.app.svgFilePdf('data:image/svg+xml;base64,' + btoa(SVGS.paths)))), 'and the others as vectors');
+});
+
+const dropProjectFiles = (target, files, prepare) => {
+  const data = new DataTransfer();
+  files.forEach(file => data.items.add(file));
+  data.setData('text/plain', files.map(file => file.name).join('\n'));
+  prepare?.(data);
+  const box = target.getBoundingClientRect();
+  const options = { dataTransfer: data, bubbles: true, cancelable: true, clientX: box.left + 5, clientY: box.top + 5 };
+  const over = new DragEvent('dragover', options), drop = new DragEvent('drop', options);
+  target.dispatchEvent(over); target.dispatchEvent(drop);
+  T.ok(drop.defaultPrevented, 'dropping does not navigate away');
+};
+const projectDropFile = (data, name = 'project.diagramtex') => new File([JSON.stringify(data)], name, { type: '' });
+
+T.test('File drop: .diagramtex opens each file kind without changing the current file', async () => {
+  board('File drop original');
+  const originalId = TD.state.docId, original = TD.app.projectJson(TD.state.doc);
+  TD.app.saveNow();
+  const rect = { id: 'drop-rect', ...TD.TYPES.rect.create({ x: 20, y: 30 }, TD.state.defaults, 'rect'), w: 80, h: 40 };
+  const examples = [
+    { app: 'diagramtex', version: 3, kind: 'board', name: 'Dropped whiteboard', blocks: [{ type: 'diagram', shapes: [rect] }] },
+    { app: 'diagramtex', version: 3, kind: 'classic', name: 'Dropped classic', blocks: [{ type: 'text', text: 'Saved notes' }, { type: 'diagram', shapes: [rect] }] },
+    { app: 'diagramtex', version: 3, kind: 'page', name: 'Dropped page', sheet: { pages: 2, shapes: [rect] } },
+  ];
+  for (const [i, data] of examples.entries()) {
+    const target = document.querySelector(i === 0 ? '#topbar' : i === 1 ? '#files' : '#docview');
+    dropProjectFiles(target, [projectDropFile(data, i === 2 ? 'PROJECT.DIAGRAMTEX' : 'project.diagramtex')]);
+    await until(() => TD.state.doc.name === data.name);
+    T.eq(TD.state.doc.name, data.name, 'opens the dropped project');
+    T.eq(TD.state.doc.kind, data.kind, 'keeps its file kind');
+    T.ok(TD.state.doc.shapes.some(shape => shape.id === rect.id), 'keeps the shapes');
+    if (data.kind === 'classic') T.eq(TD.state.doc.blocks[0].text, 'Saved notes', 'keeps text blocks');
+    if (data.kind === 'page') T.eq(TD.state.doc.sheet.pages, 2, 'keeps page count');
+  }
+  TD.app.cmd.openDoc(originalId);
+  T.eq(TD.app.projectJson(TD.state.doc), original, 'the previously open file is unchanged');
+});
+
+T.test('File drop: multiple projects and bundles open from Quick and Table', async () => {
+  const project = name => ({ app: 'diagramtex', version: 3, kind: 'board', name, blocks: [{ type: 'diagram', shapes: [] }] });
+  TD.app.cmd.setQuick(true);
+  dropProjectFiles(document.querySelector('#topbar'), [projectDropFile(project('Drop first')), projectDropFile(project('Drop second'))]);
+  await until(() => TD.state.doc.name === 'Drop second' && !TD.app.cmd.inQuick());
+  T.ok(TD.app.cmd.files().some(file => file.name === 'Drop first'), 'first project imported');
+  T.eq(TD.state.doc.name, 'Drop second', 'second project opened last');
+  T.ok(!TD.app.cmd.inQuick(), 'leaves Quick');
+  TD.app.cmd.setTable(true);
+  const bundle = { app: 'diagramtex', version: 3, kind: 'bundle', files: [project('Bundle first'), project('Bundle second')] };
+  dropProjectFiles(document.querySelector('#topbar'), [projectDropFile(bundle, 'backup.diagramtex')]);
+  await until(() => TD.app.cmd.files().some(file => file.name === 'Bundle second') && !TD.app.cmd.inTable());
+  T.ok(!TD.app.cmd.inTable(), 'leaves Table');
+  const count = TD.app.cmd.files().length;
+  dropProjectFiles(document.querySelector('#topbar'), [projectDropFile(bundle, 'backup.diagramtex')]);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  T.eq(TD.app.cmd.files().length, count, 'opening a bundle twice does not duplicate files');
+});
+
+T.test('File drop: invalid projects show an error without changing the document', async () => {
+  board('Invalid drop original');
+  const originalId = TD.state.docId, count = TD.app.cmd.files().length;
+  const original = TD.app.projectJson(TD.state.doc);
+  dropProjectFiles(document.querySelector('#topbar'), [new File(['not JSON'], 'broken.diagramtex', { type: 'text/plain' })]);
+  await until(() => document.querySelector('.td-dialog'));
+  T.ok(document.querySelector('#tddTitle').textContent.includes('broken.diagramtex'), 'error identifies the file');
+  T.eq(TD.state.docId, originalId, 'keeps the original document open');
+  T.eq(TD.app.projectJson(TD.state.doc), original, 'does not insert raw file contents');
+  T.eq(TD.app.cmd.files().length, count, 'does not create an invalid file');
+  document.querySelector('.td-dialog [data-r="1"]').click();
+});
+
+T.test('File drop: captures an available disk handle before reading the file', async () => {
+  const link = TD.files.link, docFor = TD.files.docFor;
+  const handle = { kind: 'file', name: 'linked.diagramtex' };
+  const nativeHandle = Object.getOwnPropertyDescriptor(DataTransferItem.prototype, 'getAsFileSystemHandle');
+  let requested = false, linked = null;
+  TD.files.link = async (_id, value) => { linked = value; };
+  TD.files.docFor = async () => null;
+  try {
+    const file = projectDropFile({ kind: 'board', name: 'Dropped linked file', blocks: [{ type: 'diagram', shapes: [] }] }, handle.name);
+    const read = file.text.bind(file);
+    file.text = () => { T.ok(requested, 'handle requested synchronously before file read'); return read(); };
+    dropProjectFiles(document.querySelector('#topbar'), [file], data => {
+      Object.defineProperty(DataTransferItem.prototype, 'getAsFileSystemHandle', { configurable: true, value: () => { requested = true; return Promise.resolve(handle); } });
+    });
+    T.ok(requested, 'handle captured during the drop event');
+    await until(() => linked);
+    T.eq(linked, handle, 'uses the same linking path as Open');
+    T.eq(TD.state.doc.name, 'Dropped linked file', 'opens the project');
+  } finally {
+    TD.files.link = link; TD.files.docFor = docFor;
+    if (nativeHandle) Object.defineProperty(DataTransferItem.prototype, 'getAsFileSystemHandle', nativeHandle);
+    else delete DataTransferItem.prototype.getAsFileSystemHandle;
+  }
+});
+
+T.test('File drop: leaves an open modal and its document untouched', async () => {
+  const id = TD.state.docId, count = TD.app.cmd.files().length;
+  const alert = TD.alert('Work in progress', 'Keep this dialog open');
+  await until(() => document.querySelector('.td-dialog'));
+  dropProjectFiles(document.querySelector('#topbar'), [projectDropFile({ kind: 'board', name: 'Must not open', blocks: [{ type: 'diagram', shapes: [] }] })]);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  T.eq(TD.state.docId, id, 'does not switch documents behind a modal');
+  T.eq(TD.app.cmd.files().length, count, 'does not create files behind a modal');
+  document.querySelector('.td-dialog [data-r="1"]').click();
+  await alert;
 });

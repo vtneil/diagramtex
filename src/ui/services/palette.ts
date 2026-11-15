@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t, message as msg, caption, bindCaption, type Message } from '../../i18n';
 // Search ("/"): one field that finds tools and shapes, commands (Save, Export, Add Page…), modes and files,
 // and runs the one picked. Tools and shapes are read from the toolbar and its menus as they are, so
 // anything added there can be found here without a second list; commands and modes are listed below.
@@ -9,7 +10,10 @@ import { runtime as TD } from '../../runtime';
   const esc = (t: any) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
   // ---------- what can be found ----------
-  const FLY: Record<string, any> = { lines: 'Lines', shapes: 'Shapes', elec: 'Electrical', phys: 'Physics', misc: 'Misc', arrows: 'Block arrows', insertPop: '2D plots', plots3d: '3D plots', figures3d: '3D figures', blocks: 'Blocks' };
+  const FLY: Record<string, Message> = { lines: msg('pal.fly.lines', 'Lines'), shapes: msg('pal.fly.shapes', 'Shapes'), elec: msg('pal.fly.elec', 'Electrical'), phys: msg('ui.physics', 'Physics'), misc: msg('pal.fly.misc', 'Misc'), arrows: msg('ui.block.arrows', 'Block arrows'), insertPop: msg('ui.2d.plots', '2D plots'), plots3d: msg('ui.3d.plots', '3D plots'), figures3d: msg('ui.3d.figures', '3D figures'), blocks: msg('ui.blocks', 'Blocks') };
+  // result groups: an English key (ordering) and the caption shown
+  const GROUP: Record<string, Message> = { 'Tools & Shapes': msg('pal.group.tools', 'Tools & Shapes'), Operations: msg('pal.group.ops', 'Operations'), Modes: msg('pal.group.modes', 'Modes'), Files: msg('pal.group.files', 'Files') };
+  const groupName = (g: string) => caption(GROUP[g] || g);
   const ICON = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const IC = {
     newdoc: ICON('<path d="M5 2.5h6.5l3.5 3.5v11.5H5z"/><path d="M10 8.5v6M7 11.5h6"/>'),
@@ -35,63 +39,68 @@ import { runtime as TD } from '../../runtime';
     all: ICON('<path d="M3.5 3.5h10l3 3v10h-13z"/><path d="M6.5 3.5v4h6v-4"/>'),
   };
   const modeIcon = (sel: any) => { const b = $(sel); const s = b && b.querySelector('svg'); return s ? s.outerHTML : ''; };
-  const kindWord = () => (({ page: 'page', board: 'whiteboard', classic: 'document' }) as Record<string, any>)[st.doc.kind];
   const onCanvas = () => !C.inTool() && st.mode !== 'document';
   const leaveQuick = () => { C.setQuick(false); C.setTable(false); };
+
+  // per file kind: a page, a whiteboard or a classic document
+  const byKind = (page: Message, board: Message, classic: Message) => (({ page, board, classic }) as Record<string, Message>)[st.doc.kind] || classic;
+  // captions are shown in the interface language; the English stays searchable too
+  const shown2 = (L: any[], group: string) => L.filter((c) => !c.when || c.when()).map((c) => ({ ...c, group, label: caption(c.label), words: c.words + ' ' + caption(c.label, 'en') }));
 
   function commands() {
     const kind = st.doc.kind, id = st.docId, linked = TD.files && TD.files.fileOf(id), can = TD.files && TD.files.can;
     const L: any[] = [
-      { label: `New ${kindWord()[0].toUpperCase() + kindWord().slice(1)}`, words: 'create blank file add', ic: IC.newdoc, run: () => { leaveQuick(); C.runCmd('new'); } },
-      { label: 'New Folder…', words: 'create group organise', ic: IC.folder, run: () => { leaveQuick(); C.newFolder(''); } },
-      { label: 'Open File…', words: 'load diagramtex json tex', key: 'Ctrl+O', ic: IC.open, run: () => C.runCmd('open') },
-      { label: linked ? `Save to ${linked.name}` : can ? 'Save to File…' : 'Save (Download .diagramtex)', words: 'save write file disk download keep', key: linked ? 'Ctrl+S' : 'Ctrl+Shift+S', ic: IC.save, run: () => C.runCmd('save') },
-      ...(can ? [{ label: linked ? 'Save to Another File…' : 'Save to New File…', words: 'save as copy file', ic: IC.save, run: () => C.runCmd('saveas') }] : []),
-      { label: 'Copy Share Link', words: 'share url link send copy small', ic: IC.link, run: () => C.shareLink(id) },
-      { label: 'Import LaTeX or TikZ…', words: 'paste code tikzpicture import tex', ic: IC.imp, run: () => { leaveQuick(); C.runCmd('import'); } },
-      { label: 'Export Image (PNG, SVG, PDF)…', words: 'export picture png svg pdf dpi', ic: IC.exp, when: onCanvas, run: () => C.runCmd('export') },
-      { label: kind === 'page' ? 'LaTeX Code…' : 'TikZ Code…', words: 'latex tikz code copy export', key: 'Ctrl+E', ic: IC.tex, when: () => !C.inTool(), run: () => C.runCmd('tikz') },
-      { label: 'Download LaTeX Document (.tex)', words: 'export latex tex document download', key: 'Ctrl+Shift+E', ic: IC.tex, when: () => !C.inTool(), run: () => C.runCmd('latex') },
-      { label: 'Export Web Page (.html)', words: 'html web page export', ic: IC.exp, when: () => !C.inTool(), run: () => C.runCmd('html') },
-      { label: 'Print or Save as PDF…', words: 'print pdf paper', key: 'Ctrl+P', ic: IC.print, when: () => !C.inTool(), run: () => C.runCmd('print') },
-      { label: 'Export All Files…', words: 'backup bundle export everything', ic: IC.all, run: () => C.docAction('exportall') },
-      { label: 'Add Page', words: 'insert new page after sheet', ic: IC.page, when: () => kind === 'page' && !C.inTool(), run: () => C.addPage() },
-      { label: 'Next Page', words: 'page down go', key: 'PgDn', ic: IC.page, when: () => kind === 'page' && !C.inTool() && C.currentPage() < C.pageCount() - 1, run: () => C.goToPage(C.currentPage() + 1) },
-      { label: 'Previous Page', words: 'page up go back', key: 'PgUp', ic: IC.page, when: () => kind === 'page' && !C.inTool() && C.currentPage() > 0, run: () => C.goToPage(C.currentPage() - 1) },
-      { label: 'Undo', words: 'back revert', key: 'Ctrl+Z', ic: IC.undo, when: () => onCanvas() && C.canUndo(), run: () => C.undo() },
-      { label: 'Redo', words: 'again forward', key: 'Ctrl+Shift+Z', ic: IC.redo, when: () => onCanvas() && C.canRedo(), run: () => C.redo() },
-      { label: st.grid ? 'Hide Grid' : 'Show Grid', words: 'grid lines toggle', key: 'G', ic: IC.grid, when: onCanvas, run: () => C.toggleGrid() },
-      { label: st.snap ? 'Turn Snapping Off' : 'Turn Snapping On', words: 'snap grid points magnet toggle', ic: IC.snap, when: onCanvas, run: () => C.toggleSnap() },
-      { label: 'Zoom to Fit', words: 'fit view whole everything', ic: IC.fit, when: onCanvas, run: () => C.zoomFit() },
-      { label: 'Zoom to Fit Width', words: 'fit width view', ic: IC.fit, when: onCanvas, run: () => C.zoomFitWidth() },
-      { label: 'Actual Size (100%)', words: 'zoom 1:1 reset 100', ic: IC.zoom, when: onCanvas, run: () => C.zoomTo(1) },
-      { label: `Rename This ${kindWord()[0].toUpperCase() + kindWord().slice(1)}…`, words: 'rename name title file', ic: IC.rename, when: () => !C.inTool(), run: () => C.docAction('rename', id) },
-      { label: 'Move to Folder…', words: 'folder move organise', ic: IC.folder, when: () => !C.inTool(), run: () => C.docAction('move', id) },
-      { label: `Duplicate This ${kindWord()[0].toUpperCase() + kindWord().slice(1)}`, words: 'copy duplicate file', ic: IC.dup, when: () => !C.inTool(), run: () => C.docAction('dup', id) },
-      { label: document.body.classList.contains('no-files') ? 'Show File List' : 'Hide File List', words: 'sidebar documents files panel toggle', ic: IC.side, run: () => $('#btnSidebar').click() },
-      { label: 'Recovery Copies…', words: 'history versions backup restore recover earlier autosave revert lost', ic: IC.undo, when: () => !C.inTool(), run: () => C.docAction('recovery', id) },
-      { label: 'Welcome Tour', words: 'help tour guide welcome intro start tutorial onboarding', ic: IC.page, run: () => TD.tour && TD.tour.show() },
-      { label: 'Recycle Bin…', words: 'trash deleted restore undelete bin recover', ic: IC.del, run: () => C.openBin() },
-      { label: `Move This ${kindWord()[0].toUpperCase() + kindWord().slice(1)} to the Recycle Bin`, words: 'delete remove trash file bin', ic: IC.del, danger: true, when: () => !C.inTool(), run: () => C.docAction('del', id) },
+      { label: byKind(msg('pal.newPage', 'New Page'), msg('pal.newWhiteboard', 'New Whiteboard'), msg('pal.newDocument', 'New Document')), words: 'create blank file add', ic: IC.newdoc, run: () => { leaveQuick(); C.runCmd('new'); } },
+      { label: msg('pal.newFolder', 'New Folder…'), words: 'create group organise', ic: IC.folder, run: () => { leaveQuick(); C.newFolder(''); } },
+      { label: msg('pal.openFile', 'Open File…'), words: 'load diagramtex json tex', key: 'Ctrl+O', ic: IC.open, run: () => C.runCmd('open') },
+      { label: linked ? msg('pal.saveTo', 'Save to {name}', { name: linked.name }) : can ? msg('pal.saveToFile', 'Save to File…') : msg('pal.saveDownload', 'Save (Download .diagramtex)'), words: 'save write file disk download keep', key: linked ? 'Ctrl+S' : 'Ctrl+Shift+S', ic: IC.save, run: () => C.runCmd('save') },
+      ...(can ? [{ label: linked ? msg('pal.saveAnother', 'Save to Another File…') : msg('pal.saveNew', 'Save to New File…'), words: 'save as copy file', ic: IC.save, run: () => C.runCmd('saveas') }] : []),
+      { label: msg('pal.shareLink', 'Copy Share Link'), words: 'share url link send copy small', ic: IC.link, run: () => C.shareLink(id) },
+      { label: msg('pal.import', 'Import LaTeX or TikZ…'), words: 'paste code tikzpicture import tex', ic: IC.imp, run: () => { leaveQuick(); C.runCmd('import'); } },
+      { label: msg('pal.exportImage', 'Export Image (PNG, SVG, PDF)…'), words: 'export picture png svg pdf dpi', ic: IC.exp, when: onCanvas, run: () => C.runCmd('export') },
+      { label: kind === 'page' ? msg('pal.latexCode', 'LaTeX Code…') : msg('pal.tikzCode', 'TikZ Code…'), words: 'latex tikz code copy export', key: 'Ctrl+E', ic: IC.tex, when: () => !C.inTool(), run: () => C.runCmd('tikz') },
+      { label: msg('pal.downloadTex', 'Download LaTeX Document (.tex)'), words: 'export latex tex document download', key: 'Ctrl+Shift+E', ic: IC.tex, when: () => !C.inTool(), run: () => C.runCmd('latex') },
+      { label: msg('pal.exportHtml', 'Export Web Page (.html)'), words: 'html web page export', ic: IC.exp, when: () => !C.inTool(), run: () => C.runCmd('html') },
+      { label: msg('pal.print', 'Print or Save as PDF…'), words: 'print pdf paper', key: 'Ctrl+P', ic: IC.print, when: () => !C.inTool(), run: () => C.runCmd('print') },
+      { label: msg('pal.exportAll', 'Export All Files…'), words: 'backup bundle export everything', ic: IC.all, run: () => C.docAction('exportall') },
+      { label: msg('pal.addPage', 'Add Page'), words: 'insert new page after sheet', ic: IC.page, when: () => kind === 'page' && !C.inTool(), run: () => C.addPage() },
+      { label: msg('pal.nextPage', 'Next Page'), words: 'page down go', key: 'PgDn', ic: IC.page, when: () => kind === 'page' && !C.inTool() && C.currentPage() < C.pageCount() - 1, run: () => C.goToPage(C.currentPage() + 1) },
+      { label: msg('pal.prevPage', 'Previous Page'), words: 'page up go back', key: 'PgUp', ic: IC.page, when: () => kind === 'page' && !C.inTool() && C.currentPage() > 0, run: () => C.goToPage(C.currentPage() - 1) },
+      { label: msg('pal.undo', 'Undo'), words: 'back revert', key: 'Ctrl+Z', ic: IC.undo, when: () => onCanvas() && C.canUndo(), run: () => C.undo() },
+      { label: msg('pal.redo', 'Redo'), words: 'again forward', key: 'Ctrl+Shift+Z', ic: IC.redo, when: () => onCanvas() && C.canRedo(), run: () => C.redo() },
+      { label: st.grid ? msg('pal.hideGrid', 'Hide Grid') : msg('pal.showGrid', 'Show Grid'), words: 'grid lines toggle', key: 'G', ic: IC.grid, when: onCanvas, run: () => C.toggleGrid() },
+      { label: st.snap ? msg('pal.snapOff', 'Turn Snapping Off') : msg('pal.snapOn', 'Turn Snapping On'), words: 'snap grid points magnet toggle', ic: IC.snap, when: onCanvas, run: () => C.toggleSnap() },
+      { label: msg('pal.zoomFit', 'Zoom to Fit'), words: 'fit view whole everything', ic: IC.fit, when: onCanvas, run: () => C.zoomFit() },
+      { label: msg('pal.zoomFitWidth', 'Zoom to Fit Width'), words: 'fit width view', ic: IC.fit, when: onCanvas, run: () => C.zoomFitWidth() },
+      { label: msg('pal.actualSize', 'Actual Size (100%)'), words: 'zoom 1:1 reset 100', ic: IC.zoom, when: onCanvas, run: () => C.zoomTo(1) },
+      { label: byKind(msg('pal.renamePage', 'Rename This Page…'), msg('pal.renameWhiteboard', 'Rename This Whiteboard…'), msg('pal.renameDocument', 'Rename This Document…')), words: 'rename name title file', ic: IC.rename, when: () => !C.inTool(), run: () => C.docAction('rename', id) },
+      { label: msg('pal.moveToFolder', 'Move to Folder…'), words: 'folder move organise', ic: IC.folder, when: () => !C.inTool(), run: () => C.docAction('move', id) },
+      { label: byKind(msg('pal.dupPage', 'Duplicate This Page'), msg('pal.dupWhiteboard', 'Duplicate This Whiteboard'), msg('pal.dupDocument', 'Duplicate This Document')), words: 'copy duplicate file', ic: IC.dup, when: () => !C.inTool(), run: () => C.docAction('dup', id) },
+      { label: document.body.classList.contains('no-files') ? msg('pal.showFiles', 'Show File List') : msg('pal.hideFiles', 'Hide File List'), words: 'sidebar documents files panel toggle', ic: IC.side, run: () => $('#btnSidebar').click() },
+      { label: msg('pal.recovery', 'Recovery Copies…'), words: 'history versions backup restore recover earlier autosave revert lost', ic: IC.undo, when: () => !C.inTool(), run: () => C.docAction('recovery', id) },
+      { label: msg('pal.tour', 'Welcome Tour'), words: 'help tour guide welcome intro start tutorial onboarding', ic: IC.page, run: () => TD.tour && TD.tour.show() },
+      { label: msg('pal.bin', 'Recycle Bin…'), words: 'trash deleted restore undelete bin recover', ic: IC.del, run: () => C.openBin() },
+      { label: byKind(msg('pal.binPage', 'Move This Page to the Recycle Bin'), msg('pal.binWhiteboard', 'Move This Whiteboard to the Recycle Bin'), msg('pal.binDocument', 'Move This Document to the Recycle Bin')), words: 'delete remove trash file bin', ic: IC.del, danger: true, when: () => !C.inTool(), run: () => C.docAction('del', id) },
     ];
-    return L.filter((c) => !c.when || c.when()).map((c) => ({ ...c, group: 'Operations' }));
+    return shown2(L, 'Operations');
   }
 
   function modes() {
     const cur = C.inQuick() ? 'quick' : C.inTable() ? 'table' : st.mode;
-    const L: any[] = [
-      { m: 'document', label: 'Classic: Document View', words: 'classic text page view mode', ic: modeIcon('#classicSeg [data-mode="document"]') },
-      { m: 'diagram', label: 'Classic: Diagram View', words: 'classic canvas draw view mode', ic: modeIcon('#classicSeg [data-mode="diagram"]') },
-      { m: 'page', label: 'Page', words: 'free form paper sheet mode', ic: modeIcon('#kindSeg [data-mode="page"]') },
-      { m: 'board', label: 'Whiteboard', words: 'board endless canvas infinite mode', ic: modeIcon('#kindSeg [data-mode="board"]') },
-      { m: 'table', label: 'Table', words: 'table tabular spreadsheet csv excel sheets booktabs import latex mode', ic: modeIcon('#kindSeg [data-table]') },
-      { m: 'quick', label: 'Quick Formula', words: 'quick formula equation png copy mode', ic: modeIcon('#kindSeg [data-quick]') },
-    ].filter((x) => x.m !== cur).map((x) => ({ ...x, group: 'Modes', run: () => { if (x.m === 'quick') C.setQuick(true); else if (x.m === 'table') C.setTable(true); else { leaveQuick(); C.setMode(x.m); } } }));
+    const L: any[] = shown2([
+      { m: 'document', label: msg('pal.mode.document', 'Classic: Document View'), words: 'classic text page view mode', ic: modeIcon('#classicSeg [data-mode="document"]') },
+      { m: 'diagram', label: msg('pal.mode.diagram', 'Classic: Diagram View'), words: 'classic canvas draw view mode', ic: modeIcon('#classicSeg [data-mode="diagram"]') },
+      { m: 'page', label: msg('ui.page', 'Page'), words: 'free form paper sheet mode', ic: modeIcon('#kindSeg [data-mode="page"]') },
+      { m: 'board', label: msg('ui.whiteboard', 'Whiteboard'), words: 'board endless canvas infinite mode', ic: modeIcon('#kindSeg [data-mode="board"]') },
+      { m: 'table', label: msg('ui.table', 'Table'), words: 'table tabular spreadsheet csv excel sheets booktabs import latex mode', ic: modeIcon('#kindSeg [data-table]') },
+      { m: 'quick', label: msg('pal.mode.quick', 'Quick Formula'), words: 'quick formula equation png copy mode', ic: modeIcon('#kindSeg [data-quick]') },
+    ].filter((x) => x.m !== cur), 'Modes').map((x) => ({ ...x, run: () => { if (x.m === 'quick') C.setQuick(true); else if (x.m === 'table') C.setTable(true); else { leaveQuick(); C.setMode(x.m); } } }));
     const theme = window.TDTheme ? TDTheme.get() : 'system';
-    for (const [t, label] of [['system', 'Appearance: Follow the System'], ['light', 'Appearance: Light'], ['dark', 'Appearance: Dark']]) {
+    const themes: [string, Message][] = [['system', msg('pal.theme.system', 'Appearance: Follow the System')], ['light', msg('pal.theme.light', 'Appearance: Light')], ['dark', msg('pal.theme.dark', 'Appearance: Dark')]];
+    for (const [t, label] of themes) {
       if (t === theme) continue;
       const b = $(`#themeBox [data-theme-pick="${t}"]`);
-      L.push({ group: 'Modes', label, words: 'theme dark light colour color appearance', ic: b ? b.querySelector('svg').outerHTML : '', run: () => { if (window.TDTheme && TDTheme.get() !== t) b.click(); } });
+      L.push(...shown2([{ label, words: 'theme dark light colour color appearance', ic: b ? b.querySelector('svg').outerHTML : '', run: () => { if (window.TDTheme && TDTheme.get() !== t) b.click(); } }], 'Modes'));
     }
     return L;
   }
@@ -116,7 +125,7 @@ import { runtime as TD } from '../../runtime';
     }
     for (const b of document.querySelectorAll('.flyout [data-pick], .flyout [data-insert]')) {
       if (b.classList.contains('soon')) continue;
-      const fly = b.closest('.flyout'), cat = FLY[fly!.id === 'insertPop' ? 'insertPop' : fly!.id.replace(/^fly-/, '')] || '';
+      const fly = b.closest('.flyout'), catM = FLY[fly!.id === 'insertPop' ? 'insertPop' : fly!.id.replace(/^fly-/, '')], cat = catM ? caption(catM) : '', catEn = catM ? caption(catM, 'en') : '';
       const text = [...b.childNodes].filter((n: any) => n.nodeType === 3 || n.tagName === 'SPAN').map((n) => n.textContent).join(' ').replace(/\s+/g, ' ').trim();
       const t = fromTitle(tipOf(b) || text);
       const label = text || t.label;
@@ -124,7 +133,7 @@ import { runtime as TD } from '../../runtime';
       const secName = sec && sec.classList.contains('pop-title') ? sec.firstChild!.textContent!.trim() : '';
       out.push({ group: 'Tools & Shapes', label, key: t.key,
         detail: [cat, secName && secName !== cat ? secName : ''].filter(Boolean).join(' · '),
-        words: [(b as HTMLElement).dataset.pick || (b as HTMLElement).dataset.insert, t.detail, cat, secName].join(' '), ic: b.querySelector('svg')?.outerHTML || '', run: () => runTool(b) });
+        words: [(b as HTMLElement).dataset.pick || (b as HTMLElement).dataset.insert, t.detail, cat, catEn, secName].join(' '), ic: b.querySelector('svg')?.outerHTML || '', run: () => runTool(b) });
     }
     return out;
   }
@@ -134,9 +143,9 @@ import { runtime as TD } from '../../runtime';
     b.click(); // the toolbar's own handlers pick the tool (and close any menu)
   }
   function files() {
-    const KIND: Record<string, any> = { page: 'Page', board: 'Whiteboard', classic: 'Classic' };
+    const KIND: Record<string, Message> = { page: msg('ui.page', 'Page'), board: msg('ui.whiteboard', 'Whiteboard'), classic: msg('ui.classic', 'Classic') };
     return C.files().filter((d: any) => d.id !== st.docId).map((d: any) => ({
-      group: 'Files', label: C.leafOf(d.name), detail: [C.folderOf(d.name), KIND[d.kind || 'classic']].filter(Boolean).join(' · '), words: d.name,
+      group: 'Files', label: C.leafOf(d.name), detail: [C.folderOf(d.name), caption(KIND[d.kind || 'classic'])].filter(Boolean).join(' · '), words: d.name + ' ' + caption(KIND[d.kind || 'classic'], 'en'),
       ic: ICON('<path d="M5 2.5h6.5l3.5 3.5v11.5H5zM11.5 2.5V6H15"/>'),
       run: () => { leaveQuick(); C.openDoc(d.id); },
     }));
@@ -147,7 +156,7 @@ import { runtime as TD } from '../../runtime';
   // every word typed must be found; a hit at the start of the name counts most, then at the start of a
   // word in it, anywhere in it, in the details, and last as letters in order (so "bzc" finds "Bézier curve")
   function score(it: any, words: any) {
-    const name = norm(it.label), more = norm(it.detail + ' ' + it.words + ' ' + it.group);
+    const name = norm(it.label), more = norm(it.detail + ' ' + it.words + ' ' + it.group + ' ' + groupName(it.group));
     let total = 0;
     for (const w of words) {
       let s = 0;
@@ -166,13 +175,19 @@ import { runtime as TD } from '../../runtime';
   // ---------- the search box ----------
   const root = document.createElement('div');
   root.id = 'cmdk'; root.hidden = true;
-  root.innerHTML = `<div class="cmdk-box" role="dialog" aria-modal="true" aria-label="Search tools and commands">
+  root.innerHTML = `<div class="cmdk-box" role="dialog" aria-modal="true">
     <div class="cmdk-field"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5"/><path d="M12.5 12.5l4.5 4.5"/></svg>
-      <input id="cmdkIn" type="text" spellcheck="false" autocomplete="off" placeholder="Search tools, shapes, commands, modes and files" role="combobox" aria-expanded="true" aria-controls="cmdkList" aria-autocomplete="list"></div>
-    <div id="cmdkList" class="cmdk-list" role="listbox" aria-label="Results"></div>
-    <div class="cmdk-foot"><span><kbd>↑</kbd><kbd>↓</kbd> choose</span><span><kbd>↩</kbd> run</span><span><kbd>esc</kbd> close</span></div></div>`;
+      <input id="cmdkIn" type="text" spellcheck="false" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="cmdkList" aria-autocomplete="list"></div>
+    <div id="cmdkList" class="cmdk-list" role="listbox"></div>
+    <div class="cmdk-foot"><span><kbd>↑</kbd><kbd>↓</kbd> <span data-c="choose"></span></span><span><kbd>↩</kbd> <span data-c="run"></span></span><span><kbd>esc</kbd> <span data-c="close"></span></span></div></div>`;
   document.body.appendChild(root);
   const box = root.firstElementChild, inp = root.querySelector('#cmdkIn'), list = root.querySelector('#cmdkList');
+  bindCaption(box!, msg('pal.aria', 'Search tools and commands'), 'aria-label');
+  bindCaption(inp!, msg('pal.placeholder', 'Search tools, shapes, commands, modes and files'), 'placeholder');
+  bindCaption(list!, msg('pal.results', 'Results'), 'aria-label');
+  bindCaption(root.querySelector('[data-c="choose"]')!, msg('pal.foot.choose', 'choose'));
+  bindCaption(root.querySelector('[data-c="run"]')!, msg('pal.foot.run', 'run'));
+  bindCaption(root.querySelector('[data-c="close"]')!, msg('pal.foot.close', 'close'));
   let items: any[] = [], shown: any[] = [], cur = 0, prevFocus: any = null;
 
   function place() {
@@ -194,12 +209,12 @@ import { runtime as TD } from '../../runtime';
     cur = Math.min(cur, Math.max(0, shown.length - 1));
     let last: any = null, h = '';
     shown.forEach((x, i) => {
-      if (!words.length && x.group !== last) { h += `<div class="cmdk-sec" role="presentation">${esc(x.group)}</div>`; last = x.group; }
+      if (!words.length && x.group !== last) { h += `<div class="cmdk-sec" role="presentation">${esc(groupName(x.group))}</div>`; last = x.group; }
       h += `<div class="cmdk-row${i === cur ? ' on' : ''}${x.danger ? ' danger' : ''}" role="option" id="cmdk-${i}" data-i="${i}" aria-selected="${i === cur}">
         <span class="cmdk-ic">${x.ic || ''}</span><span class="cmdk-lb">${esc(x.label)}${x.detail ? `<small>${esc(x.detail)}</small>` : ''}</span>
-        ${words.length ? `<span class="cmdk-grp">${esc(x.group)}</span>` : ''}${x.key ? `<kbd>${esc(C.kb(x.key))}</kbd>` : ''}</div>`;
+        ${words.length ? `<span class="cmdk-grp">${esc(groupName(x.group))}</span>` : ''}${x.key ? `<kbd>${esc(C.kb(x.key))}</kbd>` : ''}</div>`;
     });
-    list!.innerHTML = h || `<div class="cmdk-empty">Nothing found for “${esc((inp! as HTMLInputElement).value.trim())}”</div>`;
+    list!.innerHTML = h || `<div class="cmdk-empty">${esc(t('pal.empty', 'Nothing found for “{q}”', { q: (inp! as HTMLInputElement).value.trim() }))}</div>`;
     inp!.setAttribute('aria-activedescendant', shown.length ? 'cmdk-' + cur : '');
     const on = list!.querySelector('.on');
     if (on) on.scrollIntoView({ block: 'nearest' });

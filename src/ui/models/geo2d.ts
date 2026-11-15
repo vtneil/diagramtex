@@ -1,4 +1,6 @@
+import { captions } from '../../i18n/messages';
 import { runtime as TD } from '../../runtime';
+import { t, message as msg } from '../../i18n';
 import { panelServices } from '../../domain/geo2d.ts';
 const { layout, sliders, fmt, G, fullCode } = panelServices;
 import { row, section } from '../forms';
@@ -11,13 +13,13 @@ TD.panels.geo2d = {
         value: x.v, numericValue: fmt(x.v, 3), unit: '',
         attrs: { 'data-g2': x.name, min: x.lo, max: x.hi, step: x.step, 'aria-label': x.name },
         numericAttrs: { 'data-g2n': x.name, step: x.step * 10, 'aria-label': x.name } }] }));
-      rows.push(row('Scale', { kind: 'input' as const, value: fmt(L.scale, 2), attrs: { type: 'number', 'data-g2': 'scale', step: '0.25', min: '0.1' } }));
-      rows.push({ kind: 'help' as const, text: [(S.length ? 'Each value set to a number in the code gets a slider. ' : '') + 'Double-click the figure to edit it: drag points, add vectors, projections, angle marks, plots and measures.'] });
-      return { sections: [section('2D geometry', rows, 'sec'),
+      rows.push(row(captions["ui.scale"], { kind: 'input' as const, value: fmt(L.scale, 2), attrs: { type: 'number', 'data-g2': 'scale', step: '0.25', min: '0.1' } }));
+      rows.push({ kind: 'help' as const, text: [...(S.length ? [msg('geo2d.help.sliders', 'Each value set to a number in the code gets a slider. ')] : []), msg('geo2d.help.edit', 'Double-click the figure to edit it: drag points, add vectors, projections, angle marks, plots and measures.')] });
+      return { sections: [section(msg('geo2d.title', '2D geometry'), rows, 'sec'),
         section('TikZ', [{ kind: 'column' as const, value: s.src, attrs: { class: 'code', 'data-p': 'src', spellcheck: 'false', rows: '12' } },
           ...L.warnings.map((text: any) => ({ kind: 'error' as const, text })),
-          { kind: 'help' as const, text: ['Plain TikZ; angle marks add ', { code: '\\usetikzlibrary{angles, quotes}' }, ". The picture's options go on a scope."] }], 'sec'),
-        { class: 'sec', rows: [{ kind: 'button' as const, class: 'wide primary', action: 'editgeo2d', label: 'Edit 2D Geometry…' }, { kind: 'button' as const, class: 'wide', action: 'copygeo2d', label: 'Copy TikZ Code' }] }]
+          { kind: 'help' as const, text: [msg('geo2d.help.plain', 'Plain TikZ; angle marks add '), { code: '\\usetikzlibrary{angles, quotes}' }, msg('geo2d.help.scope', ". The picture's options go on a scope.")] }], 'sec'),
+        { class: 'sec', rows: [{ kind: 'button' as const, class: 'wide primary', action: 'editgeo2d', label: msg('model.edit.2d.geometry', 'Edit 2D Geometry…') }, { kind: 'button' as const, class: 'wide', action: 'copygeo2d', label: msg('ui.copy.tikz.code', 'Copy TikZ Code') }] }]
         .map((sec, i) => i === 0 ? { ...sec, summary: 'TikZ' } : sec) };
     },
     apply(s, t) {
@@ -36,7 +38,7 @@ TD.panels.geo2d = {
       if (act === 'editgeo2d') { if (TD.geo2dOpen) TD.geo2dOpen(s.id); return; }
       if (act !== 'copygeo2d') return;
       const txt = fullCode(s.src) + '\n';
-      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt('TikZ Code', txt, { multiline: true, readonly: true, message: 'Copying failed: select the code and copy it yourself.', ok: 'Done', cancel: null }));
-      return 'Copied TikZ code';
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).catch(() => TD.prompt(t('ui.tikz.code', 'TikZ Code'), txt, { multiline: true, readonly: true, message: t('model.copyFailed', 'Copying failed: select the code and copy it yourself.'), ok: t('ui.done', 'Done'), cancel: null }));
+      return t('model.copied.tikz.code', 'Copied TikZ code');
     },
   };

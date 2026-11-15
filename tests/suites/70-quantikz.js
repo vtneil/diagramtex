@@ -81,7 +81,10 @@ T.test('quantikz: colours from style, label style, the environment and wire styl
   const s = svg(wrap('& \\gate[style={fill=red!20,draw=red},label style={color=blue}]{H} & \\ctrl[style={draw=green}]{1} \\\\\n& & \\targ{}'));
   T.ok(/fill="#ffcccc"/i.test(s), 'fill=red!20');
   T.ok(/stroke="#ff0000"/i.test(s), 'draw=red');
-  T.ok(/#0000ff/i.test(s), 'label style colour');
+  const labels = [...s.matchAll(/href="data:image\/svg\+xml;base64,([^"]+)"/g)].map(m => decodeURIComponent(escape(atob(m[1])))).join('');
+  const labelDoc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${labels}</svg>`, 'image/svg+xml');
+  T.ok([...labelDoc.querySelectorAll('[fill],[style]')].some(el =>
+    [el.getAttribute('fill'), el.style?.color].some(value => ['#0000ff', 'rgb(0,0,255)'].includes((value || '').replace(/\s/g, '').toLowerCase()))), 'label style colour reaches painted vectors');
   T.ok(/stroke="#00ff00"/i.test(s), 'the control and its line in green');
   const e = svg(wrap('& \\gate{H} &', 'color=red,background color=yellow'));
   T.ok(/stroke="#ff0000"/i.test(e) && /fill="#ffff00"/i.test(e), 'environment colours');
@@ -163,4 +166,85 @@ T.test('quantikz editor: the Circuit spacing fields write row sep / column sep, 
     q('[data-qe="done"]').click();
   }
   T.ok(got && /column sep=0\.3cm/.test(got.src), 'Done hands the options back');
+});
+
+T.test('quantikz: multi-wire gates at the bottom boundary have finite geometry', () => {
+  for (const gate of ['\\gate[8]{U}', '\\gate[2,swap]{}', '\\meter[8]{}']) {
+    for (const body of [gate, `& \\\\\n${gate} &`]) {
+      const src = wrap(body), drawing = svg(src), layout = L(src);
+      T.ok(!/NaN|Infinity/.test(drawing.replace(/href="[^"]*"/g, '')), `${gate}: valid SVG at circuit boundary`);
+      T.ok(Number.isFinite(layout.bb.w) && Number.isFinite(layout.bb.h), 'finite bounds');
+    }
+  }
+});
+
+T.test('quantikz editor: span drag grows wires downward and stops at the top', async () => {
+  TD.qcEditor.open(qc(wrap('\\gate[2]{U} & \\\\\n &')), () => {});
+  await new Promise((r) => setTimeout(r, 50));
+  const root = document.querySelector('#qcModal');
+  const q = (s) => root.querySelector(s);
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+  const handle = q('.qe-span[data-e="b"]');
+  T.ok(handle, 'gate has span handle');
+  const svg = handle.ownerSVGElement, capture = svg.setPointerCapture;
+  svg.setPointerCapture = () => {};
+  const pointer = (target, type, x, y) => target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, button: 0, clientX: x, clientY: y }));
+  try {
+    let b = handle.getBoundingClientRect();
+    pointer(handle, 'pointerdown', b.x + b.width / 2, b.y + b.height / 2);
+    pointer(svg, 'pointermove', b.x + b.width / 2, b.y + 150);
+    pointer(svg, 'pointerup', b.x + b.width / 2, b.y + 150);
+    let src = q('.cz-code textarea').value;
+    T.ok(QC.grid(QC.unwrap(src).inner).length > 2, 'downward drag adds wires');
+    T.ok(Number(q('[data-f="span"]').value) > 2, 'gate extends onto added wires');
+    const top = q('.qe-span[data-e="t"]'); b = top.getBoundingClientRect();
+    pointer(top, 'pointerdown', b.x + b.width / 2, b.y);
+    pointer(svg, 'pointermove', b.x + b.width / 2, b.y - 500);
+    pointer(svg, 'pointerup', b.x + b.width / 2, b.y - 500);
+    src = q('.cz-code textarea').value;
+    T.ok(QC.grid(QC.unwrap(src).inner)[0][0].includes('\\gate'), 'upward drag stays on first wire');
+  } finally {
+    svg.setPointerCapture = capture;
+    q('[data-qe="done"]').click();
+  }
+});
+
+T.test('quantikz: library math inherits ink outside the isolated label image', () => {
+  const host = document.createElement('div');
+  host.style.color = 'rgb(230, 225, 215)';
+  host.innerHTML = TD.qcMini('\\gate{H}');
+  document.body.append(host);
+  try {
+    const mask = host.querySelector('mask');
+    T.ok(mask && mask.querySelector('image.svg-label'), 'math image supplies alpha mask');
+    const label = host.querySelector('rect[mask]');
+    T.eq(getComputedStyle(label).fill, 'rgb(230, 225, 215)', 'dark theme ink');
+    host.style.color = 'rgb(28, 27, 25)';
+    T.eq(getComputedStyle(label).fill, 'rgb(28, 27, 25)', 'theme change recolors existing label');
+  } finally { host.remove(); }
+});
+
+T.test('quantikz editor: dragging a tall gate previews the actual full gate at canvas scale', async () => {
+  TD.qcEditor.open(qc(wrap('\\gate[3][2cm]{U} & \\\\\n & \\\\\n &')), () => {});
+  await new Promise((r) => setTimeout(r, 50));
+  const root = document.querySelector('#qcModal'), q = (s) => root.querySelector(s);
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+  const box = q('.qe-gbox'), b = box.getBoundingClientRect(), svg = box.ownerSVGElement;
+  const capture = svg.setPointerCapture; svg.setPointerCapture = () => {};
+  const x = b.x + b.width / 2, y = b.y + b.height / 2;
+  const pointer = (target, type, cx, cy) => target.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, button: 0, clientX: cx, clientY: cy }));
+  try {
+    pointer(box, 'pointerdown', x, y);
+    pointer(svg, 'pointermove', x + 20, y + 20);
+    const preview = q('.qe-drag-preview');
+    T.ok(preview, 'move preview shown');
+    const gate = preview.querySelector('rect');
+    T.ok(preview.getBoundingClientRect().height >= b.height, 'full three-wire height preserved');
+    T.ok(preview.getBoundingClientRect().width >= b.width, 'custom width preserved');
+    T.ok(gate && preview.querySelector('[aria-label="$U$"]'), 'actual gate and label included');
+    pointer(svg, 'pointerup', x, y);
+  } finally {
+    svg.setPointerCapture = capture;
+    q('[data-qe="done"]').click();
+  }
 });

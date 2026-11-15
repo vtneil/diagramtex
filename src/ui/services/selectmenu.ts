@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { caption } from '../../i18n';
 // Custom menu for every <select> in the app, so all dropdowns match the dash/width menus instead of
 // mixing in the native system menu. The <select> stays the source of truth: picking an item sets its
 // value and fires the same input/change events a native pick would, so existing handlers keep working.
@@ -20,13 +21,16 @@ import { runtime as TD } from '../../runtime';
   const enabled = (i: any) => { const o = sel && sel.options[i]; return o && !o.disabled && !o.hidden; };
 
   function setHi(i: any, scroll?: any) {
+    const changed = hi !== i;
     hi = i;
     items().forEach((el) => el.classList.toggle('hi', +(el as HTMLElement).dataset.i! === i));
+    if (changed && sel && enabled(i)) sel.dispatchEvent(new CustomEvent('optionpreview', { bubbles: true, detail: { value: sel.options[i].value } }));
     if (scroll) { const el = menu.querySelector(`.selmenu-item[data-i="${i}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }
   }
 
   function open(s: any) {
     if (sel === s) { close(); return; }
+    close();
     sel = s;
     menu.textContent = '';
     // a select with data-pics names a set of pictures (TD.selectPics[name][value] = [short label, svg]):
@@ -48,7 +52,8 @@ import { runtime as TD } from '../../runtime';
       el.setAttribute('role', 'option');
       el.setAttribute('aria-selected', String(i === s.selectedIndex));
       el.textContent = o.textContent;
-      if (pics && pics[o.value]) { el.innerHTML = pics[o.value][1] + '<span></span>'; el.lastElementChild!.textContent = pics[o.value][0]; el.title = o.textContent; }
+      if (o.style.fontFamily) el.style.fontFamily = o.style.fontFamily;
+      if (pics && pics[o.value]) { el.innerHTML = pics[o.value][1] + '<span></span>'; el.lastElementChild!.textContent = caption(pics[o.value][0]); el.title = o.textContent; }
       // an option with data-swatch shows that colour before its name
       if (o.dataset.swatch) { const sw = document.createElement('span'); sw.className = 'selmenu-sw'; sw.style.background = o.dataset.swatch; el.prepend(sw); }
       menu.appendChild(el);
@@ -75,6 +80,7 @@ import { runtime as TD } from '../../runtime';
 
   function close() {
     if (!sel) return;
+    sel.dispatchEvent(new CustomEvent('optionpreviewend', { bubbles: true }));
     sel.removeAttribute('aria-expanded');
     sel = null; hi = -1;
     menu.hidden = true;

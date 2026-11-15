@@ -17,5 +17,23 @@ compile:
       - .npm/
   script:
     - npm ci --include=dev --cache .npm --prefer-offline --no-audit --no-fund
+    - node scripts/generate-label-glyphs.js --check
     - npm run check
     - npm run build
+    - npx playwright install --with-deps chromium webkit firefox
+    - node tests/run.mjs --dist --no-tex
+    - node tests/rendering-parity.mjs --dist
+    - node tests/document-layout.mjs --dist
+    - node tests/webkit-rendering.mjs --dist
+    - node tests/mixed-labels.mjs --dist
+    - node tests/label-clipping.mjs --dist
+    - node tests/text-alignment.mjs --dist
+    - node tests/math-performance.mjs --dist
+    - node tests/label-display.mjs --dist
+    - node tests/document-performance.mjs --dist
+    - node tests/math-loading.mjs --dist
+    - node tests/math-priority.mjs --dist
+    - node tests/output-readiness.mjs --dist
+    - node tests/preview-fade.mjs --dist
+    - node tests/page-print.mjs --dist
+    - node tests/format-preview.mjs --dist

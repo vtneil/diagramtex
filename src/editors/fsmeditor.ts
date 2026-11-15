@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note, actionRow, texColour } from '../ui/editor-fields';
@@ -25,22 +28,22 @@ import { runtime as TD } from '../runtime';
   const sMini = (o: any) => pic(`\\node[state${o}] (a) at (0,0) {};`);
   const eMini = (o: any) => pic(`\\node (a) at (0,0) {}; \\node (b) at (1.4,0) {}; \\path (a) edge [${o}] (b);`);
   const lMini = (side: any) => pic(`\\node[state] (a) at (0,0) {}; \\path (a) edge [loop ${side}] ();`);
-  const PAL = [
-    ['States', [
-      ['s:state', 'State', sMini(''), 'S'], ['s:initial', 'Initial', sMini(', initial'), 'I'],
-      ['s:accepting', 'Accepting (final)', sMini(', accepting'), 'A', 'Final'], ['s:both', 'Initial and accepting', sMini(', initial, accepting'), null, 'Both'],
+  // names are caption descriptors, shown in the interface language when the palette is drawn
+  const PAL: any[] = [
+    [message('editor.fsm.cat.states', 'States'), [
+      ['s:state', message('editor.fsm.state', 'State'), sMini(''), 'S'], ['s:initial', message('editor.fsm.initial', 'Initial'), sMini(', initial'), 'I'],
+      ['s:accepting', message('editor.fsm.acceptingFinal', 'Accepting (final)'), sMini(', accepting'), 'A', message('editor.fsm.final', 'Final')], ['s:both', message('editor.fsm.initialAccepting', 'Initial and accepting'), sMini(', initial, accepting'), null, message('editor.fsm.both', 'Both')],
     ]],
-    ['Transitions', [
-      ['e:straight', 'Straight', eMini(''), 'T'], ['e:bend', 'Bent', eMini('bend left'), 'B'],
+    [message('editor.fsm.cat.transitions', 'Transitions'), [
+      ['e:straight', message('editor.fsm.straight', 'Straight'), eMini(''), 'T'], ['e:bend', message('editor.fsm.bent', 'Bent'), eMini('bend left'), 'B'],
     ]],
-    ['Loops', [
-      ['l:above', 'Loop above', lMini('above'), 'L', 'Above'], ['l:below', 'Loop below', lMini('below'), null, 'Below'],
-      ['l:left', 'Loop left', lMini('left'), null, 'Left'], ['l:right', 'Loop right', lMini('right'), null, 'Right'],
+    [message('editor.fsm.cat.loops', 'Loops'), [
+      ['l:above', message('editor.fsm.loopAbove', 'Loop above'), lMini('above'), 'L', message('editor.fsm.above', 'Above')], ['l:below', message('editor.fsm.loopBelow', 'Loop below'), lMini('below'), null, message('editor.fsm.below', 'Below')],
+      ['l:left', message('editor.fsm.loopLeft', 'Loop left'), lMini('left'), null, message('editor.fsm.left', 'Left')], ['l:right', message('editor.fsm.loopRight', 'Loop right'), lMini('right'), null, message('editor.fsm.right', 'Right')],
     ]],
   ];
   const ITEM: Record<string, any> = {}, KEYS: Record<string, any> = {};
   for (const [, items] of PAL) for (const [k, name, mini, key, short] of items) { ITEM[(k as any)] = { k, name, mini, key, short }; if (key) KEYS[key.toLowerCase()] = k; }
-  const KIND_NAMES: Record<string, any> = { straight: 'straight transition', bend: 'bent transition' };
 
   // ---------------------------------------------------------------- model
   // M = TD.fsm.parse(src) plus { raw, dirty }: the code is M.raw until something is edited
@@ -132,6 +135,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- state
   // { M, sel: { s: name } | { e: index } | null, arm, kind, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  let stopLocale: (() => void) | null = null;
   const snapCode = () => codeOf(E.M);
   function begin() { if (E.pending == null) E.pending = snapCode(); }
   function commit() {
@@ -241,8 +245,9 @@ import { runtime as TD } from '../runtime';
     const step = Math.max(2, lay().P0.nd[1]);
     edit(() => F.autoLayout(E.M, mode, step));
     fit();
-    setTip(mode === 'circle' ? 'States placed on a circle' : 'States placed in layers from the initial state');
-    setTimeout(() => { if (E && /^States placed/.test(tip.textContent)) setTip(''); }, 1800);
+    const placed = mode === 'circle' ? uiText('editor.fsm.placedCircle', 'States placed on a circle') : uiText('editor.fsm.placedLayers', 'States placed in layers from the initial state');
+    setTip(placed);
+    setTimeout(() => { if (E && tip.textContent === placed) setTip(''); }, 1800);
   }
 
   // ---------------------------------------------------------------- palette
@@ -255,15 +260,17 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k.slice(2)} ${title}`.toLowerCase().includes(q));
+    for (const [cat, items] of PAL) {
+      // search the shown name and the English one
+      const title = caption(cat);
+      const hits = (items as any).filter(([k, label]: any) => !q || `${caption(label)} ${label.fallback} ${k.slice(2)} ${title} ${cat.fallback}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => {
-        const on = E && (E.arm === k || k === `e:${E.kind}`);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.fsmMini(ITEM[k].mini, 1e3)}</span><span>${esc(ITEM[k].short || name)}</span></button>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => {
+        const on = E && (E.arm === k || k === `e:${E.kind}`), name = caption(label);
+        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.fsmMini(ITEM[k].mini, 1e3)}</span><span>${esc(ITEM[k].short ? caption(ITEM[k].short) : name)}</span></button>`;
       }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 64, 40, 1.6);
   }
   search.addEventListener('input', buildPalette);
@@ -301,7 +308,7 @@ import { runtime as TD } from '../runtime';
       const e = selE();
       if (e && !e.loop) edit(() => setBend(e, E.kind === 'bend' ? 'left' : '', 30));
       buildPalette();
-      setTip(e ? '' : `${ITEM[k].name}: point at a state, then drag its blue handle to another state (or back onto itself for a loop)`);
+      setTip(e ? '' : uiText('editor.fsm.edgeTip', '{name}: point at a state, then drag its blue handle to another state (or back onto itself for a loop)', { name: caption(ITEM[k].name) }));
       return;
     }
     const s = selS(), e = selE();
@@ -312,7 +319,7 @@ import { runtime as TD } from '../runtime';
     } else if (s && !E.arm) { const [i, a] = KINDS[k]; edit(() => setFlags(s, i, a)); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? (k[0] === 'l' ? `${ITEM[k].name}: click a state to give it a loop. Esc when done.` : `${ITEM[k].name}: click the grid to place it. Esc when done.`) : '');
+    setTip(E.arm ? (k[0] === 'l' ? uiText('editor.fsm.armLoopTip', '{name}: click a state to give it a loop. Esc when done.', { name: caption(ITEM[k].name) }) : uiText('editor.fsm.armTip', '{name}: click the grid to place it. Esc when done.', { name: caption(ITEM[k].name) })) : '');
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -366,7 +373,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -439,7 +446,7 @@ import { runtime as TD } from '../runtime';
       }
       const [X, Y] = S(kn.x, kn.y), off = Math.max(4, nodeR(kn)) + 12, kx = r2(X + off * Math.cos(ang)), ky = r2(Y + off * Math.sin(ang));
       E.knobPos = { v: kn_, X, Y, kx, ky };
-      out += `<g class="ze-knob" data-v="${esc(kn_)}"><title>Drag to another state to draw a ${esc(KIND_NAMES[E.kind])}, or back onto this one for a loop</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
+      out += `<g class="ze-knob" data-v="${esc(kn_)}"><title>${esc(E.kind === 'bend' ? uiText('editor.fsm.knobBent', 'Drag to another state to draw a bent transition, or back onto this one for a loop') : uiText('editor.fsm.knobStraight', 'Drag to another state to draw a straight transition, or back onto this one for a loop'))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
     }
     // placing: where it lands
     if (E.arm && !armLoop && E.hover && E.hover.at || E.ghost && E.hover && E.hover.at) { const [X, Y] = m(...(E.hover.at as [any, any])); out += `<circle class="cz-snap on" cx="${r2(X)}" cy="${r2(Y)}" r="5"/>`; }
@@ -505,7 +512,7 @@ import { runtime as TD } from '../runtime';
     if (d.mode === 'edge') {
       const sn = stateAt(e, 14);
       E.hover = sn ? { v: sn } : { at: toCm(e, !e.altKey) };
-      setTip(sn === d.from ? `Loop at ${sn}` : sn ? `Transition to ${sn}` : 'Drop on a state, or on the grid for a new one');
+      setTip(sn === d.from ? uiText('editor.fsm.loopAt', 'Loop at {name}', { name: sn }) : sn ? uiText('editor.fsm.transitionTo', 'Transition to {name}', { name: sn }) : uiText('editor.fsm.dropTip', 'Drop on a state, or on the grid for a new one'));
       draw(); return;
     }
     if (d.mode === 'move') {
@@ -514,7 +521,7 @@ import { runtime as TD } from '../runtime';
       const s = sOf(d.s), k = E.view.k;
       s.x = snap(d.x0 + (sx - d.sx) / k, !e.altKey); s.y = snap(d.y0 - (sy - d.sy) / k, !e.altKey); s.rel = null;
       E.M.dirty = true;
-      setTip(`${d.s} at (${F.num(s.x)}, ${F.num(s.y)})${e.altKey ? '' : ' · ⌥ to place freely'}`);
+      setTip(e.altKey ? uiText('editor.fsm.stateAt', '{name} at ({x}, {y})', { name: d.s, x: F.num(s.x), y: F.num(s.y) }) : uiText('editor.fsm.stateAtFree', '{name} at ({x}, {y}) · ⌥ to place freely', { name: d.s, x: F.num(s.x), y: F.num(s.y) }));
       draw(); return;
     }
   });
@@ -557,7 +564,7 @@ import { runtime as TD } from '../runtime';
     loop: '<circle cx="10" cy="13" r="4"/><path d="M8 9.3C5 3 15 3 12 9.3M12.6 6.6l-.6 2.7-2.5-1"/>',
     swap: '<path d="M4 10h12"/><path d="M8 6.5h4M8 13.5h4" stroke-dasharray="1.5 1.5"/>',
   };
-  const mItem = (act: any, label: any, icon: any, key?: any, on?: any) => `<button class="ctx-item${/^(sdel|edel)$/.test(act) ? ' danger' : ''}${on ? ' on' : ''}" data-fm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key?: any, on?: any) => `<button class="ctx-item${/^(sdel|edel)$/.test(act) ? ' danger' : ''}${on ? ' on' : ''}" data-fm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -566,16 +573,16 @@ import { runtime as TD } from '../runtime';
     if (sn != null && sOf(sn)) {
       E.sel = { s: sn };
       const f = flags(sOf(sn));
-      menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + '<hr>' +
-        mItem('init', f.initial ? 'Not Initial' : 'Make Initial', 'initial', 'I') + mItem('acc', f.accepting ? 'Not Accepting' : 'Make Accepting', 'accepting', 'A') +
-        mItem('addloop', 'Add Loop', 'loop', 'L') + '<hr>' + mItem('sdel', 'Delete State', 'del', '⌫');
+      menu.innerHTML = mItem('label', uiText('editor.fsm.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' +
+        mItem('init', f.initial ? uiText('editor.fsm.notInitial', 'Not Initial') : uiText('editor.fsm.makeInitial', 'Make Initial'), 'initial', 'I') + mItem('acc', f.accepting ? uiText('editor.fsm.notAccepting', 'Not Accepting') : uiText('editor.fsm.makeAccepting', 'Make Accepting'), 'accepting', 'A') +
+        mItem('addloop', uiText('editor.fsm.addLoop', 'Add Loop'), 'loop', 'L') + '<hr>' + mItem('sdel', uiText('editor.fsm.deleteState', 'Delete State'), 'del', '⌫');
     } else if (ei != null) {
       E.sel = { e: ei };
       const ed = E.M.edges[ei];
-      menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + (ed.t ? mItem('swap', 'Label on the Other Side', 'swap') : '') + (ed.loop ? '' : mItem('rev', 'Reverse Direction', 'rev')) + '<hr>' +
-        (ed.loop ? mItem('la', 'Loop Above', 'loop') + mItem('lb', 'Loop Below', 'loop') + mItem('ll', 'Loop Left', 'loop') + mItem('lr', 'Loop Right', 'loop')
-          : mItem('bleft', 'Bend Left', 'left') + mItem('bright', 'Bend Right', 'right') + mItem('bnone', 'Straight', 'straight')) +
-        '<hr>' + mItem('edel', ed.loop ? 'Delete Loop' : 'Delete Transition', 'del', '⌫');
+      menu.innerHTML = mItem('label', uiText('editor.fsm.editLabel', 'Edit Label'), 'label', '↩') + (ed.t ? mItem('swap', uiText('editor.fsm.labelOtherSide', 'Label on the Other Side'), 'swap') : '') + (ed.loop ? '' : mItem('rev', uiText('editor.fsm.reverse', 'Reverse Direction'), 'rev')) + '<hr>' +
+        (ed.loop ? mItem('la', uiText('editor.fsm.menuLoopAbove', 'Loop Above'), 'loop') + mItem('lb', uiText('editor.fsm.menuLoopBelow', 'Loop Below'), 'loop') + mItem('ll', uiText('editor.fsm.menuLoopLeft', 'Loop Left'), 'loop') + mItem('lr', uiText('editor.fsm.menuLoopRight', 'Loop Right'), 'loop')
+          : mItem('bleft', uiText('editor.fsm.bendLeft', 'Bend Left'), 'left') + mItem('bright', uiText('editor.fsm.bendRight', 'Bend Right'), 'right') + mItem('bnone', uiText('editor.fsm.straight', 'Straight'), 'straight')) +
+        '<hr>' + mItem('edel', ed.loop ? uiText('editor.fsm.deleteLoop', 'Delete Loop') : uiText('editor.fsm.deleteTransition', 'Delete Transition'), 'del', '⌫');
     } else { closeMenu(); return; }
     draw(); renderProps();
     menu.hidden = false;
@@ -647,29 +654,32 @@ import { runtime as TD } from '../runtime';
     if (s) {
       const L = lay(), n = L.nodes.get(s.name), f = flags(s), x = s.x != null ? s.x : n ? n.x / PX : null, y = s.y != null ? s.y : n ? -n.y / PX : null;
       const rest = s.o.filter((it: any) => !isFlag(it) && !isSCol(it)), outs = M.edges.filter((ed: any) => ed.a === s.name).length;
-      const kind = f.initial && f.accepting ? 'Initial, accepting state' : f.initial ? 'Initial state' : f.accepting ? 'Accepting state' : f.state ? 'State' : 'Node', side = /\s/.test(f.side) ? '' : f.side;
-      show(kind, `${outs} transition${outs === 1 ? '' : 's'} out`, [field('Name', 'name', s.name, { class: 'mono' }), field('Label', 'text', mathOf(s.text || ''), { 'data-tx': 'math', placeholder: 'none' }),
-        segments('Initial', 'init', f.initial ? 1 : 0, [[0, 'No'], [1, 'Yes', 'initial: an arrow comes in from outside']]), segments('Arrow from', 'iside', side, [['left', 'Left'], ['above', 'Above'], ['below', 'Below'], ['right', 'Right']], !f.initial),
-        field('Start text', 'itext', f.initial ? f.text : '', { 'data-tx': 'text', ...(!f.initial ? { disabled: true } : {}), placeholder: 'none' }), segments('Accepting', 'acc', f.accepting ? 1 : 0, [[0, 'No'], [1, 'Yes', 'accepting: drawn with a double line']]),
+      const kind = f.initial && f.accepting ? uiText('editor.fsm.initialAcceptingState', 'Initial, accepting state') : f.initial ? uiText('editor.fsm.initialState', 'Initial state') : f.accepting ? uiText('editor.fsm.acceptingState', 'Accepting state') : f.state ? uiText('editor.fsm.state', 'State') : uiText('editor.fsm.node', 'Node'), side = /\s/.test(f.side) ? '' : f.side;
+      const sides = [['left', uiText('editor.fsm.left', 'Left')], ['above', uiText('editor.fsm.above', 'Above')], ['below', uiText('editor.fsm.below', 'Below')], ['right', uiText('editor.fsm.right', 'Right')]];
+      const no = uiText('editor.fsm.no', 'No'), yes = uiText('editor.fsm.yes', 'Yes'), none = uiText('editor.commonB.nonePlaceholder', 'none');
+      show(kind, outs === 1 ? uiText('editor.fsm.oneOut', '1 transition out') : uiText('editor.fsm.nOut', '{n} transitions out', { n: outs }), [field(uiText('editor.fsm.name', 'Name'), 'name', s.name, { class: 'mono' }), field(uiText('editor.fsm.label', 'Label'), 'text', mathOf(s.text || ''), { 'data-tx': 'math', placeholder: none }),
+        segments(uiText('editor.fsm.initial', 'Initial'), 'init', f.initial ? 1 : 0, [[0, no], [1, yes, uiText('editor.fsm.initialTitle', 'initial: an arrow comes in from outside')]]), segments(uiText('editor.fsm.arrowFrom', 'Arrow from'), 'iside', side, sides, !f.initial),
+        field(uiText('editor.fsm.startText', 'Start text'), 'itext', f.initial ? f.text : '', { 'data-tx': 'text', ...(!f.initial ? { disabled: true } : {}), placeholder: none }), segments(uiText('editor.fsm.accepting', 'Accepting'), 'acc', f.accepting ? 1 : 0, [[0, no], [1, yes, uiText('editor.fsm.acceptingTitle', 'accepting: drawn with a double line')]]),
         numField('x', 'x', x == null ? '' : F.num(x), 'cm', { step: '0.25' }), numField('y', 'y', y == null ? '' : F.num(y), 'cm', { step: '0.25' }),
-        ...(s.x == null ? [note(s.rel ? `Placed ${s.rel.dir} of ${s.rel.of}. Moving it writes its position.` : 'No position in the code: moving it writes one.')] : []),
-        colorRow('Fill', 'sfill', getOpt(s.o, 'fill'), { dflt: 'None' }), colorRow('Line', 'sdraw', getOpt(s.o, 'draw'), { dfltSw: TD.css('#000000') }), colorRow('Text', 'stext', getOpt(s.o, 'text'), { dfltSw: TD.css('#000000') }),
-        field('Options', 'sopts', rest.join(', '), { class: 'mono', placeholder: 'e.g. thick' }), actionRow('fe', 'sdel', 'Delete State')]); return;
+        ...(s.x == null ? [note(s.rel ? uiText('editor.fsm.placedRel', 'Placed {dir} of {of}. Moving it writes its position.', { dir: s.rel.dir, of: s.rel.of }) : uiText('editor.fsm.noPosition', 'No position in the code: moving it writes one.'))] : []),
+        colorRow(uiText('editor.fsm.fill', 'Fill'), 'sfill', getOpt(s.o, 'fill'), { dflt: uiText('editor.fsm.colourNone', 'None') }), colorRow(uiText('editor.fsm.line', 'Line'), 'sdraw', getOpt(s.o, 'draw'), { dfltSw: TD.css('#000000') }), colorRow(uiText('editor.fsm.text', 'Text'), 'stext', getOpt(s.o, 'text'), { dfltSw: TD.css('#000000') }),
+        field(uiText('editor.commonB.options', 'Options'), 'sopts', rest.join(', '), { class: 'mono', placeholder: uiText('editor.fsm.egThick', 'e.g. thick') }), actionRow('fe', 'sdel', uiText('editor.fsm.deleteState', 'Delete State'))]); return;
     }
     if (e) {
       const b = bendOf(e), side = sideOf(e), lp = e.loop ? loopOf(e) : '', bending = b.kind === 'left' || b.kind === 'right';
       const rest = e.o.filter((it: any) => !isBend(it) && !isLoop(it) && !isSwap(it) && !isECol(it));
-      show(e.loop ? 'Loop' : 'Transition', e.loop ? `at ${e.a}` : `${e.a} → ${e.b}`, [field('Label', 'label', mathOf(e.t || ''), { 'data-tx': 'math', placeholder: 'none' }),
-        segments('Label side', 'side', side, [[1, 'Left', 'Left of the arrow’s direction'], [-1, 'Right', 'swap: right of the arrow’s direction']], !e.t),
-        e.loop ? segments('Loop', 'loop', lp, [['above', 'Above'], ['below', 'Below'], ['left', 'Left'], ['right', 'Right']]) : segments('Bend', 'bend', b.kind === 'custom' ? '' : b.kind, [['', 'Straight'], ['left', 'Left'], ['right', 'Right']]),
-        ...(e.loop ? [] : [numField('Angle', 'angle', bending ? F.num(b.a) : '', '°', { min: '5', max: '90', step: '5', ...(!bending ? { disabled: true } : {}) })]),
-        colorRow('Colour', 'ecol', getOpt(e.o, 'color'), { dfltSw: TD.css('#000000') }), colorRow('Label colour', 'etext', getOpt(e.o, 'text'), { dfltSw: TD.css('#000000'), dflt: 'Same' }), field('Options', 'eopts', rest.join(', '), { class: 'mono', placeholder: 'e.g. dashed' }),
-        { kind: 'actions' as const, class: 'row', buttons: [...(e.loop ? [] : [{ text: 'Reverse Direction', attrs: { 'data-fe': 'rev' } }]), { text: e.loop ? 'Delete Loop' : 'Delete Transition', attrs: { class: 'danger', 'data-fe': 'edel' } }] },
+      const left = uiText('editor.fsm.left', 'Left'), right = uiText('editor.fsm.right', 'Right');
+      show(e.loop ? uiText('editor.fsm.loop', 'Loop') : uiText('editor.fsm.transition', 'Transition'), e.loop ? uiText('editor.fsm.atState', 'at {name}', { name: e.a }) : `${e.a} → ${e.b}`, [field(uiText('editor.fsm.label', 'Label'), 'label', mathOf(e.t || ''), { 'data-tx': 'math', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }),
+        segments(uiText('editor.fsm.labelSide', 'Label side'), 'side', side, [[1, left, uiText('editor.fsm.leftOfArrow', 'Left of the arrow’s direction')], [-1, right, uiText('editor.fsm.swapRight', 'swap: right of the arrow’s direction')]], !e.t),
+        e.loop ? segments(uiText('editor.fsm.loop', 'Loop'), 'loop', lp, [['above', uiText('editor.fsm.above', 'Above')], ['below', uiText('editor.fsm.below', 'Below')], ['left', left], ['right', right]]) : segments(uiText('editor.fsm.bend', 'Bend'), 'bend', b.kind === 'custom' ? '' : b.kind, [['', uiText('editor.fsm.straight', 'Straight')], ['left', left], ['right', right]]),
+        ...(e.loop ? [] : [numField(uiText('editor.fsm.angle', 'Angle'), 'angle', bending ? F.num(b.a) : '', '°', { min: '5', max: '90', step: '5', ...(!bending ? { disabled: true } : {}) })]),
+        colorRow(uiText('editor.fsm.colour', 'Colour'), 'ecol', getOpt(e.o, 'color'), { dfltSw: TD.css('#000000') }), colorRow(uiText('editor.fsm.labelColour', 'Label colour'), 'etext', getOpt(e.o, 'text'), { dfltSw: TD.css('#000000'), dflt: uiText('editor.fsm.same', 'Same') }), field(uiText('editor.commonB.options', 'Options'), 'eopts', rest.join(', '), { class: 'mono', placeholder: uiText('editor.fsm.egDashed', 'e.g. dashed') }),
+        { kind: 'actions' as const, class: 'row', buttons: [...(e.loop ? [] : [{ text: uiText('editor.fsm.reverse', 'Reverse Direction'), attrs: { 'data-fe': 'rev' } }]), { text: e.loop ? uiText('editor.fsm.deleteLoop', 'Delete Loop') : uiText('editor.fsm.deleteTransition', 'Delete Transition'), attrs: { class: 'danger', 'data-fe': 'edel' } }] },
       ]); return;
     }
     renderView(props, FormPanel, { sections: [
-      { ...section('State machine', [note('Place states from the left on the grid; drag them to move (', { kbd: '⌥' }, ' places freely), and their transitions follow. Select a state and drag its blue handle to another state for a transition, or back onto the same state for a loop. Double-click a state or transition to label it.')], 'sec'), summary: `${M.states.length} states · ${M.edges.length} transitions` },
-      section('Auto layout', [{ kind: 'actions' as const, class: 'row fsm-auto', buttons: [{ text: 'In Layers', attrs: { 'data-fe': 'layers', title: 'Columns by distance from the initial state' } }, { text: 'On a Circle', attrs: { 'data-fe': 'circle', title: 'On a circle, in the order they are reached' } }] }, note('Places every state and bends transitions that would cross a state or their reverse. One undo step.')], 'sec'),
+      { ...section(captions["ui.state.machine"], [note(uiText('editor.fsm.help1', 'Place states from the left on the grid; drag them to move ('), { kbd: '⌥' }, uiText('editor.fsm.help2', ' places freely), and their transitions follow. Select a state and drag its blue handle to another state for a transition, or back onto the same state for a loop. Double-click a state or transition to label it.'))], 'sec'), summary: uiText('editor.fsm.summary', '{states} states · {edges} transitions', { states: M.states.length, edges: M.edges.length }) },
+      section(uiText('editor.fsm.autoLayout', 'Auto layout'), [{ kind: 'actions' as const, class: 'row fsm-auto', buttons: [{ text: uiText('editor.fsm.inLayers', 'In Layers'), attrs: { 'data-fe': 'layers', title: uiText('editor.fsm.inLayersTitle', 'Columns by distance from the initial state') } }, { text: uiText('editor.fsm.onCircle', 'On a Circle'), attrs: { 'data-fe': 'circle', title: uiText('editor.fsm.onCircleTitle', 'On a circle, in the order they are reached') } }] }, note(uiText('editor.fsm.autoNote', 'Places every state and bends transitions that would cross a state or their reverse. One undo step.'))], 'sec'),
     ] });
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
@@ -738,7 +748,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'sdel') { if (s) deleteState(s.name); }
     else if (a === 'edel') { if (e) deleteEdge(E.sel.e); }
     else if (a === 'label') { if (E.sel) editLabel(E.sel); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     else if (s) {
       const f = flags(s);
       if (a === 'init') edit(() => setFlags(s, !f.initial, f.accepting));
@@ -756,7 +766,7 @@ import { runtime as TD } from '../runtime';
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const M = E.M;
-    count.textContent = `${M.states.length} state${M.states.length === 1 ? '' : 's'} · ${M.edges.length} transition${M.edges.length === 1 ? '' : 's'}`;
+    count.textContent = `${M.states.length === 1 ? uiText('editor.fsm.oneState', '1 state') : uiText('editor.fsm.nStates', '{n} states', { n: M.states.length })} · ${M.edges.length === 1 ? uiText('editor.fsm.oneTransition', '1 transition') : uiText('editor.fsm.nTransitions', '{n} transitions', { n: M.edges.length })}`;
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -829,8 +839,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = uiText('editor.commonB.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snapCode() !== E.start);
@@ -841,8 +852,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this state machine?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(uiText('editor.fsm.discard', 'Discard changes to this state machine?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
+    stopLocale?.(); stopLocale = null;
     root.hidden = true;
     document.body.classList.remove('cz-open');
     E = null;
@@ -856,6 +868,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, panel and drawing's captions follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

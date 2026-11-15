@@ -1,9 +1,11 @@
+import { measurementElement } from './measurement';
+import { labelImage } from './label-image';
 import { runtime as TD } from '../runtime';
 // Shape definitions: geometry, handles, SVG rendering and TikZ export.
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.46.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.47.5'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -359,7 +361,18 @@ import { runtime as TD } from '../runtime';
   // ---------- text rendering (KaTeX for $...$) ----------
   const htmlCache = new Map();
   const sizeCache = new Map();
+  let previewSizes = new Map();
+  let cachedGeometryDepth = 0;
+  TD.withCachedGeometry = (draw: () => any) => {
+    cachedGeometryDepth++;
+    try { return draw(); } finally { cachedGeometryDepth--; }
+  };
+  TD.retainPreviewSizes = () => { previewSizes = new Map(sizeCache); };
   TD.clearTextCache = () => { htmlCache.clear(); sizeCache.clear(); };
+  TD.clearPendingTextCache = (ids?: number[]) => {
+    for (const [key, value] of sizeCache) if (value.pending && (!ids || TD.math.pendingIds(value.html).some((id: number) => ids.includes(id)))) sizeCache.delete(key);
+    if (!TD.math.pending) previewSizes.clear();
+  };
 
   // Split a line into text / math segments: $…$ is inline math; $$…$$ and \[…\] are display
   // math ({ math: true, display: true }), rendered and exported as \displaystyle.
@@ -528,7 +541,7 @@ import { runtime as TD } from '../runtime';
       }).join('') || '&#8203;'
     );
     const html = lines.map((l) => `<div>${l}</div>`).join('');
-    htmlCache.set(text, html);
+    if (!TD.math.isPending(html)) htmlCache.set(text, html);
     return html;
   }
   TD.textHtml = textHtml;
@@ -543,8 +556,28 @@ import { runtime as TD } from '../runtime';
   TD.textStyle = textStyle;
   // a wrapping text is exactly its text width wide (the TikZ text width), so resizing it keeps its edges
   // where they were dropped; other text gets 2px of slack round the measured glyphs
-  const boxW = (st: any, w: any) => (st && st.tw > 0 ? r2(st.tw) : Math.ceil(w) + 2);
-  function textBox(text: any, st: any) {
+  const boxW = (st: any, w: any) => (st && st.tw > 0 ? r2(st.tw) : w + 2);
+  // Measure in font-design space, then convert back to CSS pixels once. At screen
+  // sizes, browser font hinting and per-line pixel quantisation can change a box
+  // by a pixel. A shared em scale retains fractional metrics across browsers.
+  function measureStyle(element: HTMLElement, css: string) {
+    element.style.cssText = css;
+    const px = parseFloat(element.style.fontSize), scale = 1024 / px;
+    const width = parseFloat(element.style.width);
+    element.style.fontSize = '1024px';
+    element.style.width = Number.isFinite(width) ? `${width * scale}px` : 'max-content';
+    return scale;
+  }
+  function measuredBox(element: HTMLElement, scale: number) {
+    const rect = element.getBoundingClientRect();
+    // The bundled TeX faces use 1000 font units per em. Quantise in that
+    // design space before conversion, rather than preserving platform hinting.
+    const cssPx = 1024 / scale;
+    const length = (value: number) => Math.round(Math.round(value / 1024 * 1000) / 1000 * cssPx * 100) / 100;
+    return { w: length(rect.width), h: length(rect.height) };
+  }
+  function textBox(text: any, st: any): any {
+    if (!TD.math.previewing && !TD.math.finalizing && TD.math.pending) return TD.math.preview(() => textBox(text, st));
     if (typeof st !== 'object' || st === null) st = { size: st || 'normalsize' };
     const ts = textStyle(st), px = ts.px;
     // a text box with a fixed width wraps its lines (TikZ: text width=…, align=…)
@@ -552,15 +585,26 @@ import { runtime as TD } from '../runtime';
     else if (st.align && st.align !== 'center') ts.css += `text-align:${st.align};`; // lines of a multi-line label
     const key = ts.css + '|' + text;
     let box = sizeCache.get(key);
-    if (!box && batch) { batch.set(key, { css: ts.css, text, tw: st.tw }); box = { w: 10, h: 10 }; } // measured with the rest, then drawn again
-    else if (!box) {
-      const m = document.getElementById('measure');
-      m!.setAttribute('style', ts.css);
-      m!.innerHTML = textHtml(text);
-      box = { w: boxW(st, m!.offsetWidth), h: Math.ceil(m!.offsetHeight) };
+    if (cachedGeometryDepth && box?.html != null) return { ...box, px, css: ts.css };
+    if (box?.pending && TD.math.finalizing) box = undefined;
+    if (!box && TD.math.previewing && previewSizes.has(key) && TD.math.isPending(textHtml(text))) {
+      const next = textHtml(text), previous = previewSizes.get(key);
+      const markers = TD.math.pendingIds(next).map((id: number) => `<!--td-math-pending:${id}-->`).join('');
+      // Keep a whole label's already-rendered preview until all of its
+      // formulae are ready, instead of repeatedly generating mixed-engine images.
+      box = { ...previous, pending: true, html: TD.math.cleanPreview(previous.html) + markers };
       sizeCache.set(key, box);
     }
-    return { ...box, px, css: ts.css, html: textHtml(text) };
+    if (!box && batch) { batch.set(key, { css: ts.css, text, tw: st.tw }); box = { w: 10, h: 10 }; } // measured with the rest, then drawn again
+    else if (!box) {
+      const m = measurementElement();
+      const scale = measureStyle(m!, ts.css);
+      m!.innerHTML = textHtml(text);
+      const measured = measuredBox(m!, scale);
+      box = { w: boxW(st, measured.w), h: measured.h, pending: TD.math.isPending(textHtml(text)), html: textHtml(text) };
+      sizeCache.set(key, box);
+    }
+    return { ...box, px, css: ts.css, html: box.pending && !TD.math.finalizing ? box.html : textHtml(text) };
   }
   TD.textBox = textBox;
 
@@ -575,27 +619,46 @@ import { runtime as TD } from '../runtime';
     let r, miss;
     try { r = fn(); } finally { miss = batch; batch = null; }
     if (!miss.size) return r;
-    const m = document.getElementById('measure'), host = m!.parentNode, frag = document.createDocumentFragment(), els = [];
+    const m = measurementElement(), host = m!.parentNode, frag = document.createDocumentFragment(), els = [];
     for (const [key, it] of miss) {
       const d = document.createElement('div');
       d.className = m!.className;
-      d.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;' + it.css;
+      const scale = measureStyle(d, 'position:absolute;left:-10000px;top:0;visibility:hidden;' + it.css);
       d.innerHTML = textHtml(it.text);
-      frag.appendChild(d); els.push([key, d]);
+      frag.appendChild(d); els.push([key, d, scale]);
     }
     host!.appendChild(frag);
-    for (const [key, d] of els) sizeCache.set(key, { w: boxW(miss.get(key), d.offsetWidth), h: Math.ceil(d.offsetHeight) });
+    for (const [key, d, scale] of els) {
+      const measured = measuredBox(d, scale);
+      sizeCache.set(key, { w: boxW(miss.get(key), measured.w), h: measured.h, pending: TD.math.isPending(d.innerHTML), html: textHtml(miss.get(key).text) });
+    }
     for (const [, d] of els) d.remove();
     return fn();
   };
 
   // font-size:0 on the foreignObject: its line box would otherwise get the page font's strut, which
   // pushes text smaller than that font down inside its box
-  function textSvg(text: any, st: any, color: any, cx: any, cy: any, ctx: any, extra = '') {
+  let inheritedLabelId = 0;
+  function textSvg(text: any, st: any, color: any, cx: any, cy: any, ctx: any, extra = ''): string {
+    if (ctx.export && !TD.math.previewing && !TD.math.finalizing) return TD.math.synchronous(() => textSvg(text, st, color, cx, cy, ctx, extra));
     const b = textBox(text, st);
     const x = r2(cx - b.w / 2), y = r2(cy - b.h / 2);
     const ns = ctx.export ? ' xmlns="http://www.w3.org/1999/xhtml"' : '';
     const html = ctx.export ? TD.math.forXml(b.html) : b.html;
+    if (/<math\b|class="td-math/.test(b.html)) {
+      const align = ['left', 'center', 'right', 'justify'].includes(st?.align) ? st.align : st?.tw > 0 ? 'left' : 'center';
+      const pending = TD.math.isPending(b.html), html = TD.math.cleanPreview(b.html);
+      const image = labelImage(/class="katex(?:\s|")/.test(html) ? 'katex' : /class="td-math/.test(html) ? 'temml' : TD.math.engine, html, b.css, color, b.w, b.h, align);
+      const img = `<image class="svg-label${pending ? ' math-pending' : ''}"${pending ? ` data-math-pending="${TD.math.pendingIds(b.html).join(',')}"` : ''} x="${x + image.x}" y="${y + image.y}" width="${image.width}" height="${image.height}" href="${image.href}" aria-label="${esc(text)}"${extra}/>`;
+      // An SVG image is its own document: currentColor cannot cross that boundary.
+      // Use its alpha as a mask so palette math follows the surrounding theme live.
+      const id = `inherited-label-${++inheritedLabelId}`;
+      const painted = color === 'currentColor'
+        ? `<mask id="${id}" maskUnits="userSpaceOnUse" x="${x + image.x}" y="${y + image.y}" width="${image.width}" height="${image.height}" style="mask-type:alpha">${img}</mask><rect x="${x + image.x}" y="${y + image.y}" width="${image.width}" height="${image.height}" fill="currentColor" mask="url(#${id})"/>`
+        : img;
+      return painted +
+        (ctx.export ? '' : `<rect class="hitfill" x="${x}" y="${y}" width="${b.w}" height="${b.h}"/>`);
+    }
     return `<foreignObject x="${x}" y="${y}" width="${b.w}" height="${b.h}" style="overflow:visible;font-size:0;text-align:center"${extra}><div${ns} class="tx" style="${b.css}color:${css(color)}">${html}</div></foreignObject>` +
       (ctx.export ? '' : `<rect class="hitfill" x="${x}" y="${y}" width="${b.w}" height="${b.h}"/>`);
   }
@@ -640,7 +703,7 @@ import { runtime as TD } from '../runtime';
   }
 
   // ---------- TikZ helpers ----------
-  const f = (n: any) => { const v = Math.round(n * 100) / 100; return Object.is(v, -0) ? '0' : String(v); };
+  const f = (n: any) => { const stable = Math.round(n * 1e9) / 1e9; const v = Math.round(stable * 100) / 100; return Object.is(v, -0) ? '0' : String(v); };
   function makeX() : any {
     const colors = new Map();
     const X: Record<string, any> = {
@@ -1901,6 +1964,7 @@ import { runtime as TD } from '../runtime';
   // what the picture's own options use (a style naming DarkBlue, a library's keys), for the preamble
   const openUses = (open: any, X: any) => { if (!TD.lint || !TD.lint.uses) return; const u = TD.lint.uses(open); for (const l of u.libs) X.libs.add(l); for (const p of u.pkgs) X.pkgs.add(p); };
   TD.tikzPicture = function (shapes: any, X: any) {
+    if (!TD.math.finalizing) return TD.math.synchronous(() => TD.tikzPicture(shapes, X));
     const W = TD.tikzWhole(shapes, X);
     if (W) { openUses(W.open, X); return W.open + W.pre.map((c: any) => '\n  ' + c.replace(/\n/g, '\n  ')).join('') + W.body + W.close; }
     const open = TD.tikzOpen(shapes);

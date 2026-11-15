@@ -1,6 +1,11 @@
+import { previewFadeFinished } from '../platform/preview-fade';
+import { updateSvg } from '../platform/update-svg';
+import { SvgLabelResources } from '../platform/svg-label-resources';
+import { wheelZoomFactor } from '../ui/wheel-zoom';
 import DocumentSettings from '../ui/DocumentSettings.svelte';
 import { renderView } from '../ui/render-view.svelte';
 import { runtime as TD } from '../runtime';
+import { t, onLocale } from '../i18n';
 import { downloadImage } from '../platform/download';
 import { readPicture } from '../platform/images';
 // Document view: a page of text blocks (LaTeX-flavoured, $math$) with embedded diagrams,
@@ -11,11 +16,16 @@ import { readPicture } from '../platform/images';
   const app = TD.app;
   const { esc } = TD.util;
   const root = document.getElementById('docview');
+  const labelResources = new SvgLabelResources();
 
   // ---------- text rendering ----------
   // Text blocks are LaTeX-flavoured: $math$, $$display$$, # headings, - / 1. / - [ ] lists and a
   // handful of inline commands (\textbf, \textit, \underline, \sout, \textcolor, \colorbox, \href…).
-  const katex = (src: any, display: any) => TD.math.render(src, { display });
+  const katex = (src: any, display: any) => {
+    let html = TD.math.render(src, { display });
+    if (TD.math.previewing) html = TD.math.liveMarkup(html);
+    return TD.math.isPending(html) ? `<span class="math-pending" data-math-pending="${TD.math.pendingIds(html).join(',')}">${TD.math.cleanPreview(html)}</span>` : html;
+  };
   const colorCss = (opt: any, v: any) => { v = v.trim(); if (opt === 'HTML') return /^[0-9a-f]{6}$/i.test(v) ? '#' + v : '#000'; let c; try { c = TD.tikzColor && TD.tikzColor(v); } catch { c = null; } return c ? TD.css(c) : /^[a-z]+$/i.test(v) ? v : '#000'; };
   const safeUrl = (u: any) => (/^(https?:|mailto:|#)/i.test(u.trim()) ? u.trim() : '#');
   const FMT: Record<string, any> = {
@@ -369,47 +379,49 @@ import { readPicture } from '../platform/images';
     math: 'M4 15l2.5-10L9 15M5 11h3M11 7l5 7M16 7l-5 7',
   };
   function insertBar(i: any) {
-    return `<div class="ins" data-at="${i}"><button data-add="text">+ Text</button><button data-add="diagram">+ Diagram</button><button data-add="table">+ Table</button><button data-add="image">+ Image</button></div>`;
+    return `<div class="ins" data-at="${i}"><button data-add="text">${esc(t('doc.add.text', '+ Text'))}</button><button data-add="diagram">${esc(t('doc.add.diagram', '+ Diagram'))}</button><button data-add="table">${esc(t('doc.add.table', '+ Table'))}</button><button data-add="image">${esc(t('doc.add.image', '+ Image'))}</button></div>`;
   }
   // Formatting bar over the text block being edited (the source stays LaTeX-flavoured text).
   // LaTeX's size commands, named for the menu (the command itself is in the menu's tip)
-  const SIZE_NAME: Record<string, any> = { tiny: 'Tiny', scriptsize: 'Script', footnotesize: 'Footnote', small: 'Small', normalsize: 'Normal', large: 'Large', Large: 'Larger', LARGE: 'Largest', huge: 'Huge', Huge: 'Huger' };
+  const SIZE_NAME = (): Record<string, string> => ({ tiny: t('table.size.tiny', 'Tiny'), scriptsize: t('table.size.script', 'Script'), footnotesize: t('table.size.footnote', 'Footnote'), small: t('table.size.small', 'Small'), normalsize: t('ui.normal', 'Normal'), large: t('table.size.large', 'Large'), Large: t('table.size.larger', 'Larger'), LARGE: t('doc.size.largest', 'Largest'), huge: t('quick.size.huge', 'Huge'), Huge: t('doc.size.huger', 'Huger') });
   function textBar(b: any) {
     const al = b.align || 'justify', sz = b.size || 'normalsize';
-    return `<div class="fmt-bar" role="toolbar" aria-label="Text formatting">
-      <select data-fmt="head" title="Paragraph style"><option value="">Paragraph</option><option value="#">Section</option><option value="##">Subsection</option><option value="###">Subsubsection</option></select>
-      <select data-fmt="size" title="Font size of this block (\\${esc(sz)})">${TD.SIZES.map(([k]: any) => `<option value="${k}"${k === sz ? ' selected' : ''}>${SIZE_NAME[k] || k}</option>`).join('')}</select>
+    const names = SIZE_NAME();
+    return `<div class="fmt-bar" role="toolbar" aria-label="${esc(t('doc.fmt.aria', 'Text formatting'))}">
+      <select data-fmt="head" title="${esc(t('doc.fmt.style', 'Paragraph style'))}"><option value="">${esc(t('doc.fmt.paragraph', 'Paragraph'))}</option><option value="#">${esc(t('doc.fmt.section', 'Section'))}</option><option value="##">${esc(t('doc.fmt.subsection', 'Subsection'))}</option><option value="###">${esc(t('doc.fmt.subsubsection', 'Subsubsection'))}</option></select>
+      <select data-fmt="size" title="${esc(t('doc.fmt.size', 'Font size of this block ({cmd})', { cmd: '\\' + sz }))}">${TD.SIZES.map(([k]: any) => `<option value="${k}"${k === sz ? ' selected' : ''}>${esc(names[k] || k)}</option>`).join('')}</select>
       <span class="sep"></span>
-      <button data-fmt="b" title="Bold (⌘B) — \\textbf"><b>B</b></button><button data-fmt="i" title="Italic (⌘I) — \\textit"><i>I</i></button>
-      <button data-fmt="u" title="Underline (⌘U) — \\underline"><u>U</u></button><button data-fmt="s" title="Strikethrough — \\sout"><s>S</s></button>
-      <button type="button" class="fmt-col" data-fpick="color" title="Text colour — \\textcolor"><span class="glyph" style="border-bottom-color:${esc(TD.texColor.swatch(fmtColor))}">A</span></button>
-      <button type="button" class="fmt-col" data-fpick="hl" title="Highlight — \\colorbox"><span class="glyph hl" style="background:${esc(TD.texColor.swatch(fmtHl))}">ab</span></button>
-      <button data-fmt="link" title="Link — \\href">${ic(I.link)}</button><button data-fmt="math" title="Inline maths $…$">${ic(I.math)}</button>
+      <button data-fmt="b" title="${esc(t('doc.fmt.bold', 'Bold (⌘B) — \\textbf'))}"><b>B</b></button><button data-fmt="i" title="${esc(t('doc.fmt.italic', 'Italic (⌘I) — \\textit'))}"><i>I</i></button>
+      <button data-fmt="u" title="${esc(t('doc.fmt.underline', 'Underline (⌘U) — \\underline'))}"><u>U</u></button><button data-fmt="s" title="${esc(t('doc.fmt.strike', 'Strikethrough — \\sout'))}"><s>S</s></button>
+      <button type="button" class="fmt-col" data-fpick="color" title="${esc(t('doc.fmt.colour', 'Text colour — \\textcolor'))}"><span class="glyph" style="border-bottom-color:${esc(TD.texColor.swatch(fmtColor))}">A</span></button>
+      <button type="button" class="fmt-col" data-fpick="hl" title="${esc(t('doc.fmt.highlight', 'Highlight — \\colorbox'))}"><span class="glyph hl" style="background:${esc(TD.texColor.swatch(fmtHl))}">ab</span></button>
+      <button data-fmt="link" title="${esc(t('doc.fmt.link', 'Link — \\href'))}">${ic(I.link)}</button><button data-fmt="math" title="${esc(t('doc.fmt.math', 'Inline maths $…$'))}">${ic(I.math)}</button>
       <span class="sep"></span>
-      <button data-fmt="ul" title="Bulleted list (- item)">${ic(I.ul)}</button><button data-fmt="ol" title="Numbered list (1. item)">${ic(I.ol)}</button><button data-fmt="chk" title="Checklist (- [ ] item)">${ic(I.chk)}</button>
+      <button data-fmt="ul" title="${esc(t('doc.fmt.ul', 'Bulleted list (- item)'))}">${ic(I.ul)}</button><button data-fmt="ol" title="${esc(t('doc.fmt.ol', 'Numbered list (1. item)'))}">${ic(I.ol)}</button><button data-fmt="chk" title="${esc(t('doc.fmt.chk', 'Checklist (- [ ] item)'))}">${ic(I.chk)}</button>
       <span class="sep"></span>
-      ${['justify', 'left', 'center', 'right'].map((a) => `<button data-fmt="al:${a}" class="${a === al ? 'on' : ''}" title="${a === 'justify' ? 'Justified (LaTeX default)' : 'Align ' + a}">${ic(I[a])}</button>`).join('')}
+      ${['justify', 'left', 'center', 'right'].map((a) => `<button data-fmt="al:${a}" class="${a === al ? 'on' : ''}" title="${esc(({ justify: t('doc.fmt.justify', 'Justified (LaTeX default)'), left: t('doc.fmt.left', 'Align left'), center: t('doc.fmt.center', 'Align center'), right: t('doc.fmt.right', 'Align right') } as Record<string, string>)[a])}">${ic(I[a])}</button>`).join('')}
     </div>`;
   }
   function tableBar(b: any) {
     const R = b.rows || [[]], nr = R.length, nc = Math.max(1, ...R.map((r: any) => r.length)), al = b.colAlign || 'c', hdr = b.header !== false;
-    const step = (k: any, n: any, name: any) => `<span class="fmt-lbl">${name}</span><span class="fmt-step" role="group" aria-label="${name}">
-        <button data-tb="${k}-" title="Remove the last ${name.toLowerCase().slice(0, -1)}" aria-label="Fewer ${name.toLowerCase()}"${n < 2 ? ' disabled' : ''}>${ic('M5 10h10')}</button><output>${n}</output><button data-tb="${k}+" title="Add a ${name.toLowerCase().slice(0, -1)}" aria-label="More ${name.toLowerCase()}">${ic('M10 5v10M5 10h10')}</button></span>`;
-    return `<div class="fmt-bar" role="toolbar" aria-label="Table">
-      ${step('row', nr, 'Rows')}${step('col', nc, 'Columns')}
+    // c: the captions — the group's name, the − and + buttons' tips and names
+    const step = (k: any, n: any, c: { name: string; less: string; fewer: string; add: string; more: string }) => `<span class="fmt-lbl">${esc(c.name)}</span><span class="fmt-step" role="group" aria-label="${esc(c.name)}">
+        <button data-tb="${k}-" title="${esc(c.less)}" aria-label="${esc(c.fewer)}"${n < 2 ? ' disabled' : ''}>${ic('M5 10h10')}</button><output>${n}</output><button data-tb="${k}+" title="${esc(c.add)}" aria-label="${esc(c.more)}">${ic('M10 5v10M5 10h10')}</button></span>`;
+    return `<div class="fmt-bar" role="toolbar" aria-label="${esc(t('ui.table', 'Table'))}">
+      ${step('row', nr, { name: t('doc.tb.rows', 'Rows'), less: t('doc.tb.rowLess', 'Remove the last row'), fewer: t('doc.tb.rowFewer', 'Fewer rows'), add: t('doc.tb.rowAdd', 'Add a row'), more: t('doc.tb.rowMore', 'More rows') })}${step('col', nc, { name: t('doc.tb.cols', 'Columns'), less: t('doc.tb.colLess', 'Remove the last column'), fewer: t('doc.tb.colFewer', 'Fewer columns'), add: t('doc.tb.colAdd', 'Add a column'), more: t('doc.tb.colMore', 'More columns') })}
       <span class="sep"></span>
-      <button data-tb="hdr" class="txt${hdr ? ' on' : ''}" aria-pressed="${hdr}" title="Set the first row as a header (bold, with a rule under it)">Header row</button>
+      <button data-tb="hdr" class="txt${hdr ? ' on' : ''}" aria-pressed="${hdr}" title="${esc(t('doc.tb.headerTip', 'Set the first row as a header (bold, with a rule under it)'))}">${esc(t('doc.tb.header', 'Header row'))}</button>
       <span class="sep"></span>
-      ${[['l', 'left'], ['c', 'center'], ['r', 'right']].map(([k, n]) => `<button data-tb="al:${k}" class="${k === al ? 'on' : ''}" aria-pressed="${k === al}" title="Align columns ${n}">${ic(I[n])}</button>`).join('')}
-      <select data-tb="borders" title="Rules"><option value="all"${b.borders === 'all' ? ' selected' : ''}>All borders</option><option value="header"${b.borders === 'header' ? ' selected' : ''}>Top, header, bottom</option><option value="none"${b.borders === 'none' ? ' selected' : ''}>No borders</option></select>
+      ${[['l', 'left'], ['c', 'center'], ['r', 'right']].map(([k, n]) => `<button data-tb="al:${k}" class="${k === al ? 'on' : ''}" aria-pressed="${k === al}" title="${esc(({ left: t('doc.tb.alLeft', 'Align columns left'), center: t('doc.tb.alCenter', 'Align columns center'), right: t('doc.tb.alRight', 'Align columns right') } as Record<string, string>)[n])}">${ic(I[n])}</button>`).join('')}
+      <select data-tb="borders" title="${esc(t('table.rules', 'Rules'))}"><option value="all"${b.borders === 'all' ? ' selected' : ''}>${esc(t('table.border.all', 'All borders'))}</option><option value="header"${b.borders === 'header' ? ' selected' : ''}>${esc(t('doc.tb.headerRules', 'Top, header, bottom'))}</option><option value="none"${b.borders === 'none' ? ' selected' : ''}>${esc(t('table.border.none', 'No borders'))}</option></select>
     </div>`;
   }
   function imageBar(b: any) {
-    return `<div class="fmt-bar" role="toolbar" aria-label="Image">
-      <label class="rng" title="Width as a share of the text width">Width <input type="range" data-im="width" min="0.1" max="1" step="0.05" value="${b.width || 0.6}"><output>${Math.round((b.width || 0.6) * 100)}%</output></label>
+    return `<div class="fmt-bar" role="toolbar" aria-label="${esc(t('doc.img.aria', 'Image'))}">
+      <label class="rng" title="${esc(t('doc.img.widthTip', 'Width as a share of the text width'))}">${esc(t('ui.width', 'Width'))} <input type="range" data-im="width" min="0.1" max="1" step="0.05" value="${b.width || 0.6}"><output>${Math.round((b.width || 0.6) * 100)}%</output></label>
       <span class="sep"></span>
-      <input type="text" data-im="caption" placeholder="Caption (optional)" value="${esc(b.caption || '')}">
-      <button data-im="replace" class="txt">Replace…</button><button data-im="download" class="txt" title="Save the picture next to your .tex, under this name">Save ${esc(imageName(b, doc().blocks.indexOf(b)))}</button>
+      <input type="text" data-im="caption" placeholder="${esc(t('doc.img.caption', 'Caption (optional)'))}" value="${esc(b.caption || '')}">
+      <button data-im="replace" class="txt">${esc(t('ui.replace', 'Replace…'))}</button><button data-im="download" class="txt" title="${esc(t('doc.img.saveTip', 'Save the picture next to your .tex, under this name'))}">${esc(t('doc.img.save', 'Save {name}', { name: imageName(b, doc().blocks.indexOf(b)) }))}</button>
     </div>`;
   }
   const tableHtml = (b: any, editing: any) => {
@@ -422,9 +434,37 @@ import { readPicture } from '../platform/images';
     }).join('')}</tr>`).join('')}</table>`;
   };
   let fmtColor = 'red', fmtHl = 'yellow!20'; // xcolor specs, as the picker gives them
-  let zoomMode = 'fit'; // 'fit', or a zoom factor (1 = 100%)
+  let zoomMode: 'fit' | number = 'fit'; // 'fit', or a zoom factor (1 = 100%)
   let curZoom: any = 1; // the zoom last applied
   const ZMIN = 0.25, ZMAX = 4;
+  function scrollbarSpace() {
+    const parent = root!.parentElement!;
+    const width = Math.max(0, root!.offsetWidth - root!.clientWidth) + 'px';
+    if (parent.style.getPropertyValue('--doc-scrollbar-width') === width) return false;
+    parent.style.setProperty('--doc-scrollbar-width', width);
+    return true;
+  }
+  // The panel is a sibling of the scrolling view, so it cannot inherit the
+  // browser's scrollbar gutter. Track that gutter without double-counting it.
+  new ResizeObserver(() => {
+    if (scrollbarSpace() && app.state.mode === 'document' && zoomMode === 'fit') layoutPage(TD.pageSize(doc().page));
+  }).observe(root!);
+  const paperSizes = new WeakMap<HTMLElement, { width: number; height: number; pages: number }>();
+  function sizeSheet(page: HTMLElement, pages = paperSizes.get(page)?.pages || 1) {
+    const sheet = page.parentElement;
+    if (!sheet?.classList.contains('doc-sheet')) return;
+    const natural = getComputedStyle(page);
+    const size = { width: parseFloat(natural.width), height: parseFloat(natural.height), pages };
+    paperSizes.set(page, size);
+    sheet.style.width = size.width * curZoom + 'px';
+    sheet.style.height = size.height * curZoom + 'px';
+  }
+  // Keep newly loaded images and growing text editors inside the visible sheet,
+  // even before the debounced pagination pass runs.
+  const sheetObserver = new ResizeObserver(entries => {
+    if (app.state.mode !== 'document') return;
+    for (const entry of entries) if (entry.target.isConnected) sizeSheet(entry.target as HTMLElement);
+  });
   function pageStyle(P: any) {
     return `width:${P.W}cm;min-height:${P.H}cm;padding:${P.mt}cm ${P.mr}cm ${P.mb}cm ${P.ml}cm;font-size:${P.font}pt;--spread:${+P.spread || 1}`;
   }
@@ -439,39 +479,140 @@ import { readPicture } from '../platform/images';
       if (!forPrint) h += insertBar(i);
       const ed = i === editingIdx && !forPrint;
       const tools = forPrint ? '' : `<div class="blk-tools">
-        <button data-mv="-1" title="Move up" aria-label="Move up"${i === 0 ? ' disabled' : ''}>${ic('M5.5 12.5L10 8l4.5 4.5')}</button>
-        <button data-mv="1" title="Move down" aria-label="Move down"${i === d.blocks.length - 1 ? ' disabled' : ''}>${ic('M5.5 8l4.5 4.5L14.5 8')}</button>
-        ${b.type === 'diagram' ? '<button data-edit title="Edit on canvas">Edit</button>' : ''}
-        <button data-rm title="Delete block" aria-label="Delete block"${b.type === 'diagram' && diagramCount() < 2 ? ' disabled' : ''}>${ic(TRASH)}</button></div>`;
+        <button data-mv="-1" title="${esc(t('doc.blk.up', 'Move up'))}" aria-label="${esc(t('doc.blk.up', 'Move up'))}"${i === 0 ? ' disabled' : ''}>${ic('M5.5 12.5L10 8l4.5 4.5')}</button>
+        <button data-mv="1" title="${esc(t('doc.blk.down', 'Move down'))}" aria-label="${esc(t('doc.blk.down', 'Move down'))}"${i === d.blocks.length - 1 ? ' disabled' : ''}>${ic('M5.5 8l4.5 4.5L14.5 8')}</button>
+        ${b.type === 'diagram' ? `<button data-edit title="${esc(t('doc.blk.editTip', 'Edit on canvas'))}">${esc(t('ui.edit', 'Edit'))}</button>` : ''}
+        <button data-rm title="${esc(t('doc.blk.delete', 'Delete block'))}" aria-label="${esc(t('doc.blk.delete', 'Delete block'))}"${b.type === 'diagram' && diagramCount() < 2 ? ' disabled' : ''}>${ic(TRASH)}</button></div>`;
       const edc = ed ? ' editing' : '';
       if (b.type === 'text') {
         const st = `text-align:${b.align || 'justify'}${b.size && b.size !== 'normalsize' ? `;font-size:${SIZE_EM[b.size]}em` : ''}`;
         h += `<div class="blk blk-text${edc}" data-i="${i}">${tools}${ed
-          ? `${textBar(b)}<textarea class="blk-ed" spellcheck="true" placeholder="Write text. $x^2$ for math, $$…$$ for display math, # Section, - bullet, 1. numbered, - [ ] checkbox">${esc(b.text || '')}</textarea>`
+          ? `${textBar(b)}<textarea class="blk-ed" spellcheck="true" placeholder="${esc(t('doc.text.ph', 'Write text. $x^2$ for math, $$…$$ for display math, # Section, - bullet, 1. numbered, - [ ] checkbox'))}">${esc(b.text || '')}</textarea>`
           : `<div class="blk-body" style="${st}">${textToHtml(b.text || '', tctx)}</div>`}</div>`;
         if (ed) textToHtml(b.text || '', tctx); // keep section numbers counting
       } else if (b.type === 'table') {
         h += `<div class="blk blk-table${edc}" data-i="${i}">${tools}${ed ? tableBar(b) : ''}<div class="blk-body">${tableHtml(b, ed)}</div></div>`;
       } else if (b.type === 'image') {
         const cap = b.caption && b.caption.trim() ? `<figcaption>Figure ${++fig}: ${inl(b.caption)}</figcaption>` : '';
-        h += `<div class="blk blk-image${edc}" data-i="${i}">${tools}${ed ? imageBar(b) : ''}<figure class="blk-body">${b.src ? `<img src="${esc(b.src)}" alt="${esc(b.caption || b.name || '')}" style="width:${(b.width || 0.6) * 100}%">` : '<div class="ph">No picture</div>'}${cap}</figure></div>`;
+        h += `<div class="blk blk-image${edc}" data-i="${i}">${tools}${ed ? imageBar(b) : ''}<figure class="blk-body">${b.src ? `<img src="${esc(b.src)}" alt="${esc(b.caption || b.name || '')}" style="width:${(b.width || 0.6) * 100}%">` : `<div class="ph">${forPrint ? 'No picture' : esc(t('doc.img.none', 'No picture'))}</div>`}${cap}</figure></div>`;
       } else {
-        const svg = b.shapes.length ? app.shapesSvg(b.shapes, 6, false) : '';
-        h += `<div class="blk blk-diag${i === d.active && !forPrint ? ' active' : ''}" data-i="${i}">${tools}<div class="blk-body">${svg || (forPrint ? '' : '<div class="ph">Empty diagram — double-click to draw</div>')}</div></div>`;
+        const svg = b.shapes.length ? app.shapesSvg(b.shapes, 6, false, !forPrint) : '';
+        h += `<div class="blk blk-diag${i === d.active && !forPrint ? ' active' : ''}" data-i="${i}">${tools}<div class="blk-body">${svg || (forPrint ? '' : `<div class="ph">${esc(t('doc.diag.empty', 'Empty diagram — double-click to draw'))}</div>`)}</div></div>`;
       }
     });
     if (!forPrint) h += insertBar(d.blocks.length);
     h += '</div>';
     return { h, P };
   }
-  function render(forPrint?: any) {
+  // Stage the selected engine without rebuilding existing blocks or editors.
+  const mathPriorities = new Map<number, number>();
+  function captureMathPriorities(): void {
+    mathPriorities.clear();
+    const viewport = root!.getBoundingClientRect(), paper = root!.querySelector<HTMLElement>('.doc-page');
+    const sheet = paper?.getBoundingClientRect();
+    const zoom = paper && sheet ? sheet.width / paper.offsetWidth : 1;
+    const height = TD.pageSize(doc().page).H * TD.PX_PER_CM * zoom;
+    const page = Math.max(0, Math.floor(((viewport.top + viewport.bottom) / 2 - (sheet?.top || 0)) / height));
+    const top = (sheet?.top || 0) + page * height;
+    for (const element of root!.querySelectorAll<HTMLElement>('.blk[data-i]')) {
+      const rect = element.getBoundingClientRect();
+      const visible = rect.bottom >= viewport.top && rect.top <= viewport.bottom && rect.right >= viewport.left && rect.left <= viewport.right;
+      mathPriorities.set(+element.dataset.i!, visible ? 0 : rect.bottom >= top && rect.top <= top + height ? 1 : 2);
+    }
+  }
+  function beginEngineChange(): void {
+    if (!TD.math.previewing) return TD.math.preview(beginEngineChange);
+    captureMathPriorities();
+    const P = TD.pageSize(doc().page), ctx = { sec: [0, 0, 0], numbered: !!P.numbered };
+    doc().blocks.forEach((block: any, i: number) => {
+      const element = root!.querySelector<HTMLElement>(`.blk[data-i="${i}"]`);
+      const rank = mathPriorities.get(i) ?? 2;
+      const html = TD.math.withPriority(rank, () => {
+        if (block.type === 'text') return textToHtml(block.text || '', ctx);
+        if (block.type === 'diagram') return app.shapesSvg(block.shapes, 6, false, true);
+        if (block.type === 'table') return tableHtml(block, false);
+        return block.caption ? inl(block.caption) : '';
+      });
+      TD.math.prioritize([...html.matchAll(/data-math-pending="([\d,]+)"/g)].flatMap(match => match[1].split(',').map(Number)), rank);
+      if (!element || element.classList.contains('editing')) return;
+      const body = element.querySelector('.blk-body');
+      if (!body || !body.querySelector('.katex,.td-math,image.svg-label,.math-pending')) return;
+      const ids = [...html.matchAll(/data-math-pending="([\d,]+)"/g)].flatMap(match => match[1].split(','));
+      // Keep the existing DOM/decoded images. Only metadata changes until a
+      // bounded progress pass can publish the selected engine's real output.
+      body.classList.add('math-pending'); body.setAttribute('data-math-pending', ids.join(',') || '0');
+    });
+    renderProgress();
+  }
+  let progressFrame = 0, finishProgress: (() => void) | null = null;
+  function cancelProgress(): void {
+    mathPriorities.clear();
+    cancelAnimationFrame(progressFrame); progressFrame = 0;
+    const finish = finishProgress; finishProgress = null; finish?.();
+  }
+  function renderProgress(): void {
+    if (progressFrame) return;
+    if (!TD.math.previewing) return TD.math.preview(renderProgress);
+    const P = TD.pageSize(doc().page), ctx = { sec: [0, 0, 0], numbered: !!P.numbered };
+    const st = root!.scrollTop, sl = root!.scrollLeft;
+    let changed = false, count = 0, more = false;
+    // Number headings in source order; publish ready blocks in view order.
+    const blocks = doc().blocks.map((block: any, i: number) => ({ block, i,
+      text: block.type === 'text' ? TD.math.withPriority(mathPriorities.get(i) ?? 2, () => textToHtml(block.text || '', ctx)) : '' }));
+    blocks.sort((a: any, b: any) => (mathPriorities.get(a.i) ?? 2) - (mathPriorities.get(b.i) ?? 2) || a.i - b.i);
+    blocks.forEach(({ block, i, text }: any) => {
+      const element = root!.querySelector<HTMLElement>(`.blk[data-i="${i}"]`);
+      // Never replace a live editor.
+      if (!element || element.classList.contains('editing') || !element.querySelector('.math-pending')) return;
+      const ready = [...element.querySelectorAll('[data-math-pending]')].every(node => node.getAttribute('data-math-pending')!.split(',').every(id => !TD.math.hasPendingJob(+id)));
+      if (!ready) return;
+      if (count++ >= 4) { more = true; return; }
+      const body = element.querySelector('.blk-body');
+      if (!body) return;
+      if (block.type === 'text') body.innerHTML = text;
+      else if (block.type === 'diagram') updateSvg(body, app.shapesSvg(block.shapes, 6, false, true), labelResources);
+      else if (block.type === 'table') body.innerHTML = tableHtml(block, false);
+      else if (block.type === 'image') {
+        const caption = element.querySelector('figcaption');
+        if (caption) caption.innerHTML = caption.innerHTML.replace(/:.*$/s, ': ' + inl(block.caption));
+      }
+      body.classList.remove('math-pending'); body.removeAttribute('data-math-pending');
+      TD.math.trackView(previewFadeFinished(body));
+      changed = true;
+    });
+    if (changed) {
+      sizeDiagrams(root); labelResources.update(root!);
+      // Keep pagination stable through the provisional phase. One final layout
+      // pass avoids reflowing the entire document for every small label batch.
+      if (!root!.querySelector('.blk:not(.editing) .math-pending')) layoutPage(P);
+      root!.scrollTop = st; root!.scrollLeft = sl;
+    }
+    if (more) TD.math.trackView(new Promise<void>(resolve => {
+      finishProgress = resolve;
+      progressFrame = requestAnimationFrame(() => { progressFrame = 0; finishProgress = null; try { renderProgress(); } finally { resolve(); } });
+    }));
+  }
+  // Renaming must not rebuild block editors or move focus away from the name field.
+  function updateTitle() {
+    const title = root!.querySelector('.doc-title');
+    if (!title) return;
+    title.textContent = doc().name || 'Untitled';
+    if (app.state.mode === 'document') layoutPage(TD.pageSize(doc().page));
+  }
+
+  function render(forPrint?: any): void {
+    if (!forPrint && !TD.math.previewing) return TD.math.preview(() => render());
+    if (forPrint && !TD.math.finalizing) return TD.math.synchronous(() => render(true));
     const { h: page, P } = pageHtml(forPrint);
-    let h = page;
-    if (!forPrint) h += `<div class="doc-hud"><span class="pg-info"></span><button data-zoom="out" title="Zoom out (Ctrl/⌘ −)" aria-label="Zoom out">−</button><button data-zoom="in" title="Zoom in (Ctrl/⌘ +)" aria-label="Zoom in">+</button><button data-zoom="fit"${zoomMode === 'fit' ? ' class="on"' : ''} title="Fit the page's width to the view">Fit Width</button><button data-zoom="1"${(zoomMode as any) === 1 ? ' class="on"' : ''} title="Actual size (Ctrl/⌘ 0)">100%</button></div>`;
+    let h = forPrint ? page : `<div class="doc-sheet">${page}</div>`;
+    if (!forPrint) h += `<div class="doc-hud"><span class="pg-info"></span><button data-zoom="out" title="${esc(t('doc.zoom.outTip', 'Zoom out (Ctrl/⌘ −)'))}" aria-label="${esc(t('doc.zoom.out', 'Zoom out'))}">−</button><button data-zoom="in" title="${esc(t('doc.zoom.inTip', 'Zoom in (Ctrl/⌘ +)'))}" aria-label="${esc(t('doc.zoom.in', 'Zoom in'))}">+</button><button data-zoom="fit"${zoomMode === 'fit' ? ' class="on"' : ''} title="${esc(t('doc.zoom.fitTip', "Fit the page's width to the view"))}">${esc(t('ui.fit.width', 'Fit Width'))}</button><button data-zoom="1"${(zoomMode as any) === 1 ? ' class="on"' : ''} title="${esc(t('doc.zoom.actualTip', 'Actual size (Ctrl/⌘ 0)'))}">100%</button></div>`;
+    sheetObserver.disconnect();
     root!.innerHTML = h;
+    if (forPrint) labelResources.clear(root!); else labelResources.update(root!);
     sizeDiagrams(root);
     printStyle(P);
     layoutPage(P, forPrint);
+    if (!forPrint) sheetObserver.observe(root!.querySelector('.doc-page')!);
     if (!forPrint) requestAnimationFrame(() => layoutPage(P)); // after the side panel has laid out
     const ta = root!.querySelector('.blk-ed');
     if (ta) { autosize(ta); (ta as HTMLElement).focus({ preventScroll: true }); }
@@ -503,13 +644,16 @@ import { readPicture } from '../platform/images';
   }
   // Fit the page to the view, and mark (approximate) page breaks.
   function layoutPage(P: any, forPrint?: any) {
-    const page = root!.querySelector('.doc-page');
-    if (!page || forPrint) return;
-    const st = root!.scrollTop, sl = root!.scrollLeft; // measuring at zoom 1 shortens the page, which would clamp the scroll
-    (page as HTMLElement).style.zoom = '1';
-    (page as HTMLElement).style.minHeight = '0';
+    const page = root!.querySelector<HTMLElement>('.doc-page');
+    const sheet = root!.querySelector<HTMLElement>('.doc-sheet');
+    if (!page || !sheet || forPrint) return;
+    const st = root!.scrollTop, sl = root!.scrollLeft;
+    // Layout always stays at 100%. CSS zoom changes text metrics in WebKit and
+    // rounds dimensions differently across zoom levels, moving content past page dividers.
+    page.style.minHeight = '0';
     page.querySelectorAll('.pg-brk').forEach((e) => e.remove());
-    const cmPx = ((page.querySelector('.cm-probe'))! as HTMLElement).offsetWidth || 37.8;
+    const cmPx = 96 / 2.54; // CSS centimetres, without offsetWidth's integer rounding
+    scrollbarSpace();
     // the width beside the side panel (the view's padding keeps clear of it), less a margin
     const cs = getComputedStyle(root!);
     const avail = root!.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 24;
@@ -517,8 +661,8 @@ import { readPicture } from '../platform/images';
     curZoom = z;
     // height of the real content (ignoring the trailing "+ Text / + Diagram" bar), in cm
     const blks = page.querySelectorAll('.blk, .doc-title');
-    const top = page.getBoundingClientRect().top;
-    const bottom = blks.length ? blks[blks.length - 1].getBoundingClientRect().bottom - top : 0;
+    const last = blks[blks.length - 1] as HTMLElement | undefined;
+    const bottom = last ? last.offsetTop + last.offsetHeight : 0;
     const textH = Math.max(0, bottom / cmPx - P.mt);
     const n = Math.max(1, Math.ceil(textH / P.textH - 0.01));
     (page as HTMLElement).style.minHeight = n * P.H + 'cm';
@@ -529,27 +673,47 @@ import { readPicture } from '../platform/images';
       m.innerHTML = `<span>Page ${k + 1}</span>`;
       page.appendChild(m);
     }
-    (page as HTMLElement).style.zoom = String(z);
-    // the editing tools stay at screen size whatever the page zoom
-    (page as HTMLElement).style.setProperty('--unzoom', String(1 / (z as any)));
+    sizeSheet(page, n);
+    scalePage(P, z);
     root!.scrollTop = st; root!.scrollLeft = sl;
+  }
+  // Zoom is a camera operation. Pagination and natural paper measurements only
+  // run when content/settings change; scaling reuses the fixed layout dimensions.
+  function scalePage(P: any, z: number) {
+    const page = root!.querySelector<HTMLElement>('.doc-page');
+    const sheet = root!.querySelector<HTMLElement>('.doc-sheet');
+    const size = page && paperSizes.get(page);
+    if (!page || !sheet || !size) return;
+    curZoom = z;
+    page.style.transform = `scale(${z})`;
+    // The clipped sizing wrapper gives the scroll area only the scaled dimensions,
+    // rather than the union of the transformed and untransformed paper bounds.
+    sheet.style.width = size.width * z + 'px';
+    sheet.style.height = size.height * z + 'px';
+    // Scope the changing custom property to the controls: inheriting it from the
+    // paper would invalidate styles throughout every formula on each zoom event.
+    for (const tools of page.querySelectorAll<HTMLElement>('.blk-tools')) tools.style.setProperty('--unzoom', String(1 / z));
+    const n = size.pages;
     const info = root!.querySelector('.pg-info');
-    if (info) info.textContent = `${TD.PAPERS[P.paper]?.name || 'Custom'} · ${n} page${n > 1 ? 's' : ''} (approx.) · ${Math.round((z as any) * 100)}%`;
+    if (info) info.textContent = t('doc.pageInfo', '{paper} · {pages} (approx.) · {zoom}%', { paper: TD.PAPERS[P.paper]?.name || t('ui.custom', 'Custom'), pages: n > 1 ? t('doc.pages', '{n} pages', { n }) : t('doc.page1', '{n} page', { n }), zoom: Math.round((z as any) * 100) });
   }
   window.addEventListener('resize', () => { if (app.state.mode === 'document' && zoomMode === 'fit') layoutPage(TD.pageSize(doc().page)); });
+  root!.addEventListener('load', () => { if (app.state.mode === 'document') layoutPage(TD.pageSize(doc().page)); }, true);
   // Zoom to z, keeping the point under (cx, cy) (view coordinates; the view's centre by default) in place.
   function zoomTo(z: any, cx?: any, cy?: any) {
     z = Math.min(ZMAX, Math.max(ZMIN, z));
     const page = root!.querySelector('.doc-page');
     if (!page) return;
     if (cx == null) { cx = root!.clientWidth / 2; cy = root!.clientHeight / 2; }
-    const ox = (page as HTMLElement).offsetLeft, oy = (page as HTMLElement).offsetTop, k = z / curZoom;
-    const px = root!.scrollLeft + cx - ox, py = root!.scrollTop + cy - oy; // the point, on the page
+    const view = root!.getBoundingClientRect(), before = page.getBoundingClientRect();
+    const px = (view.left + cx - before.left) / curZoom;
+    const py = (view.top + cy - before.top) / curZoom; // the point in unscaled paper pixels
     zoomMode = Math.abs(z - 1) < 1e-3 ? 1 : z;
-    layoutPage(TD.pageSize(doc().page));
+    scalePage(TD.pageSize(doc().page), Number(zoomMode));
     root!.querySelectorAll('.doc-hud [data-zoom]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.zoom === String(zoomMode)));
-    root!.scrollLeft = (page as HTMLElement).offsetLeft + px * k - cx;
-    root!.scrollTop = (page as HTMLElement).offsetTop + py * k - cy;
+    const after = page.getBoundingClientRect();
+    root!.scrollLeft += after.left - view.left + px * curZoom - cx;
+    root!.scrollTop += after.top - view.top + py * curZoom - cy;
   }
   const STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
   const stepZoom = (dir: any) => zoomTo(dir > 0 ? (STEPS.find((v) => v > curZoom + 0.005) ?? ZMAX) : ([...STEPS].reverse().find((v) => v < curZoom - 0.005) ?? ZMIN));
@@ -558,7 +722,7 @@ import { readPicture } from '../platform/images';
     if (!(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
     const r = root!.getBoundingClientRect();
-    zoomTo(curZoom * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    zoomTo(curZoom * wheelZoomFactor(e), e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
   // pinch in Safari
   let gz = 1;
@@ -579,7 +743,7 @@ import { readPicture } from '../platform/images';
     const page = TD.pageSize(doc().page);
     const diagrams = doc().blocks.filter((b: any) => b.type === 'diagram' && b.shapes.length);
     const wide = diagrams.filter((b: any) => diagramWidthCm(b.shapes) > page.textW + 0.01).length;
-    renderView(el, DocumentSettings, { page, wide, papers: Object.entries<any>(TD.PAPERS).map(([key, value]) => ({ key, name: value.name })) });
+    renderView(el, DocumentSettings, { page, wide, papers: Object.entries<any>(TD.PAPERS).map(([key, value]) => ({ key, name: key === 'custom' ? t('page.paper.custom', 'Custom') : value.name })) });
   }
   function setPage(patch: any) {
     const d = doc();
@@ -674,7 +838,7 @@ import { readPicture } from '../platform/images';
     }
     else if (f === 'link') {
       const s0 = ta.selectionStart, s1 = ta.selectionEnd, sel = ta.value.slice(s0, s1);
-      TD.prompt('Link Address', /^https?:\/\//.test(sel) ? sel : 'https://', { ok: 'Add Link' }).then((url: any) => {
+      TD.prompt(t('doc.link.title', 'Link Address'), /^https?:\/\//.test(sel) ? sel : 'https://', { ok: t('doc.link.ok', 'Add Link') }).then((url: any) => {
         ta.focus(); ta.setSelectionRange(s0, s1); // the dialog took the focus: put the selection back
         if (!url || url === 'https://') return;
         if (!sel || sel === url) wrapSel(ta, '\\url{', '}', url);
@@ -700,7 +864,7 @@ import { readPicture } from '../platform/images';
         if (replaceIdx != null) Object.assign(doc().blocks[replaceIdx], { src: pic.src, name: f.name });
         else { keepActive((d: any) => d.blocks.splice(at, 0, { type: 'image', src: pic.src, name: f.name, width: 0.6, caption: '' })); editingIdx = at; }
         changed(); render();
-      }, (err) => app.showHint?.(`Couldn't open ${f.name}: ${err.message}`, 2500));
+      }, (err) => app.showHint?.(t('doc.img.openFailed', "Couldn't open {name}: {error}", { name: f.name, error: err.message }), 2500));
     };
     inp.click();
   }
@@ -741,7 +905,7 @@ import { readPicture } from '../platform/images';
     if ((e.target! as Element).closest('[data-rm]')) {
       const remove = () => { keepActive((d: any) => d.blocks.splice(i, 1)); editingIdx = -1; changed(); render(); };
       if (b.type === 'diagram' && b.shapes.length) {
-        TD.confirm('Delete this diagram?', `Its ${b.shapes.length} object${b.shapes.length > 1 ? 's' : ''} will be deleted too.`, { ok: 'Delete', danger: true }).then((yes) => { if (yes) remove(); });
+        TD.confirm(t('doc.diag.deleteTitle', 'Delete this diagram?'), b.shapes.length > 1 ? t('doc.diag.deleteMany', 'Its {n} objects will be deleted too.', { n: b.shapes.length }) : t('doc.diag.deleteOne', 'Its 1 object will be deleted too.'), { ok: t('ui.delete', 'Delete'), danger: true }).then((yes) => { if (yes) remove(); });
       } else remove();
       return;
     }
@@ -868,10 +1032,7 @@ import { readPicture } from '../platform/images';
     return `data:${type};base64,${btoa(s)}`;
   };
   // Where each maths stylesheet lives (vendor/). Fonts are only ever embedded from these local copies.
-  const MATH_CSS: Record<string, any> = {
-    katex: { css: 'vendor/katex/katex.min.css' },
-    temml: { css: 'vendor/temml/Temml-Latin-Modern.css' },
-  };
+  const MATH_CSS = 'vendor/katex/katex.min.css';
   const fetchOk = async (url: any) => {
     for (let k = 0; k < 2; k++) { // one retry: a dev server mid-restart usually answers the second time
       try { const r = await fetch(url); if (r.ok) return r; } catch (e: any) { /* retry */ }
@@ -892,8 +1053,8 @@ import { readPicture } from '../platform/images';
   }
   // Fonts that could not be embedded in the last export (left out; nothing is fetched from another site).
   TD.mathFontsLinked = 0;
-  async function inlineFonts(engine: any) {
-    const { css: cssUrl } = MATH_CSS[engine];
+  async function inlineFonts() {
+    const cssUrl = MATH_CSS;
     let css = await mathCssText(cssUrl);
     if (!css) { TD.mathFontsLinked = -1; return ''; }
     const base = cssUrl.slice(0, cssUrl.lastIndexOf('/') + 1);
@@ -910,7 +1071,7 @@ import { readPicture } from '../platform/images';
     return css.replace(/,\s*url\([^)]*\.(woff|ttf)\)\s*format\(["'](woff|truetype)["']\)/g, '');
   }
   // the maths stylesheet with its fonts embedded (for PNG / PDF export)
-  TD.inlineMathCss = () => inlineFonts(TD.math.engine === 'temml' ? 'temml' : 'katex');
+  TD.inlineMathCss = inlineFonts;
   // pageBody: ready-made markup (Page files pass their page SVGs); otherwise the Classic document.
   TD.docToHtml = async function (pageBody: any) {
     const was = editingIdx;
@@ -931,7 +1092,7 @@ import { readPicture } from '../platform/images';
 <title>${esc(name)}</title>
 <style>${mathCss}</style>
 <style>
-:root { --font-tex: ${TD.math.engine === 'temml' ? '"Latin Modern Roman", "Latin Modern Math"' : 'KaTeX_Main'}, "Times New Roman", serif; }
+:root { --font-tex: KaTeX_Main, "Times New Roman", serif; }
 body { margin: 0; background: #f4f3ef; color: #111; padding: 24px 12px; }
 ${own}
 .doc-page { margin: 0 auto; max-width: 100%; box-sizing: border-box; min-height: 0 !important; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 6px 20px rgba(0,0,0,.06); }
@@ -945,6 +1106,9 @@ ${box.innerHTML}
 `;
   };
 
-  TD.docview = { render, renderSettings, textToHtml, textToLatex, inl };
+  TD.docview = { render, renderProgress, beginEngineChange, cancelProgress, updateTitle, renderSettings, textToHtml, textToLatex, inl };
+  // the page's editing chrome follows the interface language
+  let firstLocale = true;
+  onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (app.state.mode === 'document') render(); });
   if (app.state.mode === 'document') { render(); app.renderProps(); }
 })();

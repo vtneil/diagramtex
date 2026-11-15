@@ -1,3 +1,4 @@
+import { message as msg } from '../../i18n';
 import Dialog from '../Dialog.svelte';
 import { mountFrame } from '../mount-frame';
 import { unmount } from 'svelte';
@@ -13,7 +14,7 @@ import { runtime as TD } from '../../runtime';
   const esc = (t: any) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
   let open: any = null; // { finish } of the dialog on screen; a new one cancels it
 
-  function dialog({ title, message = '', input = null, multiline = false, ok = 'OK', cancel = 'Cancel', danger = false, readonly = false, placeholder = '' }: any) {
+  function dialog({ title, message = '', input = null, multiline = false, ok = msg("ui.ok", 'OK'), cancel = msg("ui.cancel", 'Cancel'), danger = false, readonly = false, placeholder = '' }: any) {
     if (open) open.finish(false);
     const prev = document.activeElement;
     const root = document.createElement('div');
@@ -61,7 +62,7 @@ import { runtime as TD } from '../../runtime';
   }
 
   TD.dialog = dialog;
-  TD.confirm = (title, message, opts = {}) => dialog({ title, message, ok: 'OK', ...opts }) as Promise<boolean>;
+  TD.confirm = (title, message, opts = {}) => dialog({ title, message, ok: msg("ui.ok", 'OK'), ...opts }) as Promise<boolean>;
   TD.prompt = (title: any, value = '', opts = {}) => dialog({ title, input: value, ...opts });
   TD.alert = (title: any, message: any, opts = {}) => dialog({ title, message, cancel: null, ...opts });
 })();

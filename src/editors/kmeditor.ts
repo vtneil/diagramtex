@@ -1,3 +1,5 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { message, onLocale, t } from '../i18n';
 import type { FormRow } from '../ui/forms';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
@@ -23,7 +25,10 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- palette
   // a size's tile shows its grids; its title says how many variables
   const SIZE_NAMES: Record<string, any> = { '2,2,1': '2 × 2', '4,2,1': '4 × 2', '2,4,1': '2 × 4', '4,4,1': '4 × 4', '4,4,2': '4 × 4 × 2', '4,4,4': '4 × 4 × 4' };
-  const SIZE_TIPS: Record<string, any> = { '2,2,1': '2 variables', '4,2,1': '3 variables, 4 columns', '2,4,1': '3 variables, 4 rows', '4,4,1': '4 variables', '4,4,2': '5 variables: two 4 × 4 maps', '4,4,4': '6 variables: four 4 × 4 maps' };
+  const sizeTip = (k: string): string => ({
+    '2,2,1': () => t('editor.km.size.2', '2 variables'), '4,2,1': () => t('editor.km.size.3cols', '3 variables, 4 columns'), '2,4,1': () => t('editor.km.size.3rows', '3 variables, 4 rows'),
+    '4,4,1': () => t('editor.km.size.4', '4 variables'), '4,4,2': () => t('editor.km.size.5', '5 variables: two 4 × 4 maps'), '4,4,4': () => t('editor.km.size.6', '6 variables: four 4 × 4 maps'),
+  } as Record<string, () => string>)[k]?.() ?? '';
   // a size: its sub maps as grids of cells, side by side and below as the package lays them out
   function mapMini(x: any, y: any, z: any) {
     const c = 7, gap = 5, W = (z > 1 ? 2 : 1) * x * c + (z > 1 ? gap : 0), H = (z > 2 ? 2 : 1) * y * c + (z > 2 ? gap : 0);
@@ -41,6 +46,12 @@ import { runtime as TD } from '../runtime';
     ['Map', F.SIZES.map((s: any) => [`m:${s.join(',')}`, SIZE_NAMES[s.join(',')], mapMini(...(s as [any, any, any]))])],
     ['Cells', [['v:1', 'One', cellMini('1'), '1'], ['v:0', 'Zero', cellMini('0'), '0'], ['v:-', 'Don’t care', cellMini('–'), 'D'], ['v:', 'Empty', cellMini(''), 'E'], ['g:', 'Group', groupMini, 'G']]],
   ];
+  // the palette's names as shown (PAL keeps the English for search)
+  const palTitle = (title: string) => (title === 'Map' ? t('editor.km.pal.map', 'Map') : t('editor.km.pal.cells', 'Cells'));
+  const itemName = (k: string, name: string): string => ({
+    'v:1': () => t('editor.km.v.one', 'One'), 'v:0': () => t('editor.km.v.zero', 'Zero'), 'v:-': () => t('editor.km.v.dontCare', 'Don’t care'),
+    'v:': () => t('editor.km.v.empty', 'Empty'), 'g:': () => t('editor.km.group', 'Group'),
+  } as Record<string, () => string>)[k]?.() ?? name;
   const ITEM: Record<string, any> = {}, KEYS: Record<string, any> = {};
   for (const [, items] of PAL) for (const [k, name, mini, key] of items) { ITEM[k] = { k, name, mini, key }; if (key) KEYS[key.toLowerCase()] = k; }
   KEYS['-'] = 'v:-';
@@ -52,7 +63,7 @@ import { runtime as TD } from '../runtime';
   const mathOf = (t: any) => { t = String(t || '').trim(); const m = /^\$([\s\S]*)\$$/.exec(t) || /^\\\(([\s\S]*)\\\)$/.exec(t); return m ? m[1] : t; };
   const wrapMath = (t: any) => { const v = mathOf(t).trim(); return v ? `$${v}$` : ''; };
   const NEXT = { '0': '1', '1': '-', '-': '0' }, PREV = { '0': '-', '1': '0', '-': '1' };
-  const VNAME: Record<string, any> = { '1': '1', '0': '0', '-': 'don’t care', '': 'empty' };
+  const vName = (v: string) => (v === '-' ? t('editor.km.vname.dontCare', 'don’t care') : v === '' ? t('editor.km.vname.empty', 'empty') : v);
   const setOpt = (M: any, key: any, val: any) => {
     const l = M.opts ? M.opts.split(/,(?![^{]*\})/).map((x: any) => x.trim()).filter(Boolean) : [];
     const rest = l.filter((x: any) => !new RegExp(`^${key}\\s*(=|$)`).test(x));
@@ -123,8 +134,10 @@ import { runtime as TD } from '../runtime';
     const g = F.solve(E.M, E.mode);
     edit(() => { E.M.groups = g; });
     E.sel = null; renderProps();
-    setTip(g.length ? `${g.length} group${g.length === 1 ? '' : 's'}: ${E.mode === 'pos' ? 'the 0s as sums' : 'the 1s as products'}` : `No ${E.mode === 'pos' ? '0s' : '1s'} to group`);
-    setTimeout(() => { if (E && /^(No|\d)/.test(tip.textContent)) setTip(''); }, 1800);
+    const how = E.mode === 'pos' ? t('editor.km.solve.sums', 'the 0s as sums') : t('editor.km.solve.products', 'the 1s as products');
+    const msg = g.length ? (g.length === 1 ? t('editor.km.solve.one', '1 group: {how}', { how }) : t('editor.km.solve.many', '{n} groups: {how}', { n: g.length, how })) : t('editor.km.solve.none', 'No {value}s to group', { value: E.mode === 'pos' ? '0' : '1' });
+    setTip(msg);
+    setTimeout(() => { if (E && tip.textContent === msg) setTip(''); }, 1800);
   }
 
   // ---------------------------------------------------------------- palette
@@ -139,14 +152,14 @@ import { runtime as TD } from '../runtime';
     let html = '';
     const cur = E ? `m:${E.M.X},${E.M.Y},${E.M.Z}` : '';
     for (const [title, items] of PAL) {
-      const hits = items.filter(([k, name]: any) => !q || `${name} ${title} ${SIZE_TIPS[k.slice(2)] || ''} ${k === 'v:-' ? 'dont care x indeterminant' : ''}`.toLowerCase().includes(q));
+      const hits = items.filter(([k, name]: any) => !q || `${name} ${itemName(k, name)} ${title} ${palTitle(title)} ${sizeTip(k.slice(2))} ${k === 'v:-' ? 'dont care x indeterminant' : ''}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => {
-        const on = E && (E.arm === k || k === cur);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(k[0] === 'm' ? `${SIZE_TIPS[k.slice(2)]} (${name})` : name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${ITEM[k].mini}</span><span>${esc(name)}</span></button>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(palTitle(title))}</div><div class="qe-grid">${hits.map(([k, name0, , key]: any) => {
+        const on = E && (E.arm === k || k === cur), name = itemName(k, name0);
+        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(k[0] === 'm' ? `${sizeTip(k.slice(2))} (${name})` : name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${ITEM[k].mini}</span><span>${esc(name)}</span></button>`;
       }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 64, 40, 1.6);
   }
   search.addEventListener('input', buildPalette);
@@ -160,7 +173,7 @@ import { runtime as TD } from '../runtime';
     if (k[0] === 'm') { resize(...(k.slice(2).split(',').map(Number) as [any, any, any])); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(!E.arm ? '' : k === 'g:' ? 'Group: click a cell or drag across cells. Esc when done.' : `${ITEM[k].name}: click or drag over cells to set them. Esc when done.`);
+    setTip(!E.arm ? '' : k === 'g:' ? t('editor.km.tip.group', 'Group: click a cell or drag across cells. Esc when done.') : t('editor.km.tip.value', '{value}: click or drag over cells to set them. Esc when done.', { value: itemName(k, ITEM[k].name) }));
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -216,7 +229,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(400, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(12, Math.min(400, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -397,16 +410,16 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover != null) { E.hover = null; if (!E.arm) setTip(''); draw(); } });
   function cellTip(n: any) {
     const M = E.M, nv = F.varsOf(M.X, M.Y, M.Z), v = valOf(n);
-    return `Cell ${n} · ${n.toString(2).padStart(nv, '0')} · ${VNAME[v] != null ? VNAME[v] : v}`;
+    return t('editor.km.cellTip', 'Cell {n} · {bits} · {value}', { n, bits: n.toString(2).padStart(nv, '0'), value: vName(v) });
   }
   function groupTip(g: any) {
     const R = F.rectOf(E.M, g), cells = R.h * R.w * g.maps.length;
-    return `${cells} cell${cells === 1 ? '' : 's'}${R.wr || R.wc ? ` · wraps ${R.wr && R.wc ? 'at the corners' : R.wr ? 'top to bottom' : 'left to right'}` : ''}`;
+    return `${cells === 1 ? t('editor.km.oneCell', '1 cell') : t('editor.commonA.nCells', '{n} cells', { n: cells })}${R.wr || R.wc ? ` · ${R.wr && R.wc ? t('editor.km.wrap.corners', 'wraps at the corners') : R.wr ? t('editor.km.wrap.rows', 'wraps top to bottom') : t('editor.km.wrap.cols', 'wraps left to right')}` : ''}`;
   }
 
   // right-click: the cell's values, and the group's delete
   const MI: Record<string, any> = { del: TRASH, check: '<path d="M4 10.5l4 4 8-9"/>' };
-  const mItem = (act: any, label: any, icon: any, key: any, danger?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-km="${act}">${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="ic"></span>'}<span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key: any, danger?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-km="${act}">${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="ic"></span>'}<span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -416,9 +429,9 @@ import { runtime as TD } from '../runtime';
     if (n != null) {
       const v = valOf(n);
       E.menuCell = n;
-      html += [['1', 'One', '1'], ['0', 'Zero', '0'], ['-', 'Don’t Care', 'D'], ['', 'Empty', 'E']].map(([val, nm, key]) => mItem(`set:${val}`, nm, v === val ? 'check' : null, key)).join('');
+      html += [['1', t('editor.km.v.one', 'One'), '1'], ['0', t('editor.km.v.zero', 'Zero'), '0'], ['-', t('editor.km.menu.dontCare', 'Don’t Care'), 'D'], ['', t('editor.km.v.empty', 'Empty'), 'E']].map(([val, nm, key]) => mItem(`set:${val}`, nm, v === val ? 'check' : null, key)).join('');
     }
-    if (gi != null) { E.sel = { g: gi }; html += (html ? '<hr>' : '') + mItem('gdel', 'Delete Group', 'del', '⌫', true); }
+    if (gi != null) { E.sel = { g: gi }; html += (html ? '<hr>' : '') + mItem('gdel', t('editor.km.deleteGroup', 'Delete Group'), 'del', '⌫', true); }
     if (!html) { closeMenu(); return; }
     menu.innerHTML = html;
     draw(); renderProps();
@@ -447,27 +460,28 @@ import { runtime as TD } from '../runtime';
     const swatch = (i: any) => ({ bw: !!M.bw, css: F.colour(F.colorList(M)[i] || 'cyan') });
     if (g) {
       const i = E.sel.g, G = C.groups[i], R = F.rectOf(M, g);
-      const status = G.ok ? (G.redundant ? `Valid, but its ${want}s are all in other groups` : G.prime ? 'Valid and as large as it can be' : 'Valid, but it could be larger') : G.why;
+      const status = G.ok ? (G.redundant ? t('editor.km.status.redundant', 'Valid, but its {value}s are all in other groups', { value: want }) : G.prime ? t('editor.km.status.prime', 'Valid and as large as it can be') : t('editor.km.status.larger', 'Valid, but it could be larger')) : G.why;
       const rows: FormRow[] = [{ kind: 'rendered' as const, class: 'km-term', svgOrMath: G.ok ? math(G.term) : '—' },
         { kind: 'status' as const, class: 'km-status ' + (G.ok && G.prime && !G.redundant ? 'ok' : 'bad'), icon: G.ok ? OK : BAD, text: status }];
-      if (M.Z > 1) rows.push({ ...row('Sub maps', ...Array.from<any, any>({ length: M.Z }, (_, m) => ({ kind: 'button' as const, text: M.Z === 2 ? String(m) : m.toString(2).padStart(2, '0'), attrs: { 'data-fm': m, class: g.maps.includes(m) ? 'on' : '', title: M.Z === 2 ? `Sub map ${m}` : `Sub map ${m} (${m.toString(2).padStart(2, '0')})` } }))), controlClass: 'ctl seg-ctl ze-flags km-maps' });
-      rows.push(codeRow(groupCode(g)), note('Drag its outline to move it, or a handle to resize it; past an edge it wraps round. Arrow keys move it, ', { kbd: '⇧' }, ' arrows resize it.'), actionRow('ke', 'gdel', 'Delete Group'));
-      renderView(props, FormPanel, { sections: [{ ...section(`Group ${i + 1}`, rows, 'sec'), swatch: swatch(i), summary: `${R.h} × ${R.w}${g.maps.length > 1 ? ` × ${g.maps.length}` : ''}` }] }); return;
+      if (M.Z > 1) rows.push({ ...row(t('editor.km.subMaps', 'Sub maps'), ...Array.from<any, any>({ length: M.Z }, (_, m) => ({ kind: 'button' as const, text: M.Z === 2 ? String(m) : m.toString(2).padStart(2, '0'), attrs: { 'data-fm': m, class: g.maps.includes(m) ? 'on' : '', title: M.Z === 2 ? t('editor.km.subMap', 'Sub map {n}', { n: m }) : t('editor.km.subMapBits', 'Sub map {n} ({bits})', { n: m, bits: m.toString(2).padStart(2, '0') }) } }))), controlClass: 'ctl seg-ctl ze-flags km-maps' });
+      rows.push(codeRow(groupCode(g)), note(t('editor.km.help.group', 'Drag its outline to move it, or a handle to resize it; past an edge it wraps round. Arrow keys move it, '), { kbd: '⇧' }, t('editor.km.help.groupResize', ' arrows resize it.')), actionRow('ke', 'gdel', t('editor.km.deleteGroup', 'Delete Group')));
+      renderView(props, FormPanel, { sections: [{ ...section(t('editor.km.groupN', 'Group {n}', { n: i + 1 }), rows, 'sec'), swatch: swatch(i), summary: `${R.h} × ${R.w}${g.maps.length > 1 ? ` × ${g.maps.length}` : ''}` }] }); return;
     }
     const lb = F.labelsOf(M), nv = F.varsOf(M.X, M.Y, M.Z);
-    const labels = lb.old ? [field('Top', 'lx0', mathOf(M.labels[0]), { 'data-tx': 'math' }), field('Side', 'lx1', mathOf(M.labels[1]), { 'data-tx': 'math' }),
-      ...(M.Z > 1 ? [field('Sub maps', 'lx2', mathOf(M.labels[2]), { 'data-tx': 'math' })] : [])]
-      : Array.from<any, any>({ length: nv }, (_, k) => field(`Bit ${k}`, `l${k}`, mathOf(M.labels[k] != null ? M.labels[k] : ''), { 'data-tx': 'math', placeholder: mathOf(F.DEF_LABEL(k)) }));
-    const missing = C.missing.length ? `${C.missing.length === 1 ? 'A' : C.missing.length} ${want}${C.missing.length === 1 ? ' is' : 's are'} in no group: cell${C.missing.length === 1 ? '' : 's'} ${C.missing.slice(0, 12).join(', ')}${C.missing.length > 12 ? '…' : ''}` : C.ones ? `Every ${want} is in a group` : `No ${want}s on the map`;
+    const labels = lb.old ? [field(t('ui.top', 'Top'), 'lx0', mathOf(M.labels[0]), { 'data-tx': 'math' }), field(t('editor.km.side', 'Side'), 'lx1', mathOf(M.labels[1]), { 'data-tx': 'math' }),
+      ...(M.Z > 1 ? [field(t('editor.km.subMaps', 'Sub maps'), 'lx2', mathOf(M.labels[2]), { 'data-tx': 'math' })] : [])]
+      : Array.from<any, any>({ length: nv }, (_, k) => field(t('editor.km.bit', 'Bit {n}', { n: k }), `l${k}`, mathOf(M.labels[k] != null ? M.labels[k] : ''), { 'data-tx': 'math', placeholder: mathOf(F.DEF_LABEL(k)) }));
+    const cellList = `${C.missing.slice(0, 12).join(', ')}${C.missing.length > 12 ? '…' : ''}`;
+    const missing = C.missing.length ? (C.missing.length === 1 ? t('editor.km.missing.one', 'A {value} is in no group: cell {cells}', { value: want, cells: cellList }) : t('editor.km.missing.many', '{n} {value}s are in no group: cells {cells}', { n: C.missing.length, value: want, cells: cellList })) : C.ones ? t('editor.km.missing.none', 'Every {value} is in a group', { value: want }) : t('editor.km.missing.empty', 'No {value}s on the map', { value: want });
     const allOk = !C.missing.length && C.groups.every((G: any) => G.ok);
     renderView(props, FormPanel, { sections: [
-      { ...section('Karnaugh map', [...labels, segments('Labels', 'lmode', F.labelMode(M), [['middle', 'Sides'], ['corner', 'Corner', 'label=corner: both names at the top left corner']]), segments('Groups', 'bw', M.bw ? 1 : 0, [[0, 'Coloured'], [1, 'Outlined', 'karnaugh-map*: black and white']])], 'sec'), summary: `${nv} variables · ${M.groups.length} group${M.groups.length === 1 ? '' : 's'}` },
-      section('Check', [segments('Group the', 'mode', E.mode, [['sop', '1s', 'Sum of products'], ['pos', '0s', 'Product of sums']]),
+      { ...section(message('editor.km.title', 'Karnaugh map'), [...labels, segments(t('ui.labels', 'Labels'), 'lmode', F.labelMode(M), [['middle', t('editor.km.labels.sides', 'Sides')], ['corner', t('editor.km.labels.corner', 'Corner'), t('editor.km.labels.cornerTitle', 'label=corner: both names at the top left corner')]]), segments(t('editor.km.groups', 'Groups'), 'bw', M.bw ? 1 : 0, [[0, t('editor.km.groups.coloured', 'Coloured')], [1, t('editor.km.groups.outlined', 'Outlined'), t('editor.km.groups.outlinedTitle', 'karnaugh-map*: black and white')]])], 'sec'), summary: `${t('editor.km.nVariables', '{n} variables', { n: nv })} · ${M.groups.length === 1 ? t('editor.km.oneGroup', '1 group') : t('editor.km.nGroups', '{n} groups', { n: M.groups.length })}` },
+      section(t('editor.km.check', 'Check'), [segments(t('editor.km.groupThe', 'Group the'), 'mode', E.mode, [['sop', '1s', t('editor.km.sop', 'Sum of products')], ['pos', '0s', t('editor.km.pos', 'Product of sums')]]),
         { kind: 'rendered' as const, class: 'km-term', svgOrMath: math(`F = ${C.expr}`) }, { kind: 'status' as const, class: 'km-status ' + (allOk ? 'ok' : 'bad'), icon: allOk ? OK : BAD, text: missing },
-        ...(C.groups.length ? [{ kind: 'kmapGroups' as const, groups: C.groups.map((G: any) => ({ index: G.i, title: G.ok ? (G.redundant ? 'Its cells are all in other groups' : G.prime ? 'Valid' : 'Could be larger') : G.why,
+        ...(C.groups.length ? [{ kind: 'kmapGroups' as const, groups: C.groups.map((G: any) => ({ index: G.i, title: G.ok ? (G.redundant ? t('editor.km.groupTitle.redundant', 'Its cells are all in other groups') : G.prime ? t('editor.km.groupTitle.valid', 'Valid') : t('editor.km.groupTitle.larger', 'Could be larger')) : G.why,
           ...swatch(G.i), valid: G.ok, math: G.ok ? math(G.term) : '', text: G.why, icon: G.ok && G.prime && !G.redundant ? OK : BAD })) }] : []),
-        { kind: 'actions' as const, class: 'row km-acts', buttons: [{ text: 'Find Groups', attrs: { 'data-ke': 'solve', title: `Replace the groups with a smallest cover of the ${want}s` } }, { text: 'Remove Groups', attrs: { class: 'danger', 'data-ke': 'clear', ...(!M.groups.length ? { disabled: true } : {}) } }] },
-        note("Click a cell to turn it through 0, 1 and don't care (", { kbd: '⇧' }, ' goes back). Drag across cells to group them; drag past an edge to wrap round. Right-click a cell or group for more.'),
+        { kind: 'actions' as const, class: 'row km-acts', buttons: [{ text: t('editor.km.findGroups', 'Find Groups'), attrs: { 'data-ke': 'solve', title: t('editor.km.findGroupsTitle', 'Replace the groups with a smallest cover of the {value}s', { value: want }) } }, { text: t('editor.km.removeGroups', 'Remove Groups'), attrs: { class: 'danger', 'data-ke': 'clear', ...(!M.groups.length ? { disabled: true } : {}) } }] },
+        note(t('editor.km.help.map', "Click a cell to turn it through 0, 1 and don't care ("), { kbd: '⇧' }, t('editor.km.help.mapRest', ' goes back). Drag across cells to group them; drag past an edge to wrap round. Right-click a cell or group for more.')),
       ], 'sec'),
     ] });
   }
@@ -531,13 +545,13 @@ import { runtime as TD } from '../runtime';
     else if (a === 'delete' || a === 'gdel') { if (selG()) deleteGroup(E.sel.g); }
     else if (a === 'solve') solve();
     else if (a === 'clear') { edit(() => { E.M.groups = []; }); E.sel = null; renderProps(); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
     updateTools();
   }
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const M = E.M, nv = F.varsOf(M.X, M.Y, M.Z);
-    count.textContent = `${nv} variables · ${M.groups.length} group${M.groups.length === 1 ? '' : 's'}`;
+    count.textContent = `${t('editor.km.nVariables', '{n} variables', { n: nv })} · ${M.groups.length === 1 ? t('editor.km.oneGroup', '1 group') : t('editor.km.nGroups', '{n} groups', { n: M.groups.length })}`;
     updateTools();
     if (document.activeElement === codeTa) return;
     const c = snapCode();
@@ -563,7 +577,7 @@ import { runtime as TD } from '../runtime';
     const R = F.rectOf(M, g), dr = key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0, dc = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0;
     const N = grow ? { ...R, h: Math.max(1, Math.min(M.Y, R.h + dr)), w: Math.max(1, Math.min(M.X, R.w + dc)) } : { ...R, r: (R.r + dr + M.Y) % M.Y, c: (R.c + dc + M.X) % M.X };
     const n = F.groupFor(M, N, g.maps);
-    if (!n) { setTip(grow ? 'The package can’t draw that shape' : 'The package can’t draw the group there'); return; }
+    if (!n) { setTip(grow ? t('editor.km.cantShape', 'The package can’t draw that shape') : t('editor.km.cantThere', 'The package can’t draw the group there')); return; }
     const i = E.sel.g;
     edit(() => { M.groups[i] = n; });
     setTip(groupTip(n));
@@ -608,9 +622,10 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- open / close
   // ⌘S: write the map back to the page (one undo step there) and keep editing
   const { save, finish } = TD.editorSession.lifecycle({
-    state: () => E, clear: () => { E = null; }, snapshot: snapCode, commit,
-    root, code: codeTa, readCode, setTip, tip, discardTitle: 'Discard changes to this map?',
+    state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: snapCode, commit,
+    root, code: codeTa, readCode, setTip, tip, discardTitle: () => t('editor.km.discard', 'Discard changes to this map?'),
   });
+  let localeOff: (() => void) | undefined;
   function open(block: any, done: any) {
     const M = load(block.src);
     // groups of 0s only: check them as a product of sums
@@ -622,6 +637,9 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette and properties follow the interface language while the editor is open
+    localeOff?.();
+    localeOff = onLocale(() => { if (E) { buildPalette(); renderProps(); syncCode(); } });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

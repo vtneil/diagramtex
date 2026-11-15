@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note, texColour } from '../ui/editor-fields';
@@ -23,22 +26,23 @@ import { runtime as TD } from '../runtime';
 
   // ---------------------------------------------------------------- palette
   const tbl = (rows: any, extra = '') => `\\begin{tikztimingtable}${rows.map((r: any) => ` & ${r} \\\\`).join('')}${extra ? `\\extracode ${extra}` : ''}\\end{tikztimingtable}`;
-  const PAL = [
-    ['Values', [
-      ['v:H', 'High', tbl(['L 2H L']), 'H'], ['v:L', 'Low', tbl(['H 2L H']), 'L'], ['v:Z', 'High-Z', tbl(['L 2Z H']), 'Z'],
-      ['v:X', 'Unknown', tbl(['L 2X H']), 'X'], ['v:D', 'Data', tbl(['D{} 2D{} D{}']), 'D'], ['v:U', 'Unknown data', tbl(['D{} 2U D{}']), 'U'],
-      ['v:C', 'Clock', tbl(['6{c}']), 'C'], ['v:T', 'Toggle', tbl(['4{T}']), 'T'], ['v:M', 'Metastable', tbl(['L 2M H']), 'M'],
-      ['v:G', 'Glitch', tbl(['2L G 2L']), 'G'], ['v:S', 'Gap', tbl(['H 2S H']), 'S'],
-      ['v:UH', 'Hatched', tbl(['D{} {[timing/u/background/.style={pattern=north east lines}]2U} D{}']), 'W'],
+  // names are caption descriptors, shown in the interface language when the palette is drawn
+  const PAL: any[] = [
+    [message('editor.tm.cat.values', 'Values'), [
+      ['v:H', message('editor.tm.high', 'High'), tbl(['L 2H L']), 'H'], ['v:L', message('editor.tm.low', 'Low'), tbl(['H 2L H']), 'L'], ['v:Z', message('editor.tm.highZ', 'High-Z'), tbl(['L 2Z H']), 'Z'],
+      ['v:X', message('editor.tm.unknown', 'Unknown'), tbl(['L 2X H']), 'X'], ['v:D', message('editor.tm.data', 'Data'), tbl(['D{} 2D{} D{}']), 'D'], ['v:U', message('editor.tm.unknownData', 'Unknown data'), tbl(['D{} 2U D{}']), 'U'],
+      ['v:C', message('editor.tm.clock', 'Clock'), tbl(['6{c}']), 'C'], ['v:T', message('editor.tm.toggle', 'Toggle'), tbl(['4{T}']), 'T'], ['v:M', message('editor.tm.metastable', 'Metastable'), tbl(['L 2M H']), 'M'],
+      ['v:G', message('editor.tm.glitch', 'Glitch'), tbl(['2L G 2L']), 'G'], ['v:S', message('editor.tm.gap', 'Gap'), tbl(['H 2S H']), 'S'],
+      ['v:UH', message('editor.tm.hatched', 'Hatched'), tbl(['D{} {[timing/u/background/.style={pattern=north east lines}]2U} D{}']), 'W'],
     ]],
-    ['Rows', [
-      ['r:clock', 'Clock row', tbl(['8{c}'])], ['r:signal', 'Signal row', tbl(['L 2H L 2H'])], ['r:bus', 'Bus row', tbl(['U 2D{} 2D{} U'])],
-      ['r:blank', 'Blank row', tbl(['L 2H L 2H', '', 'L 2H L 2H'])],
+    [message('editor.tm.cat.rows', 'Rows'), [
+      ['r:clock', message('editor.tm.clockRow', 'Clock row'), tbl(['8{c}'])], ['r:signal', message('editor.tm.signalRow', 'Signal row'), tbl(['L 2H L 2H'])], ['r:bus', message('editor.tm.busRow', 'Bus row'), tbl(['U 2D{} 2D{} U'])],
+      ['r:blank', message('editor.tm.blankRow', 'Blank row'), tbl(['L 2H L 2H', '', 'L 2H L 2H'])],
     ]],
-    ['Annotations', [
-      ['a:<->', 'Interval', tbl(['L 4H'], '\\draw[<->] (1,1.6) -- (4,1.6);'), 'I'], ['a:->', 'Delay', tbl(['L 4H'], '\\draw[->] (1,1.6) -- (4,1.6);'), 'A'],
-      ['a:mark', 'Marker line', tbl(['L 2H 2L'], '\\vertlines[help lines]{1,3}'), 'K'],
-      ['a:brk', 'Break', tbl(['L 2H 2L'], '\\foreach \\y in {0} {\\fill[white] (2.3,\\y-.2) -- (2.5,\\y+1.2) -- (2.7,\\y+1.2) -- (2.5,\\y-.2) -- cycle; \\draw (2.3,\\y-.2) -- (2.5,\\y+1.2) (2.5,\\y-.2) -- (2.7,\\y+1.2);}'), 'B'],
+    [message('editor.tm.cat.annotations', 'Annotations'), [
+      ['a:<->', message('editor.tm.interval', 'Interval'), tbl(['L 4H'], '\\draw[<->] (1,1.6) -- (4,1.6);'), 'I'], ['a:->', message('editor.tm.delay', 'Delay'), tbl(['L 4H'], '\\draw[->] (1,1.6) -- (4,1.6);'), 'A'],
+      ['a:mark', message('editor.tm.markerLine', 'Marker line'), tbl(['L 2H 2L'], '\\vertlines[help lines]{1,3}'), 'K'],
+      ['a:brk', message('editor.tm.break', 'Break'), tbl(['L 2H 2L'], '\\foreach \\y in {0} {\\fill[white] (2.3,\\y-.2) -- (2.5,\\y+1.2) -- (2.7,\\y+1.2) -- (2.5,\\y-.2) -- cycle; \\draw (2.3,\\y-.2) -- (2.5,\\y+1.2) (2.5,\\y-.2) -- (2.7,\\y+1.2);}'), 'B'],
     ]],
   ];
   const ITEM: Record<string, any> = {}, KEYS: Record<string, any> = {};
@@ -170,6 +174,7 @@ import { runtime as TD } from '../runtime';
   // { M, sel: { r, i } (a segment) | { row } | { x } (an annotation) | { x, j } (a marker) | null, arm, view: { k (px per period), ox, oy },
   //   undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  let stopLocale: (() => void) | null = null;
   const snapCode = () => codeOf(E.M);
   function begin() { if (E.pending == null) E.pending = snapCode(); }
   function commit() {
@@ -343,13 +348,15 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k.slice(2)} ${title}`.toLowerCase().includes(q));
+    for (const [cat, items] of PAL) {
+      // search the shown name and the English one
+      const title = caption(cat);
+      const hits = (items as any).filter(([k, name]: any) => !q || `${caption(name)} ${name.fallback} ${k.slice(2)} ${title} ${cat.fallback}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) =>
-        `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.timingMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => { const name = caption(label); return (
+        `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.timingMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`); }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 64, 34, 3);
   }
   search.addEventListener('input', buildPalette);
@@ -364,13 +371,13 @@ import { runtime as TD } from '../runtime';
     if (k[0] === 'v' && !E.arm && E.sel && E.sel.r != null) { setValue(E.sel.r, E.sel.i, k.slice(2)); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    const name = ITEM[k].name;
-    setHint(!E.arm ? '' : k[0] === 'v' ? armHint() : k === 'a:mark' ? 'Marker line: click a time, or Esc.' : k === 'a:brk' ? 'Break: click a time to break every row there, or Esc.' : `${name}: drag from one edge to another, or Esc.`);
+    const name = caption(ITEM[k].name);
+    setHint(!E.arm ? '' : k[0] === 'v' ? armHint() : k === 'a:mark' ? uiText('editor.tm.armMark', 'Marker line: click a time, or Esc.') : k === 'a:brk' ? uiText('editor.tm.armBreak', 'Break: click a time to break every row there, or Esc.') : uiText('editor.tm.armAnnot', '{name}: drag from one edge to another, or Esc.', { name }));
   }
   function setHint(t: any) { tip.textContent = t; tip.hidden = !t; }
   function disarm() { if (!E.arm) return; E.arm = null; buildPalette(); setHint(''); }
   // a value stays picked for painting until Esc; its hint stays up meanwhile
-  const armHint = () => (E.arm && E.arm[0] === 'v' ? `${ITEM[E.arm].name}: drag along a row to paint it, or click a segment. Esc when done.` : '');
+  const armHint = () => (E.arm && E.arm[0] === 'v' ? uiText('editor.tm.armValue', '{name}: drag along a row to paint it, or click a segment. Esc when done.', { name: caption(ITEM[E.arm].name) }) : '');
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -447,7 +454,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(4, Math.min(300, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(4, Math.min(300, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -499,10 +506,10 @@ import { runtime as TD } from '../runtime';
       // below the last row, and below any arrow or label hanging under it
       const n = E.M.rows.length, [X0, Yr] = n ? m(0, baseOf(n - 1) - 1) : [W / 2 - 170, H / 2], Y = n && !L.empty ? Math.max(Yr, S(0, L.bb.y + L.bb.h)[1]) + 22 : Yr;
       let x = X0;
-      for (const [kind, name] of [['signal', 'Signal row'], ['clock', 'Clock row'], ['bus', 'Bus row'], ['blank', 'Blank row']]) {
+      for (const [kind, name] of [['signal', uiText('editor.tm.signalRow', 'Signal row')], ['clock', uiText('editor.tm.clockRow', 'Clock row')], ['bus', uiText('editor.tm.busRow', 'Bus row')], ['blank', uiText('editor.tm.blankRow', 'Blank row')]]) {
         const w = 104, on = E.hover && E.hover.add === kind;
         E.adds.push({ kind, x1: x, x2: x + w, y1: Y - 13, y2: Y + 13 });
-        out += `<g class="tm-add${on ? ' on' : ''}"><rect x="${r2(x)}" y="${r2(Y - 13)}" width="${w}" height="26" rx="6"/><path d="M${r2(x + 13)},${r2(Y)}h10M${r2(x + 18)},${r2(Y - 5)}v10"/><text x="${r2(x + 30)}" y="${r2(Y + 4)}">${name}</text></g>`;
+        out += `<g class="tm-add${on ? ' on' : ''}"><rect x="${r2(x)}" y="${r2(Y - 13)}" width="${w}" height="26" rx="6"/><path d="M${r2(x + 13)},${r2(Y)}h10M${r2(x + 18)},${r2(Y - 5)}v10"/><text x="${r2(x + 30)}" y="${r2(Y + 4)}">${esc(name)}</text></g>`;
         x += w + 8;
       }
     }
@@ -608,10 +615,10 @@ import { runtime as TD } from '../runtime';
     if (d.mode === 'paint') {
       if (!d.moved && Math.abs(sx - d.sx) < 4) return;
       d.moved = true; d.b = Math.max(0, paintT(t, e.altKey));
-      setHint(`${ITEM[E.arm].name} from ${T.num(Math.min(d.a, d.b))} to ${T.num(Math.max(d.a, d.b))}`);
+      setHint(uiText('editor.tm.paintRange', '{name} from {a} to {b}', { name: caption(ITEM[E.arm].name), a: T.num(Math.min(d.a, d.b)), b: T.num(Math.max(d.a, d.b)) }));
       draw(); return;
     }
-    if (d.mode === 'annot') { d.t2 = snapEdge(t, e.altKey); setHint(`From ${T.num(d.t1)} to ${T.num(d.t2)}: ${T.num(Math.abs(d.t2 - d.t1))} periods`); draw(); return; }
+    if (d.mode === 'annot') { d.t2 = snapEdge(t, e.altKey); setHint(uiText('editor.tm.annotRange', 'From {a} to {b}: {n} periods', { a: T.num(d.t1), b: T.num(d.t2), n: T.num(Math.abs(d.t2 - d.t1)) })); draw(); return; }
     if (d.mode === 'edge') {
       if (!d.moved && Math.abs(sx - d.sx) < 3) return;
       if (!d.moved) { begin(); d.moved = true; }
@@ -622,7 +629,7 @@ import { runtime as TD } from '../runtime';
       if (d.n >= 0) row.segs[d.n].w = ripple ? d.wn : round(d.nextEnd - nt);
       for (const f of d.follow) E.M.ext[f.xi]['x' + f.end] = nt, xdirty(E.M.ext[f.xi]);
       touch(row);
-      setHint(`Edge at ${T.num(nt)}${ripple && d.n >= 0 ? ' · the rest of the row moves along' : e.shiftKey ? '' : ' · ⇧ moves the rest of the row along, ⌥ places freely'}`);
+      setHint(ripple && d.n >= 0 ? uiText('editor.tm.edgeAtRipple', 'Edge at {t} · the rest of the row moves along', { t: T.num(nt) }) : e.shiftKey ? uiText('editor.tm.edgeAt', 'Edge at {t}', { t: T.num(nt) }) : uiText('editor.tm.edgeAtHelp', 'Edge at {t} · ⇧ moves the rest of the row along, ⌥ places freely', { t: T.num(nt) }));
       draw(); return;
     }
     if (d.mode === 'move') {
@@ -633,7 +640,7 @@ import { runtime as TD } from '../runtime';
       na = Math.max(d.a0 - d.wp + min, Math.min(d.a0 + d.wn - min, na));
       row.segs[d.p].w = round(d.wp + na - d.a0); row.segs[d.n].w = round(d.wn - (na - d.a0));
       touch(row);
-      setHint(`Starts at ${T.num(na)}`);
+      setHint(uiText('editor.tm.startsAt', 'Starts at {t}', { t: T.num(na) }));
       draw(); return;
     }
     if (d.mode === 'amove') {
@@ -646,20 +653,20 @@ import { runtime as TD } from '../runtime';
     if (d.mode === 'aend') {
       const x = E.M.ext[d.x];
       x['x' + d.end] = snapEdge(t, e.altKey);
-      xdirty(x); setHint(`${T.num(Math.abs(x.x2 - x.x1))} periods`); draw(); return;
+      xdirty(x); setHint(uiText('editor.tm.nPeriods', '{n} periods', { n: T.num(Math.abs(x.x2 - x.x1)) })); draw(); return;
     }
     if (d.mode === 'bmove') {
       if (!d.moved && Math.abs(sx - d.sx) < 3) return;
       if (!d.moved) { begin(); d.moved = true; }
       const x = E.M.ext[d.x];
-      x.t = Math.max(0.2, snapT(t, !e.altKey)); xdirty(x); setHint(`Break at ${T.num(x.t)}`); draw(); return;
+      x.t = Math.max(0.2, snapT(t, !e.altKey)); xdirty(x); setHint(uiText('editor.tm.breakAt', 'Break at {t}', { t: T.num(x.t) })); draw(); return;
     }
     if (d.mode === 'mmove') {
       if (!d.moved && Math.abs(sx - d.sx) < 3) return;
       if (!d.moved) { begin(); d.moved = true; }
       const x = E.M.ext[d.x], v = markVals(x);
       v[d.j] = Math.max(0, snapEdge(t, e.altKey));
-      setMarks(x, v); setHint(`Marker at ${T.num(v[d.j])}`); draw();
+      setMarks(x, v); setHint(uiText('editor.tm.markerAt', 'Marker at {t}', { t: T.num(v[d.j]) })); draw();
     }
   });
   svg.addEventListener('pointerup', (e: any) => {
@@ -703,27 +710,27 @@ import { runtime as TD } from '../runtime';
     add: '<path d="M10 4v12M4 10h12"/>',
     rev: '<path d="M3 7h12l-3-3M17 13H5l3 3"/>',
   };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/del$/.test(act) ? ' danger' : ''}" data-tm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/del$/.test(act) ? ' danger' : ''}" data-tm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
     if (!E) return;
     const h = hitAt(e);
     E.menuAt = toT(e)[0];
-    if (h && h.brk) { E.sel = { x: h.x }; menu.innerHTML = mItem('bdel', 'Delete Break', 'del', '⌫'); }
-    else if (h && h.x != null && h.j == null) { E.sel = { x: h.x }; menu.innerHTML = mItem('label', 'Edit Label', 'label', '↩') + mItem('side', 'Label Other Side', 'above') + mItem('flip', 'Reverse Arrow', 'rev') + '<hr>' + mItem('adel', 'Delete Arrow', 'del', '⌫'); }
-    else if (h && h.j != null) { E.sel = { x: h.x, j: h.j }; menu.innerHTML = mItem('mdel', 'Delete Marker', 'del', '⌫'); }
+    if (h && h.brk) { E.sel = { x: h.x }; menu.innerHTML = mItem('bdel', uiText('editor.tm.deleteBreak', 'Delete Break'), 'del', '⌫'); }
+    else if (h && h.x != null && h.j == null) { E.sel = { x: h.x }; menu.innerHTML = mItem('label', uiText('editor.tm.editLabel', 'Edit Label'), 'label', '↩') + mItem('side', uiText('editor.tm.labelOtherSide', 'Label Other Side'), 'above') + mItem('flip', uiText('editor.tm.reverseArrow', 'Reverse Arrow'), 'rev') + '<hr>' + mItem('adel', uiText('editor.tm.deleteArrow', 'Delete Arrow'), 'del', '⌫'); }
+    else if (h && h.j != null) { E.sel = { x: h.x, j: h.j }; menu.innerHTML = mItem('mdel', uiText('editor.tm.deleteMarker', 'Delete Marker'), 'del', '⌫'); }
     else if (h && h.row != null) {
       E.sel = { row: h.row };
-      menu.innerHTML = mItem('label', 'Edit Name', 'label', '↩') + mItem('insa', 'Insert Row Above', 'above') + mItem('insb', 'Insert Row Below', 'below') + '<hr>' + mItem('up', 'Move Up', 'up') + mItem('down', 'Move Down', 'down') + mItem('dup', 'Duplicate Row', 'dup') + '<hr>' + mItem('rdel', 'Delete Row', 'del');
+      menu.innerHTML = mItem('label', uiText('editor.tm.editName', 'Edit Name'), 'label', '↩') + mItem('insa', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above') + mItem('insb', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below') + '<hr>' + mItem('up', uiText('editor.tm.moveUp', 'Move Up'), 'up') + mItem('down', uiText('editor.tm.moveDown', 'Move Down'), 'down') + mItem('dup', uiText('editor.tm.duplicateRow', 'Duplicate Row'), 'dup') + '<hr>' + mItem('rdel', uiText('editor.commonB.deleteRow', 'Delete Row'), 'del');
     } else if (h && (h.i != null || h.edge != null)) {
       const i = h.i != null ? h.i : h.edge;
       E.sel = { r: h.r, i };
       const s = selSeg();
-      menu.innerHTML = (s.c === 'D' ? mItem('label', 'Edit Text', 'label', '↩') : '') + (s.c !== 'G' ? mItem('split', 'Split Here', 'split') : '') + mItem('rowsel', 'Select Row', 'above') + '<hr>' + mItem('sdel', 'Delete Segment', 'del', '⌫');
+      menu.innerHTML = (s.c === 'D' ? mItem('label', uiText('editor.tm.editText', 'Edit Text'), 'label', '↩') : '') + (s.c !== 'G' ? mItem('split', uiText('editor.tm.splitHere', 'Split Here'), 'split') : '') + mItem('rowsel', uiText('editor.tm.selectRow', 'Select Row'), 'above') + '<hr>' + mItem('sdel', uiText('editor.tm.deleteSegment', 'Delete Segment'), 'del', '⌫');
     } else if (!h || h.past || h.add) {
       E.sel = null;
-      menu.innerHTML = mItem('add:signal', 'Add Signal Row', 'add') + mItem('add:clock', 'Add Clock Row', 'add') + mItem('add:bus', 'Add Bus Row', 'add') + mItem('add:blank', 'Add Blank Row', 'add');
+      menu.innerHTML = mItem('add:signal', uiText('editor.tm.addSignalRow', 'Add Signal Row'), 'add') + mItem('add:clock', uiText('editor.tm.addClockRow', 'Add Clock Row'), 'add') + mItem('add:bus', uiText('editor.tm.addBusRow', 'Add Bus Row'), 'add') + mItem('add:blank', uiText('editor.tm.addBlankRow', 'Add Blank Row'), 'add');
     } else { closeMenu(); return; }
     draw(); renderProps();
     menu.hidden = false;
@@ -793,32 +800,36 @@ import { runtime as TD } from '../runtime';
       const sp = spansOf(E.sel.r)[E.sel.i], rname = M.rows[E.sel.r].name, band = sg.c === 'D' || sg.c === 'U', clock = sg.c === 'C' || sg.c === 'T';
       const run = clock ? runOf(E.sel.r, E.sel.i) : null, ws = run ? M.rows[E.sel.r].segs.slice(run.a, run.b + 1).map((q: any) => q.w) : [], clockW = ws.every((w: any) => Math.abs(w - ws[0]) < 1e-6) ? ws[0] : null;
       const p = bgParts(sg.bg);
-      show(T.VALUE_NAMES[sg.c], `${rname || `Row ${E.sel.r + 1}`} · ${T.num(sp.a)}–${T.num(sp.b)}`, [
-        selectField('Value', 'value', sg.c, T.VALUES.map((c: any) => [c, `${T.VALUE_NAMES[c]} (${c})`])), numeric(clock ? 'Step width' : 'Width', 'w', sg.w, 'periods', 0.5, sg.c === 'G' ? { disabled: true } : { min: '0.05' }),
-        ...(clock ? [numeric('Clock width', 'cw', clockW, 'periods', 0.5, { min: '0.25' })] : []), ...(sg.c === 'D' ? [field('Text', 't', sg.t || '', { 'data-tx': 'text', placeholder: 'none' })] : []),
-        ...(band ? [{ ...row('Fill', texColour(p.c, { 'data-f': 'bg' }, { nullable: true, defaultSwatch: p.hatch ? '#000000' : sg.c === 'U' ? '#808080' : '', title: 'Fill' })), controlClass: 'ctl tc' }, segments('Pattern', 'bgpat', p.hatch ? '1' : '0', [['0', 'Solid'], ['1', 'Hatched']])] : []),
-        ...(sg.c === 'D' ? [segments('Starts', 'newv', sg.t == null ? 0 : 1, [[1, 'New value', 'A crossing where it starts: D{…}'], [0, 'Continues', 'No crossing: the value before goes on']], sg.t != null && sg.t !== '')] : []),
-        note(...(clock ? [`Clock width sets every step of this ${sg.c === 'C' ? 'clock' : 'toggle'} (${run!.b - run!.a + 1} steps, each a high or a low) and keeps about the same length: 2 writes `, { code: '2C' }, '. Step width changes only this step. '] : []), 'Drag its edges along the row; ', { kbd: '⇧' }, ' moves the rest of the row with an edge. Drag the segment to move it between its neighbours.'),
+      const periods = uiText('editor.tm.unitPeriods', 'periods');
+      show(T.VALUE_NAMES[sg.c], `${rname || uiText('editor.tm.rowN', 'Row {n}', { n: E.sel.r + 1 })} · ${T.num(sp.a)}–${T.num(sp.b)}`, [
+        selectField(uiText('editor.tm.value', 'Value'), 'value', sg.c, T.VALUES.map((c: any) => [c, `${T.VALUE_NAMES[c]} (${c})`])), numeric(clock ? uiText('editor.tm.stepWidth', 'Step width') : uiText('editor.tm.width', 'Width'), 'w', sg.w, periods, 0.5, sg.c === 'G' ? { disabled: true } : { min: '0.05' }),
+        ...(clock ? [numeric(uiText('editor.tm.clockWidth', 'Clock width'), 'cw', clockW, periods, 0.5, { min: '0.25' })] : []), ...(sg.c === 'D' ? [field(uiText('editor.tm.text', 'Text'), 't', sg.t || '', { 'data-tx': 'text', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') })] : []),
+        ...(band ? [{ ...row(captions["ui.fill"], texColour(p.c, { 'data-f': 'bg' }, { nullable: true, defaultSwatch: p.hatch ? '#000000' : sg.c === 'U' ? '#808080' : '', title: uiText('editor.tm.fill', 'Fill') })), controlClass: 'ctl tc' }, segments(uiText('editor.tm.pattern', 'Pattern'), 'bgpat', p.hatch ? '1' : '0', [['0', uiText('editor.tm.solid', 'Solid')], ['1', uiText('editor.tm.hatched', 'Hatched')]])] : []),
+        ...(sg.c === 'D' ? [segments(uiText('editor.tm.starts', 'Starts'), 'newv', sg.t == null ? 0 : 1, [[1, uiText('editor.tm.newValue', 'New value'), uiText('editor.tm.newValueTitle', 'A crossing where it starts: D{…}')], [0, uiText('editor.tm.continues', 'Continues'), uiText('editor.tm.continuesTitle', 'No crossing: the value before goes on')]], sg.t != null && sg.t !== '')] : []),
+        note(...(clock ? [sg.c === 'C' ? uiText('editor.tm.clockNoteClock', 'Clock width sets every step of this clock ({n} steps, each a high or a low) and keeps about the same length: 2 writes ', { n: run!.b - run!.a + 1 }) : uiText('editor.tm.clockNoteToggle', 'Clock width sets every step of this toggle ({n} steps, each a high or a low) and keeps about the same length: 2 writes ', { n: run!.b - run!.a + 1 }), { code: '2C' }, uiText('editor.tm.clockNoteEnd', '. Step width changes only this step. ')] : []), uiText('editor.tm.segNote1', 'Drag its edges along the row; '), { kbd: '⇧' }, uiText('editor.tm.segNote2', ' moves the rest of the row with an edge. Drag the segment to move it between its neighbours.')),
       ]); return;
     }
     if (signal) {
-      show(signal.segs.length ? 'Signal' : 'Blank row', signal.segs.length ? `${signal.segs.length} segment${signal.segs.length === 1 ? '' : 's'} · ${T.num(rowEnd(E.sel.row))} periods` : 'a gap between rows; type characters to make it a signal', [
-        field('Name', 'name', signal.name, { 'data-tx': 'text', placeholder: 'none' }), selectField('Starts from', 'init', signal.init || '', [['', 'Nothing'], ['L', 'Low'], ['H', 'High'], ['Z', 'High impedance'], ['X', 'Unknown'], ['D', 'Data']]), field('Characters', 'chars', T.charsCode(signal), { class: 'mono' }),
-        ...(signal.ropts ? [field('Options', 'ropts', signal.ropts, { class: 'mono' })] : []), note('Characters: ', { code: 'H L Z X D{text} U M G S C T' }, '; a number in front sets the width (', { code: '3H' }, '), lower case is half (', { code: 'h' }, '), ', { code: '4{C}' }, ' repeats.'),
+      const ns = signal.segs.length, len = T.num(rowEnd(E.sel.row));
+      show(ns ? uiText('editor.tm.signal', 'Signal') : uiText('editor.tm.blankRow', 'Blank row'), ns ? (ns === 1 ? uiText('editor.tm.oneSegment', '1 segment · {len} periods', { len }) : uiText('editor.tm.nSegments', '{n} segments · {len} periods', { n: ns, len })) : uiText('editor.tm.blankSummary', 'a gap between rows; type characters to make it a signal'), [
+        field(uiText('editor.tm.name', 'Name'), 'name', signal.name, { 'data-tx': 'text', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }), selectField(uiText('editor.tm.startsFrom', 'Starts from'), 'init', signal.init || '', [['', uiText('editor.tm.nothing', 'Nothing')], ['L', uiText('editor.tm.low', 'Low')], ['H', uiText('editor.tm.high', 'High')], ['Z', uiText('editor.tm.highImpedance', 'High impedance')], ['X', uiText('editor.tm.unknown', 'Unknown')], ['D', uiText('editor.tm.data', 'Data')]]), field(uiText('editor.tm.characters', 'Characters'), 'chars', T.charsCode(signal), { class: 'mono' }),
+        ...(signal.ropts ? [field(uiText('editor.commonB.options', 'Options'), 'ropts', signal.ropts, { class: 'mono' })] : []), note(uiText('editor.tm.charsNote1', 'Characters: '), { code: 'H L Z X D{text} U M G S C T' }, uiText('editor.tm.charsNote2', '; a number in front sets the width ('), { code: '3H' }, uiText('editor.tm.charsNote3', '), lower case is half ('), { code: 'h' }, '), ', { code: '4{C}' }, uiText('editor.tm.charsNote4', ' repeats.')),
       ]); return;
     }
     if (an) {
-      show('Arrow', `${T.num(Math.abs(an.x2 - an.x1))} periods`, [field('Label', 'alabel', mathOf(an.t || ''), { 'data-tx': 'math', placeholder: 'none' }),
-        segments('Tips', 'tips', tipOpt(an), [['<->', '↔', '<->'], ['->', '→', '->'], ['<-', '←', '<-'], ['|<->|', '|↔|', '|<->|'], ['-', '—', 'No tips']]), segments('Label side', 'side', sideOf(an), [['above', 'Above'], ['below', 'Below']], !an.t), segments('Line', 'dash', dashedOf(an) ? 1 : 0, [[0, 'Solid'], [1, 'Dashed']]),
-        numeric('From', 'x1', an.x1, 'periods'), numeric('To', 'x2', an.x2, 'periods'), numeric('Height', 'ay', an.y1, 'units', 0.25), field('Options', 'aopts', an.o.filter((it: any) => !/^[<>|]*-[<>|]*$/.test(it.trim()) && !/^(loosely |densely )?(dashed|dotted)$/.test(it.trim())).join(', '), { class: 'mono', placeholder: 'e.g. blue, thick' }),
+      const periods = uiText('editor.tm.unitPeriods', 'periods');
+      show(uiText('editor.tm.arrow', 'Arrow'), uiText('editor.tm.nPeriods', '{n} periods', { n: T.num(Math.abs(an.x2 - an.x1)) }), [field(uiText('editor.tm.label', 'Label'), 'alabel', mathOf(an.t || ''), { 'data-tx': 'math', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }),
+        segments(uiText('editor.tm.tips', 'Tips'), 'tips', tipOpt(an), [['<->', '↔', '<->'], ['->', '→', '->'], ['<-', '←', '<-'], ['|<->|', '|↔|', '|<->|'], ['-', '—', uiText('editor.tm.noTips', 'No tips')]]), segments(uiText('editor.tm.labelSide', 'Label side'), 'side', sideOf(an), [['above', uiText('editor.tm.above', 'Above')], ['below', uiText('editor.tm.below', 'Below')]], !an.t), segments(uiText('editor.tm.line', 'Line'), 'dash', dashedOf(an) ? 1 : 0, [[0, uiText('editor.tm.solid', 'Solid')], [1, uiText('editor.tm.dashed', 'Dashed')]]),
+        numeric(uiText('editor.tm.from', 'From'), 'x1', an.x1, periods), numeric(uiText('editor.tm.to', 'To'), 'x2', an.x2, periods), numeric(uiText('editor.tm.height', 'Height'), 'ay', an.y1, uiText('editor.tm.unitUnits', 'units'), 0.25), field(uiText('editor.commonB.options', 'Options'), 'aopts', an.o.filter((it: any) => !/^[<>|]*-[<>|]*$/.test(it.trim()) && !/^(loosely |densely )?(dashed|dotted)$/.test(it.trim())).join(', '), { class: 'mono', placeholder: uiText('editor.tm.optsPlaceholder', 'e.g. blue, thick') }),
       ]); return;
     }
     const bk = selBrk();
-    if (bk) { show('Break', `across ${bk.ys.length} row${bk.ys.length === 1 ? '' : 's'}`, [numeric('Time', 'bt', bk.t, 'periods'), note('Drag it along the rows. It is drawn in the extra code, over every row that has a signal.')]); return; }
-    if (mk) { show('Marker line', '\\vertlines', [numeric('Time', 'mt', markVals(mk)[E.sel.j], 'periods'), segments('Style', 'mstyle', /help lines/.test(mk.o) ? 'help' : /dashed/.test(mk.o) ? 'dashed' : 'solid', [['help', 'Help line'], ['dashed', 'Dashed'], ['solid', 'Solid']]), note('The style is shared by every marker written in the same ', { code: '\\vertlines' }, '.')]); return; }
+    if (bk) { show(uiText('editor.tm.break', 'Break'), bk.ys.length === 1 ? uiText('editor.tm.acrossOne', 'across 1 row') : uiText('editor.tm.acrossN', 'across {n} rows', { n: bk.ys.length }), [numeric(uiText('editor.tm.time', 'Time'), 'bt', bk.t, uiText('editor.tm.unitPeriods', 'periods')), note(uiText('editor.tm.breakNote', 'Drag it along the rows. It is drawn in the extra code, over every row that has a signal.'))]); return; }
+    if (mk) { show(uiText('editor.tm.markerLine', 'Marker line'), '\\vertlines', [numeric(uiText('editor.tm.time', 'Time'), 'mt', markVals(mk)[E.sel.j], uiText('editor.tm.unitPeriods', 'periods')), segments(uiText('editor.tm.style', 'Style'), 'mstyle', /help lines/.test(mk.o) ? 'help' : /dashed/.test(mk.o) ? 'dashed' : 'solid', [['help', uiText('editor.tm.helpLine', 'Help line')], ['dashed', uiText('editor.tm.dashed', 'Dashed')], ['solid', uiText('editor.tm.solid', 'Solid')]]), note(uiText('editor.tm.markNote', 'The style is shared by every marker written in the same '), { code: '\\vertlines' }, uiText('editor.tm.markNoteEnd', '.'))]); return; }
     const c = cfg(), grid = M.ext.find((x: any) => x.k === 'grid' || x.k === 'fullgrid'), sl = toptOf('timing/slope'), maxW = M.rows.reduce((a: any, _: any, r: any) => Math.max(a, rowEnd(r)), 0);
-    show('Table', `${M.rows.length} signal${M.rows.length === 1 ? '' : 's'} · ${T.num(maxW)} periods`, [numeric('Row distance', 'rowdist', c.rowdist, 'heights', 0.5, { min: '1' }), numeric('Slope', 'slope', sl != null ? parseFloat(sl) : c.lslope, 'periods', 0.05, { min: '0', max: '1' }), segments('Grid', 'grid', grid ? grid.k : 'none', [['none', 'None'], ['grid', 'Rows', '\\tablegrid'], ['fullgrid', 'Full', '\\fulltablegrid']]),
-      note('Add a row with the buttons under the last row, from Rows on the left, or by right-clicking a row name. Click a value to paint with it: drag along a row, or click a segment. Drag edges to move transitions. Draw arrows between edges for setup, hold and delay times. Double-click a name or data value to type it.')]);
+    const nsig = M.rows.length, len = T.num(maxW);
+    show(uiText('editor.tm.table', 'Table'), nsig === 1 ? uiText('editor.tm.oneSignalPeriods', '1 signal · {len} periods', { len }) : uiText('editor.tm.nSignalsPeriods', '{n} signals · {len} periods', { n: nsig, len }), [numeric(uiText('editor.tm.rowDistance', 'Row distance'), 'rowdist', c.rowdist, uiText('editor.tm.unitHeights', 'heights'), 0.5, { min: '1' }), numeric(uiText('editor.tm.slope', 'Slope'), 'slope', sl != null ? parseFloat(sl) : c.lslope, uiText('editor.tm.unitPeriods', 'periods'), 0.05, { min: '0', max: '1' }), segments(uiText('editor.tm.grid', 'Grid'), 'grid', grid ? grid.k : 'none', [['none', uiText('editor.tm.gridNone', 'None')], ['grid', uiText('editor.tm.gridRows', 'Rows'), '\\tablegrid'], ['fullgrid', uiText('editor.tm.gridFull', 'Full'), '\\fulltablegrid']]),
+      note(uiText('editor.tm.tableNote', 'Add a row with the buttons under the last row, from Rows on the left, or by right-clicking a row name. Click a value to paint with it: drag along a row, or click a segment. Drag edges to move transitions. Draw arrows between edges for setup, hold and delay times. Double-click a name or data value to type it.'))]);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { begin(); E.cwSpan = null; E.rdFrom = null; } });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
@@ -921,7 +932,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'delete' || a === 'sdel' || a === 'rdel' || a === 'adel' || a === 'mdel' || a === 'bdel') deleteSel();
     else if (a === 'label') { if (s) editLabel(s); }
     else if (a.startsWith('add:')) addRow(a.slice(4), E.M.rows.length);
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     else if (!s) return;
     else if (a === 'split' && s.r != null) splitSeg(s.r, s.i, snapT(E.menuAt, true));
     else if (a === 'rowsel' && s.r != null) { E.sel = { row: s.r }; draw(); renderProps(); }
@@ -938,7 +949,7 @@ import { runtime as TD } from '../runtime';
   function syncCode() {
     const M = E.M;
     const nA = M.ext.filter((x: any) => x.k === 'annot').length;
-    count.textContent = `${M.rows.length} signal${M.rows.length === 1 ? '' : 's'} · ${nA} arrow${nA === 1 ? '' : 's'}`;
+    count.textContent = `${M.rows.length === 1 ? uiText('editor.tm.oneSignal', '1 signal') : uiText('editor.tm.nSignals', '{n} signals', { n: M.rows.length })} · ${nA === 1 ? uiText('editor.tm.oneArrow', '1 arrow') : uiText('editor.tm.nArrows', '{n} arrows', { n: nA })}`;
     updateTools();
     if (document.activeElement === codeTa) return;
     const c = snapCode();
@@ -1014,8 +1025,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setHint('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setHint(''); }, 1500);
+    const saved = uiText('editor.commonB.saved', 'Saved to the page');
+    setHint(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setHint(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snapCode() !== E.start);
@@ -1026,8 +1038,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this diagram?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(uiText('editor.commonB.discardDiagram', 'Discard changes to this diagram?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
+    stopLocale?.(); stopLocale = null;
     root.hidden = true;
     document.body.classList.remove('cz-open');
     E = null;
@@ -1041,6 +1054,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setHint('');
+    // the palette, panel and drawing's captions follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

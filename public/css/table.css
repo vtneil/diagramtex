@@ -6,15 +6,15 @@
 body.mode-table #tableview { display: block; flex: 1; order: 2; min-width: 0; position: relative; background: var(--paper); }
 body.mode-table #tools, body.mode-table #stage, body.mode-table #docview, body.mode-table #quick,
 body.mode-table #layersWin,
-body.mode-table #topbar > .group:not(.files-grp), body.mode-table #docName, body.mode-table #saveState,
+body.mode-table #topbar .group:not(.files-grp),
 body.mode-table #blockSel, body.mode-table #classicSeg { display: none !important; }
 /* hidden but keeping their room, so the mode switch and the sidebar's engine box stay where they are */
-body.mode-table #topbar > .files-grp, body.mode-table #files .panel-head, body.mode-table #docList, body.mode-table #binRow, body.mode-table #gridFlags { visibility: hidden; }
+body.mode-table #docName, body.mode-table #saveState, body.mode-table #topbar .files-grp, body.mode-table #files .panel-head, body.mode-table #docList, body.mode-table #binRow, body.mode-table #gridFlags { visibility: hidden; }
 body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 
 .tbw {
   /* the grid is content (white in both appearances), so its headers keep the light look in dark too */
-  --tb-rule: #1c1b19; --tb-grid: #e3e0d8; --tb-head: #f6f4ef; --tb-head-ink: #6f6c64; --tb-head-rule: rgba(28, 27, 25, .12);
+  --tb-rule: #1c1b19; --tb-grid: #e3e0d8; --tb-head: color-mix(in srgb, var(--canvas), #1c1b19 4%); --tb-head-ink: #6f6c64; --tb-head-rule: rgba(28, 27, 25, .12);
   position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px;
   padding: 8px calc(var(--props-w) + 24px) 8px 16px;
 }
@@ -64,7 +64,7 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-fxin:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 22%, transparent); }
 
 /* ---- the grid ---- */
-.tb-gridwrap { flex: 1 1 55%; min-height: 140px; position: relative; overflow: auto; border: 1px solid var(--rule-strong); border-radius: var(--r-lg); background: #fff; outline: none; }
+.tb-gridwrap { flex: 1 1 55%; min-height: 140px; position: relative; overflow: auto; border: 1px solid var(--rule-strong); border-radius: var(--r-lg); background: var(--canvas); outline: none; } /* the paper, as the diagram sheet */
 .tb-gridwrap:focus-visible { border-color: var(--bluepen); }
 .tb-grid { display: inline-block; min-width: 100%; }
 /* the table with a 28px band right of it and under it; hovering a band shows a dashed + strip that adds a column
@@ -98,10 +98,11 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-selbox.multi { background: rgba(200, 54, 29, .06); }
 .tb-selbox[hidden] { display: none; }
 .tb-gridwrap:not(:focus-within) .tb-selbox { border-color: color-mix(in srgb, var(--redpen) 55%, transparent); }
-/* editing in place (blue pen: focus) */
-.tb-edit { position: absolute; z-index: 4; box-sizing: border-box; padding: 3px 7px; margin: 0; resize: none; overflow: hidden;
-  border: 2px solid var(--bluepen); border-radius: 2px; background: #fff; color: #1c1b19; font-family: var(--font-mono); line-height: 1.35; outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 20%, transparent), var(--shadow-pop); }
+/* editing in place: the canvas text editor's card (#inlineEditor), in the interface's own appearance, over the cell;
+   the app-wide focus ring (:focus-visible) gives it the same blue double edge */
+.tb-edit { position: absolute; z-index: 4; box-sizing: border-box; padding: 6px 10px; margin: 0; resize: none; overflow: hidden;
+  border: 1px solid var(--bluepen); border-radius: var(--r); background: var(--sheet-raised); color: var(--ink);
+  font: 14px/1.5 var(--font-mono); box-shadow: var(--shadow-pop); }
 
 /* ---- preview and LaTeX ---- */
 .tb-out { flex: 1 1 45%; min-height: 160px; display: flex; flex-direction: column; border: 1px solid var(--rule-strong); border-radius: var(--r-lg); background: var(--sheet); overflow: hidden; }
@@ -121,7 +122,7 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-join > button:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .tb-join > button:hover, .tb-join > button:focus-visible { position: relative; z-index: 1; }
 .tb-outbar select { width: 92px; }
-.tb-prev { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 16px; background: #fff; }
+.tb-prev { flex: 1; min-height: 0; overflow: auto; display: flex; padding: 16px; background: var(--canvas); }
 .tb-prev > svg { margin: auto; flex: none; color: #000; }
 .tb-prev[hidden], .tb-code[hidden] { display: none; }
 .tb-code { flex: 1; min-height: 0; padding: 12px 16px 12px 0; overflow: auto; white-space: pre; user-select: text; cursor: text; background: var(--sheet-raised); font: 12px/1.6 var(--font-mono); color: var(--ink); }

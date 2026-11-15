@@ -6,16 +6,17 @@
 
 **DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ**, **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata**, **pgf-umlcd**, **pgf-umlsd**, **karnaugh-map**, **bytefield**, **chemfig**, **blochsphere** and **booktabs** table code for LaTeX. Draw shapes, arrows, circuits, plots, commutative diagrams, quantum circuits, trees, ZX diagrams, Feynman diagrams, 2D and 3D geometry, timing diagrams, state machines, UML class and sequence diagrams, Karnaugh maps, bit fields, chemical structures and reaction schemes, Bloch spheres and data tables with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
-It is **free and open source** ([GNU GPLv3](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
+It is **free and open source** ([GNU AGPLv3](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
 **[Open DiagramTeX: diagramtex.com](https://diagramtex.com/)**
 
-![DiagramTeX editing a diagram: formulae, a flowchart, an op-amp circuit, a plot and a QFT quantum circuit on one canvas, with the plot's properties open on the right](docs/screenshots/01-diagram.png)
+![DiagramTeX editing a diagram: formulae, a flowchart, an RC circuit, a plot and a two-qubit quantum circuit on one canvas, with the plot's properties open on the right](docs/screenshots/01-diagram.png)
 
 ## Why DiagramTeX
 
 - **Visual TikZ editor:** draw instead of guessing coordinates, and get readable `tikzpicture` code with the packages and libraries listed for you.
 - **LaTeX maths everywhere:** labels render with KaTeX or Temml as you type, with LaTeX command suggestions and maths highlighting.
+- **Optimised for maths-heavy diagrams, tested in Chromium, WebKit and Firefox (Gecko):** reusable vector previews, background maths generation and visible-element priority keep editing responsive while previews update. Both engines are covered by browser and visual parity tests, alongside generated stress bundles spanning all 40 element types. See [performance and browser compatibility](#performance-and-browser-compatibility).
 - **Import existing TikZ:** open a `.tex` file or paste TikZ code to keep editing figures you already have.
 - **Paste and drop from anywhere:** ⌘V (Ctrl+V) or drag in a picture (PNG, JPEG, SVG; GIF, WebP and the like go in as PNG), a `.tex` file, TikZ code, a block's environment (`quantikz`, `tikzcd`, `\chemfig{…}`, `\xymatrix{…}`, `forest`, a `tabular`…), cells from a spreadsheet, a Markdown table or a `.csv` / `.xlsx` file (a Table block), a formula or a symbol (`\alpha`, `x^2`, `\[ … \]`), or plain text. Each becomes what it is: an image, shapes, that block, a formula or a text object. A dropped one lands where you drop it; in the Document view each becomes a block. Shapes copied in another DiagramTeX window paste back as shapes.
 - **LaTeX with its pictures:** when the code uses pictures, the LaTeX dialog also offers **Download .zip**: the `.tex` and every picture it names, ready to compile or upload to Overleaf. SVG pictures go in with `\includesvg` (the `svg` package). **Download .zip** leaves the conversion to Inkscape, which needs shell escape (Overleaf has both). Its arrow offers **SVG as PDF, no Inkscape**: the `.zip` then holds a vector PDF of each SVG where the package looks for it, and the package is told never to call Inkscape, so it compiles with plain pdflatex. Shapes, gradients, clip paths, transparency and text stay sharp; text is set in the nearest standard PDF font (Helvetica, Times or Courier), and an SVG with filters, masks, patterns, markers or embedded pictures goes in as a high-resolution picture instead.
@@ -23,6 +24,14 @@ It is **free and open source** ([GNU GPLv3](LICENSE)), **works offline**, and ne
 - **Privacy-focused:** no account, no cookies, no ads, no analytics in the app (the host's own Cloudflare Workers analytics aside). See [Privacy](#privacy).
 - **No account, no cost:** open the page and start drawing.
 - **Static hosting:** compiled HTML, CSS and JavaScript, with no application server required.
+
+## Performance and browser compatibility
+
+Pan and zoom reuse rendered labels and cached geometry instead of recompiling equations on every movement. Shared SVG image resources reduce repeated work while keeping vector output sharp. Switching between **KaTeX and Temml** generates new previews in a background worker, starting with on-screen elements and the current page or diagram. Existing previews remain visible and fade into the completed output, so you can keep editing in either direction.
+
+Automated tests exercise **Chromium, WebKit and Firefox (Gecko)** with both engines, covering editing, engine changes, scrolling, zooming, printing and exports. Direct visual comparisons check formula geometry and painted glyphs across browsers. Native Safari profiling also informs the optimisation work; measured improvements and test conditions are recorded in the [performance investigation](docs/rendering-performance.md).
+
+Reproducible [stress bundles](tests/stress-fixtures/README.md) cover **Document, Diagram, Page and Whiteboard**, all **40 registered element types**, and varied maths. They range from **2,032 to 12,192 top-level elements** across four files, making large workloads and browser limits testable. These are stress datasets, not capacity guarantees: extreme Documents still have documented size/stall limits, and browser-native HTML text can still exhibit WebKit inline rounding. Mixed math/prose diagram labels use explicit vector glyphs to preserve baselines and repeated-word widths. See [stress results](tests/stress-fixtures/README.md#observed-extreme-case-limit) and [browser test coverage and known limitations](docs/browser-testing.md).
 
 ## What you can draw
 
@@ -59,18 +68,22 @@ It is **free and open source** ([GNU GPLv3](LICENSE)), **works offline**, and ne
 
 ## Screenshots
 
+Captured from v1.47.1 with the two-row toolbar, adjacent Classic view selectors and aligned centimetre rulers.
+
 | | |
 |---|---|
 | ![Gallery of physics, optics, waveforms, a 3D surface plot, a solid of revolution, 3D solids, a Feynman diagram, a tree, a ZX diagram and a Bloch sphere](docs/screenshots/02-gallery.png) | ![The same gallery in dark mode](docs/screenshots/03-gallery-dark.png) |
 | **Gallery:** physics, optics, plots, 3D solids, Feynman, forest, ZX and Bloch blocks on one canvas | **Dark mode** follows the system, or pick it from the top bar |
 | ![Document view: text, headings and diagram blocks laid out as one LaTeX document](docs/screenshots/04-document.png) | ![Quantum circuit editor showing a three-qubit QFT with a dashed gate group](docs/screenshots/05-quantum.png) |
 | **Document view:** write text and maths around your figures, then export one `article` | **Quantum circuits** (`quantikz`): a three-qubit QFT with a gate group |
-| ![Circuit editor in dark mode showing an inverting op-amp stage with resistors, a capacitor and grounds](docs/screenshots/06-circuit-dark.png) | ![Timing diagram editor with a clock, data and output rows and setup, hold and delay arrows](docs/screenshots/07-timing.png) |
+| ![Circuit editor in dark mode showing a voltage source, resistor and capacitor with live circuitikz code](docs/screenshots/06-circuit-dark.png) | ![Timing diagram editor with a clock, data and output rows and setup, hold and delay arrows](docs/screenshots/07-timing.png) |
 | **Circuits** (`circuitikz`): drag parts from the library, with the code live beside them | **Timing diagrams** (`tikz-timing`): paint values onto rows and mark setup, hold and delay |
-| ![Chemistry editor showing the structure of aspirin and its chemfig code](docs/screenshots/08-chem.png) | ![UML class diagram editor showing an abstract Shape class with Circle and Square subclasses and its pgf-umlcd code](docs/screenshots/09-uml.png) |
-| **Chemistry** (`chemfig`): aspirin, drawn from the formula on the right | **UML class diagrams** (`pgf-umlcd`): classes, relations and the code beside them |
-| ![Table mode: a grid of measurements, its booktabs preview and the table settings](docs/screenshots/10-table.png) | |
-| **Tables:** import, edit like a spreadsheet, copy `booktabs` LaTeX | |
+| ![Chemistry editor showing benzene and acetic acid with their chemfig code](docs/screenshots/08-chem.png) | ![UML class diagram editor showing an abstract Shape class with Circle and Square subclasses and its pgf-umlcd code](docs/screenshots/09-uml.png) |
+| **Chemistry** (`chemfig`): benzene and acetic acid, drawn from the code on the right | **UML class diagrams** (`pgf-umlcd`): classes, relations and the code beside them |
+| ![Table mode: a grid of measurements, its booktabs preview and the table settings](docs/screenshots/10-table.png) | ![File sorting menu with custom order, date created, date modified, name and direction controls](docs/screenshots/11-file-sorting.png) |
+| **Tables:** import, edit like a spreadsheet, copy `booktabs` LaTeX | **File sorting:** keep your own order, or sort by date or name |
+| ![The main app in Thai, with translated toolbar, plot properties and layers while diagram content stays unchanged](docs/screenshots/12-thai-interface.png) | |
+| **Interface languages:** Thai browsers start in Thai; other browsers start in English. Switch from the top bar; your choice is remembered and your document stays unchanged | |
 
 How close does the exported LaTeX come to what you see? See [PARITY.md](PARITY.md).
 
@@ -85,7 +98,7 @@ The full user guide (every tool, block, mode, export and shortcut) is at **[diag
 
 A new browser opens with a welcome file, a Classic document: what the app does, a list of everything you can draw and its four modes (Classic, Page, Whiteboard and Quick) on top, then a diagram with one example of each kind of object (text, formulae, shapes, a circuit, a quantum circuit, a plot, a commutative diagram), a second gallery (physics, optics, waveforms, a 3D surface plot, a solid of revolution, a 3D solid, a Feynman diagram, a tree, a ZX diagram and a Bloch sphere), then a short manual: drawing, text and maths, blocks, arranging, writing the document and getting the LaTeX out. Its shortcuts read Cmd on a Mac and Ctrl elsewhere.
 
-To use it offline, install it from your browser (the install icon in the address bar, or **Add to Home Screen** on a phone).
+To install it, use **Install** beside the language switcher when your browser offers it, or your browser's own install menu. The button is hidden in installed app windows and after installation. Browsers without a custom install prompt, including Safari, use their native installation menu.
 
 ### Run it locally
 
@@ -102,11 +115,22 @@ browser after edits. The generated bundle is ignored by Git.
 For a simple static server or direct-file use, run `npm run compile` first, then
 serve `public/` (for example, `python3 -m http.server 5173 --directory public`).
 Opening `public/index.html` directly also works in most browsers after compilation.
-KaTeX, Temml, MathLive and fonts remain local; no CDN is needed.
+KaTeX, Temml, the SVG typesetter, MathLive and fonts remain local; no CDN is needed.
 
 `npm run check` checks all application TypeScript modules and Svelte components.
-`npm test` compiles and runs the regression suite; `npm run test:ux` checks the
-existing mouse/keyboard workflows. See [migration.md](docs/architecture/migration.md)
+`npm test` compiles and runs the same regression suite in Chromium, WebKit and Firefox (Gecko),
+including real mouse/keyboard checks for the language picker, saved language,
+themes and document controls. Install the browsers first with
+`npx playwright install chromium webkit firefox` (an installed Chrome is also supported).
+`npm run test:chromium`, `npm run test:webkit` and `npm run test:firefox` select one browser.
+`npm run test:ux` checks the existing Chromium workflow benchmarks.
+`npm run test:rendering` checks label painting in all three engines through scrolling, zooming,
+block editing and standalone exports. `npm run test:document` checks fixed page
+layout and dividers across zoom levels, resizing and printing in all three browsers.
+`npm run test:parity` directly compares KaTeX and Temml across Chromium, WebKit and Firefox (Gecko),
+writing paired screenshots and an HTML/JSON report. It fails on visual or layout
+differences beyond its fixed tolerances. Passing these checks does not imply pixel-identical browser rendering. See [browser testing](docs/browser-testing.md) for coverage,
+commands and how export snapshots differ from rendering parity. See [migration.md](docs/architecture/migration.md)
 for boundaries, verification and the saved starting commit.
 
 ### Self-host on Cloudflare Workers
@@ -168,9 +192,9 @@ npx wrangler preview
   - **Variables:** one line such as `a = 2, b = 0.5` per plot; every series can use them.
 - **LaTeX labels:** text and path labels render `$…$` maths. Path labels use TikZ `auto` / `swap` placement, so the canvas matches the output.
 - **LaTeX engine** (left sidebar, under the file list): choose how maths is previewed. It only changes the preview; the exported LaTeX is the same. The choice is saved in this browser.
-  - **KaTeX** (default): HTML and CSS, so it looks the same in every browser.
-  - **Temml**: MathML set in Latin Modern Math by the browser. It covers more LaTeX and looks closer to MathJax / TeX, but fine details (accent widths, stretchy brackets) vary a little between browsers.
-  - Exported SVGs carry the stylesheet for the engine in use. Temml SVGs keep real MathML.
+  - **KaTeX** (default): its original HTML/CSS preview in every browser; exported LaTeX is unchanged.
+  - **Temml**: more LaTeX coverage. Temml parses the source into MathML, then a bundled MathJax SVG layout produces the same geometry in each browser.
+  - Mixed math/prose diagram labels use self-contained SVG images, with the bundled TeX glyphs converted to exact outlines. System fonts and unsupported scripts retain SVG text shaping and font fallback. Pan, zoom, rotation and exported SVGs transform that image as a whole; maths is not rasterised.
 - **Styling:**
   - colour picker with presets, alpha and **Default** (**None** on fills). Every block editor (Quantum, Automaton, Bit field, CD, XyMatrix, Timing…) and the document toolbar use the same picker: a preset is written as its `xcolor` name (`red`, `blue!20`), any other colour as `rgb,255:red,…;green,…;blue,…`
   - **fills** with three tabs: Basic (a colour), **Gradient** (linear or radial, 12 presets, rotate, scale, centre and draggable colour stops; exported as pgf shadings) and **Pattern** (vertical, horizontal, grid, diagonal, crosshatch, bricks, dots, with size, line width and colour; exported with `patterns.meta`)
@@ -360,6 +384,7 @@ npx wrangler preview
 - **Zoom keys:** Ctrl/⌘ + and − zoom the canvas, the whiteboard and the Document view in and out, and Ctrl/⌘ 0 returns to 100%. They zoom the drawing, not the browser's page.
 - **Fit** (status bar, or right-click the empty canvas) zooms the whole page or drawing into view; **Fit Width** fits its width and shows it from the top. In Page mode and the Classic diagram, both use the space left of the properties panel, so nothing ends up underneath it.
 - **Save** (Ctrl+Shift+S) saves a `.diagramtex` file: JSON inside, recording its kind (`"kind": "page"`, `"classic"` or `"board"`). **Open** (Ctrl+O) loads it back into the right mode. Files saved by older versions (`.json`, `.page.json`, `.board.json`) still open; a `.json` with no kind opens as Classic.
+- **Drag and drop project files:** drop one or more `.diagramtex` files anywhere in the app to open them, including backup bundles. Their file kinds and contents are preserved; your current file stays in the file list. Where supported, a dropped file remains linked for later saves.
 - **Export All Files…** (right-click the empty part of the file list) saves every file, Pages, Classic and Whiteboard, into one `.diagramtex` bundle. **Open** a bundle to bring them all back: each file goes into its own kind, a file that is already here unchanged is skipped, and a name that is taken gets "copy" added.
 - **Saving to the same file** (Chrome, Edge and other Chromium browsers): the first **Save** asks where to put the file. After that the document is *linked* to it: Ctrl+S and **Save** write straight to it, with no dialog. The top bar shows the file's name, with an amber dot while there are changes not yet saved to it. A file opened with **Open** is linked the same way. Opening a linked file again switches to its document, and picks up the file if it changed on disk. After a reload the browser asks once to allow editing the file again; choose **Allow on every visit** to stop the question. The file list's right-click menu has **Save to Another File…** and **Unlink**. Safari and Firefox lack this feature, so there each Save downloads a copy, as before.
 - **Opening files from the system** (installed app, Chromium): `.diagramtex`, `.json`, `.tex` and `.tikz` files can be opened with DiagramTeX from Finder or Explorer (Open With). They open in the window that is already running.
@@ -387,10 +412,11 @@ npx wrangler preview
   - new, open (Ctrl+O, `.diagramtex` / `.tex`), save file (Ctrl+Shift+S), import LaTeX/TikZ
   - print / PDF (Ctrl+P), **Export** (PNG / SVG / PDF), **TikZ** (Ctrl+E), **LaTeX** (Ctrl+Shift+E), HTML
 - The ◧ button at the far left hides the document list.
+- **Sorting**: the sort button beside **+** in the file list sorts by **Custom order** (your own: drag files up and down to rearrange them), **Date created**, **Date modified** or **Name**, each either way round. While sorted, dragging only moves files into or out of folders.
 - **Folders**: a slash in a name files it in a folder, as in cloud storage: `Physics/Lab 1` shows as *Lab 1* inside *Physics*. Drag a file onto a folder (or the empty part of the list) to move it; right-click a folder to add to it, rename, fold or delete it.
 - **Recycle Bin** (under the file list): deleting a file or a folder moves it there. Ctrl+Z (⌘Z on a Mac) brings it straight back, and Ctrl+Shift+Z deletes it again. Undo history is kept per file, so switching files no longer loses it. Restore it from the bin, or delete it for good; anything in the bin for 30 days is removed automatically.
 - **Recovery Copies** (right-click a file, or search "Recovery" in the command search): while you edit, the browser keeps earlier states of the file on its own, at most one every 10 minutes, and the newest 3 of them, plus one more taken every 5 minutes in between (the next one replaces it), so 4 at most. Restore one in place of the file (what it held before becomes a copy too), or open it as a new file. How often a copy is kept (or never) and how many are kept are set in the same dialog.
-- **Share links**: right-click a file → **Copy Share Link**. A small file travels inside the link itself (compressed, after `#`, so it never reaches a server); whoever opens it gets their own copy. A file too large for a link (over about 8,000 characters) has to be sent as a `.diagramtex` file.
+- **Share links**: right-click a file → **Copy Share Link**. A small file travels inside the link itself (compressed, with coordinates cut to 6 significant digits, after `#`, so it never reaches a server); whoever opens it gets their own copy. A file too large for a link (over about 8,000 characters) has to be sent as a `.diagramtex` file.
 - **Search** (`/`): one field for every tool and shape, the commands (Save, Export, Add Page…), the modes and your files. ↑↓ choose, Enter runs, Esc closes.
 
 ### Export and import
@@ -424,7 +450,7 @@ DiagramTeX is privacy-focused by design:
 - **No account.** No sign-up, login, email or payment, ever.
 - **No tracking.** No analytics, telemetry, cookies, ads or third-party scripts in the app. The one exception is the host's own Cloudflare Workers analytics: aggregate, server-side request counts (such as requests, errors and rough country) that Cloudflare keeps for the site's owner. It runs on Cloudflare's side, sets no cookie, adds no script to the page and never sees your documents, which stay on your device. The app, its maths engines (KaTeX, Temml, MathLive) and fonts are served from the same site, and after the first visit the app runs fully offline.
 - **Files stay yours.** Save, Open, Import and Export work on files on your own computer. The app never contacts another site: everything it uses is served with it, a Content-Security-Policy blocks any other origin, and SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them, so opening an export requests nothing either.
-- **Open source.** Every line is in this repository ([GNU GPLv3](LICENSE)), and you can self-host it as plain static files.
+- **Open source.** Every line is in this repository ([GNU AGPLv3](LICENSE)), and you can self-host it as plain static files.
 
 ## Use of generative AI
 
@@ -521,7 +547,7 @@ TikZ, plus `circuitikz` for circuits, `pgfplots` for plots, `tikz-cd` or `xy` fo
 - `src/domain/params.ts`: variables and expressions in geometry fields (`TD.params`: parse, evaluate, solve)
 - `src/domain/components.ts`: components (the `comp` object: a part's shapes, linked copies, export as a TikZ pic)
 - `tests/bench.mjs`: workflow benchmark. Common tasks are done with real mouse and key input, counting clicks, drags, keys and switches between mouse and keyboard; it fails when a task gets longer than in `tests/bench.json` (`--update` writes it)
-- `tests/`: `node tests/run.mjs [filter] [--update] [--no-tex]` runs the suites in `tests/suites/` in headless Chrome against `tests/golden/` (TikZ of every parity figure, round trips, lossless import, lint) and compiles each export with pdfLaTeX (cached); `--update` rewrites the golden files. `node tests/probe.mjs script.js` runs a script in the loaded app and prints what it returns
+- `tests/`: `node tests/run.mjs [filter] [--chromium | --webkit | --firefox] [--no-tex]` runs the suites in `tests/suites/` in Chromium, WebKit and Firefox (Gecko) against `tests/golden/` (TikZ of every parity figure, round trips, lossless import, lint) and compiles each export with pdfLaTeX (cached); `--chromium --update` rewrites the shared reviewed golden files; all three browsers must match them. `node tests/probe.mjs script.js` runs a script in the loaded app and prints what it returns
 - `src/platform/storage.ts`: files and the file list in IndexedDB (read into memory at start, written in the background, shared between tabs)
 - `src/application/app.ts`: editor state, interaction, history, properties panel, storage, menu, export
 - `src/application/docview.ts`: document view and whole-document LaTeX export
@@ -547,15 +573,15 @@ Bug reports and ideas are welcome in the [issue tracker](https://gitlab.com/igni
 
 ## License
 
-DiagramTeX is released under the [GNU General Public License v3.0](LICENSE) (`GPL-3.0-only`). © 2026 Vivatsathorn Thitasirivit.
+DiagramTeX is released under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). © 2026 Vivatsathorn Thitasirivit.
 
 ### Licensing of generated content
 
-DiagramTeX is licensed under the GNU General Public License v3.0.
+DiagramTeX is licensed under the GNU Affero General Public License v3.0.
 
-Diagrams, LaTeX code, images, PDFs, and other content created using DiagramTeX are not subject to the GPL solely because they were produced with DiagramTeX. Users may use their original creations in academic publications, commercial projects, proprietary documents, and other works without additional licensing obligations imposed by DiagramTeX.
+Diagrams, LaTeX code, images, PDFs, and other content created using DiagramTeX are not subject to the AGPL solely because they were produced with DiagramTeX. Users may use their original creations in academic publications, commercial projects, proprietary documents, and other works without additional licensing obligations imposed by DiagramTeX.
 
 Third-party assets or content incorporated into an output may remain subject to their own licenses.
 
-The compiled UI includes Svelte, clsx and esm-env (MIT; notices in `public/vendor/svelte/LICENSE.txt`). It also bundles KaTeX (MIT), Temml (MIT), MathLive (MIT), the Latin Modern Math font (GUST Font License) and Inter Display (SIL Open Font License); see their licence files in `public/vendor/` and `public/fonts/`.
+The compiled UI includes Svelte, clsx and esm-env (MIT; notices in `public/vendor/svelte/LICENSE.txt`). It also bundles KaTeX (MIT), Temml (MIT), MathLive (MIT), MathJax and its TeX font data (Apache-2.0; notices in `public/vendor/mathjax/`), the Latin Modern Math font (GUST Font License) and Inter Display (SIL Open Font License); see their licence files in `public/vendor/` and `public/fonts/`.
 

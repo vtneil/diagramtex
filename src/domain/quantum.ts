@@ -127,10 +127,29 @@ import { runtime as TD } from '../runtime';
     }
     return items;
   }
+  // A measurement's classical output starts at its right border. Quantikz applies
+  // setwiretype to the incoming segment, so put a same-cell output change in the next cell.
+  // Share this normalization between preview and export to keep the two drawings consistent.
+  function measurementOutputs(rows: any) {
+    let changed = false;
+    for (const row of rows) for (let c = 0; c < row.length; c++) {
+      const items = cell(row[c].replace(/(^|[^\\])%.*$/gm, '$1'), () => {});
+      const measurement = items.findIndex((it: any) => ['meter', 'metercw', 'meterD', 'measure', 'measuretab'].includes(it.name));
+      if (measurement < 0 || !items.some((it: any, i: number) => i > measurement && it.name === 'setwiretype' && it.a[0]?.trim() === 'c')) continue;
+      row[c] = row[c].replace(/\\setwiretype\s*\{\s*c\s*\}/g, '');
+      if (c + 1 < row.length) {
+        const next = row[c + 1], sep = /^\s*\[[^\]]*\]/.exec(next);
+        row[c + 1] = sep ? sep[0] + ' \\setwiretype{c} ' + next.slice(sep[0].length) : '\\setwiretype{c} ' + next;
+      }
+      changed = true;
+    }
+    return changed;
+  }
   function parse(src: any) {
     const warnings: any[] = [];
     const { env, inner } = unwrap(src);
     const raw: any = grid(inner);
+    measurementOutputs(raw);
     const rows = raw.map((r: any, ri: any) => r.map((t: any, ci: any) => cell(t, (w: any) => { if (!warnings.includes(w)) warnings.push(w); void ri; void ci; })));
     return { env: opts(env), rows, seps: raw.seps, warnings };
   }
@@ -475,7 +494,7 @@ import { runtime as TD } from '../runtime';
       const k = it.name, X = cx[c], Y = cy[r], p = paint(S(it)), lc = labC(it), tcol = lc || p.tc; // draw= colours the shape only; color= or text= (or a label style) the label
       const tc = tcol ? { tc: tcol } : {};
       if (k === 'gate' || k === 'meter') {
-        const g = gdim(it), n = g.n;
+        const g = gdim(it), n = Math.min(g.n, R - r);
         // the box fits its cells; a style's minimum size then grows it in place, over its neighbours
         const w = Math.max(g.w, g.m.sw);
         let y1 = Y - g.h / 2;
@@ -485,7 +504,7 @@ import { runtime as TD } from '../runtime';
         if (g.m.sw > g.w) warn('style={minimum width=…} widens the gate box but not its column, so it covers its neighbours in LaTeX too; \\gate[…][width]{…} widens the column');
         ops.push({ k: 'rect', x: X - w / 2, y: y1, w, h: y2 - y1, fill: true, ...(k === 'gate' ? { gate: [r, c], fit: [gw(g.b), gh(g.b)] } : {}), ...p });
         if (g.swap) {
-          const x1 = X - w / 2, x2 = X + w / 2, ya = Y, yb = cy[r + 1];
+          const x1 = X - w / 2, x2 = X + w / 2, ya = Y, yb = cy[clampRow(r + 1)];
           curve(x1, ya, x2, yb, p); gapCurve(x2, ya, x1, yb); curve(x2, ya, x1, yb, p);
         } else if (k === 'meter') {
           meterTops.push({ x: X, y: y1, w });
@@ -710,8 +729,17 @@ import { runtime as TD } from '../runtime';
 
   // the code as it goes into LaTeX: always a full quantikz environment
   function fullCode(src: any) {
-    const t = String(src || '').trim();
-    return /\\begin\{quantikz\}/.test(t) ? t : `\\begin{quantikz}\n${t}\n\\end{quantikz}`;
+    let t = String(src || '').trim();
+    const begin = /\\begin\{quantikz\}/.exec(t);
+    let start = begin ? skipWs(t, begin.index + begin[0].length) : 0;
+    if (begin && t[start] === '[') { const end = close(t, start); if (end >= 0) start = end + 1; }
+    const stop = begin ? t.indexOf('\\end{quantikz}', start) : -1;
+    const end = stop < 0 ? t.length : stop, rows = grid(t.slice(start, end));
+    if (measurementOutputs(rows)) {
+      const body = rows.map((row: any, i: number) => row.map((value: string) => value.trim()).join(' & ') + (i < rows.length - 1 ? ' \\\\' + (rows.seps[i] || '') + '\n' : '')).join('');
+      t = t.slice(0, start) + '\n' + body + '\n' + t.slice(end);
+    }
+    return begin ? t : `\\begin{quantikz}\n${t}\n\\end{quantikz}`;
   }
 
   // A small drawing of a snippet, for the command suggestions: in the UI's ink, on its surface colour.

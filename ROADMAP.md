@@ -1,5 +1,9 @@
 # Roadmap
 
+## Browser performance
+
+- [ ] Fix performance degradation on Safari browser when panning, zooming, and scrolling with KaTeX and Temml.
+
 ## Milestone: science blocks
 
 Blocks in the same class as Circuit and Quantum: the LaTeX source is the object, drawn on the canvas,

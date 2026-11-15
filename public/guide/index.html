@@ -8,6 +8,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <link rel="canonical" href="https://diagramtex.com/guide/">
+  <link rel="alternate" hreflang="en" href="https://diagramtex.com/guide/">
+  <link rel="alternate" hreflang="th" href="https://diagramtex.com/guide/th.html">
   <link rel="icon" href="../icons/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="../icons/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="icon" href="../icons/icon-192.png" sizes="192x192" type="image/png">
@@ -148,6 +150,8 @@
     details.block > div { padding: 0 16px 8px 30px; font-size: 14.5px; }
     @media (prefers-reduced-motion: reduce) { details.block > summary::before { transition: none; } }
 
+    html:lang(th) { --font-ui: "Inter Display", "Leelawadee UI", "Thonburi", "Noto Sans Thai", system-ui, sans-serif; }
+    html:lang(th) h1, html:lang(th) h2, html:lang(th) h3 { line-height: 1.5; letter-spacing: normal; }
     footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--pencil); }
 
     @media (max-width: 900px) {
@@ -160,6 +164,7 @@
       .brand small { display: none; }
     }
   </style>
+  <link rel="stylesheet" href="../css/language-menu.css">
 </head>
 <body>
   <header class="top">
@@ -168,6 +173,13 @@
       DiagramTeX <small>Guide</small>
     </a>
     <span class="sp"></span>
+    <details class="language-picker">
+      <summary aria-label="Guide language" aria-haspopup="menu" aria-expanded="false"><span class="language-flag" aria-hidden="true">🇬🇧</span><span>English</span><svg class="language-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></summary>
+      <div class="language-options" popover="manual" role="menu" aria-label="Language">
+        <a class="language-option" role="menuitemradio" aria-checked="true" href="./" data-guide-lang="en" lang="en" aria-label="English (UK)" aria-current="page"><span class="language-flag" aria-hidden="true">🇬🇧</span><span>English</span><span class="language-check" aria-hidden="true">✓</span></a>
+        <a class="language-option" role="menuitemradio" aria-checked="false" href="th.html" data-guide-lang="th" lang="th" aria-label="ภาษาไทย"><span class="language-flag" aria-hidden="true">🇹🇭</span><span>ไทย</span></a>
+      </div>
+    </details>
     <a class="btn" href="../">Open DiagramTeX
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
   </header>
@@ -233,7 +245,7 @@
           <figcaption>A Classic diagram with the plot selected: its settings fill the panel on the right.</figcaption>
         </figure>
         <div class="cards">
-          <div class="card"><h4>Top bar</h4><p>New, Open, Save and Import on the left; the mode switch; the file name and autosave state; undo and redo; grid and snap; Print, Export, Code and LaTeX on the right.</p></div>
+          <div class="card"><h4>Top bar</h4><p>The first row has the logo on the left, the file name in the centre, and language and appearance on the right. The second row holds New, Open, Save and Import; the mode selector and adjacent Classic Document/Diagram views; undo and redo; grid and snap; Print, Export and LaTeX.</p></div>
           <div class="card"><h4>File list</h4><p>Your files of the current kind. Right-click a file to rename, duplicate or delete it. The button at the far left folds the list away. Underneath: the text input mode and the maths engine.</p></div>
           <div class="card"><h4>Tool rail</h4><p>Every tool. A button with a small corner triangle opens a flyout of related tools when you hover it.</p></div>
           <div class="card"><h4>Properties panel</h4><p>Floats over the top right of the canvas. With nothing selected it sets the default style for new shapes and lists the shortcuts; click its heading to fold it.</p></div>
@@ -242,6 +254,11 @@
         </div>
         <p>1 cm in TikZ is 40 px on the canvas at 100%. Canvas y points down and TikZ y points up; the faint cross on the canvas marks the TikZ origin. The app follows your system's light or dark appearance, or the choice at the right end of the top bar. The drawing sheet stays light in both, so colours look as they will on paper.</p>
       </section>
+
+      <figure>
+        <img src="img/12-thai-interface.png" width="1920" height="1080" alt="The main app in Thai, showing translated toolbar, plot settings and layers alongside unchanged diagram content" loading="lazy">
+        <figcaption>On first access, a Thai browser preference selects Thai; other languages select English. Change it from the first row and your choice is remembered. Your names, text, maths and code stay as written.</figcaption>
+      </figure>
 
       <section id="modes">
         <h2>Five modes</h2>
@@ -310,7 +327,7 @@
           <li><code>$…$</code> is inline maths. <code>$$…$$</code> or <code>\[…\]</code> is display style (full-size fractions and limits), exported as <code>$\displaystyle …$</code>. <b>Math style</b> in the panel switches every formula in the selection at once.</li>
           <li><b>Command suggestions:</b> type <code>\</code> and matching commands appear with a rendered preview, about 250 common ones first. <kbd>↑</kbd> <kbd>↓</kbd> to choose, <kbd>Enter</kbd> or <kbd>Tab</kbd> to insert, <kbd>Esc</kbd> to close.</li>
           <li><b>Text input</b> (left sidebar): <b>LaTeX</b> to type source, or <b>MathLive</b> to edit maths visually. Double-clicking a label edits it in the mode you chose.</li>
-          <li><b>LaTeX engine</b> (left sidebar) changes only the preview: <b>KaTeX</b> looks the same in every browser; <b>Temml</b> covers more LaTeX and looks closer to TeX. The exported code is the same.</li>
+          <li><b>LaTeX engine</b> (left sidebar) changes only the preview: <b>KaTeX</b> provides a fast LaTeX preview; <b>Temml</b> covers more LaTeX and looks closer to TeX. The exported code is the same.</li>
           <li>Labels on lines and curves use TikZ's <code>auto</code> and <code>swap</code> placement, so they sit where LaTeX puts them.</li>
         </ul>
         <p class="note">Maths inside LaTeX source fields is shown in green, so you can see at a glance which part is maths. In maths, typing <code>(</code>, <code>[</code> or <code>{</code> adds its closing partner when nothing, a space or the closing <code>$</code> follows the caret (or wraps the selected text in the pair); typing the closer steps over it, and Backspace between an empty pair removes both.</p>
@@ -353,7 +370,7 @@
             <li>The panel sets the label (maths welcome: <code>$R_1$</code>), annotation, voltage and current arrows, open and closed ends, rotation and mirroring.</li>
             <li>Exported as a <code>scope</code> with <code>\usepackage{circuitikz}</code>; <b>Copy circuitikz Code</b> gives a standalone environment.</li>
           </ul>
-          <figure><img src="img/06-circuit-dark.png" width="1920" height="1080" alt="The circuit editor in dark mode: an op-amp stage with R1, Rf, Cf and RL, and the circuitikz code beside it" loading="lazy"></figure>
+          <figure><img src="img/06-circuit-dark.png" width="1920" height="1080" alt="The circuit editor in dark mode: a voltage source, resistor and capacitor, and the circuitikz code beside it" loading="lazy"></figure>
         </div></details>
 
         <details class="block"><summary>Quantum circuit <code>quantikz</code></summary><div>
@@ -577,12 +594,15 @@
 
       <section id="files">
         <h2>Files and saving</h2>
+        <p>Drop one or more <code>.diagramtex</code> files anywhere in the app to open them in their saved modes. Backup bundles work too. Your current file stays in the file list; dropped project contents are not inserted into its canvas.</p>
+        <figure><img src="img/11-file-sorting.png" width="1920" height="1080" alt="The file-list sorting menu with custom order, date created, date modified, name and direction choices" loading="lazy"><figcaption>Use the sort button beside + to choose the file order. Custom order lets you drag files into your own sequence.</figcaption></figure>
         <ul>
           <li><b>Autosave:</b> every change is saved in your browser (IndexedDB) as you work. Nothing is uploaded. A block editor's edits join the document when you press Done (or ⌘S); reloading or closing the tab before that makes the browser ask first.</li>
           <li><b>Save</b> (<kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd>) writes a <code>.diagramtex</code> file (JSON inside); <b>Open</b> (<kbd class="mod">Ctrl</kbd><kbd>O</kbd>) loads it back in the right mode.</li>
           <li><b>Export All Files…</b> (right-click the empty part of the file list) saves every Pages, Classic and Whiteboard file into one <code>.diagramtex</code> bundle. Opening the bundle puts each file back in its own kind, skips ones already here unchanged, and adds “copy” to names that are taken.</li>
           <li><b>Linked files</b> (Chromium browsers): after the first Save, the file stays linked, so <kbd class="mod">Ctrl</kbd><kbd>S</kbd> writes straight to it. An amber dot by the name means unsaved changes. Safari and Firefox download a copy each time instead.</li>
           <li>The installed app can open <code>.diagramtex</code>, <code>.tex</code> and <code>.tikz</code> files from Finder or Explorer (Open With).</li>
+                  <li><b>Sorting:</b> the sort button beside <b>+</b> at the top of the file list sorts by <i>Custom order</i> (your own; drag files up and down to rearrange them), <i>Date created</i>, <i>Date modified</i> or <i>Name</i>, each either way round. While the list is sorted, dragging only moves files into or out of folders.</li>
                   <li><b>Folders:</b> put a slash in a name to file it in a folder, as in cloud storage: <code>Physics/Lab 1</code> is listed as <i>Lab 1</i> inside <i>Physics</i>. Drag a file onto a folder to move it there, or onto the empty part of the list to take it out. Right-click a folder to add a file or folder to it, rename it, fold it or delete it.</li>
           <li><b>Undo deletes:</b> <kbd class="mod">Ctrl</kbd><kbd>Z</kbd> brings a deleted file or folder straight back from the Recycle Bin. Undo history is kept per file, so switching files doesn't lose it.</li>
           <li><b>Recovery Copies:</b> while you edit, the browser keeps earlier states of the file on its own: at most one every 10 minutes, the newest 3, plus one more every 5 minutes in between. Right-click a file (or search "Recovery") to restore one in place of the file or open it as a new file; the same dialog sets how often and how many.</li>
@@ -646,7 +666,7 @@
           <li><b>Offline:</b> after the first visit, the app, both maths engines, MathLive and every font are stored by the browser, so everything works without a connection.</li>
           <li><b>Updates:</b> when a newer release is on the same site, an amber dot appears before the version number at the bottom of the file list; click it to reload into it. The app checks once per load and asks no other site.</li>
           <li><b>No requests to other sites,</b> even from your exports: SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them.</li>
-          <li><b>Open source</b> under the GNU General Public License v3.0; you can host it yourself as plain static files.</li>
+          <li><b>Open source</b> under the GNU Affero General Public License v3.0; you can host it yourself as plain static files.</li>
         </ul>
       </section>
 
@@ -658,8 +678,8 @@
       <section id="faq">
         <h2>Questions</h2>
         <h3 id="generated-content-license">Licensing of generated content</h3>
-        <p>DiagramTeX is licensed under the GNU General Public License v3.0.</p>
-        <p>Diagrams, LaTeX code, images, PDFs, and other content created using DiagramTeX are not subject to the GPL solely because they were produced with DiagramTeX. Users may use their original creations in academic publications, commercial projects, proprietary documents, and other works without additional licensing obligations imposed by DiagramTeX.</p>
+        <p>DiagramTeX is licensed under the GNU Affero General Public License v3.0.</p>
+        <p>Diagrams, LaTeX code, images, PDFs, and other content created using DiagramTeX are not subject to the AGPL solely because they were produced with DiagramTeX. Users may use their original creations in academic publications, commercial projects, proprietary documents, and other works without additional licensing obligations imposed by DiagramTeX.</p>
         <p>Third-party assets or content incorporated into an output may remain subject to their own licenses.</p>
         <h3>Can I use the output in Overleaf?</h3>
         <p>Yes. Press <kbd class="mod">Ctrl</kbd><kbd>E</kbd>, copy the code and paste it into your project; load the packages listed in the comment at the top.</p>
@@ -674,7 +694,7 @@
       </section>
 
       <footer>
-        DiagramTeX is free and open source under the GNU General Public License v3.0. Source, issues and releases: <a href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener">gitlab.com/igniting-space/diagramtex</a>.
+        DiagramTeX is free and open source under the GNU Affero General Public License v3.0. Source, issues and releases: <a href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener">gitlab.com/igniting-space/diagramtex</a>.
       </footer>
     </main>
   </div>
@@ -705,5 +725,7 @@
       addEventListener('scroll', update, { passive: true }); update();
     })();
   </script>
+  <script src="../language-menu.js"></script>
+  <script src="language.js"></script>
 </body>
 </html>

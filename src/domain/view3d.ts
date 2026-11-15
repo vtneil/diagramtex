@@ -40,7 +40,7 @@ import { runtime as TD } from '../runtime';
     const dv = [sh * cv, -ch * cv, sv];
     const la = Math.atan2(dv[1], dv[0]) - 50 * D2R, le = 40 * D2R;
     const L = [Math.cos(la) * Math.cos(le), Math.sin(la) * Math.cos(le), Math.sin(le)];
-    return { P, dv, L, depth: (p: any) => dot(p, dv) };
+    return { P, dv, L, depth: (p: any) => Math.round(dot(p, dv) * 1e9) / 1e9 };
   };
 
   // ---------------------------------------------------------------- colour
@@ -119,7 +119,7 @@ import { runtime as TD } from '../runtime';
       const c = p.reduce((s: any, q: any) => add(s, mul(q, 1 / p.length)), [0, 0, 0]);
       return { ...fc, n, c, facing: dot(n, vw.dv) > 1e-9, d: vw.depth(c) };
     });
-    const painted = F.filter((fc: any) => !o.closed || fc.facing).sort((a: any, b: any) => a.d - b.d);
+    const painted = F.filter((fc: any) => !o.closed || fc.facing).sort((a: any, b: any) => Math.round(a.d * 1e9) - Math.round(b.d * 1e9));
     painted.forEach((fc: any, i: any) => { fc.order = i; });
     // edges with their faces
     const E = new Map();
@@ -168,7 +168,7 @@ import { runtime as TD } from '../runtime';
     }
     for (const line of chain(shown)) out.push({ k: 'line', pts: line.map(vw.P), stroke: ink, w: lw });
     for (const cv of o.curves || []) {
-      const R = cv.normals ? V3.splitRuns(cv.pts, (i: any) => dot(cv.normals[i], vw.dv) > 0) : { shown: [cv.pts], hidden: [] };
+      const R = cv.normals ? V3.splitRuns(cv.pts, (i: any) => dot(cv.normals[i], vw.dv) > 1e-9) : { shown: [cv.pts], hidden: [] };
       for (const run of R.shown) out.push({ k: 'line', pts: run.map(vw.P), stroke: cv.stroke || ink, w: cv.w ?? lw, dash: cv.dash });
       if (o.hidden) for (const run of R.hidden) out.push({ k: 'line', pts: run.map(vw.P), stroke: cv.stroke || ink, w: cv.w ?? lw, dash: true });
     }

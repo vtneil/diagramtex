@@ -1,3 +1,5 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { onLocale, t } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { row, section } from '../ui/forms';
@@ -156,6 +158,33 @@ import { runtime as TD } from '../runtime';
     return polar ? { x: `${ex[1]}*cos(${ex[0]})`, y: `${ex[1]}*sin(${ex[0]})` } : { x: ex[0], y: ex[1] };
   }
   const NEED_PAIR = 'Select a segment or vector between two named points first';
+  // an item's or command's name as shown (the tables keep the English, which search also matches)
+  const say = (en: string): string => (({
+    Axes: () => t('editor.g3.n.axes', 'Axes'), 'Rotated frame': () => t('editor.g3.n.rframe', 'Rotated frame'), 'Grid plane': () => t('editor.g3.n.gridPlane', 'Grid plane'), Grid: () => t('ui.grid', 'Grid'),
+    Point: () => t('editor.g3.n.point', 'Point'), 'Point (r, θ, φ)': () => t('editor.g3.n.spoint', 'Point {coords}', { coords: '(r, θ, φ)' }), 'Point (x, y)': () => t('editor.g3.n.spoint', 'Point {coords}', { coords: '(x, y)' }),
+    'Point (r, θ)': () => t('editor.g3.n.spoint', 'Point {coords}', { coords: '(r, θ)' }), Label: () => t('ui.label', 'Label'),
+    Vector: () => t('editor.g3.n.vector', 'Vector'), Segment: () => t('editor.g3.n.segment', 'Segment'), Projection: () => t('editor.g3.n.projection', 'Projection'), 'Space curve': () => t('editor.g3.n.curve3', 'Space curve'),
+    Plane: () => t('editor.g3.n.plane', 'Plane'), Triangle: () => t('editor.g3.n.triangle', 'Triangle'), Circle: () => t('editor.g3.n.circle', 'Circle'), Sphere: () => t('editor.g3.n.sphere', 'Sphere'),
+    'Plane ax + by + cz = d': () => t('editor.g3.n.planeEq', 'Plane {eq}', { eq: 'ax + by + cz = d' }), 'Surface z = f(x, y)': () => t('editor.g3.n.surface', 'Surface {eq}', { eq: 'z = f(x, y)' }),
+    'Surface (u, v)': () => t('editor.g3.n.surface', 'Surface {eq}', { eq: '(u, v)' }), 'Graph z = f(x, y)': () => t('editor.g3.n.graph', 'Graph {eq}', { eq: 'z = f(x, y)' }), Box: () => t('editor.g3.n.box', 'Box'),
+    'Angle in xy': () => t('editor.g3.n.arc', 'Angle in xy'), 'Angle from z': () => t('editor.g3.n.tarc', 'Angle from z'), Polygon: () => t('editor.g3.n.polygon', 'Polygon'),
+    'Angle mark': () => t('prop.mark', 'Angle mark'), 'Right angle': () => t('editor.g3.n.rmark', 'Right angle'), 'Polar r(θ)': () => t('editor.g3.n.polar', 'Polar {eq}', { eq: 'r(θ)' }),
+    Parametric: () => t('ui.parametric', 'Parametric'), Length: () => t('editor.g3.n.length', 'Length'), Angle: () => t('ui.angle', 'Angle'),
+    'Angle arc': () => t('editor.g3.n.angleArc', 'Angle arc'), 'Frame origin': () => t('editor.g3.n.origin', 'Frame origin'), 'Theta plane': () => t('editor.g3.n.tplane', 'Theta plane'), View: () => t('ui.view', 'View'),
+    Value: () => t('editor.g3.value', 'Value'), Command: () => t('editor.g3.n.command', 'Command'), Loop: () => t('editor.g3.n.loop', 'Loop'), Scope: () => t('editor.g3.n.scope', 'Scope'),
+    Curve: () => t('editor.g3.n.curve', 'Curve'), Path: () => t('editor.g3.n.path', 'Path'), Face: () => t('editor.g3.n.face', 'Face'),
+  } as Record<string, () => string>)[en]?.() ?? en);
+  const catName = (en: string): string => (({
+    Frames: () => t('editor.g3.cat.frames', 'Frames'), Points: () => t('editor.g3.cat.points', 'Points'), Lines: () => t('editor.g3.cat.lines', 'Lines'), Surfaces: () => t('editor.g3.cat.surfaces', 'Surfaces'),
+    Angles: () => t('editor.g3.cat.angles', 'Angles'), Plots: () => t('editor.g3.cat.plots', 'Plots'), Measures: () => t('editor.g3.cat.measures', 'Measures'),
+  } as Record<string, () => string>)[en]?.() ?? en);
+  // a label's side, as the Position list names it
+  const sideName = (p: string) => (({
+    right: () => t('editor.commonA.side.right', 'Right'), 'above right': () => t('editor.commonA.side.aboveRight', 'Above right'), above: () => t('editor.commonA.side.above', 'Above'),
+    'above left': () => t('editor.commonA.side.aboveLeft', 'Above left'), left: () => t('editor.commonA.side.left', 'Left'), 'below left': () => t('editor.commonA.side.belowLeft', 'Below left'),
+    below: () => t('editor.commonA.side.below', 'Below'), 'below right': () => t('editor.commonA.side.belowRight', 'Below right'),
+  } as Record<string, () => string>)[p]?.() ?? p[0].toUpperCase() + p.slice(1));
+  const commandsText = (n: number) => t('editor.g3.nCommands', '{n} commands', { n });
   function measure(kind: any) {
     return (n: any, sel: any, Lx: any) => {
       const pr = pairOf(sel, Lx);
@@ -338,7 +367,7 @@ import { runtime as TD } from '../runtime';
   function endPick() { if (!E.pick) return; E.pick = null; E.pickAt = null; svg.style.cursor = ''; setTip(''); draw(); }
   function markCorner(sx: any, sy: any) {
     const Lx = L(), k = cornerAt(sx, sy, Lx), p = E.pick;
-    if (!k) { flashTip('Click nearer a corner where two lines meet'); return; }
+    if (!k) { flashTip(t('editor.g3.tip.nearer', 'Click nearer a corner where two lines meet')); return; }
     const pre: any[] = [], taken: any[] = [];
     const nameOf = (m: any) => {
       let nm = null;
@@ -361,8 +390,8 @@ import { runtime as TD } from '../runtime';
     const selName = (() => { const st = selSt(); return st && (st.k === 'coordinate' || st.k === 'setcoord') ? st.name : null; })();
     // an item's code: text to add, or { edits made first, code, atEnd: added at the end of the picture }
     const r = forced || it.code(nm, key === 'vector' && !FLAT ? selName : E.sel, Lx);
-    if (r && r.pick) { E.pick = { key, pic: r.pic }; svg.style.cursor = 'crosshair'; setTip(`${it.name}: click inside a corner where two lines meet  ·  Esc cancels`); return; }
-    if (r == null) { const msg = it.need || 'Select what this applies to first'; setTip(msg); setTimeout(() => { if (E && tip.textContent === msg) setTip(''); }, 2400); return; }
+    if (r && r.pick) { E.pick = { key, pic: r.pic }; svg.style.cursor = 'crosshair'; setTip(t('editor.g3.tip.pick', '{name}: click inside a corner where two lines meet  ·  Esc cancels', { name: say(it.name) })); return; }
+    if (r == null) { const msg = it.need ? t('editor.g3.needPair', 'Select a segment or vector between two named points first') : t('editor.g3.needSel', 'Select what this applies to first'); setTip(msg); setTimeout(() => { if (E && tip.textContent === msg) setTip(''); }, 2400); return; }
     const code = typeof r === 'string' ? r : r.code, pre = typeof r === 'string' ? [] : r.edits || [];
     const pos = insertAt(Lx, typeof r === 'object' && r.atEnd), ind = pos.ind ?? (pos.lead.replace('\n', '') || '  ');
     const lines = code.split('\n').map((l: any) => ind + l).join('\n');
@@ -373,8 +402,9 @@ import { runtime as TD } from '../runtime';
     const i = L2.S.findIndex((st: any) => st.s >= at && drawable(st) && !['macro', 'rot', 'tplane'].includes(st.k) && (st.k !== 'coordinate' || it.pt));
     E.sel = i >= 0 ? i : null;
     draw(); renderProps();
-    setTip(`${it.name} added`);
-    setTimeout(() => { if (E && tip.textContent === `${it.name} added`) setTip(''); }, 1200);
+    const added = t('editor.g3.added', '{name} added', { name: say(it.name) });
+    setTip(added);
+    setTimeout(() => { if (E && tip.textContent === added) setTip(''); }, 1200);
   }
   // a statement's span with the line it sits on, so deleting leaves no blank line
   function lineSpan(st: any) {
@@ -399,7 +429,7 @@ import { runtime as TD } from '../runtime';
     if (E.many) { const Lx = L(), del = E.many; edit(() => G.edits(E.src, del.map((i: any) => ({ ...lineSpan(Lx.S[i]), t: '' })))); E.sel = null; draw(); renderProps(); return; }
     const st = selSt();
     if (!st) return;
-    if (st.k === 'main') { setTip('The view stays: turn it instead'); return; }
+    if (st.k === 'main') { setTip(t('editor.g3.tip.viewStays', 'The view stays: turn it instead')); return; }
     // a point goes with the commands that draw it (by its name), as the code would no longer compile
     const Lx = L(), del = [E.sel];
     const nm = st.k === 'coordinate' || st.k === 'setcoord' ? st.name : null;
@@ -430,7 +460,7 @@ import { runtime as TD } from '../runtime';
     clip = { text, n: 0 };
     navigator.clipboard?.writeText(text).catch(() => {});
     if (cut) deleteSel();
-    flashTip(cut ? 'Cut' : 'Copied');
+    flashTip(cut ? t('ui.cut', 'Cut') : t('ui.copied', 'Copied'));
   }
   async function pasteClip() {
     let text = null;
@@ -479,7 +509,7 @@ import { runtime as TD } from '../runtime';
     edit(() => r.src);
     E.sel = sis.length === 1 ? sis[0] : null; E.many = sis.length > 1 ? sis : null;
     draw(); renderProps();
-    flashTip(sis.length ? `Pasted ${sis.length} command${sis.length > 1 ? 's' : ''}` : 'Pasted');
+    flashTip(sis.length ? (sis.length > 1 ? t('editor.g3.pastedN', 'Pasted {n} commands', { n: sis.length }) : t('editor.g3.pasted1', 'Pasted 1 command')) : t('editor.g3.pasted', 'Pasted'));
   }
   // draw order: swap with the next / previous drawn command
   function reorder(dir: any) {
@@ -505,12 +535,12 @@ import { runtime as TD } from '../runtime';
     const q = search.value.trim().toLowerCase();
     let html = '';
     for (const [title, items] of pal()) {
-      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k} ${title}`.toLowerCase().includes(q));
+      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k} ${title} ${say(name)} ${catName(title as string)}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , m, key]: any) =>
-        `<button class="qe-item" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${miniSvg(m)}</span><span>${esc(name)}</span></button>`).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(catName(title as string))}</div><div class="qe-grid">${hits.map(([k, name, , m, key]: any) =>
+        `<button class="qe-item" data-item="${esc(k)}" title="${esc(say(name))}${key ? ` (${key})` : ''}"><span class="qe-fig">${miniSvg(m)}</span><span>${esc(say(name))}</span></button>`).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list);
   }
   search.addEventListener('input', buildPalette);
@@ -541,7 +571,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(2000, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(12, Math.min(2000, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -680,7 +710,7 @@ import { runtime as TD } from '../runtime';
       }
     }
     if (!Lx.empty) { try { out += V3.svg(Lx.items, f, { export: true }); } catch (e: any) { /* drawn next time */ } }
-    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Add axes or a point from the left to start</text>`;
+    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(t('editor.g3.empty', 'Add axes or a point from the left to start'))}</text>`;
     // a circle's rim under the pointer or being dragged
     const rg = E.drag && (E.drag.mode === 'radius' || E.drag.mode === 'shift') ? E.drag.ring : E.hover && E.hover.ring;
     if (rg) { const g = (Lx.rings || []).find((x: any) => ringKey(x) === ringKey(rg)); if (g && (g.writable || ringMoves(Lx, g))) { const { C, R } = ringGeom(Lx, g); out += `<circle class="g3-ring" cx="${r2(C[0])}" cy="${r2(C[1])}" r="${r2(R)}"/>`; } }
@@ -745,7 +775,7 @@ import { runtime as TD } from '../runtime';
     if (h) {
       E.sel = h.si;
       E.drag = h.writable ? { mode: 'move', h, sx, sy, m0: h.at.m.slice(), m: null, moved: false, si: h.si } : null;
-      if (!h.writable) setTip('This point is computed in the code: change it there');
+      if (!h.writable) setTip(t('editor.g3.tip.pointComputed', 'This point is computed in the code: change it there'));
       draw(); renderProps(); return;
     }
     const rg = ringAt(e);
@@ -755,7 +785,7 @@ import { runtime as TD } from '../runtime';
       const mv = ringMoves(L(), rg);
       E.drag = mv ? { mode: 'shift', si: rg.si, ring: rg, sx, sy, moved: false } : null;
       if (mv) svg.style.cursor = 'move';
-      else setTip(rg.writable ? 'This centre is computed in the code: drag the square to resize' : 'This circle is computed in the code: change it there');
+      else setTip(rg.writable ? t('editor.g3.tip.centreComputed', 'This centre is computed in the code: drag the square to resize') : t('editor.g3.tip.circleComputed', 'This circle is computed in the code: change it there'));
       draw(); renderProps(); return;
     }
     const si = itemAt(e);
@@ -955,7 +985,7 @@ import { runtime as TD } from '../runtime';
     fwd: '<path d="M10 16V4M5 9l5-5 5 5"/>',
     back: '<path d="M10 4v12M5 11l5 5 5-5"/>',
   };
-  const mItem = (act: any, label: any, icon: any, key: any) => `<button class="ctx-item${act === 'del' ? ' danger' : ''}" data-gm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key: any) => `<button class="ctx-item${act === 'del' ? ' danger' : ''}" data-gm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -964,8 +994,8 @@ import { runtime as TD } from '../runtime';
     if (si == null) { closeMenu(); return; }
     E.sel = si; E.many = null;
     const st = selSt();
-    menu.innerHTML = (labelOf(si) ? mItem('label', 'Edit Label', 'label', '↩') : '') + mItem('dup', 'Duplicate', 'dup', isMac ? '⌘D' : 'Ctrl+D') + '<hr>'
-      + mItem('fwd', 'Draw Later', 'fwd', ']') + mItem('back', 'Draw Earlier', 'back', '[') + '<hr>' + mItem('del', st && (st.k === 'coordinate' || st.k === 'setcoord') ? 'Delete Point' : 'Delete', 'del', '⌫');
+    menu.innerHTML = (labelOf(si) ? mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩') : '') + mItem('dup', t('ui.duplicate', 'Duplicate'), 'dup', isMac ? '⌘D' : 'Ctrl+D') + '<hr>'
+      + mItem('fwd', t('editor.commonA.drawLater', 'Draw Later'), 'fwd', ']') + mItem('back', t('editor.commonA.drawEarlier', 'Draw Earlier'), 'back', '[') + '<hr>' + mItem('del', st && (st.k === 'coordinate' || st.k === 'setcoord') ? t('editor.g3.deletePoint', 'Delete Point') : t('ui.delete', 'Delete'), 'del', '⌫');
     draw(); renderProps();
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
@@ -1047,7 +1077,7 @@ import { runtime as TD } from '../runtime';
   // a value field: numbers type straight in; an expression or macro is typed as code
 
   const COLORK = (o: any) => o.v == null && !!TD.tikzColor(o.k) && !G.WIDTHS[o.k];
-  const WIDTH_OPTS = [['ultra thin', 'Ultra thin'], ['very thin', 'Very thin'], ['thin', 'Thin'], ['', 'Normal'], ['semithick', 'Semithick'], ['thick', 'Thick'], ['very thick', 'Very thick'], ['ultra thick', 'Ultra thick']];
+  const WIDTH_OPTS = () => [['ultra thin', t('editor.g3.w.ultraThin', 'Ultra thin')], ['very thin', t('editor.g3.w.veryThin', 'Very thin')], ['thin', t('editor.g3.w.thin', 'Thin')], ['', t('ui.normal', 'Normal')], ['semithick', t('editor.g3.w.semithick', 'Semithick')], ['thick', t('editor.g3.w.thick', 'Thick')], ['very thick', t('editor.g3.w.veryThick', 'Very thick')], ['ultra thick', t('editor.g3.w.ultraThick', 'Ultra thick')]];
   const NAMES: Record<string, any> = { coordinate: 'Point', setcoord: 'Point (r, θ, φ)', node: 'Label', arc: 'Angle arc', rot: 'Rotated frame', rorig: 'Frame origin', rreset: 'Frame origin', tplane: 'Theta plane', main: 'View', macro: 'Value', cmd: 'Command', foreach: 'Loop', scope: 'Scope', pic: 'Angle mark' };
   function pathName(st: any) {
     const sty = G.styleOf(E.src, st.o), els = st.els;
@@ -1064,29 +1094,29 @@ import { runtime as TD } from '../runtime';
     if (!E) return;
     const Lx = L(), st = selSt();
     const show = (title: string, rows: FormRow[], summary?: string) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), summary }] });
-    const del = (text = 'Delete') => actionRow('ge', 'del', text);
+    const del = (text = t('ui.delete', 'Delete')) => actionRow('ge', 'del', text);
     const vf = (label: string, key: string, span: any) => field(label, key, text(span).trim(), { class: 'mono' });
-    const col = (label: string, key: string, value: string, nullable = false) => ({ ...row(label, texColour(value === 'none' ? '' : TD.texColor.unwrap(value), { 'data-f': key }, nullable ? { nullable: true, defaultLabel: 'none', title: 'Fill' } : { title: 'Colour' })), controlClass: 'ctl tc' });
+    const col = (label: string, key: string, value: string, nullable = false) => ({ ...row(label, texColour(value === 'none' ? '' : TD.texColor.unwrap(value), { 'data-f': key }, nullable ? { nullable: true, defaultLabel: 'none', title: t('ui.fill', 'Fill') } : { title: t('ui.colour', 'Colour') })), controlClass: 'ctl tc' });
     if (E.many) {
-      show('Selection', [note(...(FLAT ? ['Drag any of them to move them together; it snaps to 0.05, hold ', { kbd: '⌥' } as const, ' to move freely. '] : []), { kbd: '⌫' }, ' deletes them; ', { kbd: 'Esc' }, ' or a click elsewhere clears the selection.'), del('Delete All')], `${E.many.length} commands`); return;
+      show(t('editor.g3.selection', 'Selection'), [note(...(FLAT ? [t('editor.g3.help.many', 'Drag any of them to move them together; it snaps to 0.05, hold '), { kbd: '⌥' } as const, t('editor.g3.help.manyFree', ' to move freely. ')] : []), { kbd: '⌫' }, t('editor.g3.help.deletes', ' deletes them; '), { kbd: 'Esc' }, t('editor.g3.help.clears', ' or a click elsewhere clears the selection.')), del(t('editor.g3.deleteAll', 'Delete All'))], commandsText(E.many.length)); return;
     }
     if (!st) {
-      const scale = numField('Scale', 'scale', fmt(Lx.scale, 2), '', { step: '0.25', min: '0.1' });
-      const rows = FLAT ? [scale, note('Drag a point to move it; it snaps to 0.05, hold ', { kbd: '⇧' }, ' for 15° steps along a line or whole numbers, ', { kbd: '⌥' }, ' to place it freely. Drag a line or shape to move it whole (a circle by its rim; the square at its top right sizes it), drag across empty space to select (left to right: what lies wholly inside; right to left: anything it touches; ', { kbd: '⇧' }, ' adds), and hold ', { kbd: 'Space' }, ' to drag the view. Click a line or label to select what drew it; double-click to label it. ', { kbd: '⌘C' }, ' ', { kbd: '⌘X' }, ' ', { kbd: '⌘V' }, ' copy, cut and paste commands. Angle marks: pick one, then click inside a corner where two lines meet. Measures need two named points: select a segment between them, or a point.')]
-        : [numField('Tilt θ', 'vth', fmt(Lx.view.th, 0), '°', { step: '5', min: '0', max: '180' }), numField('Turn φ', 'vph', fmt(Lx.view.ph, 0), '°', { step: '5' }), scale, note('Drag empty space to turn the view. Drag a point to move it level; hold ', { kbd: '⇧' }, ' to move it up and down, ', { kbd: '⌥' }, ' to place it freely. Click a line, face or label to select what drew it; double-click to label it. Add things from the left.')];
-      show('Figure', rows, `${Lx.S.filter(drawable).length} commands`); return;
+      const scale = numField(t('ui.scale', 'Scale'), 'scale', fmt(Lx.scale, 2), '', { step: '0.25', min: '0.1' });
+      const rows = FLAT ? [scale, note(t('editor.g3.help2d.a', 'Drag a point to move it; it snaps to 0.05, hold '), { kbd: '⇧' }, t('editor.g3.help2d.b', ' for 15° steps along a line or whole numbers, '), { kbd: '⌥' }, t('editor.g3.help2d.c', ' to place it freely. Drag a line or shape to move it whole (a circle by its rim; the square at its top right sizes it), drag across empty space to select (left to right: what lies wholly inside; right to left: anything it touches; '), { kbd: '⇧' }, t('editor.g3.help2d.d', ' adds), and hold '), { kbd: 'Space' }, t('editor.g3.help2d.e', ' to drag the view. Click a line or label to select what drew it; double-click to label it. '), { kbd: '⌘C' }, ' ', { kbd: '⌘X' }, ' ', { kbd: '⌘V' }, t('editor.g3.help2d.f', ' copy, cut and paste commands. Angle marks: pick one, then click inside a corner where two lines meet. Measures need two named points: select a segment between them, or a point.'))]
+        : [numField(t('editor.g3.tilt', 'Tilt θ'), 'vth', fmt(Lx.view.th, 0), '°', { step: '5', min: '0', max: '180' }), numField(t('editor.g3.turn', 'Turn φ'), 'vph', fmt(Lx.view.ph, 0), '°', { step: '5' }), scale, note(t('editor.g3.help3d.a', 'Drag empty space to turn the view. Drag a point to move it level; hold '), { kbd: '⇧' }, t('editor.g3.help3d.b', ' to move it up and down, '), { kbd: '⌥' }, t('editor.g3.help3d.c', ' to place it freely. Click a line, face or label to select what drew it; double-click to label it. Add things from the left.'))];
+      show(t('editor.g3.figure', 'Figure'), rows, commandsText(Lx.S.filter(drawable).length)); return;
     }
-    const title = st.k === 'path' ? pathName(st) : NAMES[st.k] || 'Command';
+    const title = say(st.k === 'path' ? pathName(st) : NAMES[st.k] || 'Command');
     const rows: FormRow[] = [];
     if (st.k === 'coordinate' && st.atPt) {
       const comps = G.splitTop(E.src, st.atPt.is, st.atPt.ie), polar = FLAT && comps.length === 1 ? G.splitTop(E.src, st.atPt.is, st.atPt.ie, ':') : [];
-      rows.push(field('Name', 'cname', st.name, { class: 'mono' }));
+      rows.push(field(t('ui.name', 'Name'), 'cname', st.name, { class: 'mono' }));
       if (comps.length === (FLAT ? 2 : 3)) rows.push(...comps.map((c: any, i: number) => vf('xyz'[i], `c${i}`, c)));
-      else if (polar.length === 2) rows.push(vf('Angle θ', 'q0', polar[0]), vf('Radius r', 'q1', polar[1]));
-      else rows.push(vf('At', 'at', { s: st.atPt.is, e: st.atPt.ie }));
-      rows.push(field('Label', 'label', '', { 'data-tx': 'math', placeholder: 'add a label' }));
+      else if (polar.length === 2) rows.push(vf(t('editor.g3.angleTheta', 'Angle θ'), 'q0', polar[0]), vf(t('editor.g3.radiusR', 'Radius r'), 'q1', polar[1]));
+      else rows.push(vf(t('editor.g3.at', 'At'), 'at', { s: st.atPt.is, e: st.atPt.ie }));
+      rows.push(field(t('ui.label', 'Label'), 'label', '', { 'data-tx': 'math', placeholder: 'add a label' }));
     } else if (st.k === 'setcoord') {
-      rows.push(field('Name', 'cname', st.name, { class: 'mono' }), vf('r', 'sr', st.r), vf('θ from z', 'sth', st.th), vf('φ from x', 'sph', st.ph), note(`${st.simple ? '' : `Also names its shadows (${st.name}xy), (${st.name}x), (${st.name}y), (${st.name}z)… for projections. `}Drag the point, or type a number or a value such as \\thetavec.`));
+      rows.push(field(t('ui.name', 'Name'), 'cname', st.name, { class: 'mono' }), vf('r', 'sr', st.r), vf(t('editor.g3.thetaZ', 'θ from z'), 'sth', st.th), vf(t('editor.g3.phiX', 'φ from x'), 'sph', st.ph), note(`${st.simple ? '' : t('editor.g3.help.shadows', 'Also names its shadows ({name}xy), ({name}x), ({name}y), ({name}z)… for projections. ', { name: st.name })}${t('editor.g3.help.spoint', 'Drag the point, or type a number or a value such as {example}.', { example: '\\thetavec' })}`));
     } else if (st.k === 'path' || st.k === 'node' || st.k === 'arc') {
       const sty = G.styleOf(E.src, st.o), O = sty.items;
       const colorItem = O.find((o: any) => o.k === 'color' && o.v != null) || O.find(COLORK), color = colorItem ? (colorItem.v != null ? colorItem.v : colorItem.k) : 'black';
@@ -1094,44 +1124,44 @@ import { runtime as TD } from '../runtime';
       const lb = labelOf(E.sel);
       if (st.k === 'path') rows.push({ kind: 'points', points: st.els.filter((x: any) => x.t === 'pt').map((p: any, i: number) => {
         const c = G.splitTop(E.src, p.is, p.ie);
-        return c.length === (FLAT ? 2 : 3) && !p.rel ? c.map((x: any, j: number) => ({ kind: 'input', value: x.t, attrs: { type: 'text', class: 'mono', 'data-f': `p${i}:${j}`, 'aria-label': `${'xyz'[j]} of point ${i + 1}`, spellcheck: 'false' } })) : [{ kind: 'input', value: E.src.slice(p.is, p.ie), attrs: { type: 'text', class: 'mono wide', 'data-f': `p${i}`, 'aria-label': `Point ${i + 1}`, spellcheck: 'false' } }];
+        return c.length === (FLAT ? 2 : 3) && !p.rel ? c.map((x: any, j: number) => ({ kind: 'input', value: x.t, attrs: { type: 'text', class: 'mono', 'data-f': `p${i}:${j}`, 'aria-label': t('editor.g3.coordOf', '{axis} of point {n}', { axis: 'xyz'[j], n: i + 1 }), spellcheck: 'false' } })) : [{ kind: 'input', value: E.src.slice(p.is, p.ie), attrs: { type: 'text', class: 'mono wide', 'data-f': `p${i}`, 'aria-label': t('editor.g3.pointN', 'Point {n}', { n: i + 1 }), spellcheck: 'false' } }];
       }) });
-      else if (st.k === 'node' && st.atPt) rows.push(vf('At', 'at', { s: st.atPt.is, e: st.atPt.ie }));
-      else if (st.k === 'arc') rows.push(vf('Centre', 'ac', st.c), vf('Radius', 'ar', st.r), vf('From', 'a0', st.a0), vf('To', 'a1', st.a1));
-      rows.push(col('Colour', st.k === 'node' ? 'tcolor' : 'color', color));
+      else if (st.k === 'node' && st.atPt) rows.push(vf(t('editor.g3.at', 'At'), 'at', { s: st.atPt.is, e: st.atPt.ie }));
+      else if (st.k === 'arc') rows.push(vf(t('ui.centre', 'Centre'), 'ac', st.c), vf(t('ui.radius', 'Radius'), 'ar', st.r), vf(t('editor.g3.from', 'From'), 'a0', st.a0), vf(t('editor.g3.to', 'To'), 'a1', st.a1));
+      rows.push(col(t('ui.colour', 'Colour'), st.k === 'node' ? 'tcolor' : 'color', color));
       if (st.k === 'path') {
-        rows.push(sty.shade ? row('Fill', { kind: 'input', value: O.filter((o: any) => / color$/.test(o.k)).map((o: any) => o.t).join(', '), attrs: { type: 'text', class: 'mono', readonly: true, tabindex: '-1', title: 'A shading: change its colours in Options' } }) : col('Fill', 'fill', fill, true));
+        rows.push(sty.shade ? row(t('ui.fill', 'Fill'), { kind: 'input', value: O.filter((o: any) => / color$/.test(o.k)).map((o: any) => o.t).join(', '), attrs: { type: 'text', class: 'mono', readonly: true, tabindex: '-1', title: t('editor.g3.shading', 'A shading: change its colours in Options') } }) : col(t('ui.fill', 'Fill'), 'fill', fill, true));
         const op = O.find((o: any) => o.k === 'fill opacity' || o.k === 'opacity');
-        rows.push(numField('Opacity', 'opacity', op ? op.v : 1, '', { min: '0', max: '1', step: '0.1' }));
+        rows.push(numField(t('ui.opacity', 'Opacity'), 'opacity', op ? op.v : 1, '', { min: '0', max: '1', step: '0.1' }));
       }
       if (st.k !== 'node') {
         const w = (O.find((o: any) => o.v == null && G.WIDTHS[o.k] != null) || { k: '' }).k;
-        rows.push(segments('Line', 'dash', sty.dash ? (/dot/.test(sty.dash) ? 'dotted' : 'dashed') : '', [['', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]), row('Width', { kind: 'select', value: w, attrs: { 'data-f': 'width' }, options: WIDTH_OPTS }));
-        if (st.k === 'path') rows.push(segments('Arrow', 'arrow', `${sty.arrow0 ? 1 : 0}${sty.arrow ? 1 : 0}`, [['00', 'None'], ['01', 'End'], ['10', 'Start'], ['11', 'Both']]));
-        if (!FLAT) rows.push(segments('Frame', 'frame', sty.frame || 'main', [['main', 'Main', 'tdplot_main_coords'], ['rotated', 'Rotated', 'tdplot_rotated_coords: the frame set by \\tdplotsetrotatedcoords'], ['screen', 'Screen', 'tdplot_screen_coords: flat on the page']]));
+        rows.push(segments(t('ui.line', 'Line'), 'dash', sty.dash ? (/dot/.test(sty.dash) ? 'dotted' : 'dashed') : '', [['', t('ui.solid', 'Solid')], ['dashed', t('ui.dashed', 'Dashed')], ['dotted', t('ui.dotted', 'Dotted')]]), row(t('ui.width', 'Width'), { kind: 'select', value: w, attrs: { 'data-f': 'width' }, options: WIDTH_OPTS() }));
+        if (st.k === 'path') rows.push(segments(t('ui.arrow', 'Arrow'), 'arrow', `${sty.arrow0 ? 1 : 0}${sty.arrow ? 1 : 0}`, [['00', t('ui.none', 'None')], ['01', t('ui.end', 'End')], ['10', t('ui.start', 'Start')], ['11', t('editor.commonA.both', 'Both')]]));
+        if (!FLAT) rows.push(segments(t('editor.g3.frame', 'Frame'), 'frame', sty.frame || 'main', [['main', t('editor.g3.frame.main', 'Main'), 'tdplot_main_coords'], ['rotated', t('editor.g3.frame.rotated', 'Rotated'), `tdplot_rotated_coords: ${t('editor.g3.frame.rotatedTitle', 'the frame set by {cmd}', { cmd: '\\tdplotsetrotatedcoords' })}`], ['screen', t('editor.g3.frame.screen', 'Screen'), `tdplot_screen_coords: ${t('editor.g3.frame.screenTitle', 'flat on the page')}`]]));
       }
-      rows.push(field('Label', 'label', lb ? mathOf(text(lb.span)) : '', { 'data-tx': 'math', placeholder: 'none' }));
+      rows.push(field(t('ui.label', 'Label'), 'label', lb ? mathOf(text(lb.span)) : '', { 'data-tx': 'math', placeholder: 'none' }));
       if (lb || st.k === 'node' || st.k === 'arc') {
         const lo = st.k === 'arc' ? G.styleOf(E.src, st.lo) : G.styleOf(E.src, lb && lb.node ? lb.node.o : st.o), posv = Object.entries<any>(G.POS).find(([, a]) => a === lo.anchor);
-        rows.push(row('Position', { kind: 'select', value: posv ? posv[0] : '', attrs: { 'data-f': 'lpos' }, options: [['', 'Centre'], ...Object.keys(G.POS).map(k => [k, k[0].toUpperCase() + k.slice(1)])] }));
+        rows.push(row(t('ui.position', 'Position'), { kind: 'select', value: posv ? posv[0] : '', attrs: { 'data-f': 'lpos' }, options: [['', t('ui.centre', 'Centre')], ...Object.keys(G.POS).map(k => [k, sideName(k)])] }));
       }
       const known = (o: any) => COLORK(o) || ['color', 'fill', 'opacity', 'fill opacity', 'draw opacity'].includes(o.k) || G.WIDTHS[o.k] != null || ['dashed', 'dotted', 'densely dashed', 'loosely dashed', 'densely dotted', 'loosely dotted', 'solid'].includes(o.k) || /^tdplot_/.test(o.k) || (o.v == null && /-/.test(o.k) && !/_/.test(o.k));
-      rows.push(field('Options', 'rest', O.filter((o: any) => !known(o)).map((o: any) => o.t).join(', '), { class: 'mono', placeholder: 'other TikZ options' }));
+      rows.push(field(t('ui.options', 'Options'), 'rest', O.filter((o: any) => !known(o)).map((o: any) => o.t).join(', '), { class: 'mono', placeholder: t('editor.g3.otherOptions', 'other TikZ options') }));
     } else if (st.k === 'pic') {
       const O = st.o ? G.optList(E.src, st.o.s, st.o.e) : [], g = (k: string) => (O.find((o: any) => o.k === k) || {}).v, q = O.find((o: any) => o.k[0] === '"'), color = (O.find(COLORK) || {}).k || 'black';
-      rows.push(field('Size', 'psize', g('angle radius') || '5mm', { class: 'mono', placeholder: '5mm' }), field('Label', 'plabel', q ? mathOf(q.k.replace(/^"|"$/g, '')) : '', { 'data-tx': 'math', placeholder: 'none' }));
-      if (q) rows.push(numField('Distance', 'pecc', g('angle eccentricity') || '0.6', '', { min: '0', step: '0.05', title: 'Where the label sits, as a share of the size: 0 is the corner, 1 the mark, more is outside' }));
-      rows.push(col('Colour', 'color', color), note('Drag the square to size the mark, and its label to move it in or out.'));
-    } else if (st.k === 'foreach') rows.push(field('Values', 'fl', text(st.list), { class: 'mono' }), note('Repeats its body for each value of ', ...st.vars.flatMap((v: string, i: number) => [...(i ? [', '] : []), { code: `\\${v}` }]), '; ', { code: 'a,b,...,c' }, ' counts from a to c in steps of b − a. Its parts are drawn but not dragged: change them in the code.'));
-    else if (st.k === 'scope') rows.push(...(st.o ? [field('Options', 'so', text(st.o), { class: 'mono' })] : []), note('Its options (colours, frames, ', { code: 'declare function' }, ') apply to everything inside.'));
-    else if (st.k === 'rot') rows.push(vf('α about z', 'ra', st.a), vf('β about y', 'rb', st.b), vf('γ about z', 'rg', st.g), note('Euler angles (z, y, z) of the frame that ', { code: 'tdplot_rotated_coords' }, ' draws in, from here on.'));
-    else if (st.k === 'tplane') rows.push(vf('φ', 'tp', st.ph), note('From here on, ', { code: 'tdplot_rotated_coords' }, ' is the plane through the z-axis at angle φ: its x-axis is z, so an arc from 0 to θ there measures the angle from z.'));
-    else if (st.k === 'rorig') rows.push(vf('Origin', 'ro', st.at));
-    else if (st.k === 'macro') rows.push(field('Value', 'mv', text(st.v), { class: 'mono' }), note('Used as ', { code: `\\${st.name}` }, '. Dragging a point that uses it changes it here.'));
-    else if (st.k === 'main') rows.push(vf('Tilt θ', 'mth', st.th), vf('Turn φ', 'mph', st.ph));
-    else rows.push(note('Kept in the code as written.'));
-    if (st.k !== 'main') rows.push({ kind: 'actions', class: 'row', buttons: [{ text: 'Duplicate', attrs: { 'data-ge': 'dup' } }, { text: st.k === 'coordinate' || st.k === 'setcoord' ? 'Delete Point' : 'Delete', attrs: { class: 'danger', 'data-ge': 'del' } }] });
-    show(title, rows, `line ${E.src.slice(0, st.s).split('\n').length}`);
+      rows.push(field(t('ui.size', 'Size'), 'psize', g('angle radius') || '5mm', { class: 'mono', placeholder: '5mm' }), field(t('ui.label', 'Label'), 'plabel', q ? mathOf(q.k.replace(/^"|"$/g, '')) : '', { 'data-tx': 'math', placeholder: 'none' }));
+      if (q) rows.push(numField(t('editor.g3.distance', 'Distance'), 'pecc', g('angle eccentricity') || '0.6', '', { min: '0', step: '0.05', title: t('editor.g3.distanceTitle', 'Where the label sits, as a share of the size: 0 is the corner, 1 the mark, more is outside') }));
+      rows.push(col(t('ui.colour', 'Colour'), 'color', color), note(t('editor.g3.help.pic', 'Drag the square to size the mark, and its label to move it in or out.')));
+    } else if (st.k === 'foreach') rows.push(field(t('editor.g3.values', 'Values'), 'fl', text(st.list), { class: 'mono' }), note(t('editor.g3.help.foreach', 'Repeats its body for each value of '), ...st.vars.flatMap((v: string, i: number) => [...(i ? [', '] : []), { code: `\\${v}` }]), '; ', { code: 'a,b,...,c' }, t('editor.g3.help.foreachRest', ' counts from a to c in steps of b − a. Its parts are drawn but not dragged: change them in the code.')));
+    else if (st.k === 'scope') rows.push(...(st.o ? [field(t('ui.options', 'Options'), 'so', text(st.o), { class: 'mono' })] : []), note(t('editor.g3.help.scope', 'Its options (colours, frames, '), { code: 'declare function' }, t('editor.g3.help.scopeRest', ') apply to everything inside.')));
+    else if (st.k === 'rot') rows.push(vf(t('editor.g3.about', '{angle} about {axis}', { angle: 'α', axis: 'z' }), 'ra', st.a), vf(t('editor.g3.about', '{angle} about {axis}', { angle: 'β', axis: 'y' }), 'rb', st.b), vf(t('editor.g3.about', '{angle} about {axis}', { angle: 'γ', axis: 'z' }), 'rg', st.g), note(t('editor.g3.help.rot', 'Euler angles (z, y, z) of the frame that '), { code: 'tdplot_rotated_coords' }, t('editor.g3.help.rotRest', ' draws in, from here on.')));
+    else if (st.k === 'tplane') rows.push(vf('φ', 'tp', st.ph), note(t('editor.g3.help.tplane', 'From here on, '), { code: 'tdplot_rotated_coords' }, t('editor.g3.help.tplaneRest', ' is the plane through the z-axis at angle φ: its x-axis is z, so an arc from 0 to θ there measures the angle from z.')));
+    else if (st.k === 'rorig') rows.push(vf(t('editor.g3.origin', 'Origin'), 'ro', st.at));
+    else if (st.k === 'macro') rows.push(field(t('editor.g3.value', 'Value'), 'mv', text(st.v), { class: 'mono' }), note(t('editor.g3.help.macro', 'Used as '), { code: `\\${st.name}` }, t('editor.g3.help.macroRest', '. Dragging a point that uses it changes it here.')));
+    else if (st.k === 'main') rows.push(vf(t('editor.g3.tilt', 'Tilt θ'), 'mth', st.th), vf(t('editor.g3.turn', 'Turn φ'), 'mph', st.ph));
+    else rows.push(note(t('editor.g3.help.kept', 'Kept in the code as written.')));
+    if (st.k !== 'main') rows.push({ kind: 'actions', class: 'row', buttons: [{ text: t('ui.duplicate', 'Duplicate'), attrs: { 'data-ge': 'dup' } }, { text: st.k === 'coordinate' || st.k === 'setcoord' ? t('editor.g3.deletePoint', 'Delete Point') : t('ui.delete', 'Delete'), attrs: { class: 'danger', 'data-ge': 'del' } }] });
+    show(title, rows, t('editor.g3.lineN', 'line {n}', { n: E.src.slice(0, st.s).split('\n').length }));
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { begin(); E.base = E.src; } });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { E.base = null; commit(); renderProps(); } });
@@ -1257,13 +1287,13 @@ import { runtime as TD } from '../runtime';
     else if (a === 'fwd') reorder(1);
     else if (a === 'back') reorder(-1);
     else if (a === 'label') { if (E.sel != null) editLabel(E.sel); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
     updateTools();
   }
   // the code follows the drawing, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const Lx = L();
-    count.textContent = `${Lx.S.filter(drawable).length} commands`;
+    count.textContent = commandsText(Lx.S.filter(drawable).length);
     updateTools();
     if (document.activeElement === codeTa) return;
     if (E.src !== E.codeAt) { E.codeAt = E.src; codeTa.value = E.src; }
@@ -1343,8 +1373,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement === codeTa) readCode();
     commit();
     if (E.src !== E.start) { E.start = E.src; E.done({ src: E.src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = t('editor.commonA.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && E.src !== E.start);
@@ -1355,27 +1386,43 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = E.src, changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this figure?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(t('editor.g3.discard', 'Discard changes to this figure?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
     root.hidden = true;
     document.body.classList.remove('cz-open');
+    localeOff?.(); localeOff = undefined;
     E = null;
     if (ok && changed) done({ src });
   }
+  let localeOff: (() => void) | undefined;
+  // the chrome that depends on the kind of figure, set after the frame's own captions
+  function chrome() {
+    const lang = FLAT ? 'TikZ' : 'tikz-3dplot', title = FLAT ? t('editor.g3.title2d', '2D geometry') : t('editor.g3.title', '3D geometry');
+    $('#g3Title', root).textContent = title;
+    const ic = TD.blocks.get(FLAT ? 'geo2d' : 'geo3d')?.menu.icon;
+    if (ic) $('#g3Icon', root).innerHTML = ic;
+    svg.setAttribute('aria-label', title);
+    $('.g3-lang', root).textContent = lang;
+    codeTa.setAttribute('aria-label', t('editor.commonA.langCode', '{lang} code', { lang }));
+    $('[data-ge="copy"]', root).title = t('editor.commonA.copyCode', 'Copy the {lang} code', { lang });
+  }
   function open(block: any, done: any, opts: Record<string, any> = {}) {
     FLAT = !!opts.flat;
-    const lang = FLAT ? 'TikZ' : 'tikz-3dplot';
-    $('#g3Title', root).textContent = FLAT ? '2D geometry' : '3D geometry';
-    svg.setAttribute('aria-label', FLAT ? '2D geometry' : '3D geometry');
-    $('.g3-lang', root).textContent = lang;
-    codeTa.setAttribute('aria-label', `${lang} code`);
-    $('[data-ge="copy"]', root).title = `Copy the ${lang} code`;
+    chrome();
     E = { src: String(block.src || ''), sel: null, many: null, view: { ox: 0, oy: 0, k: 120 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null, base: null };
     E.start = E.src;
     root.hidden = false;
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, properties, hints and title follow the interface language while the editor is open
+    let first = true;
+    localeOff?.();
+    localeOff = onLocale(() => {
+      if (first) { first = false; return; }
+      queueMicrotask(() => { if (E) chrome(); });
+      if (E) { buildPalette(); renderProps(); draw(); syncCode(); }
+    });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

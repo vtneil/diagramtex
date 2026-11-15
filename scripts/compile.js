@@ -20,6 +20,9 @@ function options({ minify = false, write = true } = {}) {
     entryPoints: [path.resolve(__dirname, '../src/main.ts')],
     outfile: path.resolve(__dirname, '../public/js/app.bundle.js'),
     bundle: true, format: 'iife', platform: 'browser', target: 'es2020',
+    loader: { '.woff2': 'dataurl', '.css': 'text' },
+    // Use the selected SVG font as the default too; omit the unused NewCM tables.
+    alias: { '#default-font/svg/default.js': path.resolve(__dirname, '../node_modules/@mathjax/mathjax-tex-font/mjs/svg/default.js') },
     // Without a `development` / `production` condition, esm-env (Svelte's DEV flag) falls back to false everywhere.
     conditions: [minify ? 'production' : 'development'],
     minify, write, sourcemap: maps, legalComments: 'inline',
@@ -63,6 +66,17 @@ function options({ minify = false, write = true } = {}) {
     } }],
   };
 }
-async function compileApp(settings) { return esbuild.build(options(settings)); }
-module.exports = { compileApp, options, renderIndex };
+function workerOptions({ minify = false, write = true } = {}) {
+  return { entryPoints: [path.resolve(__dirname, '../src/domain/math-render-worker.ts')],
+    outfile: path.resolve(__dirname, '../public/math-render-worker.js'),
+    bundle: true, format: 'iife', platform: 'browser', target: 'es2020', minify, write,
+    alias: { '#default-font/svg/default.js': path.resolve(__dirname, '../node_modules/@mathjax/mathjax-tex-font/mjs/svg/default.js') },
+    legalComments: 'inline' };
+}
+async function compileApp(settings) {
+  const [application, worker] = await Promise.all([esbuild.build(options(settings)), esbuild.build(workerOptions(settings))]);
+  if (application.outputFiles) application.outputFiles.push(...worker.outputFiles);
+  return application;
+}
+module.exports = { compileApp, options, workerOptions, renderIndex };
 if (require.main === module) compileApp().catch(() => { process.exitCode = 1; });

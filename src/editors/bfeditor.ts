@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { onLocale, t } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, codeRow, note, actionRow, texColour } from '../ui/editor-fields';
@@ -39,6 +42,18 @@ import { runtime as TD } from '../runtime';
   ];
   const ITEM: Record<string, any> = {}, KEYS: Record<string, any> = {};
   for (const [, items] of PAL) for (const [k, name, m, key, tip] of items) { ITEM[k] = { k, name, mini: m, key, tip }; if (key) KEYS[key.toLowerCase()] = k; }
+  // the palette as shown (PAL keeps the English for search): [name, tooltip]
+  const palTitle = (title: any) => (title === 'Fields' ? t('editor.bf.pal.fields', 'Fields') : t('editor.bf.pal.groups', 'Groups'));
+  const palText = (k: string): [string, string] => (({
+    bitbox: () => [t('editor.bf.bitBox', 'Bit box'), t('editor.bf.pal.bitboxTip', 'A field some bits wide, in the row')],
+    wordbox: () => [t('editor.bf.wordBox', 'Word box'), t('editor.bf.pal.wordboxTip', 'A field the width of the whole row, one or more rows tall')],
+    bitboxes: () => [t('editor.bf.bits', 'Bits'), t('editor.bf.pal.bitboxesTip', 'One box per bit, each with its own label (\\bitboxes)')],
+    skip: () => [t('editor.bf.pal.skip', 'Skipped'), t('editor.bf.pal.skipTip', 'Skipped words: rows left out, drawn as the package\'s slanted lines (\\skippedwords)')],
+    bitheader: () => [t('editor.bf.pal.header', 'Header'), t('editor.bf.pal.headerTip', 'Bit header: the bit numbers above the first row')],
+    gr: () => [t('ui.right', 'Right'), t('editor.bf.pal.grTip', 'Right word group: a brace and label to the right of the selected rows')],
+    gl: () => [t('ui.left', 'Left'), t('editor.bf.pal.glTip', 'Left word group: a brace and label to the left of the selected rows')],
+  } as Record<string, () => [string, string]>)[k]?.() ?? [ITEM[k].name, ITEM[k].tip]);
+  const rowsText = (n: any) => (n === 1 ? t('editor.bf.oneRow', '1 row') : t('editor.bf.nRows', '{n} rows', { n: String(n) }));
 
   // ---------------------------------------------------------------- model
   // M = TD.bytefield.parse(src) plus { raw, dirty }: the code is M.raw until something is edited
@@ -149,8 +164,8 @@ import { runtime as TD } from '../runtime';
     if (!it) return;
     if (it.k === 'bitbox') {
       const w = num(it.w);
-      if (!(w! >= 2) || w !== Math.round(w!)) { setTip('A field must be at least 2 whole bits to split'); return; }
-      if (bits && w > 64) { setTip('Too many bits to split one by one'); return; }
+      if (!(w! >= 2) || w !== Math.round(w!)) { setTip(t('editor.bf.tip.split2', 'A field must be at least 2 whole bits to split')); return; }
+      if (bits && w > 64) { setTip(t('editor.bf.tip.tooMany', 'Too many bits to split one by one')); return; }
       edit(() => {
         const ws = bits ? Array(w).fill(1) : [Math.ceil(w / 2), Math.floor(w / 2)];
         it.w = String(ws[0]); touch(it);
@@ -160,7 +175,7 @@ import { runtime as TD } from '../runtime';
     }
     if (it.k === 'wordbox') {
       const n = num(it.w);
-      if (!(n! >= 2) || n !== Math.round(n!)) { setTip('A word box must be at least 2 rows to split'); return; }
+      if (!(n! >= 2) || n !== Math.round(n!)) { setTip(t('editor.bf.tip.split2rows', 'A word box must be at least 2 rows to split')); return; }
       edit(() => {
         it.w = String(Math.ceil(n / 2)); touch(it);
         E.M.items.splice(ii + 1, 0, BR(), mk('wordbox', { w: String(Math.floor(n / 2)), text: '', sides: it.sides, opts: it.opts }, ROWPRE));
@@ -175,7 +190,7 @@ import { runtime as TD } from '../runtime';
       });
       return;
     }
-    setTip('Only bit boxes and word boxes split');
+    setTip(t('editor.bf.tip.onlySplit', 'Only bit boxes and word boxes split'));
   }
   // the content item next to ii in its row (dir ±1)
   function neighbour(ii: any, dir: any) {
@@ -185,8 +200,8 @@ import { runtime as TD } from '../runtime';
   }
   function merge(ii: any, dir: any) {
     const jj = neighbour(ii, dir), a = E.M.items[ii], b = jj != null ? E.M.items[jj] : null;
-    if (!b) { setTip(`No field ${dir > 0 ? 'after' : 'before'} it in the row`); return; }
-    if (a.k !== 'bitbox' || b.k !== 'bitbox') { setTip('Only bit boxes merge'); return; }
+    if (!b) { setTip(dir > 0 ? t('editor.bf.tip.noAfter', 'No field after it in the row') : t('editor.bf.tip.noBefore', 'No field before it in the row')); return; }
+    if (a.k !== 'bitbox' || b.k !== 'bitbox') { setTip(t('editor.bf.tip.onlyMerge', 'Only bit boxes merge')); return; }
     const L = dir > 0 ? a : b, R = dir > 0 ? b : a, li = dir > 0 ? ii : jj, ri = dir > 0 ? jj : ii;
     edit(() => {
       L.w = nstr((num(L.w) || 0) + (num(R.w) || 0));
@@ -207,7 +222,7 @@ import { runtime as TD } from '../runtime';
       E.M.items.splice(after ? ii + 1 : ii, 0, nw);
     });
     E.sel = { t: 'box', ii: after ? ii + 1 : ii, sub: null }; renderProps(); draw();
-    if (room <= 0) setTip(`The row is now wider than ${bitsOf()} bits`);
+    if (room <= 0) setTip(t('editor.bf.tip.wider', 'The row is now wider than {n} bits', { n: bitsOf() }));
   }
   // a new row holding item, before or after row r; returns the new item's index
   function insertRow(r: any, after: any, item: any) {
@@ -311,12 +326,12 @@ import { runtime as TD } from '../runtime';
     const r = s ? rowOfItem(E.sel.ii) : rows.length - 1;
     if (k === 'gr' || k === 'gl') {
       const sr = selRowRange();
-      if (!sr) { setTip('Select the rows to group first (⇧-click for more than one)'); return; }
+      if (!sr) { setTip(t('editor.bf.tip.selectRows', 'Select the rows to group first (⇧-click for more than one)')); return; }
       groupRows(k === 'gr' ? 'r' : 'l', sr[0], sr[1]);
       return;
     }
     if (k === 'bitheader') {
-      if (E.M.items.some((it: any) => it.k === 'bitheader')) setTip('The field already has a bit header: this adds another');
+      if (E.M.items.some((it: any) => it.k === 'bitheader')) setTip(t('editor.bf.tip.header', 'The field already has a bit header: this adds another'));
       const n = bitsOf();
       const spec = n <= 16 ? `0-${n - 1}` : Array.from<any, any>({ length: Math.ceil(n / 8) }, (_, i) => [i * 8, Math.min(n - 1, i * 8 + 7)]).flat().filter((v, i, a) => a.indexOf(v) === i).join(',');
       insertRow(0, false, mk('bitheader', { spec }));
@@ -348,7 +363,7 @@ import { runtime as TD } from '../runtime';
     const a = bs[0], z = bs[bs.length - 1];
     E.sel = { t: 'box', ii: a.ii, sub: a.sub, fo: { ii: z.ii, sub: z.sub }, all: true };
     const n = fr[fr.length - 1] - fr[0] + 1;
-    setTip(`${n} row${n === 1 ? '' : 's'} selected · R or L groups them, ⌫ deletes them`);
+    setTip(n === 1 ? t('editor.bf.tip.rowSelected', '1 row selected · R or L groups them, ⌫ deletes them') : t('editor.bf.tip.rowsSelected', '{n} rows selected · R or L groups them, ⌫ deletes them', { n }));
     draw(); renderProps();
   }
   // A selection is a field (the anchor) and, for a range, the field at its other end (fo): it covers every
@@ -390,9 +405,9 @@ import { runtime as TD } from '../runtime';
     const bs = selBoxes();
     if (bs.length < 2) return null;
     const rr = selRowRange(), n = rr![1] - rr![0] + 1;
-    if (wholeRows()) return n === 1 ? 'Delete Row' : `Delete ${n} Rows`;
+    if (wholeRows()) return n === 1 ? t('editor.commonA.menu.deleteRow', 'Delete Row') : t('editor.commonA.menu.deleteRows', 'Delete {n} Rows', { n });
     const m = new Set(bs.map((b: any) => b.ii)).size;
-    return `Delete ${m} Field${m === 1 ? '' : 's'}`;
+    return m === 1 ? t('editor.bf.deleteOneField', 'Delete 1 Field') : t('editor.bf.deleteFields', 'Delete {n} Fields', { n: m });
   }
   function deleteRange() {
     if (wholeRows()) { const rr = selRowRange(); deleteRows(rr![0], rr![1]); return; }
@@ -404,7 +419,7 @@ import { runtime as TD } from '../runtime';
     const bs = selBoxes(), rr = selRowRange();
     if (bs.length < 2) { if (bs[0]) setTip(boxTip(bs[0])); return; }
     const n = rr![1] - rr![0] + 1;
-    setTip(`${bs.length} fields${n > 1 ? ` in ${n} rows` : ''} selected`);
+    setTip(n > 1 ? t('editor.bf.tip.fieldsRows', '{n} fields in {rows} rows selected', { n: bs.length, rows: n }) : t('editor.bf.tip.fields', '{n} fields selected', { n: bs.length }));
   }
   function setText(ii: any, sub: any, v: any) {
     const it = E.M.items[ii];
@@ -427,11 +442,11 @@ import { runtime as TD } from '../runtime';
     const q = search.value.trim().toLowerCase();
     let html = '';
     for (const [title, items] of PAL) {
-      const hits = (items as any).filter(([k, name, , , t]: any) => !q || `${name} ${title} ${t} ${k}`.toLowerCase().includes(q));
+      const hits = (items as any).filter(([k, name, , , tp]: any) => !q || `${name} ${title} ${tp} ${k} ${palText(k).join(' ')} ${palTitle(title)}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, , key, t]: any) => `<button class="qe-item" data-item="${esc(k)}" title="${esc(t)}${key ? ` (${key})` : ''}"><span class="qe-fig">${ITEM[k].mini}</span><span>${esc(name)}</span></button>`).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(palTitle(title))}</div><div class="qe-grid">${hits.map(([k, , , key]: any) => { const [name, tp] = palText(k); return `<button class="qe-item" data-item="${esc(k)}" title="${esc(tp)}${key ? ` (${key})` : ''}"><span class="qe-fig">${ITEM[k].mini}</span><span>${esc(name)}</span></button>`; }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 64, 40, 1.6);
   }
   search.addEventListener('input', buildPalette);
@@ -487,7 +502,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -503,11 +518,16 @@ import { runtime as TD } from '../runtime';
   function boxTip(b: any) {
     const it = E.M.items[b.ii];
     if (!it) return '';
-    if (b.k === 'skip') return 'Skipped words';
-    const t = F.shown(b.sub != null ? F.tokens(it.text)[b.sub] : it.text).replace(/\n/g, ' ');
-    if (b.k === 'wordbox') { const n = num(it.w); return `Word box · ${n} row${n === 1 ? '' : 's'}${t ? ` · ${t}` : ''}`; }
-    const [lo, hi] = bitRange(b), n = hi - lo + 1;
-    return `${n === 1 ? `Bit ${lo}` : `Bits ${lo}–${hi}`} · ${n} bit${n === 1 ? '' : 's'}${t ? ` · ${t}` : ''}`;
+    if (b.k === 'skip') return t('editor.bf.skippedWords', 'Skipped words');
+    const txt = F.shown(b.sub != null ? F.tokens(it.text)[b.sub] : it.text).replace(/\n/g, ' ');
+    if (b.k === 'wordbox') return `${t('editor.bf.wordBox', 'Word box')} · ${rowsText(num(it.w))}${txt ? ` · ${txt}` : ''}`;
+    const n = bitRange(b)[1] - bitRange(b)[0] + 1;
+    return `${bitsHead(b)} · ${n === 1 ? t('editor.bf.oneBit', '1 bit') : t('editor.bf.nBits', '{n} bits', { n })}${txt ? ` · ${txt}` : ''}`;
+  }
+  // a bit box's bits: "Bit 3" or "Bits 0–7"
+  function bitsHead(b: any) {
+    const [lo, hi] = bitRange(b);
+    return lo === hi ? t('editor.bf.bitN', 'Bit {n}', { n: lo }) : t('editor.bf.bitsRange', 'Bits {lo}–{hi}', { lo, hi });
   }
 
   // ---------------------------------------------------------------- drawing
@@ -625,7 +645,7 @@ import { runtime as TD } from '../runtime';
     if (!d) {
       const h = hit(e), key = h ? (h.t === 'box' ? `b${h.b.ii}:${h.b.sub}:${h.edge}` : `g${h.g.beg}:${h.edge}`) : '';
       svg.style.cursor = h && h.edge ? (h.edge === 'r' ? 'ew-resize' : 'ns-resize') : '';
-      if (key !== E.hoverKey) { E.hoverKey = key; E.hover = h; draw(); setTip(h ? (h.t === 'box' ? boxTip(h.b) + (h.edge === 'r' ? ' · drag to resize' : h.edge === 'b' ? ' · drag to change its rows' : '') : `Word group · ${F.shown(h.g.text).replace(/\n/g, ' ') || 'no label'}${h.edge ? ` · drag to change its ${h.edge === 't' ? 'first' : 'last'} row` : ''}`) : ''); }
+      if (key !== E.hoverKey) { E.hoverKey = key; E.hover = h; draw(); setTip(h ? (h.t === 'box' ? boxTip(h.b) + (h.edge === 'r' ? ` · ${t('editor.bf.tip.dragResize', 'drag to resize')}` : h.edge === 'b' ? ` · ${t('editor.bf.tip.dragRows', 'drag to change its rows')}` : '') : `${t('editor.bf.wordGroup', 'Word group')} · ${F.shown(h.g.text).replace(/\n/g, ' ') || t('editor.bf.noLabel', 'no label')}${h.edge ? ` · ${h.edge === 't' ? t('editor.bf.tip.dragFirst', 'drag to change its first row') : t('editor.bf.tip.dragLast', 'drag to change its last row')}` : ''}`) : ''); }
       return;
     }
     if (d.mode === 'pan') {
@@ -684,12 +704,12 @@ import { runtime as TD } from '../runtime';
       if (k === d.at) return;
       d.at = k;
       d.items0.forEach((it: any, i: any) => (it.pre = d.pre0[i])); // a placement may re-indent: start again from the code as it was
-      const t = want[0] === s1 && want[1] === s2 ? d.items0.slice() : placeGroup(d.items0, d.bo, d.eo, want[0], want[1]);
-      if (!t) { setTip('A word group can\'t cross another on its side: they nest'); return; }
-      E.M.items = t; E.M.dirty = true;
-      E.sel = { t: 'group', beg: t.indexOf(d.bo) };
+      const placed = want[0] === s1 && want[1] === s2 ? d.items0.slice() : placeGroup(d.items0, d.bo, d.eo, want[0], want[1]);
+      if (!placed) { setTip(t('editor.bf.tip.nest', 'A word group can\'t cross another on its side: they nest')); return; }
+      E.M.items = placed; E.M.dirty = true;
+      E.sel = { t: 'group', beg: placed.indexOf(d.bo) };
       const n = want[1] - want[0] + 1;
-      setTip(`Word group · ${n} row${n === 1 ? '' : 's'}`);
+      setTip(`${t('editor.bf.wordGroup', 'Word group')} · ${rowsText(n)}`);
       draw(); renderProps();
       return;
     }
@@ -765,7 +785,7 @@ import { runtime as TD } from '../runtime';
     above: blocks(0, false, false), below: blocks(2, false, false), rowdel: blocks(0, true, false),
     before: blocks(0, false, true), after: blocks(2, false, true),
   };
-  const mItem = (act: any, label: any, icon?: any, key?: any, danger?: any, off?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-bm="${act}"${off ? ' disabled' : ''}>${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="ic"></span>'}<span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon?: any, key?: any, danger?: any, off?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-bm="${act}"${off ? ' disabled' : ''}>${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="ic"></span>'}<span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -778,27 +798,27 @@ import { runtime as TD } from '../runtime';
       if (!keep) E.sel = { t: 'box', ii: h.b.ii, sub: h.b.sub };
       const b = keep ? boxOf(E.sel.ii, E.sel.sub) : h.b, it = E.M.items[b.ii];
       const box = BOXES.has(it.k), bit = it.k === 'bitbox', w = num(it.w);
-      html += box ? mItem('label', 'Edit Label…', null, '↩') : '';
-      if (bit) html += mItem('half', 'Split in Half', null, 'S', false, !(w! >= 2 && w === Math.round(w!))) + mItem('bits', 'Split into Bits', null, '', false, !(w! >= 2 && w === Math.round(w!) && w <= 64));
-      if (it.k === 'wordbox') html += mItem('half', 'Split into Rows', null, 'S', false, !(w! >= 2 && w === Math.round(w!)));
-      if (it.k === 'bitboxes') html += mItem('half', 'Split into Bit Boxes', null, 'S');
+      html += box ? mItem('label', t('editor.commonA.menu.editLabel', 'Edit Label…'), null, '↩') : '';
+      if (bit) html += mItem('half', t('editor.bf.menu.half', 'Split in Half'), null, 'S', false, !(w! >= 2 && w === Math.round(w!))) + mItem('bits', t('editor.bf.menu.bits', 'Split into Bits'), null, '', false, !(w! >= 2 && w === Math.round(w!) && w <= 64));
+      if (it.k === 'wordbox') html += mItem('half', t('editor.bf.menu.rows', 'Split into Rows'), null, 'S', false, !(w! >= 2 && w === Math.round(w!)));
+      if (it.k === 'bitboxes') html += mItem('half', t('editor.bf.menu.boxes', 'Split into Bit Boxes'), null, 'S');
       if (bit) {
         const nx = neighbour(b.ii, 1), pv = neighbour(b.ii, -1);
-        html += mItem('mnext', 'Merge with Next', null, 'M', false, !(nx != null && E.M.items[nx].k === 'bitbox')) + mItem('mprev', 'Merge with Previous', null, '⇧M', false, !(pv != null && E.M.items[pv].k === 'bitbox'));
+        html += mItem('mnext', t('editor.bf.menu.mergeNext', 'Merge with Next'), null, 'M', false, !(nx != null && E.M.items[nx].k === 'bitbox')) + mItem('mprev', t('editor.bf.menu.mergePrev', 'Merge with Previous'), null, '⇧M', false, !(pv != null && E.M.items[pv].k === 'bitbox'));
       }
       html += '<hr>';
-      if (it.k === 'bitbox' || it.k === 'bitboxes') html += mItem('fbefore', 'Insert Field Before', 'before') + mItem('fafter', 'Insert Field After', 'after');
-      html += mItem('rabove', 'Insert Row Above', 'above') + mItem('rbelow', 'Insert Row Below', 'below');
-      html += '<hr>' + mItem('gright', 'Group Rows Right', null, 'R') + mItem('gleft', 'Group Rows Left', null, 'L');
+      if (it.k === 'bitbox' || it.k === 'bitboxes') html += mItem('fbefore', t('editor.bf.menu.fieldBefore', 'Insert Field Before'), 'before') + mItem('fafter', t('editor.bf.menu.fieldAfter', 'Insert Field After'), 'after');
+      html += mItem('rabove', t('editor.commonA.menu.rowAbove', 'Insert Row Above'), 'above') + mItem('rbelow', t('editor.commonA.menu.rowBelow', 'Insert Row Below'), 'below');
+      html += '<hr>' + mItem('gright', t('editor.bf.menu.groupRight', 'Group Rows Right'), null, 'R') + mItem('gleft', t('editor.bf.menu.groupLeft', 'Group Rows Left'), null, 'L');
       const dl = rangeDelLabel();
       if (dl) html += '<hr>' + mItem('fdel', dl, wholeRows() ? 'rowdel' : 'del', '⌫', true);
       else {
-        html += '<hr>' + mItem('fdel', it.k === 'wordbox' || it.k === 'skip' ? 'Delete Row' : 'Delete Field', it.k === 'wordbox' || it.k === 'skip' ? 'rowdel' : 'del', '⌫', true);
-        if (it.k !== 'wordbox' && it.k !== 'skip' && it.k !== 'bitheader') html += mItem('rdel', 'Delete Row', 'rowdel', '', true);
+        html += '<hr>' + mItem('fdel', it.k === 'wordbox' || it.k === 'skip' ? t('editor.commonA.menu.deleteRow', 'Delete Row') : t('editor.bf.deleteField', 'Delete Field'), it.k === 'wordbox' || it.k === 'skip' ? 'rowdel' : 'del', '⌫', true);
+        if (it.k !== 'wordbox' && it.k !== 'skip' && it.k !== 'bitheader') html += mItem('rdel', t('editor.commonA.menu.deleteRow', 'Delete Row'), 'rowdel', '', true);
       }
     } else if (h && h.t === 'group') {
       E.sel = { t: 'group', beg: h.g.beg };
-      html += mItem('label', 'Edit Label…', null, '↩') + mItem('gflip', h.g.side === 'r' ? 'Move to the Left' : 'Move to the Right') + '<hr>' + mItem('gdel', 'Delete Group', 'del', '⌫', true);
+      html += mItem('label', t('editor.commonA.menu.editLabel', 'Edit Label…'), null, '↩') + mItem('gflip', h.g.side === 'r' ? t('editor.bf.menu.toLeft', 'Move to the Left') : t('editor.bf.menu.toRight', 'Move to the Right')) + '<hr>' + mItem('gdel', t('editor.bf.deleteGroup', 'Delete Group'), 'del', '⌫', true);
     }
     if (!html) { closeMenu(); return; }
     menu.innerHTML = html;
@@ -818,7 +838,7 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('wheel', closeMenu, { passive: true });
 
   // ---------------------------------------------------------------- properties
-  const ENDS = [['', 'Default'], ['little', 'Little', 'Bit 0 at the left'], ['big', 'Big', 'Bit 0 at the right']];
+  const ENDS = () => [['', t('ui.default', 'Default')], ['little', t('editor.bf.end.little', 'Little'), t('editor.bf.end.littleTitle', 'Bit 0 at the left')], ['big', t('editor.bf.end.big', 'Big'), t('editor.bf.end.bigTitle', 'Bit 0 at the right')]];
   function renderProps() {
     if (!E) return;
     const M = E.M, L = lay(), it = selItem(), g = selGroup();
@@ -827,38 +847,39 @@ import { runtime as TD } from '../runtime';
       const b = boxOf(E.sel.ii, E.sel.sub), rr = selRowRange(), delN = rangeDelLabel(), multi = !!delN, nsel = selBoxes().length;
       const code = F.fmt(it);
       if (it.k === 'bitheader') {
-        show('Bit header', `${F.headerNums(it.spec).length} numbers`, [field('Numbers', 'spec', it.spec, { placeholder: '0,7,8,15' }),
-          segments('Endianness', 'hend', F.getKey(it.opts, 'endianness') || '', ENDS), numField('Lowest bit', 'hlsb', F.getKey(it.opts, 'lsb'), '', { step: '1', placeholder: '0' }), codeRow(code),
-          note('Numbers are a list like ', { code: '0,7,8,15' }, ' or ranges like ', { code: '0-31' }, '.'), actionRow('be', 'fdel', delN || 'Delete Bit Header')]);
+        show(t('editor.bf.bitHeader', 'Bit header'), t('editor.bf.nNumbers', '{n} numbers', { n: F.headerNums(it.spec).length }), [field(t('editor.bf.numbers', 'Numbers'), 'spec', it.spec, { placeholder: '0,7,8,15' }),
+          segments(t('editor.bf.endianness', 'Endianness'), 'hend', F.getKey(it.opts, 'endianness') || '', ENDS()), numField(t('editor.bf.lowestBit', 'Lowest bit'), 'hlsb', F.getKey(it.opts, 'lsb'), '', { step: '1', placeholder: '0' }), codeRow(code),
+          note(t('editor.bf.help.numbers', 'Numbers are a list like '), { code: '0,7,8,15' }, t('editor.bf.help.ranges', ' or ranges like '), { code: '0-31' }, t('editor.bf.help.end', '.')), actionRow('be', 'fdel', delN || t('editor.bf.deleteHeader', 'Delete Bit Header'))]);
         return;
       }
       if (it.k === 'skip') {
-        show('Skipped words', '', [field('Height', 'len', it.len ?? '', { placeholder: '2ex' }), codeRow(code), actionRow('be', 'fdel', delN || 'Delete Row')]); return;
+        show(t('editor.bf.skippedWords', 'Skipped words'), '', [field(t('ui.height', 'Height'), 'len', it.len ?? '', { placeholder: '2ex' }), codeRow(code), actionRow('be', 'fdel', delN || t('editor.commonA.menu.deleteRow', 'Delete Row'))]); return;
       }
       const sd = F.sides(it.sides), word = it.k === 'wordbox', many = it.k === 'bitboxes';
       const label = many && E.sel.sub != null ? F.tokens(it.text)[E.sel.sub] || '' : it.text;
-      const title = word ? 'Word box' : many ? 'Bits' : 'Bit box';
-      const small = b ? boxTip(b).split(' · ').slice(0, 1).join('').replace(/^Word box/, `${num(it.w)} row${num(it.w) === 1 ? '' : 's'}`) : '';
-      const flags = { ...row('Borders', ...[['l', 'L', 'Left'], ['r', 'R', 'Right'], ['t', 'T', 'Top'], ['b', 'B', 'Bottom']].map(([key, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-fb': key, class: sd[key] ? 'on' : '', title: title + ' line' } }))), controlClass: 'ctl seg-ctl ze-flags' };
-      show(title, small, [field(many ? `Bit ${E.sel.sub != null ? E.sel.sub + 1 : ''} label` : 'Label', 'text', label, { 'data-tx': 'text', placeholder: 'none' }),
-        ...(many ? [field('All labels', 'all', it.text, { 'data-tx': 'text' })] : []), numField(word ? 'Rows' : many ? 'Bits each' : 'Bits', 'w', it.w, '', { min: '0', step: '1' }), flags,
-        { ...row('Fill', texColour(TD.texColor.unwrap(F.getKey(it.opts, 'bgcolor')), { 'data-f': 'bg' }, { nullable: true, defaultLabel: 'None', title: 'Fill' })), controlClass: 'ctl tc' },
-        field('Options', 'opts', it.opts || '', { placeholder: 'boxformatting=…' }), codeRow(code),
-        note(multi ? `${nsel} fields selected${rr![1] > rr![0] ? `, rows ${rr![0] + 1}–${rr![1] + 1}: R or L groups the rows` : ''}. This panel edits the first.` : `Drag its ${word ? 'bottom edge to change its rows' : 'right edge to move the line between it and the next field (⌥ for this field alone)'}; double-click to edit its label. Drag across fields, ⇧-click or ⇧-arrow to select a range.`),
-        actionRow('be', 'fdel', delN || (word ? 'Delete Row' : 'Delete Field'))]); return;
+      const title = word ? t('editor.bf.wordBox', 'Word box') : many ? t('editor.bf.bits', 'Bits') : t('editor.bf.bitBox', 'Bit box');
+      const small = b ? (b.k === 'skip' ? t('editor.bf.skippedWords', 'Skipped words') : b.k === 'wordbox' ? rowsText(num(it.w)) : bitsHead(b)) : '';
+      const BORDERS = [['l', 'L', t('editor.bf.border.left', 'Left line')], ['r', 'R', t('editor.bf.border.right', 'Right line')], ['t', 'T', t('editor.bf.border.top', 'Top line')], ['b', 'B', t('editor.bf.border.bottom', 'Bottom line')]];
+      const flags = { ...row(t('editor.bf.borders', 'Borders'), ...BORDERS.map(([key, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-fb': key, class: sd[key] ? 'on' : '', title } }))), controlClass: 'ctl seg-ctl ze-flags' };
+      show(title, small, [field(many ? t('editor.bf.bitLabel', 'Bit {n} label', { n: E.sel.sub != null ? E.sel.sub + 1 : '' }) : t('ui.label', 'Label'), 'text', label, { 'data-tx': 'text', placeholder: 'none' }),
+        ...(many ? [field(t('editor.bf.allLabels', 'All labels'), 'all', it.text, { 'data-tx': 'text' })] : []), numField(word ? t('editor.bf.rows', 'Rows') : many ? t('editor.bf.bitsEach', 'Bits each') : t('editor.bf.bits', 'Bits'), 'w', it.w, '', { min: '0', step: '1' }), flags,
+        { ...row(captions["ui.fill"], texColour(TD.texColor.unwrap(F.getKey(it.opts, 'bgcolor')), { 'data-f': 'bg' }, { nullable: true, defaultLabel: t('ui.none', 'None'), title: t('ui.fill', 'Fill') })), controlClass: 'ctl tc' },
+        field(t('ui.options', 'Options'), 'opts', it.opts || '', { placeholder: 'boxformatting=…' }), codeRow(code),
+        note(multi ? (rr![1] > rr![0] ? t('editor.bf.help.multiRows', '{n} fields selected, rows {r1}–{r2}: R or L groups the rows. This panel edits the first.', { n: nsel, r1: rr![0] + 1, r2: rr![1] + 1 }) : t('editor.bf.help.multi', '{n} fields selected. This panel edits the first.', { n: nsel })) : word ? t('editor.bf.help.word', 'Drag its bottom edge to change its rows; double-click to edit its label. Drag across fields, ⇧-click or ⇧-arrow to select a range.') : t('editor.bf.help.bit', 'Drag its right edge to move the line between it and the next field (⌥ for this field alone); double-click to edit its label. Drag across fields, ⇧-click or ⇧-arrow to select a range.')),
+        actionRow('be', 'fdel', delN || (word ? t('editor.commonA.menu.deleteRow', 'Delete Row') : t('editor.bf.deleteField', 'Delete Field')))]); return;
     }
     if (g) {
       const gi = M.items[g.beg];
-      show('Word group', g.side === 'r' ? 'right' : 'left', [field('Label', 'gtext', gi.text, { 'data-tx': 'text', placeholder: 'none' }), segments('Side', 'gside', g.side, [['l', 'Left'], ['r', 'Right']]),
-        field('Options', 'gopts', gi.opts || '', { placeholder: 'rightcurly=., …' }), note('A ', { code: '\\\\' }, ' in the label breaks the line.'), actionRow('be', 'gdel', 'Delete Group')]); return;
+      show(t('editor.bf.wordGroup', 'Word group'), g.side === 'r' ? t('editor.bf.side.right', 'right') : t('editor.bf.side.left', 'left'), [field(t('ui.label', 'Label'), 'gtext', gi.text, { 'data-tx': 'text', placeholder: 'none' }), segments(t('editor.bf.side', 'Side'), 'gside', g.side, [['l', t('ui.left', 'Left')], ['r', t('ui.right', 'Right')]]),
+        field(t('ui.options', 'Options'), 'gopts', gi.opts || '', { placeholder: 'rightcurly=., …' }), note(t('editor.bf.help.break', 'A '), { code: '\\\\' }, t('editor.bf.help.breakRest', ' in the label breaks the line.')), actionRow('be', 'gdel', t('editor.bf.deleteGroup', 'Delete Group'))]); return;
     }
     const o = M.head.opts, c = L.cfg;
-    show('Bit field', F.summary(L), [numField('Bits wide', 'bits', M.head.bits, '', { min: '1', step: '1' }),
-      field('Bit width', 'bitwidth', F.getKey(o, 'bitwidth') || '', { placeholder: `${r2(c.bw)}pt` }), field('Bit height', 'bitheight', F.getKey(o, 'bitheight') || '', { placeholder: '4ex' }),
-      segments('Endianness', 'end', F.getKey(o, 'endianness') || '', ENDS), numField('Lowest bit', 'lsb', F.getKey(o, 'lsb'), '', { step: '1', placeholder: '0' }),
-      field('Bit numbers', 'bitformatting', F.getKey(o, 'bitformatting') || '', { placeholder: '\\tiny' }),
-      field('Field text', 'boxformatting', F.getKey(o, 'boxformatting') || '', { placeholder: '\\centering' }),
-      note('Click a field to edit it; drag the line between two fields to move it; right-click for more. ', { kbd: 'S' }, ' splits, ', { kbd: 'M' }, ' merges, arrow keys move between fields.'),
+    show(t('editor.bf.title', 'Bit field'), F.summary(L), [numField(t('editor.bf.bitsWide', 'Bits wide'), 'bits', M.head.bits, '', { min: '1', step: '1' }),
+      field(t('editor.bf.bitWidth', 'Bit width'), 'bitwidth', F.getKey(o, 'bitwidth') || '', { placeholder: `${r2(c.bw)}pt` }), field(t('editor.bf.bitHeight', 'Bit height'), 'bitheight', F.getKey(o, 'bitheight') || '', { placeholder: '4ex' }),
+      segments(t('editor.bf.endianness', 'Endianness'), 'end', F.getKey(o, 'endianness') || '', ENDS()), numField(t('editor.bf.lowestBit', 'Lowest bit'), 'lsb', F.getKey(o, 'lsb'), '', { step: '1', placeholder: '0' }),
+      field(t('editor.bf.bitNumbers', 'Bit numbers'), 'bitformatting', F.getKey(o, 'bitformatting') || '', { placeholder: '\\tiny' }),
+      field(t('editor.bf.fieldText', 'Field text'), 'boxformatting', F.getKey(o, 'boxformatting') || '', { placeholder: '\\centering' }),
+      note(t('editor.bf.help.field', 'Click a field to edit it; drag the line between two fields to move it; right-click for more. '), { kbd: 'S' }, t('editor.bf.help.splits', ' splits, '), { kbd: 'M' }, t('editor.bf.help.merges', ' merges, arrow keys move between fields.')),
     ]);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
@@ -951,7 +972,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'rbelow' && it) insertRow(rowOfItem(s.ii), true, mk('wordbox', { w: '1', text: '' }));
     else if (a === 'gright' || a === 'gleft') add(a === 'gright' ? 'gr' : 'gl');
     else if (a === 'gflip' && g) flipGroup(g);
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
     updateTools();
   }
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
@@ -1045,9 +1066,10 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- open / close
   // ⌘S: write the field back to the page (one undo step there) and keep editing
   const { save, finish } = TD.editorSession.lifecycle({
-    state: () => E, clear: () => { E = null; }, snapshot: snapCode, commit,
-    root, code: codeTa, readCode, setTip, tip, discardTitle: 'Discard changes to this bit field?', beforeClose: () => { if (LB) LB.pop.close(); },
+    state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: snapCode, commit,
+    root, code: codeTa, readCode, setTip, tip, discardTitle: () => t('editor.bf.discard', 'Discard changes to this bit field?'), beforeClose: () => { if (LB) LB.pop.close(); },
   });
+  let localeOff: (() => void) | undefined;
   function open(block: any, done: any) {
     const M = load(block.src);
     E = { M, sel: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, hoverKey: '', codeAt: null, codeTimer: null };
@@ -1056,6 +1078,9 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette and properties follow the interface language while the editor is open
+    localeOff?.();
+    localeOff = onLocale(() => { if (E) { buildPalette(); renderProps(); } });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

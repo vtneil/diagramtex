@@ -461,6 +461,8 @@ def build(res):
   if 'bulk' in cand and abs(cand['bulk'][0]) + abs(cand['bulk'][1]) < 1e-3: cand.pop('bulk')
   if cat == 'logic': cand.pop('up', None); cand.pop('down', None)
   if kind == 'b' or len(set(cand) - {'left', 'right'}) > 0: cand.pop('left', None); cand.pop('right', None)
+  if name in ('jump crossing', 'plain crossing'):
+    cand = {a: res['anchors'][a] for a in ('left', 'right', 'north', 'south')}
   rank = lambda a: (PREFER.index(a) if a in PREFER else 100 + len(a), a)
   best = {}
   for a in sorted(cand, key=rank):

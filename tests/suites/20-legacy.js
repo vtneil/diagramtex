@@ -14,7 +14,7 @@ for (const f of Object.keys(T.fixtures).filter((k) => k.startsWith('legacy/') &&
       T.ok([b.x, b.y, b.w, b.h].every(Number.isFinite), `finite box for ${s.type}`);
     }
     const svg = TD.app.svgOf(shapes);
-    T.ok(svg.length > 100 && !/NaN|undefined/.test(svg), 'draws without NaN');
+    T.ok(svg.length > 100 && !/NaN|undefined/.test(svg.replace(/data:[^"']*/g, '')), 'draws without NaN');
     const doc = { name: p.name, page: p.page, blocks: p.blocks };
     const tex = TD.docToLatex(doc);
     const back = TD.app.parseProject(TD.app.projectJson({ ...doc, kind: 'classic' }), tag);

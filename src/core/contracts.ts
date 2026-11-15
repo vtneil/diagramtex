@@ -6,6 +6,8 @@ export interface Shape {
 }
 export type FileKind = 'classic' | 'board' | 'page';
 export interface ShapeOwner {
+  /** Optional navigation name for Classic diagram blocks. */
+  name?: string;
   shapes: Shape[];
   vars?: Record<string, string>;
 }
@@ -36,6 +38,8 @@ export interface HistoryStep {
   pa?: number;
   vb?: string;
   va?: string;
+  nb?: string;
+  na?: string;
   /** when it was done (or redone), and when it was last undone: `stamp()` order across every file */
   t?: number;
   r?: number;

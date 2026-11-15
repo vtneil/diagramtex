@@ -1,5 +1,6 @@
 // Common code-editor history and save/discard lifecycle. Domain gestures and rendering stay local.
 import type { SourceSession } from './contracts';
+import { t } from '../i18n';
 interface HistoryHooks {
   state(): SourceSession;
   snapshot(): string;
@@ -16,7 +17,7 @@ interface LifecycleHooks {
   readCode(): void;
   setTip(value: string): void;
   tip?: HTMLElement;
-  discardTitle: string;
+  discardTitle: string | (() => string); // a getter reads it in the current interface language
   beforeClose?(): void;
 }
 export function createEditorSession(services: {
@@ -49,12 +50,12 @@ export function createEditorSession(services: {
       commit();
       const e = state()!, src = snapshot();
       if (src !== e.start) { e.start = src; e.done({ src }); }
-      setTip('Saved to the page');
+      setTip(t('editor.saved', 'Saved to the page'));
       setTimeout(() => { if (state()) setTipAfterSave(); }, 1500);
     }
     // Avoid erasing a newer, domain-specific hint while the saved message's timer is pending.
     function setTipAfterSave() {
-      if (tip && tip.textContent === 'Saved to the page') setTip('');
+      if (tip && tip.textContent === t('editor.saved', 'Saved to the page')) setTip('');
     }
     async function finish(ok: boolean) {
       if (!state()) return;
@@ -63,7 +64,7 @@ export function createEditorSession(services: {
       if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
       commit();
       const e = state()!, src = snapshot(), changed = src !== e.start;
-      if (!ok && changed && !(await services.confirm(discardTitle, 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+      if (!ok && changed && !(await services.confirm(typeof discardTitle === 'function' ? discardTitle() : discardTitle, t('editor.discard.body', 'Your edits since opening the editor will be lost.'), { ok: t('editor.discard.ok', 'Discard'), danger: true }))) return;
       const done = e.done;
       root.hidden = true;
       document.body.classList.remove('cz-open');

@@ -425,31 +425,42 @@ import { runtime as TD } from '../runtime';
   // ---------- physics: mechanics and optics ----------
   // Drawn in px inside the box, so hatching, bobs, axles and angle marks keep their size when the object is
   // resized; rotate, flip and Rotation turn them like any shape. Angle labels are maths (no $), empty to hide.
-  // params: hatched objects get a hatch spacing; every one is drawn in px (params present), so its menu icon too
+  // Hatched objects expose spacing, angle and stroke width; px-based geometry also drives menu icons.
   const Ph = (k: any, n: any, cat: any, draw: any, o: Record<string, any> = {}) => {
-    S(k, n, cat, { size: o.size || [80, 60], fill: !!o.fill, text: !!o.text, draw, params: { ...(o.hatch ? { hatch: 7 } : {}), ...(o.params || {}) } });
+    S(k, n, cat, { size: o.size || [80, 60], fill: !!o.fill, text: !!o.text, draw, params: { ...(o.hatch ? { hatch: 7, hatchAngle: 45, hatchWidth: 1 } : {}), ...(o.params || {}) } });
     if (o.text0) (LIB as Record<string, any>)[k].text0 = o.text0; // the text a new one starts with
     if (o.icon) (LIB as Record<string, any>)[k].icon = o.icon; // a compact size to draw the menu icon at, so hatching and lens shapes stay readable
   };
   const P = (b: any, x: any, y: any) => [b.u(x), b.v(y)];
   const line = (b: any, x0: any, y0: any, x1: any, y1: any) => b.pl(...P(b, x0, y0), ...P(b, x1, y1));
-  // 45° hatching filling the band [x0,x1]×[y0,y1] (lines x + y = c, `gap` px apart along the edge)
-  function hatchBand(b: any, x0: any, y0: any, x1: any, y1: any, gap: any) {
-    for (let c = x0 + y0 + gap / 2; c < x1 + y1; c += gap) {
-      const xa = Math.max(x0, c - y1), xb = Math.min(x1, c - y0);
-      if (xb - xa > 0.5) line(b, xa, c - xa, xb, c - xb);
+  // Clip parallel hatch strokes to the band in the symbol's local frame (angle is y-up).
+  function hatchBand(b: any, x0: any, y0: any, x1: any, y1: any, gap: any, s: any) {
+    const a = num(s.hatchAngle, 45) * Math.PI / 180, dx = Math.cos(a), dy = -Math.sin(a), nx = -dy, ny = dx;
+    const corners = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map(([x, y]) => x * nx + y * ny);
+    const step = Math.max(3, gap) * Math.SQRT1_2;
+    for (let c = Math.min(...corners) + step / 2; c < Math.max(...corners); c += step) {
+      let lo = -Infinity, hi = Infinity;
+      for (const [origin, dir, min, max] of [[nx * c, dx, x0, x1], [ny * c, dy, y0, y1]]) {
+        if (Math.abs(dir) < 1e-9) { if (origin < min || origin > max) { hi = -Infinity; break; } }
+        else { const a = (min - origin) / dir, z = (max - origin) / dir; lo = Math.max(lo, Math.min(a, z)); hi = Math.min(hi, Math.max(a, z)); }
+      }
+      if (hi - lo > 0.5) hatchLine(b, s, nx * c + dx * lo, ny * c + dy * lo, nx * c + dx * hi, ny * c + dy * hi);
     }
   }
+  function hatchLine(b: any, s: any, x0: any, y0: any, x1: any, y1: any) {
+    line(b, x0, y0, x1, y1);
+    b.subs[b.subs.length - 1].hatchWidth = Math.max(0.25, num(s.hatchWidth, s.width || 1));
+  }
   // short slanted ticks behind a curve: pts are [x, y, nx, ny] with (nx, ny) the unit normal towards the back
-  function hatchCurve(b: any, pts: any, gap: any, len: any) {
+  function hatchCurve(b: any, pts: any, gap: any, len: any, s: any) {
     let run = gap / 2;
     for (let i = 1; i < pts.length; i++) {
       const [x0, y0] = pts[i - 1], [x1, y1, nx, ny] = pts[i], d = Math.hypot(x1 - x0, y1 - y0);
       run -= d;
       if (run > 0) continue;
       run += gap;
-      const k = Math.SQRT1_2, tx = -ny, ty = nx; // along the curve, then lean the tick back 45°
-      line(b, x1, y1, x1 + len * k * (nx - tx), y1 + len * k * (ny - ty));
+      const a = num(s.hatchAngle, 45) * Math.PI / 180, n = Math.sin(a), t = Math.cos(a), tx = -ny, ty = nx;
+      hatchLine(b, s, x1, y1, x1 + len * (n * nx - t * tx), y1 + len * (n * ny - t * ty));
     }
   }
   function dashed(b: any, x0: any, y0: any, x1: any, y1: any, on = 4, off = 3) {
@@ -469,9 +480,25 @@ import { runtime as TD } from '../runtime';
   const gapOf = (s: any) => num(s.hatch, 7);
 
   // mechanics
-  Ph('p-ground', 'Ground', 'mech', (b: any, s: any) => { line(b, 0, 0, b.w, 0); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [120, 9], icon: [56, 10] });
-  Ph('p-ceiling', 'Ceiling', 'mech', (b: any, s: any) => { line(b, 0, b.h, b.w, b.h); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [120, 9], icon: [56, 10] });
-  Ph('p-wall', 'Wall', 'mech', (b: any, s: any) => { line(b, b.w, 0, b.w, b.h); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [9, 100], icon: [10, 40] });
+  // One hatch geometry; old toolbox entries are presets, and remain valid in saved files.
+  const hatchEdges = { hatchTop: false, hatchRight: false, hatchBottom: false, hatchLeft: false };
+  const drawHatch = (b: any, s: any) => {
+    hatchBand(b, 0, 0, b.w, b.h, gapOf(s), s);
+    if (s.hatchTop) line(b, 0, 0, b.w, 0);
+    if (s.hatchRight) line(b, b.w, 0, b.w, b.h);
+    if (s.hatchBottom) line(b, 0, b.h, b.w, b.h);
+    if (s.hatchLeft) line(b, 0, 0, 0, b.h);
+    return b;
+  };
+  const hatchPreset = (key: string, name: string, cat: string, size: number[], icon: number[], edges: any) => {
+    Ph(key, name, cat, drawHatch, { hatch: true, size, icon, params: { ...hatchEdges, ...edges } });
+    LIB[key].hatchPreset = true;
+  };
+  hatchPreset('p-hatch', 'Hatch', 'mech', [120, 35], [56, 18], {});
+  hatchPreset('p-ground', 'Hatch — ground', 'mech', [120, 9], [56, 10], { hatchTop: true });
+  hatchPreset('p-ceiling', 'Hatch — ceiling', 'mech', [120, 9], [56, 10], { hatchBottom: true });
+  hatchPreset('p-wall', 'Hatch — wall', 'mech', [9, 100], [10, 40], { hatchRight: true });
+
   Ph('p-block', 'Block', 'mech', (b: any) => b.box(0, 0, 1, 1), { size: [50, 40], fill: true, text: true, text0: '$m$' });
   Ph('p-incline', 'Incline', 'mech', (b: any, s: any) => {
     b.pg(0, 1, 1, 1, 1, 0);
@@ -488,7 +515,7 @@ import { runtime as TD } from '../runtime';
   Ph('p-pulley', 'Pulley', 'mech', (b: any, s: any) => {
     const R = Math.max(4, Math.min(b.w / 2, (b.h - 12) / 2) - 0.5), cx = b.w / 2, cy = b.h - R - 0.5, top = s.mount === false ? 0 : 8;
     b.circ(b.u(cx), b.v(cy), R);
-    if (s.mount !== false) { const m = Math.min(b.w / 2, 18); line(b, cx - m, top, cx + m, top); hatchBand(b, cx - m, 0, cx + m, top, gapOf(s)); }
+    if (s.mount !== false) { const m = Math.min(b.w / 2, 18); line(b, cx - m, top, cx + m, top); hatchBand(b, cx - m, 0, cx + m, top, gapOf(s), s); }
     line(b, cx, top, cx, cy);
     b.circ(b.u(cx), b.v(cy), Math.min(2.5, R / 3)).solid();
     return b;
@@ -496,7 +523,7 @@ import { runtime as TD } from '../runtime';
   Ph('p-pendulum', 'Pendulum', 'mech', (b: any, s: any) => {
     const top = s.mount === false ? 0 : 8, px = Math.min(b.w * 0.3, b.w - 20), r = Math.max(3, Math.min(8, b.w * 0.1));
     const bx = b.w - r - 0.5, by = b.h - r - 0.5, L = Math.hypot(bx - px, by - top);
-    if (s.mount !== false) { const m = Math.min(px, 22); line(b, px - m, top, px + m, top); hatchBand(b, px - m, 0, px + m, top, gapOf(s)); }
+    if (s.mount !== false) { const m = Math.min(px, 22); line(b, px - m, top, px + m, top); hatchBand(b, px - m, 0, px + m, top, gapOf(s), s); }
     line(b, px, top, bx - ((bx - px) / L) * r, by - ((by - top) / L) * r);
     dashed(b, px, top, px, top + L);
     b.circ(b.u(bx), b.v(by), r).solid();
@@ -521,7 +548,7 @@ import { runtime as TD } from '../runtime';
     b.pl(...P(b, b.w / 2 - a, 0), 0.5, b.v(a * 1.1), ...P(b, b.w / 2 + a, 0)); b.pl(...P(b, b.w / 2 - a, b.h), 0.5, b.v(b.h - a * 1.1), ...P(b, b.w / 2 + a, b.h));
     return b;
   }, { size: [16, 110], icon: [14, 50] });
-  Ph('p-mirror', 'Plane mirror', 'optics', (b: any, s: any) => { line(b, 0, 0, 0, b.h); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [9, 110], icon: [10, 44] });
+  hatchPreset('p-mirror', 'Hatch — mirror', 'optics', [9, 110], [10, 44], { hatchLeft: true });
   const curved = (concave: any) => (b: any, s: any) => {
     const hl = 7, sag = Math.max(1, b.w - hl - 1), [R, f] = bow(b.h, sag), cy = b.h / 2;
     // concave: the ends at the left, the middle `sag` px back; convex: the middle at the left
@@ -533,13 +560,13 @@ import { runtime as TD } from '../runtime';
       const nx = Math.cos(a), ny = -Math.sin(a); // away from the centre
       pts.push(concave ? [x, y, nx, ny] : [x, y, -nx, -ny]);
     }
-    hatchCurve(b, pts, gapOf(s), hl);
+    hatchCurve(b, pts, gapOf(s), hl, s);
     return b;
   };
-  Ph('p-concmirror', 'Concave mirror', 'optics', curved(true), { size: [22, 110], icon: [16, 50] });
-  Ph('p-convmirror', 'Convex mirror', 'optics', curved(false), { size: [22, 110], icon: [16, 50] });
+  Ph('p-concmirror', 'Concave mirror', 'optics', curved(true), { size: [22, 110], icon: [16, 50], hatch: true });
+  Ph('p-convmirror', 'Convex mirror', 'optics', curved(false), { size: [22, 110], icon: [16, 50], hatch: true });
   Ph('p-prism', 'Prism', 'optics', (b: any) => b.pg(0.5, 0, 1, 1, 0, 1), { size: [80, 70], fill: true });
-  Ph('p-screen', 'Screen', 'optics', (b: any, s: any) => { b.box(0, 0, 1, 1); hatchBand(b, 0, 0, b.w, b.h, gapOf(s)); return b; }, { hatch: true, size: [10, 110], icon: [10, 44] });
+  hatchPreset('p-screen', 'Hatch — screen', 'optics', [10, 110], [10, 44], { hatchTop: true, hatchRight: true, hatchBottom: true, hatchLeft: true });
   Ph('p-slit', 'Slits', 'optics', (b: any, s: any) => {
     const n = Math.max(1, Math.round(+s.slits || 2)), g = Math.min(b.h / (2 * n + 1), 10), mid = b.h / 2, span = (n - 1) * g * 2.2;
     let y = 0;
@@ -570,7 +597,7 @@ import { runtime as TD } from '../runtime';
     const odd = (s.rot || 0) % 2 === 1;
     const lw = odd ? s.h : s.w, lh = odd ? s.w : s.h;
     const b = builder(Math.max(lw, 1e-6), Math.max(lh, 1e-6));
-    def.draw(b, def.params ? { ...def.params, ...s } : s);
+    def.draw(b, def.params ? { ...def.params, ...s, hatchWidth: s.hatchWidth ?? s.width ?? 1 } : s);
     const k = (s.rot || 0) % 4;
     const xf = symXf(s);
     const map = (u: any, v: any) => {
@@ -585,6 +612,7 @@ import { runtime as TD } from '../runtime';
     };
     const out: any = b.subs.map((sp) => ({
       solid: sp.solid,
+      hatchWidth: sp.hatchWidth,
       closed: sp.segs[sp.segs.length - 1][0] === 'Z',
       segs: sp.segs.map((g: any) => {
         if (g[0] === 'Z') return g;
@@ -636,6 +664,7 @@ import { runtime as TD } from '../runtime';
       const s: Record<string, any> = { type: 'sym', kind, x: p.x, y: p.y, w: 0, h: 0, rot: 0, fx: false, fy: false, stroke: d.stroke || '#000000', width: d.width, dash: d.dash, opacity: 1 };
       if (def.fill) s.fill = d.fill || null;
       if (def.params) Object.assign(s, def.params);
+      if (def.hatchPreset) s.kind = 'p-hatch';
       s.angle = 0; s.skew = 0;
       if (def.text) Object.assign(s, { text: def.text0 || '', size: d.size || 'normalsize', font: d.font || 'default', bold: false, italic: false, color: d.color || '#000000' });
       return s;
@@ -661,17 +690,18 @@ import { runtime as TD } from '../runtime';
     samples(s: any) { const t = symXf(s); return [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]].map(([x, y]) => { const [X, Y] = t(x, y); return { x: X, y: Y }; }); },
     svg(s: any, ctx: any) {
       const def = (LIB as Record<string, any>)[s.kind] || LIB.rect;
-      const subs: any = geom(s), main = subs.filter((p: any) => !p.solid), solid = subs.filter((p: any) => p.solid);
+      const subs: any = geom(s), main = subs.filter((p: any) => !p.solid && p.hatchWidth == null), solid = subs.filter((p: any) => p.solid);
       const d = dOf(main), ds = dOf(solid);
       const col = s.stroke ? css(s.stroke) : 'none';
       const dar = TD.dashArray(s.dash, s.width), da = dar ? `stroke-dasharray="${dar}"` : '';
       let out = `<path d="${d}" fill="${def.fill && s.fill ? css(s.fill) : 'none'}" fill-rule="evenodd" stroke="${col}" stroke-width="${s.width}" ${da} stroke-linejoin="round"/>`;
+      for (const sp of subs.filter((p: any) => p.hatchWidth != null)) out += `<path d="${dOf([sp])}" fill="none" stroke="${col}" stroke-width="${sp.hatchWidth}" ${da}/>`;
       if (ds) out += `<path d="${ds}" fill="${css(s.stroke || '#000000')}" stroke="none"/>`;
       for (const [x, y, t] of subs.labs) out += TD.textSvg(`$${t}$`, LAB_ST, s.stroke || '#000000', x, y, ctx);
       if (s.text) out += TD.textSvg(s.text, s, s.color || '#000', s.x + s.w / 2, s.y + s.h / 2, ctx);
       if (s.opacity != null && s.opacity < 1) out = `<g opacity="${s.opacity}">${out}</g>`;
       if (!ctx.export) {
-        out += `<path class="hit" d="${d}${ds}" stroke-width="${ctx.hit}"/>`;
+        out += `<path class="hit" d="${dOf(subs)}" stroke-width="${ctx.hit}"/>`;
         if (def.fill || def.text) out += `<path class="hitfill" d="${d}"/>`;
       }
       return out;
@@ -690,13 +720,17 @@ import { runtime as TD } from '../runtime';
         return o;
       }).join(' ');
       const lines = [];
-      const main = subs.filter((p: any) => !p.solid), solid = subs.filter((p: any) => p.solid);
+      const main = subs.filter((p: any) => !p.solid && p.hatchWidth == null), solid = subs.filter((p: any) => p.solid);
       const fill = def.fill && s.fill;
       if (main.length && (s.stroke || fill)) {
         const o = TD.styleOpts(s, X, { fill: !!fill });
         if (fill && main.length > 1) o.push('even odd rule');
         o.push('line join=round');
         lines.push(`${s.stroke ? '\\draw' : typeof fill === 'object' ? '\\path' : '\\fill'}${TD.tikzOpts(o)} ${path(main)};`);
+      }
+      for (const sp of subs.filter((p: any) => p.hatchWidth != null)) if (s.stroke) {
+        const o = TD.styleOpts({ ...s, width: sp.hatchWidth }, X, { fill: false });
+        lines.push(`\\draw${TD.tikzOpts(o)} ${path([sp])};`);
       }
       if (solid.length && s.stroke) {
         const o = [X.col(s.stroke)];

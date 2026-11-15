@@ -12,6 +12,7 @@ interface Snapshot {
   json: Map<string, string>;
   pages?: number;
   vars: string;
+  name: string;
 }
 export function createDocumentHistory(state: HistoryState, hooks: {
   syncLinks(): void;
@@ -26,6 +27,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     json: new Map(state.doc.shapes.map(s => [s.id, JSON.stringify(s)])),
     pages: state.doc.kind === 'page' ? state.doc.sheet.pages : undefined,
     vars: JSON.stringify(owner().vars || null),
+    name: JSON.stringify(owner().name ?? null),
   });
   function begin() {
     if (pending) return;
@@ -62,11 +64,12 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     });
     for (const [id, old] of previous.json) if (!now.json.has(id)) before.push([id, old, positions.get(id)!]);
     const moved = !sameOrder(previous, now);
-    if (before.length || after.length || moved || now.pages !== previous.pages || now.vars !== previous.vars) {
+    if (before.length || after.length || moved || now.pages !== previous.pages || now.vars !== previous.vars || now.name !== previous.name) {
       const step: HistoryStep = { before, after, size: 64, t: stamp() };
       if (moved) { step.ib = previous.ids; step.ia = now.ids; step.size += 12 * (previous.ids.length + now.ids.length); }
       if (now.pages !== previous.pages) { step.pb = previous.pages; step.pa = now.pages; }
       if (now.vars !== previous.vars) { step.vb = previous.vars; step.va = now.vars; }
+      if (now.name !== previous.name) { step.nb = previous.name; step.na = now.name; step.size += previous.name.length + now.name.length; }
       for (const entry of [...before, ...after]) step.size += entry[1].length;
       state.undo.push(step); trim(); state.redo = [];
       hooks.changed();
@@ -101,12 +104,15 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     const pages = back ? step.pb : step.pa, vars = back ? step.vb : step.va;
     if (pages !== undefined) state.doc.sheet.pages = pages;
     if (vars !== undefined) { const value = JSON.parse(vars); if (value) owner().vars = value; else delete owner().vars; }
+    const name = back ? step.nb : step.na;
+    if (name !== undefined) { const value = JSON.parse(name); if (value === null) delete owner().name; else owner().name = value; }
     if (base && base.owner === owner()) {
       for (const id of fromIds) if (!toMap.has(id)) base.json.delete(id);
       for (const [id, json] of toMap) base.json.set(id, json);
       base.ids = list.map(s => s.id);
       if (pages !== undefined) base.pages = pages;
       if (vars !== undefined) base.vars = vars;
+      if (name !== undefined) base.name = name;
     } else base = null;
     const ids = new Set(list.map(s => s.id));
     for (const id of state.sel) if (!ids.has(id)) state.sel.delete(id);

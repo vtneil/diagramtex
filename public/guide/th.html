@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>คู่มือ DiagramTeX ภาษาไทย</title>
+  <meta name="description" content="คู่มือ DiagramTeX ภาษาไทย: การวาดแผนภาพ สูตร LaTeX วงจร กราฟ รูปสามมิติ เคมี UML ตาราง เอกสาร การนำเข้าและส่งออก TikZ">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <link rel="canonical" href="https://diagramtex.com/guide/th.html">
+  <link rel="alternate" hreflang="en" href="https://diagramtex.com/guide/">
+  <link rel="alternate" hreflang="th" href="https://diagramtex.com/guide/th.html">
+  <link rel="icon" href="../icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../icons/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="../icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="icon" href="../favicon.ico" sizes="16x16 32x32 48x48">
+  <meta name="theme-color" content="#fffdf8">
+  <script>
+    // Same appearance as the app: its Light / Dark choice, or the system's. Runs before the styles, so no flash.
+    (function () {
+      var pick = null, mq = matchMedia('(prefers-color-scheme: dark)');
+      try { pick = localStorage.getItem('diagramtex.theme'); } catch (e) { /* storage blocked */ }
+      function apply() {
+        var t = pick === 'light' || pick === 'dark' ? pick : mq.matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = t;
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.content = t === 'dark' ? '#242320' : '#fffdf8';
+      }
+      apply();
+      mq.addEventListener('change', apply);
+      addEventListener('storage', function (e) { if (e.key === 'diagramtex.theme') { pick = e.newValue; apply(); } });
+    })();
+  </script>
+  <style>
+    @font-face { font-family: 'Inter Display'; font-weight: 400 500; font-display: swap; src: url('../fonts/InterDisplay-Medium.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter Display'; font-weight: 600; font-display: swap; src: url('../fonts/InterDisplay-SemiBold.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter Display'; font-weight: 700; font-display: swap; src: url('../fonts/InterDisplay-Bold.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter Display'; font-style: italic; font-weight: 400; font-display: swap; src: url('../fonts/InterDisplay-Italic.woff2') format('woff2'); }
+
+    /* the app's tokens (css/style.css), so the guide reads as part of it */
+    :root {
+      color-scheme: light;
+      --paper: #f4f2ec; --sheet: #fffdf8; --sheet-raised: #ffffff; --well: #f3f0e8;
+      --ink: #1c1b19; --graphite: #5d5b55; --pencil: #6f6c64; --faint: #bab7ae;
+      --rule: rgba(28, 27, 25, .12); --rule-soft: rgba(28, 27, 25, .07); --rule-strong: rgba(28, 27, 25, .24);
+      --wash: rgba(28, 27, 25, .045); --wash-strong: rgba(28, 27, 25, .085);
+      --redpen: #c8361d; --bluepen: #2459a6; --mathpen: #1f7a3a; --marker-wash: rgba(232, 180, 20, .10);
+      --logo-k: #23205A;
+      --r-sm: 4px; --r: 6px; --r-lg: 10px; --r-xl: 12px; --ctl: 28px;
+      --font-ui: "Inter Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    :root[data-theme=dark] {
+      color-scheme: dark;
+      --paper: #1c1b19; --sheet: #242320; --sheet-raised: #2e2d2a; --well: #1a1917;
+      --ink: #ecebe6; --graphite: #b4b1a9; --pencil: #95928a; --faint: #5c5a55;
+      --rule: rgba(236, 235, 230, .13); --rule-soft: rgba(236, 235, 230, .07); --rule-strong: rgba(236, 235, 230, .24);
+      --wash: rgba(236, 235, 230, .06); --wash-strong: rgba(236, 235, 230, .11);
+      --redpen: #e8674c; --bluepen: #6c9de3; --mathpen: #7cc58f; --marker-wash: rgba(240, 197, 60, .10);
+      --logo-k: #F1EFFF;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: 64px; -webkit-text-size-adjust: 100%; }
+    @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 500 15px/1.6 var(--font-ui); font-feature-settings: "cv11", "ss03"; }
+    a { color: var(--bluepen); text-decoration: none; }
+    a:hover { text-decoration: underline; text-underline-offset: 2px; }
+    a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: var(--r-sm); }
+
+    /* top bar */
+    .top { position: sticky; top: 0; z-index: 5; height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 16px;
+      background: var(--sheet); border-bottom: 1px solid var(--rule); }
+    .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; font-size: 14px; }
+    .brand:hover { text-decoration: none; }
+    .brand svg { width: 20px; height: 20px; }
+    .brand .k { fill: var(--logo-k); }
+    .brand small { color: var(--pencil); font-weight: 500; font-size: 14px; }
+    .top .sp { flex: 1; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl); padding: 0 12px; border-radius: var(--r);
+      border: 1px solid var(--rule-strong); color: var(--ink); font: 500 13px var(--font-ui); white-space: nowrap; }
+    .btn:hover { background: var(--wash); text-decoration: none; }
+    .btn svg { width: 14px; height: 14px; }
+
+    /* layout: contents on the left, one reading column */
+    .wrap { display: grid; grid-template-columns: 232px minmax(0, 760px); gap: 48px; max-width: 1104px; margin: 0 auto; padding: 32px 24px 96px; }
+    nav.toc { position: sticky; top: 72px; align-self: start; max-height: calc(100vh - 96px); overflow: auto; font-size: 13px; }
+    nav.toc .h { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pencil); margin: 0 0 8px 8px; }
+    nav.toc ol { list-style: none; margin: 0; padding: 0; }
+    nav.toc li a { display: block; padding: 4px 8px; border-radius: var(--r); color: var(--graphite); }
+    nav.toc li a:hover { background: var(--wash); color: var(--ink); text-decoration: none; }
+    nav.toc li a.on { color: var(--ink); background: var(--wash-strong); }
+    nav.toc ol ol a { padding-left: 20px; font-size: 12.5px; }
+    .toc-m { display: none; }
+
+    main { min-width: 0; }
+    .hero { padding: 8px 0 24px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+    .eyebrow { font-size: 12px; font-weight: 600; color: var(--pencil); letter-spacing: .02em; }
+    h1 { font-size: 36px; line-height: 1.15; letter-spacing: -.02em; font-weight: 700; margin: 4px 0 12px; }
+    .lede { font-size: 17px; color: var(--graphite); margin: 0 0 16px; max-width: 640px; }
+    .facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .facts li { font-size: 12px; color: var(--graphite); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; background: var(--sheet); }
+    h2 { font-size: 24px; line-height: 1.25; letter-spacing: -.01em; font-weight: 700; margin: 48px 0 12px; }
+    h3 { font-size: 17px; line-height: 1.3; font-weight: 600; margin: 28px 0 8px; }
+    h2 + p, h3 + p { margin-top: 0; }
+    p, ul, ol { margin: 0 0 12px; }
+    ul, ol { padding-left: 20px; }
+    li { margin: 3px 0; }
+    li::marker { color: var(--pencil); }
+    b, strong { font-weight: 600; }
+    .muted { color: var(--pencil); }
+    code { font: 13px var(--font-mono); background: var(--wash); border-radius: var(--r-sm); padding: 1px 4px; overflow-wrap: anywhere; }
+    pre { font: 13px/1.5 var(--font-mono); background: var(--well); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 12px 16px; overflow-x: auto; margin: 0 0 16px; }
+    pre code { background: none; padding: 0; }
+    kbd { font: 11.5px var(--font-mono); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-bottom-width: 2px; border-radius: var(--r-sm); padding: 0 5px; color: var(--ink); white-space: nowrap; }
+
+    figure { margin: 16px 0 24px; }
+    figure img { display: block; width: 100%; height: auto; border-radius: var(--r-lg); border: 1px solid var(--rule); background: var(--sheet); }
+    figcaption { font-size: 13px; color: var(--pencil); margin-top: 8px; }
+
+    .steps { counter-reset: s; list-style: none; padding: 0; display: grid; gap: 8px; }
+    .steps li { counter-increment: s; position: relative; padding: 12px 16px 12px 52px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); margin: 0; }
+    .steps li::before { content: counter(s); position: absolute; left: 16px; top: 12px; width: 24px; height: 24px; border-radius: 50%;
+      background: var(--ink); color: var(--sheet); font: 600 12px/24px var(--font-ui); text-align: center; }
+
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 16px; }
+    .card { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); padding: 12px 16px; }
+    .card h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+    .card p { margin: 0; font-size: 13.5px; color: var(--graphite); }
+
+    .note { border-left: 3px solid var(--bluepen); background: var(--sheet); border-radius: 0 var(--r) var(--r) 0; padding: 10px 14px; margin: 0 0 16px; font-size: 14px; }
+    .note.warn { border-left-color: var(--redpen); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 0 0 16px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); overflow: hidden; display: block; overflow-x: auto; }
+    table > tbody, table > thead { display: table; width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--rule-soft); }
+    th { font-size: 12px; font-weight: 600; color: var(--pencil); background: var(--wash); }
+    tr:last-child td { border-bottom: 0; }
+    td:first-child { white-space: nowrap; }
+    .rate { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; }
+
+    details.block { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-lg); margin: 0 0 8px; }
+    details.block > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; padding: 10px 16px; font-weight: 600; }
+    details.block > summary::-webkit-details-marker { display: none; }
+    details.block > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--pencil); border-bottom: 1.5px solid var(--pencil);
+      transform: rotate(-45deg); transition: transform 220ms var(--ease); flex: none; align-self: center; }
+    details.block[open] > summary::before { transform: rotate(45deg); }
+    details.block > summary code { font-weight: 500; }
+    details.block > summary .muted { font-weight: 500; font-size: 13px; margin-left: auto; }
+    details.block > div { padding: 0 16px 8px 30px; font-size: 14.5px; }
+    @media (prefers-reduced-motion: reduce) { details.block > summary::before { transition: none; } }
+
+    html:lang(th) { --font-ui: "Inter Display", "Leelawadee UI", "Thonburi", "Noto Sans Thai", system-ui, sans-serif; }
+    html:lang(th) h1, html:lang(th) h2, html:lang(th) h3 { line-height: 1.5; letter-spacing: normal; }
+    footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--pencil); }
+
+    @media (max-width: 900px) {
+      .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 16px 16px 64px; }
+      nav.toc { display: none; }
+      .toc-m { display: block; margin: 0 0 16px; }
+      .toc-m nav.toc { display: block; position: static; max-height: none; padding: 0 8px 8px; }
+      h1 { font-size: 30px; }
+      .cards { grid-template-columns: minmax(0, 1fr); }
+      .brand small { display: none; }
+    }
+  </style>
+  <link rel="stylesheet" href="../css/language-menu.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="../" title="เปิด DiagramTeX">
+      <svg viewBox="0 0 256 256" aria-hidden="true"><path class="k" d="M84.14 55.86L200.14 171.86L171.86 200.14L55.86 84.14Z"/><circle cx="70" cy="70" r="54" fill="#FF5A3C"/><rect x="132" y="132" width="108" height="108" rx="16" fill="#2F7BFF"/></svg>
+      DiagramTeX <small>คู่มือ</small>
+    </a>
+    <span class="sp"></span>
+    <details class="language-picker">
+      <summary aria-label="ภาษาของคู่มือ" aria-haspopup="menu" aria-expanded="false"><span class="language-flag" aria-hidden="true">🇹🇭</span><span>ไทย</span><svg class="language-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg></summary>
+      <div class="language-options" popover="manual" role="menu" aria-label="ภาษา">
+        <a class="language-option" role="menuitemradio" aria-checked="false" href="./" data-guide-lang="en" lang="en" aria-label="English (UK)"><span class="language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+        <a class="language-option" role="menuitemradio" aria-checked="true" href="th.html" data-guide-lang="th" lang="th" aria-label="ภาษาไทย" aria-current="page"><span class="language-flag" aria-hidden="true">🇹🇭</span><span>ไทย</span><span class="language-check" aria-hidden="true">✓</span></a>
+      </div>
+    </details>
+    <a class="btn" href="../">เปิด DiagramTeX
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+  </header>
+
+  <div class="wrap">
+    <nav class="toc" id="toc" aria-label="สารบัญ">
+      <div class="h">สารบัญ</div>
+      <ol>
+        <li><a href="#start">เริ่มต้นใช้งาน</a></li>
+        <li><a href="#window">ส่วนต่าง ๆ ของหน้าต่าง</a></li>
+        <li><a href="#modes">โหมดทั้งห้า</a></li>
+        <li><a href="#drawing">การวาด</a>
+          <ol>
+            <li><a href="#tools">เครื่องมือ</a></li>
+            <li><a href="#precision">การจัดแนวและความแม่นยำ</a></li>
+            <li><a href="#arrange">การจัดวาง</a></li>
+            <li><a href="#style">รูปแบบ</a></li>
+          </ol>
+        </li>
+        <li><a href="#maths">ข้อความและสูตร</a></li>
+        <li><a href="#plots">กราฟและรูปสามมิติ</a></li>
+        <li><a href="#blocks">บล็อก</a></li>
+        <li><a href="#table">ตาราง</a></li>
+        <li><a href="#documents">เอกสารและหน้ากระดาษ</a></li>
+        <li><a href="#export">การส่งออก LaTeX</a></li>
+        <li><a href="#import">การนำเข้า TikZ</a></li>
+        <li><a href="#files">ไฟล์และการบันทึก</a></li>
+        <li><a href="#parity">ความใกล้เคียงกับ LaTeX</a></li>
+        <li><a href="#keys">แป้นพิมพ์ลัด</a></li>
+        <li><a href="#privacy">ออฟไลน์และความเป็นส่วนตัว</a></li>
+        <li><a href="#ai">การใช้ AI เชิงกำเนิด</a></li>
+        <li><a href="#faq">คำถามที่พบบ่อย</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <details class="block toc-m"><summary>สารบัญ</summary></details>
+      <section class="hero">
+        <div class="eyebrow">คู่มือผู้ใช้</div>
+        <h1>วาดภาพ แล้วนำ LaTeX ไปใช้ได้เลย</h1>
+        <p class="lede">DiagramTeX เป็นตัวแก้ไขแผนภาพที่สร้างโค้ด TikZ วาดด้วยเมาส์ พิมพ์ป้ายกำกับด้วยสูตร LaTeX แล้วคัดลอกโค้ดไปยัง Overleaf หรือเอกสาร LaTeX ของคุณ คู่มือนี้อธิบายตั้งแต่การวาดเส้นแรกจนถึงการส่งออกเอกสารทั้งฉบับ</p>
+        <ul class="facts"><li>ฟรีและเปิดเผยซอร์สโค้ด</li><li>ทำงานออฟไลน์</li><li>ไม่ต้องมีบัญชี</li><li>เอกสารอยู่ในเบราว์เซอร์ของคุณ</li></ul>
+        <p class="note">เลือก 🇬🇧 หรือ 🇹🇭 บนแถบด้านบนเพื่อเปลี่ยนภาษาของคู่มือและบันทึกภาษาที่ต้องการบนอุปกรณ์นี้ ในตัวแก้ไขก็มีตัวเลือกธงเช่นกัน ครั้งแรกจะใช้ภาษาอังกฤษ ข้อความที่ยังไม่มีคำแปลจะแสดงเป็นภาษาอังกฤษ ชื่อไฟล์ เนื้อหาเอกสาร สูตร และโค้ดส่งออกจะไม่เปลี่ยนตามภาษาของส่วนติดต่อ</p>
+      </section>
+
+      <section id="start">
+        <h2>เริ่มต้นใช้งาน</h2>
+        <ol class="steps">
+          <li><b>เลือกเครื่องมือแล้ววาด</b> เครื่องมืออยู่ทางซ้าย กด <kbd>L</kbd> เพื่อวาดเส้น <kbd>R</kbd> เพื่อวาดสี่เหลี่ยม หรือ <kbd>T</kbd> เพื่อพิมพ์ข้อความ</li>
+          <li><b>พิมพ์สูตรในป้ายกำกับ</b> ข้อความระหว่าง <code>$…$</code> จะแสดงเป็นสูตร LaTeX ขณะพิมพ์ เช่น <code>$\vec F = m\vec a$</code></li>
+          <li><b>คัดลอก TikZ</b> กด <kbd class="mod">Ctrl</kbd><kbd>E</kbd> เพื่อเปิดโค้ด หมายเหตุด้านบนระบุแพ็กเกจที่ต้องใช้</li>
+          <li><b>วางแล้วคอมไพล์</b> ใส่โค้ดในเอกสาร โหลดแพ็กเกจตามรายการ แล้วคอมไพล์ด้วย pdfLaTeX</li>
+        </ol>
+        <p>เมื่อเปิดครั้งแรก คุณจะเห็นไฟล์ต้อนรับที่มีคำแนะนำและตัวอย่างแผนภาพ เปิดวัตถุในตัวอย่างเพื่อดูวิธีสร้างได้ ติดตั้งแอปผ่านไอคอนติดตั้งในแถบที่อยู่ของเบราว์เซอร์ หรือเมนูเพิ่มไปยังหน้าจอหลัก เพื่อใช้งานโดยไม่ต้องเชื่อมต่ออินเทอร์เน็ต</p>
+      </section>
+
+      <section id="window">
+        <h2>ส่วนต่าง ๆ ของหน้าต่าง</h2>
+        <figure><img src="img/12-thai-interface.png" width="1920" height="1080" alt="หน้าต่าง DiagramTeX มีรายการไฟล์และเครื่องมือทางซ้าย พื้นที่วาดตรงกลาง และแผงคุณสมบัติทางขวา" loading="lazy"><figcaption>แผนภาพในโหมดคลาสสิก เมื่อเลือกกราฟ การตั้งค่าจะปรากฏทางขวา ภาพประกอบแสดงส่วนติดต่อภาษาไทย โดยเนื้อหาในแผนภาพคงเดิม เมื่อใช้ครั้งแรก หากภาษาที่ต้องการของเบราว์เซอร์เป็นภาษาไทย แอปจะใช้ภาษาไทย มิฉะนั้นจะใช้ภาษาอังกฤษ เปลี่ยนภาษาได้จากแถวแรก และแอปจะจำภาษาที่เลือกไว้</figcaption></figure>
+        <div class="cards">
+          <div class="card"><h4>แถบด้านบน</h4><p>แถวแรกมีโลโก้ทางซ้าย ชื่อไฟล์ตรงกลาง และภาษาและรูปลักษณ์ทางขวา แถวที่สองมีคำสั่งเอกสารใหม่ เปิด บันทึก นำเข้า ตัวเลือกโหมด และตัวเลือกเอกสาร/แผนภาพที่อยู่ติดกัน ตามด้วยเลิกทำ ทำซ้ำ กริด จัดแนว พิมพ์ ส่งออก และ LaTeX</p></div>
+          <div class="card"><h4>รายการไฟล์</h4><p>แสดงไฟล์ประเภทที่กำลังใช้ คลิกขวาเพื่อเปลี่ยนชื่อ ทำสำเนา หรือลบ ปุ่มซ้ายสุดซ่อนรายการได้ ด้านล่างเลือกวิธีป้อนข้อความและเอนจินแสดงสูตร</p></div>
+          <div class="card"><h4>แถบเครื่องมือ</h4><p>ปุ่มที่มีสามเหลี่ยมเล็กตรงมุมเปิดเมนูเครื่องมือที่เกี่ยวข้องเมื่อวางเมาส์เหนือปุ่ม</p></div>
+          <div class="card"><h4>แผงคุณสมบัติ</h4><p>ลอยอยู่มุมขวาบน หากไม่ได้เลือกวัตถุ จะตั้งรูปแบบเริ่มต้นของรูปร่างใหม่และแสดงแป้นพิมพ์ลัด คลิกหัวแผงเพื่อยุบ</p></div>
+          <div class="card"><h4>เลเยอร์</h4><p>อยู่ใต้คุณสมบัติ เรียงจากบนลงล่าง คลิกเพื่อเลือก ลากเพื่อจัดลำดับ รูปตาใช้ซ่อน รูปกุญแจใช้ล็อก ดับเบิลคลิกชื่อเพื่อเปลี่ยนชื่อ</p></div>
+          <div class="card"><h4>ไม้บรรทัดและแถบสถานะ</h4><p>แสดงพิกัด TikZ เป็นเซนติเมตร ตำแหน่งเมาส์ ขนาดสิ่งที่เลือก กริด การจัดแนว และการซูม มีปุ่มขนาดจริง พอดีภาพ และพอดีความกว้าง</p></div>
+        </div>
+        <p>ที่การซูม 100% ระยะ 1 ซม. ใน TikZ เท่ากับ 40 พิกเซลบนพื้นที่วาด แกน y ของพื้นที่วาดชี้ลง แต่ของ TikZ ชี้ขึ้น กากบาทจาง ๆ คือจุดกำเนิด แอปใช้รูปลักษณ์สว่างหรือมืดตามระบบหรือตัวเลือกของคุณ ส่วนกระดาษวาดยังสว่างเพื่อให้เห็นสีเหมือนบนกระดาษจริง</p>
+      </section>
+
+      <section id="modes">
+        <h2>โหมดทั้งห้า</h2>
+        <p>เลือกโหมดบนแถบด้านบน คลาสสิก หน้ากระดาษ และไวท์บอร์ดเป็นไฟล์คนละประเภท รายการด้านซ้ายแสดงเฉพาะประเภทปัจจุบัน และคำสั่งเอกสารใหม่จะสร้างไฟล์ประเภทนั้น</p>
+        <div class="cards">
+          <div class="card"><h4>คลาสสิก (Classic)</h4><p>รวมแผนภาพกับเอกสารข้อความ สลับระหว่างมุมมองเอกสารและแผนภาพเพื่อเขียนหรือวาด</p></div>
+          <div class="card"><h4>หน้ากระดาษ (Page)</h4><p>วางข้อความ สูตร รูปร่าง กราฟ และรูปภาพได้ทุกตำแหน่งบน A4 หรือ Letter ส่งออกเป็นเอกสาร <code>article</code> โดยรักษาตำแหน่ง</p></div>
+          <div class="card"><h4>ไวท์บอร์ด (Whiteboard)</h4><p>พื้นที่วาดไม่จำกัด เลื่อนเพื่อย้ายมุมมอง จีบนิ้วหรือ <kbd class="mod">Ctrl</kbd>+เลื่อนเพื่อซูม 3–800% กด <kbd>H</kbd> หรือ <kbd>Space</kbd> แล้วลากเพื่อจับพื้นที่วาด</p></div>
+          <div class="card"><h4>ตาราง (Table)</h4><p>นำเข้าตารางจากสเปรดชีต CSV, Excel, Markdown, HTML หรือ LaTeX แก้ไขแล้วคัดลอกเป็น <code>booktabs</code> ดูหัวข้อ <a href="#table">ตาราง</a></p></div>
+          <div class="card"><h4>ด่วน (Quick)</h4><p>พิมพ์สูตรเดียวแล้วคัดลอกเป็น PNG ด้วย <kbd class="mod">Ctrl</kbd><kbd>Enter</kbd> หรือคัดลอกเป็น SVG เพื่อวางในสไลด์หรือแชต ไฟล์ที่เปิดอยู่ยังคงเปิดอยู่</p></div>
+        </div>
+      </section>
+
+      <section id="drawing">
+        <h2>การวาด</h2>
+        <h3 id="tools">เครื่องมือ</h3>
+        <ul>
+          <li><b>เลือก</b> (<kbd>V</kbd>) <b>สูตร</b> (<kbd>M</kbd> เริ่มกล่องข้อความด้วย <code>$…$</code>) และ <b>ข้อความ</b> (<kbd>T</kbd> ลากเพื่อสร้างกล่องย่อหน้า)</li>
+          <li><b>เส้น:</b> เส้นตรง ลูกศร ลูกศรสองหัว เส้นเชื่อมมุมฉาก เส้นเชื่อมโค้ง เส้นเบซิเยร์ เส้นผ่านจุด เส้นหลายท่อน เส้นโค้งปิด ส่วนโค้ง และสปริง วาดโดยลากหรือคลิกจุดเริ่มและจุดสิ้นสุด กด <kbd>Esc</kbd> เพื่อยกเลิก ปลายเส้นเชื่อมจะติดกับรูปร่างที่เชื่อมอยู่</li>
+          <li><b>เส้นทาง (Route):</b> เลือกตรง มุมฉาก หรือโค้งในแผงคุณสมบัติ ลากจุดจับกลางของเส้นมุมฉากเพื่อย้ายข้อพับ หรือดึงช่วงตรงออกด้านข้างให้เป็นรูป U ตำแหน่งข้อพับจะคงอยู่จนรูปร่างเข้ามาใกล้กว่า 0.5 ซม. และกลับมาเมื่อย้ายออก ตัวเลือกทิศทางกำหนดการเข้าออกแนวนอนหรือแนวตั้ง</li>
+          <li><b>ส่วนโค้งจากศูนย์กลาง</b> (<kbd>O</kbd>): คลิกศูนย์กลาง จุดเริ่ม และจุดสิ้นสุด วาดได้ทั้งสองทิศและเกิน 180° กด <kbd class="shift">Shift</kbd> เพื่อกำหนดทีละ 15° ส่วนโค้งผ่านสามจุดให้คลิกปลายทั้งสองก่อน แล้วคลิกจุดบนส่วนโค้ง หลังวาด จุดจับปลายกำหนดมุม จุดจับกลางกำหนดรัศมี และจุดจับกรอบยืดเป็นวงรีได้</li>
+          <li><b>รูปร่าง:</b> สี่เหลี่ยมธรรมดา มน และตัดมุม รูปร่างพื้นฐาน 33 แบบ และสัญลักษณ์ผังงาน 28 แบบ ส่งออกเป็นเส้นทาง TikZ และใส่ข้อความกลางรูปได้</li>
+          <li><b>สี่เหลี่ยมและวงรี</b> (<kbd>R</kbd>, <kbd>E</kbd>): วางเมาส์หรือคลิกขวาที่ปุ่มเพื่อเลือกวิธีวาด เช่น มุมถึงมุม จากศูนย์กลาง หรือสามจุด วงกลมเลือกศูนย์กลาง เส้นผ่านศูนย์กลาง หรือสามจุดได้ แอปจำวิธีที่เลือก กด <kbd class="shift">Shift</kbd> เพื่อคงสัดส่วนสี่เหลี่ยมจัตุรัสหรือวงกลม</li>
+          <li><b>ไฟฟ้า:</b> ตัวแก้ไขวงจร สัญลักษณ์ตัวต้านทาน ตัวเก็บประจุ แหล่งจ่าย ไดโอด ทรานซิสเตอร์ ประตูลอจิก กราวด์ และรูปคลื่นต่าง ๆ</li>
+          <li><b>ฟิสิกส์:</b> รูปที่คำนวณจากพารามิเตอร์ในหกสาขา พร้อมสัญลักษณ์กลศาสตร์และทัศนศาสตร์ ดู <a href="#physics">รูปฟิสิกส์</a></li>
+          <li><b>อื่น ๆ:</b> แกน คลื่น วงเล็บปีกกา ไม้บรรทัด กริด ลูกบอล จุด ลูกศรทึบ 27 แบบ รูปภาพ (<kbd>I</kbd>) และดินสอ (<kbd>N</kbd> ปรับเส้นอิสระให้เป็นเส้นเบซิเยร์เรียบ)</li>
+        </ul>
+        <p>เมื่อยืดรูปที่มีรายละเอียด ขนาดรายละเอียดจะคงเดิม เช่น คลื่นเพิ่มคาบ สปริงเพิ่มขด และไม้บรรทัดเพิ่มขีด ปรับคาบ ระยะขด ระยะขีด และขนาดช่องได้ในแผงคุณสมบัติ สำหรับเส้นหลายท่อน คลิกจุดเพื่อเลือก ลากเครื่องหมาย <b>+</b> เพื่อเพิ่มจุด และดับเบิลคลิกเพื่อลบจุด</p>
+        <h3 id="physics">รูปฟิสิกส์</h3>
+        <p>เลือกสาขาจากเมนูฟิสิกส์แล้วคลิกพื้นที่วาดเพื่อเริ่มจากตัวอย่าง รูปจะคำนวณใหม่เมื่อเปลี่ยนพารามิเตอร์ เช่น ย้ายเลนส์แล้วรังสีและภาพเปลี่ยน เพิ่มความชันแล้วแรงและความเร่งเปลี่ยน ดับเบิลคลิก กด <kbd>Enter</kbd> หรือเลือก Edit Physics… เพื่อเปิดตัวแก้ไข</p>
+        <ul>
+          <li><b>สาขา:</b> กลศาสตร์ (พื้นเอียง แรงเสียดทาน เครื่องแอตวูด สปริง ลูกตุ้ม โพรเจกไทล์ กลไกเชื่อมโยง) ทัศนศาสตร์ (เลนส์ กระจก ปริซึม ตัวกลาง โพลาไรเซอร์ ตัวแยกลำแสง อินเตอร์เฟอโรมิเตอร์) สนาม (เส้นสนาม ศักย์เท่ากัน จุดสนามเป็นศูนย์) คลื่น (การแทรกสอด ช่องแคบ เกรตติง บีต คลื่นนิ่ง) ปริภูมิเวลา และระดับพลังงาน</li>
+          <li><b>จัดวัตถุ:</b> เลือกจากทางซ้ายแล้วคลิกกริด กด <kbd>Esc</kbd> เมื่อเสร็จ จุดจับสี่เหลี่ยมใช้ย้าย วงกลมใช้หมุน และข้าวหลามตัดใช้ปรับขนาดหรือความยาวโฟกัส กด <kbd class="alt">Alt</kbd> เพื่อปิดการจัดแนวชั่วคราว ลูกศรเลื่อนวัตถุ <kbd>Tab</kbd> สลับวัตถุ <kbd class="mod">Ctrl</kbd><kbd>D</kbd> ทำสำเนา และ <kbd>Delete</kbd> ลบ</li>
+          <li><b>วาดประกอบ:</b> ใช้ข้อความ สูตร เส้น ลูกศร เส้นโค้ง ดินสอ รูปร่าง และสัญลักษณ์จากส่วนล่างของแถบเครื่องมือได้ ลากพื้นที่ว่างเพื่อเลือกหลายวัตถุ กด Shift แล้วคลิกเพื่อเพิ่ม ใช้ Space แล้วลากหรือเมาส์ปุ่มกลางเพื่อย้ายมุมมอง</li>
+          <li><b>ผลลัพธ์:</b> เมื่อไม่เลือกวัตถุ แผงด้านขวาแสดงค่าที่คำนวณพร้อมป้าย exact, ideal, approx หรือ schematic และเตือนเมื่อการตั้งค่าเป็นไปไม่ได้ ผลและภาพยังอยู่ระหว่างการทดลอง ควรตรวจสอบก่อนใช้</li>
+          <li><b>ต้นฉบับ:</b> หนึ่งวัตถุต่อบรรทัด เช่น <code>\lens[f=2](3)</code> รองรับหน่วย <code>500nm</code>, <code>30deg</code>, <code>2kg</code> บรรทัดที่ไม่รู้จักจะถูกเก็บไว้ ไวยากรณ์นี้เป็นของ DiagramTeX ไม่ใช่ LaTeX ใช้ส่งออกหรือ Copy TikZ Code เพื่อรับ TikZ ที่คอมไพล์ได้พร้อม <code>arrows.meta</code></li>
+        </ul>
+        <h3 id="precision">การจัดแนวและความแม่นยำ</h3>
+        <ul>
+          <li>กริดเริ่มต้นห่าง 0.25 ซม. วัตถุจัดแนวกับกริดและจุดของวัตถุอื่น กด <kbd class="alt">Alt</kbd> ค้างเพื่อวางอิสระ</li>
+          <li><kbd class="shift">Shift</kbd> จำกัดมุมทีละ 15° และรักษาสัดส่วนสี่เหลี่ยมจัตุรัสหรือวงกลม ลูกศรเลื่อนสิ่งที่เลือก พิมพ์พิกัด TikZ เป็นเซนติเมตรในแผงได้</li>
+          <li><b>หมุน:</b> วางเมาส์นอกมุมกรอบจนเคอร์เซอร์เปลี่ยนแล้วลาก กด Shift เพื่อหมุนทีละ 15° หรือ <kbd class="mod">Ctrl</kbd><kbd>R</kbd> เพื่อหมุน 90°</li>
+        </ul>
+        <h3 id="arrange">การจัดวาง</h3>
+        <ul>
+          <li>คลิกขวาที่วัตถุเพื่อคัดลอก ตัด วาง ทำสำเนา ลบ จัดกลุ่ม คัดลอก TikZ คัดลอกหรือบันทึกเป็นภาพ PNG พื้นขาว PNG โปร่งใส หรือ SVG พร้อมแบบอักษรสูตร รวมถึงรวมรูป จัดลำดับ หมุน จัดแนว และกระจายระยะ</li>
+          <li>จัดกลุ่มด้วย <kbd class="mod">Ctrl</kbd><kbd>G</kbd> เพิ่ม Shift เพื่อยกเลิกกลุ่ม คลิกสมาชิกในกลุ่มที่เลือกอีกครั้งเพื่อเลือกเฉพาะชิ้นนั้น</li>
+          <li>รวมรูปร่างปิดด้วย Unite, Intersect, Subtract, Exclude หรือ Divide ผลเป็นบริเวณที่มีรูได้ และส่งออกด้วย <code>even odd rule</code></li>
+          <li><kbd class="mod">Ctrl</kbd><kbd>]</kbd> และ <kbd class="mod">Ctrl</kbd><kbd>[</kbd> ย้ายไปด้านหน้าหรือด้านหลัง หรือใช้การลากแถวในเลเยอร์</li>
+        </ul>
+        <h3 id="style">รูปแบบ</h3>
+        <ul>
+          <li><b>สีและสีเติม:</b> สีสำเร็จรูป ความโปร่งใส ไม่มีสี การไล่สีแนวเส้นหรือรัศมีพร้อมจุดสีที่ลากได้ และลวดลายเส้น กริด อิฐ จุด ส่งออกการไล่สีเป็น pgf shading และลวดลายด้วย <code>patterns.meta</code></li>
+          <li><b>เส้น:</b> ความหนา รูปแบบเส้นประหรือกำหนด <code>on off</code> เอง หัวลูกศร 27 แบบ เส้นคู่ เส้นคลื่น เส้นมีขีด และความทึบ</li>
+          <li><b>ข้อความ:</b> แบบอักษร ตัวหนา ตัวเอียง ขนาดตั้งแต่ <code>\tiny</code> ถึง <code>\Huge</code> หรือกำหนดเอง ความกว้างตัดบรรทัด และจัดชิดซ้าย กลาง ขวา หรือเต็มบรรทัด</li>
+          <li>เมื่อไม่เลือกวัตถุ การตั้งค่าในแผงจะเป็นรูปแบบเริ่มต้นสำหรับรูปร่างใหม่</li>
+        </ul>
+      </section>
+
+      <section id="maths">
+        <h2>ข้อความและสูตร</h2>
+        <ul>
+          <li><code>$…$</code> เป็นสูตรในบรรทัด ส่วน <code>$$…$$</code> หรือ <code>\[…\]</code> เป็นสูตรแบบแสดงเต็มขนาด ส่งออกเป็น <code>$\displaystyle …$</code> ตัวเลือก Math style เปลี่ยนสูตรในสิ่งที่เลือกพร้อมกัน</li>
+          <li><b>แนะนำคำสั่ง:</b> พิมพ์ <code>\</code> เพื่อดูคำสั่งและตัวอย่างแสดงผล ใช้ลูกศรขึ้นลงเลือก Enter หรือ Tab แทรก และ Esc ปิด มีคำสั่งที่ใช้บ่อยประมาณ 250 คำสั่งอยู่ด้านหน้า</li>
+          <li><b>การป้อนข้อความ:</b> เลือก LaTeX เพื่อพิมพ์โค้ด หรือ MathLive เพื่อแก้ไขสูตรแบบภาพ ดับเบิลคลิกป้ายกำกับเพื่อแก้ไขตามโหมดที่เลือก</li>
+          <li><b>เอนจิน LaTeX:</b> KaTeX แสดงตัวอย่าง LaTeX ได้รวดเร็ว ส่วน Temml รองรับ LaTeX มากกว่าและใกล้เคียง TeX มากขึ้น ตัวเลือกนี้เปลี่ยนเฉพาะภาพตัวอย่าง ไม่เปลี่ยนโค้ดส่งออก</li>
+          <li>ป้ายบนเส้นใช้ตำแหน่ง <code>auto</code> และ <code>swap</code> ของ TikZ เพื่อวางตาม LaTeX</li>
+        </ul>
+        <p class="note">สูตรในช่องโค้ดจะแสดงเป็นสีเขียว ในสูตร เมื่อพิมพ์วงเล็บเปิด ระบบเพิ่มวงเล็บปิดให้ในตำแหน่งที่เหมาะสม หรือครอบข้อความที่เลือก พิมพ์วงเล็บปิดเพื่อข้ามตัวที่มีอยู่ และกด Backspace ระหว่างวงเล็บว่างเพื่อลบทั้งคู่</p>
+      </section>
+
+      <section id="plots">
+        <h2>กราฟและรูปสามมิติ</h2>
+        <h3>กราฟ 2 มิติ (pgfplots)</h3>
+        <p>คลิกเครื่องมือกราฟหรือลากกรอบ แต่ละกราฟมีหลายชุดข้อมูลได้ เขียนนิพจน์เช่น <code>sin(x)*exp(-x/4)</code> หรือป้อนข้อมูล รองรับกราฟฟังก์ชัน เส้น กระจาย พื้นที่ แท่ง เส้นชั้นระดับ แผนที่ความร้อน และวงกลม (หนึ่ง <code>label value [#color]</code> ต่อบรรทัด)</p>
+        <p>ชุดฟังก์ชันรองรับอสมการ บริเวณระหว่างเส้นโค้ง x ในรูป y พาราเมตริก เชิงขั้ว สมการโดยปริยาย <code>F(x, y) = 0</code> จุด เวกเตอร์ สนามเวกเตอร์ และแผนภาพเฟส กำหนดตัวแปรร่วม เช่น <code>a = 2, b = 0.5</code> ได้ ปรับแกน ช่วงค่า กริด คำอธิบาย สี และแถบสีในแผง ข้อผิดพลาดนิพจน์แสดงทั้งในแผงและพื้นที่วาด</p>
+        <h3>เรขาคณิต 2 มิติ</h3>
+        <p>เลือก 2D Geometry ในเมนูบล็อกเพื่อวาดเวกเตอร์ จุด การฉาย เช่น <code>(Q |- P)</code> มุม กราฟ และค่าการวัดที่เปลี่ยนตามจุด ดู <a href="#blocks">บล็อก</a></p>
+        <h3>สามมิติ</h3>
+        <ul>
+          <li><b>กราฟ 3 มิติ:</b> พื้นผิว <code>z = f(x, y)</code> หรือตาข่าย พื้นผิวพาราเมตริก เส้นโค้งในปริภูมิ และกราฟกระจาย ใช้มุมมอง <code>view={az}{el}</code> ของ pgfplots</li>
+          <li><b>รูปทรง TikZ:</b> บริเวณทรงตันเหนือวงรี สี่เหลี่ยม หรือบริเวณเชิงขั้ว พร้อมแท่งรีมันน์ ทรงตันจากการหมุนแบบจาน วงแหวน หรือเปลือก และรูปทรงพื้นฐาน เช่น กล่อง ลูกบาศก์ ทรงกระบอก กรวย กรวยตัด ทรงกลม ครึ่งทรงกลม ทรงรี ทอรัส ปริซึม พีระมิด และทรงหลายหน้า เส้นที่ถูกบังเป็นเส้นประ ลดค่าแอลฟาของสีเพื่อมองทะลุได้</li>
+          <li><b>เรขาคณิต 3 มิติ:</b> เลือก 3D Geometry ในเมนูบล็อก ใช้ <code>tikz-3dplot</code> และหมุนภาพด้วยการลาก</li>
+        </ul>
+      </section>
+
+      <section id="blocks">
+        <h2>บล็อก</h2>
+        <p>บล็อกคือรูปทั้งรูปที่ใช้แพ็กเกจ LaTeX เฉพาะและมีตัวแก้ไขของตนเอง เพิ่มจากเมนูบล็อกรูปลูกบาศก์ เมื่อวางจะเลือกบล็อกเท่านั้น ดับเบิลคลิก กด Enter หรือปุ่ม Edit… เพื่อแก้ไข บล็อกยังอยู่ระหว่างการทดลอง ควรตรวจสอบรูปที่คอมไพล์แล้วก่อนนำไปใช้</p>
+        <figure><img src="img/05-quantum.png" width="1920" height="1080" alt="ตัวแก้ไขวงจรควอนตัม แถบประตูทางซ้าย วงจรตรงกลาง และโค้ด quantikz ทางขวา" loading="lazy"><figcaption>ตัวแก้ไขบล็อกมีแถบเครื่องมือทางซ้าย ภาพตรงกลาง และคุณสมบัติกับโค้ดทางขวา</figcaption></figure>
+        <ul>
+          <li>คลิกวัตถุจากแถบทางซ้ายแล้วคลิกกริด หรือลากเข้ามา ปุ่มตัวอักษรใช้วางวัตถุที่ใช้บ่อย</li>
+          <li>โค้ดและรูปปรับตามกันทั้งสองทิศ ส่วนที่ไม่แก้ไขและคำสั่งที่วาดไม่ได้จะถูกเก็บและส่งออกตามต้นฉบับ พร้อมแจ้งบรรทัดที่เกี่ยวข้อง</li>
+          <li>คลิกขวาเพื่อดูคำสั่งแทรก ลบ กลับทิศ ดัดโค้ง หรือแก้ป้าย ดับเบิลคลิกป้ายเพื่อแก้ในตำแหน่งนั้น</li>
+          <li>Done หรือ <kbd class="mod">Ctrl</kbd><kbd>Enter</kbd> บันทึกบล็อกกลับและปิดตัวแก้ไข <kbd class="mod">Ctrl</kbd><kbd>S</kbd> บันทึกโดยยังเปิดไว้ Cancel หรือ Esc จะถามก่อนทิ้งการเปลี่ยนแปลง</li>
+        </ul>
+        <details class="block"><summary>วงจรไฟฟ้า <code>circuitikz</code><span class="muted">415 ชิ้นส่วน</span></summary><div>
+          <p>ค้นหาชิ้นส่วนตามหมวด คลิกแล้ววางบนกริด หรือลากจากต้นถึงปลายเพื่อกำหนดความยาวชิ้นส่วนสองขั้ว สายไฟ (<kbd>W</kbd>) ติดกับขาและเคลื่อนตามชิ้นส่วน ทรานซิสเตอร์และไอซีได้ชื่ออัตโนมัติ เช่น <code>Q1</code>, <code>U1</code> จึงส่งออกสายเป็น <code>(Q1.B)</code> ได้</p>
+          <p>แผงตั้งป้าย เช่น <code>$R_1$</code> หมายเหตุ ลูกศรแรงดันและกระแส ปลายเปิดหรือปิด การหมุน และการกลับด้าน ส่งออกเป็น <code>scope</code> พร้อม <code>\usepackage{circuitikz}</code> ส่วน Copy circuitikz Code ให้สภาพแวดล้อมแยก</p>
+          <figure><img src="img/06-circuit-dark.png" width="1920" height="1080" alt="ตัวแก้ไขวงจรในโหมดมืด แสดงแหล่งจ่ายแรงดัน ตัวต้านทาน ตัวเก็บประจุ และโค้ด circuitikz" loading="lazy"></figure>
+        </div></details>
+        <details class="block"><summary>วงจรควอนตัม <code>quantikz</code></summary><div>
+          <p>กริดแบ่งตามสายและขั้น ปุ่ม <kbd>H</kbd> <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd> <kbd>S</kbd> <kbd>T</kbd> <kbd>U</kbd> วางประตูแล้วเลื่อนไปขั้นถัดไป <kbd>C</kbd> จุดควบคุม <kbd>O</kbd> จุดควบคุมเปิด <kbd>+</kbd> เป้าหมาย และ <kbd>M</kbd> เครื่องวัด วางบนแถวหรือคอลัมน์เส้นประเพื่อเพิ่มสายหรือขั้น คลิกขวาเพื่อแทรก ลบ หรือล้างช่วง</p>
+          <p>จุดควบคุมเชื่อมกับประตูใกล้ที่สุดในขั้นเดียวกัน ลากจุดจับสีน้ำเงินเพื่อเปลี่ยนสาย ลากขอบบนล่างของประตูเพื่อคร่อมหลายสาย หรือลากมุมเพื่อกำหนดขนาดขั้นต่ำ ลากองค์ประกอบเพื่อย้าย หรือลากพื้นที่ว่างในช่องเพื่อเลือกช่วง ดับเบิลคลิกป้ายประตู กลุ่ม หรือ slice เพื่อแก้ไข</p>
+          <p>แผงตั้งชนิดสาย quantum, classical หรือ bundle ป้าย กลุ่ม และ slice ใช้ Label above หรือ Border: None เพื่อทำป้ายไม่มีกรอบ เส้นประสีน้ำเงินที่ใช้แสดงกลุ่มในตัวแก้ไขจะไม่ถูกส่งออก คลิกขวาช่วงเพื่อ Group Selection, Label Above Selection หรือ Delete Group เลือกช่องในกลุ่มแล้วลากขอบเพื่อปรับช่วง กำหนดป้ายด้านบน ด้านล่าง หรือทั้งคู่ และ From wire / To wire ของ slice ได้ ส่งออกใน <code>quantikz</code> พร้อม <code>\usetikzlibrary{quantikz2}</code></p>
+        </div></details>
+        <details class="block"><summary>แผนภาพสลับที่ <code>tikz-cd</code></summary><div>
+          <p>เลือกช่องแล้วพิมพ์วัตถุ หรือลากจากแถบเครื่องมือ ลากระหว่างช่องเพื่อวาดลูกศรตามรูปแบบที่เลือก เช่น inclusion, onto, dashed, implies หรือ harpoon แผงตั้งป้าย ด้านของป้าย หัวลูกศร เส้น ช่องว่างจุดตัด ความโค้ง และการเลื่อน ใช้ Reverse เพื่อสลับปลาย</p>
+        </div></details>
+        <details class="block"><summary>แผนภาพสลับที่ <code>xymatrix</code></summary><div>
+          <p>ใช้ตัวแก้ไข CD แต่เขียน <code>\xymatrix{…}</code> ของแพ็กเกจ <code>xy</code> รองรับลูกศร <code>\ar@{-&gt;&gt;}[r]^{f}</code> ความโค้ง <code>@/^1pc/</code> การเลื่อน <code>@&lt;.5ex&gt;</code> และระยะ <code>@R=</code>, <code>@C=</code> ส่งออกพร้อม <code>\usepackage[all]{xy}</code></p>
+          <p>Convert to tikz-cd และ Convert to xymatrix ใช้แปลงระหว่างแพ็กเกจ แปลงกลับก่อนแก้ไขจะคืนโค้ดต้นฉบับ ส่วนที่อีกแพ็กเกจรองรับไม่ได้จะแจ้งไว้</p>
+        </div></details>
+        <details class="block"><summary>ต้นไม้ <code>forest</code></summary><div>
+          <p>ใช้ทำต้นไม้วากยสัมพันธ์ ผังองค์กร โฟลเดอร์ การตัดสินใจ และความน่าจะเป็น เริ่มจากแม่แบบ เพิ่ม ย้าย และปรับรูปแบบโหนดด้วยแป้นพิมพ์หรือการลาก ปุ่มทิศทางทำงานตามทิศการเติบโตของต้นไม้ และโค้ดปรับตามรูป</p>
+        </div></details>
+        <details class="block"><summary>แผนภาพ ZX <code>zx-calculus</code></summary><div>
+          <p>วางสไปเดอร์ Z และ X กล่อง Hadamard จุด และลูป หรือกด <kbd>Z</kbd> <kbd>X</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>L</kbd> ลากจุดจับสีน้ำเงินจากโหนดเพื่อเชื่อมสาย คลิกสายเพื่อเลือกรูปแบบ ตัวทำเครื่องหมาย เส้นคลาสสิก หนา หรือประ แผงตั้งสี เฟส และตำแหน่งเฟส</p>
+        </div></details>
+        <details class="block"><summary>แผนภาพไฟน์แมน <code>tikz-feynman</code></summary><div>
+          <p>วางจุดยอดแบบจุด บล็อบ จุดกากบาท หรืออนุภาคบนกริดเซนติเมตร แล้วลากจุดจับสีน้ำเงินไปยังจุดอื่นเพื่อเชื่อมตัวแพร่ รองรับเฟอร์มิออน โฟตอน กลูออน สเกลาร์ ghost, Majorana และโบซอน (ปุ่ม <kbd>F</kbd> <kbd>P</kbd> <kbd>G</kbd> <kbd>S</kbd> <kbd>M</kbd> <kbd>B</kbd> <kbd>L</kbd>)</p>
+          <p>ตั้งป้าย ลูกศรโมเมนตัม การโค้ง ครึ่งวงกลม และ insertion ได้ คลิกขวาเพื่อกลับทิศ ส่งออกด้วย <code>\usepackage[compat=1.1.0]{tikz-feynman}</code> และใช้ pdfLaTeX ได้ เพราะกำหนดตำแหน่งทุกจุดยอดไว้แล้ว</p>
+        </div></details>
+        <details class="block"><summary>เรขาคณิต 2 มิติ <code>TikZ</code></summary><div>
+          <p>ลากพื้นที่ว่างจากซ้ายไปขวาเพื่อเลือกวัตถุที่อยู่ภายในทั้งหมด หรือขวาไปซ้ายเพื่อเลือกทุกวัตถุที่กรอบแตะ กด Shift เพื่อเพิ่ม ใช้ Space แล้วลากหรือลูกศรเพื่อย้ายมุมมอง ลากจุดเพื่อย้ายบนกริด 0.05 หน่วย กด Alt เพื่อย้ายอิสระ พิกัดเชิงขั้วจะคงรูปแบบเดิม</p>
+          <p>ลากขอบหรือศูนย์กลางวงกลมเพื่อย้าย วางเมาส์บนขอบแล้วลากสี่เหลี่ยมเล็กมุมขวาบนเพื่อปรับรัศมี รัศมีที่คำนวณจากโค้ดจะไม่มีจุดจับนี้ ลากเส้น ขอบ หรือด้านในรูปเพื่อย้ายทุกจุดที่ใช้ร่วมกัน จุดมีชื่อจะเปลี่ยนตรงที่นิยาม ทำให้รูปอื่นที่อ้างถึงเคลื่อนตาม ส่วนจุดที่คำนวณ เช่น การฉาย calc ลูป และกราฟ จะไม่ถูกย้ายด้วยวิธีนี้</p>
+          <p>Shift ขณะลากจุดใช้จัดแนวกับพิกัดจำนวนเต็มหรือมุมทีละ 15° สำหรับปลายเส้น Alt+Shift จำกัดเฉพาะมุม <kbd class="mod">Ctrl</kbd><kbd>A</kbd> เลือกทั้งหมดรวมกริด Delete ลบ Esc หรือคลิกพื้นที่ว่างยกเลิกการเลือก</p>
+          <p>เพิ่มแกน กริด จุด ป้าย เส้น เวกเตอร์ การฉาย รูปหลายเหลี่ยม วงกลม เครื่องหมายมุมและมุมฉาก รวมถึงกราฟฟังก์ชัน เชิงขั้ว และพาราเมตริกได้ (ปุ่ม A, G, P, T, S, V, C, M, F) วางเครื่องหมายมุมโดยเลือกแล้วคลิกในมุมระหว่างสองเส้น ลากจุดจับเพื่อปรับขนาดและระยะป้าย</p>
+          <p>คัดลอกหรือตัดคำสั่งที่เลือกด้วย Ctrl/⌘+C หรือ X แล้ววางด้วย V ชื่อจุดซ้ำจะเปลี่ยนให้อัตโนมัติ เลือกส่วนของเส้นตรงแล้วเพิ่มค่าการวัด Δx, Δy, ความยาว หรือมุม ค่าคำนวณในโค้ดด้วย <code>\pgfmathprintnumber</code> จึงเปลี่ยนตามจุด แผงมีตัวเลื่อนสำหรับค่าตัวเลข และโหลด <code>angles</code>, <code>quotes</code> เมื่อใช้เครื่องหมายมุม</p>
+        </div></details>
+        <details class="block"><summary>เรขาคณิต 3 มิติ <code>tikz-3dplot</code></summary><div>
+          <p>ลากพื้นที่ว่างเพื่อหมุนมุมมอง ลูกศรหมุนทีละ 5° หรือ Shift ทีละ 15° ลากจุดเพื่อย้ายในระนาบ กด Shift ค้างเพื่อย้ายขึ้นลง เพิ่มแกน กรอบหมุน จุดคาร์ทีเซียนหรือทรงกลม เวกเตอร์ เส้น การฉาย ระนาบ พื้นผิว สามเหลี่ยม วงกลม ทรงกลม กล่อง เส้นโค้ง และส่วนโค้งมุมได้</p>
+          <p>อ่านและวาดลูป <code>\foreach</code> ค่าจาก <code>\def</code> และ scope การย้ายจุดที่นิยามด้วยค่าจาก <code>\def</code> จะเขียนค่ากลับที่นิยามนั้น</p>
+        </div></details>
+        <details class="block"><summary>แผนภาพเวลา <code>tikz-timing</code></summary><div>
+          <p>เลือก High, Low, High-Z, Unknown, Data, Clock, Toggle, Metastable, Glitch, Gap หรือ Hatched แล้วลากตามแถวเพื่อระบายสัญญาณ ลากขอบเพื่อเลื่อนจุดเปลี่ยน กด Shift เพื่อเลื่อนส่วนที่เหลือของแถวด้วย ช่อง Data ใส่สีหรือลายได้</p>
+          <p>Interval และ Delay วาดลูกศรมีป้ายระหว่างขอบสัญญาณ เช่น setup, hold และ clock-to-output ส่วน Break (<kbd>B</kbd>) เพิ่ม <code>//</code> ทุกแถว ข้อความทั่วไปจะถูก escape ให้ ใช้ <code>$x_1$</code> เมื่อต้องการตัวห้อย</p>
+        </div></details>
+        <details class="block"><summary>เครื่องสถานะ TikZ <code>automata</code></summary><div>
+          <p>วางสถานะปกติ เริ่มต้น ยอมรับ หรือทั้งสองแบบ ลากจุดจับสีน้ำเงินไปยังสถานะอื่นเพื่อสร้างการเปลี่ยนสถานะ หรือลากกลับตัวเองเพื่อสร้างลูป ปุ่ม <kbd>I</kbd>, <kbd>A</kbd>, <kbd>L</kbd> ใช้สลับสถานะเริ่มต้น ยอมรับ และเพิ่มลูป Auto layout จัดสถานะเป็นชั้นหรือวงกลมและปรับความโค้งเพื่อหลบวัตถุ</p>
+        </div></details>
+        <details class="block"><summary>แผนภาพคลาส UML <code>pgf-umlcd</code></summary><div>
+          <figure><img src="img/09-uml.png" width="1920" height="1080" alt="ตัวแก้ไขคลาส UML แสดงคลาส Shape และคลาสลูก Circle กับ Square พร้อมโค้ด" loading="lazy"></figure>
+          <p>เลือก Blocks → UML เพื่อเริ่มจากตัวอย่าง รองรับ class, interface, abstract class, static class, object และ note วางบนกริดหรือลากจุดจับของกล่องไปพื้นที่ว่างเพื่อสร้างวัตถุที่เชื่อมกัน ดับเบิลคลิกชื่อเพื่อเปลี่ยนชื่อพร้อมทุกจุดอ้างอิง หรือแก้แอตทริบิวต์และเมธอดในตำแหน่งนั้น ลากป้ายของเส้นเพื่อเปลี่ยนตำแหน่ง</p>
+          <p>ความสัมพันธ์มี inheritance, implementation, association, aggregation, composition, dependency และ note link ลากจุดจับระหว่างกล่องแล้วตั้งชื่อบทบาท จำนวน และทิศทางในแผง เส้น <code>\draw</code> ที่เขียนเองเคลื่อนตามคลาส ส่งออกพร้อม <code>\usepackage{pgf-umlcd}</code> และนำเข้ากลับได้</p>
+        </div></details>
+        <details class="block"><summary>แผนภาพลำดับ UML <code>pgf-umlsd</code></summary><div>
+          <p>เลือก Blocks → Sequence เพื่อเริ่มตัวอย่าง client, server และฐานข้อมูล เพิ่ม instance (<kbd>I</kbd>) หรือ thread (<kbd>T</kbd>) ลากด้านข้างเพื่อจัดลำดับ เพิ่ม call, self call, message หรือ call ไม่มีค่าคืนด้วย C, S, M, A โดยลากระหว่าง lifeline ข้อความภายใน activation จะซ้อนใน call นั้น</p>
+          <p>แผงตั้งข้อความ ค่าคืน ระยะ และความหน่วง <kbd>B</kbd> ครอบข้อความที่เลือกด้วยกรอบและคำอธิบาย Alt/⌥+ลูกศรขึ้นลงย้ายลำดับข้อความ ส่งออกด้วย <code>\usepackage{pgf-umlsd}</code> และนำเข้า <code>sequencediagram</code> กลับได้ ข้อความของ message ใช้เป็นชื่อโหนดด้วย จึงมีข้อจำกัดกับคำสั่งและวงเล็บ ซึ่งแผงจะแจ้งเตือน</p>
+        </div></details>
+        <details class="block"><summary>แผนผังคาร์โนห์ <code>karnaugh-map</code><span class="muted">2–6 ตัวแปร</span></summary><div>
+          <p>คลิกช่องเพื่อวนค่า 0, 1 และ don't care หรือระบายด้วยปุ่ม 1, 0, D, E แถวและคอลัมน์เรียงตามรหัสเกรย์ ลากช่องเพื่อจัดกลุ่ม กลุ่มที่ผ่านขอบจะวนไปอีกด้าน แผงตรวจกลุ่มและแสดงฟังก์ชันที่ลดรูป Find Groups หาชุดกลุ่มที่ครอบคลุมโดยใช้จำนวนน้อยที่สุด</p>
+        </div></details>
+        <details class="block"><summary>บิตฟิลด์ <code>bytefield</code><span class="muted">โครงสร้างแพ็กเก็ตและรีจิสเตอร์</span></summary><div>
+          <p>เริ่มจากส่วนหัวคล้าย IPv4 เพิ่ม Bit box (B), Word box (W), Bits (I), Skipped words (K) หรือ Header (H) ลากขอบขวาเพื่อปรับจำนวนบิต ขอบล่างของ word box เพื่อปรับความสูง S แบ่งช่อง M รวมกับช่องถัดไป Shift+M รวมกับช่องก่อนหน้า ดับเบิลคลิกหรือ Enter เพื่อแก้ป้าย</p>
+          <p>ลากข้ามช่อง หรือ Shift+คลิก/ลูกศร เพื่อเลือกช่วง Ctrl/⌘+A เลือกทั้งหมด R หรือ L เพิ่มวงเล็บปีกกาพร้อมป้าย Delete ลบพร้อมกัน ลากปลายวงเล็บเพื่อเปลี่ยนแถวที่ครอบ แผงกำหนดขอบ สีเติม รูปแบบ ความกว้าง ขนาดบิต และ endianness ส่วนโค้ดที่ไม่แตะจะคงเดิม</p>
+        </div></details>
+        <details class="block"><summary>เคมี <code>chemfig</code></summary><div>
+          <p>เลือกอะตอมแล้วลากจุดจับสีน้ำเงินเพื่อเพิ่มพันธะ โดยจัดมุมทีละ 15° กด C, H, N, O เพื่อเปลี่ยนอะตอม หรือดับเบิลคลิกเพื่อพิมพ์ป้าย เช่น <code>NH_2</code> ดับเบิลคลิกพันธะเพื่อวนเดี่ยว คู่ สาม แถบเครื่องมือมีวงแหวน 3–7 เหลี่ยม เบนซีน อะโรมาติก หมู่ฟังก์ชัน ประจุ และคู่อิเล็กตรอนโดดเดี่ยว</p>
+          <p>ลูกศรปฏิกิริยาสร้าง <code>\schemestart … \schemestop</code> พร้อมสำเนาโมเลกุลสำหรับผลิตภัณฑ์ ลากหัวลูกศรเพื่อหมุนและยืด Merge รวมสาร ใส่วงเล็บรอบโมเลกุลหรือรวมขั้นเป็น <code>\subscheme</code> ได้</p>
+          <p>ลูกศรโค้ง: คลิกอะตอมหรือพันธะต้นทางและปลายทางเพื่อสร้าง <code>@{name}</code> และ <code>\chemmove</code> ลากจุดจับเพื่อดัดโค้งและตั้งหัวเส้นกับสีในแผง Delete ลบ รองรับ <code>\definesubmol</code> พร้อมอาร์กิวเมนต์ <code>\setchemfig</code> และ <code>\hreac … \endhreac</code> อะตอมจากโมเลกุลย่อยจะแก้กลับในนิยาม <code>\definesubmol</code></p>
+        </div></details>
+        <details class="block"><summary>ทรงกลมบล็อค <code>blochsphere</code></summary><div>
+          <p>แผงตั้งรัศมี มุมเอียง การหมุน รูปแบบทรงกลม สี และรายการสถานะด้วยป้าย θ และ φ แก้ไขโค้ดด้านล่างได้เช่นกัน คำสั่งที่แผงไม่รองรับจะถูกเก็บไว้</p>
+        </div></details>
+      </section>
+
+      <section id="table">
+        <h2>ตาราง</h2>
+        <p>เลือก Table บนแถบโหมด เป็นพื้นที่ทำตารางแล้วนำออกไปใช้ ไม่ใช่ไฟล์อีกประเภทหนึ่ง ไฟล์เดิมยังเปิดอยู่</p>
+        <figure><img src="img/10-table.png" width="1920" height="1080" alt="โหมดตาราง มีกริดด้านบน ตัวอย่าง booktabs ด้านล่าง และการตั้งค่าทางขวา" loading="lazy"><figcaption>แก้ไขในกริด ตรวจตัวอย่าง และคัดลอกเป็น LaTeX หรือรูปภาพ</figcaption></figure>
+        <ul>
+          <li><b>นำเข้า:</b> วางเซลล์จาก Excel, Google Sheets หรือ Numbers ด้วย <kbd class="mod">Ctrl</kbd><kbd>V</kbd> เปิดหรือลากไฟล์ CSV, TSV, <code>.xlsx</code>, Markdown, HTML หรือ LaTeX หรือวางข้อความโดยตรง รองรับ <code>tabular</code>, <code>tabularx</code>, <code>longtable</code>, เซลล์รวม <code>\multicolumn</code>/<code>\multirow</code>, สี แถบสลับสี เส้นคู่ ชนิดคอลัมน์ <code>m{}</code>/<code>b{}</code>, <code>\newcolumntype</code>, หัวท้าย longtable และคอลัมน์ <code>S</code> ของ siunitx รูปแบบตัวหนา เอียง สี เส้นขอบ และการจัดแนวจะติดมาด้วย <code>$…$</code> ยังคงเป็นสูตร แต่ <code>$5 and $10</code> ยังคงเป็นข้อความเงิน</li>
+          <li><b>แก้ไข:</b> ใช้ลูกศร Tab และ Enter ย้ายช่อง Shift ขยายช่วง พิมพ์เพื่อแทนค่า หรือ Enter, F2 และดับเบิลคลิกเพื่อแก้ไข แถบเหนือกริดแก้ LaTeX ของช่องปัจจุบัน คลิกขวาเพื่อแทรก ลบ ย้ายแถวหรือคอลัมน์ รวม แยก และกำหนดแถวหัว ลากขอบขวาของหัวคอลัมน์เพื่อกำหนดความกว้างแบบ <code>p{…}</code></li>
+          <li>การวางเซลล์เริ่มจากช่องที่เลือกและขยายตารางได้ มีเพียง Import ที่แทนตารางทั้งหมด เซลล์แก้เป็น LaTeX หรือ MathLive ตามการตั้งค่าการป้อนข้อความ</li>
+          <li><b>รูปแบบ:</b> เลือก Academic (booktabs), Minimal, Grid, Striped หรือ Plain ตั้งหัวตาราง การจัดแนว ความกว้าง ทศนิยม รูปแบบวิทยาศาสตร์ ความไม่แน่นอน หน่วย siunitx สี ขนาด คำบรรยาย label, float และ placement ได้</li>
+          <li><b>ส่งออก:</b> ตัวอย่างใต้กริดสลับเป็นโค้ดพร้อมแพ็กเกจที่ต้องใช้ คัดลอก LaTeX ด้วย <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>C</kbd> ดาวน์โหลด <code>.tex</code> ที่คอมไพล์แยกได้ SVG ฝังแบบอักษร PNG ที่ 150, 300 หรือ 600 DPI หรือ Copy PNG</li>
+          <li>ตารางในพื้นที่ทำงานอยู่ในเบราว์เซอร์จนกว่าจะนำเข้าครั้งถัดไป ไม่ได้บันทึกในไฟล์เอกสาร</li>
+          <li><b>ตารางในแผนภาพ:</b> เลือก Blocks → Table หรือวางเซลล์ Markdown, <code>tabular</code>, CSV หรือ Excel ลงในแผนภาพ ดับเบิลคลิกเพื่อแก้ในพื้นที่ตาราง Done บันทึกกลับ Ctrl/⌘+S บันทึกโดยยังแก้ต่อ Cancel ทิ้งการเปลี่ยนแปลง ตารางของพื้นที่ทำงานเดิมไม่เปลี่ยน บล็อกส่งออกเป็น <code>tabular</code> ในโหนด TikZ จึงไม่มี caption หรือ float</li>
+        </ul>
+      </section>
+
+      <section id="documents">
+        <h2>เอกสารและหน้ากระดาษ</h2>
+        <figure><img src="img/04-document.png" width="1920" height="1080" alt="มุมมองเอกสารมีหัวข้อ ข้อความ สูตร และบล็อกแผนภาพ พร้อมการตั้งค่าหน้ากระดาษด้านขวา" loading="lazy"><figcaption>มุมมองเอกสารจัดข้อความและแผนภาพบนหน้าที่มีขนาดตามจริง</figcaption></figure>
+        <h3>เอกสารคลาสสิก</h3>
+        <ul>
+          <li>ไฟล์คลาสสิกประกอบด้วยบล็อกข้อความและแผนภาพ ข้อความรองรับ <code># Heading</code>, <code>$inline$</code>, <code>$$display$$</code>, <code>\textbf{}</code> และ <code>\emph{}</code></li>
+          <li>ดับเบิลคลิกแผนภาพหรือกด Edit เพื่อแก้บนพื้นที่วาด ในมุมมองแผนภาพ ตัวเลือกด้านบนใช้สลับระหว่างแผนภาพ</li>
+          <li>ตั้งกระดาษ A4, A5, B5, US Letter, US Legal หรือขนาดเอง แนวกระดาษ ระยะขอบ ขนาดอักษร และชื่อเรื่องในแผงขวา ภาพตัวอย่างแสดงจุดแบ่งหน้าโดยประมาณ</li>
+          <li>แผนภาพที่กว้างกว่าข้อความจะย่อให้พอดีทั้งบนหน้าจอและเมื่อส่งออกด้วย <code>\resizebox{\linewidth}{!}{…}</code></li>
+        </ul>
+        <h3>โหมดหน้ากระดาษ</h3>
+        <ul>
+          <li>วางวัตถุได้ทุกตำแหน่ง เส้นประสีน้ำเงินคือระยะขอบ ใช้จัดแนวกับมุม ระยะขอบ และเส้นกลางได้</li>
+          <li>หลายหน้าเรียงลงด้านล่าง เมื่อไม่เลือกวัตถุ แผงจะแสดงรายการหน้าให้ย้าย ทำสำเนา แทรก หรือลบ วัตถุเป็นของหน้าที่อยู่ใต้จุดกึ่งกลางและย้ายตามหน้านั้น กด PgUp / PgDn เพื่อเปลี่ยนหน้า</li>
+          <li>ส่งออกหนึ่ง <code>tikzpicture[remember picture, overlay]</code> ต่อหน้า ยึดกับมุมกระดาษเพื่อรักษาตำแหน่ง <b>คอมไพล์สองครั้ง</b></li>
+        </ul>
+      </section>
+
+      <section id="export">
+        <h2>การส่งออก LaTeX</h2>
+        <table><thead><tr><th>คำสั่ง</th><th>ผลลัพธ์</th></tr></thead><tbody>
+          <tr><td><b>LaTeX</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>เปิดโค้ดเพื่อคัดลอกหรือดาวน์โหลด เลือกภาพ <code>tikzpicture</code> เอกสาร <code>standalone</code> ทั้งรูปหรือเฉพาะที่เลือก หรือทั้งเอกสาร หมายเหตุบนสุดระบุแพ็กเกจและไลบรารีที่ต้องโหลด</td></tr>
+          <tr><td><b>ทั้งเอกสาร</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>ดาวน์โหลด <code>article</code> พร้อม <code>geometry</code> และแต่ละแผนภาพเป็น <code>tikzpicture</code> หมายเหตุ <code>% diagramtex-data:</code> เก็บข้อมูลสำหรับนำเข้ากลับอย่างตรงต้นฉบับ</td></tr>
+          <tr><td><b>ส่งออก</b></td><td>PNG ที่ 24–2400 DPI พร้อมตัวเลือกพื้นโปร่งใส SVG แบบเวกเตอร์ฝังแบบอักษรสูตร หรือ PDF เวกเตอร์ผ่านหน้าต่างพิมพ์ เปิด Flatten เพื่อเปลี่ยนหน้าเป็นภาพตาม DPI ที่เลือก (เริ่มต้น 300) และบันทึกโดยตรง</td></tr>
+          <tr><td><b>พิมพ์</b> <kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>หน้าขนาดจริง เลือกบันทึกเป็น PDF เพื่อรับ PDF เวกเตอร์</td></tr>
+          <tr><td><b>ดาวน์โหลด .zip</b></td><td>เมื่อโค้ดใช้รูปภาพ จะรวม <code>.tex</code> และรูปทุกไฟล์ อัปโหลดไป Overleaf ได้ SVG ใช้ <code>\includesvg</code> จึงต้องมี Inkscape และ shell escape หรือเลือก SVG as PDF, no Inkscape จากลูกศรข้างปุ่มเพื่อแนบ PDF เวกเตอร์แทนและคอมไพล์ด้วย pdfLaTeX ธรรมดา</td></tr>
+          <tr><td><b>คลิกขวา → Copy TikZ</b></td><td>คัดลอกเฉพาะโค้ดของวัตถุที่เลือกไปยังคลิปบอร์ด</td></tr>
+        </tbody></table>
+        <p><b>Save to</b> ใน Chrome, Edge และเบราว์เซอร์ Chromium: เลือกโฟลเดอร์ส่งออกครั้งเดียว เช่น <code>figures/</code> ของบทความ แล้วการส่งออกครั้งต่อไปจะเขียนทับสำเนาในโฟลเดอร์นั้น</p>
+        <p>ตัวอย่างโค้ด:</p>
+<pre><code>% Requires: \usepackage{tikz} \usetikzlibrary{arrows.meta}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \draw[line width=0.71pt, -{Stealth}] (0,0) -- (3,0) node[midway, above] {$\vec v$};
+  \draw[line width=0.71pt] (4,0) circle (0.5);
+\end{tikzpicture}</code></pre>
+        <p><b>แพ็กเกจ:</b> ใช้ TikZ เสมอ และเพิ่มตามบล็อก ได้แก่ <code>circuitikz</code>, <code>pgfplots</code>, <code>tikz-cd</code>, <code>xy</code>, ไลบรารี <code>quantikz2</code>, <code>forest</code>, <code>zx-calculus</code>, <code>tikz-feynman</code>, <code>tikz-3dplot</code>, <code>tikz-timing</code>, ไลบรารี <code>automata</code>, <code>pgf-umlcd</code>, <code>pgf-umlsd</code>, <code>karnaugh-map</code>, <code>bytefield</code>, <code>chemfig</code> และ <code>blochsphere</code> ทั้งหมดมีใน TeX Live และ Overleaf</p>
+        <p class="note warn">quantikz2 เปลี่ยนรูปแบบของแผนภาพ tikz-cd ในเอกสารเดียวกัน เมื่อรวมวงจรควอนตัมกับแผนภาพสลับที่หรือ ZX ระบบจะเพิ่มคำสั่งในส่วน preamble เพื่อรักษารูปลักษณ์ของแต่ละแผนภาพ</p>
+      </section>
+
+      <section id="import">
+        <h2>การนำเข้า TikZ</h2>
+        <p>วางด้วย <kbd class="mod">Ctrl</kbd><kbd>V</kbd> หรือลากรูปภาพ PNG, JPEG, SVG (GIF และ WebP จะแปลงเป็น PNG) ไฟล์ <code>.tex</code> โค้ด TikZ สภาพแวดล้อมของบล็อก สูตร สัญลักษณ์ หรือข้อความทั่วไปเข้ามาได้ แต่ละอย่างจะกลายเป็นวัตถุชนิดนั้นและอยู่ตรงจุดที่วาง ในมุมมองเอกสารจะกลายเป็นบล็อก รูปร่างที่คัดลอกจากหน้าต่าง DiagramTeX อื่นวางกลับเป็นรูปร่างได้</p>
+        <p>ปุ่มนำเข้า LaTeX / TikZ ด้านบนรับโค้ดหรือไฟล์ <code>.tex</code> เพื่อสร้างวัตถุแก้ไขได้:</p>
+        <ul>
+          <li>คำสั่ง <code>\draw</code>, <code>\fill</code>, <code>\filldraw</code>, <code>\node</code>, <code>\coordinate</code></li>
+          <li>เส้นทาง <code>--</code>, <code>..controls..</code>, <code>|-</code>, <code>rectangle</code>, <code>circle</code>, <code>ellipse</code>, <code>arc</code>, <code>to[bend]</code>, <code>grid</code> และโหนดในเส้น</li>
+          <li>สี เช่น <code>red!50</code> ความหนา เส้นประ ลูกศร scale พิกัดเชิงขั้วและสัมพัทธ์ รวมถึง rotate, shift, xshift, yshift บนเส้น โหนด และ scope ซ้อน</li>
+          <li>สภาพแวดล้อม <code>ZX</code>, <code>feynman</code>, <code>tikztimingtable</code> และ <code>bytefield</code> กลับมาเป็นบล็อก ข้อความเอกสารกลายเป็นบล็อกข้อความ และตัวเลือก <code>\documentclass</code>/<code>geometry</code> กลายเป็นการตั้งค่าหน้า</li>
+          <li><b>ตามโค้ดต้นฉบับ (As Written)</b> เก็บส่วนที่อ่านได้ไม่ครบเป็นโค้ด ส่งออกตามเดิม และแสดงในกรอบเส้นประ ส่วน <b>รูปร่างที่แก้ไขได้ (Editable Shapes)</b> แปลงเป็นวัตถุทั่วไป รายละเอียดบางอย่างอาจเปลี่ยน</li>
+          <li><b>แทรกลงในแผนภาพ</b> เพิ่มแต่ละรูปเป็นกลุ่มกลางพื้นที่วาด หรือเป็นแผนภาพใหม่หลังบล็อกปัจจุบันในมุมมองเอกสาร <b>นำเข้าเป็นเอกสารใหม่</b> จะสร้างไฟล์ใหม่</li>
+          <li>สภาพแวดล้อม <code>axis</code> และ <code>tikzcd</code> ที่เขียนเองจะถูกข้ามพร้อมคำเตือน แต่ไฟล์ที่ DiagramTeX ส่งออกนำเข้ากลับได้ตรงต้นฉบับรวมถึงกราฟ</li>
+        </ul>
+      </section>
+
+      <section id="files">
+        <h2>ไฟล์และการบันทึก</h2>
+        <p>ลากไฟล์ <code>.diagramtex</code> หนึ่งไฟล์หรือหลายไฟล์มาวางที่ใดก็ได้ในแอปเพื่อเปิดในโหมดที่บันทึกไว้ ใช้กับไฟล์สำรองรวมได้ด้วย ไฟล์ปัจจุบันยังอยู่ในรายการไฟล์ และเนื้อหาของไฟล์ที่ลากมาจะไม่ถูกแทรกลงในแผนภาพปัจจุบัน</p>
+        <figure><img src="img/11-file-sorting.png" width="1920" height="1080" alt="เมนูเรียงไฟล์ตามลำดับที่กำหนดเอง วันที่สร้าง วันที่แก้ไข หรือชื่อ พร้อมตัวเลือกทิศทาง" loading="lazy"><figcaption>ปุ่มเรียงลำดับอยู่ข้าง + เลือกลำดับที่กำหนดเองเพื่อลากไฟล์ขึ้นลงได้ ภาพเมนูนี้แสดงส่วนติดต่อภาษาอังกฤษ</figcaption></figure>
+        <ul>
+          <li><b>บันทึกอัตโนมัติ:</b> ทุกการเปลี่ยนแปลงบันทึกใน IndexedDB ของเบราว์เซอร์ ไม่มีการอัปโหลด การแก้บล็อกจะเข้ารวมในเอกสารเมื่อกด Done หรือ Ctrl/⌘+S หากรีโหลดก่อน แอปจะถามยืนยัน</li>
+          <li><b>บันทึกเป็นไฟล์:</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd> เขียนไฟล์ <code>.diagramtex</code> (ภายในเป็น JSON) เปิดกลับด้วย <kbd class="mod">Ctrl</kbd><kbd>O</kbd> ระบบเลือกโหมดให้ตรงประเภท</li>
+          <li><b>Export All Files…:</b> คลิกขวาพื้นที่ว่างในรายการไฟล์เพื่อรวมไฟล์หน้ากระดาษ คลาสสิก และไวท์บอร์ดเป็นชุด <code>.diagramtex</code> เมื่อเปิดจะคืนแต่ละไฟล์ตามประเภท ข้ามไฟล์เดิมที่ไม่เปลี่ยน และเพิ่ม “copy” เมื่อชื่อซ้ำ</li>
+          <li><b>ไฟล์ที่เชื่อมโยง:</b> ใน Chromium หลังบันทึกครั้งแรก Ctrl/⌘+S เขียนลงไฟล์เดิม จุดสีเหลืองอำพันหมายถึงมีส่วนยังไม่บันทึก Safari และ Firefox ดาวน์โหลดสำเนาใหม่แต่ละครั้ง แอปที่ติดตั้งเปิด <code>.diagramtex</code>, <code>.tex</code> และ <code>.tikz</code> ผ่าน Open With ใน Finder หรือ Explorer ได้</li>
+          <li><b>เรียงลำดับ:</b> ปุ่มข้าง + เรียงตามลำดับที่กำหนดเอง วันที่สร้าง วันที่แก้ไข หรือชื่อ และกลับทิศได้ โหมดกำหนดเองลากไฟล์ขึ้นลงเพื่อเรียงได้ เมื่อเรียงตามเกณฑ์อื่น การลากใช้ย้ายเข้าออกโฟลเดอร์เท่านั้น</li>
+          <li><b>โฟลเดอร์:</b> ใช้ / ในชื่อ เช่น <code>Physics/Lab 1</code> จะแสดง Lab 1 ภายใน Physics ลากไฟล์ลงโฟลเดอร์เพื่อย้ายเข้า หรือพื้นที่ว่างเพื่อย้ายออก คลิกขวาโฟลเดอร์เพื่อเพิ่ม เปลี่ยนชื่อ ยุบ หรือลบ</li>
+          <li><b>เลิกทำการลบ:</b> Ctrl/⌘+Z คืนไฟล์หรือโฟลเดอร์จากถังรีไซเคิลทันที ประวัติเลิกทำแยกตามไฟล์และไม่หายเมื่อสลับไฟล์</li>
+          <li><b>สำเนากู้คืน:</b> ระหว่างแก้ไข เบราว์เซอร์เก็บสถานะก่อนหน้า เริ่มต้นเก็บล่าสุด 3 สำเนาห่างกันอย่างน้อย 10 นาที และอีกหนึ่งสำเนาระหว่างกลางทุก 5 นาที คลิกขวาไฟล์หรือค้นหา Recovery เพื่อคืนทับไฟล์เดิม เปิดเป็นไฟล์ใหม่ หรือปรับช่วงเวลาและจำนวน</li>
+          <li><b>ถังรีไซเคิล:</b> เปิดจากใต้รายการไฟล์เพื่อกู้คืนหรือลบถาวร รายการที่อยู่ครบ 30 วันจะถูกลบอัตโนมัติ</li>
+          <li><b>ลิงก์แบ่งปัน:</b> คลิกขวาไฟล์แล้วเลือก Copy Share Link ไฟล์ขนาดเล็กบรรจุในลิงก์หลัง <code>#</code> จึงไม่ถูกส่งไปเซิร์ฟเวอร์ ผู้เปิดได้รับสำเนาของตนเอง หากใหญ่เกินไปให้ส่งไฟล์ <code>.diagramtex</code> แทน</li>
+        </ul>
+        <p class="note">คุณหรือเบราว์เซอร์อาจล้างพื้นที่จัดเก็บได้ ควรเก็บสำเนา <code>.diagramtex</code> ของงานสำคัญไว้เสมอ</p>
+      </section>
+
+      <section id="parity">
+        <h2>ความใกล้เคียงกับ LaTeX</h2>
+        <p>พื้นที่วาดใช้เรขาคณิตตามแต่ละแพ็กเกจ ในรูปทดสอบ หมึก 99.5% อยู่ห่างจากผลของ pdflatex ไม่เกินครึ่งมิลลิเมตร ความแตกต่างที่อาจพบ:</p>
+        <ul>
+          <li><b>แบบอักษร:</b> KaTeX และ Temml ใกล้เคียง Computer Modern แต่ไม่เหมือนทั้งหมด การตัดบรรทัดอาจต่างเล็กน้อย</li>
+          <li><b>ลวดลาย:</b> LaTeX ยึดแนวเส้นและจุดกับมุมหน้า ทำให้ลวดลายภายในรูปร่างอาจเหลื่อม</li>
+          <li><b>ระยะเล็กน้อย:</b> ลูกศรแรงดันโค้งบางชนิด เครื่องหมายออปแอมป์ และป้ายแกนกราฟ 3 มิติในบางมุมอาจคลาดเคลื่อนประมาณ 1 มม.</li>
+          <li><b>โค้ดที่เก็บแต่ไม่วาด:</b> ตัวเลือกพิเศษหรือส่วนโค้ง <code>-U&gt;</code> ของ chemfig อาจเห็นเฉพาะใน PDF แต่ละตัวแก้ไขแสดงบรรทัดที่เกี่ยวข้อง</li>
+        </ul>
+        <p>ดูภาพเทียบและผลแต่ละชนิดใน <a href="https://gitlab.com/igniting-space/diagramtex/-/blob/main/PARITY.md" target="_blank" rel="noopener">PARITY.md</a></p>
+      </section>
+
+      <section id="keys">
+        <h2>แป้นพิมพ์ลัด</h2>
+        <p>บน Mac ใช้ ⌘ แทน Ctrl และ ⌥ แทน Alt</p>
+        <table><thead><tr><th>ปุ่ม</th><th>การทำงาน</th></tr></thead><tbody>
+          <tr><td><kbd>V</kbd> <kbd>L</kbd> <kbd>A</kbd> <kbd>C</kbd> <kbd>P</kbd></td><td>เลือก เส้น ลูกศร เส้นโค้ง เส้นหลายท่อน</td></tr>
+          <tr><td><kbd>O</kbd> <kbd>S</kbd> <kbd>R</kbd> <kbd>E</kbd></td><td>ส่วนโค้ง สปริง สี่เหลี่ยม วงรี</td></tr>
+          <tr><td><kbd>B</kbd> <kbd>D</kbd> <kbd>T</kbd> <kbd>M</kbd></td><td>ลูกบอล จุด ข้อความ สูตร</td></tr>
+          <tr><td><kbd>I</kbd> <kbd>N</kbd> <kbd>H</kbd></td><td>รูปภาพ ดินสอ มือ (ไวท์บอร์ดและหน้ากระดาษ)</td></tr>
+          <tr><td><kbd>/</kbd></td><td>ค้นหาเครื่องมือ รูปร่าง คำสั่ง โหมด และไฟล์</td></tr>
+          <tr><td><kbd class="shift">Shift</kbd></td><td>จำกัดมุมทีละ 15° สี่เหลี่ยมจัตุรัส และวงกลม</td></tr>
+          <tr><td><kbd class="alt">Alt</kbd></td><td>ลากโดยไม่จัดแนว</td></tr>
+          <tr><td><kbd>Space</kbd> + ลาก</td><td>ย้ายมุมมอง หรือใช้เมาส์ปุ่มกลาง</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd> + เลื่อน</td><td>ซูม</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>Z</kbd> / <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>Z</kbd></td><td>เลิกทำ / ทำซ้ำ</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></td><td>ซูมเข้า ออก หรือขนาด 100%</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>D</kbd></td><td>ทำสำเนา</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>G</kbd></td><td>จัดกลุ่ม เพิ่ม Shift เพื่อยกเลิกกลุ่ม</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>R</kbd></td><td>หมุน 90°</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>]</kbd> / <kbd>[</kbd></td><td>ย้ายไปด้านหน้า / ด้านหลัง</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td>เปิดตัวแก้ไขของบล็อกที่เลือก</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>Enter</kbd></td><td>Done ในตัวแก้ไข หรือ Copy PNG ในโหมดด่วน</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>S</kbd></td><td>บันทึก ในตัวแก้ไขบล็อกจะเขียนกลับแต่ยังเปิดไว้</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd></td><td>บันทึกเป็นไฟล์</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>O</kbd></td><td>เปิดไฟล์</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>เปิดโค้ด TikZ</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>ส่งออกทั้งเอกสารเป็น LaTeX</td></tr>
+          <tr><td><kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>พิมพ์หรือ PDF</td></tr>
+          <tr><td>คลิกขวา</td><td>เมนูวัตถุ</td></tr>
+        </tbody></table>
+      </section>
+
+      <section id="privacy">
+        <h2>ออฟไลน์และความเป็นส่วนตัว</h2>
+        <ul>
+          <li><b>งานอยู่ในอุปกรณ์:</b> ไฟล์และการตั้งค่าอยู่ในเบราว์เซอร์ ไม่มีการเก็บเอกสารบนเซิร์ฟเวอร์</li>
+          <li><b>ไม่ต้องมีบัญชี:</b> แอปไม่มีการสมัครบัญชี คุกกี้ โฆษณา สคริปต์บุคคลที่สาม หรือระบบติดตามผู้ใช้</li>
+          <li><b>ข้อยกเว้น:</b> Cloudflare Workers ของโฮสต์เก็บสถิติคำขอฝั่งเซิร์ฟเวอร์แบบรวม เช่น จำนวนคำขอ ข้อผิดพลาด และประเทศโดยประมาณ ไม่ตั้งคุกกี้ ไม่เพิ่มสคริปต์ และไม่เห็นเอกสารของคุณ</li>
+          <li><b>ออฟไลน์:</b> หลังเข้าครั้งแรก เบราว์เซอร์เก็บแอป เอนจินสูตร MathLive และแบบอักษรไว้ คำแปลไทยและคู่มือทั้งสองภาษารวมอยู่ในไฟล์ของเว็บไซต์ ไม่มีบริการแปลภายนอก</li>
+          <li><b>อัปเดต:</b> จุดสีเหลืองอำพันหน้าหมายเลขรุ่นด้านล่างรายการไฟล์แจ้งว่ามีรุ่นใหม่ คลิกเพื่อโหลดใหม่ แอปตรวจรุ่นจากเว็บไซต์เดียวกันครั้งเดียวต่อการเปิด</li>
+          <li>ไฟล์ SVG, HTML, PNG และ PDF ที่ส่งออกฝังแบบอักษรสูตร ไม่ต้องร้องขอจากเว็บไซต์อื่น</li>
+          <li>เปิดเผยซอร์สโค้ดภายใต้ GNU AGPLv3 และโฮสต์เองเป็นไฟล์เว็บไซต์คงที่ได้</li>
+        </ul>
+      </section>
+      <section id="ai">
+        <h2>การใช้ AI เชิงกำเนิด</h2>
+        <p>DiagramTeX พัฒนาด้วยความช่วยเหลือของ AI เชิงกำเนิด โค้ด การทดสอบ และเอกสารส่วนใหญ่เขียนด้วยผู้ช่วยเขียนโค้ด AI โดยผู้พัฒนากำกับ ตรวจสอบ และทดสอบ ตัวแอปเองไม่ใช้ AI และไม่ส่งสิ่งที่คุณวาดไปยังบริการ AI</p>
+      </section>
+      <section id="faq">
+        <h2>คำถามที่พบบ่อย</h2>
+        <h3 id="generated-content-license">สิทธิ์การใช้เนื้อหาที่สร้าง</h3>
+        <p>ตัวโปรแกรม DiagramTeX ใช้สัญญาอนุญาต GNU AGPLv3 แต่แผนภาพ โค้ด LaTeX รูปภาพ PDF และเนื้อหาที่คุณสร้างไม่ได้อยู่ภายใต้ AGPL เพียงเพราะสร้างด้วยโปรแกรมนี้ คุณนำงานต้นฉบับของคุณไปใช้ในสิ่งพิมพ์วิชาการ งานเชิงพาณิชย์ เอกสารที่ไม่เปิดเผย หรือผลงานอื่นได้โดยไม่มีข้อผูกพันด้านสัญญาอนุญาตเพิ่มเติมจาก DiagramTeX เนื้อหาหรือทรัพยากรของบุคคลที่สามยังอาจมีสัญญาอนุญาตของตนเอง</p>
+        <h3>ใช้กับ Overleaf ได้ไหม?</h3><p>ได้ กด Ctrl/⌘+E คัดลอกโค้ดไปวางในโครงการ และโหลดแพ็กเกจตามหมายเหตุด้านบน</p>
+        <h3>ใช้บนมือถือและแท็บเล็ตได้ไหม?</h3><p>ใช้บนแท็บเล็ตและมือถือแนวนอนได้ มือถือแนวตั้งจะแนะนำให้ใช้หน้าจอใหญ่ขึ้น เพราะตัวแก้ไขต้องการพื้นที่</p>
+        <h3>วาดได้ใหญ่แค่ไหน?</h3><p>รองรับวัตถุหลายหมื่นชิ้น ระบบวาดเฉพาะส่วนใกล้มุมมองเพื่อให้การแก้ไขยังลื่นไหลที่ประมาณ 20,000 วัตถุ</p>
+        <h3>แผนภาพเก็บที่ไหน?</h3><p>ใน IndexedDB ของเบราว์เซอร์ ใช้บันทึกเพื่อเก็บสำเนา <code>.diagramtex</code> เป็นไฟล์ด้วย</p>
+        <h3>หากตัวแก้ไขวาดบางอย่างไม่ได้?</h3><p>พิมพ์ในช่องโค้ด ระบบเก็บและส่งออกตามที่เขียน และแจ้งบรรทัดที่วาดไม่ได้</p>
+      </section>
+      <footer>DiagramTeX ใช้งานฟรีและเปิดเผยซอร์สโค้ดภายใต้ GNU AGPLv3 ดูซอร์สโค้ด ปัญหา และรุ่นเผยแพร่ที่ <a href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener">gitlab.com/igniting-space/diagramtex</a></footer>
+    </main>
+  </div>
+
+  <script>
+    // Shortcuts read ⌘ ⌥ ⇧ on a Mac, Ctrl / Alt / Shift elsewhere (as in the app)
+    (function () {
+      if (!/Mac|iPhone|iPad/.test(navigator.platform)) return;
+      var map = { mod: '⌘', alt: '⌥', shift: '⇧' };
+      document.querySelectorAll('kbd.mod, kbd.alt, kbd.shift').forEach(function (k) { k.textContent = map[k.className]; });
+    })();
+    // the phone-width contents: the same list, in a fold at the top
+    (function () {
+      var m = document.querySelector('.toc-m'), t = document.getElementById('toc');
+      m.appendChild(t.cloneNode(true)).removeAttribute('id');
+      m.addEventListener('click', function (e) { if (e.target.closest('a')) m.open = false; });
+    })();
+    // mark the section being read in the contents
+    (function () {
+      var links = [].slice.call(document.querySelectorAll('#toc a'));
+      var byId = {}; links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+      var targets = Object.keys(byId).map(function (id) { return document.getElementById(id); }).filter(Boolean);
+      function update() {
+        var cur = targets[0];
+        for (var i = 0; i < targets.length; i++) if (targets[i].getBoundingClientRect().top < 120) cur = targets[i];
+        links.forEach(function (a) { a.classList.toggle('on', a === byId[cur.id]); });
+      }
+      addEventListener('scroll', update, { passive: true }); update();
+    })();
+  </script>
+  <script src="../language-menu.js"></script>
+  <script src="language.js"></script>
+</body>
+</html>

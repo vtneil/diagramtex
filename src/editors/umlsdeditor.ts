@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note, texColour } from '../ui/editor-fields';
@@ -31,23 +34,26 @@ import { runtime as TD } from '../runtime';
     block: ic('<rect x="4" y="3" width="56" height="22"/><path d="M4 11H20L23 8V3"/>'),
   };
   const PAL: any[] = [
-    ['Lifelines', [
-      ['inst', 'Instance', 'I', 'Instance'],
-      ['thread', 'Thread (active from the start)', 'T', 'Thread'],
+    // names are caption descriptors, shown in the interface language when the palette is drawn
+    [message('editor.umlsd.cat.lifelines', 'Lifelines'), [
+      ['inst', message('editor.umlsd.instance', 'Instance'), 'I', message('editor.umlsd.instance', 'Instance')],
+      ['thread', message('editor.umlsd.threadLong', 'Thread (active from the start)'), 'T', message('editor.umlsd.thread', 'Thread')],
     ]],
-    ['Messages', [
-      ['call', 'Call, with a return', 'C', 'Call'],
-      ['callself', 'Self call', 'S', 'Self call'],
-      ['mess', 'Message', 'M', 'Message'],
-      ['messcall', 'Call without a return', 'A', 'No return'],
+    [message('editor.umlsd.cat.messages', 'Messages'), [
+      ['call', message('editor.umlsd.callLong', 'Call, with a return'), 'C', message('editor.umlsd.call', 'Call')],
+      ['callself', message('editor.umlsd.selfCall', 'Self call'), 'S', message('editor.umlsd.selfCall', 'Self call')],
+      ['mess', message('editor.umlsd.message', 'Message'), 'M', message('editor.umlsd.message', 'Message')],
+      ['messcall', message('editor.umlsd.callNoReturn', 'Call without a return'), 'A', message('editor.umlsd.noReturn', 'No return')],
     ]],
-    ['Frames', [
-      ['block', 'Block (frame round the selection)', 'B', 'Block'],
+    [message('editor.umlsd.cat.frames', 'Frames'), [
+      ['block', message('editor.umlsd.blockLong', 'Block (frame round the selection)'), 'B', message('editor.umlsd.block', 'Block')],
     ]],
   ];
   const ITEM: Record<string, any> = {}, KEYS: Record<string, string> = {};
   for (const [, its] of PAL) for (const [k, name, key, short] of its) { ITEM[k] = { k, name, key, short }; if (key) KEYS[key.toLowerCase()] = k; }
   const KIND_NAMES: Record<string, string> = { call: 'call', callself: 'self call', mess: 'message', messcall: 'call without a return' };
+  // a kind's name as a title, in the interface language
+  const KIND_TITLE = (k: string) => (({ call: () => uiText('editor.umlsd.call', 'Call'), callself: () => uiText('editor.umlsd.selfCall', 'Self call'), mess: () => uiText('editor.umlsd.message', 'Message'), messcall: () => uiText('editor.umlsd.callNoReturn', 'Call without a return') }) as Record<string, () => string>)[k]?.() ?? '';
 
   // ---------------------------------------------------------------- model
   // M = TD.umlsd.parse(src) plus { raw, dirty }: the code is M.raw until something is edited
@@ -94,6 +100,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- state
   // { M, sel: path | null, kind (of new messages), view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  let stopLocale: (() => void) | null = null;
   const snapCode = () => codeOf(E.M);
   function begin() { if (E.pending == null) E.pending = snapCode(); }
   function commit() {
@@ -140,7 +147,7 @@ import { runtime as TD } from '../runtime';
     return { path, list: l, i };
   }
   function addArrow(a: string, b: string, y: number, kind = E.kind) {
-    if (kind === 'mess' && a === b) { setTip('A message goes to another lifeline: drag to a different one'); return; }
+    if (kind === 'mess' && a === b) { setTip(uiText('editor.umlsd.messOtherDrag', 'A message goes to another lifeline: drag to a different one')); return; }
     if (a === b) kind = 'callself';
     else if (kind === 'callself') kind = 'call';
     let ref: number[];
@@ -169,13 +176,13 @@ import { runtime as TD } from '../runtime';
   // a call or message turned into another kind (a message has no body: one with messages inside stays a call)
   function setKind(it: any, kind: string) {
     if (!isArrow(it) || kindOf(it) === kind) return;
-    if (kind === 'mess' && it.body && it.body.length) { setTip('Only a call with nothing inside it can become a message'); return; }
-    if (kind === 'mess' && it.a === it.b) { setTip('A message goes to another lifeline'); return; }
+    if (kind === 'mess' && it.body && it.body.length) { setTip(uiText('editor.umlsd.onlyEmptyCall', 'Only a call with nothing inside it can become a message')); return; }
+    if (kind === 'mess' && it.a === it.b) { setTip(uiText('editor.umlsd.messOther', 'A message goes to another lifeline')); return; }
     edit(() => {
       if (kind === 'mess') { it.k = 'mess'; delete it.env; delete it.r; delete it.body; if (it.o && !/^\s*[\d.]+\s*$/.test(it.o)) it.o = null; return; }
       if (it.k === 'mess') { it.k = 'call'; it.body = []; it.o = null; }
       if (kind === 'callself') { it.env = 'callself'; it.b = it.a; if (it.r == null) it.r = ''; return; }
-      if (it.a === it.b) { const other = insts().find((x: any) => x.v !== it.a); if (!other) { setTip('Add another instance first'); return; } it.b = other.v; }
+      if (it.a === it.b) { const other = insts().find((x: any) => x.v !== it.a); if (!other) { setTip(uiText('editor.umlsd.addAnother', 'Add another instance first')); return; } it.b = other.v; }
       it.env = kind;
       if (kind === 'call' && it.r == null) it.r = '';
       if (kind === 'messcall') delete it.r;
@@ -183,7 +190,7 @@ import { runtime as TD } from '../runtime';
   }
   // the two ends of a call or message (to itself: a self call; from a self call to another: a call)
   function setEnds(it: any, a: string, b: string) {
-    if (it.k === 'mess' && a === b) { setTip('A message goes to another lifeline'); return false; }
+    if (it.k === 'mess' && a === b) { setTip(uiText('editor.umlsd.messOther', 'A message goes to another lifeline')); return false; }
     it.a = a; it.b = b;
     if (it.k === 'call') {
       if (a === b) { it.env = 'callself'; if (it.r == null) it.r = ''; }
@@ -249,15 +256,17 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    for (const [title, its] of PAL) {
-      const hits = its.filter(([k, name, , short]: any) => !q || `${name} ${short || ''} ${k} ${title}`.toLowerCase().includes(q));
+    for (const [cat, its] of PAL) {
+      // search the shown names and the English ones
+      const title = caption(cat);
+      const hits = its.filter(([k, name, , short]: any) => !q || `${caption(name)} ${name.fallback} ${caption(short)} ${short.fallback} ${k} ${title} ${cat.fallback}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name, key, short]: any) => {
-        const on = E && KIND_NAMES[k] && E.kind === k;
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${MINI[k]}</span><span>${esc(short || name)}</span></button>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, key, short]: any) => {
+        const on = E && KIND_NAMES[k] && E.kind === k, name = caption(label);
+        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${MINI[k]}</span><span>${esc(caption(short) || name)}</span></button>`;
       }).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
   }
   search.addEventListener('input', buildPalette);
   search.addEventListener('keydown', (e: any) => {
@@ -280,7 +289,7 @@ import { runtime as TD } from '../runtime';
     const s = selIt();
     if (isArrow(s)) setKind(s, k);
     buildPalette();
-    setTip(isArrow(s) ? '' : `${ITEM[k].name}: drag from one lifeline to another${k === 'callself' ? ' (or down along one)' : ''}`);
+    setTip(isArrow(s) ? '' : k === 'callself' ? uiText('editor.umlsd.armTipSelf', '{name}: drag from one lifeline to another (or down along one)', { name: caption(ITEM[k].name) }) : uiText('editor.umlsd.armTip', '{name}: drag from one lifeline to another', { name: caption(ITEM[k].name) }));
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -355,7 +364,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -386,7 +395,7 @@ import { runtime as TD } from '../runtime';
       for (const f of L.frames) if (same(f.ref, sel)) { const [l, t] = P(f.x1, f.y2), [rr, b] = P(f.x2, f.y1); out += `<rect class="ze-wsel" x="${r2(l)}" y="${r2(t)}" width="${r2(rr - l)}" height="${r2(b - t)}" fill="none" stroke-width="8"/>`; }
     }
     if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${U.draw({ type: 'umlsd', x: L.bb.x, y: L.bb.y, src: snapCode() }, { export: true })}</g>`;
-    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Add an instance from the left to start</text>`;
+    else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(uiText('editor.umlsd.emptyHint', 'Add an instance from the left to start'))}</text>`;
     for (const n of L.order) {
       const s = boxScr(instBox(n)), at = `x="${r2(s.l - 3)}" y="${r2(s.t - 3)}" width="${r2(s.r - s.l + 6)}" height="${r2(s.b - s.t + 6)}" rx="3"`;
       if (same(n.ref, sel)) out += `<rect class="uml-sel" ${at}/>`;
@@ -476,14 +485,14 @@ import { runtime as TD } from '../runtime';
       const T = instAt(e, 6) || lifelineAt(e, 16);
       // on its own lifeline: a self call once the pointer has gone down along it
       d.to = T ? (T.v !== d.from || sy - d.sy > 12 ? T.v : null) : null;
-      const kind = d.to === d.from ? 'self call' : KIND_NAMES[E.kind === 'callself' ? 'call' : E.kind];
-      setTip(d.to ? `${kind[0].toUpperCase() + kind.slice(1)} from ${d.from} to ${d.to}` : 'Drop on a lifeline (on this one, lower down: a self call)');
+      const kind = KIND_TITLE(d.to === d.from ? 'callself' : E.kind === 'callself' ? 'call' : E.kind);
+      setTip(d.to ? uiText('editor.umlsd.dragTip', '{kind} from {from} to {to}', { kind, from: d.from, to: d.to }) : uiText('editor.umlsd.dropOnLifeline', 'Drop on a lifeline (on this one, lower down: a self call)'));
       draw(); return;
     }
     if (d.mode === 'move') {
       if (!d.moved && Math.abs(sx - d.sx) < 5) return;
       d.moved = true; d.at = [sx, sy];
-      setTip('Drop where the instance goes');
+      setTip(uiText('editor.umlsd.dropInstance', 'Drop where the instance goes'));
       draw(); return;
     }
   });
@@ -514,7 +523,7 @@ import { runtime as TD } from '../runtime';
     down: '<path d="M10 4v12M5 11l5 5 5-5"/>',
     block: '<rect x="3" y="4" width="14" height="12"/><path d="M3 8h5l1.5-1.5V4"/>',
   };
-  const mItem = (act: string, label: string, icon: string, key?: string) => `<button class="ctx-item${act === 'del' ? ' danger' : ''}" data-us="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: string, label: string, icon: string, key?: string) => `<button class="ctx-item${act === 'del' ? ' danger' : ''}" data-us="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -523,11 +532,11 @@ import { runtime as TD } from '../runtime';
     if (!hit) { closeMenu(); return; }
     E.sel = hit.ref;
     const it = selIt(), alt = isMac ? '⌥' : 'Alt+';
-    const name = it.k === 'inst' ? (it.thread ? 'Thread' : 'Instance') : it.k === 'block' ? 'Block' : KIND_NAMES[kindOf(it)].replace(/^./, (c: string) => c.toUpperCase());
-    menu.innerHTML = mItem('text', 'Edit Text', 'rename', '↩')
-      + (it.k === 'inst' ? mItem('up', 'Move Left', 'up', `${alt}←`) + mItem('down', 'Move Right', 'down', `${alt}→`) : mItem('up', 'Move Up', 'up', `${alt}↑`) + mItem('down', 'Move Down', 'down', `${alt}↓`))
-      + (it.k !== 'inst' ? mItem('wrap', 'Put in a Block', 'block') : '')
-      + '<hr>' + mItem('del', `Delete ${name}`, 'del', '⌫');
+    const del = it.k === 'inst' ? (it.thread ? uiText('editor.umlsd.deleteThread', 'Delete Thread') : uiText('editor.umlsd.deleteInstance', 'Delete Instance')) : it.k === 'block' ? uiText('editor.umlsd.deleteBlock', 'Delete Block') : uiText('editor.umlsd.deleteKind', 'Delete {kind}', { kind: KIND_TITLE(kindOf(it)) });
+    menu.innerHTML = mItem('text', uiText('editor.umlsd.editText', 'Edit Text'), 'rename', '↩')
+      + (it.k === 'inst' ? mItem('up', uiText('editor.umlsd.moveLeft', 'Move Left'), 'up', `${alt}←`) + mItem('down', uiText('editor.umlsd.moveRight', 'Move Right'), 'down', `${alt}→`) : mItem('up', uiText('editor.umlsd.moveUp', 'Move Up'), 'up', `${alt}↑`) + mItem('down', uiText('editor.umlsd.moveDown', 'Move Down'), 'down', `${alt}↓`))
+      + (it.k !== 'inst' ? mItem('wrap', uiText('editor.umlsd.putInBlock', 'Put in a Block'), 'block') : '')
+      + '<hr>' + mItem('del', del, 'del', '⌫');
     draw(); renderProps();
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
@@ -581,6 +590,8 @@ import { runtime as TD } from '../runtime';
   }
 
   // ---------------------------------------------------------------- properties
+  // "2 instances · 3 messages"
+  const countText = (n: number, m: number) => `${n === 1 ? uiText('editor.umlsd.oneInstance', '1 instance') : uiText('editor.umlsd.nInstances', '{n} instances', { n })} · ${m === 1 ? uiText('editor.umlsd.oneMessage', '1 message') : uiText('editor.umlsd.nMessages', '{n} messages', { n: m })}`;
   function renderProps() {
     if (!E) return;
     const it = selIt();
@@ -589,63 +600,63 @@ import { runtime as TD } from '../runtime';
     const actions = (buttons: any[]) => ({ kind: 'actions' as const, class: 'row', buttons });
     const colorRow = (label: string, key: string, value: string, dflt?: string) => ({ ...row(label, texColour(value, { 'data-f': key }, { nullable: true, title: label, defaultLabel: dflt })), controlClass: 'ctl tc' });
     const vars = insts().map((x: any) => [x.v, `${x.v}  ${x.t}`]);
-    const moves = (h: boolean) => actions([{ text: h ? 'Move Left' : 'Move Up', attrs: { 'data-ue': 'up' } }, { text: h ? 'Move Right' : 'Move Down', attrs: { 'data-ue': 'down' } }]);
+    const moves = (h: boolean) => actions([{ text: h ? uiText('editor.umlsd.moveLeft', 'Move Left') : uiText('editor.umlsd.moveUp', 'Move Up'), attrs: { 'data-ue': 'up' } }, { text: h ? uiText('editor.umlsd.moveRight', 'Move Right') : uiText('editor.umlsd.moveDown', 'Move Down'), attrs: { 'data-ue': 'down' } }]);
     if (it && it.k === 'inst') {
       const uses = [...walk()].filter(([x]) => isArrow(x) && (x.a === it.v || x.b === it.v)).length;
-      show(it.thread ? 'Thread' : 'Instance', `${it.v}${uses ? ` · ${uses} message${uses === 1 ? '' : 's'}` : ''}`, [
-        field('Text', 'itext', it.t, { 'data-tx': 'text', placeholder: 'name:Class' }),
-        field('Name', 'ivar', it.v, { class: 'mono' }),
-        note('The name messages refer to it by.'),
-        segments('Kind', 'ikind', it.thread ? 'thread' : 'inst', [['inst', 'Instance', 'passive until called (\\newinst)'], ['thread', 'Thread', 'active from the start (\\newthread)']]),
-        ...(it.thread ? [colorRow('Colour', 'icol', it.o ? U.unbrace(it.o) : '', 'Grey 30%')]
-          : [numField('Gap', 'igap', U.num(gapOf(it)), 'cm', { step: '0.1', min: '0' })]),
+      show(it.thread ? uiText('editor.umlsd.thread', 'Thread') : uiText('editor.umlsd.instance', 'Instance'), `${it.v}${uses ? ` · ${uses === 1 ? uiText('editor.umlsd.oneMessage', '1 message') : uiText('editor.umlsd.nMessages', '{n} messages', { n: uses })}` : ''}`, [
+        field(uiText('editor.umlsd.text', 'Text'), 'itext', it.t, { 'data-tx': 'text', placeholder: 'name:Class' }),
+        field(uiText('editor.umlsd.name', 'Name'), 'ivar', it.v, { class: 'mono' }),
+        note(uiText('editor.umlsd.nameNote', 'The name messages refer to it by.')),
+        segments(uiText('editor.umlsd.kind', 'Kind'), 'ikind', it.thread ? 'thread' : 'inst', [['inst', uiText('editor.umlsd.instance', 'Instance'), uiText('editor.umlsd.instanceTitle', 'passive until called ({cmd})', { cmd: '\\newinst' })], ['thread', uiText('editor.umlsd.thread', 'Thread'), uiText('editor.umlsd.threadTitle', 'active from the start ({cmd})', { cmd: '\\newthread' })]]),
+        ...(it.thread ? [colorRow(uiText('editor.umlsd.colour', 'Colour'), 'icol', it.o ? U.unbrace(it.o) : '', uiText('editor.umlsd.grey30', 'Grey 30%'))]
+          : [numField(uiText('editor.umlsd.gap', 'Gap'), 'igap', U.num(gapOf(it)), 'cm', { step: '0.1', min: '0' })]),
         moves(true),
-        actions([{ text: `Delete ${it.thread ? 'Thread' : 'Instance'}`, attrs: { class: 'danger', 'data-ue': 'del' } }]),
-        ...(uses ? [note('Deleting it takes out its messages too (what they hold stays).')] : []),
+        actions([{ text: it.thread ? uiText('editor.umlsd.deleteThread', 'Delete Thread') : uiText('editor.umlsd.deleteInstance', 'Delete Instance'), attrs: { class: 'danger', 'data-ue': 'del' } }]),
+        ...(uses ? [note(uiText('editor.umlsd.deleteInstNote', 'Deleting it takes out its messages too (what they hold stays).'))] : []),
       ]);
       return;
     }
     if (isArrow(it)) {
       const k = kindOf(it), self = k === 'callself';
-      show(KIND_NAMES[k].replace(/^./, (c) => c.toUpperCase()), self ? it.a : `${it.a} → ${it.b}`, [
-        sel('Kind', 'akind', k, [['call', 'Call'], ['callself', 'Self call'], ['messcall', 'Call without a return'], ['mess', 'Message']]),
-        sel('From', 'afrom', it.a, vars),
-        ...(self ? [] : [sel('To', 'ato', it.b, vars)]),
-        field('Text', 'atext', it.t, { 'data-tx': 'text', placeholder: 'none' }),
-        ...(it.k === 'call' && it.env !== 'messcall' ? [field('Returns', 'aret', it.r || '', { 'data-tx': 'text', placeholder: 'none' })] : []),
+      show(KIND_TITLE(k), self ? it.a : `${it.a} → ${it.b}`, [
+        sel(uiText('editor.umlsd.kind', 'Kind'), 'akind', k, [['call', KIND_TITLE('call')], ['callself', KIND_TITLE('callself')], ['messcall', KIND_TITLE('messcall')], ['mess', KIND_TITLE('mess')]]),
+        sel(uiText('editor.umlsd.from', 'From'), 'afrom', it.a, vars),
+        ...(self ? [] : [sel(uiText('editor.umlsd.to', 'To'), 'ato', it.b, vars)]),
+        field(uiText('editor.umlsd.text', 'Text'), 'atext', it.t, { 'data-tx': 'text', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }),
+        ...(it.k === 'call' && it.env !== 'messcall' ? [field(uiText('editor.umlsd.returns', 'Returns'), 'aret', it.r || '', { 'data-tx': 'text', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') })] : []),
         it.k === 'mess'
-          ? numField('Delay', 'adelay', it.o || '0', 'levels', { step: '1', min: '0' })
-          : numField('Length', 'alevel', it.o || '1', 'levels', { step: '1', min: '0' }),
-        note(it.k === 'mess' ? 'A delay draws it sloping down: it arrives that many levels later.' : 'How many levels it lasts after what it holds.'),
+          ? numField(uiText('editor.umlsd.delay', 'Delay'), 'adelay', it.o || '0', uiText('editor.umlsd.levels', 'levels'), { step: '1', min: '0' })
+          : numField(uiText('editor.umlsd.length', 'Length'), 'alevel', it.o || '1', uiText('editor.umlsd.levels', 'levels'), { step: '1', min: '0' }),
+        note(it.k === 'mess' ? uiText('editor.umlsd.delayNote', 'A delay draws it sloping down: it arrives that many levels later.') : uiText('editor.umlsd.lengthNote', 'How many levels it lasts after what it holds.')),
         moves(false),
-        actions([{ text: 'Put in a Block', attrs: { 'data-ue': 'wrap' } }, { text: 'Delete', attrs: { class: 'danger', 'data-ue': 'del' } }]),
-        ...(it.body && it.body.length ? [note('Deleting it keeps what it holds.')] : []),
+        actions([{ text: uiText('editor.umlsd.putInBlock', 'Put in a Block'), attrs: { 'data-ue': 'wrap' } }, { text: uiText('editor.umlsd.delete', 'Delete'), attrs: { class: 'danger', 'data-ue': 'del' } }]),
+        ...(it.body && it.body.length ? [note(uiText('editor.umlsd.keepsNote', 'Deleting it keeps what it holds.'))] : []),
       ]);
       return;
     }
     if (it && it.k === 'block') {
-      show('Block', `${it.body.length} item${it.body.length === 1 ? '' : 's'}`, [
-        field('Caption', 'btext', it.t, { 'data-tx': 'text', placeholder: 'loop' }),
-        field('Comment', 'bcomm', it.c || '', { 'data-tx': 'text', placeholder: 'e.g. [while running]' }),
-        colorRow('Caption fill', 'bcol', it.o ? U.unbrace(it.o) : '', 'White'),
+      show(uiText('editor.umlsd.block', 'Block'), it.body.length === 1 ? uiText('editor.umlsd.oneItem', '1 item') : uiText('editor.umlsd.nItems', '{n} items', { n: it.body.length }), [
+        field(uiText('editor.umlsd.caption', 'Caption'), 'btext', it.t, { 'data-tx': 'text', placeholder: 'loop' }),
+        field(uiText('editor.umlsd.comment', 'Comment'), 'bcomm', it.c || '', { 'data-tx': 'text', placeholder: uiText('editor.umlsd.commentPlaceholder', 'e.g. [while running]') }),
+        colorRow(uiText('editor.umlsd.captionFill', 'Caption fill'), 'bcol', it.o ? U.unbrace(it.o) : '', uiText('editor.umlsd.white', 'White')),
         moves(false),
-        actions([{ text: 'Delete Block', attrs: { class: 'danger', 'data-ue': 'del' } }]),
-        note('Deleting it keeps what it holds.'),
+        actions([{ text: uiText('editor.umlsd.deleteBlock', 'Delete Block'), attrs: { class: 'danger', 'data-ue': 'del' } }]),
+        note(uiText('editor.umlsd.keepsNote', 'Deleting it keeps what it holds.')),
       ]);
       return;
     }
     if (it) {
-      const what: Record<string, string> = { pre: '\\prelevel: what follows starts a level earlier', post: '\\postlevel: what follows starts a level later', bias: `\\setthreadbias{${it.v}}: where calls meet a lifeline from here on`, style: 'A style, as written in the code', flag: 'A switch, as written in the code', unit: `\\unitfactor: one level is ${it.v} cm`, raw: 'Code kept as written' };
-      show('Code', '', [note(what[it.k] || ''), moves(false), actions([{ text: 'Delete', attrs: { class: 'danger', 'data-ue': 'del' } }])]);
+      const what: Record<string, string> = { pre: uiText('editor.umlsd.preNote', '{cmd}: what follows starts a level earlier', { cmd: '\\prelevel' }), post: uiText('editor.umlsd.postNote', '{cmd}: what follows starts a level later', { cmd: '\\postlevel' }), bias: uiText('editor.umlsd.biasNote', '{cmd}: where calls meet a lifeline from here on', { cmd: `\\setthreadbias{${it.v}}` }), style: uiText('editor.umlsd.styleNote', 'A style, as written in the code'), flag: uiText('editor.umlsd.flagNote', 'A switch, as written in the code'), unit: uiText('editor.umlsd.unitNote', '{cmd}: one level is {n} cm', { cmd: '\\unitfactor', n: it.v }), raw: uiText('editor.umlsd.rawNote', 'Code kept as written') };
+      show(uiText('editor.commonB.code', 'Code'), '', [note(what[it.k] || ''), moves(false), actions([{ text: uiText('editor.umlsd.delete', 'Delete'), attrs: { class: 'danger', 'data-ue': 'del' } }])]);
       return;
     }
     const L = lay(), under = !items().some((x: any) => x.k === 'flag' && x.name === 'underline' && !x.v);
     renderView(props, FormPanel, { sections: [
-      { ...section('Sequence diagram', [
-        segments('Names', 'under', under ? 'on' : 'off', [['on', 'Underlined', 'instances, as UML writes them'], ['off', 'Plain', '\\pgfumlsdunderlinefalse']]),
-        note('Add instances from the left. Drag from one lifeline to another for a message of the kind chosen under Messages; on one lifeline, drag down for a self call. A message drawn inside an activation goes inside that call. Drag an instance sideways to reorder; double-click any text to edit it.'),
-      ], 'sec'), summary: `${L.order.length} instance${L.order.length === 1 ? '' : 's'} · ${L.lines.filter((l: any) => !l.ret).length} message${L.lines.filter((l: any) => !l.ret).length === 1 ? '' : 's'}` },
-      section('Code', [note('Written for ', { code: 'pgf-umlsd' }, '. ', { code: '\\prelevel' }, ', ', { code: '\\postlevel' }, ', ', { code: '\\setthreadbias' }, ' and ', { code: '\\tikzstyle{inststyle}' }, ' are read and drawn; edit them in the code.')], 'sec'),
+      { ...section(captions["ui.sequence.diagram"], [
+        segments(uiText('editor.umlsd.names', 'Names'), 'under', under ? 'on' : 'off', [['on', uiText('editor.umlsd.underlined', 'Underlined'), uiText('editor.umlsd.underlinedTitle', 'instances, as UML writes them')], ['off', uiText('editor.umlsd.plain', 'Plain'), '\\pgfumlsdunderlinefalse']]),
+        note(uiText('editor.umlsd.help', 'Add instances from the left. Drag from one lifeline to another for a message of the kind chosen under Messages; on one lifeline, drag down for a self call. A message drawn inside an activation goes inside that call. Drag an instance sideways to reorder; double-click any text to edit it.')),
+      ], 'sec'), summary: countText(L.order.length, L.lines.filter((l: any) => !l.ret).length) },
+      section(uiText('editor.commonB.code', 'Code'), [note(uiText('editor.umlsd.codeNote1', 'Written for '), { code: 'pgf-umlsd' }, uiText('editor.umlsd.codeNote2', '. '), { code: '\\prelevel' }, ', ', { code: '\\postlevel' }, ', ', { code: '\\setthreadbias' }, uiText('editor.umlsd.codeNote3', ' and '), { code: '\\tikzstyle{inststyle}' }, uiText('editor.umlsd.codeNote4', ' are read and drawn; edit them in the code.'))], 'sec'),
     ] });
   }
   const gapOf = (it: any) => { const v = String(it.o ?? '').trim(); if (!v) return 0.2; const m = /^(-?[\d.]+)\s*(cm|mm|pt)?$/.exec(v); if (!m) return 0.2; const n = parseFloat(m[1]); return m[2] === 'mm' ? n / 10 : m[2] === 'pt' ? n / CMPT : n; };
@@ -722,13 +733,13 @@ import { runtime as TD } from '../runtime';
     else if (a === 'down') shift(1);
     else if (a === 'wrap') addBlock();
     else if (a === 'text' && E.sel) { const it = selIt(); if (!editText(E.sel, 't')) focusField(); void it; }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     updateTools();
   }
   // the drawing writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const L = lay(), n = L.order.length, m = L.lines.filter((l: any) => !l.ret).length;
-    count.textContent = `${n} instance${n === 1 ? '' : 's'} · ${m} message${m === 1 ? '' : 's'}`;
+    count.textContent = countText(n, m);
     updateTools();
     if (document.activeElement === codeTa) return;
     const c = snapCode();
@@ -793,8 +804,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = uiText('editor.commonB.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   TD.unsaved.push(() => !!E && snapCode() !== E.start);
   async function finish(ok: any) {
@@ -804,8 +816,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this sequence diagram?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(uiText('editor.umlsd.discard', 'Discard changes to this sequence diagram?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
+    stopLocale?.(); stopLocale = null;
     root.hidden = true;
     document.body.classList.remove('cz-open');
     E = null;
@@ -819,6 +832,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, panel and drawing's captions follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
     requestAnimationFrame(() => { if (E) fit(); });
   }

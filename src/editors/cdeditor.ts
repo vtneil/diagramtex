@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { bindCaption, message, onLocale, t } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { row, section } from '../ui/forms';
@@ -13,6 +16,7 @@ import { runtime as TD } from '../runtime';
 // TD.cdEditor.open(block, onDone, X) — block: { src }; onDone({ src }) on Done. X (TD.xy) edits xymatrix code
 // instead: the model stays tikz-cd code, read from and written back to the xy dialect.
 (function () {
+  let titleCaption: (() => void) | undefined, localeOff: (() => void) | undefined;
   const D = TD.cd, Z = TD.zx;
   const { esc, r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
@@ -33,6 +37,13 @@ import { runtime as TD } from '../runtime';
     ['leftrightarrow', 'Both ways', ['leftrightarrow']], ['dash', 'Line', ['dash']], ['harpoon', 'Harpoon', ['harpoon']], ['squiggly', 'Squiggly', ['squiggly']],
   ];
   const STYLE = Object.fromEntries<any>(STYLES.map(([k, n, o]) => [k, { k, name: n, items: o }]));
+  // the styles' names as shown (STYLES keeps the English for search)
+  const styleName = (k: string): string => ({
+    to: () => t('editor.cd.style.to', 'Arrow'), mapsto: () => t('editor.cd.style.mapsto', 'Maps to'), hook: () => t('editor.cd.style.hook', 'Inclusion'),
+    'two heads': () => t('editor.cd.style.twoHeads', 'Onto'), tail: () => t('editor.cd.style.tail', 'Into'), dashed: () => t('ui.dashed', 'Dashed'),
+    Rightarrow: () => t('editor.cd.style.implies', 'Implies'), equal: () => t('editor.cd.style.equal', 'Equal'), leftrightarrow: () => t('editor.cd.style.both', 'Both ways'),
+    dash: () => t('editor.cd.style.dash', 'Line'), harpoon: () => t('editor.cd.style.harpoon', 'Harpoon'), squiggly: () => t('editor.cd.style.squiggly', 'Squiggly'),
+  } as Record<string, () => string>)[k]?.() ?? (STYLE[k] ? STYLE[k].name : k);
   const OBJ = Object.fromEntries<any>(OBJECTS.map(([k, t]) => [k, t]));
   // An arrow's style is two independent choices: its head (the pictures) and its line (solid, dashed, dotted,
   // squiggly). A picture replaces only the head, a line only the line, so neither undoes the other.
@@ -53,8 +64,8 @@ import { runtime as TD } from '../runtime';
     if (o.length && o.every((x: any) => LINE_KINDS.includes(x))) a.items = a.items.filter((x: any) => !isLine(x)).concat(o);
     else a.items = o.concat(a.items.filter((x: any) => !isHead(x)));
   }
-  const SEP_OPTS = [['', 'Normal']].concat(TD.CD_SEPS.filter((x: any) => x !== 'normal').map((x: any) => [x, x[0].toUpperCase() + x.slice(1)]));
-  const XY_SEPS = [['', 'Normal (2pc)'], ['.5pc', '0.5pc'], ['1pc', '1pc'], ['1.5pc', '1.5pc'], ['3pc', '3pc'], ['4pc', '4pc']];
+  const SEP_OPTS = () => [['', t('ui.normal', 'Normal')]].concat(TD.CD_SEPS.filter((x: any) => x !== 'normal').map((x: any) => [x, x[0].toUpperCase() + x.slice(1)]));
+  const XY_SEPS = () => [['', t('editor.cd.sepNormalXy', 'Normal (2pc)')], ['.5pc', '0.5pc'], ['1pc', '1pc'], ['1.5pc', '1.5pc'], ['3pc', '3pc'], ['4pc', '4pc']];
 
   // ---------------------------------------------------------------- model
   // M: { wrapped, env, amp, rows: [{ cells: [cell], sep }] }; cell: { text, sep (the &[…] before it), t (its
@@ -346,14 +357,15 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    const objs = OBJECTS.filter(([k, t]) => !q || `${k} ${t} objects`.toLowerCase().includes(q));
-    if (objs.length) html += `<div class="cz-cat"><div class="cz-cat-t">Objects</div><div class="qe-grid">${objs.map(([k, t]) => `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(t)}"><span class="qe-fig">${TD.cdMini(cdw(t), 1e3)}</span></button>`).join('')}</div></div>`;
-    const sts = STYLES.filter(([k, n]) => !q || `${k} ${n} arrows`.toLowerCase().includes(q));
+    const objsT = t('editor.cd.objects', 'Objects'), arrowsT = t('editor.cd.arrows', 'Arrows');
+    const objs = OBJECTS.filter(([k, x]) => !q || `${k} ${x} objects ${objsT}`.toLowerCase().includes(q));
+    if (objs.length) html += `<div class="cz-cat"><div class="cz-cat-t">${esc(objsT)}</div><div class="qe-grid">${objs.map(([k, t]) => `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(t)}"><span class="qe-fig">${TD.cdMini(cdw(t), 1e3)}</span></button>`).join('')}</div></div>`;
+    const sts = STYLES.filter(([k, n]) => !q || `${k} ${n} arrows ${styleName(k)} ${arrowsT}`.toLowerCase().includes(q));
     if (sts.length) {
       const cur = E && E.arrow && arrowOf(E.arrow) ? paletteKey(arrowOf(E.arrow).items) : E ? E.style : 'to';
-      html += `<div class="cz-cat"><div class="cz-cat-t">Arrows${E && E.arrow ? '' : ' <small>for new arrows</small>'}</div><div class="qe-grid">${sts.map(([k, n, o]) => `<button class="qe-item${cur === k ? ' on' : ''}" data-style="${esc(k)}" title="${esc(n)}${o.length ? ` (${(o as any).join(', ')})` : ''}"><span class="qe-fig">${styleMini(o)}</span><span>${esc(n)}</span></button>`).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(arrowsT)}${E && E.arrow ? '' : ` <small>${esc(t('editor.cd.forNewArrows', 'for new arrows'))}</small>`}</div><div class="qe-grid">${sts.map(([k, , o]) => `<button class="qe-item${cur === k ? ' on' : ''}" data-style="${esc(k)}" title="${esc(styleName(k))}${o.length ? ` (${(o as any).join(', ')})` : ''}"><span class="qe-fig">${styleMini(o)}</span><span>${esc(styleName(k))}</span></button>`).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     sizeMinis(list, 64, 34, 2.2);
   }
   search.addEventListener('input', buildPalette);
@@ -390,7 +402,7 @@ import { runtime as TD } from '../runtime';
     if (!nR(E.M) && !E.arm) { put(k, 0, 0, true); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
-    setTip(E.arm ? `${OBJ[k]}: click a cell to place it. Esc when done.` : '');
+    setTip(E.arm ? t('editor.cd.tip.place', '{object}: click a cell to place it. Esc when done.', { object: OBJ[k] }) : '');
   }
   // an arrow style: onto the selected arrow, else the style of the next arrows drawn
   function pickStyle(k: any) {
@@ -398,7 +410,7 @@ import { runtime as TD } from '../runtime';
     if (a) {
       const cell = at(E.arrow[0], E.arrow[1]);
       edit(() => { applyStyle(a, k); touch(cell); });
-    } else { E.style = k; setTip(`New arrows: ${STYLE[k].name.toLowerCase()}. Drag from a cell's blue handle to draw one.`); }
+    } else { E.style = k; setTip(t('editor.cd.tip.newArrows', "New arrows: {style}. Drag from a cell's blue handle to draw one.", { style: styleName(k).toLowerCase() })); }
     buildPalette();
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
@@ -468,7 +480,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.5, Math.min(14, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(0.5, Math.min(14, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -511,7 +523,7 @@ import { runtime as TD } from '../runtime';
       out += '</g>';
     }
     if (R && C && !L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${D.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true }, L)}</g>`;
-    if (!R || !C || L.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${R && C ? 'Type in a cell, or drop an object' : 'Drop an object here to start'}</text>`;
+    if (!R || !C || L.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${esc(R && C ? t('editor.cd.empty.cells', 'Type in a cell, or drop an object') : t('editor.cd.empty.start', 'Drop an object here to start'))}</text>`;
     // an arrow being drawn
     if (E.drag && E.drag.mode === 'arrow') {
       const d = E.drag, x0 = X(G.cx(d.c)), y0 = Y(G.cy(d.r));
@@ -524,11 +536,11 @@ import { runtime as TD } from '../runtime';
     if (knobCell) {
       const n = L.nodes && L.nodes.find((x: any) => x.cell[0] === knobCell.r && x.cell[1] === knobCell.c);
       const kx = r2(X(G.cx(knobCell.c) + (n ? n.w / 2 : 2 * MM)) + 9), ky = r2(Y(G.cy(knobCell.r)));
-      out += `<g class="ze-knob" data-r="${knobCell.r}" data-c="${knobCell.c}"><title>Drag to another cell to draw an arrow</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
+      out += `<g class="ze-knob" data-r="${knobCell.r}" data-c="${knobCell.c}"><title>${esc(t('editor.cd.knob', 'Drag to another cell to draw an arrow'))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
     }
     // the delete gutters left of the rows and above the columns
     E.gut = !E.drag && !E.arm && !E.ghost && R && C ? { sx: xs.map(X), sy: ys.map(Y), R, C, left: X(px1), top: Y(py1) } : null;
-    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, ['row', 'column']);
+    out += TD.gridDel.svg(E.gut, E.del, E.del ? null : E.near, [t('editor.cd.deleteRowN', 'Delete row {n}'), t('editor.cd.deleteColumnN', 'Delete column {n}')]);
     // what is being dragged, under the pointer
     const mv = E.drag && E.drag.mode === 'move' && E.drag.moved;
     if ((E.ghost && E.ghost.k) || mv) {
@@ -592,13 +604,13 @@ import { runtime as TD } from '../runtime';
     if (d.mode === 'arrow') {
       d.e = [sx, sy]; E.hover = cellAt(e);
       const h = E.hover;
-      setTip(h && (h.r !== d.r || h.c !== d.c) ? `Arrow to row ${h.r + 1}, column ${h.c + 1}` : 'Drop on another cell');
+      setTip(h && (h.r !== d.r || h.c !== d.c) ? t('editor.cd.tip.arrowTo', 'Arrow to row {row}, column {col}', { row: h.r + 1, col: h.c + 1 }) : t('editor.cd.tip.dropOther', 'Drop on another cell'));
       draw(); return;
     }
     if (d.mode === 'move') {
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
       d.moved = true; d.e = [sx, sy]; E.hover = cellAt(e);
-      setTip(e.altKey ? 'Copy to this cell' : 'Move here; a full cell swaps places. ⌥ copies.');
+      setTip(e.altKey ? t('editor.cd.tip.copyHere', 'Copy to this cell') : t('editor.cd.tip.moveHere', 'Move here; a full cell swaps places. ⌥ copies.'));
       draw(); return;
     }
     if (d.mode === 'range') { const h = cellAt(e); if (h && h.r < nR(E.M) && h.c < nC(E.M)) { E.sel.r2 = h.r; E.sel.c2 = h.c; draw(); renderProps(); } }
@@ -629,7 +641,7 @@ import { runtime as TD } from '../runtime';
 
   // right-click: rows and columns around the cell (or range) under the pointer; on an arrow, the arrow
   const MI: Record<string, any> = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>', rev: '<path d="M3 7h13l-3-3M17 13H4l3 3"/>', edit: '<path d="M4 16l1-4 8-8 3 3-8 8z"/>' };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|arrowdel)$/.test(act) ? ' danger' : ''}" data-cm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|arrowdel)$/.test(act) ? ' danger' : ''}" data-cm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -637,7 +649,7 @@ import { runtime as TD } from '../runtime';
     const n = nodeAt(e), w = !n && arrowAt(e);
     if (w) {
       selectArrow(w); draw(); renderProps(); buildPalette();
-      menu.innerHTML = mItem('label', 'Edit Label', 'edit', 'Enter') + mItem('reverse', 'Reverse Arrow', 'rev') + '<hr>' + mItem('arrowdel', 'Delete Arrow', 'del', '⌫');
+      menu.innerHTML = mItem('label', t('editor.cd.menu.editLabel', 'Edit Label'), 'edit', 'Enter') + mItem('reverse', t('editor.cd.menu.reverse', 'Reverse Arrow'), 'rev') + '<hr>' + mItem('arrowdel', t('editor.cd.menu.deleteArrow', 'Delete Arrow'), 'del', '⌫');
     } else {
       const h = cellAt(e);
       if (!h || h.r >= nR(E.M) || h.c >= nC(E.M)) { closeMenu(); return; }
@@ -645,11 +657,11 @@ import { runtime as TD } from '../runtime';
       if (!b || h.r < b.r1 || h.r > b.r2 || h.c < b.c1 || h.c > b.c2) selectCell(h.r, h.c);
       draw(); renderProps();
       const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
-      menu.innerHTML = (single() ? mItem('cell', 'Edit Object', 'edit', 'Enter') + '<hr>' : '') +
-        mItem('rowabove', 'Insert Row Above', 'above') + mItem('rowbelow', 'Insert Row Below', 'below') + '<hr>' +
-        mItem('colbefore', 'Insert Column Before', 'before') + mItem('colafter', 'Insert Column After', 'after') + '<hr>' +
-        mItem('rowdel', nr > 1 ? `Delete ${nr} Rows` : 'Delete Row', 'rowdel') + mItem('coldel', nc > 1 ? `Delete ${nc} Columns` : 'Delete Column', 'coldel') + '<hr>' +
-        mItem('delete', nr * nc > 1 ? 'Clear Cells' : 'Clear Cell', 'clear', '⌫');
+      menu.innerHTML = (single() ? mItem('cell', t('editor.cd.menu.editObject', 'Edit Object'), 'edit', 'Enter') + '<hr>' : '') +
+        mItem('rowabove', t('editor.commonA.menu.rowAbove', 'Insert Row Above'), 'above') + mItem('rowbelow', t('editor.commonA.menu.rowBelow', 'Insert Row Below'), 'below') + '<hr>' +
+        mItem('colbefore', t('editor.commonA.menu.colBefore', 'Insert Column Before'), 'before') + mItem('colafter', t('editor.commonA.menu.colAfter', 'Insert Column After'), 'after') + '<hr>' +
+        mItem('rowdel', nr > 1 ? t('editor.commonA.menu.deleteRows', 'Delete {n} Rows', { n: nr }) : t('editor.commonA.menu.deleteRow', 'Delete Row'), 'rowdel') + mItem('coldel', nc > 1 ? t('editor.commonA.menu.deleteCols', 'Delete {n} Columns', { n: nc }) : t('editor.commonA.menu.deleteCol', 'Delete Column'), 'coldel') + '<hr>' +
+        mItem('delete', nr * nc > 1 ? t('editor.commonA.menu.clearCells', 'Clear Cells') : t('editor.commonA.menu.clearCell', 'Clear Cell'), 'clear', '⌫');
     }
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
@@ -764,7 +776,7 @@ import { runtime as TD } from '../runtime';
     }
     touch(cell);
   }
-  const colLabel = (spec: any) => (!spec ? 'Default' : spec.replace(/^rgb,\s*255\s*:\s*red,\s*(\d+);\s*green,\s*(\d+);\s*blue,\s*(\d+)$/, 'RGB $1, $2, $3'));
+  const colLabel = (spec: any) => (!spec ? t('ui.default', 'Default') : spec.replace(/^rgb,\s*255\s*:\s*red,\s*(\d+);\s*green,\s*(\d+);\s*blue,\s*(\d+)$/, 'RGB $1, $2, $3'));
   const swatchCss = (spec: any) => { const h = spec && TD.tikzColor(spec); return h ? TD.fillCss(h) : 'transparent'; };
 
   function openColor(btn: any) {
@@ -788,7 +800,7 @@ import { runtime as TD } from '../runtime';
     const cur = get();
     TD.openColorPicker(btn, { value: (cur && TD.tikzColor(cur)) || null, nullable: true, onInput: set, onChange: set, onClose() { commit(); renderProps(); } });
   }
-  const POSN = [['near start', 'Start'], ['', 'Middle'], ['near end', 'End']];
+  const POSN = () => [['near start', t('ui.start', 'Start')], ['', t('editor.cd.pos.middle', 'Middle')], ['near end', t('ui.end', 'End')]];
   const POS_RE = /^(at start|very near start|near start|midway|near end|very near end|at end|pos)$/;
   // env options
   const envList = () => Z.opts(E.M.env || '').list;
@@ -799,7 +811,7 @@ import { runtime as TD } from '../runtime';
     E.M.env = l.join(', ');
   }
   function sepRow(label: string, name: string): FormRow {
-    const v = envGet(name) || envGet('sep') || '', opts = E.X ? XY_SEPS : SEP_OPTS;
+    const v = envGet(name) || envGet('sep') || '', opts = E.X ? XY_SEPS() : SEP_OPTS();
     const known = opts.some(([k]: string[]) => k === v) || v === 'normal';
     return row(label, { kind: 'select', value: v === 'normal' ? '' : v, attrs: { 'data-f': name }, options: [...opts, ...(known ? [] : [[v, v]])] });
   }
@@ -807,8 +819,8 @@ import { runtime as TD } from '../runtime';
     if (!E) return;
     const M = E.M;
     const show = (sections: FormSection[]) => renderView(props, FormPanel, { sections });
-    const sg = (label: string, key: string, current: string, options: string[][], off = false): FormRow => ({ ...row(label, ...options.map(([value, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-cs': key, 'data-v': value, class: String(current) === String(value) ? 'on' : '', ...(off ? { disabled: true, title: 'Add a label first' } : title ? { title } : {}) } }))), controlClass: 'ctl seg-ctl' });
-    const color = (label: string, key: string, spec: string | null, off?: string | false) => row(label, { kind: 'fillColour', none: !spec, label: colLabel(spec), css: swatchCss(spec), attrs: { 'data-cc': key, ...(off ? { disabled: true, title: off } : { title: spec || 'Default colour' }) } });
+    const sg = (label: string, key: string, current: string, options: string[][], off = false): FormRow => ({ ...row(label, ...options.map(([value, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-cs': key, 'data-v': value, class: String(current) === String(value) ? 'on' : '', ...(off ? { disabled: true, title: t('editor.cd.addLabelFirst', 'Add a label first') } : title ? { title } : {}) } }))), controlClass: 'ctl seg-ctl' });
+    const color = (label: string, key: string, spec: string | null, off?: string | false) => row(label, { kind: 'fillColour', none: !spec, label: colLabel(spec), css: swatchCss(spec), attrs: { 'data-cc': key, ...(off ? { disabled: true, title: off } : { title: spec || t('editor.commonA.defaultColour', 'Default colour') }) } });
     if (E.arrow) {
       const a = arrowOf(E.arrow);
       if (!a) { E.arrow = null; renderProps(); return; }
@@ -816,29 +828,30 @@ import { runtime as TD } from '../runtime';
       const side = L.opts.includes('description') || a.items.includes('description') ? 'on' : L.swap ? 'right' : 'left', p = L.opts.find((x: any) => POS_RE.test(Z.styleOf(x).name)) || '';
       const bend = find(a, /^bend (left|right)$/), shift = find(a, /^shift (left|right)$/), bendSide = bend ? nameOf(bend).slice(5) : '', bendA = bend ? Z.styleOf(bend).arg || '30' : '30', shiftSide = shift ? nameOf(shift).slice(6) : '';
       const sk = headKey(a.items), lk = lineOf(a.items), noLabel = !L.t;
-      const rows: FormRow[] = [field('Label', 'label', D.splitColor(L.t).body, { 'data-tx': 'math', placeholder: 'none' }), color('Colour', 'arrow', (arrowColor(a) || {} as any).spec || null), color('Label colour', 'label', labelColor(a), noLabel && 'Add a label first'), sg('Side', 'side', side, [['left', 'Left'], ['right', 'Right', "Swapped (')"], ['on', 'On line', 'description']], noLabel), sg('At', 'pos', p, POSN, noLabel),
-        { kind: 'controls', class: 'ze-shapes', controls: HEAD_STYLES.map(([k, n, o]) => ({ kind: 'button', text: '', svg: styleMini(o), attrs: { class: 'ze-shape' + (sk === k ? ' on' : ''), 'data-cs': 'style', 'data-v': k, title: n } })) },
-        sg('Line', 'line', lk, [['', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['squiggly', 'Squiggly']])];
-      if (!E.X) rows.push(sg('Crossing', 'cross', find(a, /^crossing over$/) ? '1' : '', [['', 'None'], ['1', 'Gap', 'crossing over: a gap where it crosses another arrow']]));
-      rows.push(sg('Bend', 'bend', bendSide, [['', 'None'], ['left', 'Left'], ['right', 'Right']]));
-      if (bendSide && !E.X) rows.push(numField('Angle', 'bendA', bendA, '°', { min: '0', max: '90', step: '5' }));
-      rows.push(sg('Shift', 'shift', shiftSide, [['', 'None'], ['left', 'Left', 'shift left: for parallel arrows'], ['right', 'Right', 'shift right']]));
-      if (!E.X) rows.push(field('Options', 'items', a.items.join(', '), { class: 'mono' }));
-      rows.push({ kind: 'actions', class: 'row', buttons: [{ text: 'Reverse', attrs: { 'data-ce': 'reverse' } }, { text: 'Delete Arrow', attrs: { class: 'danger', 'data-ce': 'arrowdel' } }] });
-      show([{ ...section('Arrow', rows, 'sec'), summary: `row ${E.arrow[0] + 1}, col ${E.arrow[1] + 1} → row ${E.arrow[0] + dr + 1}, col ${E.arrow[1] + dc + 1}` }]); sizeMinis(props, 48, 26, 2); return;
+      const none = t('ui.none', 'None'), left = t('ui.left', 'Left'), right = t('ui.right', 'Right');
+      const rows: FormRow[] = [field(t('ui.label', 'Label'), 'label', D.splitColor(L.t).body, { 'data-tx': 'math', placeholder: 'none' }), color(t('ui.colour', 'Colour'), 'arrow', (arrowColor(a) || {} as any).spec || null), color(t('editor.cd.labelColour', 'Label colour'), 'label', labelColor(a), noLabel && t('editor.cd.addLabelFirst', 'Add a label first')), sg(t('editor.cd.side', 'Side'), 'side', side, [['left', left], ['right', right, t('editor.cd.side.swapped', "Swapped (')")], ['on', t('editor.cd.side.on', 'On line'), 'description']], noLabel), sg(t('editor.cd.at', 'At'), 'pos', p, POSN(), noLabel),
+        { kind: 'controls', class: 'ze-shapes', controls: HEAD_STYLES.map(([k, , o]) => ({ kind: 'button', text: '', svg: styleMini(o), attrs: { class: 'ze-shape' + (sk === k ? ' on' : ''), 'data-cs': 'style', 'data-v': k, title: styleName(k) } })) },
+        sg(t('editor.cd.line', 'Line'), 'line', lk, [['', t('editor.commonA.solid', 'Solid')], ['dashed', t('ui.dashed', 'Dashed')], ['dotted', t('ui.dotted', 'Dotted')], ['squiggly', t('editor.cd.style.squiggly', 'Squiggly')]])];
+      if (!E.X) rows.push(sg(t('editor.cd.crossing', 'Crossing'), 'cross', find(a, /^crossing over$/) ? '1' : '', [['', none], ['1', t('editor.cd.crossing.gap', 'Gap'), t('editor.cd.crossing.gapTitle', 'crossing over: a gap where it crosses another arrow')]]));
+      rows.push(sg(t('editor.cd.bend', 'Bend'), 'bend', bendSide, [['', none], ['left', left], ['right', right]]));
+      if (bendSide && !E.X) rows.push(numField(t('ui.angle', 'Angle'), 'bendA', bendA, '°', { min: '0', max: '90', step: '5' }));
+      rows.push(sg(t('editor.cd.shift', 'Shift'), 'shift', shiftSide, [['', none], ['left', left, t('editor.cd.shift.leftTitle', 'shift left: for parallel arrows')], ['right', right, t('editor.cd.shift.rightTitle', 'shift right')]]));
+      if (!E.X) rows.push(field(t('ui.options', 'Options'), 'items', a.items.join(', '), { class: 'mono' }));
+      rows.push({ kind: 'actions', class: 'row', buttons: [{ text: t('editor.cd.reverse', 'Reverse'), attrs: { 'data-ce': 'reverse' } }, { text: t('editor.cd.menu.deleteArrow', 'Delete Arrow'), attrs: { class: 'danger', 'data-ce': 'arrowdel' } }] });
+      show([{ ...section(captions["ui.arrow"], rows, 'sec'), summary: t('editor.cd.arrowSummary', 'row {r1}, col {c1} → row {r2}, col {c2}', { r1: E.arrow[0] + 1, c1: E.arrow[1] + 1, r2: E.arrow[0] + dr + 1, c2: E.arrow[1] + dc + 1 }) }]); sizeMinis(props, 48, 26, 2); return;
     }
     const b = selBox();
     if (!b) {
-      const rows = [sepRow('Row sep', 'row sep'), sepRow('Column sep', 'column sep')];
-      if (!E.X) rows.push(field('Options', 'env', M.env, { class: 'mono', placeholder: 'e.g. row sep=large' }));
-      rows.push(note("Type in a cell to write its object. Drag a cell's blue handle to another cell to draw an arrow; click an arrow to label and style it. ", { kbd: 'Enter' }, ' edits, ', { kbd: '⌫' }, ' clears.'));
-      show([{ ...section('Diagram', rows, 'sec'), summary: `${nR(M)} × ${nC(M)}` }]); return;
+      const rows = [sepRow(t('editor.cd.rowSep', 'Row sep'), 'row sep'), sepRow(t('editor.cd.colSep', 'Column sep'), 'column sep')];
+      if (!E.X) rows.push(field(t('ui.options', 'Options'), 'env', M.env, { class: 'mono', placeholder: t('editor.cd.envPlaceholder', 'e.g. row sep=large') }));
+      rows.push(note(t('editor.cd.help', "Type in a cell to write its object. Drag a cell's blue handle to another cell to draw an arrow; click an arrow to label and style it. "), { kbd: 'Enter' }, t('editor.commonA.help.edits', ' edits, '), { kbd: '⌫' }, t('editor.commonA.help.clears', ' clears.')));
+      show([{ ...section(captions["ui.diagram"], rows, 'sec'), summary: `${nR(M)} × ${nC(M)}` }]); return;
     }
-    if (!single()) { const n = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1); show([section(`${n} cells`, [note(`Rows ${b.r1 + 1}–${b.r2 + 1}, columns ${b.c1 + 1}–${b.c2 + 1}. Right-click for rows and columns.`)], 'sec')]); return; }
+    if (!single()) { const n = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1); show([section(t('editor.commonA.nCells', '{n} cells', { n }), [note(t('editor.cd.rangeNote', 'Rows {r1}–{r2}, columns {c1}–{c2}. Right-click for rows and columns.', { r1: b.r1 + 1, r2: b.r2 + 1, c1: b.c1 + 1, c2: b.c2 + 1 }))], 'sec')]); return; }
     const cell = at(b.r1, b.c1);
-    const sections: FormSection[] = [{ ...section(cell.t ? 'Object' : 'Empty cell', [field('Object', 't', D.splitColor(cell.t).body, { 'data-tx': 'math', placeholder: 'empty' }), color('Colour', 'obj', objColor(cell), !cell.t && 'Type an object first')], 'sec'), summary: `row ${b.r1 + 1} · column ${b.c1 + 1}` }];
-    if (cell.arrows.length) sections.push(section('Arrows from here', [{ kind: 'codeButtons', class: 'ze-wires', items: cell.arrows.map((a: any, i: number) => { const [dr, dc] = delta(a.dirs); return { attrs: { 'data-ce': 'pickarrow', 'data-i': i }, label: `→ row ${b.r1 + dr + 1}, col ${b.c1 + dc + 1}`, code: E.X ? E.X.arrowXy(a) : arrowCode(a) }; }) }], 'sec'));
-    sections.push({ class: 'sec', rows: [field('Code', 'code', E.X ? E.X.cellFromCd(cellText(cell)) : cellText(cell), { class: 'mono' })] }); show(sections);
+    const sections: FormSection[] = [{ ...section(cell.t ? t('editor.cd.object', 'Object') : t('editor.cd.emptyCell', 'Empty cell'), [field(t('editor.cd.object', 'Object'), 't', D.splitColor(cell.t).body, { 'data-tx': 'math', placeholder: 'empty' }), color(t('ui.colour', 'Colour'), 'obj', objColor(cell), !cell.t && t('editor.cd.typeObjectFirst', 'Type an object first'))], 'sec'), summary: t('editor.cd.cellSummary', 'row {row} · column {col}', { row: b.r1 + 1, col: b.c1 + 1 }) }];
+    if (cell.arrows.length) sections.push(section(t('editor.cd.arrowsFromHere', 'Arrows from here'), [{ kind: 'codeButtons', class: 'ze-wires', items: cell.arrows.map((a: any, i: number) => { const [dr, dc] = delta(a.dirs); return { attrs: { 'data-ce': 'pickarrow', 'data-i': i }, label: t('editor.cd.arrowTarget', '→ row {row}, col {col}', { row: b.r1 + dr + 1, col: b.c1 + dc + 1 }), code: E.X ? E.X.arrowXy(a) : arrowCode(a) }; }) }], 'sec'));
+    sections.push({ class: 'sec', rows: [field(t('editor.commonA.code', 'Code'), 'code', E.X ? E.X.cellFromCd(cellText(cell)) : cellText(cell), { class: 'mono' })] }); show(sections);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
@@ -915,7 +928,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'arrowdel') { if (E.arrow) deleteArrow(E.arrow); }
     else if (a === 'reverse') { if (E.arrow) reverseArrow(E.arrow); }
     else if (a === 'label') { if (E.arrow) editLabel(E.arrow); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
     else if (a === 'addrow') edit(() => ensure(M, nR(M) + 1, Math.max(nC(M), 1)));
     else if (a === 'addcol') edit(() => ensure(M, Math.max(nR(M), 1), nC(M) + 1));
     else if (a === 'pickarrow' && single()) { selectArrow([single().r1, single().c1, +b.dataset.i]); draw(); renderProps(); buildPalette(); }
@@ -930,7 +943,7 @@ import { runtime as TD } from '../runtime';
   }
   function syncCode() {
     const R = nR(E.M), C = nC(E.M);
-    count.textContent = `${R} row${R === 1 ? '' : 's'} · ${C} column${C === 1 ? '' : 's'}`;
+    count.textContent = `${R === 1 ? t('editor.commonA.oneRow', '1 row') : t('editor.commonA.nRows', '{n} rows', { n: R })} · ${C === 1 ? t('editor.commonA.oneColumn', '1 column') : t('editor.commonA.nColumns', '{n} columns', { n: C })}`;
     if (document.activeElement === codeTa) return;
     const c = out();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -1020,8 +1033,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = out();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = t('editor.commonA.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && out() !== E.start);
@@ -1032,20 +1046,23 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = out(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this diagram?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(t('editor.cd.discard', 'Discard changes to this diagram?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
     root.hidden = true;
     document.body.classList.remove('cz-open');
+    localeOff?.(); localeOff = undefined;
     E = null;
     if (ok && changed) done({ src });
   }
   function open(block: any, done: any, X: any) {
     const M = load(X ? X.toCd(block.src) : block.src);
     const lang = X ? 'xymatrix' : 'tikz-cd';
-    $('#cdTitle', root).textContent = X ? 'XyMatrix' : 'Commutative diagram';
+    titleCaption?.();
+    titleCaption = bindCaption($('#cdTitle', root), X ? message("editor.xy.title", 'XyMatrix') : message("editor.cd.title", 'Commutative diagram'));
+    const ic = TD.blocks.get(X ? 'xy' : 'cd')?.menu.icon;
+    if (ic) $('#cdIcon', root).innerHTML = ic;
     $('.cz-code-head span', root).textContent = lang;
-    $('[data-ce="copy"]', root).title = `Copy the ${lang} code`;
-    codeTa.setAttribute('aria-label', `${lang} code`);
+
     E = { X: X || null, M, sel: null, arrow: null, arm: null, style: 'to', view: { ox: 0, oy: 0, k: 4 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null, clip: null, G: null };
     E.start = out();
     root.hidden = false;
@@ -1053,6 +1070,18 @@ import { runtime as TD } from '../runtime';
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     requestAnimationFrame(fit);
+    // the chrome built here follows the interface language while the editor is open
+    let first = true;
+    localeOff?.();
+    localeOff = onLocale(() => {
+      // after the frame's own (English-id) captions, so the dialect's names win
+      queueMicrotask(() => {
+        $('[data-ce="copy"]', root).title = t('editor.commonA.copyCode', 'Copy the {lang} code', { lang });
+        codeTa.setAttribute('aria-label', t('editor.commonA.langCode', '{lang} code', { lang }));
+      });
+      if (first) { first = false; return; }
+      if (E) { buildPalette(); renderProps(); draw(); }
+    });
   }
   TD.cdEditor = { open };
 })();

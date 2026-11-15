@@ -1,3 +1,5 @@
+import { onLocale } from '../i18n';
+import { blockCaption } from '../i18n/shapes';
 // Typed extension registry. Domain modules register behavior; the app owns transactions.
 import type { Shape } from './contracts';
 export interface Box { x: number; y: number; w: number; h: number }
@@ -42,9 +44,11 @@ export function createBlocks(types: Record<string, unknown>, alias: (name: strin
       const buttons = [...definitions].filter(([, b]) => !b.menu.flyout).sort((a, b) => a[1].menu.order - b[1].menu.order).map(([type, { menu }]) => {
         const button = document.createElement('button');
         button.dataset.insert = type;
-        button.title = menu.title;
         button.innerHTML = menu.icon;
-        button.appendChild(document.createTextNode(menu.label));
+        const text = document.createTextNode('');
+        button.appendChild(text);
+        // captions follow the interface language (src/i18n/shapes.ts); English is the definition's own
+        onLocale(() => { button.title = blockCaption(type, 'title', menu.title); text.data = blockCaption(type, 'label', menu.label); });
         return button;
       });
       container.prepend(...buttons); // keep the purposeful coming-soon entries after active blocks

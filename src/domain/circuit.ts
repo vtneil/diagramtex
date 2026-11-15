@@ -1,3 +1,4 @@
+import { crossingSections, isCrossing } from './circuit-crossings';
 export let panelServices: any;
 import { runtime as TD } from '../runtime';
 // Circuit block: a schematic drawn with circuitikz parts (czcore.ts + czparts-*.ts) and exported as
@@ -50,7 +51,7 @@ import { runtime as TD } from '../runtime';
     const col = o.color || '#000', paper = o.paper || '#fff';
     const wW = 0.4 / K / PX * k, bW = 2 * wW; // wires 0.4pt, component bodies twice that (circuitikz thickness 2)
     let out = '';
-    for (const it of items) {
+    for (const it of [...items.filter((it: any) => !isCrossing(it)), ...items.filter(isCrossing)]) {
       const def = CZ.parts[it.part], ic = colorOf(it), c = o.colorOf ? o.colorOf(it, ic) : ic ? TD.css(ic) : col;
       let s = '';
       if (it.p) {
@@ -61,6 +62,10 @@ import { runtime as TD } from '../runtime';
         const T = bipXf(it), [ax, ay] = m(...it.a), [bx, by] = m(...it.b);
         // an open circuit draws nothing; in the editor (o.wrap) a faint dashed line keeps it findable
         if (it.part === 'open') { if (o.wrap) s += `<path d="M${r2(ax)},${r2(ay)}L${r2(bx)},${r2(by)}" stroke="${c}" stroke-opacity=".35" stroke-width="${r2(wW)}" stroke-dasharray="3 3" fill="none"/>`; }
+        else if (isWire(it)) {
+          const d = crossingSections(it, items).map(([a, b]) => { const [ax, ay] = m(...a), [bx, by] = m(...b); return `M${r2(ax)},${r2(ay)}L${r2(bx)},${r2(by)}`; }).join('');
+          s += `<path d="${d}" stroke="${c}" stroke-width="${r2(wW)}" stroke-linecap="round" fill="none"/>`;
+        }
         else if (!def || w <= 0) s += `<path d="M${r2(ax)},${r2(ay)}L${r2(bx)},${r2(by)}" stroke="${c}" stroke-width="${r2(wW)}" stroke-linecap="round" fill="none"${def ? '' : ' stroke-dasharray="3 3"'}/>`;
         else {
           const [p1x, p1y] = m(...T(-w / 2, 0)), [p2x, p2y] = m(...T(w / 2, 0));
@@ -302,8 +307,8 @@ import { runtime as TD } from '../runtime';
       if (it.name) o.push(`n=${it.name}`);
       if (it.poles && it.poles !== '-') o.push(it.poles);
       if (it.opts) o.push(it.opts);
-      if (isWire(it) && !o.length) lines.push(`\\draw ${pt(it.a)} -- ${pt(it.b)};`);
-      else lines.push(`\\draw ${pt(it.a)} to[${[nameOf(it, def, st), ...o].join(', ')}] ${pt(it.b)};`);
+      if (isWire(it) && !o.length) { for (const [a, b] of crossingSections(it, items)) lines.push(`\\draw ${pt(a)} -- ${pt(b)};`); }
+      else { for (const [a, b] of isWire(it) ? crossingSections(it, items) : [[it.a, it.b]]) lines.push(`\\draw ${pt(a)} to[${[nameOf(it, def, st), ...o].join(', ')}] ${pt(b)};`); }
     }
     // \ctikzset / \tikzset lines go first: they set the style of everything drawn after them
     if (raw && raw.trim()) {

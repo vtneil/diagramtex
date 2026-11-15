@@ -80,6 +80,7 @@ async function main() {
   // (Svelte's dev-only error and warning texts, behind esm-env's DEV), which the bundling pass cannot drop.
   const appCode = esbuild.transformSync(app.text, { minify: true, target: 'es2020', legalComments: 'inline' }).code;
   write('js/bundle.js', appCode);
+  write('math-render-worker.js', application.outputFiles.find(file => file.path.endsWith('math-render-worker.js')).text);
   bundle(styles.files, 'css', 'css/app.css', '\n');
   write('index.html', html);
 

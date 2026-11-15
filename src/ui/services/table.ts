@@ -1,5 +1,7 @@
+import { previewFadeFinished } from '../../platform/preview-fade';
 import { runtime as TD } from '../../runtime';
 import { gridIcon } from '../grid-icons';
+import { t, message as msg, caption, onLocale, type Message } from '../../i18n';
 import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../domain/table/model';
 // Table: a quick tool for one table, beside the files like Quick. Import (paste or drop CSV, TSV, Excel,
 // Google Sheets, Markdown, HTML or a LaTeX tabular), edit and format in a spreadsheet-like grid, then copy or
@@ -75,13 +77,13 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   }
   function undo() {
     finishEdit(true);
-    if (!undoStack.length) { hint('Nothing to undo'); return; }
+    if (!undoStack.length) { hint(t('table.hint.noUndo', 'Nothing to undo')); return; }
     redoStack.push(JSON.stringify(M)); M = T.normalize(JSON.parse(undoStack.pop()!));
     clampSel(); save(); refresh();
   }
   function redo() {
     finishEdit(true);
-    if (!redoStack.length) { hint('Nothing to redo'); return; }
+    if (!redoStack.length) { hint(t('table.hint.noRedo', 'Nothing to redo')); return; }
     undoStack.push(JSON.stringify(M)); M = T.normalize(JSON.parse(redoStack.pop()!));
     clampSel(); save(); refresh();
   }
@@ -112,37 +114,47 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     bottom: ic('<path d="M3 17h14"/><path d="M3 17V3h14v14M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'), left: ic('<path d="M3 3v14"/><path d="M3 3h14v14H3M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'),
     right: ic('<path d="M17 3v14"/><path d="M17 3H3v14h14M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'), none: ic('<path d="M3 3h14v14H3zM10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'),
   };
-  const BNAME: Record<BorderWhere, string> = { all: 'All borders', outer: 'Outer borders', inner: 'Inner borders', innerH: 'Inner horizontal', innerV: 'Inner vertical', top: 'Top border', bottom: 'Bottom border', left: 'Left border', right: 'Right border', none: 'No borders' };
+  const BNAME = (): Record<BorderWhere, string> => ({ all: t('table.border.all', 'All borders'), outer: t('table.border.outer', 'Outer borders'), inner: t('table.border.inner', 'Inner borders'), innerH: t('table.border.innerH', 'Inner horizontal'), innerV: t('table.border.innerV', 'Inner vertical'), top: t('table.border.top', 'Top border'), bottom: t('table.border.bottom', 'Bottom border'), left: t('table.border.left', 'Left border'), right: t('table.border.right', 'Right border'), none: t('table.border.none', 'No borders') });
+  // the presets' names and descriptions (the domain's PRESETS holds the English)
+  const PRESET: Record<string, [Message, Message]> = {
+    booktabs: [msg('table.preset.booktabs', 'Academic'), msg('table.preset.booktabs.tip', 'booktabs: a heavy rule on top and at the bottom, a light one under the header, no vertical rules')],
+    minimal: [msg('table.preset.minimal', 'Minimal'), msg('table.preset.minimal.tip', 'A rule under the header only')],
+    grid: [msg('table.preset.grid', 'Grid'), msg('table.preset.grid.tip', 'Every cell boxed, the header in bold')],
+    striped: [msg('table.preset.striped', 'Striped'), msg('table.preset.striped.tip', 'Every other row shaded, a rule under the header, the header in bold')],
+    plain: [msg('table.preset.plain', 'Plain'), msg('table.preset.plain.tip', 'No rules at all')],
+  };
+  const presetName = (p: any) => (PRESET[p.key] ? caption(PRESET[p.key][0]) : p.name);
+  const presetTip = (p: any) => (PRESET[p.key] ? caption(PRESET[p.key][1]) : p.title);
 
   // ---------------------------------------------------------------- the frame
   function build() {
     host!.innerHTML = `<div class="tbw${session ? ' tb-in-block' : ''}">
-      ${session ? `<div class="tb-session" role="region" aria-label="Editing a table from the diagram"><span>Editing a table from the diagram. <b>Done</b> puts it back; the Table workspace's own table is left as it was.</span><div class="spacer"></div><button type="button" data-ses="cancel">Cancel</button><button type="button" class="primary" data-ses="done" title="Put the table back in the diagram (${MOD}S keeps editing)">Done</button></div>` : ''}
-      <div class="tb-bar" role="toolbar" aria-label="Table">
-        <div class="tb-grp"><button type="button" data-t="import" class="tb-imp" title="Import a table: paste or open CSV, TSV, Excel (.xlsx), Markdown, HTML or LaTeX" aria-haspopup="menu">${I.imp}Import</button></div>
-        <div class="tb-grp"><button type="button" class="icon" data-t="undo" title="Undo (${MOD}Z)">${I.undo}</button><button type="button" class="icon" data-t="redo" title="Redo (${SHIFT}${MOD}Z)">${I.redo}</button></div>
-        <div class="tb-grp"><select data-t="preset" class="tb-preset" aria-label="Table style" title="Table style: rules, stripes and header">${T.PRESETS.map((p: any) => `<option value="${p.key}" title="${esc(p.title)}">${p.name}</option>`).join('')}<option value="custom" disabled>Custom</option></select></div>
-        <div class="tb-grp"><button type="button" class="icon" data-t="b" title="Bold (${MOD}B)">${I.b}</button><button type="button" class="icon" data-t="i" title="Italic (${MOD}I)">${I.i}</button><button type="button" class="icon" data-t="u" title="Underline (${MOD}U)">${I.u}</button><button type="button" class="icon" data-t="tt" title="Monospace (\\texttt)">${I.tt}</button></div>
-        <div class="tb-grp"><button type="button" class="icon tb-col" data-t="fg" title="Text colour">${I.fg}</button><button type="button" class="icon tb-col" data-t="bg" title="Cell fill">${I.bg}</button></div>
-        <div class="tb-grp seg-ctl tb-seg" role="group" aria-label="Alignment">${(['l', 'c', 'r', 'j'] as HAlign[]).map((a) => `<button type="button" data-t="al" data-v="${a}" title="${({ l: 'Align left', c: 'Centre', r: 'Align right', j: 'Justify (wrapping columns)' } as any)[a]}">${I.al[a]}</button>`).join('')}</div>
-        <div class="tb-grp"><span class="split-btn tb-split"><button type="button" class="icon" data-t="border" title="Borders: the last one picked">${B.all}</button><button type="button" class="tb-more" data-t="borders" title="Borders" aria-haspopup="menu">${I.more}</button></span></div>
-        <div class="tb-grp"><button type="button" class="icon" data-t="merge" title="Merge cells (\\multicolumn, \\multirow)">${I.merge}</button><button type="button" class="icon" data-t="split" title="Split cells">${I.split}</button></div>
-        <div class="tb-grp"><button type="button" class="icon" data-t="num" title="Numbers: align on the decimal point (siunitx), round, scientific notation">${I.num}</button></div>
+      ${session ? `<div class="tb-session" role="region" aria-label="${esc(t('table.session.aria', 'Editing a table from the diagram'))}"><span>${esc(t('table.session.editing', 'Editing a table from the diagram.'))} <b>${esc(t('ui.done', 'Done'))}</b> ${esc(t('table.session.back', "puts it back; the Table workspace's own table is left as it was."))}</span><div class="spacer"></div><button type="button" data-ses="cancel">${esc(t('ui.cancel', 'Cancel'))}</button><button type="button" class="primary" data-ses="done" title="${esc(t('table.session.doneTip', 'Put the table back in the diagram ({key} keeps editing)', { key: MOD + 'S' }))}">${esc(t('ui.done', 'Done'))}</button></div>` : ''}
+      <div class="tb-bar" role="toolbar" aria-label="${esc(t('ui.table', 'Table'))}">
+        <div class="tb-grp"><button type="button" data-t="import" class="tb-imp" title="${esc(t('table.importTip', 'Import a table: paste or open CSV, TSV, Excel (.xlsx), Markdown, HTML or LaTeX'))}" aria-haspopup="menu">${I.imp}${esc(t('table.import', 'Import'))}</button></div>
+        <div class="tb-grp"><button type="button" class="icon" data-t="undo" title="${esc(t('table.undoTip', 'Undo ({key})', { key: MOD + 'Z' }))}">${I.undo}</button><button type="button" class="icon" data-t="redo" title="${esc(t('table.redoTip', 'Redo ({key})', { key: SHIFT + MOD + 'Z' }))}">${I.redo}</button></div>
+        <div class="tb-grp"><select data-t="preset" class="tb-preset" aria-label="${esc(t('table.style', 'Table style'))}" title="${esc(t('table.styleTip', 'Table style: rules, stripes and header'))}">${T.PRESETS.map((p: any) => `<option value="${p.key}" title="${esc(presetTip(p))}">${esc(presetName(p))}</option>`).join('')}<option value="custom" disabled>${esc(t('ui.custom', 'Custom'))}</option></select></div>
+        <div class="tb-grp"><button type="button" class="icon" data-t="b" title="${esc(t('table.boldTip', 'Bold ({key})', { key: MOD + 'B' }))}">${I.b}</button><button type="button" class="icon" data-t="i" title="${esc(t('table.italicTip', 'Italic ({key})', { key: MOD + 'I' }))}">${I.i}</button><button type="button" class="icon" data-t="u" title="${esc(t('table.underlineTip', 'Underline ({key})', { key: MOD + 'U' }))}">${I.u}</button><button type="button" class="icon" data-t="tt" title="${esc(t('table.monoTip', 'Monospace (\\texttt)'))}">${I.tt}</button></div>
+        <div class="tb-grp"><button type="button" class="icon tb-col" data-t="fg" title="${esc(t('table.textColour', 'Text colour'))}">${I.fg}</button><button type="button" class="icon tb-col" data-t="bg" title="${esc(t('table.cellFill', 'Cell fill'))}">${I.bg}</button></div>
+        <div class="tb-grp seg-ctl tb-seg" role="group" aria-label="${esc(t('ui.alignment', 'Alignment'))}">${(['l', 'c', 'r', 'j'] as HAlign[]).map((a) => `<button type="button" data-t="al" data-v="${a}" title="${esc(({ l: t('table.alignLeft', 'Align left'), c: t('ui.centre', 'Centre'), r: t('table.alignRight', 'Align right'), j: t('table.justify', 'Justify (wrapping columns)') } as any)[a])}">${I.al[a]}</button>`).join('')}</div>
+        <div class="tb-grp"><span class="split-btn tb-split"><button type="button" class="icon" data-t="border" title="${esc(t('table.bordersLast', 'Borders: the last one picked'))}">${B.all}</button><button type="button" class="tb-more" data-t="borders" title="${esc(t('table.borders', 'Borders'))}" aria-haspopup="menu">${I.more}</button></span></div>
+        <div class="tb-grp"><button type="button" class="icon" data-t="merge" title="${esc(t('table.mergeTip', 'Merge cells (\\multicolumn, \\multirow)'))}">${I.merge}</button><button type="button" class="icon" data-t="split" title="${esc(t('table.splitTip', 'Split cells'))}">${I.split}</button></div>
+        <div class="tb-grp"><button type="button" class="icon" data-t="num" title="${esc(t('table.numTip', 'Numbers: align on the decimal point (siunitx), round, scientific notation'))}">${I.num}</button></div>
       </div>
-      <div class="tb-fx"><span class="tb-ref" title="The active cell"></span><input class="tb-fxin" data-tx="text" spellcheck="false" autocomplete="off" aria-label="Cell text (LaTeX)" placeholder="Cell text: plain words, $maths$, \\textbf{…}"></div>
-      <div class="tb-gridwrap" tabindex="0" aria-label="Table cells" role="grid"><div class="tb-grid"></div><div class="tb-selbox" aria-hidden="true"></div></div>
+      <div class="tb-fx"><span class="tb-ref" title="${esc(t('table.activeCell', 'The active cell'))}"></span><input class="tb-fxin" data-tx="text" spellcheck="false" autocomplete="off" aria-label="${esc(t('table.cellTextAria', 'Cell text (LaTeX)'))}" placeholder="${esc(t('table.cellTextPh', 'Cell text: plain words, $maths$, \\textbf{…}'))}"></div>
+      <div class="tb-gridwrap" tabindex="0" aria-label="${esc(t('table.cells', 'Table cells'))}" role="grid"><div class="tb-grid"></div><div class="tb-selbox" aria-hidden="true"></div></div>
       <div class="tb-out">
         <div class="tb-outbar">
-          <div class="seg tb-tabs" role="tablist"><button type="button" role="tab" data-tab="preview">Preview</button><button type="button" role="tab" data-tab="latex">LaTeX</button></div>
-          <span class="tb-pk" title="Packages the LaTeX needs"></span>
+          <div class="seg tb-tabs" role="tablist"><button type="button" role="tab" data-tab="preview">${esc(t('ui.preview', 'Preview'))}</button><button type="button" role="tab" data-tab="latex">LaTeX</button></div>
+          <span class="tb-pk" title="${esc(t('table.packagesShort', 'Packages the LaTeX needs'))}"></span>
           <div class="spacer"></div>
-          <button type="button" class="primary" data-o="copy" title="Copy the LaTeX (${SHIFT}${MOD}C)">Copy LaTeX</button>
-          <button type="button" data-o="copy-png" title="Copy the table as a PNG picture">Copy PNG</button>
-          <span class="tb-join" role="group" aria-label="Download"><button type="button" data-o="dl-tex" title="Download the LaTeX: a document that compiles on its own">${I.dl}.tex</button><button type="button" data-o="dl-svg" title="Download a vector SVG (maths fonts embedded)">SVG</button><button type="button" data-o="dl-png" title="Download a PNG at the resolution on the right">PNG</button></span>
-          <select data-o="dpi" aria-label="PNG resolution" title="PNG resolution">${[150, 300, 600].map((d) => `<option value="${d}"${d === +out.dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}</select>
+          <button type="button" class="primary" data-o="copy" title="${esc(t('table.copyLatexTip', 'Copy the LaTeX ({key})', { key: SHIFT + MOD + 'C' }))}">${esc(t('table.copyLatex', 'Copy LaTeX'))}</button>
+          <button type="button" data-o="copy-png" title="${esc(t('table.copyPngTip', 'Copy the table as a PNG picture'))}">${esc(t('table.copyPng', 'Copy PNG'))}</button>
+          <span class="tb-join" role="group" aria-label="${esc(t('ui.download', 'Download'))}"><button type="button" data-o="dl-tex" title="${esc(t('table.dlTexTip', 'Download the LaTeX: a document that compiles on its own'))}">${I.dl}.tex</button><button type="button" data-o="dl-svg" title="${esc(t('table.dlSvgTip', 'Download a vector SVG (maths fonts embedded)'))}">SVG</button><button type="button" data-o="dl-png" title="${esc(t('table.dlPngTip', 'Download a PNG at the resolution on the right'))}">PNG</button></span>
+          <select data-o="dpi" aria-label="${esc(t('table.pngRes', 'PNG resolution'))}" title="${esc(t('table.pngRes', 'PNG resolution'))}">${[150, 300, 600].map((d) => `<option value="${d}"${d === +out.dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}</select>
         </div>
         <div class="tb-prev" data-pane="preview"></div>
-        <div class="tb-code codeview" data-pane="latex" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label="LaTeX code"></div>
+        <div class="tb-code codeview" data-pane="latex" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label="${esc(t('ui.latex.code', 'LaTeX code'))}"></div>
       </div>
       <div class="tb-start" hidden></div>
     </div>`;
@@ -156,16 +168,16 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     host!.classList.toggle('is-fresh', fresh);
     if (!fresh) { s.innerHTML = ''; return; }
     s.innerHTML = `<div class="tb-drop">
-      <div class="tb-drop-t">Make a table</div>
-      <p>Paste cells from Excel or Google Sheets (${MOD}V), drop a file here, or paste CSV, Markdown, HTML or a LaTeX <code>tabular</code> below.</p>
-      <textarea class="tb-paste" spellcheck="false" placeholder="Name, Mass, Speed&#10;Ball, 0.45, 12.3&#10;…" aria-label="Table text to import"></textarea>
+      <div class="tb-drop-t">${esc(t('table.start.title', 'Make a table'))}</div>
+      <p>${esc(t('table.start.body', 'Paste cells from Excel or Google Sheets ({key}), drop a file here, or paste CSV, Markdown, HTML or a LaTeX', { key: MOD + 'V' }))} <code>tabular</code> ${esc(t('table.start.below', 'below.'))}</p>
+      <textarea class="tb-paste" spellcheck="false" placeholder="Name, Mass, Speed&#10;Ball, 0.45, 12.3&#10;…" aria-label="${esc(t('table.start.pasteAria', 'Table text to import'))}"></textarea>
       <div class="tb-drop-acts">
-        <button type="button" data-t="file">Choose File…</button>
+        <button type="button" data-t="file">${esc(t('ui.choose.file', 'Choose File…'))}</button>
         <span class="spacer"></span>
-        <button type="button" data-t="blank" title="An empty 4 × 3 table">Start Empty</button>
-        <button type="button" class="primary" data-t="import-text">Import</button>
+        <button type="button" data-t="blank" title="${esc(t('table.start.blankTip', 'An empty 4 × 3 table'))}">${esc(t('table.start.blank', 'Start Empty'))}</button>
+        <button type="button" class="primary" data-t="import-text">${esc(t('table.import', 'Import'))}</button>
       </div>
-      <p class="tb-drop-foot">CSV, TSV, Excel (.xlsx), Markdown, HTML and LaTeX (<code>tabular</code>, <code>tabularx</code>, <code>longtable</code>, booktabs, <code>\\multicolumn</code>, <code>\\multirow</code>). Nothing leaves your browser.</p>
+      <p class="tb-drop-foot">CSV, TSV, Excel (.xlsx), Markdown, HTML ${esc(t('table.start.and', 'and'))} LaTeX (<code>tabular</code>, <code>tabularx</code>, <code>longtable</code>, booktabs, <code>\\multicolumn</code>, <code>\\multirow</code>). ${esc(t('table.start.local', 'Nothing leaves your browser.'))}</p>
     </div>`;
     requestAnimationFrame(() => (s.querySelector('.tb-paste') as HTMLElement)?.focus({ preventScroll: true }));
   }
@@ -197,22 +209,27 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const col = M.cols[c];
     if (col.num && r >= M.head && (x.cs || 1) === 1) {
       const n = T.parseNum(x.t);
-      if (n) return TD.textHtml(T.mathText(T.format(n, col.num), col.num.unc || 'paren'));
+      if (n) return cellPreview(T.mathText(T.format(n, col.num), col.num.unc || 'paren'));
     }
     let t = T.shownText(M, r, c, x);
     if (!t.trim()) return '';
     if (x.tt) t = t.split('\n').map((l: string) => (l.trim() ? `\\texttt{${l}}` : l)).join('\n');
     if (x.u) t = t.split('\n').map((l: string) => (l.trim() ? `\\underline{${l}}` : l)).join('\n');
-    try { return TD.textHtml(t); } catch (e: any) { return esc(t); }
+    try { return cellPreview(t); } catch (e: any) { return esc(t); }
   }
-  function paint() {
+  function cellPreview(text: string): string {
+    const html = TD.math.liveMarkup(TD.textHtml(text));
+    return TD.math.isPending(html) ? `<span class="math-pending">${TD.math.cleanPreview(html)}</span>` : html;
+  }
+  function paint(): void {
+    if (!TD.math.previewing) return TD.math.preview(paint);
     const g = $('.tb-grid');
     if (!g) return;
     const nr = T.nRows(M), nc = T.nCols(M), own = T.owners(M);
     const wrap = $('.tb-gridwrap'), keep = [wrap.scrollLeft, wrap.scrollTop];
     const colW = (c: number) => (M.cols[c].w > 0 ? `${(M.cols[c].w * PX).toFixed(1)}px` : 'auto');
     let h = `<table class="tg" style="font-size:${(TD.sizePx(M.size) as number).toFixed(2)}px;--tb-stretch:${M.stretch}${M.ruleColor ? `;--tb-rule:${M.ruleColor}` : ''}"><colgroup><col class="tg-rhc">${M.cols.map((_: any, c: number) => `<col style="width:${colW(c)}">`).join('')}</colgroup>`;
-    h += `<thead><tr><th class="tg-corner" data-all title="Select all (${MOD}A)"></th>${M.cols.map((col: any, c: number) => `<th class="tg-ch${col.num ? ' num' : ''}" data-ch="${c}"><span>${T.colName(c)}</span>${col.num ? '<i title="Numbers aligned on the decimal point">.00</i>' : ''}${col.w > 0 ? `<i title="Wraps at ${col.w} cm">${col.w}cm</i>` : col.fill && M.env === 'tabularx' ? '<i title="Takes the rest of the width (X)">X</i>' : ''}<span class="tg-rs" data-rs="${c}" title="Drag to set a width (the column wraps); double-click for automatic"></span></th>`).join('')}</tr></thead><tbody>`;
+    h += `<thead><tr><th class="tg-corner" data-all title="${esc(t('table.selectAllTip', 'Select all ({key})', { key: MOD + 'A' }))}"></th>${M.cols.map((col: any, c: number) => `<th class="tg-ch${col.num ? ' num' : ''}" data-ch="${c}"><span>${T.colName(c)}</span>${col.num ? `<i title="${esc(t('table.numAligned', 'Numbers aligned on the decimal point'))}">.00</i>` : ''}${col.w > 0 ? `<i title="${esc(t('table.wrapsAt', 'Wraps at {w} cm', { w: col.w }))}">${col.w}cm</i>` : col.fill && M.env === 'tabularx' ? `<i title="${esc(t('table.fillTip', 'Takes the rest of the width (X)'))}">X</i>` : ''}<span class="tg-rs" data-rs="${c}" title="${esc(t('table.resizeTip', 'Drag to set a width (the column wraps); double-click for automatic'))}"></span></th>`).join('')}</tr></thead><tbody>`;
     for (let r = 0; r < nr; r++) {
       h += `<tr class="${r < M.head ? 'hd' : ''}${r === M.head - 1 ? ' hd-last' : ''}"><th class="tg-rh" data-rh="${r}">${r + 1}</th>`;
       for (let c = 0; c < nc; c++) {
@@ -224,7 +241,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     }
     // the strips past the last column and under the last row: hovering one shows a + that adds a column or a row
     const plus = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 5v10M5 10h10"/></svg>';
-    g.innerHTML = `<div class="tg-box">${h}</tbody></table><button type="button" class="tg-add tg-addc" data-add="col" title="Add a column" aria-label="Add a column">${plus}</button><button type="button" class="tg-add tg-addr" data-add="row" title="Add a row" aria-label="Add a row">${plus}</button></div>`;
+    g.innerHTML = `<div class="tg-box">${h}</tbody></table><button type="button" class="tg-add tg-addc" data-add="col" title="${esc(t('table.addCol', 'Add a column'))}" aria-label="${esc(t('table.addCol', 'Add a column'))}">${plus}</button><button type="button" class="tg-add tg-addr" data-add="row" title="${esc(t('table.addRow', 'Add a row'))}" aria-label="${esc(t('table.addRow', 'Add a row'))}">${plus}</button></div>`;
     const head = g.querySelector('thead') as HTMLElement, corner = g.querySelector('.tg-corner') as HTMLElement;
     // a button doesn't stretch between top and bottom like a div does, so the strips get their size here
     const tbl = g.querySelector('table') as HTMLElement, addc = g.querySelector('.tg-addc') as HTMLElement, addr = g.querySelector('.tg-addr') as HTMLElement;
@@ -315,15 +332,15 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const ta = document.createElement('textarea');
     ta.className = 'tb-edit';
     ta.spellcheck = false;
+    ta.rows = 1; // grows with its text (fit), from one line
     ta.dataset.tx = 'text'; // maths green, LaTeX suggestions and bracket pairs (texhighlight.ts, texcomplete.ts)
-    ta.setAttribute('aria-label', `Cell ${T.cellName(r, c)}`);
+    ta.setAttribute('aria-label', t('table.cellAria', 'Cell {name}', { name: T.cellName(r, c) }));
     ta.value = v0;
     const wr = wrap.getBoundingClientRect(), rr = td.getBoundingClientRect();
     ta.style.left = rr.left - wr.left + wrap.scrollLeft + 'px';
     ta.style.top = rr.top - wr.top + wrap.scrollTop + 'px';
     ta.style.minWidth = Math.max(rr.width, 120) + 'px';
     ta.style.minHeight = rr.height + 'px';
-    ta.style.fontSize = getComputedStyle(td).fontSize;
     wrap.appendChild(ta);
     editing = { r, c, was: x.t, ta, pop: null, v: v0 };
     const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 2 + 'px'; ta.style.width = 'auto'; ta.style.width = Math.min(Math.max(rr.width, 120, ta.scrollWidth + 4), 560) + 'px'; };
@@ -393,13 +410,13 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     else change(() => T.styleRange(M, g, { al: a }));
   }
   let lastBorder: BorderWhere = 'all';
-  function border(where: BorderWhere, w: Rule = 1) { lastBorder = where; ($('[data-t="border"]') as HTMLElement).innerHTML = B[where]; ($('[data-t="border"]') as HTMLElement).title = `${BNAME[where]} (the last one picked)`; change(() => T.setBorders(M, range(), where, w)); }
+  function border(where: BorderWhere, w: Rule = 1) { lastBorder = where; ($('[data-t="border"]') as HTMLElement).innerHTML = B[where]; ($('[data-t="border"]') as HTMLElement).title = t('table.border.last', '{name} (the last one picked)', { name: BNAME()[where] }); change(() => T.setBorders(M, range(), where, w)); }
   function pickColor(btn: HTMLElement, k: 'fg' | 'bg') {
     const g = range(), cur = M.cells[act[0]][act[1]][k] || null;
     const before = JSON.stringify(M);
     let changed = false;
     TD.openColorPicker(btn, {
-      value: cur, nullable: true, noneLabel: k === 'fg' ? 'Automatic' : 'No Fill',
+      value: cur, nullable: true, noneLabel: k === 'fg' ? t('table.automatic', 'Automatic') : t('table.noFill', 'No Fill'),
       onInput: (v: any) => { const hex = v ? TD.parseColor(v).hex : undefined; T.styleRange(M, g, { [k]: hex }); changed = true; paint(); preview(); },
       onChange: (v: any) => { const hex = v ? TD.parseColor(v).hex : undefined; T.styleRange(M, g, { [k]: hex }); changed = true; paint(); preview(); },
       onClose: () => { if (changed && JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; fresh = false; save(); panel(); toolbarState(); } },
@@ -409,7 +426,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const g = range(), cols = Array.from({ length: g.c1 - g.c0 + 1 }, (_, k) => g.c0 + k);
     const on = cols.every((c) => M.cols[c].num);
     change(() => { for (const c of cols) M.cols[c].num = on ? null : {}; });
-    if (!on) hint('Numbers aligned on the decimal point (siunitx S column). Round them in the panel on the right.', 2600);
+    if (!on) hint(t('table.hint.numOn', 'Numbers aligned on the decimal point (siunitx S column). Round them in the panel on the right.'), 2600);
   }
   function toolbarState() {
     const x = M.cells[act[0]][act[1]], all = anchorsSel(), g = range();
@@ -453,38 +470,38 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   // checked: a radio item (role menuitemradio) with a tick at its right end when it is the one picked
   const TICK = '<svg class="ck" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>';
   const item = (label: string, act2: string, o: { icon?: string; key?: string; dis?: boolean; danger?: boolean; checked?: boolean } = {}) =>
-    `<button class="ctx-item${o.danger ? ' danger' : ''}" data-m="${act2}"${o.checked != null ? ` role="menuitemradio" aria-checked="${o.checked}"` : ''}${o.dis ? ' disabled' : ''}>${o.icon || '<span class="ic"></span>'}<span class="lb">${label}</span>${o.key ? `<kbd>${o.key}</kbd>` : ''}${o.checked != null ? (o.checked ? TICK : '<span class="ck"></span>') : ''}</button>`;
+    `<button class="ctx-item${o.danger ? ' danger' : ''}" data-m="${act2}"${o.checked != null ? ` role="menuitemradio" aria-checked="${o.checked}"` : ''}${o.dis ? ' disabled' : ''}>${o.icon || '<span class="ic"></span>'}<span class="lb">${esc(label)}</span>${o.key ? `<kbd>${o.key}</kbd>` : ''}${o.checked != null ? (o.checked ? TICK : '<span class="ck"></span>') : ''}</button>`;
   function bordersMenu(anchor: HTMLElement) {
     const r = anchor.getBoundingClientRect();
     const where: BorderWhere[] = ['all', 'outer', 'inner', 'innerH', 'innerV', 'top', 'bottom', 'left', 'right', 'none'];
-    openMenu(`<div class="tb-bgrid">${where.map((w) => `<button type="button" class="icon flat" data-m="b:${w}" title="${BNAME[w]}">${B[w]}</button>`).join('')}</div><hr>
-      ${item('Thick Rules', 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 })}${item('Thin Rules', 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 })}${item('Double Rules', 'bw:3', { icon: ic('<path d="M3 8h14M3 12h14"/>'), checked: borderW === 3 })}`, r.left, r.bottom + 6);
+    openMenu(`<div class="tb-bgrid">${where.map((w) => `<button type="button" class="icon flat" data-m="b:${w}" title="${esc(BNAME()[w])}">${B[w]}</button>`).join('')}</div><hr>
+      ${item(t('table.rules.thick', 'Thick Rules'), 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 })}${item(t('table.rules.thin', 'Thin Rules'), 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 })}${item(t('table.rules.double', 'Double Rules'), 'bw:3', { icon: ic('<path d="M3 8h14M3 12h14"/>'), checked: borderW === 3 })}`, r.left, r.bottom + 6);
   }
   let borderW: Rule = 1;
   function ctxMenu(x: number, y: number) {
     const g = range(), rows = g.r1 - g.r0 + 1, cols = g.c1 - g.c0 + 1, nr = T.nRows(M), nc = T.nCols(M);
     const multi = rows > 1 || cols > 1, merged = anchorsSel().some((q) => q.rs || q.cs);
-    const R = rows > 1 ? `${rows} Rows` : 'Row', C = cols > 1 ? `${cols} Columns` : 'Column';
+    const many = rows > 1, manyC = cols > 1;
     openMenu(
-      item('Cut', 'cut', { key: MOD + 'X' }) + item('Copy', 'copy', { key: MOD + 'C' }) + item('Paste', 'paste', { key: MOD + 'V' }) + '<hr>' +
-      item(`Insert ${R} Above`, 'row-above', { icon: gridIcon('above') }) +
-      item(`Insert ${R} Below`, 'row-below', { icon: gridIcon('below') }) +
-      item(`Insert ${C} Left`, 'col-left', { icon: gridIcon('before') }) +
-      item(`Insert ${C} Right`, 'col-right', { icon: gridIcon('after') }) + '<hr>' +
-      item('Move Up', 'up', { dis: g.r0 === 0 }) + item('Move Down', 'down', { dis: g.r1 === nr - 1 }) + item('Move Left', 'left', { dis: g.c0 === 0 }) + item('Move Right', 'right', { dis: g.c1 === nc - 1 }) + '<hr>' +
-      item('Merge Cells', 'merge', { icon: I.merge, dis: !multi }) + item('Split Cells', 'split', { icon: I.split, dis: !merged }) +
-      item(g.r1 < M.head && g.r0 === 0 ? 'Header: rows above this one' : `Header: rows 1–${g.r1 + 1}`, 'head', { icon: ic('<path d="M3 3h14v14H3z"/><path d="M3 7.5h14" stroke-width="2.5"/>') }) + '<hr>' +
-      item('Clear Text', 'clear-text', { key: '⌫' }) + item('Clear Formatting', 'clear-format') +
-      item(`Delete ${R}`, 'del-rows', { danger: true, dis: rows >= nr, icon: gridIcon('rowdel') }) +
-      item(`Delete ${C}`, 'del-cols', { danger: true, dis: cols >= nc, icon: gridIcon('coldel') }), x, y);
+      item(t('ui.cut', 'Cut'), 'cut', { key: MOD + 'X' }) + item(t('ui.copy', 'Copy'), 'copy', { key: MOD + 'C' }) + item(t('ui.paste', 'Paste'), 'paste', { key: MOD + 'V' }) + '<hr>' +
+      item(many ? t('table.insertRowsAbove', 'Insert {n} Rows Above', { n: rows }) : t('table.insertRowAbove', 'Insert Row Above'), 'row-above', { icon: gridIcon('above') }) +
+      item(many ? t('table.insertRowsBelow', 'Insert {n} Rows Below', { n: rows }) : t('table.insertRowBelow', 'Insert Row Below'), 'row-below', { icon: gridIcon('below') }) +
+      item(manyC ? t('table.insertColsLeft', 'Insert {n} Columns Left', { n: cols }) : t('table.insertColLeft', 'Insert Column Left'), 'col-left', { icon: gridIcon('before') }) +
+      item(manyC ? t('table.insertColsRight', 'Insert {n} Columns Right', { n: cols }) : t('table.insertColRight', 'Insert Column Right'), 'col-right', { icon: gridIcon('after') }) + '<hr>' +
+      item(t('table.moveUp', 'Move Up'), 'up', { dis: g.r0 === 0 }) + item(t('table.moveDown', 'Move Down'), 'down', { dis: g.r1 === nr - 1 }) + item(t('table.moveLeft', 'Move Left'), 'left', { dis: g.c0 === 0 }) + item(t('table.moveRight', 'Move Right'), 'right', { dis: g.c1 === nc - 1 }) + '<hr>' +
+      item(t('table.mergeCells', 'Merge Cells'), 'merge', { icon: I.merge, dis: !multi }) + item(t('table.splitCells', 'Split Cells'), 'split', { icon: I.split, dis: !merged }) +
+      item(g.r1 < M.head && g.r0 === 0 ? t('table.headerAbove', 'Header: rows above this one') : t('table.headerRows', 'Header: rows 1–{n}', { n: g.r1 + 1 }), 'head', { icon: ic('<path d="M3 3h14v14H3z"/><path d="M3 7.5h14" stroke-width="2.5"/>') }) + '<hr>' +
+      item(t('table.clearText', 'Clear Text'), 'clear-text', { key: '⌫' }) + item(t('table.clearFormat', 'Clear Formatting'), 'clear-format') +
+      item(many ? t('table.deleteRows', 'Delete {n} Rows', { n: rows }) : t('table.deleteRow', 'Delete Row'), 'del-rows', { danger: true, dis: rows >= nr, icon: gridIcon('rowdel') }) +
+      item(manyC ? t('table.deleteCols', 'Delete {n} Columns', { n: cols }) : t('table.deleteCol', 'Delete Column'), 'del-cols', { danger: true, dis: cols >= nc, icon: gridIcon('coldel') }), x, y);
   }
   function menuAct(a: string) {
     const g = range();
     if (a === 'imp-text') { importDialog(); return; }
     if (a === 'imp-file') { chooseFile(); return; }
-    if (a === 'imp-blank') { replaceTable(T.create(4, 3, 'booktabs'), 'A new table'); return; }
+    if (a === 'imp-blank') { replaceTable(T.create(4, 3, 'booktabs'), t('table.newTable', 'A new table')); return; }
     if (a.startsWith('b:')) { border(a.slice(2) as BorderWhere, borderW); return; }
-    if (a.startsWith('bw:')) { borderW = +a.slice(3) as Rule; hint(borderW === 3 ? 'New rules are double' : borderW === 2 ? 'New rules are thick' : 'New rules are thin'); return; }
+    if (a.startsWith('bw:')) { borderW = +a.slice(3) as Rule; hint(borderW === 3 ? t('table.hint.rulesDouble', 'New rules are double') : borderW === 2 ? t('table.hint.rulesThick', 'New rules are thick') : t('table.hint.rulesThin', 'New rules are thin')); return; }
     switch (a) {
       case 'cut': copySel(true); break;
       case 'copy': copySel(false); break;
@@ -493,10 +510,10 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       case 'row-below': change(() => T.insertRows(M, g.r1 + 1, g.r1 - g.r0 + 1)); select([g.r1 + 1, act[1]]); break;
       case 'col-left': change(() => T.insertCols(M, g.c0, g.c1 - g.c0 + 1)); select([act[0], g.c0]); break;
       case 'col-right': change(() => T.insertCols(M, g.c1 + 1, g.c1 - g.c0 + 1)); select([act[0], g.c1 + 1]); break;
-      case 'up': if (change(() => T.moveRows(M, g.r0, g.r1, -1))) { act[0]--; ext[0]--; syncSel(true); } else hint('A merged cell is in the way'); break;
-      case 'down': if (change(() => T.moveRows(M, g.r0, g.r1, 1))) { act[0]++; ext[0]++; syncSel(true); } else hint('A merged cell is in the way'); break;
-      case 'left': if (change(() => T.moveCols(M, g.c0, g.c1, -1))) { act[1]--; ext[1]--; syncSel(true); } else hint('A merged cell is in the way'); break;
-      case 'right': if (change(() => T.moveCols(M, g.c0, g.c1, 1))) { act[1]++; ext[1]++; syncSel(true); } else hint('A merged cell is in the way'); break;
+      case 'up': if (change(() => T.moveRows(M, g.r0, g.r1, -1))) { act[0]--; ext[0]--; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
+      case 'down': if (change(() => T.moveRows(M, g.r0, g.r1, 1))) { act[0]++; ext[0]++; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
+      case 'left': if (change(() => T.moveCols(M, g.c0, g.c1, -1))) { act[1]--; ext[1]--; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
+      case 'right': if (change(() => T.moveCols(M, g.c0, g.c1, 1))) { act[1]++; ext[1]++; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
       case 'merge': mergeSel(); break;
       case 'split': change(() => T.split(M, g)); break;
       case 'head': change(() => { M.head = g.r1 + 1 >= T.nRows(M) ? T.nRows(M) - 1 : g.r1 + 1; T.restyle(M); }); break;
@@ -511,7 +528,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const filled = new Set(anchorsSel().map((x) => x.t.trim()).filter(Boolean)).size;
     change(() => T.merge(M, g));
     act = [g.r0, g.c0]; ext = act.slice() as [number, number]; syncSel();
-    if (filled > 1) hint('Merged: the texts were joined. ' + MOD + 'Z undoes it.', 2200);
+    if (filled > 1) hint(t('table.hint.merged', 'Merged: the texts were joined. {key} undoes it.', { key: MOD + 'Z' }), 2200);
   }
 
   // ---------------------------------------------------------------- clipboard
@@ -536,12 +553,12 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     return h + '</table>';
   }
   async function copySel(cut: boolean) {
-    const g = range(), t = T.slice(M, g);
-    const text = T.toTsv(M, g), html = sliceHtml(t);
+    const g = range(), sl = T.slice(M, g);
+    const text = T.toTsv(M, g), html = sliceHtml(sl);
     try {
       if (window.ClipboardItem && navigator.clipboard?.write) await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]);
       else await navigator.clipboard.writeText(text);
-    } catch (e: any) { hint("Couldn't copy"); return; }
+    } catch (e: any) { hint(t('table.hint.copyFailed', "Couldn't copy")); return; }
     if (cut) change(() => T.clearRange(M, g, 'all'));
   }
   async function pasteFromClipboard() {
@@ -549,7 +566,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       const items = await navigator.clipboard.read();
       for (const it of items) if (it.types.includes('text/html')) { pasteData(await (await it.getType('text/html')).text(), await (it.types.includes('text/plain') ? (await it.getType('text/plain')).text() : '')); return; }
       pasteData('', await navigator.clipboard.readText());
-    } catch (e: any) { hint(`Use ${MOD}V to paste`); }
+    } catch (e: any) { hint(t('table.hint.usePaste', 'Use {key} to paste', { key: MOD + 'V' })); }
   }
   /** ⌘V pastes at the selection's top-left cell, growing the table to fit: copied cells (this tool, Excel,
    *  Sheets) with their formats, text tables (TSV, CSV, Markdown, a LaTeX tabular) as text, keeping the cells'
@@ -575,7 +592,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
         else if (/[\t\n]/.test(body)) src = T.fromDelimited(body, f === 'tsv' ? '\t' : undefined);
       } catch (e: any) { hint(String(e.message || e)); return; }
     }
-    if (fresh && src && T.nRows(src) * T.nCols(src) > 1) { replaceTable(src, 'Pasted'); return; }
+    if (fresh && src && T.nRows(src) * T.nCols(src) > 1) { replaceTable(src, t('table.pasted', 'Pasted')); return; }
     if (!src) {
       // one value: the text as typed, in every selected cell
       change(() => { for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) M.cells[r][c].t = body; });
@@ -600,26 +617,26 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const p = box.at;
     if (p) {
       act = [p.r0, p.c0]; ext = [p.r1, p.c1]; clampSel(); syncSel(true); panel();
-      if (T.nRows(M) > nrWas || T.nCols(M) > ncWas) hint(`Pasted ${h} × ${w}; the table grew to ${T.nRows(M)} × ${T.nCols(M)}`, 2000);
+      if (T.nRows(M) > nrWas || T.nCols(M) > ncWas) hint(t('table.hint.grew', 'Pasted {h} × {w}; the table grew to {rows} × {cols}', { h, w, rows: T.nRows(M), cols: T.nCols(M) }), 2000);
     }
   }
-  function replaceTable(t: TableModel, msg?: string) {
+  function replaceTable(tbl: TableModel, note?: string) {
     finishEdit(true);
     const was = fresh;
-    change(() => { M = t; });
+    change(() => { M = tbl; });
     fresh = false;
     if (was !== fresh) startScreen();
     act = [0, 0]; ext = [0, 0];
     syncSel(); panel();
     focusGrid();
-    if (msg) hint(`${msg} · ${T.nRows(M)} × ${T.nCols(M)}. ${MOD}Z undoes it.`, 2400);
+    if (note) hint(t('table.hint.replaced', '{what} · {rows} × {cols}. {key} undoes it.', { what: note, rows: T.nRows(M), cols: T.nCols(M), key: MOD + 'Z' }), 2400);
   }
   async function importFile(file: File) {
     try {
       const r = await T.importFile(file);
-      replaceTable(r.table, `Imported ${file.name}`);
+      replaceTable(r.table, t('table.importedFile', 'Imported {name}', { name: file.name }));
       if (r.warnings.length) setTimeout(() => hint(r.warnings.join(' · '), 3200), 2500);
-    } catch (e: any) { TD.alert("Couldn't import the file", String(e.message || e)); }
+    } catch (e: any) { TD.alert(t('table.importFileFailed', "Couldn't import the file"), String(e.message || e)); }
   }
   function chooseFile() {
     const inp = document.createElement('input');
@@ -629,26 +646,26 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     inp.click();
   }
   async function importDialog() {
-    const text = await TD.prompt('Import a Table', '', {
-      multiline: true, ok: 'Import', message: `Paste CSV, TSV, Markdown, HTML or a LaTeX tabular. It replaces this table (${MOD}Z undoes it).`,
+    const text = await TD.prompt(t('table.importTitle', 'Import a Table'), '', {
+      multiline: true, ok: t('table.import', 'Import'), message: t('table.importBody', 'Paste CSV, TSV, Markdown, HTML or a LaTeX tabular. It replaces this table ({key} undoes it).', { key: MOD + 'Z' }),
       placeholder: '\\begin{tabular}{lr}\n\\toprule\nName & Value \\\\\n\\midrule\n…',
     });
     if (text == null) return; // Cancel
-    if (!String(text).trim()) { hint('Nothing to import: the box was empty'); return; }
-    try { const r = T.importText(String(text)); replaceTable(r.table, `Imported (${r.format})`); }
-    catch (e: any) { TD.alert("Couldn't import", String(e.message || e)); }
+    if (!String(text).trim()) { hint(t('table.hint.emptyImport', 'Nothing to import: the box was empty')); return; }
+    try { const r = T.importText(String(text)); replaceTable(r.table, t('table.importedFormat', 'Imported ({format})', { format: r.format })); }
+    catch (e: any) { TD.alert(t('table.importFailed', "Couldn't import"), String(e.message || e)); }
   }
 
   // ---------------------------------------------------------------- the right panel
-  const rowsHtml = (rows: [string, string, string?][]) => rows.map(([l, ctl, title]) => `<div class="row"${title ? ` title="${esc(title)}"` : ''}><label>${l}</label><div class="ctl">${ctl}</div></div>`).join('');
-  const seg = (key: string, list: [string, string, string?][], cur: string) => `<div class="seg-ctl" data-seg="${key}">${list.map(([v, l, t]) => `<button type="button" data-v="${v}" class="${v === cur ? 'on' : ''}"${t ? ` title="${esc(t)}"` : ''}>${l}</button>`).join('')}</div>`;
+  const rowsHtml = (rows: [string, string, string?][]) => rows.map(([l, ctl, title]) => `<div class="row"${title ? ` title="${esc(title)}"` : ''}><label>${esc(l)}</label><div class="ctl">${ctl}</div></div>`).join('');
+  const seg = (key: string, list: [string, string, string?][], cur: string) => `<div class="seg-ctl" data-seg="${key}">${list.map(([v, l, tip]) => `<button type="button" data-v="${v}" class="${v === cur ? 'on' : ''}"${tip ? ` title="${esc(tip)}"` : ''}>${l}</button>`).join('')}</div>`;
   const opt = (list: [string, string][], cur: string) => list.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('');
-  const SIZE_NAMES: [string, string][] = [['tiny', 'Tiny'], ['scriptsize', 'Script'], ['footnotesize', 'Footnote'], ['small', 'Small'], ['normalsize', 'Normal'], ['large', 'Large'], ['Large', 'Larger']];
-  const swatch = (k: string, v: string | undefined, none: string) => `<button type="button" class="tb-swatch" data-color="${k}" title="${v || none}"><i style="background:${v || 'transparent'}"${v ? '' : ' class="none"'}></i><span>${v ? v.toUpperCase() : none}</span></button>`;
+  const SIZE_NAMES = (): [string, string][] => [['tiny', t('table.size.tiny', 'Tiny')], ['scriptsize', t('table.size.script', 'Script')], ['footnotesize', t('table.size.footnote', 'Footnote')], ['small', t('table.size.small', 'Small')], ['normalsize', t('ui.normal', 'Normal')], ['large', t('table.size.large', 'Large')], ['Large', t('table.size.larger', 'Larger')]];
+  const swatch = (k: string, v: string | undefined, none: string) => `<button type="button" class="tb-swatch" data-color="${k}" title="${esc(v || none)}"><i style="background:${v || 'transparent'}"${v ? '' : ' class="none"'}></i><span>${v ? v.toUpperCase() : esc(none)}</span></button>`;
   let detailsOpen = false;
-  const floatCtl = () => M.env === 'longtable' ? '<span class="tb-unit">longtable: over pages, no float</span>'
-    : (M.caption.trim() || M.label.trim()) ? '<label class="tb-chk" title="A caption or label always puts the table in a table environment"><input type="checkbox" checked disabled> table environment</label>'
-    : `<label class="tb-chk" title="In a table environment, placed by LaTeX (h t b p)"><input type="checkbox" data-p="float"${M.float ? ' checked' : ''}> table environment</label>`;
+  const floatCtl = () => M.env === 'longtable' ? `<span class="tb-unit">${esc(t('table.longtableNoFloat', 'longtable: over pages, no float'))}</span>`
+    : (M.caption.trim() || M.label.trim()) ? `<label class="tb-chk" title="${esc(t('table.floatForced', 'A caption or label always puts the table in a table environment'))}"><input type="checkbox" checked disabled> ${esc(t('table.tableEnv', 'table environment'))}</label>`
+    : `<label class="tb-chk" title="${esc(t('table.floatTip', 'In a table environment, placed by LaTeX (h t b p)'))}"><input type="checkbox" data-p="float"${M.float ? ' checked' : ''}> ${esc(t('table.tableEnv', 'table environment'))}</label>`;
   function panel() {
     if (!shown) return;
     const el = document.getElementById('props');
@@ -657,50 +674,50 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     const c = act[1], col = M.cols[c], x = M.cells[act[0]][act[1]], g = range();
     const n = col.num;
     const round = !n ? 'none' : n.sig != null ? 'sig' : n.dp != null ? 'dp' : 'none';
-    el.innerHTML = `<h3>Table <small>${T.nRows(M)} × ${T.nCols(M)}</small></h3>
+    el.innerHTML = `<h3>${esc(t('ui.table', 'Table'))} <small>${T.nRows(M)} × ${T.nCols(M)}</small></h3>
     <div class="sec">${rowsHtml([
-      ['Style', `<select data-p="preset" aria-label="Table style">${opt([...T.PRESETS.map((p: any) => [p.key, p.name]), ['custom', 'Custom rules']], M.preset)}</select>`],
-      ['Header rows', `<input type="number" data-p="head" min="0" max="${T.nRows(M)}" step="1" value="${M.head}" aria-label="Header rows"><label class="tb-chk" title="The header rows in bold"><input type="checkbox" data-p="headBold"${M.headBold ? ' checked' : ''}> Bold</label>`],
-      ['Rules', seg('booktabs', [['1', 'booktabs', 'Rules of different weights, with space round them (\\toprule, \\midrule, \\bottomrule)'], ['0', 'Lines', '\\hline and \\cline: thin lines, no extra space']], M.booktabs ? '1' : '0')],
-      ['Stripes', `<label class="tb-chk"><input type="checkbox" data-p="striped"${M.stripe || M.stripe2 ? ' checked' : ''}> Every other row</label>${M.stripe || M.stripe2 ? swatch('stripe', M.stripe, 'None').replace('class="tb-swatch"', 'class="tb-swatch bare" aria-label="Stripe colour"') : ''}`],
-      ...(M.stripe || M.stripe2 ? [['Other rows', swatch('stripe2', M.stripe2, 'None'), 'The rows between the stripes (\\rowcolors\' other colour)'] as [string, string, string]] : []),
+      [t('ui.style', 'Style'), `<select data-p="preset" aria-label="${esc(t('table.style', 'Table style'))}">${opt([...T.PRESETS.map((p: any) => [p.key, presetName(p)]), ['custom', t('table.customRules', 'Custom rules')]], M.preset)}</select>`],
+      [t('table.headerRowsLabel', 'Header rows'), `<input type="number" data-p="head" min="0" max="${T.nRows(M)}" step="1" value="${M.head}" aria-label="${esc(t('table.headerRowsLabel', 'Header rows'))}"><label class="tb-chk" title="${esc(t('table.headBoldTip', 'The header rows in bold'))}"><input type="checkbox" data-p="headBold"${M.headBold ? ' checked' : ''}> ${esc(t('ui.bold', 'Bold'))}</label>`],
+      [t('table.rules', 'Rules'), seg('booktabs', [['1', 'booktabs', t('table.rules.booktabsTip', 'Rules of different weights, with space round them (\\toprule, \\midrule, \\bottomrule)')], ['0', esc(t('table.rules.lines', 'Lines')), t('table.rules.linesTip', '\\hline and \\cline: thin lines, no extra space')]], M.booktabs ? '1' : '0')],
+      [t('table.stripes', 'Stripes'), `<label class="tb-chk"><input type="checkbox" data-p="striped"${M.stripe || M.stripe2 ? ' checked' : ''}> ${esc(t('table.everyOtherRow', 'Every other row'))}</label>${M.stripe || M.stripe2 ? swatch('stripe', M.stripe, t('ui.none', 'None')).replace('class="tb-swatch"', `class="tb-swatch bare" aria-label="${esc(t('table.stripeColour', 'Stripe colour'))}"`) : ''}`],
+      ...(M.stripe || M.stripe2 ? [[t('table.otherRows', 'Other rows'), swatch('stripe2', M.stripe2, t('ui.none', 'None')), t('table.otherRowsTip', "The rows between the stripes (\\rowcolors' other colour)")] as [string, string, string]] : []),
     ])}</div>
-    <div class="sec"><div class="sec-title">Column ${T.colName(c)}${g.c1 > g.c0 ? `–${T.colName(g.c1)}` : ''}</div>${rowsHtml([
-      ['Align', seg('colAl', [['l', I.al.l, 'Left'], ['c', I.al.c, 'Centre'], ['r', I.al.r, 'Right'], ['j', I.al.j, 'Justified (with a width)']], col.al)],
-      ['Width', `<input type="number" data-p="w" min="0" step="0.1" value="${col.w || ''}" placeholder="Auto" aria-label="Column width (cm)" title="A width in cm makes the column wrap (p{…}); empty: as wide as its text"><span class="tb-unit">cm</span>${M.env === 'tabularx' ? `<label class="tb-chk" title="The column takes the rest of the line (X)"><input type="checkbox" data-p="fill"${col.fill ? ' checked' : ''}> Fill</label>` : ''}`],
-      ['Numbers', `<label class="tb-chk" title="Numbers align on the decimal point in a siunitx S column"><input type="checkbox" data-p="num"${n ? ' checked' : ''}> Align decimals</label>`],
+    <div class="sec"><div class="sec-title">${esc(t('table.columnTitle', 'Column {name}', { name: T.colName(c) + (g.c1 > g.c0 ? `–${T.colName(g.c1)}` : '') }))}</div>${rowsHtml([
+      [t('ui.align', 'Align'), seg('colAl', [['l', I.al.l, t('ui.left', 'Left')], ['c', I.al.c, t('ui.centre', 'Centre')], ['r', I.al.r, t('ui.right', 'Right')], ['j', I.al.j, t('table.justified', 'Justified (with a width)')]], col.al)],
+      [t('ui.width', 'Width'), `<input type="number" data-p="w" min="0" step="0.1" value="${col.w || ''}" placeholder="${esc(t('ui.auto', 'Auto'))}" aria-label="${esc(t('table.colWidthAria', 'Column width (cm)'))}" title="${esc(t('table.colWidthTip', 'A width in cm makes the column wrap (p{…}); empty: as wide as its text'))}"><span class="tb-unit">cm</span>${M.env === 'tabularx' ? `<label class="tb-chk" title="${esc(t('table.colFillTip', 'The column takes the rest of the line (X)'))}"><input type="checkbox" data-p="fill"${col.fill ? ' checked' : ''}> ${esc(t('table.fill', 'Fill'))}</label>` : ''}`],
+      [t('table.numbers', 'Numbers'), `<label class="tb-chk" title="${esc(t('table.numbersTip', 'Numbers align on the decimal point in a siunitx S column'))}"><input type="checkbox" data-p="num"${n ? ' checked' : ''}> ${esc(t('table.alignDecimals', 'Align decimals'))}</label>`],
     ])}${n ? `<div class="tb-sub">${rowsHtml([
-      ['Round', `<select data-p="round" aria-label="Rounding">${opt([['none', 'As typed'], ['sig', 'Significant figures'], ['dp', 'Decimal places']], round)}</select>${round !== 'none' ? `<input type="number" class="tb-n" data-p="prec" min="${round === 'sig' ? 1 : 0}" max="15" step="1" value="${round === 'sig' ? n.sig : n.dp}" aria-label="${round === 'sig' ? 'Significant figures' : 'Decimal places'}">` : ''}`],
-      ['Exponent', `<select data-p="exp" aria-label="Exponent">${opt([['input', 'As typed'], ['sci', 'Scientific (× 10ⁿ)'], ['fixed', 'Never']], n.exp || 'input')}</select>`],
-      ['Uncertainty', seg('unc', [['paren', '1.23(4)'], ['pm', '1.23 ± 0.04']], n.unc || 'paren')],
+      [t('table.round', 'Round'), `<select data-p="round" aria-label="${esc(t('table.rounding', 'Rounding'))}">${opt([['none', t('table.asTyped', 'As typed')], ['sig', t('table.sigFigs', 'Significant figures')], ['dp', t('table.decimals', 'Decimal places')]], round)}</select>${round !== 'none' ? `<input type="number" class="tb-n" data-p="prec" min="${round === 'sig' ? 1 : 0}" max="15" step="1" value="${round === 'sig' ? n.sig : n.dp}" aria-label="${round === 'sig' ? esc(t('table.sigFigs', 'Significant figures')) : esc(t('table.decimals', 'Decimal places'))}">` : ''}`],
+      [t('table.exponent', 'Exponent'), `<select data-p="exp" aria-label="${esc(t('table.exponent', 'Exponent'))}">${opt([['input', t('table.asTyped', 'As typed')], ['sci', t('table.scientific', 'Scientific (× 10ⁿ)')], ['fixed', t('table.never', 'Never')]], n.exp || 'input')}</select>`],
+      [t('table.uncertainty', 'Uncertainty'), seg('unc', [['paren', '1.23(4)'], ['pm', '1.23 ± 0.04']], n.unc || 'paren')],
     ])}</div>` : ''}${rowsHtml([
-      ['Unit', `<input type="text" data-p="unit" value="${esc(col.unit || '')}" placeholder="kg, m/s, \\kilo\\gram" aria-label="Unit" spellcheck="false" title="siunitx unit, shown after the header text: Mass (kg)">`],
+      [t('table.unit', 'Unit'), `<input type="text" data-p="unit" value="${esc(col.unit || '')}" placeholder="kg, m/s, \\kilo\\gram" aria-label="${esc(t('table.unit', 'Unit'))}" spellcheck="false" title="${esc(t('table.unitTip', 'siunitx unit, shown after the header text: Mass (kg)'))}">`],
     ])}</div>
-    <div class="sec"><div class="sec-title">Cell ${g.r0 === g.r1 && g.c0 === g.c1 ? T.cellName(act[0], act[1]) : `${T.cellName(g.r0, g.c0)}:${T.cellName(g.r1, g.c1)}`}</div>${rowsHtml([
-      ['Vertical', seg('va', [['t', I.va.t, 'Top'], ['m', I.va.m, 'Middle'], ['b', I.va.b, 'Bottom']], x.va || ((x.rs || 1) > 1 ? 'm' : 't'))],
-      ['Size', `<select data-p="sz" aria-label="Text size">${opt([['', 'As the table'], ...SIZE_NAMES], x.sz || '')}</select>`],
-      ['Text', swatch('fg', x.fg, 'Automatic')],
-      ['Fill', swatch('bg', x.bg, 'None')],
+    <div class="sec"><div class="sec-title">${esc(t('table.cellTitle', 'Cell {name}', { name: g.r0 === g.r1 && g.c0 === g.c1 ? T.cellName(act[0], act[1]) : `${T.cellName(g.r0, g.c0)}:${T.cellName(g.r1, g.c1)}` }))}</div>${rowsHtml([
+      [t('ui.vertical', 'Vertical'), seg('va', [['t', I.va.t, t('ui.top', 'Top')], ['m', I.va.m, t('table.middle', 'Middle')], ['b', I.va.b, t('ui.bottom', 'Bottom')]], x.va || ((x.rs || 1) > 1 ? 'm' : 't'))],
+      [t('ui.size', 'Size'), `<select data-p="sz" aria-label="${esc(t('table.textSize', 'Text size'))}">${opt([['', t('table.asTable', 'As the table')], ...SIZE_NAMES()], x.sz || '')}</select>`],
+      [t('ui.text', 'Text'), swatch('fg', x.fg, t('table.automatic', 'Automatic'))],
+      [t('ui.fill', 'Fill'), swatch('bg', x.bg, t('ui.none', 'None'))],
     ])}</div>
-    <div class="sec"><div class="sec-title">LaTeX</div>${session ? '<div class="hint-line">In the diagram the table is a tabular in a node: no caption, label or float.</div>' : ''}${rowsHtml(session ? [] : [
-      ['Caption', `<input type="text" data-p="caption" value="${esc(M.caption)}" placeholder="None" aria-label="Caption">`],
-      ['Label', `<input type="text" data-p="label" value="${esc(M.label)}" placeholder="tab:results" aria-label="Label" spellcheck="false">`],
-      ['Float', `<span class="tb-floatctl">${floatCtl()}</span>`],
-      ['Place', seg('place', [['left', I.al.l, 'Left'], ['center', I.al.c, 'Centre'], ['right', I.al.r, 'Right']], M.place)],
+    <div class="sec"><div class="sec-title">LaTeX</div>${session ? `<div class="hint-line">${esc(t('table.inDiagram', 'In the diagram the table is a tabular in a node: no caption, label or float.'))}</div>` : ''}${rowsHtml(session ? [] : [
+      [t('table.caption', 'Caption'), `<input type="text" data-p="caption" value="${esc(M.caption)}" placeholder="${esc(t('ui.none', 'None'))}" aria-label="${esc(t('table.caption', 'Caption'))}">`],
+      [t('ui.label', 'Label'), `<input type="text" data-p="label" value="${esc(M.label)}" placeholder="tab:results" aria-label="${esc(t('ui.label', 'Label'))}" spellcheck="false">`],
+      [t('table.float', 'Float'), `<span class="tb-floatctl">${floatCtl()}</span>`],
+      [t('table.place', 'Place'), seg('place', [['left', I.al.l, t('ui.left', 'Left')], ['center', I.al.c, t('ui.centre', 'Centre')], ['right', I.al.r, t('ui.right', 'Right')]], M.place)],
     ])}
-    <details class="tb-more-sec"${detailsOpen ? ' open' : ''}><summary>More options</summary>${rowsHtml([
-      ['Environment', `<select data-p="env" aria-label="Environment">${opt([['tabular', 'tabular'], ['tabularx', 'tabularx (full width)'], ...(session ? [] : [['longtable', 'longtable (over pages)'] as [string, string]])], M.env)}</select>`],
-      ...(M.env === 'tabularx' ? [['Width', `<input type="number" data-p="width" min="10" max="100" step="5" value="${Math.round(M.width * 100)}" aria-label="Width"><span class="tb-unit">% of the line</span>`] as [string, string]] : []),
-      ...(M.env === 'longtable' && !session ? [['Footer rows', `<input type="number" data-p="foot" min="0" max="${T.nRows(M) - M.head}" step="1" value="${M.foot}" aria-label="Footer rows">`, 'The bottom rows: written once, at the end of the table (\\endlastfoot); the other pages end with the rule above them'] as [string, string, string]] : []),
-      ...(M.env !== 'longtable' && !session ? [['Placement', `<input type="text" data-p="floatPos" value="${esc(M.floatPos)}" placeholder="htbp" aria-label="Float placement" spellcheck="false" maxlength="5" title="Where LaTeX may put the table: h here, t top, b bottom, p own page, ! try harder, H exactly here (float package)">`] as [string, string]] : []),
-      ...(session ? [] : [['Caption at', seg('capTop', [['1', 'Top'], ['0', 'Bottom']], M.capTop ? '1' : '0')] as [string, string]]),
-      ['Font size', `<select data-p="size" aria-label="Font size">${opt(SIZE_NAMES, M.size)}</select>`],
-      ['Padding', `<input type="number" data-p="pad" min="0" max="30" step="0.5" value="${M.pad}" aria-label="Cell padding (pt)" title="\\tabcolsep: the space on each side of a column"><span class="tb-unit">pt</span>`],
-      ['Row height', `<input type="number" data-p="stretch" min="0.5" max="4" step="0.05" value="${M.stretch}" aria-label="Row height" title="\\arraystretch: 1 is LaTeX's own"><span class="tb-unit">×</span>`],
-      ['Rule width', `<input type="number" data-p="ruleW" min="0.1" max="5" step="0.1" value="${M.ruleW}" aria-label="Rule width (pt)" title="\\arrayrulewidth: thin rules and | (LaTeX's 0.4 pt)"><span class="tb-unit">pt</span>${swatch('ruleColor', M.ruleColor, 'Black').replace('class="tb-swatch"', 'class="tb-swatch bare" aria-label="Rule colour"').replace(/title="[^"]*"/, `title="\\arrayrulecolor: ${M.ruleColor || 'black'}"`)}`],
-      ['Units as', `<select data-p="unitStyle" aria-label="How units follow the header">${opt([['paren', 'Mass (kg)'], ['bracket', 'Mass [kg]'], ['slash', 'Mass / kg']], M.unitStyle)}</select>`],
+    <details class="tb-more-sec"${detailsOpen ? ' open' : ''}><summary>${esc(t('table.moreOptions', 'More options'))}</summary>${rowsHtml([
+      [t('table.environment', 'Environment'), `<select data-p="env" aria-label="${esc(t('table.environment', 'Environment'))}">${opt([['tabular', 'tabular'], ['tabularx', t('table.env.tabularx', 'tabularx (full width)')], ...(session ? [] : [['longtable', t('table.env.longtable', 'longtable (over pages)')] as [string, string]])], M.env)}</select>`],
+      ...(M.env === 'tabularx' ? [[t('ui.width', 'Width'), `<input type="number" data-p="width" min="10" max="100" step="5" value="${Math.round(M.width * 100)}" aria-label="${esc(t('ui.width', 'Width'))}"><span class="tb-unit">${esc(t('table.ofLine', '% of the line'))}</span>`] as [string, string]] : []),
+      ...(M.env === 'longtable' && !session ? [[t('table.footerRows', 'Footer rows'), `<input type="number" data-p="foot" min="0" max="${T.nRows(M) - M.head}" step="1" value="${M.foot}" aria-label="${esc(t('table.footerRows', 'Footer rows'))}">`, t('table.footerTip', 'The bottom rows: written once, at the end of the table (\\endlastfoot); the other pages end with the rule above them')] as [string, string, string]] : []),
+      ...(M.env !== 'longtable' && !session ? [[t('table.placement', 'Placement'), `<input type="text" data-p="floatPos" value="${esc(M.floatPos)}" placeholder="htbp" aria-label="${esc(t('table.floatPlacement', 'Float placement'))}" spellcheck="false" maxlength="5" title="${esc(t('table.placementTip', 'Where LaTeX may put the table: h here, t top, b bottom, p own page, ! try harder, H exactly here (float package)'))}">`] as [string, string]] : []),
+      ...(session ? [] : [[t('table.captionAt', 'Caption at'), seg('capTop', [['1', esc(t('ui.top', 'Top'))], ['0', esc(t('ui.bottom', 'Bottom'))]], M.capTop ? '1' : '0')] as [string, string]]),
+      [t('ui.font.size', 'Font size'), `<select data-p="size" aria-label="${esc(t('ui.font.size', 'Font size'))}">${opt(SIZE_NAMES(), M.size)}</select>`],
+      [t('table.padding', 'Padding'), `<input type="number" data-p="pad" min="0" max="30" step="0.5" value="${M.pad}" aria-label="${esc(t('table.paddingAria', 'Cell padding (pt)'))}" title="${esc(t('table.paddingTip', '\\tabcolsep: the space on each side of a column'))}"><span class="tb-unit">pt</span>`],
+      [t('table.rowHeight', 'Row height'), `<input type="number" data-p="stretch" min="0.5" max="4" step="0.05" value="${M.stretch}" aria-label="${esc(t('table.rowHeight', 'Row height'))}" title="${esc(t('table.rowHeightTip', "\\arraystretch: 1 is LaTeX's own"))}"><span class="tb-unit">×</span>`],
+      [t('table.ruleWidth', 'Rule width'), `<input type="number" data-p="ruleW" min="0.1" max="5" step="0.1" value="${M.ruleW}" aria-label="${esc(t('table.ruleWidthAria', 'Rule width (pt)'))}" title="${esc(t('table.ruleWidthTip', "\\arrayrulewidth: thin rules and | (LaTeX's 0.4 pt)"))}"><span class="tb-unit">pt</span>${swatch('ruleColor', M.ruleColor, t('table.black', 'Black')).replace('class="tb-swatch"', `class="tb-swatch bare" aria-label="${esc(t('table.ruleColour', 'Rule colour'))}"`).replace(/title="[^"]*"/, `title="\\arrayrulecolor: ${M.ruleColor || 'black'}"`)}`],
+      [t('table.unitsAs', 'Units as'), `<select data-p="unitStyle" aria-label="${esc(t('table.unitsAsAria', 'How units follow the header'))}">${opt([['paren', t('table.units.paren', 'Mass (kg)')], ['bracket', t('table.units.bracket', 'Mass [kg]')], ['slash', t('table.units.slash', 'Mass / kg')]], M.unitStyle)}</select>`],
     ])}</details></div>
-    <div class="sec tb-keys"><div class="sec-title">Keys</div><div class="hint-line">Type to replace a cell · <kbd>Enter</kbd> or double-click to edit · <kbd>${SHIFT}Enter</kbd> new line · <kbd>${SHIFT}</kbd>+arrows select · <kbd>${MOD}C</kbd> <kbd>${MOD}V</kbd> copy and paste with Excel and Sheets · right-click for rows, columns and merging.</div></div>`;
+    <div class="sec tb-keys"><div class="sec-title">${esc(t('table.keys', 'Keys'))}</div><div class="hint-line">${esc(t('table.keys.replace', 'Type to replace a cell'))} · <kbd>Enter</kbd> ${esc(t('table.keys.edit', 'or double-click to edit'))} · <kbd>${SHIFT}Enter</kbd> ${esc(t('table.keys.newline', 'new line'))} · <kbd>${SHIFT}</kbd>${esc(t('table.keys.select', '+arrows select'))} · <kbd>${MOD}C</kbd> <kbd>${MOD}V</kbd> ${esc(t('table.keys.clip', 'copy and paste with Excel and Sheets'))} · ${esc(t('table.keys.menu', 'right-click for rows, columns and merging.'))}</div></div>`;
     // the heading moves into the window's head (app.ts does it too, but later, from a MutationObserver);
     // moving it now keeps the height the scroll is restored against, so ticking a box doesn't scroll up
     const h = el.firstElementChild, head = document.getElementById('propsHead');
@@ -775,7 +792,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
         // a table-wide colour; the stripes' other rows and the rules can have none (no fill, black)
         const before = JSON.stringify(M), key = k as 'stripe' | 'stripe2' | 'ruleColor';
         const set = (v: any) => { M[key] = v ? TD.parseColor(v).hex : ''; if (!M.stripe && !M.stripe2) M.stripe = '#eef2f7'; paint(); preview(); };
-        TD.openColorPicker(b, { value: M[key] || null, nullable: k !== 'stripe' || !!M.stripe2, noneLabel: k === 'ruleColor' ? 'Black' : 'No Fill', onInput: set, onChange: set,
+        TD.openColorPicker(b, { value: M[key] || null, nullable: k !== 'stripe' || !!M.stripe2, noneLabel: k === 'ruleColor' ? t('table.black', 'Black') : t('table.noFill', 'No Fill'), onInput: set, onChange: set,
           onClose: () => { if (JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; save(); panel(); } } });
       } else pickColor(b, k as 'fg' | 'bg');
     }
@@ -793,7 +810,8 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     clearTimeout(pvTimer);
     pvTimer = setTimeout(previewNow, 40);
   }
-  function previewNow() {
+  function previewNow(): void {
+    if (!TD.math.previewing) return TD.math.preview(previewNow);
     if (!shown) return;
     const p = $('.tb-prev'), code = $('.tb-code'), pk = $('.tb-pk');
     if (!p) return;
@@ -801,13 +819,13 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       const d = TD.measureBatch(() => T.draw(M, {}));
       const pad = 12;
       p.innerHTML = `<svg class="tb-pic" viewBox="${-pad} ${-pad} ${(d.w + 2 * pad).toFixed(2)} ${(d.h + 2 * pad).toFixed(2)}" width="${((d.w + 2 * pad) * 1.25).toFixed(1)}" height="${((d.h + 2 * pad) * 1.25).toFixed(1)}">${d.svg}</svg>`;
-    } catch (e: any) { p.textContent = 'Could not draw the table: ' + (e.message || e); }
+    } catch (e: any) { p.textContent = t('table.drawFailed', 'Could not draw the table: {error}', { error: e.message || e }); }
     const r = T.toLatex(M, { bare: !!session });
     const text = (r.packages.length ? `% ${r.packages.join(' ')}\n` : '') + r.code;
     codeText = text;
     code.innerHTML = text.split('\n').map((l: string, i: number) => `<div class="cl" data-n="${i + 1}">${esc(l) || ' '}</div>`).join('');
-    pk.textContent = r.packages.length ? r.packages.map((x: string) => /\{([^}]*)\}$/.exec(x)![1]).join(', ') : 'No packages';
-    pk.title = r.packages.length ? 'Packages the LaTeX needs (in the preamble):\n' + r.packages.join('\n') : 'Plain LaTeX: no packages needed';
+    pk.textContent = r.packages.length ? r.packages.map((x: string) => /\{([^}]*)\}$/.exec(x)![1]).join(', ') : t('table.noPackages', 'No packages');
+    pk.title = r.packages.length ? t('table.packagesTip', 'Packages the LaTeX needs (in the preamble):') + '\n' + r.packages.join('\n') : t('table.noPackagesTip', 'Plain LaTeX: no packages needed');
   }
   function tabs() {
     host!.querySelectorAll('[data-tab]').forEach((b) => { const on = (b as HTMLElement).dataset.tab === out.tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
@@ -823,12 +841,13 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   }
   const fileName = () => (M.label.replace(/^tab:/, '') || M.caption.replace(/\\[A-Za-z]+|[$\\{}]/g, '')).trim().replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).toLowerCase() || 'table';
   async function output(what: string, btn: HTMLElement | null) {
+    if (!TD.app.outputAllowed()) return;
     finishEdit();
     try {
       if (what === 'copy') {
         const r = T.toLatex(M, { bare: !!session });
         await navigator.clipboard.writeText((r.packages.length ? `% Preamble: ${r.packages.join(' ')}\n` : '') + r.code + '\n');
-        flash(btn, 'Copied');
+        flash(btn, t('ui.copied', 'Copied'));
       } else if (what === 'dl-tex') TD.app.downloadBlob(fileName() + '.tex', new Blob([T.toLatex(M, { standalone: true }).code], { type: 'text/x-tex' }));
       else if (what === 'dl-svg') {
         const svg = await TD.app.svgWithFonts(TD.app.svgOf([shape()]));
@@ -836,9 +855,9 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       } else if (what === 'dl-png') TD.app.downloadBlob(fileName() + '.png', await TD.app.pngOf([shape()], +out.dpi, out.transparent));
       else if (what === 'copy-png') {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': TD.app.pngOf([shape()], +out.dpi, false) })]);
-        flash(btn, 'Copied');
+        flash(btn, t('ui.copied', 'Copied'));
       }
-    } catch (e: any) { hint(`Couldn't ${what.startsWith('dl') ? 'make the file' : 'copy'}: ${e.message || e}`, 2600); }
+    } catch (e: any) { hint(what.startsWith('dl') ? t('table.hint.fileFailed', "Couldn't make the file: {error}", { error: e.message || e }) : t('table.hint.copyFailedWhy', "Couldn't copy: {error}", { error: e.message || e }), 2600); }
   }
 
   // ---------------------------------------------------------------- events
@@ -855,29 +874,29 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       focusGrid();
       return;
     }
-    const t = b.dataset.t;
-    if (!t) return;
-    switch (t) {
+    const cmd = b.dataset.t;
+    if (!cmd) return;
+    switch (cmd) {
       case 'import': {
         const r = b.getBoundingClientRect();
-        openMenu(item('Paste a Table…', 'imp-text', { icon: ic('<path d="M7 3.5h6v2H7z"/><path d="M13 4.5h2.5v13h-11v-13H7"/><path d="M7.5 10h5M7.5 13h3"/>') })
-          + item('Open a File…', 'imp-file', { icon: ic('<path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/>') })
-          + '<hr>' + item('New Empty Table', 'imp-blank', { icon: ic('<path d="M3 4h14v12H3zM3 8h14M3 12h14M8 4v12"/>') }), r.left, r.bottom + 6);
+        openMenu(item(t('table.menu.paste', 'Paste a Table…'), 'imp-text', { icon: ic('<path d="M7 3.5h6v2H7z"/><path d="M13 4.5h2.5v13h-11v-13H7"/><path d="M7.5 10h5M7.5 13h3"/>') })
+          + item(t('table.menu.open', 'Open a File…'), 'imp-file', { icon: ic('<path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/>') })
+          + '<hr>' + item(t('table.menu.blank', 'New Empty Table'), 'imp-blank', { icon: ic('<path d="M3 4h14v12H3zM3 8h14M3 12h14M8 4v12"/>') }), r.left, r.bottom + 6);
         break;
       }
       case 'file': chooseFile(); break;
       case 'blank': replaceTable(T.create(4, 3, 'booktabs')); break;
       case 'import-text': {
         const v = ($('.tb-paste') as HTMLTextAreaElement).value;
-        if (!v.trim()) { hint('Paste a table first'); return; }
-        try { const r = T.importText(v); replaceTable(r.table, `Imported (${r.format})`); } catch (err: any) { TD.alert("Couldn't import", String(err.message || err)); }
+        if (!v.trim()) { hint(t('table.hint.pasteFirst', 'Paste a table first')); return; }
+        try { const r = T.importText(v); replaceTable(r.table, t('table.importedFormat', 'Imported ({format})', { format: r.format })); } catch (err: any) { TD.alert(t('table.importFailed', "Couldn't import"), String(err.message || err)); }
         break;
       }
       case 'undo': undo(); break;
       case 'redo': redo(); break;
-      case 'b': case 'i': case 'u': case 'tt': toggle(t); break;
+      case 'b': case 'i': case 'u': case 'tt': toggle(cmd); break;
       case 'al': setAlign(b.dataset.v as HAlign); break;
-      case 'fg': case 'bg': pickColor(b, t); break;
+      case 'fg': case 'bg': pickColor(b, cmd); break;
       case 'border': border(lastBorder, borderW); break;
       case 'borders': bordersMenu(b); break;
       case 'merge': mergeSel(); break;
@@ -1082,7 +1101,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   host.addEventListener('drop', (e) => {
     host!.classList.remove('drop');
     const f = e.dataTransfer && e.dataTransfer.files[0];
-    if (!f) { const txt = e.dataTransfer?.getData('text/plain'); if (txt) { e.preventDefault(); try { const r = T.importText(txt); replaceTable(r.table, `Imported (${r.format})`); } catch (err: any) { hint(String(err.message || err)); } } return; }
+    if (!f) { const txt = e.dataTransfer?.getData('text/plain'); if (txt) { e.preventDefault(); try { const r = T.importText(txt); replaceTable(r.table, t('table.importedFormat', 'Imported ({format})', { format: r.format })); } catch (err: any) { hint(String(err.message || err)); } } return; }
     e.preventDefault(); e.stopPropagation();
     importFile(f);
   });
@@ -1091,6 +1110,26 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   addEventListener('resize', () => { if (shown) syncSel(); });
   host.addEventListener('scroll', () => closeMenu(), true);
   if (TD.math && TD.math.onChange) TD.math.onChange(() => { if (shown) { paint(); preview(); } });
+
+  TD.math.onProgress(() => {
+    if (!shown) return;
+    TD.math.preview(() => {
+      for (const cell of host!.querySelectorAll<HTMLElement>('.tg td[data-r][data-c]')) {
+        const r = +cell.dataset.r!, c = +cell.dataset.c!;
+        if (editing && editing.r === r && editing.c === c) continue;
+        const inner = cell.querySelector('.tg-in');
+        if (inner?.querySelector('.math-pending')) {
+          inner.innerHTML = cellHtml(r, c, M.cells[r][c]);
+          if (!inner.querySelector('.math-pending')) TD.math.trackView(previewFadeFinished(inner));
+        }
+      }
+      if (host!.querySelector('.tb-prev .math-pending')) {
+        previewNow();
+        const preview = host!.querySelector('.tb-prev')!;
+        if (!preview.querySelector('.math-pending')) TD.math.trackView(previewFadeFinished(preview));
+      }
+    });
+  });
 
   function refresh() { paint(); panel(); preview(); startScreen(); }
 
@@ -1120,7 +1159,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   async function endBlock(ok: boolean) {
     if (!session) return;
     finishEdit();
-    if (!ok && JSON.stringify(M) !== session.start && !(await TD.confirm('Discard changes to this table?', 'Your edits since opening the table will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && JSON.stringify(M) !== session.start && !(await TD.confirm(t('table.discard.title', 'Discard changes to this table?'), t('table.discard.body', 'Your edits since opening the table will be lost.'), { ok: t('table.discard.ok', 'Discard'), danger: true }))) return;
     if (!session) return;
     if (!ok) session.cancel = true;
     TD.app.cmd.setTable(false);
@@ -1132,9 +1171,12 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     finishEdit();
     const cur = JSON.stringify(M);
     if (cur !== session.start) { session.start = cur; session.done({ src: '', table: JSON.parse(cur) }); }
-    hint('Saved to the diagram');
+    hint(t('table.hint.saved', 'Saved to the diagram'));
   }, true);
   TD.tableBlockEditor = { open: editBlock };
+  // a language switch while the table is on screen redraws its frame (the model and selection stay)
+  let firstLocale = true;
+  onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (shown) { finishEdit(); closeMenu(); build(); requestAnimationFrame(() => syncSel()); } });
 
   TD.tableWs = {
     show() { shown = true; host.hidden = false; build(); requestAnimationFrame(() => { syncSel(); if (!fresh) focusGrid(); }); },

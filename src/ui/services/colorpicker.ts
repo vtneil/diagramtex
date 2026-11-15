@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t, message as msg, bindCaption } from '../../i18n';
 // Popover color picker: saturation/value square, hue + alpha sliders, hex/RGBA inputs,
 // optional "No Color", and editable preset swatches (saved in localStorage).
 (function () {
@@ -42,9 +43,9 @@ import { runtime as TD } from '../../runtime';
     el = document.createElement('div');
     el.className = 'cp';
     el.innerHTML = `
-      <div class="cp-tabs"><button type="button" data-tab="basic">Basic</button><button type="button" data-tab="grad">Gradient</button><button type="button" data-tab="pat">Pattern</button></div>
+      <div class="cp-tabs"><button type="button" data-tab="basic"></button><button type="button" data-tab="grad"></button><button type="button" data-tab="pat"></button></div>
       <div class="cp-pane" data-pane="basic">
-      <button class="cp-none" type="button">No Color</button>
+      <button class="cp-none" type="button"></button>
       <div class="cp-sv"><div class="cp-sv-white"></div><div class="cp-sv-black"></div><div class="cp-knob"></div></div>
       <div class="cp-row">
         <div class="cp-sliders">
@@ -61,10 +62,13 @@ import { runtime as TD } from '../../runtime';
         <label><input data-f="a" type="number" min="0" max="100"><span>A</span></label>
       </div>
       <div class="cp-presets"></div>
-      <button class="cp-edit" type="button">Change Preset Colors</button>
+      <button class="cp-edit" type="button"></button>
       </div>
       <div class="cp-pane fp" data-pane="grad"></div>
       <div class="cp-pane fp" data-pane="pat"></div>`;
+    bindCaption(el.querySelector('[data-tab="basic"]'), msg('color.basic', 'Basic'));
+    bindCaption(el.querySelector('[data-tab="grad"]'), msg('color.gradient', 'Gradient'));
+    bindCaption(el.querySelector('[data-tab="pat"]'), msg('color.pattern', 'Pattern'));
     el.querySelector('.cp-tabs').onclick = (e: any) => { const t = e.target.closest('[data-tab]'); if (t && cur) { showTab(t.dataset.tab); emit(true); } };
     document.body.appendChild(el);
 
@@ -102,7 +106,7 @@ import { runtime as TD } from '../../runtime';
     el.querySelector('.cp-edit').onclick = () => {
       cur.editing = !cur.editing;
       el.classList.toggle('editing', cur.editing);
-      el.querySelector('.cp-edit').textContent = cur.editing ? 'Done (click a swatch to replace it)' : 'Change Preset Colors';
+      el.querySelector('.cp-edit').textContent = cur.editing ? t('color.editDone', 'Done (click a swatch to replace it)') : t('color.editPresets', 'Change Preset Colors');
     };
     el.querySelector('.cp-presets').addEventListener('click', (e: any) => {
       const i = e.target.dataset.i;
@@ -196,9 +200,9 @@ import { runtime as TD } from '../../runtime';
       grad: rich && opts.value.g ? JSON.parse(JSON.stringify(opts.value)) : null, pat: rich && opts.value.p ? { ...opts.value } : null };
     setRGB(p.r, p.g, p.b, p.a);
     el.classList.remove('editing');
-    el.querySelector('.cp-edit').textContent = 'Change Preset Colors';
+    el.querySelector('.cp-edit').textContent = t('color.editPresets', 'Change Preset Colors');
     el.querySelector('.cp-none').style.display = opts.nullable ? '' : 'none';
-    el.querySelector('.cp-none').textContent = opts.noneLabel || (opts.tex ? 'Default' : 'No Color');
+    el.querySelector('.cp-none').textContent = opts.noneLabel || (opts.tex ? t('ui.default', 'Default') : t('color.none', 'No Color'));
     renderPresets();
     sync();
     el.style.display = 'block';
@@ -223,13 +227,13 @@ import { runtime as TD } from '../../runtime';
     const n = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
     return `rgb,255:red,${n[0]};green,${n[1]};blue,${n[2]}`;
   }
-  const label = (v: any, dflt: any) => (!v ? dflt || 'Default' : v.replace(/^\{?rgb,\s*255\s*:\s*red,\s*(\d+);\s*green,\s*(\d+);\s*blue,\s*(\d+)\}?$/, 'RGB $1, $2, $3'));
+  const label = (v: any, dflt: any) => (!v ? dflt || t('ui.default', 'Default') : v.replace(/^\{?rgb,\s*255\s*:\s*red,\s*(\d+);\s*green,\s*(\d+);\s*blue,\s*(\d+)\}?$/, 'RGB $1, $2, $3'));
   const swatch = (v: any, dflt: any) => { const x = v && TD.tikzColor(v); return x ? TD.css(x) : dflt || 'transparent'; };
   // attrs: the field's data-* attributes (as the select had them); o: { nullable, dflt (label), dfltSw (swatch css), title }
   function field(attrs: any, v: any, o: Record<string, any> = {}) {
     v = v || '';
     const none = !v && !o.dfltSw;
-    return `<div class="ctl tc"><button type="button" class="cbtn${none ? ' none' : ''}" data-tc="${o.nullable ? 'n' : ''}" title="${escA(o.title || 'Colour')}"${o.dfltSw ? ` data-dsw="${escA(o.dfltSw)}"` : ''}${o.dflt ? ` data-dl="${escA(o.dflt)}"` : ''}><span style="background:${swatch(v, o.dfltSw)}"></span></button><span class="cval">${escA(label(v, o.dflt))}</span><input type="hidden" ${attrs} value="${escA(v)}"></div>`;
+    return `<div class="ctl tc"><button type="button" class="cbtn${none ? ' none' : ''}" data-tc="${o.nullable ? 'n' : ''}" title="${escA(o.title || t('ui.colour', 'Colour'))}"${o.dfltSw ? ` data-dsw="${escA(o.dfltSw)}"` : ''}${o.dflt ? ` data-dl="${escA(o.dflt)}"` : ''}><span style="background:${swatch(v, o.dfltSw)}"></span></button><span class="cval">${escA(label(v, o.dflt))}</span><input type="hidden" ${attrs} value="${escA(v)}"></div>`;
   }
   // a braced spec when it has commas (rgb,255:…), for key=value lists
   const wrap = (v: any) => (v && /[,;]/.test(v) && !/^\{.*\}$/.test(v) ? `{${v}}` : v);
@@ -259,7 +263,7 @@ import { runtime as TD } from '../../runtime';
       if (final) fire('change');
     };
     fire('focusin');
-    TD.openColorPicker(btn, { value: ((inp as HTMLInputElement).value && TD.tikzColor((inp as HTMLInputElement).value)) || null, nullable: (btn as HTMLElement).dataset.tc === 'n', noneLabel: (btn as HTMLElement).dataset.dl || 'Default', tex: true,
+    TD.openColorPicker(btn, { value: ((inp as HTMLInputElement).value && TD.tikzColor((inp as HTMLInputElement).value)) || null, nullable: (btn as HTMLElement).dataset.tc === 'n', noneLabel: (btn as HTMLElement).dataset.dl || t('ui.default', 'Default'), tex: true,
       onInput: set(false), onChange: set(true), onClose() { fire('focusout'); } });
   });
 })();

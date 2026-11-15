@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t, message as msg } from '../../i18n';
 import { panelServices } from '../../domain/rawtikz.ts';
 const { prevOf, refresh } = panelServices;
 
@@ -7,7 +8,7 @@ TD.panels.tikz = {
     model(s) {
       const count = prevOf(s).length;
       return { count, code: s.code || '', lint: TD.lint ? TD.lint(s.code || '', { preview: false }) : [], issues: s.issues || [],
-        description: s.kind === 'defs' ? 'Definitions, exported where they were written.' : 'Kept exactly as written and exported unchanged' + (s.ctx && s.ctx.length ? ', inside the scopes it was in' : '') + '. Dragging it adds a shift.',
+        description: s.kind === 'defs' ? msg('raw.defs', 'Definitions, exported where they were written.') : s.ctx && s.ctx.length ? msg('raw.keptScoped', 'Kept exactly as written and exported unchanged, inside the scopes it was in. Dragging it adds a shift.') : msg('raw.kept', 'Kept exactly as written and exported unchanged. Dragging it adds a shift.'),
         scopes: s.ctx || [], convert: !!count && s.kind !== 'defs' };
     },
     apply(s, t) { if (t.dataset.p === 'code') { s.code = t.value; refresh(s); } return false; },
@@ -22,7 +23,7 @@ TD.panels.tikz = {
       });
       list.splice(i, 1, ...made);
       TD.app.state.sel = new Set(made.map((c: any) => c.id));
-      return `Converted to ${made.length} shape${made.length === 1 ? '' : 's'}`;
+      return made.length === 1 ? t('raw.converted1', 'Converted to 1 shape') : t('raw.converted', 'Converted to {n} shapes', { n: made.length });
     },
   };
 

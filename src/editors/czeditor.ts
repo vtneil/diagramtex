@@ -1,3 +1,8 @@
+import { wireIntersections } from '../domain/circuit-crossings';
+import { connectedWires, projectOnWire, wireJunctions } from './circuit-wires';
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import FormPanel from '../ui/FormPanel.svelte';
@@ -42,6 +47,7 @@ import { runtime as TD } from '../runtime';
   const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
 
   // ---------------------------------------------------------------- state
+  let stopLocale: (() => void) | null = null;
   let E: any = null; // { items, raw, sel: Set, tool, part, view: {ox, oy, k}, undo, redo, done, start, drag, hover, codeAt, codeTimer }
   const byId = (id: any) => E.items.find((it: any) => it.id === id);
   const sel = () => E.items.filter((it: any) => E.sel.has(it.id));
@@ -55,8 +61,8 @@ import { runtime as TD } from '../runtime';
     updateTools();
   }
   function restore(j: any) { const v = JSON.parse(j); E.items = v.items; E.raw = v.raw; for (const id of [...E.sel]) if (!byId(id)) E.sel.delete(id); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); }
+  function undo() { if (E.wire) endWire(); commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); }
+  function redo() { if (E.wire) endWire(); commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); }
 
   // ---------------------------------------------------------------- palette
   function buildPalette() {
@@ -64,20 +70,20 @@ import { runtime as TD } from '../runtime';
     const match = (d: any) => !q || q.split(/\s+/).every((w: any) => `${d.name} ${d.tikz} ${d.keywords || ''} ${d.cat}`.toLowerCase().includes(w));
     let html = '';
     const section = (id: any, title: any, keys: any) => {
-      const rows = keys.map((k: any) => `<button class="cz-part${E && E.part === k ? ' on' : ''}" data-part="${k}" title="${esc(CZ.parts[k].name)} — ${CZ.parts[k].kind === 'node' ? 'node' : 'to'}[${esc(CZ.parts[k].tikz)}]">${CZ.icon(k, 44, 26)}<span>${esc(CZ.parts[k].name)}</span></button>`).join('');
+      const rows = keys.map((k: any) => `<button class="cz-part${E && (E.part === k || k === 'short' && E.tool === 'wire') ? ' on' : ''}" data-part="${k}" title="${k === 'short' ? 'Wire (W)' : `${esc(CZ.parts[k].name)} — ${CZ.parts[k].kind === 'node' ? 'node' : 'to'}[${esc(CZ.parts[k].tikz)}]`}">${CZ.icon(k, 44, 26)}<span>${esc(CZ.parts[k].name)}</span></button>`).join('');
       html += q ? `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div>${rows}</div>`
         : `<details class="cz-cat" data-cat="${id}"${isOpen(id) ? ' open' : ''}><summary class="cz-cat-t">${esc(title)} <small>${keys.length}</small></summary>${rows}</details>`;
     };
     if (!q) {
       const recent = lsGet(RECENT_KEY, []).filter((k: any) => CZ.parts[k]);
-      if (recent.length) section('recent', 'Recently used', recent);
-      section('common', 'Common', COMMON.filter((k) => CZ.parts[k]));
+      if (recent.length) section('recent', uiText('editor.cz.recent', 'Recently used'), recent);
+      section('common', uiText('editor.cz.common', 'Common'), COMMON.filter((k) => CZ.parts[k]));
     }
     for (const [cat, title] of CZ.CATS) {
       const keys = CZ.order.filter((k: any) => CZ.parts[k].cat === cat && match(CZ.parts[k]));
       if (keys.length) section(cat, title, keys);
     }
-    list.innerHTML = html || `<div class="cz-empty">No part matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.cz.noPartMatches', 'No part matches “{query}”', { query: search.value }))}</div>`;
   }
   // opening or closing a section is remembered; nothing else opens one
   list.addEventListener('toggle', (e: any) => {
@@ -97,6 +103,7 @@ import { runtime as TD } from '../runtime';
   list.addEventListener('pointerdown', (e: any) => {
     const b = e.target.closest('.cz-part');
     if (!b || e.button !== 0) return;
+    if (b.dataset.part === 'short') { setTool('wire'); return; }
     palDrag = { part: b.dataset.part, x: e.clientX, y: e.clientY, moved: false };
     b.setPointerCapture(e.pointerId);
   });
@@ -114,10 +121,12 @@ import { runtime as TD } from '../runtime';
     updateTools(); buildPalette(); draw(); renderProps();
   });
   function arm(part: any) {
+    if (part === 'short') { setTool('wire'); return; }
+    if (E.wire) endWire();
     E.part = E.part === part && E.tool === 'place' ? null : part;
     E.tool = E.part ? 'place' : 'select';
     updateTools(); buildPalette(); draw();
-    setTip(E.part ? `${CZ.parts[part].name}: ${CZ.parts[part].kind === 'node' ? 'click to place' : 'click, or drag from start to end'}. Esc when done.` : '');
+    setTip(E.part ? (CZ.parts[part].kind === 'node' ? uiText('editor.cz.armNodeTip', '{name}: click to place. Esc when done.', { name: CZ.parts[part].name }) : uiText('editor.cz.armBipoleTip', '{name}: click, or drag from start to end. Esc when done.', { name: CZ.parts[part].name })) : '');
   }
   function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
 
@@ -137,7 +146,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, r = rect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(15, Math.min(240, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(15, Math.min(240, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -153,7 +162,20 @@ import { runtime as TD } from '../runtime';
   function snapPt(q: any, skip?: any, free?: any) {
     const lim = SNAP_PX / E.view.k;
     let best = null, bd = lim;
+    if (E.tool === 'place' && ['wires:jump-crossing', 'wires:plain-crossing'].includes(E.part)) {
+      for (const p of wireIntersections(E.items)) {
+        const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (d < bd) { bd = d; best = { id: '', name: 'crossing', p }; }
+      }
+      if (best) return { p: best.p.slice(), pin: best };
+    }
     for (const pin of allPins(skip)) { const d = Math.hypot(pin.p[0] - q[0], pin.p[1] - q[1]); if (d < bd) { bd = d; best = pin; } }
+    // Snap to wire interiors too, so a branch terminates exactly on its run.
+    if (!best) for (const it of E.items) {
+      if (!C.isWire(it) || skip?.has(it.id)) continue;
+      const p = projectOnWire([snapG(q[0]), snapG(q[1])], it), d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+      if (d < bd) { bd = d; best = { id: it.id, name: 'wire', p }; }
+    }
     if (best) return { p: best.p.slice(), pin: best };
     return { p: free ? [r3(q[0]), r3(q[1])] : [snapG(q[0]), snapG(q[1])], pin: null };
   }
@@ -161,6 +183,28 @@ import { runtime as TD } from '../runtime';
   function ortho(a: any, b: any, free: any) {
     if (free) return b;
     return Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? [b[0], a[1]] : [a[0], b[1]];
+  }
+
+  // Confirmed segments belong to one undo step; the rubber-band segment is
+  // only a preview, so Escape keeps exactly the points already clicked.
+  function wireEnd(q: any, free = false) {
+    const s = snapPt(q, undefined, free);
+    return s.pin ? s.p : ortho(E.wire.p, s.p, free);
+  }
+  function endWire() {
+    E.wire = null; E.wireDown = null;
+    commit(); setTool('select'); renderProps();
+  }
+  function wireClick(q: any, free = false) {
+    if (!E.wire) {
+      begin(); E.sel.clear(); E.wire = { p: snapPt(q, undefined, free).p };
+    } else {
+      const b = wireEnd(q, free);
+      if (C.same(E.wire.p, b)) { endWire(); return; }
+      const it = newBip('short', E.wire.p.slice(), b.slice());
+      E.items.push(it); E.sel.add(it.id); E.wire.p = b.slice();
+    }
+    draw(); renderProps();
   }
 
   // ---------------------------------------------------------------- items
@@ -193,12 +237,39 @@ import { runtime as TD } from '../runtime';
     const pins = [];
     for (const id of ids) for (const [name, p] of Object.entries<any>(C.pinsOf(byId(id)))) pins.push({ id, name, p });
     for (const it of E.items) {
-      if (ids.has(it.id) || it.p) continue;
+      if (ids.has(it.id) || !C.isWire(it)) continue;
       for (const end of ['a', 'b']) { const pin = pins.find((q) => C.same(q.p, it[end])); if (pin) out.push({ it, end, pin }); }
     }
     return out;
   }
   function follow(att: any) { for (const { it, end, pin } of att) { const p = C.pinsOf(byId(pin.id))[pin.name]; if (p) it[end] = [r3(p[0]), r3(p[1])]; } }
+  // A direct terminal-to-terminal contact needs an explicit wire when separated.
+  function terminalContacts(ids: Set<string>) {
+    const contacts: any[] = [];
+    const fixed = E.items.filter((it: any) => !ids.has(it.id) && !C.isWire(it)).flatMap((it: any) => Object.values<any>(C.pinsOf(it)));
+    for (const id of ids) {
+      const it = byId(id);
+      for (const [name, p] of Object.entries<any>(C.pinsOf(it))) {
+        if (!fixed.some((q: any) => C.same(p, q))) continue;
+        if (contacts.some(c => c.id === id && C.same(c.p, p))) continue;
+        contacts.push({ id, name, p: p.slice() });
+      }
+    }
+    return contacts;
+  }
+  function contactWires(contacts: any[] = []) {
+    const wires: any[] = [];
+    for (const c of contacts) {
+      const end = C.pinsOf(byId(c.id))[c.name];
+      if (!end || C.same(c.p, end)) continue;
+      const corner = [end[0], c.p[1]];
+      for (const [a, b] of [[c.p, corner], [corner, end]]) {
+        if (C.same(a, b) || wires.some(w => C.same(w.a, a) && C.same(w.b, b))) continue;
+        wires.push(newBip('short', a.slice(), b.slice()));
+      }
+    }
+    return wires;
+  }
   function rotateSel() {
     const s = sel();
     if (!s.length) return;
@@ -298,12 +369,21 @@ import { runtime as TD } from '../runtime';
       const it = sel()[0];
       if (it && !it.p) for (const end of ['a', 'b']) { const [X, Y] = m(...(it[end] as [any, any])); hs += `<rect class="cz-h" data-end="${end}" x="${(X - 4).toFixed(1)}" y="${(Y - 4).toFixed(1)}" width="8" height="8"/>`; }
     }
+    for (const joint of wireJunctions(E.items)) {
+      const [x, y] = m(...(joint.p as [any, any]));
+      body += `<circle class="cz-junction" data-id="${joint.id}" cx="${x}" cy="${y}" r="3" fill="${E.sel.has(joint.id) ? 'var(--redpen)' : '#1c1b19'}"/>`;
+    }
+    if (E.drag?.contacts) body += `<g class="cz-contact-preview">${C.itemsSvg(contactWires(E.drag.contacts), m, k, { color: '#1c1b19', paper: '#fffdf8' })}</g>`;
     // the part being placed, under the pointer
     let ghost = '';
     if (E.tool === 'place' && E.part && E.hover && !E.drag) {
       const def = CZ.parts[E.part];
       const g = def.kind === 'node' ? newNode(E.part, snapPt(E.hover).p) : (() => { const L = defLen(E.part), a = [snapG(E.hover[0] - L / 2), snapG(E.hover[1])]; return newBip(E.part, a, [r3(a[0] + L), a[1]]); })();
       ghost = `<g class="cz-ghost">${C.itemsSvg([g], m, k, { color: 'var(--bluepen)', paper: '#fffdf8' })}</g>`;
+    }
+    if (E.wire && E.hover) {
+      const b = wireEnd(E.hover, E.wireFree);
+      ghost += `<g class="cz-wire-preview">${C.itemsSvg([newBip('short', E.wire.p, b)], m, k, { color: 'var(--bluepen)', paper: '#fffdf8' })}</g>`;
     }
     if (E.tool === 'wire' && E.hover && !E.drag) { const q = snapPt(E.hover); const [X, Y] = m(...(q.p as [any, any])); ghost += `<circle class="cz-snap${q.pin ? ' on' : ''}" cx="${X}" cy="${Y}" r="5"/>`; }
     if (E.drag && E.drag.snapAt) { const [X, Y] = m(...(E.drag.snapAt as [any, any])); ghost += `<circle class="cz-snap on" cx="${X}" cy="${Y}" r="6"/>`; }
@@ -325,8 +405,13 @@ import { runtime as TD } from '../runtime';
     const q = toCm(e), r = rect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
-    if (E.tool === 'place' || E.tool === 'wire') {
-      const part = E.tool === 'wire' ? 'short' : E.part, def = CZ.parts[part];
+    if (E.tool === 'wire') {
+      wireClick(q, e.shiftKey);
+      if (E.wire) E.wireDown = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    if (E.tool === 'place') {
+      const part = E.part, def = CZ.parts[part];
       begin();
       if (E.tool !== 'wire') used(part);
       if (def.kind === 'node') { const it = newNode(part, snapPt(q).p); E.items.push(it); E.sel = new Set([it.id]); E.drag = { mode: 'node', id: it.id }; }
@@ -334,14 +419,21 @@ import { runtime as TD } from '../runtime';
       draw(); return;
     }
     const h = e.target.closest('.cz-h');
-    if (h) { begin(); E.drag = { mode: 'end', id: sel()[0].id, end: h.dataset.end }; return; }
+    if (h) {
+      if (C.isWire(sel()[0])) {
+        E.sel = connectedWires(E.items, E.sel); begin();
+        E.drag = { mode: 'move', q0: q, orig: new Map(sel().map((it: any) => [it.id, clone(it)])), att: attachments(E.sel), contacts: terminalContacts(E.sel), moved: false };
+      } else { begin(); E.drag = { mode: 'end', id: sel()[0].id, end: h.dataset.end, att: attachments(E.sel), contacts: terminalContacts(E.sel) }; }
+      return;
+    }
     const g = e.target.closest('[data-id]');
     if (g) {
       const id = g.dataset.id;
       if (e.shiftKey) { if (E.sel.has(id)) E.sel.delete(id); else E.sel.add(id); draw(); renderProps(); return; }
       if (!E.sel.has(id)) E.sel = new Set([id]);
+      if (C.isWire(byId(id)) || ['circ', 'ocirc'].includes(byId(id).part)) E.sel = connectedWires(E.items, E.sel);
       begin();
-      E.drag = { mode: 'move', q0: q, orig: new Map(sel().map((it: any) => [it.id, clone(it)])), att: attachments(E.sel), moved: false };
+      E.drag = { mode: 'move', q0: q, orig: new Map(sel().map((it: any) => [it.id, clone(it)])), att: attachments(E.sel), contacts: terminalContacts(E.sel), moved: false };
       draw(); renderProps(); return;
     }
     E.drag = { mode: 'marquee', sx, sy, ex: sx, ey: sy, add: e.shiftKey, base: new Set(E.sel) };
@@ -351,7 +443,7 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('pointermove', (e: any) => {
     if (!E) return;
     const q = toCm(e), d = E.drag;
-    if (!d) { E.hover = q; if (E.tool !== 'select') draw(); return; }
+    if (!d) { E.wireFree = e.shiftKey; E.hover = q; if (E.tool !== 'select') draw(); return; }
     const r = rect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
     if (d.mode === 'pan') { E.view.ox = d.ox + sx - d.sx; E.view.oy = d.oy + sy - d.sy; draw(); return; }
     if (d.mode === 'node') { const it = byId(d.id); it.p = snapPt(q, new Set([d.id])).p; draw(); return; }
@@ -360,6 +452,7 @@ import { runtime as TD } from '../runtime';
       const s = snapPt(q, new Set([d.id]), e.shiftKey);
       it[end] = s.pin ? s.p : ortho(other, s.p, e.shiftKey);
       d.snapAt = s.pin ? s.p : null;
+      if (d.att) follow(d.att);
       draw(); return;
     }
     if (d.mode === 'move') {
@@ -385,8 +478,14 @@ import { runtime as TD } from '../runtime';
       draw(); return;
     }
   });
-  svg.addEventListener('pointerup', () => {
-    if (!E || !E.drag) return;
+  svg.addEventListener('pointerup', (e: any) => {
+    if (!E) return;
+    if (E.wireDown) {
+      const d = E.wireDown; E.wireDown = null;
+      if (E.wire && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) { wireClick(toCm(e), e.shiftKey); if (E.wire) endWire(); }
+      return;
+    }
+    if (!E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'new') {
       const it = byId(d.id);
@@ -396,6 +495,7 @@ import { runtime as TD } from '../runtime';
       }
     }
     if (d.mode === 'end') { const it = byId(d.id); if (C.same(it.a, it.b)) it.b = [r3(it.a[0] + defLen(it.part)), it.a[1]]; }
+    if (d.contacts) E.items.push(...contactWires(d.contacts));
     commit(); draw(); renderProps();
   });
   svg.addEventListener('pointerleave', () => { if (E && !E.drag) { E.hover = null; draw(); } });
@@ -441,7 +541,7 @@ import { runtime as TD } from '../runtime';
     dup: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M4 13V4.5A1.5 1.5 0 015.5 3H13"/>',
     del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
   };
-  const mItem = (act: any, label: any, icon: any, key: any, off?: any, danger?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-cm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20">${MI[icon]}</svg><span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key: any, off?: any, danger?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-cm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -452,9 +552,9 @@ import { runtime as TD } from '../runtime';
     if (E.tool !== 'select') setTool('select');
     if (!E.sel.has(g.dataset.id)) { E.sel = new Set([g.dataset.id]); draw(); renderProps(); }
     const s = sel(), n = s.length, one = n === 1 ? s[0] : null, mod = isMac ? '⌘' : 'Ctrl+';
-    menu.innerHTML = mItem('label', 'Edit Label', 'label', '', !one || C.isWire(one)) + '<hr>' +
-      mItem('rotate', 'Rotate 90°', 'rotate', 'R') + mItem('mirrory', 'Mirror Left to Right', 'mirrory', 'X') + mItem('mirrorx', 'Mirror Top to Bottom', 'mirrorx', 'Y') + mItem('dup', 'Duplicate', 'dup', mod + 'D') + '<hr>' +
-      mItem('delete', n > 1 ? `Delete ${n} Items` : 'Delete', 'del', '⌫', false, true);
+    menu.innerHTML = mItem('label', uiText('editor.cz.editLabel', 'Edit Label'), 'label', '', !one || C.isWire(one)) + '<hr>' +
+      mItem('rotate', uiText('editor.cz.rotate90', 'Rotate 90°'), 'rotate', 'R') + mItem('mirrory', uiText('editor.cz.mirrorLR', 'Mirror Left to Right'), 'mirrory', 'X') + mItem('mirrorx', uiText('editor.cz.mirrorTB', 'Mirror Top to Bottom'), 'mirrorx', 'Y') + mItem('dup', uiText('editor.cz.duplicate', 'Duplicate'), 'dup', mod + 'D') + '<hr>' +
+      mItem('delete', n > 1 ? uiText('editor.cz.deleteItems', 'Delete {n} Items', { n }) : uiText('editor.cz.delete', 'Delete'), 'del', '⌫', false, true);
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
     menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
@@ -475,33 +575,33 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('wheel', closeMenu, { passive: true });
 
   // ---------------------------------------------------------------- properties
-  const POLES = [['', 'None'], ['*', 'Dot ●'], ['o', 'Open ○']];
+  const POLES = () => [['', uiText('editor.cz.poleNone', 'None')], ['*', uiText('editor.cz.poleDot', 'Dot ●')], ['o', uiText('editor.cz.poleOpen', 'Open ○')]];
   function renderProps() {
     if (!E) return;
     const selected = sel();
     props.hidden = !selected.length;
     if (!selected.length) { renderView(props, FormPanel, { sections: [] }); return; }
     if (selected.length > 1) {
-      renderView(props, FormPanel, { sections: [section(`${selected.length} items`, [{ kind: 'help' as const, text: ['Right-click for Rotate, Mirror (X, Y), Duplicate and Delete.'] }], 'sec')] });
+      renderView(props, FormPanel, { sections: [section(uiText('editor.cz.nItems', '{n} items', { n: selected.length }), [{ kind: 'help' as const, text: [uiText('editor.cz.multiHelp', 'Right-click for Rotate, Mirror (X, Y), Duplicate and Delete.')] }], 'sec')] });
       return;
     }
     const it = selected[0], def = CZ.parts[it.part] || { name: it.part, tikz: it.part, pins: {} };
-    const field = (f: any, label: any, placeholder = '', mono = false) => ({ ...row(label, { kind: 'input' as const, value: it[f] || '', attrs: { type: 'text', id: 'czf-' + f, 'data-f': f, placeholder: placeholder || (mono ? '' : 'Text, $math$'), spellcheck: 'false', ...(mono ? { class: 'mono' } : { 'data-tx': 'text' }) } }), labelFor: 'czf-' + f });
+    const field = (f: any, label: any, placeholder = '', mono = false) => ({ ...row(label, { kind: 'input' as const, value: it[f] || '', attrs: { type: 'text', id: 'czf-' + f, 'data-f': f, placeholder: placeholder || (mono ? '' : uiText('editor.cz.textPlaceholder', 'Text, $math$')), spellcheck: 'false', ...(mono ? { class: 'mono' } : { 'data-tx': 'text' }) } }), labelFor: 'czf-' + f });
     const rows = [];
     if (it.p) {
-      if (Object.keys(def.pins).some(name => name !== 'center')) rows.push(field('name', 'Name', 'Q1', true));
-      rows.push(field('text', 'Text'));
-      rows.push({ ...row('Rotation', ...[0, 90, 180, 270].map(angle => ({ kind: 'button' as const, text: angle + '°', attrs: { 'data-rot': angle, class: (it.rot || 0) === angle ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' });
-      rows.push({ ...row('Mirrored', { kind: 'input' as const, value: '', checked: !!it.flip, attrs: { type: 'checkbox', id: 'czf-flip', 'data-f': 'flip' } }), labelFor: 'czf-flip' });
+      if (Object.keys(def.pins).some(name => name !== 'center')) rows.push(field('name', uiText('editor.cz.name', 'Name'), 'Q1', true));
+      rows.push(field('text', uiText('editor.cz.text', 'Text')));
+      rows.push({ ...row(captions["ui.rotation"], ...[0, 90, 180, 270].map(angle => ({ kind: 'button' as const, text: angle + '°', attrs: { 'data-rot': angle, class: (it.rot || 0) === angle ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' });
+      rows.push({ ...row(uiText('editor.cz.mirrored', 'Mirrored'), { kind: 'input' as const, value: '', checked: !!it.flip, attrs: { type: 'checkbox', id: 'czf-flip', 'data-f': 'flip' } }), labelFor: 'czf-flip' });
     } else {
-      if (!C.isWire(it)) rows.push(field('l', 'Label', '$R_1$'), field('ann', 'Annotation', '$1\\,\\mathrm{k\\Omega}$'), field('v', 'Voltage', '$v_1$'), field('i', 'Current', '$i_1$'));
+      if (!C.isWire(it)) rows.push(field('l', uiText('editor.cz.label', 'Label'), '$R_1$'), field('ann', uiText('editor.cz.annotation', 'Annotation'), '$1\\,\\mathrm{k\\Omega}$'), field('v', uiText('editor.cz.voltage', 'Voltage'), '$v_1$'), field('i', uiText('editor.cz.current', 'Current'), '$i_1$'));
       const poles = /^([*o]?)-([*o]?)$/.exec(it.poles || '') || ['', '', ''];
-      rows.push(row('Ends', ...[0, 1].map(end => ({ kind: 'select' as const, options: POLES, value: poles[end + 1], attrs: { 'data-pole': end } }))));
-      if (Object.keys(def.pins).length) rows.push(field('name', 'Name', 'P1', true));
+      rows.push(row(uiText('editor.cz.ends', 'Ends'), ...[0, 1].map(end => ({ kind: 'select' as const, options: POLES(), value: poles[end + 1], attrs: { 'data-pole': end } }))));
+      if (Object.keys(def.pins).length) rows.push(field('name', uiText('editor.cz.name', 'Name'), 'P1', true));
     }
-    rows.push(field('opts', 'Options', it.p ? 'e.g. fill=blue!10' : 'e.g. mirror, color=red', true));
+    rows.push(field('opts', uiText('editor.commonB.options', 'Options'), it.p ? uiText('editor.cz.optsPlaceholder', 'e.g. {code}', { code: 'fill=blue!10' }) : uiText('editor.cz.optsPlaceholder', 'e.g. {code}', { code: 'mirror, color=red' }), true));
     const pins = Object.keys(def.pins).filter(name => name !== 'center');
-    if (pins.length) rows.push({ kind: 'help' as const, text: ['Pins: ', ...pins.flatMap((name, i) => [...(i ? [' '] : []), { code: name }])] });
+    if (pins.length) rows.push({ kind: 'help' as const, text: [uiText('editor.cz.pins', 'Pins: '), ...pins.flatMap((name, i) => [...(i ? [' '] : []), { code: name }])] });
     renderView(props, CircuitProperties, { name: def.name, command: `${it.p ? 'node' : 'to'}[${def.tikz}]`, rows });
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
@@ -528,7 +628,7 @@ import { runtime as TD } from '../runtime';
   });
 
   // ---------------------------------------------------------------- toolbar, tabs, keys
-  function setTool(t: any) { E.tool = t; if (t !== 'place') E.part = null; updateTools(); buildPalette(); draw(); setTip(t === 'wire' ? 'Drag to draw a wire. Shift: any angle. Esc when done.' : ''); }
+  function setTool(t: any) { if (E.wire) { E.wire = null; E.wireDown = null; commit(); } E.tool = t; if (t !== 'place') E.part = null; updateTools(); buildPalette(); draw(); setTip(t === 'wire' ? uiText('editor.cz.wireClickTip', 'Click to start a wire, then click each corner. Click the last point again or press Esc to finish. Shift: any angle.') : ''); }
   function updateTools() {
     if (!E) return;
     root.querySelectorAll('[data-cz="select"],[data-cz="wire"]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.cz === E.tool));
@@ -546,7 +646,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'undo') undo();
     else if (a === 'redo') redo();
     else if (a === 'fit') fit();
-    else if (a === 'copy') { navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); }); }
+    else if (a === 'copy') { navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); }); }
     else if (a === 'done') finish(true);
     else if (a === 'cancel') finish(false);
   });
@@ -555,7 +655,8 @@ import { runtime as TD } from '../runtime';
   // is read back after a short pause, and the whole typing spell is one undo step.
   function syncCode() {
     const n = E.items.filter((it: any) => !C.isWire(it)).length;
-    count.textContent = `${n} part${n === 1 ? '' : 's'} · ${E.items.length - n} wire${E.items.length - n === 1 ? '' : 's'}`;
+    const w = E.items.length - n;
+    count.textContent = `${n === 1 ? uiText('editor.cz.onePart', '1 part') : uiText('editor.cz.nParts', '{n} parts', { n })} · ${w === 1 ? uiText('editor.cz.oneWire', '1 wire') : uiText('editor.cz.nWires', '{n} wires', { n: w })}`;
     if (document.activeElement === codeTa) return;
     const c = C.code(E.items, E.raw);
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -563,7 +664,7 @@ import { runtime as TD } from '../runtime';
   }
   function showRaw() {
     const n = E.raw ? E.raw.split('\n').filter((l: any) => l.trim()).length : 0;
-    codeMsg.textContent = n ? `${n} line${n === 1 ? '' : 's'} can't be drawn here and will be kept as written.` : '';
+    codeMsg.textContent = n ? (n === 1 ? uiText('editor.cz.rawOne', "1 line can't be drawn here and will be kept as written.") : uiText('editor.cz.rawMany', "{n} lines can't be drawn here and will be kept as written.", { n })) : '';
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -635,7 +736,7 @@ import { runtime as TD } from '../runtime';
     flashSaved();
   }
   let savedT = 0;
-  function flashSaved() { setTip('Saved to the page'); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500); }
+  function flashSaved() { const saved = uiText('editor.commonB.saved', 'Saved to the page'); setTip(saved); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500); }
   // reloading or closing the tab asks first while this holds edits not yet applied (app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snap() !== E.start);
   async function finish(ok: any) {
@@ -645,8 +746,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement === codeTa) readCode();
     commit();
     const changed = snap() !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this circuit?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(uiText('editor.cz.discardCircuit', 'Discard changes to this circuit?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
     const done = E.done, res = { items: E.items, raw: E.raw };
+    stopLocale?.(); stopLocale = null;
     root.hidden = true;
     document.body.classList.remove('cz-open');
     E = null;
@@ -659,6 +761,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, panel and counts follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     requestAnimationFrame(fit);
   }
   TD.czEditor = { open };

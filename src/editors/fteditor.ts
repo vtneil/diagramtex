@@ -1,3 +1,6 @@
+import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { captions } from '../i18n/messages';
+import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note } from '../ui/editor-fields';
@@ -23,38 +26,38 @@ import { runtime as TD } from '../runtime';
   const SHAPE_KEYS = ['draw', 'circle', 'ellipse', 'rectangle', 'rounded corners', 'sharp corners'];
   const EDGES: Record<string, any> = { line: [], arrow: ['edge={->}'], dashed: ['edge=dashed'], roof: ['roof'], fork: ['forked edge'], none: ['no edge'] };
   const EDGE_KEYS = ['edge', 'no edge', 'roof', 'forked edge'];
-  const FILLS = [['none', 'None', null], ['black!8', 'Grey'], ['blue!12', 'Blue'], ['green!15', 'Green'], ['yellow!30', 'Yellow'], ['red!12', 'Red']];
+  const FILLS: any[] = [['none', message('editor.ft.fill.none', 'None'), null], ['black!8', message('editor.ft.fill.grey', 'Grey')], ['blue!12', message('editor.ft.fill.blue', 'Blue')], ['green!15', message('editor.ft.fill.green', 'Green')], ['yellow!30', message('editor.ft.fill.yellow', 'Yellow')], ['red!12', message('editor.ft.fill.red', 'Red')]];
   const wrapF = (body: any, pre = '') => `\\begin{forest}\n${pre ? `  ${pre}\n` : ''}${body}\n\\end{forest}`;
-  const PAL = [
-    ['Add', [
-      ['node', 'Node', 'tree', '[Node]', wrapF('[\\phantom{x}, phantom [Node, draw]]')],
-      ['two', 'Two children', 'tree', '[Node [A] [B]]'],
-      ['three', 'Three children', 'tree', '[Node [A] [B] [C]]'],
-      ['bin', 'Binary subtree', 'tree', '[Node [A [A1] [A2]] [B [B1] [B2]]]'],
+  const PAL: any[] = [
+    [message('editor.ft.cat.add', 'Add'), [
+      ['node', message('editor.ft.node', 'Node'), 'tree', '[Node]', wrapF('[\\phantom{x}, phantom [Node, draw]]')],
+      ['two', message('editor.ft.twoChildren', 'Two children'), 'tree', '[Node [A] [B]]'],
+      ['three', message('editor.ft.threeChildren', 'Three children'), 'tree', '[Node [A] [B] [C]]'],
+      ['bin', message('editor.ft.binarySubtree', 'Binary subtree'), 'tree', '[Node [A [A1] [A2]] [B [B1] [B2]]]'],
     ]],
-    ['Templates', [
-      ['syntax', 'Syntax tree', 'template', wrapF("  [S\n    [NP [D [the]] [N [cat]]]\n    [VP [V [sat]] [PP [P [on]] [NP [the mat, roof]]]]\n  ]")],
-      ['org', 'Org chart', 'template', wrapF('  [Director\n    [Design [UX] [Brand]]\n    [Engineering [Web] [Mobile] [Data]]\n    [Sales [EMEA] [APAC]]\n  ]', 'forked edges, for tree={draw, rounded corners, fill=black!4, align=center}')],
-      ['dir', 'Directory', 'template', wrapF('  [project/\n    [src/ [main.tex] [figures.tex]]\n    [figures/ [plot.pdf]]\n    [README.md]\n  ]', 'for tree={folder, grow\'=0, font=\\ttfamily}')],
-      ['decision', 'Decision tree', 'template', wrapF('  [{$x_1 \\le 3$?}\n    [{$x_2 \\le 1$?}, edge label={node[midway, left]{yes}}\n      [A, ellipse] [B, ellipse]]\n    [C, ellipse, edge label={node[midway, right]{no}}]\n  ]', 'for tree={draw, edge={->}, s sep=8mm, l sep=8mm}')],
-      ['binary', 'Binary tree', 'template', wrapF('  [8\n    [3 [1] [6 [4] [7]]]\n    [10 [, phantom] [14 [13] [, phantom]]]\n  ]', 'for tree={circle, draw, minimum size=2em}')],
-      ['prob', 'Probability tree', 'template', wrapF('  [, circle, fill=black, inner sep=1.5pt\n    [$H$ [$HH$] [$HT$]]\n    [$T$ [$TH$] [$TT$]]\n  ]', "for tree={grow'=0, l=18mm, s sep=3mm}")],
+    [message('editor.ft.cat.templates', 'Templates'), [
+      ['syntax', message('editor.ft.syntaxTree', 'Syntax tree'), 'template', wrapF("  [S\n    [NP [D [the]] [N [cat]]]\n    [VP [V [sat]] [PP [P [on]] [NP [the mat, roof]]]]\n  ]")],
+      ['org', message('editor.ft.orgChart', 'Org chart'), 'template', wrapF('  [Director\n    [Design [UX] [Brand]]\n    [Engineering [Web] [Mobile] [Data]]\n    [Sales [EMEA] [APAC]]\n  ]', 'forked edges, for tree={draw, rounded corners, fill=black!4, align=center}')],
+      ['dir', message('editor.ft.directory', 'Directory'), 'template', wrapF('  [project/\n    [src/ [main.tex] [figures.tex]]\n    [figures/ [plot.pdf]]\n    [README.md]\n  ]', 'for tree={folder, grow\'=0, font=\\ttfamily}')],
+      ['decision', message('editor.ft.decisionTree', 'Decision tree'), 'template', wrapF('  [{$x_1 \\le 3$?}\n    [{$x_2 \\le 1$?}, edge label={node[midway, left]{yes}}\n      [A, ellipse] [B, ellipse]]\n    [C, ellipse, edge label={node[midway, right]{no}}]\n  ]', 'for tree={draw, edge={->}, s sep=8mm, l sep=8mm}')],
+      ['binary', message('editor.ft.binaryTree', 'Binary tree'), 'template', wrapF('  [8\n    [3 [1] [6 [4] [7]]]\n    [10 [, phantom] [14 [13] [, phantom]]]\n  ]', 'for tree={circle, draw, minimum size=2em}')],
+      ['prob', message('editor.ft.probabilityTree', 'Probability tree'), 'template', wrapF('  [, circle, fill=black, inner sep=1.5pt\n    [$H$ [$HH$] [$HT$]]\n    [$T$ [$TH$] [$TT$]]\n  ]', "for tree={grow'=0, l=18mm, s sep=3mm}")],
     ]],
-    ['Node shape', [
-      ['plain', 'Plain', 'shape', 'plain', wrapF('[Node]')],
-      ['box', 'Box', 'shape', 'box', wrapF('[Node, draw]')],
-      ['round', 'Rounded', 'shape', 'round', wrapF('[Node, draw, rounded corners]')],
-      ['circle', 'Circle', 'shape', 'circle', wrapF('[$n$, circle, draw]')],
-      ['ellipse', 'Ellipse', 'shape', 'ellipse', wrapF('[Node, ellipse, draw]')],
-      ['shade', 'Shaded', 'fill', 'black!8', wrapF('[Node, draw, fill=black!8]')],
+    [message('editor.ft.cat.nodeShape', 'Node shape'), [
+      ['plain', message('editor.ft.plain', 'Plain'), 'shape', 'plain', wrapF('[Node]')],
+      ['box', message('editor.ft.box', 'Box'), 'shape', 'box', wrapF('[Node, draw]')],
+      ['round', message('editor.ft.rounded', 'Rounded'), 'shape', 'round', wrapF('[Node, draw, rounded corners]')],
+      ['circle', message('editor.ft.circle', 'Circle'), 'shape', 'circle', wrapF('[$n$, circle, draw]')],
+      ['ellipse', message('editor.ft.ellipse', 'Ellipse'), 'shape', 'ellipse', wrapF('[Node, ellipse, draw]')],
+      ['shade', message('editor.ft.shaded', 'Shaded'), 'fill', 'black!8', wrapF('[Node, draw, fill=black!8]')],
     ]],
-    ['Edge', [
-      ['line', 'Line', 'edge', 'line', wrapF('[A [B]]')],
-      ['arrow', 'Arrow', 'edge', 'arrow', wrapF('[A [B, edge={->}]]')],
-      ['dashed', 'Dashed', 'edge', 'dashed', wrapF('[A [B, edge=dashed]]')],
-      ['roof', 'Roof', 'edge', 'roof', wrapF('[NP [the big cat, roof]]')],
-      ['fork', 'Forked', 'edge', 'fork', wrapF('[A [B, forked edge] [C, forked edge]]')],
-      ['none', 'No edge', 'edge', 'none', wrapF('[A [B, no edge]]')],
+    [message('editor.ft.cat.edge', 'Edge'), [
+      ['line', message('editor.ft.line', 'Line'), 'edge', 'line', wrapF('[A [B]]')],
+      ['arrow', message('editor.ft.arrow', 'Arrow'), 'edge', 'arrow', wrapF('[A [B, edge={->}]]')],
+      ['dashed', message('editor.ft.dashed', 'Dashed'), 'edge', 'dashed', wrapF('[A [B, edge=dashed]]')],
+      ['roof', message('editor.ft.roof', 'Roof'), 'edge', 'roof', wrapF('[NP [the big cat, roof]]')],
+      ['fork', message('editor.ft.forked', 'Forked'), 'edge', 'fork', wrapF('[A [B, forked edge] [C, forked edge]]')],
+      ['none', message('editor.ft.noEdge', 'No edge'), 'edge', 'none', wrapF('[A [B, no edge]]')],
     ]],
   ];
   const ITEM: Record<string, any> = {};
@@ -124,6 +127,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- state
   // { T, sel: [nodes], view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, drop, ghost, st, codeAt, codeTimer, clip, L }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  let stopLocale: (() => void) | null = null;
   const snap = () => codeOf(E.T);
   function begin() { if (E.pending == null) E.pending = snap(); }
   function commit() {
@@ -282,21 +286,24 @@ import { runtime as TD } from '../runtime';
   function buildPalette() {
     const q = search.value.trim().toLowerCase();
     let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter((it: any) => !q || `${it[1]} ${title}`.toLowerCase().includes(q));
+    for (const [cat, items] of PAL) {
+      // search the shown name and the English one
+      const title = caption(cat);
+      const hits = (items as any).filter((it: any) => !q || `${caption(it[1])} ${it[1].fallback} ${title} ${cat.fallback}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name]: any) => `<button class="qe-item" data-item="${k}" title="${esc(tipOf(ITEM[k]))}"><span class="qe-fig">${TD.ftMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name]: any) => `<button class="qe-item" data-item="${k}" title="${esc(tipOf(ITEM[k]))}"><span class="qe-fig">${TD.ftMini(ITEM[k].mini, 1e3)}</span><span>${esc(caption(name))}</span></button>`).join('')}</div></div>`;
     }
-    list.innerHTML = html || `<div class="cz-empty">Nothing matches “${esc(search.value)}”</div>`;
+    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     for (const m of list.querySelectorAll('.qcmini')) {
       const [, , w, h] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(1.2, 64 / w, 44 / h);
       m.style.width = `${r2(w * k)}px`; m.style.height = `${r2(h * k)}px`;
     }
   }
   function tipOf(it: any) {
-    if (it.kind === 'tree') return `${it.name}: added under the selected node, or drag it onto a node`;
-    if (it.kind === 'template') return `${it.name}: replaces the tree (undo brings it back)`;
-    return `${it.name}: for the selected nodes, or for every node when none is selected`;
+    const name = caption(it.name);
+    if (it.kind === 'tree') return uiText('editor.ft.tipTree', '{name}: added under the selected node, or drag it onto a node', { name });
+    if (it.kind === 'template') return uiText('editor.ft.tipTemplate', '{name}: replaces the tree (undo brings it back)', { name });
+    return uiText('editor.ft.tipStyle', '{name}: for the selected nodes, or for every node when none is selected', { name });
   }
   search.addEventListener('input', buildPalette);
   search.addEventListener('keydown', (e: any) => {
@@ -392,7 +399,7 @@ import { runtime as TD } from '../runtime';
     e.preventDefault();
     const v = E.view, [sx, sy] = pos(e);
     if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.3, Math.min(6, v.k * Math.exp(-e.deltaY * 0.01)));
+      const k2 = Math.max(0.3, Math.min(6, v.k * wheelZoomFactor(e)));
       v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
     } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
     draw();
@@ -409,7 +416,7 @@ import { runtime as TD } from '../runtime';
     const X = (x: any) => r2(v.ox + x * k), Y = (y: any) => r2(v.oy + y * k);
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/>`;
     if (L.empty) {
-      out += `<g class="fe-start" data-fe-start="1"><rect x="${X(-60)}" y="${Y(-30)}" width="${r2(120 * k)}" height="${r2(60 * k)}" rx="6"/><path d="M${X(0) - 6},${Y(-6)}h12M${X(0)},${Y(-6) - 6}v12"/><text x="${X(0)}" y="${Y(16)}">Add a root node</text></g>`;
+      out += `<g class="fe-start" data-fe-start="1"><rect x="${X(-60)}" y="${Y(-30)}" width="${r2(120 * k)}" height="${r2(60 * k)}" rx="6"/><path d="M${X(0) - 6},${Y(-6)}h12M${X(0)},${Y(-6) - 6}v12"/><text x="${X(0)}" y="${Y(16)}">${esc(uiText('editor.ft.addRoot', 'Add a root node'))}</text></g>`;
       svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.innerHTML = out; return;
     }
     const b = L.bb;
@@ -438,11 +445,11 @@ import { runtime as TD } from '../runtime';
     if (s && !E.drag && !E.ghost) {
       const g = geoOf(s), G = L.G, U = L.U;
       if (g) {
-        const knob = (x: any, y: any, a: any, title: any) => `<g class="fe-add" data-add="${a}"><title>${title}</title><circle cx="${x}" cy="${y}" r="8"/><path d="M${x - 4},${y}h8M${x},${y - 4}v8"/></g>`;
+        const knob = (x: any, y: any, a: any, title: any) => `<g class="fe-add" data-add="${a}"><title>${esc(title)}</title><circle cx="${x}" cy="${y}" r="8"/><path d="M${x - 4},${y}h8M${x},${y - 4}v8"/></g>`;
         // the child's below the node; the sibling's on its far corner, clear of the next node
         const dc = g.hd * k + 16, ds = g.hs * k + 3, du = g.hd * k + 3;
-        out += knob(r2(X(g.x) + G[0] * dc), r2(Y(g.y) + G[1] * dc), 'child', 'Add a child (Tab)');
-        if (s !== E.T.root) out += knob(r2(X(g.x) + U[0] * ds - G[0] * du), r2(Y(g.y) + U[1] * ds - G[1] * du), 'sib', 'Add a sibling (Enter)');
+        out += knob(r2(X(g.x) + G[0] * dc), r2(Y(g.y) + G[1] * dc), 'child', uiText('ui.add.a.child.tab', 'Add a child (Tab)'));
+        if (s !== E.T.root) out += knob(r2(X(g.x) + U[0] * ds - G[0] * du), r2(Y(g.y) + U[1] * ds - G[1] * du), 'sib', uiText('ui.add.a.sibling.enter', 'Add a sibling (Enter)'));
       }
     }
     // what is being dragged, under the pointer
@@ -487,7 +494,7 @@ import { runtime as TD } from '../runtime';
       if (d.n === E.T.root && !e.altKey) return; // the root stays the root
       d.moved = true; d.e = [sx, sy];
       E.drop = dropAt(e, e.altKey ? null : d.n);
-      setTip(E.drop ? (E.drop.where === 'child' ? `Into “${E.drop.n.c || 'node'}”` : `${E.drop.where === 'before' ? 'Before' : 'After'} “${E.drop.n.c || 'node'}”`) + (e.altKey ? ' (copy)' : '') : 'Drop on a node: into it, or on its side to go beside it. ⌥ copies.');
+      { const name = E.drop ? E.drop.n.c || uiText('editor.ft.nodeFallback', 'node') : ''; setTip(E.drop ? (E.drop.where === 'child' ? uiText('editor.ft.dropInto', 'Into “{name}”', { name }) : E.drop.where === 'before' ? uiText('editor.ft.dropBefore', 'Before “{name}”', { name }) : uiText('editor.ft.dropAfter', 'After “{name}”', { name })) + (e.altKey ? uiText('editor.ft.dropCopy', ' (copy)') : '') : uiText('editor.ft.dropHelp', 'Drop on a node: into it, or on its side to go beside it. ⌥ copies.')); }
       draw();
     }
   });
@@ -504,7 +511,7 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover >= 0) { E.hover = -1; draw(); } });
 
   // right-click: around the node under the pointer
-  const mItem = (act: any, label: any, icon: any, key: any, off?: any) => `<button class="ctx-item${act === 'delete' || act === 'lift' && label.startsWith('Delete') ? ' danger' : ''}" data-fm="${act}"${off ? ' disabled' : ''}>${fic(icon, E.L)}<span class="lb">${label}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  const mItem = (act: any, label: any, icon: any, key: any, off?: any) => `<button class="ctx-item${act === 'delete' || act === 'lift' ? ' danger' : ''}" data-fm="${act}"${off ? ' disabled' : ''}>${fic(icon, E.L)}<span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
@@ -514,11 +521,11 @@ import { runtime as TD } from '../runtime';
     const n = order(E.T)[i];
     if (!E.sel.includes(n)) select([n]);
     const isRoot = n === E.T.root, p: any = parentOf(E.T, n), at = p ? p.k.indexOf(n) : 0, many = E.sel.length > 1, alt = isMac ? '⌥' : 'Alt+';
-    menu.innerHTML = mItem('child', 'Add Child', 'child', 'Tab', many) + mItem('before', 'Add Sibling Before', 'sibBefore', '⇧↵', many || isRoot) + mItem('after', 'Add Sibling After', 'sib', '↵', many || isRoot) + mItem('parent', 'Add Parent', 'parent', '', many) + '<hr>' +
-      mItem('earlier', 'Move Earlier', 'earlier', alt + '←', many || !p || at === 0) + mItem('later', 'Move Later', 'later', alt + '→', many || !p || at === p.k.length - 1) +
-      mItem('outdent', 'Move Up a Level', 'lift', '⇧Tab', many || !p || isRoot || !parentOf(E.T, p)) + '<hr>' +
-      mItem('copy', 'Copy', 'copy', isMac ? '⌘C' : 'Ctrl+C') + mItem('paste', 'Paste as Child', 'paste', isMac ? '⌘V' : 'Ctrl+V', many || !E.clip) + '<hr>' +
-      mItem('lift', 'Delete, Keep Children', 'unwrap', '', !n.k.length) + mItem('delete', many ? `Delete ${E.sel.length} Nodes` : 'Delete', 'del', '⌫');
+    menu.innerHTML = mItem('child', uiText('editor.ft.addChild', 'Add Child'), 'child', 'Tab', many) + mItem('before', uiText('editor.ft.addSiblingBefore', 'Add Sibling Before'), 'sibBefore', '⇧↵', many || isRoot) + mItem('after', uiText('editor.ft.addSiblingAfter', 'Add Sibling After'), 'sib', '↵', many || isRoot) + mItem('parent', uiText('editor.ft.addParent', 'Add Parent'), 'parent', '', many) + '<hr>' +
+      mItem('earlier', uiText('editor.ft.moveEarlier', 'Move Earlier'), 'earlier', alt + '←', many || !p || at === 0) + mItem('later', uiText('editor.ft.moveLater', 'Move Later'), 'later', alt + '→', many || !p || at === p.k.length - 1) +
+      mItem('outdent', uiText('editor.ft.moveUpLevel', 'Move Up a Level'), 'lift', '⇧Tab', many || !p || isRoot || !parentOf(E.T, p)) + '<hr>' +
+      mItem('copy', uiText('ui.copy', 'Copy'), 'copy', isMac ? '⌘C' : 'Ctrl+C') + mItem('paste', uiText('editor.ft.pasteAsChild', 'Paste as Child'), 'paste', isMac ? '⌘V' : 'Ctrl+V', many || !E.clip) + '<hr>' +
+      mItem('lift', uiText('editor.ft.deleteKeepChildren', 'Delete, Keep Children'), 'unwrap', '', !n.k.length) + mItem('delete', many ? uiText('editor.ft.deleteNodes', 'Delete {n} Nodes', { n: E.sel.length }) : uiText('ui.delete', 'Delete'), 'del', '⌫');
     menu.hidden = false;
     const r = menu.getBoundingClientRect();
     menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
@@ -562,35 +569,36 @@ import { runtime as TD } from '../runtime';
   function closeLabel() { if (Lb) Lb.pop.close(); }
 
   // ---------------------------------------------------------------- properties
-  const SHAPE_SEG = [['plain', 'Plain'], ['box', 'Box'], ['round', 'Round'], ['circle', 'Circle']];
-  const EDGE_SEG = [['line', 'Line'], ['arrow', 'Arrow'], ['dashed', 'Dash'], ['roof', 'Roof', 'A triangle over the node (linguistics)'], ['none', 'None']];
+  const SHAPE_SEG = () => [['plain', uiText('editor.ft.plain', 'Plain')], ['box', uiText('editor.ft.box', 'Box')], ['round', uiText('editor.ft.round', 'Round')], ['circle', uiText('editor.ft.circle', 'Circle')]];
+  const EDGE_SEG = () => [['line', uiText('editor.ft.line', 'Line')], ['arrow', uiText('editor.ft.arrow', 'Arrow')], ['dashed', uiText('editor.ft.dash', 'Dash')], ['roof', uiText('editor.ft.roof', 'Roof'), uiText('editor.ft.roofTitle', 'A triangle over the node (linguistics)')], ['none', uiText('editor.ft.fill.none', 'None')]];
+  const countText = (L: any) => `${L.n === 1 ? uiText('editor.ft.oneNode', '1 node') : uiText('editor.ft.nNodes', '{n} nodes', { n: L.n })} · ${L.levels === 1 ? uiText('editor.ft.oneLevel', '1 level') : uiText('editor.ft.nLevels', '{n} levels', { n: L.levels })}`;
   const same = (vals: any) => vals.every((x: any) => x === vals[0]) ? vals[0] : null;
   function renderProps() {
     if (!E) return;
     const L = E.L || (E.L = TD.ft.layout(blockOf()));
     props.hidden = false;
-    const edgeField = (value: any, forked: any) => segments('Edge', 'edge', value, forked ? EDGE_SEG.filter(([v]) => v !== 'roof' && v !== 'none') : EDGE_SEG);
-    const fills = (value: any) => ({ ...row('Fill', ...FILLS.map(([v, n]) => ({ kind: 'button' as const, text: '', attrs: { 'data-fs': 'fill', 'data-v': v, class: value === v ? 'on' : '', title: n }, swatch: { css: v === 'none' ? 'transparent' : TD.css(TD.tikzColor(v) || '#ffffff'), none: v === 'none' } }))), controlClass: 'ctl seg-ctl fe-sw' });
+    const edgeField = (value: any, forked: any) => segments(uiText('editor.ft.edge', 'Edge'), 'edge', value, forked ? EDGE_SEG().filter(([v]) => v !== 'roof' && v !== 'none') : EDGE_SEG());
+    const fills = (value: any) => ({ ...row(captions["ui.fill"], ...FILLS.map(([v, n]) => ({ kind: 'button' as const, text: '', attrs: { 'data-fs': 'fill', 'data-v': v, class: value === v ? 'on' : '', title: caption(n) }, swatch: { css: v === 'none' ? 'transparent' : TD.css(TD.tikzColor(v) || '#ffffff'), none: v === 'none' } }))), controlClass: 'ctl seg-ctl fe-sw' });
     if (!E.sel.length) {
       const dir = L.empty ? 'down' : L.grow === 0 && L.rev ? 'right' : L.grow === 90 ? 'up' : L.grow === 180 ? 'left' : 'down';
       const ft = forTree(E.T), get = (k: any) => { const o = ft.map(F.opt).find((x: any) => x.k === k); return o && o.v != null ? F.len(o.v, 10) : NaN; };
       const toMm = (px: any) => isFinite(px) ? Math.round(px / TD.PX_PER_CM * 100) / 10 : '';
       const shapes = L.nodes.map(shapeOf), edges = L.nodes.slice(1).map(edgeOf), forked = E.T.pre.some((x: any) => keyOf(x) === 'forked edges');
       renderView(props, FormPanel, { sections: [
-        { ...section('Tree', [segments('Grows', 'dir', dir, [['down', 'Down'], ['right', 'Right'], ['up', 'Up'], ['left', 'Left']]),
-          segments('Edges', 'treeedge', forked ? 'fork' : 'straight', [['straight', 'Straight'], ['fork', 'Forked', 'Org-chart elbows (edges library)']]),
-          numField('Level step', 'l', toMm(get('l')), 'mm', { min: '0', step: '1', placeholder: 'auto' }), numField('Sibling gap', 'ssep', toMm(get('s sep')), 'mm', { min: '0', step: '1', placeholder: 'auto' })], 'sec'), summary: `${L.n} node${L.n === 1 ? '' : 's'} · ${L.levels} level${L.levels === 1 ? '' : 's'}` },
-        section('Every node', [segments('Shape', 'shape', same(shapes), SHAPE_SEG), edgeField(same(edges), forked), fills(same(L.nodes.map(fillOf))),
-          field('Options', 'pre', E.T.pre.join(', '), { class: 'mono' }), note('Click a node to select it. ', { kbd: 'Tab' }, ' adds a child, ', { kbd: 'Enter' }, ' a sibling; type to rename.')], 'sec'),
+        { ...section(captions["ui.tree"], [segments(uiText('editor.ft.grows', 'Grows'), 'dir', dir, [['down', uiText('editor.ft.down', 'Down')], ['right', uiText('editor.ft.right', 'Right')], ['up', uiText('editor.ft.up', 'Up')], ['left', uiText('editor.ft.left', 'Left')]]),
+          segments(uiText('editor.ft.edges', 'Edges'), 'treeedge', forked ? 'fork' : 'straight', [['straight', uiText('editor.ft.straight', 'Straight')], ['fork', uiText('editor.ft.forked', 'Forked'), uiText('editor.ft.forkedTitle', 'Org-chart elbows (edges library)')]]),
+          numField(uiText('editor.ft.levelStep', 'Level step'), 'l', toMm(get('l')), 'mm', { min: '0', step: '1', placeholder: uiText('editor.ft.autoPlaceholder', 'auto') }), numField(uiText('editor.ft.siblingGap', 'Sibling gap'), 'ssep', toMm(get('s sep')), 'mm', { min: '0', step: '1', placeholder: uiText('editor.ft.autoPlaceholder', 'auto') })], 'sec'), summary: countText(L) },
+        section(uiText('editor.ft.everyNode', 'Every node'), [segments(uiText('editor.ft.shape', 'Shape'), 'shape', same(shapes), SHAPE_SEG()), edgeField(same(edges), forked), fills(same(L.nodes.map(fillOf))),
+          field(uiText('editor.commonB.options', 'Options'), 'pre', E.T.pre.join(', '), { class: 'mono' }), note(uiText('editor.ft.help1', 'Click a node to select it. '), { kbd: 'Tab' }, uiText('editor.ft.help2', ' adds a child, '), { kbd: 'Enter' }, uiText('editor.ft.help3', ' a sibling; type to rename.'))], 'sec'),
       ] }); return;
     }
     const gs = E.sel.map(geoOf).filter(Boolean);
-    const style = [segments('Shape', 'shape', same(gs.map(shapeOf)), SHAPE_SEG), edgeField(same(gs.map(edgeOf)), gs.length > 0 && gs.every((g: any) => g.st.fork)), fills(same(gs.map(fillOf)))];
+    const style = [segments(uiText('editor.ft.shape', 'Shape'), 'shape', same(gs.map(shapeOf)), SHAPE_SEG()), edgeField(same(gs.map(edgeOf)), gs.length > 0 && gs.every((g: any) => g.st.fork)), fills(same(gs.map(fillOf)))];
     if (E.sel.length > 1) {
-      renderView(props, FormPanel, { sections: [section(`${E.sel.length} nodes`, [...style, note('Drag a node to move it; ⌥-drag copies.')], 'sec')] }); return;
+      renderView(props, FormPanel, { sections: [section(uiText('editor.ft.nNodes', '{n} nodes', { n: E.sel.length }), [...style, note(uiText('editor.ft.dragHelp', 'Drag a node to move it; ⌥-drag copies.'))], 'sec')] }); return;
     }
-    const n = E.sel[0], g = gs[0], p = parentOf(E.T, n), where = !p ? 'root' : `level ${g ? g.depth + 1 : ''}`;
-    renderView(props, FormPanel, { sections: [{ ...section('Node', [field('Label', 'label', n.c, { 'data-tx': 'text' }), ...style, field('Options', 'opts', n.o.join(', '), { class: 'mono' })], 'sec'), summary: where + (n.k.length ? ` · ${n.k.length} child${n.k.length === 1 ? '' : 'ren'}` : '') }] });
+    const n = E.sel[0], g = gs[0], p = parentOf(E.T, n), where = !p ? uiText('editor.ft.root', 'root') : uiText('editor.ft.level', 'level {n}', { n: g ? g.depth + 1 : '' });
+    renderView(props, FormPanel, { sections: [{ ...section(uiText('editor.ft.node', 'Node'), [field(uiText('editor.ft.label', 'Label'), 'label', n.c, { 'data-tx': 'text' }), ...style, field(uiText('editor.commonB.options', 'Options'), 'opts', n.o.join(', '), { class: 'mono' })], 'sec'), summary: where + (n.k.length ? ' · ' + (n.k.length === 1 ? uiText('editor.ft.oneChild', '1 child') : uiText('editor.ft.nChildren', '{n} children', { n: n.k.length })) : '') }] });
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
@@ -651,7 +659,7 @@ import { runtime as TD } from '../runtime';
     else if (a === 'cancel') finish(false);
     else if (a === 'delete') removeSel(false);
     else if (a === 'lift') removeSel(true);
-    else if (a === 'copy' && b && b.closest('.cz-code-head')) navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1200); });
+    else if (a === 'copy' && b && b.closest('.cz-code-head')) navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     else if (a === 'copy') { if (E.sel.length) E.clip = tops(E.sel).map(clone); }
     else if (a === 'paste') paste();
     else if (a === 'child') { if (n) addChildTo(n); else if (!E.T.root) addRoot(); else addChildTo(E.T.root); }
@@ -676,7 +684,7 @@ import { runtime as TD } from '../runtime';
   // the tree writes the code, except while it is being typed in; typing is read back after a pause
   function syncCode() {
     const L = E.L || TD.ft.layout(blockOf());
-    count.textContent = `${L.n} node${L.n === 1 ? '' : 's'} · ${L.levels} level${L.levels === 1 ? '' : 's'}`;
+    count.textContent = countText(L);
     if (document.activeElement === codeTa) return;
     const c = snap();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
@@ -770,8 +778,9 @@ import { runtime as TD } from '../runtime';
     commit();
     const src = snap();
     if (src !== E.start) { E.start = src; E.done({ src }); }
-    setTip('Saved to the page');
-    setTimeout(() => { if (E && tip.textContent === 'Saved to the page') setTip(''); }, 1500);
+    const saved = uiText('editor.commonB.saved', 'Saved to the page');
+    setTip(saved);
+    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   TD.unsaved.push(() => !!E && snap() !== E.start);
@@ -782,8 +791,9 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     commit();
     const src = snap(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm('Discard changes to this tree?', 'Your edits since opening the editor will be lost.', { ok: 'Discard', danger: true }))) return;
+    if (!ok && changed && !(await TD.confirm(uiText('editor.ft.discardTree', 'Discard changes to this tree?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
     const done = E.done;
+    stopLocale?.(); stopLocale = null;
     root.hidden = true;
     document.body.classList.remove('cz-open');
     E = null;
@@ -798,6 +808,10 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
+    // the palette, panel and drawing's captions follow the interface language while open
+    stopLocale?.();
+    let first = true;
+    stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     requestAnimationFrame(fit);
   }
   TD.ftEditor = { open };

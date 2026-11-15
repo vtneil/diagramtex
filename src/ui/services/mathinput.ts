@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { t, message as msg, caption, onLocale } from '../../i18n';
 // Text input mode for the on-canvas editor: "LaTeX" (a plain text field, maths typed as $…$) or
 // "MathLive" (an interactive maths editor: fractions, roots, matrices are edited as they look).
 // Both edit the same stored text, so switching modes never changes a document.
@@ -12,8 +13,8 @@ import { runtime as TD } from '../../runtime';
   'use strict';
   const KEY = 'diagramtex.input';
   const MODES: Record<string, any> = {
-    latex: { name: 'LaTeX', note: 'Type text and $maths$ as LaTeX source.' },
-    mathlive: { name: 'MathLive', note: 'Edit maths visually. $ switches between text and maths.' },
+    latex: { name: 'LaTeX', note: msg('input.latex.note', 'Type text and $maths$ as LaTeX source.') },
+    mathlive: { name: 'MathLive', note: msg('input.mathlive.note', 'Edit maths visually. $ switches between text and maths.') },
   };
   let mode = 'latex';
   try { const v = localStorage.getItem(KEY); if (v && MODES[v]) mode = v; } catch (e: any) { /* storage blocked */ }
@@ -102,7 +103,7 @@ import { runtime as TD } from '../../runtime';
     host.innerHTML = '<div class="ml-lines"></div><div class="ml-hint"></div>';
     const list = host.firstElementChild;
     const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-    host.lastElementChild.textContent = `$ text ↔ maths · ${opts.para ? `Enter new line · ${mac ? '⌘' : 'Ctrl+'}Enter done` : 'Enter done · Shift+Enter new line'} · Esc done`;
+    host.lastElementChild.textContent = opts.para ? t('input.hint.para', '$ text ↔ maths · Enter new line · {key} done · Esc done', { key: (mac ? '⌘' : 'Ctrl+') + 'Enter' }) : t('input.hint.line', '$ text ↔ maths · Enter done · Shift+Enter new line · Esc done');
     let done = false;
     const off = new AbortController(), on = { signal: off.signal }; // the host is reused: every listener goes with destroy()
     const finish = () => { if (!done) { done = true; opts.onDone(); } };
@@ -209,7 +210,7 @@ import { runtime as TD } from '../../runtime';
       const ta = (box = document.createElement('textarea'));
       ta.className = 'td-pop-ta'; ta.spellcheck = false; ta.rows = 1; ta.value = v0;
       if (opts.math) ta.dataset.tx = 'math'; // highlighted all through as maths (texhighlight.ts)
-      ta.placeholder = opts.math ? 'Maths, without $ — Enter to finish' : 'Text, $math$ — Enter to finish';
+      ta.placeholder = opts.math ? t('input.ph.math', 'Maths, without $ — Enter to finish') : t('input.ph.text', 'Text, $math$ — Enter to finish');
       const size = () => { ta.style.height = 'auto'; ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 40), 160) + 'px'; };
       ta.addEventListener('input', () => { opts.onInput(ta.value); size(); place(); });
       ta.addEventListener('keydown', (e) => {
@@ -253,14 +254,16 @@ import { runtime as TD } from '../../runtime';
   function render() {
     const box = document.getElementById('inputBox');
     if (!box) return;
-    box.innerHTML = `<div class="eng-head">Text input</div>
-      <div class="eng-seg" role="radiogroup" aria-label="Text input">${Object.entries<any>(MODES).map(([k, v]) =>
-        `<button type="button" role="radio" data-input="${k}" aria-checked="${k === mode}" class="${k === mode ? 'on' : ''}" title="${v.name} mode: ${v.note}">${v.name}</button>`).join('')}</div>
-      <div class="eng-note">${MODES[mode].note}</div>`;
+    const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    box.innerHTML = `<div class="eng-head">${esc(t('ui.text.input', 'Text input'))}</div>
+      <div class="eng-seg" role="radiogroup" aria-label="${esc(t('ui.text.input', 'Text input'))}">${Object.entries<any>(MODES).map(([k, v]) =>
+        `<button type="button" role="radio" data-input="${k}" aria-checked="${k === mode}" class="${k === mode ? 'on' : ''}" title="${esc(t('input.modeTip', '{name} mode: {note}', { name: v.name, note: caption(v.note) }))}">${v.name}</button>`).join('')}</div>
+      <div class="eng-note">${esc(caption(MODES[mode].note))}</div>`;
   }
   document.addEventListener('click', (e) => { const b = (e.target! as Element).closest && (e.target! as Element).closest('#inputBox [data-input]'); if (b) set((b as HTMLElement).dataset.input); });
   listeners.push(render);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
+  onLocale(() => render()); // the box stays: its captions follow the interface language
   // warm the library up after start when it will be needed
   if (mode === 'mathlive') window.addEventListener('load', () => setTimeout(() => load().catch(() => {}), 300));
 
