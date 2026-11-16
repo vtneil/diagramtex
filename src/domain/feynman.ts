@@ -320,8 +320,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
 
   // where every vertex sits, in cm (y up)
   function place(M: any, warn: any) {

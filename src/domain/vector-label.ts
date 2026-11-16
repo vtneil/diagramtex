@@ -110,14 +110,16 @@ export function vectorLabel(root: HTMLElement, origin: DOMRect, width: number, h
           }
           parts.push(`<path data-label-text="${esc(run.value)}"${node.parentElement?.closest('.accent-body') ? ' data-label-accent="true"' : ''} data-baseline="${y}" data-advance="${advance * scale}" transform="translate(${x} ${y}) scale(${mirrored ? -scale : scale} ${-scale})" fill="${esc(style.color)}" d="${path}"/>`);
         } else {
-          needsFonts = true;
-          parts.push(`<text x="0" y="0" transform="translate(${x} ${y}) scale(${mirrored ? -1 : 1} 1)" fill="${esc(style.color)}" style="font-family:${esc(style.fontFamily)};font-size:${size}px;font-weight:${style.fontWeight};font-style:${style.fontStyle};font-variant:${style.fontVariant};text-decoration:${decoration};white-space:pre">${esc(run.value)}</text>`);
+          const usesBundled = !!font && [...run.value].some(char => font.chars[char.codePointAt(0)!] != null);
+          if (usesBundled) needsFonts = true;
+          const family = usesBundled ? style.fontFamily : style.fontFamily.replace(/\bKaTeX_\w+\s*,\s*/g, '') || 'serif';
+          parts.push(`<text x="0" y="0" transform="translate(${x} ${y}) scale(${mirrored ? -1 : 1} 1)" fill="${esc(style.color)}" style="font-family:${esc(family)};font-size:${size}px;font-weight:${style.fontWeight};font-style:${style.fontStyle};font-variant:${style.fontVariant};text-decoration:${decoration};white-space:pre">${esc(run.value)}</text>`);
           include(run.rect.left - origin.left, run.rect.top - origin.top, run.rect.width, run.rect.height);
           // Native fallback ink can overhang its allocation, notably italic
           // system faces. TextMetrics expands the viewport without moving it.
           if (fontMetrics === undefined) fontMetrics = document.createElement('canvas').getContext('2d');
           if (fontMetrics) {
-            fontMetrics.font = `${style.fontStyle} ${style.fontVariantCaps === 'small-caps' ? 'small-caps ' : ''}${style.fontWeight} ${size}px ${style.fontFamily}`;
+            fontMetrics.font = `${style.fontStyle} ${style.fontVariantCaps === 'small-caps' ? 'small-caps ' : ''}${style.fontWeight} ${size}px ${family}`;
             const ink = fontMetrics.measureText(run.value);
             const a = mirrored ? x - ink.actualBoundingBoxRight : x - ink.actualBoundingBoxLeft;
             include(a, y - ink.actualBoundingBoxAscent, ink.actualBoundingBoxLeft + ink.actualBoundingBoxRight, ink.actualBoundingBoxAscent + ink.actualBoundingBoxDescent);

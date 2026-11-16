@@ -5,7 +5,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.47.5'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.48.5'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -368,9 +368,16 @@ import { runtime as TD } from '../runtime';
     try { return draw(); } finally { cachedGeometryDepth--; }
   };
   TD.retainPreviewSizes = () => { previewSizes = new Map(sizeCache); };
-  TD.clearTextCache = () => { htmlCache.clear(); sizeCache.clear(); };
+  // Layouts built from provisional text measurements must be invalidated when
+  // worker results arrive, as well as when fonts or the renderer change.
+  const metricsListeners: (() => void)[] = [];
+  TD.onTextMetricsChange = (listener: () => void) => { metricsListeners.push(listener); };
+  const metricsChanged = () => { for (const listener of metricsListeners) listener(); };
+  TD.clearTextCache = () => { htmlCache.clear(); sizeCache.clear(); metricsChanged(); };
   TD.clearPendingTextCache = (ids?: number[]) => {
-    for (const [key, value] of sizeCache) if (value.pending && (!ids || TD.math.pendingIds(value.html).some((id: number) => ids.includes(id)))) sizeCache.delete(key);
+    let changed = false;
+    for (const [key, value] of sizeCache) if (value.pending && (!ids || TD.math.pendingIds(value.html).some((id: number) => ids.includes(id)))) { sizeCache.delete(key); changed = true; }
+    if (changed) metricsChanged();
     if (!TD.math.pending) previewSizes.clear();
   };
 
@@ -488,6 +495,7 @@ import { runtime as TD } from '../runtime';
   const mathOnlyCache = new Map();
   function mathOnly(raw: any) {
     const name = /^\\([A-Za-z]+)/.exec(raw)?.[1];
+    if (name && /^(left|right|middle|(?:big|Big|bigg|Bigg)[lrm]?)$/.test(name)) return true;
     if (!name || TEXT_OK.has(name) || name.startsWith('text') || !TD.math) return false;
     if (!mathOnlyCache.has(raw)) {
       let ok = false;
@@ -562,9 +570,9 @@ import { runtime as TD } from '../runtime';
   // by a pixel. A shared em scale retains fractional metrics across browsers.
   function measureStyle(element: HTMLElement, css: string) {
     element.style.cssText = css;
-    const px = parseFloat(element.style.fontSize), scale = 1024 / px;
+    const px = parseFloat(element.style.fontSize), scale = 1000 / px;
     const width = parseFloat(element.style.width);
-    element.style.fontSize = '1024px';
+    element.style.fontSize = '1000px';
     element.style.width = Number.isFinite(width) ? `${width * scale}px` : 'max-content';
     return scale;
   }
@@ -572,8 +580,8 @@ import { runtime as TD } from '../runtime';
     const rect = element.getBoundingClientRect();
     // The bundled TeX faces use 1000 font units per em. Quantise in that
     // design space before conversion, rather than preserving platform hinting.
-    const cssPx = 1024 / scale;
-    const length = (value: number) => Math.round(Math.round(value / 1024 * 1000) / 1000 * cssPx * 100) / 100;
+    const cssPx = 1000 / scale;
+    const length = (value: number) => Math.round(Math.round(value) / 1000 * cssPx * 100) / 100;
     return { w: length(rect.width), h: length(rect.height) };
   }
   function textBox(text: any, st: any): any {
@@ -1722,7 +1730,7 @@ import { runtime as TD } from '../runtime';
   // Imported shapes carry s.tex (src/domain/tikzimport.ts importPicture): the statement they came from and a signature of
   // the shape as imported. While a statement's shapes are all there, in order and unchanged, it exports as it was
   // written (comments and formatting included); a picture with nothing changed exports exactly as written.
-  const SIG_SKIP = new Set(['id', 'tex', 'name', 'gname', 'g', 'locked', 'hidden', 'ex']);
+  const SIG_SKIP = new Set(['id', 'tex', 'name', 'gname', 'g', 'scopeGroup', 'locked', 'hidden', 'ex']);
   // round: numbers to 1e-4 px (the signature a move and a move back do not change)
   const stable = (v: any, R: any) => (Array.isArray(v) ? `[${v.map((q) : any => stable(q, R)).join(',')}]` : v && typeof v === 'object'
     ? `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) : any => JSON.stringify(k) + ':' + stable(v[k], R)).join(',')}}`
@@ -1739,7 +1747,11 @@ import { runtime as TD } from '../runtime';
   // what code written as-is needs: the packages and libraries the shapes would ask for
   function needs(list: any, X: any) {
     const Y = makeX(); Y.scene = X.scene || list;
-    for (const s of list) { try { (T as Record<string, any>)[s.type].tikz(s, Y); } catch (e: any) { /* only the libraries matter here */ } }
+    for (const s of list) {
+      if (s.tex?.preamble && X.preDefs) X.preDefs.add(s.tex.preamble);
+      for (const lib of s.tex?.libs || []) Y.libs.add(lib);
+      for (const pkg of s.tex?.pkgs || []) Y.pkgs.add(pkg);
+      try { (T as Record<string, any>)[s.type].tikz(s, Y); } catch (e: any) { /* only the libraries matter here */ } }
     if (list.some((s: any) => s.pos)) Y.libs.add('positioning');
     for (const l of Y.libs) X.libs.add(l);
     for (const p of Y.pkgs) X.pkgs.add(p);
@@ -1870,9 +1882,14 @@ import { runtime as TD } from '../runtime';
     return { text: out, spans: spans.filter((x) => x.a) };
   };
   TD.tikzLines = function (shapes: any, X: any) {
-    const items = [];
+    const items: any[] = [];
+    const exportGroup = (s: any) => s.scopeGroup ? s.g : null;
+    const linkedIds = new Set(shapes.flatMap((s: any) => [s.link1?.id,s.link2?.id].filter(Boolean)));
+    const nativeChanged = (s: any) => s.nodeName || s.nodeLabel || s.nodePin || (TD.nodeFeatures?.types.has(s.type) && linkedIds.has(s.id));
     if (shapes.some((s: any) => s.pos)) X.libs.add('positioning'); // right=1cm of a, as written or kept (posCode)
     for (const s of shapes) {
+      for (const lib of s.tex?.libs || []) X.libs.add(lib);
+      for (const pkg of s.tex?.pkgs || []) X.pkgs.add(pkg);
       const code = s.type === 'tikz' ? s.code : s.tex && s.tex.src;
       if (!code || !code.includes('color')) continue;
       for (const m of code.matchAll(/\\(?:definecolor|colorlet)\s*\{([^}]*)\}/g)) (X.reserved = X.reserved || new Set()).add(m[1].trim());
@@ -1885,19 +1902,39 @@ import { runtime as TD } from '../runtime';
         X.named = X.named || new Map(); if (!X.named.has(hex)) X.named.set(hex, m[1].trim());
       }
     }
+    for (const preamble of new Set(shapes.map((s: any) => s.tex?.preamble).filter(Boolean))) {
+      if (X.preDefs) X.preDefs.add(preamble);
+      else items.push({code:preamble,ctx:[],group:null});
+    }
     for (let n = 0; n < shapes.length;) {
       const s = shapes[n], t = s.tex;
       if (t && t.i === 0 && t.src != null) {
         const run = shapes.slice(n, n + t.n);
         const whole = run.length === t.n && run.every((r: any, q: any) => r.tex && r.tex.p === t.p && r.tex.k === t.k && r.tex.i === q);
         // (a named point alone is simply written where it is now)
-        const same = whole && run.every(unchanged), d = whole && !same && !run.every((r: any) => r.type === 'coord') ? shiftOf(run) : null;
-        if (same || d) {
+        const same = whole && run.every((r: any) => r.g === s.g && !nativeChanged(r)) && run.every(unchanged), d = whole && !run.some(nativeChanged) && !same && !run.every((r: any) => r.type === 'coord') ? shiftOf(run) : null;
+        // Patch a label only when every other field still matches its imported signature.
+        // The original statement retains names, anchors, whitespace and option ordering.
+        const label = t.label;
+        let patched: string | null = null;
+        if (whole && t.n === 1 && label && s.type === 'text' && !nativeChanged(s)
+          && TD.texSig({ ...s, text: label.value }) === t.sig && s.text !== label.value) {
+          const text = String(s.text).replace(/\n/g, '\\\\');
+          let depth = 0, valid = true;
+          for (let i = 0; i < text.length; i++) {
+            if (text[i] === '\\') { i++; continue; }
+            if (text[i] === '%' || (text[i] === '}' && --depth < 0)) { valid = false; break; }
+            if (text[i] === '{') depth++;
+          }
+          if (valid && !depth && label.from >= t.cut && label.to >= label.from && label.to <= t.src.length)
+            patched = t.src.slice(0, label.from) + text + t.src.slice(label.to);
+        }
+        if (same || d || patched != null) {
           needs(run, X);
-          const own = TD.rawTikz.dedent(t.src.slice(t.cut));
+          const own = TD.rawTikz.dedent((patched ?? t.src).slice(t.cut));
           // only moved: as written, in a shift scope outside its own scopes
           const ids = run.map((r: any) => r.id);
-          if (own.trim()) items.push(d ? { code: mark(ids, TD.rawTikz.wrapCode(own, t.ctx || [], X.c(d.dx, d.dy))), ctx: [] } : { code: mark(ids, own), ctx: t.ctx || [] });
+          if (own.trim()) items.push(d ? { code: mark(ids, TD.rawTikz.wrapCode(own, t.ctx || [], X.c(d.dx, d.dy))), ctx: [], group: exportGroup(s) } : { code: mark(ids, own), ctx: t.ctx || [], group: exportGroup(s) });
           if (t.drop) (X.notes = X.notes || new Set()).add(`Picture options left out (they belong to the whole picture): ${t.drop.join(', ')}`);
           n += t.n; continue;
         }
@@ -1912,18 +1949,20 @@ import { runtime as TD } from '../runtime';
       // a node other statements still name keeps its name, as a coordinate where the text is (a named point
       // renamed here keeps its old name the same way, for the code kept as written that uses it)
       const old = t && t.nm && t.i === 0 ? t.nm.filter((nm: any) => !(s.type === 'coord' && nm === s.tikzName)) : [];
-      if (code && old.length && !placed && (s.type === 'text' || s.type === 'coord')) code += '\n' + old.map((nm: any) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
-      if (code) items.push({ code: mark([s.id], code), ctx: [] });
+      if (code && old.length && !placed && !nativeChanged(s) && (s.type === 'text' || s.type === 'coord')) code += '\n' + old.map((nm: any) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
+      if (code) items.push({ code: mark([s.id], code), ctx: [], group: exportGroup(s) });
       n++;
     }
     // consecutive statements from the same scopes share them
     const out = [];
     for (let a = 0; a < items.length;) {
-      const key = JSON.stringify(items[a].ctx);
+      const key = JSON.stringify([items[a].ctx, items[a].group]);
       let b = a + 1;
-      while (b < items.length && JSON.stringify(items[b].ctx) === key) b++;
-      if (!items[a].ctx.length) out.push(...items.slice(a, b).map((x) => x.code));
-      else out.push(TD.rawTikz.wrapCode(items.slice(a, b).map((x) => x.code).join('\n'), items[a].ctx));
+      while (b < items.length && JSON.stringify([items[b].ctx, items[b].group]) === key) b++;
+      const code = items.slice(a, b).map(x => x.code).join('\n');
+      if (items[a].group) out.push('\\begin{scope}\n  ' + TD.rawTikz.wrapCode(code, items[a].ctx).replace(/\n/g, '\n  ') + '\n\\end{scope}');
+      else if (!items[a].ctx.length) out.push(...items.slice(a, b).map(x => x.code));
+      else out.push(TD.rawTikz.wrapCode(code, items[a].ctx));
       a = b;
     }
     return out;
@@ -1932,6 +1971,8 @@ import { runtime as TD } from '../runtime';
   TD.tikzWhole = function (shapes: any, X: any) {
     const L = shapes.filter((s: any) => !s.hidden && !(s.type === 'tikz' && s.pre));
     const t0 = L.length && L[0].tex;
+    const nativeIds = new Set(L.filter((s: any) => TD.nodeFeatures?.types.has(s.type)).map((s: any) => s.id));
+    if (L.some((s: any) => s.scopeGroup || s.nodeName || s.nodeLabel || s.nodePin || nativeIds.has(s.link1?.id) || nativeIds.has(s.link2?.id))) return null;
     if (!t0 || t0.k !== 0 || t0.i !== 0 || !t0.open) return null;
     let k = 0, i = 0;
     for (const s of L) {
@@ -1943,6 +1984,7 @@ import { runtime as TD } from '../runtime';
     needs(L, X);
     // definitions from the source's preamble: to the preamble, or (a snippet) first in the picture
     const pre = shapes.filter((s: any) => !s.hidden && s.type === 'tikz' && s.pre).map((s: any) => mark([s.id], T.tikz.tikz(s, X))).filter(Boolean);
+    if (!X.preDefs) for (const preamble of new Set(L.map((s: any) => s.tex?.preamble).filter(Boolean))) pre.push(preamble);
     const runIds = (s: any) => L.filter((r: any) => r.tex.k === s.tex.k).map((r: any) => r.id);
     return { open: t0.open, pre, body: L.filter((s: any) => s.tex.i === 0).map((s: any) => mark(runIds(s), s.tex.src)).join('') + L[L.length - 1].tex.tail, close: '\\end{tikzpicture}' };
   };
@@ -1950,7 +1992,16 @@ import { runtime as TD } from '../runtime';
   TD.tikzBody = function (shapes: any, X: any) {
     shapes = shapes.filter((s: any) => !s.hidden); // a hidden layer is not exported
     X.scene = shapes;
-    const body = TD.tikzLines(shapes, X);
+    const source = [...shapes];
+    // Only reorder an edge when an attached node would otherwise be a forward reference.
+    const byId = new Map(source.map(s => [s.id, s]));
+    const ordered: any[] = [], visiting = new Set<any>(), done = new Set<any>();
+    const visit = (s: any) => { if (done.has(s) || visiting.has(s)) return; visiting.add(s);
+      for (const link of [s.link1,s.link2]) { const target = link && byId.get(link.id); if (target && TD.nodeFeatures?.types.has(target.type)) visit(target); }
+      visiting.delete(s); done.add(s); ordered.push(s);
+    };
+    source.forEach(visit);
+    const body = TD.tikzLines(ordered, X);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
     if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
     return [...defs, ...(defs.length ? [''] : []), ...body];

@@ -67,6 +67,8 @@ import { runtime as TD } from '../runtime';
   TD.canCombine = (s: any) => !!s && (s.type === 'region' || s.type === 'rect' || s.type === 'ellipse' || s.type === 'ball' || s.type === 'dot' ||
     (s.type === 'poly' && s.closed) || (s.type === 'sym' && (() => { try { return TD.symGeom(s).some((sp: any) => sp.closed && !sp.solid); } catch (e: any) { return false; } })()));
 
+  TD.containsClosedShape = (s: any, p: any) => { const rings = outline(s); return !!rings && inRings(rings, p.x, p.y); };
+
   // ---------- geometry ----------
   const inRings = (rings: any, x: any, y: any) => {
     let c = false;

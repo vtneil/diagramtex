@@ -812,7 +812,8 @@ import { runtime as TD } from '../runtime';
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    requestAnimationFrame(fit);
+    fit();
+    requestAnimationFrame(() => { if (E) fit(); });
   }
   TD.ftEditor = { open };
 })();

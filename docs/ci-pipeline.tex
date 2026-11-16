@@ -1,0 +1,18 @@
+\begin{forest}
+for tree={draw, rounded corners, forked edges, align=left, grow'=east, l sep=8mm, s sep=4mm, inner sep=3mm, font=\small}
+[GitLab CI: push
+ [build: npm run build
+  [dist/ artifact
+   [Browser tests: one job at a time\\resource group: browser-tests
+    [Functional checks\\Chromium / WebKit / Firefox]
+    [Rendering and layout\\rendering-parity / document-layout\\webkit-rendering / mixed-labels\\label-clipping / text-alignment / label-display]
+    [Performance and loading\\math-performance / document-performance\\math-loading / math-priority]
+    [Output and previews\\output-readiness / preview-fade\\page-print / format-preview]
+    [Editing and interface\\construction-tools / modal-responsive\\context-menu-layout / snapping-modes]
+   ]
+  ]
+ ]
+ [typecheck: npm run check]
+ [label-glyphs: reproducibility check]
+]
+\end{forest}

@@ -6,13 +6,16 @@ const { layout, sliders, fmt, G, fullCode } = panelServices;
 import { row, section } from '../forms';
 
 TD.panels = TD.panels || {};
+const sliderDefaults = new Map<string, Map<string, number>>();
 TD.panels.geo2d = {
     model(s) {
       const L = layout(s.src), S = sliders(L);
+      let defaults = sliderDefaults.get(s.id);
+      if (!defaults) { defaults = new Map(); sliderDefaults.set(s.id, defaults); }
+      for (const x of S) if (!defaults.has(x.name)) defaults.set(x.name, x.v);
       const rows = S.map((x: any) => ({ kind: 'row' as const, label: [x.name], labelClass: 'mono', labelTitle: '\\' + x.name, controls: [{ kind: 'angle' as const,
         value: x.v, numericValue: fmt(x.v, 3), unit: '',
-        attrs: { 'data-g2': x.name, min: x.lo, max: x.hi, step: x.step, 'aria-label': x.name },
-        numericAttrs: { 'data-g2n': x.name, step: x.step * 10, 'aria-label': x.name } }] }));
+        attrs: { 'data-slider-default': defaults.get(x.name), 'data-g2': x.name, min: x.lo, max: x.hi, step: x.step, 'aria-label': x.name } }] }));
       rows.push(row(captions["ui.scale"], { kind: 'input' as const, value: fmt(L.scale, 2), attrs: { type: 'number', 'data-g2': 'scale', step: '0.25', min: '0.1' } }));
       rows.push({ kind: 'help' as const, text: [...(S.length ? [msg('geo2d.help.sliders', 'Each value set to a number in the code gets a slider. ')] : []), msg('geo2d.help.edit', 'Double-click the figure to edit it: drag points, add vectors, projections, angle marks, plots and measures.')] });
       return { sections: [section(msg('geo2d.title', '2D geometry'), rows, 'sec'),

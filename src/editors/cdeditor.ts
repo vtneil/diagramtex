@@ -214,6 +214,15 @@ import { runtime as TD } from '../runtime';
   const svg = $('.ce-svg', root), stage = $('.cz-stage', root), list = $('.ce-list', root), search = $('.cz-search input', root);
   const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
 
+  for (const [action, axis] of [['addrow', 'row'], ['addcol', 'col']]) {
+    const button = $('[data-ce="' + action + '"]', root);
+    button.addEventListener('pointerenter', () => {
+      if (!E || E.drag || !nR(E.M) || !nC(E.M)) return;
+      E.hover = axis === 'row' ? { r: nR(E.M), c: 0 } : { r: 0, c: nC(E.M) }; draw();
+    });
+    button.addEventListener('pointerleave', () => { if (E && !E.drag) { E.hover = null; draw(); } });
+  }
+
   // ---------------------------------------------------------------- state
   // { M, sel, arrow: [r, c, i] | null, arm, style (for new arrows), view, undo, redo, pending, start, done, drag, hover, ghost, codeAt, codeTimer, clip, G }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
@@ -468,6 +477,7 @@ import { runtime as TD } from '../runtime';
     return null;
   }
   function fit() {
+    if (!E) return;
     const G = geom(), r = rect();
     const bb = G.L.bb || { x: 0, y: 0, w: 0, h: 0 };
     const x1 = Math.min(G.xs[0], bb.x) - 4, x2 = Math.max(G.xs[G.xs.length - 1], bb.x + bb.w) + 4;
@@ -512,8 +522,10 @@ import { runtime as TD } from '../runtime';
     if (b) out += box(b.r1, b.c1, b.r2, b.c2, 'qe-sel ze-sel');
     const h = E.hover, dragging = E.drag && ((E.drag.mode === 'move' && E.drag.moved) || E.drag.mode === 'arrow');
     if (h && (h.r <= R && h.c <= C)) {
-      if (E.arm || E.ghost || dragging) out += box(h.r, h.c, h.r, h.c, 'qe-target');
-      else if (!E.drag && R && C && h.r < R && h.c < C) out += box(h.r, h.c, h.r, h.c, 'qe-hover');
+      // Match Quantum: the whole growing row/column is the hit target.
+      const hb = R && C ? h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, h.r, h.c] : [h.r, h.c, h.r, h.c];
+      if (E.arm || E.ghost || dragging) out += box(hb[0], hb[1], hb[2], hb[3], 'qe-target');
+      else if (!E.drag) out += box(hb[0], hb[1], hb[2], hb[3], 'qe-hover');
     }
     // the selected arrow, as a halo under the drawing
     const sa = E.arrow && L.arrows && L.arrows.find((a: any) => a.src.join() === E.arrow.join());
@@ -593,7 +605,7 @@ import { runtime as TD } from '../runtime';
       const nr = dz ? null : TD.gridDel.near(E.gut, sx, sy);
       const ch = JSON.stringify(nr) !== JSON.stringify(E.near) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
       E.hover = h; E.knobAt = kn; E.del = dz; E.near = nr;
-      svg.style.cursor = dz || (!n && arrowAt(e)) ? 'pointer' : '';
+      svg.style.cursor = dz || (!n && arrowAt(e)) || (h && (h.r === nR(E.M) || h.c === nC(E.M))) ? 'pointer' : n ? 'move' : '';
       if (ch) draw();
       return;
     }
@@ -1069,7 +1081,8 @@ import { runtime as TD } from '../runtime';
     document.body.classList.add('cz-open');
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
-    requestAnimationFrame(fit);
+    fit();
+    requestAnimationFrame(() => { if (E) fit(); });
     // the chrome built here follows the interface language while the editor is open
     let first = true;
     localeOff?.();

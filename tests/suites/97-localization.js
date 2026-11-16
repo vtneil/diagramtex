@@ -1,5 +1,9 @@
 // Language changes affect presentation, never control values, names or source text.
 T.test('Localization: language switching, fallback and document preservation', async () => {
+  // Slider/editor suites may leave another file kind active. Use an explicit
+  // Classic fixture for the document-specific captions asserted below.
+  TD.app.newDoc('Localization checks', null, null, null, null, 'classic');
+  TD.app.setMode('document');
   const picker = document.querySelector('#languagePicker');
   const selected = () => picker.querySelector('[aria-checked="true"]').dataset.language;
   const original = selected(), saved = localStorage.getItem('diagramtex.language');

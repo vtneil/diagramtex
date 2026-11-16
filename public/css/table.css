@@ -72,9 +72,9 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tg-box { position: relative; display: inline-block; padding: 0 28px 28px 0; vertical-align: top; }
 .tg-add { position: absolute; display: grid; place-items: center; padding: 0; border: 1px dashed rgba(28, 27, 25, .24); border-radius: var(--r-sm); background: transparent; color: #5d5b55; opacity: 0; cursor: pointer; transition: opacity .16s var(--ease), background-color .16s var(--ease); }
 .tg-add svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
-.tg-addc { right: 3px; width: 22px; }
-.tg-addr { bottom: 3px; height: 22px; }
-.tg-add:hover, .tg-add:focus-visible { opacity: 1; background: rgba(28, 27, 25, .045); color: #1c1b19; }
+.tg-addc { right: 4px; width: 20px; }
+.tg-addr { bottom: 4px; height: 20px; }
+.tg-add:hover, .tg-add:focus-visible { opacity: 1; border-color: rgba(28, 27, 25, .24); background: rgba(28, 27, 25, .045); color: #1c1b19; }
 @media (prefers-reduced-motion: reduce) { .tg-add { transition: none; } }
 .tg { border-collapse: collapse; table-layout: auto; color: #1c1b19; font-family: var(--font-tex, 'Latin Modern Roman', serif); line-height: 1.25; }
 .tg col.tg-rhc { width: 40px; }
@@ -149,10 +149,12 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 
 /* ---- menus ---- */
 .tb-ctx { min-width: 220px; }
-.tb-bgrid { display: grid; grid-template-columns: repeat(5, 28px); gap: 4px; padding: 4px; }
-.tb-bgrid button { color: var(--graphite); }
-.tb-bgrid button:hover { background: var(--well); color: var(--ink); }
-.tb-bgrid svg { width: 18px; height: 18px; }
+.tb-ctx:has(.tb-bgrid) { min-width: 0; width: 232px; box-sizing: border-box; }
+.tb-bgrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 4px; }
+/* The grid sits 8px inside the menu: 4px menu padding + 4px grid padding. */
+.tb-bgrid button { width: 100%; height: 40px; padding: 0; border-radius: max(0px, calc(var(--r-lg) - 8px)); color: var(--ink); }
+.tb-bgrid button:hover, .tb-bgrid button:focus-visible { background: var(--well); color: var(--ink); }
+.tb-bgrid svg { width: 22px; height: 22px; }
 
 /* ---- the right panel in Table ---- */
 body.mode-table #props .tb-chk { display: inline-flex; align-items: center; gap: 6px; width: auto; color: var(--graphite); font-size: 12px; white-space: nowrap; }

@@ -43,15 +43,17 @@ const migrationUndo = shift => {
   document.activeElement?.blur();
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, metaKey: true, shiftKey: shift, bubbles: true }));
 };
-T.test('migration: Svelte angle input updates its counterpart and commits one undo step', () => {
+T.test('migration: shared angle value editor commits one undo step', () => {
   const shape = migrationBloch(), original = shape.src;
-  const field = document.querySelector('[data-bkn="tilt"]'); field.focus();
+  document.querySelector('[data-bk="tilt"]').parentElement.querySelector('.slider-value').click();
+  const field = document.querySelector('.slider-value-editor');
   field.value = '25'; field.dispatchEvent(new Event('input', { bubbles: true }));
   T.ok(document.activeElement === field); T.ok(field.isConnected, 'focused control is retained');
+  T.eq(shape.src, original, 'typing stays tentative until commit');
+  T.eq(TD.state.undo.length, 0);
+  field.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
   T.eq(document.querySelector('[data-bk="tilt"]').value, '25');
-  T.ok(shape.src.includes('tilt=25')); T.eq(TD.state.undo.length, 0);
-  field.dispatchEvent(new Event('change', { bubbles: true }));
-  T.eq(TD.state.undo.length, 1);
+  T.ok(shape.src.includes('tilt=25')); T.eq(TD.state.undo.length, 1);
   migrationUndo(false); T.eq(TD.state.doc.shapes[0].src, original);
   migrationUndo(true); T.ok(TD.state.doc.shapes[0].src.includes('tilt=25'));
 });
@@ -78,9 +80,10 @@ T.test('migration: a focused number field keeps its typed text through live upda
   for (const typed of ['0', '0.5']) { radius.value = typed; radius.dispatchEvent(new Event('input', { bubbles: true })); }
   T.eq(radius.value, '0.5', 'the re-render did not overwrite the typed value');
   T.ok(/radius=0\.5cm/.test(shape.src), 'the source received 0.5, not 50');
-  const tilt = document.querySelector('[data-bkn="tilt"]'); tilt.focus();
-  tilt.value = '-30'; tilt.dispatchEvent(new Event('input', { bubbles: true }));
-  T.eq(tilt.value, '-30'); T.ok(/tilt=-30\b/.test(shape.src), 'negative angle kept its sign');
+  document.querySelector('[data-bk="tilt"]').parentElement.querySelector('.slider-value').click();
+  const tilt = document.querySelector('.slider-value-editor');
+  tilt.value = '-30'; tilt.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', bubbles:true}));
+  T.ok(/tilt=-30\b/.test(shape.src), 'negative angle kept its sign');
   // A value the application rejected (no model change) is replaced by the model's once focus leaves.
   // (Headless Chrome has no window focus, so blur is dispatched by hand.)
   radius.focus(); radius.value = '7'; radius.blur(); radius.dispatchEvent(new FocusEvent('blur'));

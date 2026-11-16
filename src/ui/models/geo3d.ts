@@ -10,9 +10,8 @@ TD.panels.geo3d = {
     model(s) {
       const L = layout(s.src), th = L.view.th, ph = L.view.ph;
       const angle = (key: any, value: any, min: any, max: any) => row(key === 'th' ? msg('geo3d.tiltTheta', 'Tilt θ') : msg('geo3d.turnPhi', 'Turn φ'), { kind: 'angle' as const, value: fmt(value, 0), numericValue: fmt(value, 0), unit: '°',
-        attrs: { ['data-g3']: key, min, max, step: '1', 'aria-label': key === 'th' ? 'Tilt' : 'Turn' },
-        captionAttrs: { 'aria-label': key === 'th' ? msg('geo3d.tilt', 'Tilt') : msg('geo3d.turn', 'Turn') },
-        numericAttrs: { ['data-g3n']: key, step: '5', 'aria-label': (key === 'th' ? 'Tilt' : 'Turn') + ' in degrees' } });
+        attrs: { 'data-slider-default': key === 'th' ? 70 : 110, ['data-g3']: key, min, max, step: '1', 'aria-label': key === 'th' ? 'Tilt' : 'Turn' },
+        captionAttrs: { 'aria-label': key === 'th' ? msg('geo3d.tilt', 'Tilt') : msg('geo3d.turn', 'Turn') } });
       return { sections: [
         { ...section(captions["ui.3d.geometry"], [angle('th', th, 0, 180), angle('ph', ((ph % 360) + 360) % 360, 0, 360),
           row(captions["ui.scale"], { kind: 'input' as const, value: fmt(L.scale, 2), attrs: { type: 'number', 'data-g3': 'scale', step: '0.25', min: '0.1' } }),

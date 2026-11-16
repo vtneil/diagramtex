@@ -401,6 +401,7 @@ import { runtime as TD } from '../runtime';
   }
   const moveHandle = (i: any) => R().handles.find((h: any) => h.obj === i && h.kind === 'move') || null;
   function fit() {
+    if (!E) return;
     const r0 = rect(), r = R(), b = r.empty ? { x0: -1, y0: -1, x1: 4, y1: 2 } : r.bb;
     const w = b.x1 - b.x0 + 1, h = b.y1 - b.y0 + 1;
     const k = Math.max(16, Math.min(160, Math.min((r0.width - 80) / w, (r0.height - 80) / h)));
@@ -886,7 +887,7 @@ import { runtime as TD } from '../runtime';
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
-    requestAnimationFrame(fit);
+    requestAnimationFrame(() => { if (E) fit(); });
   }
   TD.physicsEditor = { open };
 })();

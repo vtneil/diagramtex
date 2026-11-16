@@ -438,8 +438,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
   const shown = (t: any) => String(t || '').replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$').replace(/\\\[([\s\S]*?)\\\]/g, '$$$1$$')
     .replace(/\$\$/g, ''); // $A$$B$ (two labels side by side) reads as one formula
   // a colour the package would use: an xcolor name or mix, else TikZ's own reading of it

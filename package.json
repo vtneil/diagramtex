@@ -19,6 +19,8 @@
     "test:webkit": "node tests/run.mjs --webkit",
     "test:examples": "node tests/welcome-examples.mjs",
     "test:document": "node tests/document-layout.mjs",
+    "test:scale": "node tests/object-scale.mjs",
+    "test:engine-layout": "node tests/engine-layout.mjs",
     "test:parity": "node tests/rendering-parity.mjs",
     "test:clipping": "node tests/label-clipping.mjs",
     "test:alignment": "node tests/text-alignment.mjs",
@@ -41,6 +43,10 @@
     "test:preview-fade": "node tests/preview-fade.mjs",
     "test:page-print": "node tests/page-print.mjs",
     "test:math-priority": "node tests/math-priority.mjs",
+    "test:construction": "node tests/construction-tools.mjs",
+    "test:modals": "node tests/modal-responsive.mjs",
+    "test:menus": "node tests/context-menu-layout.mjs",
+    "test:snap-modes": "node tests/snapping-modes.mjs",
     "test:format-preview": "node tests/format-preview.mjs"
   },
   "devDependencies": {
@@ -55,5 +61,9 @@
     "svelte-check": "^4.7.8",
     "typescript": "^6.0.3",
     "wrangler": "4.161.0"
+  },
+  "dependencies": {
+    "@ui-sdk/core": "^0.1.0-beta.3",
+    "@ui-sdk/svelte": "^0.1.0-beta.3"
   }
 }

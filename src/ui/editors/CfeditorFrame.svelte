@@ -17,8 +17,10 @@
         <GridStyleButtons id="chemGridStyle" />
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-ce="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-ce="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-ce="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-ce="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -30,7 +32,7 @@
         <div class="cz-props"></div>
         <div class="cz-code">
           <div class="cz-code-head"><span>{t("editor.cf.lang", "chemfig", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-ce="copy" title={t("editor.cf.copyCode", "Copy the chemfig code", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
-          <textarea spellcheck="false" aria-label={t("editor.cf.code", "chemfig code", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("editor.cf.code", "chemfig code", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

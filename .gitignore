@@ -1,14 +1,23 @@
 .DS_Store
 .wrangler/
 node_modules/
+.cache/ms-playwright/
 dist/
+ext/
 public/js/app.bundle.js
 public/js/app.bundle.js.map
 public/version.json
 ._*
 AGENT_HANDOFF.md
+graphify-out/
 
 # Optional private performance project
 /tests/test_page.diagramtex
 
 public/math-render-worker.js
+
+# Downloaded coverage corpus and generated comparison reports
+artifacts/datikz/
+
+# GitLab browser-test diagnostics
+/.ci-artifacts/

@@ -176,6 +176,15 @@ import { runtime as TD } from '../runtime';
   const svg = $('.ze-svg', root), stage = $('.cz-stage', root), list = $('.ze-list', root), search = $('.cz-search input', root);
   const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
 
+  for (const [action, axis] of [['addrow', 'row'], ['addcol', 'col']]) {
+    const button = $('[data-ze="' + action + '"]', root);
+    button.addEventListener('pointerenter', () => {
+      if (!E || E.drag || !nR(E.M) || !nC(E.M)) return;
+      E.hover = axis === 'row' ? { r: nR(E.M), c: 0 } : { r: 0, c: nC(E.M) }; draw();
+    });
+    button.addEventListener('pointerleave', () => { if (E && !E.drag) { E.hover = null; draw(); } });
+  }
+
   // ---------------------------------------------------------------- state
   // { M, sel: {r1, c1, r2, c2} | null, wire: [r, c, i] | null, arm, view, undo, redo, pending, start, done, drag, hover, ghost, codeAt, codeTimer, clip, G }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
@@ -318,7 +327,7 @@ import { runtime as TD } from '../runtime';
       const title = caption(cat);
       const hits = (items as any).filter((it: any) => !q || `${caption(it[1])} ${it[1].fallback} ${it[2]} ${title} ${cat.fallback}`.toLowerCase().includes(q));
       if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => { const name = caption(label); return `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.zxMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`; }).join('')}</div></div>`;
+      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => { const name = caption(label); return `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" aria-pressed="${!!E && E.arm === k}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.zxMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`; }).join('')}</div></div>`;
     }
     list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
     // one scale for every drawing, so nodes keep the same size; wide ones shrink to fit
@@ -352,7 +361,9 @@ import { runtime as TD } from '../runtime';
     if (h) { edit(() => place(d.k, h.r, h.c)); selectCell(h.r, h.c); renderProps(); }
     E.hover = null; draw();
   });
+  list.addEventListener('pointercancel', () => { palDrag = null; if (E) { E.ghost = null; E.hover = null; draw(); } });
   function pick(k: any) {
+    E.tool = 'select'; E.wireStart = null; updateTools();
     const s = single();
     if (s && !E.arm) { put(k, s.r1, s.c1, k !== 'loop'); return; }
     if (!nR(E.M) && !E.arm) { put(k, 0, 0, k !== 'loop'); return; }
@@ -418,6 +429,7 @@ import { runtime as TD } from '../runtime';
     return null;
   }
   function fit() {
+    if (!E) return;
     const G = geom(), r = rect();
     const bb = G.L.bb || { x: 0, y: 0, w: 0, h: 0 };
     const x1 = Math.min(G.xs[0], bb.x) - 4, x2 = Math.max(G.xs[G.xs.length - 1], bb.x + bb.w) + 4;
@@ -440,7 +452,7 @@ import { runtime as TD } from '../runtime';
   // ---------------------------------------------------------------- drawing
   function draw() {
     if (!E) return;
-    syncCode();
+    syncCode(); updateTools();
     const G = (E.G = geom()), r = rect(), W = r.width, H = r.height, v = E.view, k = v.k;
     const X = (x: any) => r2(v.ox + x * k), Y = (y: any) => r2(v.oy + y * k);
     const { xs, ys, R, C, L } = G;
@@ -464,8 +476,10 @@ import { runtime as TD } from '../runtime';
     if (b) out += box(b.r1, b.c1, b.r2, b.c2, 'qe-sel ze-sel');
     const h = E.hover, dragging = E.drag && ((E.drag.mode === 'move' && E.drag.moved) || E.drag.mode === 'wire');
     if (h && (h.r <= R && h.c <= C)) {
-      if (E.arm || E.ghost || dragging) out += box(h.r, h.c, h.r, h.c, 'qe-target');
-      else if (!E.drag && R && C && h.r < R && h.c < C) out += box(h.r, h.c, h.r, h.c, 'qe-hover');
+      // Match Quantum: the whole growing row/column is the hit target.
+      const hb = R && C ? h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, h.r, h.c] : [h.r, h.c, h.r, h.c];
+      if (E.arm || E.ghost || dragging) out += box(hb[0], hb[1], hb[2], hb[3], 'qe-target');
+      else if (!E.drag) out += box(hb[0], hb[1], hb[2], hb[3], 'qe-hover');
     }
     // the selected wire, as a halo under the drawing
     const sw = E.wire && L.wires && L.wires.find((w: any) => w.src.join() === E.wire.join());
@@ -475,8 +489,8 @@ import { runtime as TD } from '../runtime';
     if (R && C && !L.ops) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${Z.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true })}</g>`;
     if (!R || !C || L.ops) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${esc(R && C ? uiText('editor.zx.dropInCell', 'Drop a spider in a cell') : uiText('editor.zx.dropToStart', 'Drop a spider here to start'))}</text>`;
     // a wire being drawn
-    if (E.drag && E.drag.mode === 'wire') {
-      const d = E.drag, x0 = X(G.cx(d.c)), y0 = Y(G.cy(d.r));
+    if ((E.drag && E.drag.mode === 'wire') || E.wireStart) {
+      const d = E.drag?.mode === 'wire' ? E.drag : { ...E.wireStart, e: E.pointer || [0, 0] }, x0 = X(G.cx(d.c)), y0 = Y(G.cy(d.r));
       const t = E.hover && (E.hover.r !== d.r || E.hover.c !== d.c) ? [X(G.cx(E.hover.c)), Y(G.cy(E.hover.r))] : d.e;
       out += `<path class="ze-draft" d="M${x0},${y0}L${r2(t[0])},${r2(t[1])}"/>`;
     }
@@ -501,7 +515,7 @@ import { runtime as TD } from '../runtime';
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.innerHTML = out;
-    svg.classList.toggle('placing', !!E.arm);
+    svg.classList.toggle('placing', !!E.arm || E.tool === 'wire');
   }
 
   // ---------------------------------------------------------------- pointer
@@ -513,7 +527,7 @@ import { runtime as TD } from '../runtime';
     // a double-click is detected here: redraws between the clicks swap the target, so no native dblclick arrives
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
-    const [sx, sy] = pos(e);
+    const [sx, sy] = pos(e); E.pointer = [sx, sy];
     const dz = e.button === 0 && !E.space && TD.gridDel.at(E.gut, sx, sy);
     if (dz) { delLine(dz); return; }
     svg.setPointerCapture(e.pointerId);
@@ -521,6 +535,11 @@ import { runtime as TD } from '../runtime';
     const kb = e.target.closest('.ze-knob');
     if (kb) { E.drag = { mode: 'wire', r: +kb.dataset.r, c: +kb.dataset.c, e: [sx, sy] }; E.knobAt = null; return; }
     const h = cellAt(e);
+    if (E.tool === 'wire' && h) {
+      if (E.wireStart) { const from = E.wireStart; E.wireStart = null; if (from.r !== h.r || from.c !== h.c) addWire(from.r, from.c, h.r, h.c); setTip(''); draw(); }
+      else { E.drag = { mode: 'wire', r: h.r, c: h.c, e: [sx, sy] }; selectCell(h.r, h.c); draw(); renderProps(); }
+      return;
+    }
     if (E.arm && h) { put(E.arm, h.r, h.c, false); return; }
     // a node wins over a wire running past it; a wire over the cell around it
     const n = nodeAt(e), w = !n && wireAt(e);
@@ -537,14 +556,15 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('pointermove', (e: any) => {
     if (!E) return;
     const d = E.drag, [sx, sy] = pos(e);
+    E.pointer = [sx, sy];
     if (!d) {
       const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : cellAt(e), n = dz ? null : nodeAt(e, 14);
       const kn = n && at(n.r, n.c) && at(n.r, n.c).node ? n : e.target.closest('.ze-knob') ? E.knobAt : null;
       const nr = dz ? null : TD.gridDel.near(E.gut, sx, sy);
       const ch = JSON.stringify(nr) !== JSON.stringify(E.near) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(kn) !== JSON.stringify(E.knobAt);
       E.hover = h; E.knobAt = kn; E.del = dz; E.near = nr;
-      svg.style.cursor = dz || (!n && wireAt(e)) ? 'pointer' : '';
-      if (ch) draw();
+      svg.style.cursor = E.tool === 'wire' && !dz ? 'crosshair' : dz || (!n && wireAt(e)) || (h && (h.r === nR(E.M) || h.c === nC(E.M))) ? 'pointer' : n ? 'move' : '';
+      if (ch || E.wireStart) draw();
       return;
     }
     if (d.mode === 'pan') {
@@ -572,6 +592,7 @@ import { runtime as TD } from '../runtime';
       setTip('');
       const h = cellAt(e);
       if (h && (h.r !== d.r || h.c !== d.c)) addWire(d.r, d.c, h.r, h.c);
+      else if (h && E.tool === 'wire') { E.wireStart = { r: d.r, c: d.c }; setTip(uiText('editor.zx.chooseWireEnd', 'Click another cell to connect. Esc cancels.')); }
       E.hover = null; draw(); return;
     }
     if (d.mode === 'move' && d.moved) {
@@ -582,6 +603,7 @@ import { runtime as TD } from '../runtime';
     }
     draw();
   });
+  svg.addEventListener('pointercancel', () => { if (E) { E.drag = null; E.wireStart = null; E.hover = null; E.ghost = null; palDrag = null; setTip(''); draw(); } });
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.del || E.near)) { E.hover = null; E.knobAt = null; E.del = null; E.near = null; draw(); } });
   // a click on a delete gutter: that row or column goes, as one undo step
   function delLine(dz: any) {
@@ -590,7 +612,7 @@ import { runtime as TD } from '../runtime';
   }
 
   // right-click: rows and columns around the cell (or range) under the pointer; on a wire, the wire
-  const MI: Record<string, any> = { ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>', loop: '<path class="qo" d="M8 14a4 4 0 1 1 4 0"/><circle class="qf" cx="10" cy="15" r="2.5"/>' };
+  const MI: Record<string, any> = { ...QI, edit: '<path class="qo" d="M12 4l4 4M4 12l9-9 4 4-9 9-5 1z"/>', duplicate: '<path class="qo" d="M7 7h10v10H7zM3 13V3h10"/>', clear: '<path d="M4 4l12 12M16 4L4 16"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>', loop: '<path class="qo" d="M8 14a4 4 0 1 1 4 0"/><circle class="qf" cx="10" cy="15" r="2.5"/>' };
   const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|wiredel)$/.test(act) ? ' danger' : ''}" data-zm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
   svg.addEventListener('contextmenu', (e: any) => {
@@ -607,7 +629,7 @@ import { runtime as TD } from '../runtime';
       if (!b || h.r < b.r1 || h.r > b.r2 || h.c < b.c1 || h.c > b.c2) selectCell(h.r, h.c);
       draw(); renderProps();
       const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
-      menu.innerHTML = mItem('rowabove', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above') + mItem('rowbelow', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below') + '<hr>' +
+      menu.innerHTML = (single() && at(s.r1, s.c1).node ? mItem('editphase', uiText('editor.zx.editNode', 'Edit Node'), 'edit', 'Enter') + mItem('duplicate', uiText('ui.duplicate', 'Duplicate'), 'duplicate', isMac ? '⌘D' : 'Ctrl+D') + '<hr>' : '') + mItem('rowabove', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above') + mItem('rowbelow', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below') + '<hr>' +
         mItem('colbefore', uiText('editor.commonB.insertColumnBefore', 'Insert Column Before'), 'before') + mItem('colafter', uiText('editor.commonB.insertColumnAfter', 'Insert Column After'), 'after') + '<hr>' +
         (single() && at(s.r1, s.c1).node ? mItem('loop', uiText('editor.zx.addLoop', 'Add Loop'), 'loop', 'L') + '<hr>' : '') +
         mItem('rowdel', nr > 1 ? uiText('editor.commonB.deleteRows', 'Delete {n} Rows', { n: nr }) : uiText('editor.commonB.deleteRow', 'Delete Row'), 'rowdel') + mItem('coldel', nc > 1 ? uiText('editor.commonB.deleteColumns', 'Delete {n} Columns', { n: nc }) : uiText('editor.commonB.deleteColumn', 'Delete Column'), 'coldel') + '<hr>' +
@@ -686,6 +708,25 @@ import { runtime as TD } from '../runtime';
     }
     return TD.zxMini(`\\begin{ZX}${rows.join(' \\\\[\\zxwRow] ')}\\end{ZX}`, 1e3);
   }
+  // Expose the package's spacing without replacing unrelated environment options.
+  function spacing(axis: string) {
+    let value = '';
+    for (const item of Z.opts(E.M.env).list) {
+      const { name, arg } = Z.styleOf(item);
+      if (name === 'circuit') value = '4mm';
+      if (name === 'sep' || name === `${axis} sep` || name === `zx ${axis} sep`) value = arg;
+    }
+    const m = /^([\d.]+)\s*(mm|cm|pt|bp|in)?$/.exec(value);
+    const units: Record<string, number> = { mm: 1, cm: 10, pt: 25.4 / 72.27, bp: 25.4 / 72, in: 25.4 };
+    return { value: m ? r2(Number(m[1]) * units[m[2] || 'pt']) : '', placeholder: value || '1.5' };
+  }
+  function setSpacing(axis: string, value: string) {
+    const number = Number(value);
+    if (value !== '' && (!Number.isFinite(number) || number < 0)) return;
+    const list = Z.opts(E.M.env).list.filter((item: string) => !new RegExp(`^(zx )?${axis} sep$`).test(Z.styleOf(item).name));
+    if (value !== '') list.push(`${axis} sep=${number}mm`);
+    E.M.env = list.join(', '); if (E.M.env) E.M.wrapped = true;
+  }
   function renderProps() {
     if (!E) return;
     props.hidden = false;
@@ -713,7 +754,7 @@ import { runtime as TD } from '../runtime';
     }
     const b = selBox();
     if (!b) {
-      show(uiText('editor.zx.diagram', 'Diagram'), `${nR(M)} × ${nC(M)}`, [field(uiText('editor.commonB.options', 'Options'), 'env', M.env, { class: 'mono', placeholder: uiText('editor.zx.envPlaceholder', 'e.g. row sep=3mm') }), note(uiText('editor.zx.help1', 'Drop spiders from the left into cells. Select a node and drag its blue handle to another cell to draw a wire; click a wire to shape it. Type '), { kbd: 'Z' }, ' ', { kbd: 'X' }, ' ', { kbd: 'H' }, ' ', { kbd: 'N' }, uiText('editor.zx.help2', ' on a cell; '), { kbd: 'Enter' }, uiText('editor.zx.help3', ' edits a phase.'))]); return;
+      show(uiText('editor.zx.diagram', 'Diagram'), `${nR(M)} × ${nC(M)}`, [...['row', 'column'].map(axis => { const v = spacing(axis); return numField(axis === 'row' ? uiText('editor.zx.rowGap', 'Row gap') : uiText('editor.zx.columnGap', 'Column gap'), `spacing-${axis}`, v.value, 'mm', { min: '0', step: '0.5', placeholder: v.placeholder }); }), field(uiText('editor.commonB.options', 'Options'), 'env', M.env, { class: 'mono', placeholder: uiText('editor.zx.envPlaceholder', 'e.g. row sep=3mm') }), note(uiText('editor.zx.help1', 'Drop spiders from the left into cells. Select a node and drag its blue handle to another cell to draw a wire; click a wire to shape it. Type '), { kbd: 'Z' }, ' ', { kbd: 'X' }, ' ', { kbd: 'H' }, ' ', { kbd: 'N' }, uiText('editor.zx.help2', ' on a cell; '), { kbd: 'Enter' }, uiText('editor.zx.help3', ' edits a phase.'))]); return;
     }
     if (!single()) {
       const count = (b.r2 - b.r1 + 1) * (b.c2 - b.c1 + 1);
@@ -724,6 +765,7 @@ import { runtime as TD } from '../runtime';
       rows.push(zs(uiText('editor.zx.colour', 'Colour'), 'kind', n.k, [['Z', uiText('editor.zx.zGreen', 'Z (green)')], ['X', uiText('editor.zx.xRed', 'X (red)')]]), zs(uiText('editor.zx.phase', 'Phase'), 'form', n.frac ? 'frac' : 'plain', [['plain', uiText('editor.zx.plain', 'Plain')], ['frac', uiText('editor.zx.fraction', 'Fraction')]]));
       if (n.frac) rows.push(field(uiText('editor.zx.numerator', 'Numerator'), 'num', n.num, { 'data-tx': 'math' }), field(uiText('editor.zx.denominator', 'Denominator'), 'den', n.den, { 'data-tx': 'math' }));
       else rows.push(field(uiText('editor.zx.phase', 'Phase'), 'phase', n.phase, { 'data-tx': 'math', placeholder: uiText('editor.commonB.nonePlaceholder', 'none') }));
+      rows.push({ kind: 'controls' as const, class: 'ze-phase-presets', controls: [['', '0'], ['\\pi/2', 'π/2'], ['-\\pi/2', '−π/2'], ['\\pi', 'π']].map(([value, text]) => ({ kind: 'button' as const, text, attrs: { 'data-zs': 'preset', 'data-v': value, title: uiText('editor.zx.setPhase', 'Set phase to {phase}', { phase: text }), 'aria-pressed': String(!n.frac && !n.minus && (n.phase || '') === value) } })) });
       rows.push(zs(uiText('editor.zx.sign', 'Sign'), 'minus', n.minus ? '1' : '0', [['0', '+'], ['1', '−']]), zs(uiText('editor.zx.phaseAt', 'Phase at'), 'label', labelOf(n), LABELS()));
     } else if (n && n.k === 'N') rows.push(zs(uiText('editor.zx.size', 'Size'), 'nv', n.v || '', [['', uiText('editor.zx.point', 'Point')], ['+', uiText('editor.zx.square', 'Square'), uiText('editor.zx.squareTitle', '{cmd}: 2mm both ways', { cmd: '\\zxN+' })], ['-', uiText('editor.zx.wide', 'Wide'), uiText('editor.zx.wideTitle', '{cmd}: 2mm wide', { cmd: '\\zxN-' })], ['|', uiText('editor.zx.tall', 'Tall'), uiText('editor.zx.tallTitle', '{cmd}: 2mm tall', { cmd: '\\zxN|' })]]));
     else if (n && n.k === 'T') rows.push(field(uiText('editor.zx.text', 'Text'), 't', n.t, { 'data-tx': 'math' }));
@@ -740,6 +782,7 @@ import { runtime as TD } from '../runtime';
   props.addEventListener('input', (e: any) => {
     const t = e.target, f = t.dataset.f;
     if (!f) return;
+    if (f.startsWith('spacing-')) { if (t.validity.valid) setSpacing(f.slice(8), t.value); draw(); return; }
     if (f === 'env') { E.M.env = t.value; draw(); return; }
     if (E.wire) {
       const cell = at(E.wire[0], E.wire[1]), w = wireOf(E.wire);
@@ -786,7 +829,8 @@ import { runtime as TD } from '../runtime';
     const cell = at(s.r1, s.c1), n = cell.node;
     if (!n) return;
     edit(() => {
-      if (f === 'kind') n.k = v;
+      if (f === 'preset') { n.phase = v; n.minus = false; delete n.frac; delete n.num; delete n.den; delete n.numP; delete n.denP; }
+      else if (f === 'kind') n.k = v;
       else if (f === 'minus') n.minus = v === '1';
       else if (f === 'label') setLabel(n, v);
       else if (f === 'nv') n.v = v;
@@ -808,6 +852,8 @@ import { runtime as TD } from '../runtime';
     if (!E) return;
     $('[data-ze="undo"]', root).disabled = !E.undo.length;
     $('[data-ze="redo"]', root).disabled = !E.redo.length;
+    $('[data-ze="delete"]', root).disabled = !E.sel && !E.wire;
+    for (const tool of ['select', 'wire']) { const b = $(`[data-ze="${tool}"]`, root); const on = E.tool === tool && !E.arm; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
   }
   root.addEventListener('click', (e) => {
     const b = (e.target! as Element).closest('[data-ze]');
@@ -816,7 +862,18 @@ import { runtime as TD } from '../runtime';
   });
   function act(a: any, b?: any) {
     const s = selBox(), M = E.M;
-    if (a === 'undo') undo();
+    if (a === 'select' || a === 'wire') {
+      closeLabel(); E.tool = a; E.arm = null; E.wireStart = null; E.drag = null; E.hover = null;
+      buildPalette(); updateTools(); draw();
+      setTip(a === 'wire' ? uiText('editor.zx.wireToolTip', 'Drag between cells, or click a start cell and an end cell to connect.') : '');
+    }
+    else if (a === 'diagram') { act('select'); E.sel = null; E.wire = null; renderProps(); draw(); }
+    else if (a === 'editphase' && single()) { if (!editPhase(s.r1, s.c1)) focusField(); }
+    else if (a === 'duplicate' && single()) {
+      let c = s.c1 + 1; while (c < nC(M) && !isEmpty(at(s.r1, c))) c++;
+      edit(() => moveCell(s.r1, s.c1, s.r1, c, true)); selectCell(s.r1, c); draw(); renderProps();
+    }
+    else if (a === 'undo') undo();
     else if (a === 'redo') redo();
     else if (a === 'fit') fit();
     else if (a === 'done') finish(true);
@@ -870,6 +927,8 @@ import { runtime as TD } from '../runtime';
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
       if (!menu.hidden) { closeMenu(); return; }
+      if (E.wireStart || E.drag) { E.wireStart = null; E.drag = null; setTip(''); draw(); return; }
+      if (E.tool === 'wire') { act('select'); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel || E.wire) { E.sel = null; E.wire = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -893,7 +952,9 @@ import { runtime as TD } from '../runtime';
       E.sel = { r1: b.r1, c1: b.c1, r2: b.r1 + E.clip.length - 1, c2: b.c1 + E.clip[0].length - 1 }; draw(); renderProps();
       return;
     }
+    if (mod && e.key.toLowerCase() === 'd' && single()) { e.preventDefault(); act('duplicate'); return; }
     if (mod) return;
+    if (e.key.toLowerCase() === 'v' || e.key.toLowerCase() === 'w') { e.preventDefault(); act(e.key.toLowerCase() === 'v' ? 'select' : 'wire'); return; }
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
     if (e.key === '/') { e.preventDefault(); search.focus(); return; }
@@ -948,7 +1009,7 @@ import { runtime as TD } from '../runtime';
   }
   function open(block: any, done: any) {
     const M = load(block.src);
-    E = { M, sel: null, wire: null, arm: null, view: { ox: 0, oy: 0, k: 4 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null, clip: null, G: null };
+    E = { M, tool: 'select', wireStart: null, pointer: null, sel: null, wire: null, arm: null, view: { ox: 0, oy: 0, k: 4 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null, clip: null, G: null };
     // an untouched diagram hands its own text back
     E.start = codeOf(M);
     root.hidden = false;
@@ -959,7 +1020,8 @@ import { runtime as TD } from '../runtime';
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    requestAnimationFrame(fit);
+    fit();
+    requestAnimationFrame(() => { if (E) fit(); });
   }
   TD.zxEditor = { open };
 })();

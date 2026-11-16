@@ -249,8 +249,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
   const col = (v: any) => (v == null ? null : TD.tikzColor ? TD.tikzColor(unbrace(v)) : null);
 
   // The arrow tips of PGF's old arrows library, in their own frame: x along the line, out of it, from where

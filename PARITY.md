@@ -68,6 +68,33 @@ blocks added since. On the 43 figures scored both times the 0.5 mm mean is uncha
 drifted, and the two figures that had (below) are fixed. The 3D sketch tool was removed in 1.33, so that row
 lost its two sketch figures.
 
+### Repeat run (16 November 2026: SVG optimisation and Scale)
+
+I re-ran 43 of the named canvas/LaTeX scenes against the current source build, compiling every export with
+`pdflatex` and scoring the app/LaTeX composites with `tools/match.py`. This is a repeat sample rather than a
+replacement for the 48-figure measurement above: it does not include the four picture fixtures or every
+targeted edge-case scene. The scores below use the same ink-distance method; 5 px is 0.5 mm at 100 px/cm.
+
+| Repeat sample | Figures | ≤ 0.2 mm (mean) | ≤ 0.5 mm (mean / median) | ≤ 1 mm (lowest) |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline scenes | 43 | 77.5 % | 99.4 / 99.8 % | 98.4 % |
+
+At 0.5 mm, 40 of the 43 scenes scored at least 98 %. The three below that mark were the Karnaugh map
+(96.0 %), shapes (97.8 %) and Bloch sphere (97.7 %). The 0.2 mm mean is especially sensitive to font weight
+and rasterisation; the 0.5 mm and 1 mm columns are more useful for judging visible placement.
+
+I also added `objectScale = 1.5` to one shape scene and one quantum-circuit scene, then compiled and scored
+those exports separately. Both emitted TikZ `scale around` scopes and compiled successfully:
+
+| Scale probe | ≤ 0.2 mm | ≤ 0.5 mm | ≤ 1 mm |
+| --- | ---: | ---: | ---: |
+| Scaled shape | 91.4 % | 99.4 % | 100 % |
+| Scaled quantum circuit | 89.8 % | 100 % | 100 % |
+
+The run images, `.tex` files and composites are in `/tmp/texdiagram-latex-parity-HqZ7yb` on the machine that
+ran the test. These probes cover representative scaling; they do not establish parity for every scalable
+object type.
+
 Harder cases, scored separately (0.5 mm / 1 mm):
 
 | Case | ≤ 0.5 mm | ≤ 1 mm |

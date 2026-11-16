@@ -1,4 +1,6 @@
 import './ui/shell';
+// Slider entry owns Enter/Escape before block-editor capture shortcuts.
+import './ui/services/sliders.ts';
 // Explicit startup order for domain engines, services, editors and views.
 import './domain/mathengine.ts';
 import './domain/shapes.ts';
@@ -67,6 +69,7 @@ import './domain/tikzimport.ts';
 import './domain/rawtikz.ts';
 import './domain/params.ts';
 import './domain/components.ts';
+import './domain/scale';
 import './ui/services/tooltip.ts';
 import './ui/services/segthumb.ts';
 import './ui/services/selectmenu.ts';
@@ -100,6 +103,7 @@ import './ui/models/timing.ts';
 import './ui/models/xy.ts';
 import './ui/models/zx.ts';
 import './ui/panels.svelte.ts';
+import './domain/node-features';
 import './application/app.ts';
 import './application/docview.ts';
 import './domain/texcommands.ts';

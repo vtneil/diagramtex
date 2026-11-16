@@ -20,6 +20,7 @@ import './console-errors.test.mjs';
 import './qc-span.mjs';
 import './circuit-wires.mjs';
 import './canvas-grid.mjs';
+import './smart-snap.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

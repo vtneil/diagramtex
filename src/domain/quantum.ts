@@ -191,8 +191,7 @@ import { runtime as TD } from '../runtime';
     return L;
   }
   // measured text sizes change when fonts load or the maths engine changes
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
 
   // \verticaltext{MAJ} stacks the letters, one upright letter per line
   const vtext = (t: any) => String(t || '').replace(/\\verticaltext\s*\{([^{}]*)\}/g, (m, w) => `\\begin{array}{c}${[...w.replace(/\s+/g, '')].map((ch) => `\\text{${ch}}`).join('\\\\')}\\end{array}`);
@@ -441,17 +440,18 @@ import { runtime as TD } from '../runtime';
       const glabel = (t: any, list: any, tc: any, lab: any) => {
         if (!t) return;
         const b = box(t);
-        let pos = 'above', anchor = 'mid', ysh = 0.2 * PX;
+        let pos = 'above', anchor = 'mid', xsh = 0, ysh = 0.2 * PX;
         for (const e of list) {
           let q;
           if ((q = /^label position\s*=\s*(\w+)/.exec(e))) pos = q[1];
           else if ((q = /^anchor\s*=\s*([\w ]+)/.exec(e))) anchor = q[1].trim();
+          else if ((q = /^xshift\s*=\s*(.+)$/.exec(e))) xsh += length(q[1], E)?.px || 0;
           else if ((q = /^yshift\s*=\s*(.+)$/.exec(e))) ysh += length(q[1], E)?.px || 0;
           else if (e === 'below' || e === 'above') { pos = e; anchor = e === 'below' ? 'north' : 'south'; }
         }
         const ty = pos === 'below' ? y2 : pos === 'center' ? (y1 + y2) / 2 : y1, half = inkH(b) / 2 + LGAP;
         const cyl = (/north/.test(anchor) ? ty + half : /south/.test(anchor) ? ty - half : ty) - ysh;
-        dest.push({ k: 'text', t, x: (x1 + x2) / 2, y: cyl, b, lab, ...(tc ? { tc } : {}) });
+        dest.push({ k: 'text', t, x: (x1 + x2) / 2 + xsh, y: cyl, b, lab, ...(tc ? { tc } : {}) });
       };
       // lab: where the label is written, so the editor can edit it on a double-click
       const gi = at(r, c).indexOf(it);
@@ -653,15 +653,16 @@ import { runtime as TD } from '../runtime';
       // the label: a node at pos along the full line (0 the top), anchor south, 4pt inner sep; label style moves it
       if (sl.t) {
         const b = box(sl.t);
-        let pos = 0, anchor = 'south', ysh = 0;
+        let pos = 0, anchor = 'south', xsh = 0, ysh = 0;
         for (const e of sl.lo ? sl.lo.list : []) {
           let q;
           if ((q = /^pos\s*=\s*([\d.]+)/.exec(e))) pos = +q[1];
           else if ((q = /^anchor\s*=\s*([\w ]+)/.exec(e))) anchor = q[1].trim();
+          else if ((q = /^xshift\s*=\s*(.+)$/.exec(e))) xsh += length(q[1], E)?.px || 0;
           else if ((q = /^yshift\s*=\s*(.+)$/.exec(e))) ysh += length(q[1], E)?.px || 0;
         }
         const half = 4 / K + inkH(b) / 2, py = y1 + (y2 - y1) * pos;
-        ops.push({ k: 'text', t: sl.t, x: xs, y: (/north/.test(anchor) ? py + half : /south/.test(anchor) ? py - half : py) - ysh, b, lab: sl.lab, ...(sl.ll.text ? { tc: sl.ll.text } : {}) });
+        ops.push({ k: 'text', t: sl.t, x: xs + xsh, y: (/north/.test(anchor) ? py + half : /south/.test(anchor) ? py - half : py) - ysh, b, lab: sl.lab, ...(sl.ll.text ? { tc: sl.ll.text } : {}) });
       }
     }
     ops.unshift(...back);

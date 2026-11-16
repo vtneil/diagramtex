@@ -6,6 +6,10 @@ const fontkit = require('fontkit');
 const root = path.resolve(__dirname, '..');
 const css = fs.readFileSync(path.join(root, 'public/vendor/katex/katex.min.css'), 'utf8');
 const fonts = {}, copyrights = new Set();
+// Curve-extrema calculations differ in their last floating-point bits between
+// V8 versions. Canonicalize calculated bounds, not the SVG outlines, to a
+// nanounit in font coordinates so checked-in tables are runtime-independent.
+const bound = value => Number(value.toFixed(9));
 for (const match of css.matchAll(/@font-face\s*\{[^}]*\}/g)) {
   const rule = match[0];
   const property = name => new RegExp(name + '\\s*:\\s*([^;}]*)').exec(rule)?.[1].trim().replace(/["']/g, '');
@@ -21,7 +25,7 @@ for (const match of css.matchAll(/@font-face\s*\{[^}]*\}/g)) {
     chars[code] = glyph.id;
     if (!glyphs[glyph.id]) {
       const b = glyph.bbox;
-      glyphs[glyph.id] = [glyph.advanceWidth, glyph.path.toSVG(), b.minX, b.minY, b.maxX, b.maxY];
+      glyphs[glyph.id] = [glyph.advanceWidth, glyph.path.toSVG(), ...[b.minX, b.minY, b.maxX, b.maxY].map(bound)];
     }
   }
   fonts[[property('font-family'), property('font-style'), property('font-weight')].join('|')] = { em: font.unitsPerEm, chars, glyphs };

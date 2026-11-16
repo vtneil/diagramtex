@@ -95,6 +95,27 @@ try {
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const returnedScroll = await page.locator('#docview').evaluate(el => ({ top: el.scrollTop, left: el.scrollLeft }));
       assert(Math.abs(savedScroll.top - returnedScroll.top) < 2 && Math.abs(savedScroll.left - returnedScroll.left) < 2, `${name}: Document/Diagram round trip preserves both scroll axes`);
+      // Document navigation uses the same selector and follows the first visible diagram.
+      await page.evaluate(() => {
+        const d = TD.app.state.doc;
+        d.blocks = [
+          { type: 'diagram', shapes: [], name: 'First' },
+          { type: 'text', text: Array(100).fill('Document spacing paragraph.').join('\n\n') },
+          { type: 'diagram', shapes: [], name: 'Second' },
+        ];
+        d.active = 0;
+        TD.docview.render();
+        TD.app.setActiveBlock(0);
+      });
+      await page.waitForFunction(() => document.querySelector('#blockSel').textContent === 'First');
+      assert(await page.locator('#blockNav').isVisible(), `${name}: document diagram selector is visible`);
+      await page.locator('#blockNext').click();
+      await page.waitForFunction(() => TD.app.state.doc.active === 2 && document.querySelector('#blockSel').textContent === 'Second');
+      await page.evaluate(() => { const root = document.querySelector('#docview'); root.dispatchEvent(new WheelEvent('wheel')); root.scrollTop = 0; });
+      await page.waitForFunction(() => TD.app.state.doc.active === 0 && document.querySelector('#blockSel').textContent === 'First');
+      await page.locator('#blockSel').click();
+      await page.locator('.diagram-gallery [data-block="2"]').click();
+      await page.waitForFunction(() => TD.app.state.mode === 'document' && TD.app.state.doc.active === 2);
       await page.emulateMedia({ media: 'print' });
       const print = await page.evaluate(() => ({
         transform: getComputedStyle(document.querySelector('.doc-page')).transform,

@@ -307,6 +307,7 @@ import { t as uiText, message, caption, onLocale } from '../i18n';
     return best;
   }
   function fit() {
+    if (!E) return;
     const L = lay(), r = rect(), bb = L.empty ? { x: 0, y: -2 * PX, w: 4 * PX, h: 2 * PX } : L.bb;
     const w = bb.w / PX + 1, h = bb.h / PX + 1;
     const k = Math.max(20, Math.min(220, Math.min((r.width - 80) / w, (r.height - 80) / h)));
@@ -760,7 +761,7 @@ import { t as uiText, message, caption, onLocale } from '../i18n';
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
     fit();
-    requestAnimationFrame(fit);
+    requestAnimationFrame(() => { if (E) fit(); });
   }
   TD.feynEditor = { open };
 })();

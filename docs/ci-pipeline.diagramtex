@@ -1,0 +1,37 @@
+{
+ "app": "diagramtex",
+ "version": 3,
+ "kind": "board",
+ "name": "GitLab CI pipeline",
+ "page": {
+  "paper": "a4",
+  "orient": "portrait",
+  "w": 21,
+  "h": 29.7,
+  "mt": 2.5,
+  "mb": 2.5,
+  "ml": 2.5,
+  "mr": 2.5,
+  "font": 11,
+  "title": true,
+  "spread": 1,
+  "numbered": false
+ },
+ "blocks": [
+  {
+   "type": "diagram",
+   "shapes": [
+    {
+     "type": "forest",
+     "x": 0,
+     "y": 0,
+     "src": "\\begin{forest}\nfor tree={draw, rounded corners, forked edges, align=left, grow'=east, l sep=8mm, s sep=4mm, inner sep=3mm, font=\\small}\n[GitLab CI: push\n [build: npm run build\n  [dist/ artifact\n   [Browser tests: one job at a time\\\\resource group: browser-tests\n    [Functional checks\\\\Chromium / WebKit / Firefox]\n    [Rendering and layout\\\\rendering-parity / document-layout\\\\webkit-rendering / mixed-labels\\\\label-clipping / text-alignment / label-display]\n    [Performance and loading\\\\math-performance / document-performance\\\\math-loading / math-priority]\n    [Output and previews\\\\output-readiness / preview-fade\\\\page-print / format-preview]\n    [Editing and interface\\\\construction-tools / modal-responsive\\\\context-menu-layout / snapping-modes]\n   ]\n  ]\n ]\n [typecheck: npm run check]\n [label-glyphs: reproducibility check]\n]\n\\end{forest}\n",
+     "size": "large",
+     "font": "default",
+     "color": "#000000",
+     "id": "ci-pipeline-tree"
+    }
+   ]
+  }
+ ]
+}

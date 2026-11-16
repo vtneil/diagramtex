@@ -1,8 +1,11 @@
 # Roadmap
 
+## TikZ Bidirectional Parity
+- [ ] **Importing TikZ code**: Still severely unsupported. Phases: (1) Render in-place, (2) Edit in-place
+
 ## Browser performance
 
-- [ ] Fix performance degradation on Safari browser when panning, zooming, and scrolling with KaTeX and Temml.
+- [x] Fix performance degradation on Safari browser when panning, zooming, and scrolling with KaTeX and Temml.
 
 ## Milestone: science blocks
 

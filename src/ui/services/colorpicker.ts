@@ -88,6 +88,7 @@ import { t, message as msg, bindCaption } from '../../i18n';
     drag(el.querySelector('.cp-alpha'), (x: any) => { cur.a = x; cur.none = false; });
 
     el.querySelector('.cp-inputs').addEventListener('change', (e: any) => {
+      if (!cur) return;
       const f = e.target.dataset.f;
       const rgb = hsv2rgb(cur.h, cur.s, cur.v);
       let v = e.target.value.trim();
@@ -176,6 +177,8 @@ import { t, message as msg, bindCaption } from '../../i18n';
   }
   function close() {
     if (!el || el.style.display !== 'block') return;
+    // Commit a focused colour input before hiding the popover and releasing its state.
+    if (el.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
     el.style.display = 'none';
     const c = cur; cur = null;
     c.onClose && c.onClose();

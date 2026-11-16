@@ -136,6 +136,7 @@ import { runtime as TD } from '../runtime';
   function toCm(e: any) { const r = rect(), v = E.view; return [(e.clientX - r.left - v.ox) / v.k, (v.oy - (e.clientY - r.top)) / v.k]; }
   const m = (x: any, y: any) => [E.view.ox + x * E.view.k, E.view.oy - y * E.view.k];
   function fit() {
+    if (!E) return;
     const r = rect(), b = C.itemsBox(E.items, { size: 'normalsize', font: 'default', vstyle: C.vstyleOf(E.raw) }) || { x1: -2, y1: -1, x2: 2, y2: 1 };
     const w = Math.max(b.x2 - b.x1, 2), h = Math.max(b.y2 - b.y1, 2);
     const k = Math.max(20, Math.min(110, Math.min((r.width - 80) / w, (r.height - 80) / h)));
@@ -765,7 +766,8 @@ import { runtime as TD } from '../runtime';
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    requestAnimationFrame(fit);
+    fit();
+    requestAnimationFrame(() => { if (E) fit(); });
   }
   TD.czEditor = { open };
 })();

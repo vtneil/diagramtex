@@ -8,12 +8,14 @@
   import FormPanel from './FormPanel.svelte';
   import type { FormSection } from './forms';
   export interface Model {
-    defaults: boolean; title: string; fields: StyleModel[]; page?: PageModel; variables?: Variable[];
+    defaults: boolean; defaultsHint?: boolean; title: string; fields: StyleModel[]; page?: PageModel; variables?: Variable[];
     before: FormSection[]; after: FormSection[]; panel?: string; geometry: boolean;
     shortcuts?: { keys: string[]; description: string }[];
   }
   let { model }: { model: Model } = $props();
   let geometry = $state<GeometryModel | null>(null);
+  let after = $state<FormSection[] | null>(null);
+  export function updateAfter(next: FormSection[]) { flushSync(() => { after = next; }); }
   export function updateGeometry(next: GeometryModel) { flushSync(() => { geometry = next; }); }
 </script>
-{#if model.page}<PageProperties model={model.page}/>{/if}<h3>{caption(model.title, $locale)}{#if model.defaults} <small>{t("ui.for.new.shapes", "for new shapes", {}, $locale)}</small>{/if}</h3>{#if model.fields.length}<div class="sec" data-target={model.defaults ? 'defaults' : 'sel'}>{#each model.fields as field}<StyleField model={field}/>{/each}</div>{/if}{#if model.variables}<Variables variables={model.variables}/>{/if}<FormPanel model={{ sections: model.before }}/>{#if model.panel}<div class="panel" data-panel={model.panel}></div>{/if}{#if model.geometry}<div class="sec" id="geomSec">{#if geometry}<GeometryProperties model={geometry}/>{/if}</div>{/if}<FormPanel model={{ sections: model.after }}/>{#if model.shortcuts}<div class="sec"><div class="sec-title">{t("ui.shortcuts", "Shortcuts", {}, $locale)}</div><table class="keys"><tbody>{#each model.shortcuts as shortcut}<tr><td>{#each shortcut.keys as key}<kbd>{key}</kbd>{/each}</td><td>{caption(shortcut.description, $locale)}</td></tr>{/each}</tbody></table></div>{/if}
+{#if model.page}<PageProperties model={model.page}/>{/if}<h3>{caption(model.title, $locale)}{#if model.defaults && model.defaultsHint !== false} <small>{t("ui.for.new.shapes", "for new shapes", {}, $locale)}</small>{/if}</h3>{#if model.fields.length}<div class="sec" data-target={model.defaults ? 'defaults' : 'sel'}>{#each model.fields as field}<StyleField model={field}/>{/each}</div>{/if}{#if model.variables}<Variables variables={model.variables}/>{/if}<FormPanel model={{ sections: model.before }}/>{#if model.panel}<div class="panel" data-panel={model.panel}></div>{/if}{#if model.geometry}<div class="sec" id="geomSec">{#if geometry}<GeometryProperties model={geometry}/>{/if}</div>{/if}<FormPanel model={{ sections: after || model.after }}/>{#if model.shortcuts}<div class="sec"><div class="sec-title">{t("ui.shortcuts", "Shortcuts", {}, $locale)}</div><table class="keys"><tbody>{#each model.shortcuts as shortcut}<tr><td>{#each shortcut.keys as key}<kbd>{key}</kbd>{/each}</td><td>{caption(shortcut.description, $locale)}</td></tr>{/each}</tbody></table></div>{/if}

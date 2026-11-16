@@ -582,8 +582,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); baseCache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); baseCache.clear(); });
 
   // The backgrounds library's picture options: the grid, and how far the background reaches past the picture
   const EX = 4.30554, GRID_LW = 0.2;

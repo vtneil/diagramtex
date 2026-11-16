@@ -55,12 +55,12 @@ forest_dir: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_decision: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_binary: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_prob: 1/1 modelled · regenerated differs from line 4 (forest → forest)
-forest_sz_small: 1/1 modelled · regenerated differs from line 2 (forest → forest)
-forest_sz_normalsize: 1/1 modelled · regenerated differs from line 2 (forest → forest)
-forest_sz_Large: 1/1 modelled · regenerated differs from line 2 (forest → forest)
-forest_ls_0pt: 1/1 modelled · regenerated differs from line 2 (forest → forest)
-forest_ls_10pt: 1/1 modelled · regenerated differs from line 2 (forest → forest)
-forest_ls_30pt: 1/1 modelled · regenerated differs from line 2 (forest → forest)
+forest_sz_small: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_sz_normalsize: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_sz_Large: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_ls_0pt: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_ls_10pt: 1/1 modelled · regenerated differs from line 4 (forest → forest)
+forest_ls_30pt: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_nd: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_nd2: 1/1 modelled · regenerated differs from line 4 (forest → forest)
 forest_east: 1/1 modelled · regenerated differs from line 4 (forest → forest)
@@ -96,7 +96,7 @@ cz_vset: 1/1 modelled · regenerated same
 cz_vsrc: 1/1 modelled · regenerated same
 cz_idir: 1/1 modelled · regenerated same
 cz_color: 1/1 modelled · regenerated same
-cz_path: 0/8 modelled · regenerated differs from line 4 (cz → tikz)
+cz_path: 6/8 modelled · regenerated differs from line 4 (cz → coord,line,tikz)
 czg_amp1: 1/1 modelled · regenerated same
 czg_logic1: 1/1 modelled · regenerated same
 czg_logic2: 1/1 modelled · regenerated same
@@ -117,8 +117,8 @@ qc_long: 1/1 modelled · regenerated same
 qc_multi: 1/1 modelled · regenerated same
 qc_group: 1/1 modelled · regenerated same
 qc_cw: 1/1 modelled · regenerated same
-qc_small: 1/1 modelled · regenerated differs from line 2 (qc → qc)
-qc_large: 1/1 modelled · regenerated differs from line 2 (qc → qc)
+qc_small: 1/1 modelled · regenerated same
+qc_large: 1/1 modelled · regenerated same
 cz_e: 1/1 modelled · regenerated same
 plt_legend_sw: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
 plt_legend_se: 2/3 modelled · regenerated differs from line 4 (plot → tikz)

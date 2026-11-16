@@ -266,8 +266,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
 
   // phases are set at 8pt and the node scaled by 0.8: 6.4pt on the page
   const PHASE = { size: 6.4 * PT, font: 'default' }, LABEL = { size: 8 * PT, font: 'default' }, NORMAL = { size: 10 * PT, font: 'default' };

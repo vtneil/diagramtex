@@ -16,3 +16,8 @@
 
 /* The top layer escapes the editor toolbar’s horizontal scroll clipping. */
 .language-picker .language-options[popover] { position: fixed; inset: auto; margin: 0; overflow: visible; }
+
+/* Keep the editor's language trigger compact beside the appearance control. */
+#languagePicker > summary { box-sizing: border-box; min-height: 28px; padding: 2px 6px; gap: 5px; font-size: 12px; }
+#languagePicker > summary .language-flag { font-size: 16px; }
+#languagePicker > summary .language-chevron { width: 10px; height: 10px; }

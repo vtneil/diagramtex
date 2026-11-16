@@ -34,7 +34,17 @@ export function createDocumentFactory({ uid, upgrade, pageDefaults, onDropped }:
     if (!(active !== undefined && blocks[active]?.type === 'diagram')) {
       active = blocks.findIndex(b => b.type === 'diagram');
     }
+    const cleanGuides = (owner: { guides?: any[] }) => {
+      if (!Array.isArray(owner.guides)) { delete owner.guides; return; }
+      const ids = new Set<string>();
+      owner.guides = owner.guides.filter(g => g && (g.axis === 'x' || g.axis === 'y') && typeof g.position === 'number' && Number.isFinite(g.position)).map(g => {
+        const id = typeof g.id === 'string' && g.id && !ids.has(g.id) ? g.id : uid(); ids.add(id);
+        return { id, axis: g.axis, position: g.position };
+      });
+    };
+    for (const block of blocks) cleanGuides(block);
     const sheet: Sheet = { pages: 1, shapes: [], ...savedSheet };
+    cleanGuides(sheet);
     sheet.shapes = (Array.isArray(sheet.shapes) ? sheet.shapes : []).filter(fix);
     if (dropped) onDropped?.(dropped);
     const fullPage = { ...pageDefaults, ...page };

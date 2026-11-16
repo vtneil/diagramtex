@@ -10,6 +10,7 @@ export interface ShapeOwner {
   name?: string;
   shapes: Shape[];
   vars?: Record<string, string>;
+  guides?: import('./smart-snap').Guide[];
 }
 export interface Block extends ShapeOwner {
   type: string;
@@ -40,6 +41,8 @@ export interface HistoryStep {
   va?: string;
   nb?: string;
   na?: string;
+  gb?: string;
+  ga?: string;
   /** when it was done (or redone), and when it was last undone: `stamp()` order across every file */
   t?: number;
   r?: number;

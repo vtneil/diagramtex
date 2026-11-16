@@ -457,16 +457,17 @@ export function applyPreset(m: TableModel, p: Preset) {
   } else if (p === 'grid') {
     for (let r = 0; r <= nr; r++) full(r, 1);
     for (const row of m.vr) row.fill(1);
-    // no rule runs through a merged cell
-    const own = owners(m);
-    for (let r = 0; r < nr; r++) for (let c = 0; c < nc; c++) {
-      const [ar, ac] = own[r][c];
-      if (ar < r) m.hr[r][c] = 0;
-      if (ac < c) m.vr[r][c] = 0;
-    }
   } else if (p === 'minimal' || p === 'striped') {
     if (h > 0 && h < nr) full(h, 1);
     if (p === 'striped') { full(0, 1); full(nr, 1); }
+  }
+  // Every preset must leave the interior of merged cells free of rules,
+  // including a header rule crossed by a vertical merge.
+  const own = owners(m);
+  for (let r = 0; r < nr; r++) for (let c = 0; c < nc; c++) {
+    const [ar, ac] = own[r][c];
+    if (ar < r) m.hr[r][c] = 0;
+    if (ac < c) m.vr[r][c] = 0;
   }
 }
 /** After a structural change, a preset table gets its pattern again (a custom one keeps its rules). */

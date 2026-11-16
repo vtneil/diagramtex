@@ -137,12 +137,14 @@ T.test('structure: styles and node distance set on the picture stay on it', () =
   T.tex('structure-picture-styles', doc(S));
 });
 
-T.test('structure: a style with arguments, or set in a scope, stays code', () => {
+T.test('structure: single-argument styles are editable and scoped definitions do not leak', () => {
   const S = load(pic(`  \\tikzset{c/.style={draw=#1}}
   \\draw[c=red] (0,0) -- (1,0);
   \\begin{scope}
     \\tikzset{d/.style={thick}}
   \\end{scope}
   \\draw[d] (0,1) -- (1,1);`));
-  T.eq(S.map((s) => s.type), ['tikz', 'tikz', 'tikz', 'tikz'], 'nothing guessed: ' + S.map((s) => s.type).join(','));
+  T.eq(S.map((s) => s.type), ['tikz', 'line', 'tikz', 'tikz']);
+  T.eq(S[1].stroke, '#ff0000', 'the argument sets the colour');
+  T.ok(S[3].issues.some(w => w.includes('d')), 'the out-of-scope style stays code');
 });

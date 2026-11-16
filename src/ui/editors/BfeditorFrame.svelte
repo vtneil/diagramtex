@@ -14,8 +14,10 @@
         <button class="icon flat" data-be="fit" title={t("editor.bf.fit", "Fit the field in view (F)", {}, $locale)}>{@html model.p5}</button>
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-be="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-be="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-be="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-be="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -27,7 +29,7 @@
         <div class="cz-props"></div>
         <div class="cz-code">
           <div class="cz-code-head"><span>{t("editor.bf.lang", "bytefield", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-be="copy" title={t("editor.bf.copyCode", "Copy the bit field code", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
-          <textarea spellcheck="false" aria-label={t("editor.bf.code", "bytefield code", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("editor.bf.code", "bytefield code", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

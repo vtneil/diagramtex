@@ -166,8 +166,8 @@
       <div class="spacer"></div>
       <!--[-1--><!--]-->
       <details class="language-picker" id="languagePicker">
-        <summary id="languageTrigger" aria-label="Interface language" aria-haspopup="menu" aria-expanded="false" title="Language">
-          <span class="language-flag" aria-hidden="true">🇬🇧</span><span>English</span>
+        <summary id="languageTrigger" aria-label="Interface language" aria-haspopup="menu" aria-expanded="false" title="Language: English">
+          <span class="language-flag" aria-hidden="true">🇬🇧</span><span>EN</span>
           <svg class="language-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"></path></svg>
         </summary>
         <div class="language-options" popover="manual" role="menu" aria-label="Language">
@@ -205,7 +205,7 @@
     <div class="spacer"></div>
     <div id="blockNav" class="diagram-nav" hidden="">
       <button id="blockPrev" class="icon" title="Previous diagram"><svg viewBox="0 0 20 20"><path d="M12 4l-6 6 6 6"></path></svg></button>
-      <select id="blockSel" title="Diagram in this document" hidden=""></select>
+      <button id="blockSel" aria-haspopup="dialog" title="Diagram in this document" hidden=""></button>
       <button id="blockRename" class="icon" title="Rename diagram"><svg viewBox="0 0 20 20"><path d="M12 4l4 4M4 12l9-9 4 4-9 9-5 1z"></path></svg></button>
       <button id="blockNext" class="icon" title="Next diagram"><svg viewBox="0 0 20 20"><path d="M8 4l6 6-6 6"></path></svg></button>
     </div>
@@ -221,6 +221,7 @@
         <button type="button" role="radio" data-grid-style="isometric" aria-checked="false" tabindex="-1" title="Isometric" aria-label="Isometric"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.5L17 16H3Z"></path></svg></button>
         <button type="button" role="radio" data-grid-style="isometric-dot" aria-checked="false" tabindex="-1" title="Isometric Dot" aria-label="Isometric Dot"><svg viewBox="0 0 20 20" aria-hidden="true"><g fill="currentColor" stroke="none"><circle cx="10" cy="4.5" r="1.7"></circle><circle cx="4" cy="15" r="1.7"></circle><circle cx="16" cy="15" r="1.7"></circle></g></svg></button>
       </div><!---->
+      <button id="btnGuides" type="button" data-cmd="guides" title="Guides"><svg viewBox="0 0 20 20"><path d="M3 3h14v14H3zM7 3v4M11 3v3M15 3v4M3 7h4M3 11h3M3 15h4"></path></svg></button>
       <button id="btnSnap" type="button" class="on" aria-pressed="true" title="Snap to grid &amp; points (hold Alt to bypass)"><svg viewBox="0 0 20 20"><path d="M5 3v7a5 5 0 0010 0V3h-3.5v7a1.5 1.5 0 01-3 0V3z"></path><path d="M5 6.5h3.5M11.5 6.5H15"></path></svg></button>
     </div>
     <div class="group">
@@ -254,6 +255,8 @@
       <button data-tool="select" title="Select / move (V)"><svg viewBox="0 0 20 20"><path d="M5 3l10 7-5 1-2 5z" class="f"></path></svg></button>
       <button data-tool="hand" class="hand-only" title="Hand (H): drag to move around. Space-drag works with any tool"><svg viewBox="0 0 20 20"><path d="M7 10.5V4.8a1.2 1.2 0 012.4 0V9.5M9.4 9V3.7a1.2 1.2 0 012.4 0V9.5M11.8 9.2V4.6a1.2 1.2 0 012.4 0v6.6c0 3.6-2.2 6.3-5.6 6.3-2.1 0-3.4-.9-4.6-2.6L3.6 12.1a1.2 1.2 0 012-1.4L7 12.4"></path></svg></button>
       <div class="sep"></div>
+      <button data-tool="magnify" title="Magnifying glass (Z)"><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5"></circle><path d="M12 12l5 5M5.5 8h5M8 5.5v5"></path></svg></button>
+      <button data-tool="bucket" title="Fill bucket (K)"><svg viewBox="0 0 20 20"><path d="M7 3l7 7-6 6-7-7zM5 1l5 5M16 11c0 0-2 3-2 4.5a2 2 0 004 0C18 14 16 11 16 11zM2 9h11"></path></svg></button>
       <button data-tool="math" title="Math (M) — text box that starts in $…$"><svg viewBox="0 0 20 20"><path d="M9.5 4.5c-1.6-.8-3 0-3.3 1.8L4.6 16.2c-.3 1.6-1.6 2.2-2.6 1.5M3.5 9h5M10.5 9.5l5 6M15.5 9.5l-5 6"></path></svg></button>
       <button data-tool="text" title="Text (T): click for a line, drag for a paragraph box. Use $...$ for math"><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11M7.5 16h5"></path></svg></button>
       <div class="sep"></div>
@@ -318,7 +321,7 @@
     </div>
 
     <div id="stage">
-      <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+      <svg id="canvas" lang="en" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern id="gridMinor" width="10" height="10" patternUnits="userSpaceOnUse">
             <path d="M10 0H0V10" fill="none" class="grid-minor"></path>
@@ -438,15 +441,20 @@
         <button id="impInsert" class="primary" title="Add the shapes to the current diagram, in the middle of the view">Insert into Diagram</button>
         <button id="impClose" class="icon flat" title="Close" aria-label="Close"><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"></path></svg></button>
       </div>
-      <div class="imp-note" role="note">Not every symbol, command or object is supported. Anything that can't be read is kept as written or left out.</div>
+      <div class="imp-note" role="note">Supported sections become shapes. Other sections stay as code; unresolved sections have no preview. Editable Shapes may omit unsupported details.</div>
       <textarea id="impText" spellcheck="false" placeholder="Paste a tikzpicture, a bare list of \draw / \node commands, or a whole LaTeX document.
 Supported: \draw \fill \filldraw \shade \node \coordinate \definecolor, -- / .. controls .. / rectangle / circle / ellipse / arc / cycle, arrows, colours, line widths, dashes, opacity, zigzag springs.
 A full document is split into text and diagram blocks."></textarea>
+      <details class="imp-definitions">
+        <summary>Include definitions and libraries</summary>
+        <label for="impDefs">Optional preamble used by this figure, such as \tikzset and \usetikzlibrary.</label>
+        <textarea id="impDefs" rows="3" spellcheck="false" aria-label="Include definitions and libraries"></textarea>
+      </details>
       <div id="impMsg" class="modal-foot"></div>
     </div>
   </div>
 
-  <div id="measureHost"></div><!--]-->
+  <div id="measureHost" lang="en"></div><!--]-->
   <script src="js/app.bundle.js"></script>
   <script src="language-menu.js" defer></script>
 </body>

@@ -16,8 +16,10 @@
         <button class="icon flat" data-fe="fit" title={t("ui.fit.the.tree.in.view.0", "Fit the tree in view (0)", {}, $locale)}>{@html model.p7}</button>
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-fe="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-fe="done" title="{model.p8}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-fe="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-fe="done" title="{model.p8}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -29,7 +31,7 @@
         <div class="cz-props"></div>
         <div class="cz-code">
           <div class="cz-code-head"><span>{t("ui.forest", "forest", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-fe="copy" title={t("ui.copy.the.forest.code", "Copy the forest code", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
-          <textarea spellcheck="false" aria-label={t("ui.forest.code", "forest code", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("ui.forest.code", "forest code", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

@@ -15,8 +15,10 @@
         <button class="icon flat" data-pe="fit" title={t("ui.fit.the.figure.in.view.0", "Fit the figure in view (0)", {}, $locale)}>{@html model.p7}</button>
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-pe="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-pe="done" title="{model.p8}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-pe="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-pe="done" title="{model.p8}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -29,7 +31,7 @@
         <div class="cz-code">
           <div class="cz-code-head"><span>{t("ui.source", "Source", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-pe="copy" title={t("ui.copy.this.source.diagramtex.s.own.syntax.not.latex", "Copy this source (DiagramTeX's own syntax, not LaTeX)", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
           <div class="cz-code-note">{t("ui.diagramtex.s.own.syntax.not.latex.it.won.t.compile.on.its.own.the.latex.comes.fr", "DiagramTeX's own syntax, not LaTeX: it won't compile on its own. The LaTeX comes from Export, or Copy TikZ Code in the side panel.", {}, $locale)}</div>
-          <textarea spellcheck="false" aria-label={t("ui.physics.source", "Physics source", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("ui.physics.source", "Physics source", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

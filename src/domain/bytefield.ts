@@ -403,8 +403,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
 
   // Everything is worked out in pt with y up from each row's baseline, then turned into px with y down.
   function build(src: any) {

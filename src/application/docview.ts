@@ -18,6 +18,43 @@ import { readPicture } from '../platform/images';
   const root = document.getElementById('docview');
   const labelResources = new SvgLabelResources();
 
+  // Track the first diagram intersecting the document viewport, including a
+  // diagram whose top has already scrolled off screen. Keep the last selection
+  // while only text is visible.
+  let visibleFrame = 0;
+  // An explicit choice stays selected until the user scrolls, even when the
+  // document is too short to move that diagram all the way to the top.
+  let navigation: { document: any; index: number } | null = null;
+  const clearNavigation = () => { navigation = null; };
+  for (const event of ['wheel', 'touchmove', 'pointerdown', 'keydown']) root!.addEventListener(event, clearNavigation, { passive: true });
+  function syncVisibleDiagram() {
+    visibleFrame = 0;
+    if (app.state.mode !== 'document' || document.body.classList.contains('printing')) return;
+    const view = root!.getBoundingClientRect();
+    const chosen = navigation && navigation.document === doc() ? root!.querySelector<HTMLElement>(`.blk-diag[data-i="${navigation.index}"]`) : null;
+    const first = chosen || Array.from(root!.querySelectorAll<HTMLElement>('.blk-diag')).find((el) => {
+      const box = el.getBoundingClientRect();
+      return box.bottom > view.top && box.top < view.bottom && box.right > view.left && box.left < view.right;
+    });
+    if (!first) return;
+    const index = Number(first.dataset.i);
+    if (index !== doc().active) app.setActiveBlock(index, false);
+    root!.querySelectorAll<HTMLElement>('.blk-diag').forEach((el) => el.classList.toggle('active', Number(el.dataset.i) === index));
+  }
+  function queueVisibleDiagram() {
+    if (!visibleFrame) visibleFrame = requestAnimationFrame(syncVisibleDiagram);
+  }
+  root!.addEventListener('scroll', queueVisibleDiagram, { passive: true });
+  new ResizeObserver(queueVisibleDiagram).observe(root!);
+  function scrollToDiagram(index: number) {
+    const block = root!.querySelector<HTMLElement>(`.blk-diag[data-i="${index}"]`);
+    if (!block) return;
+    const view = root!.getBoundingClientRect(), box = block.getBoundingClientRect();
+    root!.scrollTop += box.top - view.top;
+    navigation = { document: doc(), index };
+    queueVisibleDiagram();
+  }
+
   // ---------- text rendering ----------
   // Text blocks are LaTeX-flavoured: $math$, $$display$$, # headings, - / 1. / - [ ] lists and a
   // handful of inline commands (\textbf, \textit, \underline, \sout, \textcolor, \colorbox, \href…).
@@ -418,7 +455,7 @@ import { readPicture } from '../platform/images';
   }
   function imageBar(b: any) {
     return `<div class="fmt-bar" role="toolbar" aria-label="${esc(t('doc.img.aria', 'Image'))}">
-      <label class="rng" title="${esc(t('doc.img.widthTip', 'Width as a share of the text width'))}">${esc(t('ui.width', 'Width'))} <input type="range" data-im="width" min="0.1" max="1" step="0.05" value="${b.width || 0.6}"><output>${Math.round((b.width || 0.6) * 100)}%</output></label>
+      <label class="rng" title="${esc(t('doc.img.widthTip', 'Width as a share of the text width'))}">${esc(t('ui.width', 'Width'))} <input type="range" data-slider-default="0.6" data-im="width" min="0.1" max="1" step="0.05" value="${b.width || 0.6}"><output class="slider-value">${Math.round((b.width || 0.6) * 100)}%</output></label>
       <span class="sep"></span>
       <input type="text" data-im="caption" placeholder="${esc(t('doc.img.caption', 'Caption (optional)'))}" value="${esc(b.caption || '')}">
       <button data-im="replace" class="txt">${esc(t('ui.replace', 'Replace…'))}</button><button data-im="download" class="txt" title="${esc(t('doc.img.saveTip', 'Save the picture next to your .tex, under this name'))}">${esc(t('doc.img.save', 'Save {name}', { name: imageName(b, doc().blocks.indexOf(b)) }))}</button>
@@ -488,16 +525,16 @@ import { readPicture } from '../platform/images';
         const st = `text-align:${b.align || 'justify'}${b.size && b.size !== 'normalsize' ? `;font-size:${SIZE_EM[b.size]}em` : ''}`;
         h += `<div class="blk blk-text${edc}" data-i="${i}">${tools}${ed
           ? `${textBar(b)}<textarea class="blk-ed" spellcheck="true" placeholder="${esc(t('doc.text.ph', 'Write text. $x^2$ for math, $$…$$ for display math, # Section, - bullet, 1. numbered, - [ ] checkbox'))}">${esc(b.text || '')}</textarea>`
-          : `<div class="blk-body" style="${st}">${textToHtml(b.text || '', tctx)}</div>`}</div>`;
+          : `<div class="blk-body" lang="en" style="${st}">${textToHtml(b.text || '', tctx)}</div>`}</div>`;
         if (ed) textToHtml(b.text || '', tctx); // keep section numbers counting
       } else if (b.type === 'table') {
-        h += `<div class="blk blk-table${edc}" data-i="${i}">${tools}${ed ? tableBar(b) : ''}<div class="blk-body">${tableHtml(b, ed)}</div></div>`;
+        h += `<div class="blk blk-table${edc}" data-i="${i}">${tools}${ed ? tableBar(b) : ''}<div class="blk-body" lang="en">${tableHtml(b, ed)}</div></div>`;
       } else if (b.type === 'image') {
         const cap = b.caption && b.caption.trim() ? `<figcaption>Figure ${++fig}: ${inl(b.caption)}</figcaption>` : '';
-        h += `<div class="blk blk-image${edc}" data-i="${i}">${tools}${ed ? imageBar(b) : ''}<figure class="blk-body">${b.src ? `<img src="${esc(b.src)}" alt="${esc(b.caption || b.name || '')}" style="width:${(b.width || 0.6) * 100}%">` : `<div class="ph">${forPrint ? 'No picture' : esc(t('doc.img.none', 'No picture'))}</div>`}${cap}</figure></div>`;
+        h += `<div class="blk blk-image${edc}" data-i="${i}">${tools}${ed ? imageBar(b) : ''}<figure class="blk-body" lang="en">${b.src ? `<img src="${esc(b.src)}" alt="${esc(b.caption || b.name || '')}" style="width:${(b.width || 0.6) * 100}%">` : `<div class="ph">${forPrint ? 'No picture' : esc(t('doc.img.none', 'No picture'))}</div>`}${cap}</figure></div>`;
       } else {
         const svg = b.shapes.length ? app.shapesSvg(b.shapes, 6, false, !forPrint) : '';
-        h += `<div class="blk blk-diag${i === d.active && !forPrint ? ' active' : ''}" data-i="${i}">${tools}<div class="blk-body">${svg || (forPrint ? '' : `<div class="ph">${esc(t('doc.diag.empty', 'Empty diagram — double-click to draw'))}</div>`)}</div></div>`;
+        h += `<div class="blk blk-diag${i === d.active && !forPrint ? ' active' : ''}" data-i="${i}">${tools}<div class="blk-body" lang="en">${svg || (forPrint ? '' : `<div class="ph">${esc(t('doc.diag.empty', 'Empty diagram — double-click to draw'))}</div>`)}</div></div>`;
       }
     });
     if (!forPrint) h += insertBar(d.blocks.length);
@@ -676,6 +713,7 @@ import { readPicture } from '../platform/images';
     sizeSheet(page, n);
     scalePage(P, z);
     root!.scrollTop = st; root!.scrollLeft = sl;
+    queueVisibleDiagram();
   }
   // Zoom is a camera operation. Pagination and natural paper measurements only
   // run when content/settings change; scaling reuses the fixed layout dimensions.
@@ -1106,7 +1144,7 @@ ${box.innerHTML}
 `;
   };
 
-  TD.docview = { render, renderProgress, beginEngineChange, cancelProgress, updateTitle, renderSettings, textToHtml, textToLatex, inl };
+  TD.docview = { scrollToDiagram, render, renderProgress, beginEngineChange, cancelProgress, updateTitle, renderSettings, textToHtml, textToLatex, inl };
   // the page's editing chrome follows the interface language
   let firstLocale = true;
   onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (app.state.mode === 'document') render(); });

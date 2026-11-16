@@ -1519,8 +1519,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); baseCache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); baseCache.clear(); });
 
   // ---------------------------------------------------------------- drawing
   // an arrow tip as chemfig's CF arrow: 5pt long, 4pt wide, inset 2.5pt; a harpoon keeps the left half

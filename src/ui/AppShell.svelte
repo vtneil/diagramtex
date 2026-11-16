@@ -73,8 +73,8 @@
         </button>
       {/if}
       <details class="language-picker" id="languagePicker">
-        <summary id="languageTrigger" aria-label={t("ui.interface.language", 'Interface language', {}, $locale)} aria-haspopup="menu" aria-expanded="false" title={t("ui.language", 'Language', {}, $locale)}>
-          <span class="language-flag" aria-hidden="true">{$locale === 'th' ? '🇹🇭' : '🇬🇧'}</span><span>{$locale === 'th' ? 'ไทย' : 'English'}</span>
+        <summary id="languageTrigger" aria-label={t("ui.interface.language", 'Interface language', {}, $locale)} aria-haspopup="menu" aria-expanded="false" title={`${t("ui.language", 'Language', {}, $locale)}: ${$locale === 'th' ? 'ไทย' : 'English'}`}>
+          <span class="language-flag" aria-hidden="true">{$locale === 'th' ? '🇹🇭' : '🇬🇧'}</span><span>{$locale === 'th' ? 'TH' : 'EN'}</span>
           <svg class="language-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg>
         </summary>
         <div class="language-options" popover="manual" role="menu" aria-label={t("ui.language", 'Language', {}, $locale)}>
@@ -112,7 +112,7 @@
     <div class="spacer"></div>
     <div id="blockNav" class="diagram-nav" hidden>
       <button id="blockPrev" class="icon" title={t('ui.previousDiagram', 'Previous diagram', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M12 4l-6 6 6 6"/></svg></button>
-      <select id="blockSel" title={t("ui.diagram.in.this.document", "Diagram in this document", {}, $locale)} hidden></select>
+      <button id="blockSel" aria-haspopup="dialog" title={t("ui.diagram.in.this.document", "Diagram in this document", {}, $locale)} hidden></button>
       <button id="blockRename" class="icon" title={t('ui.renameDiagram', 'Rename diagram', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M12 4l4 4M4 12l9-9 4 4-9 9-5 1z"/></svg></button>
       <button id="blockNext" class="icon" title={t('ui.nextDiagram', 'Next diagram', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M8 4l6 6-6 6"/></svg></button>
     </div>
@@ -122,6 +122,7 @@
     </div>
     <div class="seg ze-flags flag-seg diag-only" id="gridFlags" role="group" aria-label={t("ui.grid", "Grid", {}, $locale)}>
       <GridStyleButtons id="gridStyle" />
+      <button id="btnGuides" type="button" data-cmd="guides" title={t('assist.guides', 'Guides', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3 3h14v14H3zM7 3v4M11 3v3M15 3v4M3 7h4M3 11h3M3 15h4"/></svg></button>
       <button id="btnSnap" type="button" class="on" aria-pressed="true" title={t("ui.snap.to.grid.points.hold.alt.to.bypass", "Snap to grid & points (hold Alt to bypass)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5 3v7a5 5 0 0010 0V3h-3.5v7a1.5 1.5 0 01-3 0V3z"/><path d="M5 6.5h3.5M11.5 6.5H15"/></svg></button>
     </div>
     <div class="group">
@@ -155,6 +156,8 @@
       <button data-tool="select" title={t("ui.select.move.v", "Select / move (V)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5 3l10 7-5 1-2 5z" class="f"/></svg></button>
       <button data-tool="hand" class="hand-only" title={t("ui.hand.h.drag.to.move.around.space.drag.works.with.any.tool", "Hand (H): drag to move around. Space-drag works with any tool", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M7 10.5V4.8a1.2 1.2 0 012.4 0V9.5M9.4 9V3.7a1.2 1.2 0 012.4 0V9.5M11.8 9.2V4.6a1.2 1.2 0 012.4 0v6.6c0 3.6-2.2 6.3-5.6 6.3-2.1 0-3.4-.9-4.6-2.6L3.6 12.1a1.2 1.2 0 012-1.4L7 12.4"/></svg></button>
       <div class="sep"></div>
+      <button data-tool="magnify" title={t('assist.magnify', 'Magnifying glass (Z)', {}, $locale)}><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5"/><path d="M12 12l5 5M5.5 8h5M8 5.5v5"/></svg></button>
+      <button data-tool="bucket" title={t('assist.bucket', 'Fill bucket (K)', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M7 3l7 7-6 6-7-7zM5 1l5 5M16 11c0 0-2 3-2 4.5a2 2 0 004 0C18 14 16 11 16 11zM2 9h11"/></svg></button>
       <button data-tool="math" title={t("ui.math.m.text.box.that.starts.in", "Math (M) — text box that starts in $…$", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M9.5 4.5c-1.6-.8-3 0-3.3 1.8L4.6 16.2c-.3 1.6-1.6 2.2-2.6 1.5M3.5 9h5M10.5 9.5l5 6M15.5 9.5l-5 6"/></svg></button>
       <button data-tool="text" title={t("ui.text.t.click.for.a.line.drag.for.a.paragraph.box.use.for.math", "Text (T): click for a line, drag for a paragraph box. Use $...$ for math", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11M7.5 16h5"/></svg></button>
       <div class="sep"></div>
@@ -219,7 +222,7 @@
     </div>
 
     <div id="stage">
-      <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+      <svg id="canvas" lang="en" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern id="gridMinor" width="10" height="10" patternUnits="userSpaceOnUse">
             <path d="M10 0H0V10" fill="none" class="grid-minor"/>
@@ -339,11 +342,16 @@
         <button id="impInsert" class="primary" title={t("ui.add.the.shapes.to.the.current.diagram.in.the.middle.of.the.view", "Add the shapes to the current diagram, in the middle of the view", {}, $locale)}>{t("ui.insert.into.diagram", "Insert into Diagram", {}, $locale)}</button>
         <button id="impClose" class="icon flat" title={t("ui.close", "Close", {}, $locale)} aria-label={t("ui.close", "Close", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button>
       </div>
-      <div class="imp-note" role="note">{t("ui.not.every.symbol.command.or.object.is.supported.anything.that.can.t.be.read.is.k", "Not every symbol, command or object is supported. Anything that can't be read is kept as written or left out.", {}, $locale)}</div>
+      <div class="imp-note" role="note">{t("imp.support.note", "Supported sections become shapes. Other sections stay as code; unresolved sections have no preview. Editable Shapes may omit unsupported details.", {}, $locale)}</div>
       <textarea id="impText" spellcheck="false" placeholder={t("ui.paste.a.tikzpicture.a.bare.list.of.draw.node.commands.or.a.whole.latex.document.", "Paste a tikzpicture, a bare list of \\draw / \\node commands, or a whole LaTeX document.\nSupported: \\draw \\fill \\filldraw \\shade \\node \\coordinate \\definecolor, -- / .. controls .. / rectangle / circle / ellipse / arc / cycle, arrows, colours, line widths, dashes, opacity, zigzag springs.\nA full document is split into text and diagram blocks.", {}, $locale)}></textarea>
+      <details class="imp-definitions">
+        <summary>{t("imp.definitions", "Include definitions and libraries", {}, $locale)}</summary>
+        <label for="impDefs">{t("imp.definitions.help", "Optional preamble used by this figure, such as \\tikzset and \\usetikzlibrary.", {}, $locale)}</label>
+        <textarea id="impDefs" rows="3" spellcheck="false" aria-label={t("imp.definitions", "Include definitions and libraries", {}, $locale)}></textarea>
+      </details>
       <div id="impMsg" class="modal-foot"></div>
     </div>
   </div>
 
-  <div id="measureHost"></div>
+  <div id="measureHost" lang="en"></div>
 

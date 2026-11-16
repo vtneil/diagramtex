@@ -1,4 +1,8 @@
+import { canScale, objectScale } from '../domain/scale';
+import { snapTranslation, createSnapIndex, type Guide, type SnapLine } from '../core/smart-snap';
+import { createCanvasMagnifier } from '../ui/canvas-magnifier';
 import { GRID_STYLES, snapCanvasGrid } from '../ui/canvas-grid';
+import { SNAP_ICONS } from '../ui/snap-icons';
 import { applyWelcomeEdits } from './examples/welcome-edits';
 import { exampleDiagramBlocks } from './example-diagrams';
 import { previewFadeFinished } from '../platform/preview-fade';
@@ -15,7 +19,7 @@ import type { Shape } from '../core/contracts';
 interface SavedEntry { id: string; name: string; kind: import('../core/contracts').FileKind; updated: number; created?: number }
 interface DeletedEntry extends SavedEntry { deleted: number; folder?: string; batch?: string }
 import type { EditorState } from '../core/state';
-import { createEditorState } from '../core/state';
+import { createEditorState, SNAP_MODES, type SnapMode } from '../core/state';
 import { downloadBlob, downloadImage, createExportWriter } from '../platform/download';
 import { readPicture, svgFilePdf, texBundle, texFiles, type Picture } from '../platform/images';
 import { svgVectorPdf } from '../platform/svgpdf';
@@ -26,6 +30,7 @@ import { createRecovery, RECOVERY_DEFAULTS, RECOVERY_EVERY, RECOVERY_KEEP, RECOV
 import { createDocumentFactory } from '../core/document';
 import { conformShape } from '../core/conform';
 import { createDocumentHistory, stamp } from '../core/history';
+import { positionMenu } from '../ui/menu-position';
 import MainProperties from '../ui/MainProperties.svelte';
 import type { Model as StyleModel } from '../ui/StyleField.svelte';
 import type { Model as PageModel } from '../ui/PageProperties.svelte';
@@ -54,13 +59,20 @@ import { runtime as TD } from '../runtime';
   const { r2, esc, dist } = util;
   const $ = (s: any) => document.querySelector(s);
   const svg = $('#canvas'), content = $('#content'), overlay = $('#overlay');
+  const magnifier = createCanvasMagnifier($('#stage'), svg, () => state.view);
+  let smartLines: SnapLine[] = [];
+  let pointSnapCache: any = null;
+  let guideMode: 'show' | 'locked' | 'off' = 'show';
+  let selectedGuide: string | null = null;
+  let guidePress: any = null;
+  const activeGuides = () => guideMode === 'off' ? [] : home().guides || [];
   const PX = TD.PX_PER_CM;
   const fx = (n: any) => (Math.abs(n) < 0.005 ? 0 : n).toFixed(2).replace('-', '−');
 
   const hasHand = (m: any) => m === 'board' || m === 'page'; // modes with a Hand tool
-  const isDrawTool = (t: any) => !['select', 'hand', 'text', 'math', 'image'].includes(t);
+  const isDrawTool = (t: any) => !['select', 'hand', 'text', 'math', 'image', 'magnify', 'bucket'].includes(t);
   const toolType = (t: any) => (({ arc3: 'arc', arrow: 'line', darrow: 'line', elbow: 'line', curvedconn: 'line', curvearrow: 'curve', blob: 'poly', smoothcurve: 'poly', pencil: 'poly', math: 'text' }) as Record<string, any>)[t] || t.split(':')[0];
-  const TOOL_KEYS: Record<string, any> = { v: 'select', h: 'hand', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
+  const TOOL_KEYS: Record<string, any> = { v: 'select', h: 'hand', z: 'magnify', k: 'bucket', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
   // How the Rectangle and Ellipse tools draw, chosen from the menu on their buttons and remembered: rows are
   // [mode, label, hint, icon (20 × 20)]. The first is the default. 'three' and 'circle3' are drawn click by
   // click (pointsKind); the rest by one drag (the shape type's drag, given the mode).
@@ -162,7 +174,7 @@ import { runtime as TD } from '../runtime';
     updateTools: updateTopbar,
   });
   const { commit, apply: applyStep, trim: trimUndo } = documentHistory;
-  function begin() { clearFormatPreview(false); documentHistory.begin(); }
+  function begin() { pointSnapCache = null; clearFormatPreview(false); documentHistory.begin(); }
 
   // The open file's own steps come first; once they run out, undo reaches the file list (a file or folder
   // moved to the Recycle Bin comes back), as redo does the other way.
@@ -288,7 +300,7 @@ import { runtime as TD } from '../runtime';
       el.addEventListener('transitionend', end);
     });
   }
-  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, gridStyle: state.gridStyle, snap: state.snap, defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
+  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, gridStyle: state.gridStyle, guideMode, snap: state.snap, snapMode: snapMode(), defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
 
   // ---- Undo history per file (and per diagram of a classic file). Leaving a file keeps its steps; coming back
   // gives them back, as long as what they apply to is still exactly as it was left. Another tab's edit, a
@@ -338,13 +350,14 @@ import { runtime as TD } from '../runtime';
     if (gone) { saveNow(); retiredHint(gone); }
   }
   // Switch the canvas to another diagram block of the current document.
-  function setActiveBlock(i: any) {
+  function setActiveBlock(i: any, scrollTo = true) {
     if (!state.doc.blocks[i] || state.doc.blocks[i].type !== 'diagram') return;
     finishEdit(); finishPoly(); commit();
     keepHistory();
     state.doc.active = i;
     state.sel.clear(); takeHistory();
     render(); renderProps(); updateTopbar(); scheduleSave();
+    if (state.mode === 'document' && scrollTo) TD.docview?.scrollToDiagram(i);
   }
   // Modes: 'page' (Page files), 'board' (Whiteboard files) or 'diagram' / 'document' (the two views of a
   // Classic file). Picking a mode of another kind switches to the last file of that kind (or starts one).
@@ -367,6 +380,7 @@ import { runtime as TD } from '../runtime';
   const documentScroll = new Map<string, { top: number; left: number }>();
   let documentViewId: string | null = null;
   function applyMode(m: any, fit: any) {
+    magnifier.hide(); smartLines = [];
     const docView = $('#docview');
     if (state.mode === 'document' && documentViewId) documentScroll.set(documentViewId, { top: docView.scrollTop, left: docView.scrollLeft });
     state.mode = m;
@@ -951,7 +965,7 @@ import { runtime as TD } from '../runtime';
   function drawRulers(): void {
     if (!viewGeometry) return withViewGeometry(drawRulers);
     const rx = $('#rulerX svg'), ry = $('#rulerY svg');
-    if (!rx || state.mode === 'document' || state.mode === 'board') return;
+    if (!rx || state.mode === 'document') return;
     const pageY = state.mode === 'page'; // page mode: y measured downwards from the top of the sheet
     const v = state.view, z = v.zoom, ppc = PX * z, r = stageSize();
     if (r.w <= RULER || r.h <= RULER + 24 || !(z > 0)) return;
@@ -1007,7 +1021,7 @@ import { runtime as TD } from '../runtime';
     else { const b = unionBox(sel); el.textContent = uiText('status.selected', '{n} selected · {w} × {h} cm', { n: sel.length, w: r2(b.w / PX), h: r2(b.h / PX) }); }
     const gv = $('#gridVal');
     if (document.activeElement !== gv) gv.value = fmtGrid();
-    $('#snapInfo').textContent = caption(state.snap ? captions["ui.snap.on"] : captions["ui.snap.off"]);
+    $('#snapInfo').textContent = snapMode() === 'objects' ? uiText('snap.statusObjects','snap objects') : snapMode() === 'grid' ? uiText('snap.statusGrid','snap grid') : snapMode() === 'both' ? uiText('snap.statusBoth','snap both') : caption(captions['ui.snap.off']);
   }
   // Grid spacing: TD.GRID (px) drives snapping, nudging and paste offsets; the canvas pattern follows.
   // Major lines stay on whole centimetres when the spacing divides 1 cm, else every 4th line.
@@ -1070,9 +1084,108 @@ import { runtime as TD } from '../runtime';
   }
   const zoomFitWidth = () => zoomFit(true);
 
+  // Construction guides belong to the active diagram/sheet, never exported drawing objects.
+  function nativeNodeSections(sel: Shape[]): FormSection[] {
+    if (sel.length !== 1) return [];
+    const s = sel[0], options = TD.nodeFeatures.placements.map((k: string) => [k, k]);
+    const field = (key: string, label: string, fallback: any = '', numeric = false) => row(label, { kind: 'input' as const, value: s[key] ?? fallback, attrs: { type: numeric ? 'number' : 'text', 'data-native': key, ...(numeric ? { min: 0, step: 1 } : { 'data-tx': key === 'nodeName' ? '' : 'text' }) } }, ...(numeric ? [{ kind: 'text' as const, text: 'px', class: 'val' }] : []));
+    const place = (key: string, label: string) => row(label, { kind: 'select' as const, value: s[key] || (key==='nodePinPosition'?'right':'above'), options, attrs: { 'data-native': key } });
+    if (TD.nodeFeatures.types.has(s.type)) return [section(uiText('native.node', 'TikZ node'), [
+      field('nodeName', uiText('native.name', 'Node name'), s.tex?.nm?.[0] || ''),
+      ...(s.type !== 'text' ? [field('nodeText', uiText('native.text', 'Node text'))] : []),
+      field('nodeLabel', uiText('native.label', 'Node label')), place('nodeLabelPosition', uiText('native.labelPosition', 'Label position')),
+      field('nodePin', uiText('native.pin', 'Pin')), place('nodePinPosition', uiText('native.pinPosition', 'Pin position')),
+      field('nodePinDistance', uiText('native.pinDistance', 'Pin distance'), 24, true),
+    ], 'sec native-node')];
+    if (!CONNECT.has(s.type)) return [];
+    const nodes = shapes().filter(n => n.id !== s.id && TD.nodeFeatures.types.has(n.type));
+    return [section(uiText('native.attachments', 'Node anchors'), ['link1','link2'].flatMap((key, i) => [
+      row(i ? uiText('native.end', 'End node') : uiText('native.start', 'Start node'), { kind: 'select' as const, value: s[key]?.id || '', options: [['', uiText('native.detached', 'Detached')], ...nodes.map(n => [n.id, n.nodeName || n.name || typeName(n.type) + ' ' + n.id])], attrs: { 'data-native-link': key } }),
+      row(uiText('native.anchor', 'Anchor'), { kind: 'select' as const, value: s[key] ? TD.nodeFeatures.anchorName(s[key].u,s[key].v,byId(s[key].id)?.type) || 'custom' : 'center', options: [...TD.nodeFeatures.anchors.map((a: string)=>[a,a]), ['custom', uiText('native.customAnchor', 'Custom border point')]], attrs: { 'data-native-anchor': key, disabled: !s[key] } }),
+    ]), 'sec native-anchors')];
+  }
+  function applyNativeField(t: any, final: boolean) {
+    if (!t.dataset.native && !t.dataset.nativeLink && !t.dataset.nativeAnchor) return false;
+    const s = selected()[0]; if (!s) return true;
+    const key = t.dataset.native;
+    if (key === 'nodeName') {
+      const value = t.value.trim();
+      const invalid = value && (!TD.nodeFeatures.validName(value) || shapes().some(q => q !== s && TD.nodeFeatures.nameOf(q) === value));
+      t.classList.toggle('bad', !!invalid);
+      if (invalid) { t.title = uiText('native.invalidName', 'Use a unique name starting with a letter; letters, digits, _ and - are allowed.'); return true; }
+      t.removeAttribute('title');
+    }
+    if (key === 'nodePinDistance' && (!t.value.trim() || !Number.isFinite(+t.value) || +t.value < 0)) return true;
+    begin();
+    if (key) { const value = key === 'nodePinDistance' ? +t.value : key === 'nodeName' ? t.value.trim() : t.value; if (value === '') delete s[key]; else s[key] = value; }
+    else if (t.dataset.nativeLink) { const link = t.dataset.nativeLink; if (!t.value) delete s[link]; else { const [u,v] = TD.nodeFeatures.anchorUV(link === 'link1' ? 'east' : 'west'); s[link] = { id:t.value,u,v }; } }
+    else if (t.value !== 'custom' && s[t.dataset.nativeAnchor]) { const [u,v] = TD.nodeFeatures.anchorUV(t.value,byId(s[t.dataset.nativeAnchor].id)?.type); Object.assign(s[t.dataset.nativeAnchor],{u,v}); }
+    render();
+    const native = nativeNodeSections(selected())[0];
+    if (native && propertiesView) propertiesView.updateAfter(propertyAfter.map(section => section.class.includes('native-') ? native : section));
+    if (final) { commit(); if (!key || key.endsWith('Position')) renderProps(); }
+    return true;
+  }
+  function updateGuidesButton() {
+    const button = $('#btnGuides');
+    const text = guideMode === 'show' ? uiText('assist.showGuides', 'Show guide') : guideMode === 'locked' ? uiText('assist.lockGuides', 'Show and lock guide') : uiText('assist.noGuides', 'No guide');
+    button.dataset.guideMode = guideMode; button.title = text; button.setAttribute('aria-label',text);
+    button.setAttribute('aria-pressed',String(guideMode !== 'off')); button.classList.toggle('on',guideMode !== 'off');
+    button.querySelector('svg').innerHTML = guideMode === 'locked'
+      ? '<path d="M3 17V3h10M3 7h3M3 11h2M7 3v3"/><g class="guide-lock"><path d="M11 10V7.5a2.5 2.5 0 015 0V10"/><rect x="8.5" y="10" width="10" height="8" rx="1.5" fill="currentColor" stroke="none"/><path d="M13.5 13v2" stroke="var(--sheet-raised)" stroke-width="2"/></g>'
+      : '<path d="M3 3h14v14H3zM7 3v4M11 3v3M15 3v4M3 7h4M3 11h3M3 15h4"/>';
+    document.body.classList.toggle('guides-editable',guideMode === 'show');
+  }
+  function removeGuide(id: string, all = false) {
+    if (guideMode !== 'show' || !home().guides?.some(g=>g.id===id)) return;
+    begin(); home().guides = all ? [] : home().guides!.filter(g=>g.id!==id); selectedGuide = null;
+    commit(); renderOverlay();
+  }
+  async function editGuide(id: string) {
+    if (guideMode !== 'show') return;
+    const owner = home(), guide = owner.guides?.find(g=>g.id===id); if (!guide) return;
+    const v = state.view, size = stageSize(), canvas = svg.getBoundingClientRect(), panel = $('#rightCol').getBoundingClientRect(), sign = guide.axis === 'x' ? 1 : -1;
+    const end = guide.axis === 'x' ? (panel.width && panel.left > canvas.left+64 ? Math.min(size.w,panel.left-canvas.left-8) : size.w) : size.h-24;
+    const lo = v[guide.axis] + 30/v.zoom, hi = Math.max(lo,v[guide.axis] + (end-12)/v.zoom);
+    const limits = [lo/PX*sign,hi/PX*sign].sort((a,b)=>a-b);
+    const response = TD.prompt(uiText('assist.editGuide', 'Edit position'),String(r2(guide.position/PX*sign)),{message:uiText('assist.guideRange', 'Position in cm ({min} to {max}). Values are limited to the visible canvas.',{min:r2(limits[0]),max:r2(limits[1])})});
+    const input = document.querySelector('.td-dialog .tdd-in') as HTMLInputElement | null;
+    if (input) { input.type='number'; input.min=String(limits[0]); input.max=String(limits[1]); input.step='any'; }
+    const value = await response;
+    if (value == null || !String(value).trim() || !Number.isFinite(Number(value)) || home() !== owner || !owner.guides?.includes(guide) || guideMode !== 'show') return;
+    begin(); guide.position = Math.max(lo,Math.min(hi,Number(value)*PX*sign)); commit(); renderOverlay();
+  }
+  function addGuide(axis: 'x' | 'y', position: number): Guide {
+    const guide = { id: uid(), axis, position }; (home().guides ||= []).push(guide); return guide;
+  }
+  for (const [id, axis] of [['#rulerX', 'y'], ['#rulerY', 'x']] as const) $(id).addEventListener('pointerdown', (e: PointerEvent) => {
+    if (e.button !== 0 || state.mode === 'document' || inTool() || guideMode !== 'show') return;
+    e.preventDefault(); finishEdit(); setTool('select'); begin();
+    const point = toWorld(e), beforeGuides = clone(home().guides || null), guide = addGuide(axis, point[axis]);
+    selectedGuide = guide.id; state.sel.clear(); drag = { mode: 'guide', guide, beforeGuides }; svg.setPointerCapture(e.pointerId); renderOverlay();
+  });
+
   // ---------------- snapping ----------------
+  const snapMode = (): SnapMode => state.snap ? state.snapMode : 'off';
+  const snapObjects = () => snapMode() === 'objects' || snapMode() === 'both';
+  const snapGrid = () => snapMode() === 'grid' || snapMode() === 'both';
+  function cycleSnapMode() {
+    state.snapMode = SNAP_MODES[(SNAP_MODES.indexOf(snapMode())+1)%SNAP_MODES.length];
+    state.snap = state.snapMode !== 'off'; smartLines=[]; snapHint=null;
+    savePrefs(); updateTopbar(); renderOverlay();
+  }
+  function updateSnapButton() {
+    const mode = snapMode(), button = $('#btnSnap');
+    const label = mode === 'objects' ? uiText('snap.objects','Snap to objects, guides and object anchors only') : mode === 'grid' ? uiText('snap.grid','Snap to grid only') : mode === 'both' ? uiText('snap.both','Snap to both') : uiText('snap.off',"Don't snap");
+    button.dataset.snapMode = mode; button.title = label; button.setAttribute('aria-label',label);
+    button.setAttribute('aria-pressed',String(mode !== 'off')); button.classList.toggle('on',mode !== 'off');
+    const svg = button.querySelector('svg');
+    svg.innerHTML = SNAP_ICONS[mode]; svg.dataset.snapIcon = mode; svg.setAttribute('aria-hidden','true');
+  }
   function snapPoint(p: any, e: any, exclude?: any) {
+    smartLines = [];
     if (!state.snap || (e && e.altKey)) return { x: p.x, y: p.y };
+    if (!snapObjects()) return snapGrid() ? snapCanvasGrid(p,TD.GRID,gridStyle()) : {x:p.x,y:p.y};
     const thr = 8 / state.view.zoom;
     let best = null, bd = thr;
     for (const s of shapes()) {
@@ -1084,7 +1197,14 @@ import { runtime as TD } from '../runtime';
     }
     if (state.mode === 'page') for (const a of pageAnchors()) { const d = dist(a, p); if (d < bd) { bd = d; best = a; } }
     if (best) return { x: best.x, y: best.y, anchor: true };
-    return snapCanvasGrid(p, TD.GRID, gridStyle());
+    const excluded = [...(exclude || [])].join(',');
+    if (!pointSnapCache || pointSnapCache.owner !== home() || pointSnapCache.list !== shapes() || pointSnapCache.excluded !== excluded) {
+      const others = shapes().filter(s => !s.hidden && !exclude?.has(s.id)).map(s => TD.nodeFeatures?.bodyBox(s) || TD.bbox(s));
+      pointSnapCache = { owner:home(), list:shapes(), excluded, others, index:createSnapIndex(others) };
+    }
+    const match = snapTranslation({ x: p.x, y: p.y, w: 0, h: 0 }, 0, 0, pointSnapCache.others, activeGuides(), thr, false, pointSnapCache.index);
+    const grid = snapGrid() ? snapCanvasGrid(p, TD.GRID, gridStyle()) : p; smartLines = match.lines;
+    return { x: match.snappedX ? p.x + match.dx : grid.x, y: match.snappedY ? p.y + match.dy : grid.y };
   }
 
 
@@ -1101,8 +1221,8 @@ import { runtime as TD } from '../runtime';
   function linkFrame(t: any) {
     if (!t || CONNECT.has(t.type)) return null;
     if (t.type === 'coord') return [[t.x - 1, t.y - 1], [t.x + 1, t.y - 1], [t.x + 1, t.y + 1], [t.x - 1, t.y + 1]]; // a point: ends sit on it
-    if (TD.ROT_TYPES.has(t.type) || t.type === 'sym') { const C = TD.rotFrame(t); if (C) return C; }
-    const b = TD.bbox(t);
+    if (TD.ROT_TYPES.has(t.type) || t.type === 'sym') { const C = TD.rotFrame({ ...t, nodeLabel: '', nodePin: '' }); if (C) return C; }
+    const b = TD.nodeFeatures?.bodyBox(t) || TD.bbox(t);
     return [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]];
   }
   const fromUV = (C: any, u: any, v: any) => ({ x: C[0][0] + u * (C[1][0] - C[0][0]) + v * (C[3][0] - C[0][0]), y: C[0][1] + u * (C[1][1] - C[0][1]) + v * (C[3][1] - C[0][1]) });
@@ -1130,7 +1250,7 @@ import { runtime as TD } from '../runtime';
   }
   // what an end at raw point p (snapped to q) attaches to: a snap point of a shape, else the outline near p
   function linkAt(p: any, q: any, e: any, self?: any) {
-    if (e && e.altKey) return null;
+    if (!snapObjects() || (e && e.altKey)) return null;
     const tol = 6 / state.view.zoom, L = shapes();
     for (let i = L.length - 1; i >= 0; i--) {
       const t = L[i];
@@ -1461,7 +1581,14 @@ import { runtime as TD } from '../runtime';
   }
   function renderOverlay(viewOnly = false) {
     pruneSel();
+    if (selectedGuide && (state.sel.size || !home().guides?.some(g=>g.id===selectedGuide))) selectedGuide=null;
     const z = state.view.zoom, out = [];
+    const size = stageSize(), v = state.view;
+    for (const g of activeGuides()) {
+      const line = g.axis === 'x' ? `x1="${g.position}" y1="${v.y}" x2="${g.position}" y2="${v.y + size.h / z}"` : `x1="${v.x}" y1="${g.position}" x2="${v.x + size.w / z}" y2="${g.position}"`;
+      out.push(`<line class="construction-guide${selectedGuide === g.id ? ' selected' : ''}" ${line} stroke-width="${1/z}"/>${guideMode === 'show' ? `<line class="guide-hit" data-guide-id="${esc(g.id)}" ${line} stroke-width="${10/z}"/>` : ''}`);
+    }
+    for (const l of smartLines) out.push(`<line class="smart-guide${l.spacing ? ' equal-spacing' : ''}" x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke-width="${1/z}"/>`);
     const sel = selected();
     const pb = paintedBox;
     for (const s of sel) {
@@ -1531,7 +1658,7 @@ import { runtime as TD } from '../runtime';
       if (hs.length) { const b = unionBox(hs); out.push(`<rect class="layer-hover" x="${b.x - 4 / z}" y="${b.y - 4 / z}" width="${b.w + 8 / z}" height="${b.h + 8 / z}"/>`); }
     }
     overlay.innerHTML = out.join('');
-    drawRulers();
+    drawRulers(); magnifier.refresh();
     if (!viewOnly && !mathProgressPainting) { updateStatus(); scheduleLayers(); }
   }
 
@@ -1602,19 +1729,34 @@ import { runtime as TD } from '../runtime';
     document.querySelectorAll('#tools button[data-tool]').forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.tool === t));
     document.querySelectorAll('#tools button[data-fly]').forEach((b) => b.classList.toggle('active', flyOf(t) === (b as HTMLElement).dataset.fly));
   }
+  const canBucketFill = (s: any) => !s.hidden && !s.locked && s.type !== 'ball' && s.type !== 'dot' && TD.canCombine(s);
+  function fillShapes(list: any[], clear = false) {
+    const eligible = list.filter(canBucketFill); if (!eligible.length) return;
+    const fill = clear ? null : state.defaults.fill;
+    if (eligible.every(s=>JSON.stringify(s.fill)===JSON.stringify(fill))) return;
+    begin(); for (const s of eligible) s.fill = clone(fill); commit(); render();
+  }
   function setTool(t: any) {
+    const previous = state.tool;
     finishPoly();
     if (t === 'image') { $('#imageInput').value = ''; $('#imageInput').click(); t = 'select'; }
     state.tool = t;
+    if (t === 'bucket' && previous !== 'bucket') fillShapes(selected());
+    if (previous === 'bucket' || t === 'bucket') renderProps();
+    magnifier.hide(); smartLines = [];
     markTools();
     svg.classList.toggle('tool-draw', isDrawTool(t));
     svg.classList.toggle('tool-text', t === 'text' || t === 'math');
     svg.classList.toggle('tool-hand', t === 'hand');
+    svg.classList.toggle('tool-magnify', t === 'magnify');
+    svg.classList.toggle('tool-bucket', t === 'bucket');
     $('#emptyHint').hidden = shapes().length > 0 || t !== 'select';
     snapHint = null;
     const sym = t.startsWith('sym:') && TD.SYMS[t.slice(4)];
     if (pointsKind()) { arcHint(); renderOverlay(); return; }
-    showHint(t === 'poly' ? uiText('tool.hint.poly', 'Click to add points · double-click / Enter to finish · click first point to close')
+    showHint(t === 'magnify' ? uiText('assist.magnifyHelp', 'Move over the canvas to magnify details. Scroll to change magnification; Esc returns to Select.')
+      : t === 'bucket' ? uiText('assist.bucketHelp', 'Choose Fill in Properties, then click a closed shape. Alt-click clears fill; Shift-click applies it to selected shapes.')
+      : t === 'poly' ? uiText('tool.hint.poly', 'Click to add points · double-click / Enter to finish · click first point to close')
       : t === 'blob' ? uiText('tool.hint.blob', 'Click to add points of a smooth closed curve · double-click / Enter to finish')
       : t === 'smoothcurve' ? uiText('tool.hint.smoothcurve', 'Click to add points the curve passes through · double-click / Enter to finish')
       : t === 'elbow' ? uiText('tool.hint.elbow', 'Drag from start to end; the ends hold on to shapes · drag the middle handle to move the bend')
@@ -2150,6 +2292,22 @@ import { runtime as TD } from '../runtime';
     }
     if (e.button !== 0) return;
     svg.setPointerCapture(e.pointerId);
+    if (state.tool === 'magnify') { magnifier.show(e); return; }
+    if (state.tool === 'bucket') {
+      const hit = [...shapes()].reverse().find(s => canBucketFill(s) && TD.containsClosedShape(s, p));
+      if (!hit) { showHint(uiText('assist.bucketClosed', 'Choose a closed, unlocked shape.'), 1200); return; }
+      const targets = e.shiftKey && state.sel.has(hit.id) ? selected().filter(canBucketFill) : [hit];
+      fillShapes(targets,e.altKey); renderProps(); return;
+    }
+    const guide = e.target.closest?.('[data-guide-id]');
+    if (guide && state.tool === 'select' && guideMode === 'show') {
+      const id = guide.dataset.guideId, now = performance.now();
+      selectedGuide = id; state.sel.clear(); renderOverlay(); renderProps();
+      if (guidePress?.id === id && now-guidePress.t < 350 && Math.hypot(e.clientX-guidePress.x,e.clientY-guidePress.y)<6) { guidePress=null; void editGuide(id); return; }
+      guidePress = {id,t:now,x:e.clientX,y:e.clientY};
+      begin(); drag = { mode:'guide', guide:home().guides!.find(g=>g.id===id), beforeGuides:clone(home().guides || null) }; return;
+    }
+    selectedGuide = null; guidePress = null;
     if (lineDraft) { // the second click of a two-click line: it ends where this press lets go
       drag = { ...lineDraft, second: true }; lineDraft = null;
       createMove(drag, p, e);
@@ -2293,6 +2451,8 @@ import { runtime as TD } from '../runtime';
     const p = toWorld(e);
     $('#cursorPos').textContent = `x ${fx(p.x / PX)} · y ${fx(-p.y / PX)} cm`;
     cursorW = p; drawRulers();
+    if (state.tool === 'magnify') { magnifier.show(e); return; }
+    if (state.tool === 'bucket' && !drag) return;
     if (!drag) {
       if (lineDraft) { createMove(lineDraft, p, e); return; }
       if (arcDraft) {
@@ -2323,6 +2483,7 @@ import { runtime as TD } from '../runtime';
       return;
     }
     switch (drag.mode) {
+      case 'guide': { drag.guide.position = drag.guide.axis === 'x' ? p.x : p.y; renderOverlay(); break; }
       case 'pan': {
         state.view.x = drag.v.x - (e.clientX - drag.sx) / state.view.zoom;
         state.view.y = drag.v.y - (e.clientY - drag.sy) / state.view.zoom;
@@ -2330,42 +2491,51 @@ import { runtime as TD } from '../runtime';
         break;
       }
       case 'move': {
+        smartLines = [];
         let dx = p.x - drag.a.x, dy = p.y - drag.a.y;
         if (e.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
         if (state.snap && !e.altKey) {
           // try snapping any selected anchor to another shape's anchor, else snap reference to grid
           const thr = 8 / state.view.zoom;
           let best = null, bd = thr;
-          // other shapes' anchors in a grid of thr-sized cells, made once per drag (and again after a zoom)
-          if (!drag.snapIdx || drag.snapIdx.thr !== thr) {
-            const cells = new Map();
-            for (const sh of shapes()) if (!state.sel.has(sh.id)) for (const t of TYPES[sh.type].anchors(sh)) {
-              const k = Math.floor(t.x / thr) + ',' + Math.floor(t.y / thr);
-              (cells.get(k) || cells.set(k, []).get(k)).push(t);
+          if (snapObjects()) {
+            // other shapes' anchors in a grid of thr-sized cells, made once per drag (and again after a zoom)
+            if (!drag.snapIdx || drag.snapIdx.thr !== thr) {
+              const cells = new Map();
+              for (const sh of shapes()) if (!state.sel.has(sh.id)) for (const t of TYPES[sh.type].anchors(sh)) {
+                const k = Math.floor(t.x / thr) + ',' + Math.floor(t.y / thr);
+                (cells.get(k) || cells.set(k, []).get(k)).push(t);
+              }
+              // a large selection snaps by the corners, edge middles and centre of its bounding box
+              let mine;
+              if (drag.fast) {
+                const B = unionBox([...drag.orig.values()]);
+                mine = [];
+                for (const x of [B.x, B.x + B.w / 2, B.x + B.w]) for (const y of [B.y, B.y + B.h / 2, B.y + B.h]) mine.push({ x, y });
+              } else mine = [...drag.orig.values()].flatMap((o) => TYPES[o.type].anchors(o));
+              drag.snapIdx = { thr, cells, mine };
             }
-            // a large selection snaps by the corners, edge middles and centre of its bounding box
-            let mine;
-            if (drag.fast) {
-              const B = unionBox([...drag.orig.values()]);
-              mine = [];
-              for (const x of [B.x, B.x + B.w / 2, B.x + B.w]) for (const y of [B.y, B.y + B.h / 2, B.y + B.h]) mine.push({ x, y });
-            } else mine = [...drag.orig.values()].flatMap((o) => TYPES[o.type].anchors(o));
-            drag.snapIdx = { thr, cells, mine };
-          }
-          const { cells, mine } = drag.snapIdx;
-          for (const a of mine) {
-            const m = { x: a.x + dx, y: a.y + dy }, cx = Math.floor(m.x / thr), cy = Math.floor(m.y / thr);
-            for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-              const near = cells.get((cx + i) + ',' + (cy + j));
-              if (near) for (const t of near) { const d = dist(m, t); if (d < bd) { bd = d; best = { dx: t.x - a.x, dy: t.y - a.y, pt: t }; } }
+            const { cells, mine } = drag.snapIdx;
+            for (const a of mine) {
+              const m = { x: a.x + dx, y: a.y + dy }, cx = Math.floor(m.x / thr), cy = Math.floor(m.y / thr);
+              for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+                const near = cells.get((cx + i) + ',' + (cy + j));
+                if (near) for (const t of near) { const d = dist(m, t); if (d < bd) { bd = d; best = { dx: t.x - a.x, dy: t.y - a.y, pt: t }; } }
+              }
             }
           }
           if (best) { dx = best.dx; dy = best.dy; snapHint = { ...best.pt, anchor: true }; }
           else {
             const g = TD.GRID, rx = drag.ref.x + dx, ry = drag.ref.y + dy;
-            const snapped = snapCanvasGrid({ x: rx, y: ry }, g, gridStyle());
-            dx = snapped.x - drag.ref.x; dy = snapped.y - drag.ref.y;
-            snapHint = null;
+            const snapped = snapGrid() ? snapCanvasGrid({ x: rx, y: ry }, g, gridStyle()) : {x:rx,y:ry};
+            if (!snapObjects()) { dx=snapped.x-drag.ref.x; dy=snapped.y-drag.ref.y; snapHint=null; } else {
+              if (!drag.smart) drag.smart = { box: unionBox([...drag.orig.values()]), others: shapes().filter(s => !s.hidden && !state.sel.has(s.id) && !CONNECT.has(s.type)).map(s => TD.nodeFeatures?.bodyBox(s) || TD.bbox(s)) };
+              if (!drag.smart.index) drag.smart.index = createSnapIndex(drag.smart.others);
+              const match = snapTranslation(drag.smart.box, dx, dy, drag.smart.others, activeGuides(), thr, !e.shiftKey, drag.smart.index);
+              dx = match.snappedX ? match.dx : snapped.x - drag.ref.x;
+              dy = match.snappedY ? match.dy : snapped.y - drag.ref.y;
+              smartLines = match.lines; snapHint = null;
+            }
           }
         }
         drag.moved = true;
@@ -2482,6 +2652,7 @@ import { runtime as TD } from '../runtime';
   function endDrag(e: any) {
     if (!drag) return;
     const d = drag;
+    if (d.mode === 'guide' && e?.type === 'pointercancel') { if (d.beforeGuides) home().guides = d.beforeGuides; else delete home().guides; drag = null; documentHistory.cancel(); renderOverlay(); renderProps(); return; }
     // a click (no drag) on a member of the selected group: select that member alone
     if (d.mode === 'move' && d.narrow && (!d.moved || (e && e.clientX != null && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) <= 3))) {
       if (d.fast) endFastMove(d);
@@ -2496,6 +2667,14 @@ import { runtime as TD } from '../runtime';
     drag = null;
     svg.classList.remove('panning', 'drag-cur');
     if (d.mode === 'rotate') svg.classList.remove('rot-zone');
+    smartLines = [];
+    if (d.mode === 'guide') {
+      const r = svg.getBoundingClientRect();
+      const ruler = $(d.guide.axis === 'x' ? '#rulerY' : '#rulerX').getBoundingClientRect();
+      const onRuler = e && e.clientX >= ruler.left && e.clientX <= ruler.right && e.clientY >= ruler.top && e.clientY <= ruler.bottom;
+      if (e && (onRuler || e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) home().guides = home().guides?.filter(g => g.id !== d.guide.id);
+      commit(); renderOverlay(); renderProps(); return;
+    }
     if (d.mode === 'pan') { scheduleSave(); return; }
     if (d.mode === 'textframe') {
       const b = marquee.b, z = state.view.zoom;
@@ -2559,9 +2738,10 @@ import { runtime as TD } from '../runtime';
     }
     render(); renderProps();
   }
+  svg.addEventListener('wheel', (e: WheelEvent) => { if (state.tool !== 'magnify') return; e.preventDefault(); e.stopImmediatePropagation(); magnifier.zoom(wheelZoomFactor(e)); }, { capture: true, passive: false });
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
-  svg.addEventListener('pointerleave', () => { cursorW = null; drawRulers(); });
+  svg.addEventListener('pointerleave', () => { magnifier.hide(); cursorW = null; drawRulers(); });
   svg.addEventListener('pointerleave', () => { if (!drag && state.tool !== 'select' && !polyDraft && !arcDraft && !lineDraft) { snapHint = null; renderOverlay(); } });
 
   svg.addEventListener('wheel', (e: any) => {
@@ -2822,6 +3002,7 @@ import { runtime as TD } from '../runtime';
     ['bottom', message('valign.bottom', 'Align Bottom: new lines grow the box upward'), 'M3 17h14M10 3v10M6.5 9.5 10 13l3.5-3.5']];
   function fieldModel(p: any, v: any, labelOverride?: any): StyleModel {
     const model = {
+      sliderDefault: p.type === 'range' ? (p.key === 'labelPos' ? 0.5 : p.key === 'opacity' ? 1 : symParams(selected()[0] || {})?.[p.key] ?? ({ phase: 0, duty: 50, fire: 60 } as Record<string, number>)[p.key]) : undefined,
       type: p.type, key: p.key, id: 'f-' + p.key, label: caption(labelOverride || p.label),
       value: p.type === 'size' && typeof v === 'number' ? 'custom' : p.type === 'number' && typeof v === 'number' ? +v.toFixed(3) : p.type === 'width' ? (typeof v === 'number' ? +v.toFixed(3) : '') : v ?? '',
       min: p.min ?? '', max: p.max ?? '', step: p.step ?? 1, unit: p.unit, hint: p.hint && caption(p.hint),
@@ -2911,6 +3092,7 @@ import { runtime as TD } from '../runtime';
   });
   document.addEventListener('pointerdown', (e) => { if (!ddPop.hidden && !ddPop.contains((e.target as Node)) && !(e.target! as Element).closest('[data-dd]')) closeDd(); }, true);
   let panelView: any = null, panelType = '', propertiesView: any = null;
+  let propertyAfter: FormSection[] = [];
   function renderProps(): void {
     clearFormatPreview();
     if (!TD.math.previewing) return TD.math.preview(renderProps);
@@ -2923,6 +3105,10 @@ import { runtime as TD } from '../runtime';
     if (inTable()) { if (TD.tableWs) TD.tableWs.renderProps(); return; }
     if (state.mode === 'document') { if (TD.docview) TD.docview.renderSettings(el); return; }
     const sel = selected(), fields: StyleModel[] = [];
+    if (state.tool === 'bucket') {
+      propertiesView = mountFrame(el, MainProperties, { defaults: true, defaultsHint: false, title: uiText('assist.bucketTitle', 'Fill bucket'), fields: PROPS.filter(p => p.key === 'fill').map(p => fieldModel(p, state.defaults[p.key])), before: [], after: [], geometry: false });
+      return;
+    }
     if (!sel.length) {
       const d = state.defaults, keys = ['stroke', 'fill', 'width', 'dash', 'color', 'size', 'font', 'ballColor'];
       const shortcuts = [
@@ -2961,6 +3147,10 @@ import { runtime as TD } from '../runtime';
       else fields.push(fieldModel(p, first(p.key), label));
     }
     const before: FormSection[] = [], after: FormSection[] = [];
+    if (sel.every(canScale)) before.push({ class: 'sec', rows: [row(captions["ui.scale"],
+      { kind: 'input', value: sel.every(s => objectScale(s) === objectScale(sel[0])) ? objectScale(sel[0]) : '', attrs: { type: 'number', min: '0.01', step: '0.01', 'data-object-scale': '', 'aria-label': uiText('ui.scale', 'Scale') } },
+      { kind: 'text', text: '×' })] });
+
     if (sel.length === 1 && sel[0].type === 'poly') {
       const s = sel[0], vi = state.vertex && state.vertex.id === s.id ? state.vertex.i : -1;
       before.push({ ...section(captions["ui.points"], [{ kind: 'actions', class: 'btns', buttons: [{ text: uiText('pt.add', 'Add Point'), attrs: { 'data-act': 'pt:add', title: uiText('pt.add.title', 'Add a point after the chosen one (or on the longest segment). You can also drag a + on the shape.') } }, { text: vi >= 0 ? uiText('pt.removeN', 'Remove Point {n}', { n: vi + 1 }) : uiText('pt.remove', 'Remove Point'), attrs: { 'data-act': 'pt:rm', title: uiText('pt.remove.title', 'Remove the chosen point. You can also double-click a point.'), ...(vi < 0 ? { disabled: true } : {}) } }] }, { kind: 'hint', text: [uiText('pt.help', 'Click a point to choose it. Drag a + to add a point there; double-click a point to remove it.')] }], 'sec'), summary: String(s.pts.length) });
@@ -2970,6 +3160,11 @@ import { runtime as TD } from '../runtime';
       ['top', 'M2 3h16M5 6v10h3.5V6zM11.5 6v6H15V6z', uiText('arr.top', 'Align top')], ['middle', 'M2 10h16M5 4v12h3.5V4zM11.5 7v6H15V7z', uiText('arr.middles', 'Align middles')], ['bottom', 'M2 17h16M5 4v10h3.5V4zM11.5 8v6H15V8z', uiText('arr.bottom', 'Align bottom')],
     ].map(([key, path, title]) => ({ kind: 'button', text: '', svg: `<svg viewBox="0 0 20 20"><path d="${path}"/></svg>`, attrs: { class: 'icon', 'data-act': 'l:' + key, title } })) }], 'sec'));
     if (combinable()) after.push(section(uiText('combine.title', 'Combine'), [{ kind: 'controls', class: 'align-row', controls: COMBINE.map(([key]) => ({ kind: 'button', text: '', svg: `<svg viewBox="0 0 20 20">${COMBINE_IC[key]}</svg>`, attrs: { class: 'icon', 'data-act': 'cb:' + key, title: key === 'subtract' ? uiText('combine.subtract.title', '{name}: cut the shapes above out of the bottom one', { name: combineName(key) }) : key === 'divide' ? uiText('combine.divide.title', '{name}: split into every overlap piece', { name: combineName(key) }) : combineName(key) } })) }], 'sec'));
+    if (units().length >= 3) after.push(section(uiText('ctx.distribute', 'Distribute'), [{ kind: 'actions', class: 'btns', buttons: [
+      { text: uiText('ctx.horizontally', 'Horizontally'), attrs: { 'data-act': 'd:h' } },
+      { text: uiText('ctx.vertically', 'Vertically'), attrs: { 'data-act': 'd:v' } },
+    ] }], 'sec'));
+    after.push(...nativeNodeSections(sel));
     after.push(...componentSections(sel));
     const buttons = [
       ...(canGroup() ? [{ text: caption(captions["ui.group"]), attrs: { 'data-act': 'group', title: 'Ctrl+G' } }] : []),
@@ -2979,6 +3174,7 @@ import { runtime as TD } from '../runtime';
     ];
     after.push({ class: 'sec', rows: [{ kind: 'actions', class: 'btns', buttons }, { kind: 'hint', text: [turnable(sel) ? uiText('props.more.turn', 'Right-click for more: rotate, flip, arrange, distribute.') : rotatable(sel) ? uiText('props.more.flip', 'Right-click for more: flip, arrange, distribute.') : uiText('props.more', 'Right-click for more: arrange, distribute.')] }] });
     const panel = sel.length === 1 && TD.panels[sel[0].type];
+    propertyAfter = after;
     propertiesView = mountFrame(el, MainProperties, { defaults: false, title, fields, before, after, ...(panel ? { panel: sel[0].type } : {}), geometry: sel.length === 1 && !!GEOM[sel[0].type] });
     if (panel) panelType = sel[0].type, panelView = TD.panelViews[sel[0].type].mount(el.querySelector('[data-panel]'), sel[0] as Shape & { src: string });
     renderGeom();
@@ -3093,7 +3289,7 @@ import { runtime as TD } from '../runtime';
     if (!p) return;
     let v = t.value;
     if (p.type === 'number' || p.type === 'width') { v = parseFloat(v); if (!isFinite(v)) return; if (p.min != null) v = Math.max(p.min, v); }
-    if (p.type === 'range') { v = parseFloat(v); const sp = t.parentElement.querySelector('.val'); if (sp) sp.textContent = r2(v); }
+    if (p.type === 'range') { v = parseFloat(v); const sp = t.parentElement.querySelector('.slider-value'); if (sp) sp.textContent = r2(v); }
     if (p.type === 'checkbox' || p.type === 'bi' || key === 'italic') v = t.checked;
     if (key === 'size' && v === 'custom') v = r2(TD.sizePx(selected()[0]?.size ?? state.defaults.size));
     return { key, v };
@@ -3120,6 +3316,8 @@ import { runtime as TD } from '../runtime';
   // Numeric sizes preview on each keystroke, with a single committed edit on change.
   propsEl.addEventListener('input', (e: any) => {
     const t = e.target;
+    if (t.dataset.objectScale != null) return;
+    if (applyNativeField(t, false)) return;
     const pn = panelOf(t);
     // the panel follows each keystroke: other fields show what this one changed (the Svelte view preserves the active field)
     if (pn) { begin(); pn.panel.apply!(pn.s, t); render(); renderPanel(); return; }
@@ -3130,6 +3328,16 @@ import { runtime as TD } from '../runtime';
   });
   propsEl.addEventListener('change', (e: any) => {
     const t = e.target;
+    if (t.dataset.objectScale != null) {
+      const value = Number(t.value);
+      if (!Number.isFinite(value) || value <= 0) { renderProps(); return; }
+      begin();
+      for (const s of selected()) if (canScale(s)) {
+        if (value === 1) delete s.objectScale; else s.objectScale = value;
+      }
+      render(); commit(); renderProps(); return;
+    }
+    if (applyNativeField(t, true)) return;
     // an error mark this handler added by hand (Svelte does not know about it) is cleared before re-checking
     if (t.dataset.localBad != null) { t.classList.remove('bad'); t.title = t.dataset.localBad; delete t.dataset.localBad; }
     const pn = panelOf(t);
@@ -3230,7 +3438,11 @@ import { runtime as TD } from '../runtime';
       const key = cb.dataset.color;
       const target = $('#props .sec[data-target]')?.dataset.target;
       const fills = !!cb.dataset.fills;
-      if (target === 'defaults') openPicker(cb, () => state.defaults[key], (v: any) => { state.defaults[key] = v; savePrefs(); }, !!cb.dataset.nullable, null, fills);
+      if (target === 'defaults') openPicker(cb, () => state.defaults[key], (v: any) => {
+        state.defaults[key] = v;
+        if (state.tool === 'bucket' && key === 'fill') for (const shape of selected().filter(canBucketFill)) shape.fill = clone(v);
+        savePrefs();
+      }, !!cb.dataset.nullable, null, fills);
       else {
         const list = selected().filter((s: any) => s[key] !== undefined);
         openPicker(cb, () => list[0] && list[0][key], (v: any) => { for (const s of list) s[key] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v; }, !!cb.dataset.nullable, null, fills);
@@ -3280,6 +3492,7 @@ import { runtime as TD } from '../runtime';
     if (act === 'group') groupSel();
     if (act?.startsWith('cb:')) combineSel(act.slice(3));
     if (act === 'ungroup') ungroupSel();
+    if (act?.startsWith('d:')) distributeSel(act.slice(2));
     if (act && act.startsWith('l:')) alignSel(act.slice(2));
     if (act === 'dup') duplicate();
     if (act === 'del') deleteSel();
@@ -3333,9 +3546,10 @@ import { runtime as TD } from '../runtime';
     if (d.blocks[d.active] && at <= d.active) d.active += blocks.length; // the active block keeps being itself
     d.blocks.splice(at, 0, ...blocks);
     const k = blocks.findIndex((b: any) => b.type === 'diagram');
-    if (k >= 0) setActiveBlock(at + k); else scheduleSave();
+    if (k >= 0) setActiveBlock(at + k, false); else scheduleSave();
     if (TD.docview) TD.docview.render();
-    requestAnimationFrame(() => document.querySelector(`#docview .blk[data-i="${at}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    if (k >= 0) TD.docview?.scrollToDiagram(at + k);
+    else requestAnimationFrame(() => document.querySelector(`#docview .blk[data-i="${at}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
   }
   function pasteShapes(list: any, dx: any, dy = dx) {
     begin();
@@ -3632,7 +3846,7 @@ import { runtime as TD } from '../runtime';
     if (!canGroup()) return;
     begin();
     const g = uid();
-    for (const s of selected()) s.g = g;
+    for (const s of selected()) { s.g = g; s.scopeGroup = true; }
     // keep members adjacent in z-order (at the topmost member's position)
     const sel = selected(), all = shapes();
     let top = 0;
@@ -3644,7 +3858,7 @@ import { runtime as TD } from '../runtime';
   function ungroupSel() {
     if (!canUngroup()) return;
     begin();
-    for (const s of selected()) { delete s.g; delete s.gname; }
+    for (const s of selected()) { delete s.g; delete s.gname; delete s.scopeGroup; }
     commit(); render(); renderProps(); showHint(uiText('hint.ungrouped', 'Ungrouped'), 1000);
   }
 
@@ -3922,8 +4136,8 @@ import { runtime as TD } from '../runtime';
     const i = rest.indexOf(anchor) + (above ? 1 : 0);
     begin();
     if (!layerDrag.group) for (const s of moving) {
-      if (into) { s.g = into; const gn = rest.find((q: any) => q.g === into && q.gname); if (gn) s.gname = gn.gname; else delete s.gname; }
-      else { delete s.g; delete s.gname; }
+      if (into) { s.g = into; s.scopeGroup = true; const gn = rest.find((q: any) => q.g === into && q.gname); if (gn) s.gname = gn.gname; else delete s.gname; }
+      else { delete s.g; delete s.gname; delete s.scopeGroup; }
     }
     state.doc.shapes = [...rest.slice(0, i), ...moving, ...rest.slice(i)];
     commit(); render(); renderProps();
@@ -4223,7 +4437,7 @@ import { runtime as TD } from '../runtime';
     return (mods.has('Alt') ? '⌥' : '') + (mods.has('Shift') ? '⇧' : '') + (mods.has('Ctrl') ? '⌘' : '') + glyph;
   };
   const ctxOpen = () => !ctx.hidden;
-  function closeCtx() { ctx.hidden = true; }
+  function closeCtx() { ctx.hidden = true; ctx.style.display = ''; }
   const IC: Record<string, any> = {
     copy: '<path d="M7 7h9v10H7z"/><path d="M4 13V3h9"/>',
     cut: '<circle cx="5.5" cy="15" r="2.5"/><circle cx="14.5" cy="15" r="2.5"/><path d="M7 13.2L15 3M13 13.2L5 3"/>',
@@ -4499,10 +4713,8 @@ import { runtime as TD } from '../runtime';
   function placeCtx(x: any, y: any) {
     ctx.hidden = false;
     updateOutputAvailability();
-    const r = ctx.getBoundingClientRect();
-    ctx.style.left = Math.min(x, innerWidth - r.width - 6) + 'px';
-    ctx.style.top = Math.min(y, innerHeight - r.height - 6) + 'px';
-    ctx.classList.toggle('flip', x + r.width * 2 > innerWidth);
+    ctx.querySelectorAll<HTMLElement>('.sub').forEach(sub=>sub.style.display='none');
+    ctx.scrollTop=0; positionMenu(ctx,x,y);
   }
   function openDocCtx(id: any, x: any, y: any) {
     const it = id && docEntry(id), page = state.doc.kind === 'page', d = (k: any) => 'doc:' + k, lf = id && TD.files.fileOf(id);
@@ -4661,6 +4873,15 @@ import { runtime as TD } from '../runtime';
     if (lineDraft) { lineCancel(); return; }
     if (editing) finishEdit();
     if (state.tool !== 'select') setTool('select');
+    const guideHit = e.target.closest?.('[data-guide-id]');
+    if (guideHit && guideMode === 'show') {
+      selectedGuide = guideHit.dataset.guideId; state.sel.clear(); renderOverlay(); renderProps();
+      ctx.dataset.guideId = selectedGuide!;
+      ctx.innerHTML = item(uiText('assist.editGuide','Edit position'),'guide:edit',{ic:'edit'}) + item(uiText('assist.deleteGuide','Delete guide'),'guide:delete',{ic:'del',key:'Del'}) + hr + item(uiText('assist.deleteAllGuides','Delete all guides'),'guide:deleteAll',{ic:'del',danger:true});
+      placeCtx(e.clientX,e.clientY); return;
+    }
+    selectedGuide = null;
+
     const hitG = e.target.closest && e.target.closest('[data-id]');
     if (hitG && !state.sel.has(hitG.dataset.id)) { state.sel = new Set(groupIds(hitG.dataset.id)); renderOverlay(); renderProps(); }
     if (!hitG && state.sel.size && !e.target.closest('[data-handle]')) {
@@ -4676,6 +4897,7 @@ import { runtime as TD } from '../runtime';
     if (!b || (b as HTMLButtonElement).disabled) return;
     closeCtx();
     const [a, arg] = (b as HTMLElement).dataset.ctx!.split(':');
+    if (a === 'guide') { if (arg === 'edit') void editGuide(ctx.dataset.guideId!); else removeGuide(ctx.dataset.guideId!,arg === 'deleteAll'); return; }
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
     if (a === 'edit') { const s = selected()[0]; if (!openBlock(s.id)) startEdit(s.id, s.type === 'text' ? 'text' : 'label'); }
     if (a === 'copy') copySel();
@@ -4703,6 +4925,14 @@ import { runtime as TD } from '../runtime';
     if (a === 'fitw') zoomFitWidth();
     if (a === 'grid') toggleGrid();
   });
+  ctx.addEventListener('pointerover', (e: PointerEvent) => {
+    const row=(e.target as Element).closest<HTMLElement>('.ctx-item');
+    if (!row || (e.relatedTarget instanceof Node && row.contains(e.relatedTarget))) return;
+    ctx.querySelectorAll<HTMLElement>('.sub').forEach(sub=>{ if (!sub.contains(row) && sub.parentElement !== row) sub.style.display='none'; });
+    const sub=row.querySelector<HTMLElement>(':scope > .sub');
+    if (sub && !row.classList.contains('dis')) { const r=row.getBoundingClientRect(); positionMenu(sub,r.right,r.top-5,r); }
+  });
+  ctx.addEventListener('scroll',()=>ctx.querySelectorAll<HTMLElement>('.sub').forEach(sub=>sub.style.display='none'));
   ctx.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('pointerdown', (e) => { if (ctxOpen() && !(e.target! as Element).closest('#ctxMenu')) closeCtx(); }, true);
   window.addEventListener('blur', closeCtx);
@@ -4804,9 +5034,11 @@ import { runtime as TD } from '../runtime';
     }
     if (e.key === ' ') { if (!spaceDown) { spaceDown = true; markTools(); } svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); if (selectedGuide) removeGuide(selectedGuide); else deleteSel(); return; }
     if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (TD.blocks.editable(s.type)) openBlock(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
+      if (drag?.mode === 'guide') { if (drag.beforeGuides) home().guides = drag.beforeGuides; else delete home().guides; drag = null; documentHistory.cancel(); smartLines = []; renderOverlay(); renderProps(); return; }
+      if (selectedGuide) { selectedGuide=null; guidePress=null; renderOverlay(); return; }
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
       else { state.sel.clear(); renderOverlay(); renderProps(); }
@@ -4858,21 +5090,24 @@ import { runtime as TD } from '../runtime';
   function updateTopbar() {
     const diagrams = state.doc.blocks.map((b: any, i: any) => [b, i]).filter(([b]: any) => b.type === 'diagram');
     const bs = $('#blockSel'), nav = $('#blockNav');
-    // in a classic file the picker keeps its room in Document view too, so the view switch doesn't move
+    // Classic views share the same diagram picker and toolbar position.
     nav.hidden = bs.hidden = (state.mode !== 'diagram' && state.mode !== 'document') || !diagrams.length;
-    nav.style.visibility = state.mode === 'document' ? 'hidden' : '';
+    nav.style.visibility = '';
     const board = state.mode === 'board';
     $('#btnExport').title = state.mode === 'page' ? uiText('top.export.page', 'Export the page as PNG (choose DPI), SVG or PDF') : board ? uiText('top.export.board', 'Export this whiteboard as PNG (choose DPI), SVG or PDF') : uiText('top.export.diagram', 'Export this diagram as PNG (choose DPI), SVG or PDF');
     $('#btnTikz').title = state.mode === 'page' ? uiText('top.tikz.page', 'LaTeX for this page, to copy or download (Ctrl+E)') : board ? uiText('top.tikz.board', 'LaTeX code for this whiteboard or the whole document, to copy or download (Ctrl+E)') : caption(captions["ui.latex.code.for.this.diagram.or.the.whole.document.to.copy.or.download.ctrl.e"]);
-    bs.innerHTML = diagrams.map(([b, i]: any, n: any) => `<option value="${i}"${i === state.doc.active ? ' selected' : ''}>${esc(typeof b.name === 'string' && b.name.trim() ? b.name : uiText('top.blockSel', 'Diagram {n} of {total}', { n: n + 1, total: diagrams.length }))}</option>`).join('');
+    const activeDiagram = diagrams.find(([b, i]: any) => i === state.doc.active);
+    const activeIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
+    bs.textContent = activeDiagram?.[0].name?.trim() || uiText('top.blockSel', 'Diagram {n} of {total}', { n: activeIndex + 1, total: diagrams.length });
     const diagramIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
     $('#blockPrev').disabled = diagramIndex <= 0;
     $('#blockNext').disabled = diagramIndex < 0 || diagramIndex >= diagrams.length - 1;
     $('#btnUndo').disabled = !state.undo.length && !canUndoFile();
     $('#btnRedo').disabled = !state.redo.length && !canRedoFile();
-    for (const [id, on] of [['#btnSnap', state.snap]] as const) { const b = $(id); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
+    updateSnapButton();
     $('#stage').classList.toggle('hide-grid', !state.grid);
     updateGridSelection();
+    updateGuidesButton();
     updateStatus();
   }
   function toggleGrid() { state.grid = !state.grid; savePrefs(); updateTopbar(); }
@@ -4897,7 +5132,7 @@ import { runtime as TD } from '../runtime';
     chooseGridStyle(GRID_STYLES[next]);
     $('#gridStyle').querySelector(`[data-grid-style="${GRID_STYLES[next]}"]`)?.focus();
   });
-  $('#btnSnap').onclick = () => { state.snap = !state.snap; savePrefs(); updateTopbar(); };
+  $('#btnSnap').onclick = cycleSnapMode;
   $('#zoomIn').onclick = () => { const r = stageSize(); zoomAt(1.25, r.w / 2, r.h / 2); };
   $('#zoomOut').onclick = () => { const r = stageSize(); zoomAt(0.8, r.w / 2, r.h / 2); };
   const zoomTo = (z: any) => { const r = stageSize(); zoomAt(z / state.view.zoom, r.w / 2, r.h / 2); };
@@ -5249,6 +5484,7 @@ import { runtime as TD } from '../runtime';
   });
   function runCmd(c: any) {
     if (['print', 'export', 'svg', 'html', 'latex', 'tikz'].includes(c) && !outputAllowed()) return;
+    if (c === 'guides') { guideMode = guideMode === 'show' ? 'locked' : guideMode === 'locked' ? 'off' : 'show'; selectedGuide = null; guidePress = null; savePrefs(); updateGuidesButton(); drawRulers(); renderOverlay(); }
     if (c === 'new') newDoc(null, null, null, null, null, state.doc.kind);
     if (c === 'open') openFile();
     if (c === 'save') saveFile();
@@ -5287,7 +5523,7 @@ import { runtime as TD } from '../runtime';
   const inTable = () => document.body.classList.contains('mode-table');
   /** Quick or Table: a tool on its own, the file's canvas and document hidden */
   const inTool = () => inQuick() || inTable();
-  function leaveFile() { finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); hideFly(); closeCtx(); expPop.hidden = true; }
+  function leaveFile() { magnifier.hide(); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); hideFly(); closeCtx(); expPop.hidden = true; }
   function setTable(on: any) {
     if (on === inTable()) return;
     if (on) { setQuick(false); leaveFile(); }
@@ -5308,7 +5544,7 @@ import { runtime as TD } from '../runtime';
   }
   function setQuick(on: any) {
     if (on === inQuick()) return;
-    if (on) { setTable(false); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); }
+    if (on) { magnifier.hide(); setTable(false); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); }
     TD.math.cancelPending();
     document.body.classList.toggle('mode-quick', on);
     try { on ? localStorage.setItem(QUICK_KEY, '1') : localStorage.removeItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
@@ -5347,7 +5583,29 @@ import { runtime as TD } from '../runtime';
     if (value) block.name = value; else delete block.name;
     commit(); updateTopbar();
   };
-  $('#blockSel').onchange = (e: any) => setActiveBlock(+e.target.value);
+  $('#blockSel').onclick = () => {
+    commit();
+    const gallery = document.createElement('dialog');
+    gallery.className = 'diagram-gallery';
+    gallery.setAttribute('aria-labelledby', 'diagramGalleryTitle');
+    const diagrams = state.doc.blocks.map((b: any, i: number) => ({ b, i })).filter(({ b }: any) => b.type === 'diagram');
+    gallery.innerHTML = `<div class="modal-head"><h2 id="diagramGalleryTitle">${esc(uiText('gallery.title', 'Choose a Diagram'))}</h2><button class="icon flat" data-close aria-label="${esc(uiText('ui.close', 'Close'))}">×</button></div><div class="diagram-gallery-grid">${diagrams.map(({ b, i }: any, n: number) => {
+      const name = typeof b.name === 'string' && b.name.trim() ? b.name : uiText('top.blockSel', 'Diagram {n} of {total}', { n: n + 1, total: diagrams.length });
+      return `<button class="diagram-gallery-card${i === state.doc.active ? ' on' : ''}" data-block="${i}" aria-current="${i === state.doc.active ? 'true' : 'false'}"><span class="diagram-gallery-preview" aria-hidden="true">${shapesSvg(b.shapes || [], 12, false, true) || `<span>${esc(uiText('pages.empty', 'empty'))}</span>`}</span><span class="diagram-gallery-label"><span>${esc(name)}</span>${i === state.doc.active ? '<span aria-hidden="true">✓</span>' : ''}</span></button>`;
+    }).join('')}</div>`;
+    document.body.appendChild(gallery);
+    gallery.addEventListener('close', () => { gallery.remove(); $('#blockSel').focus({ preventScroll: true }); }, { once: true });
+    gallery.addEventListener('click', (e) => {
+      const target = (e.target as Element).closest<HTMLElement>('[data-block], [data-close]');
+      if (target?.dataset.block != null) { const index = Number(target.dataset.block); gallery.close(); setActiveBlock(index); }
+      else if (target?.hasAttribute('data-close') || e.target === gallery) gallery.close();
+    });
+    gallery.addEventListener('keydown', (e) => e.stopPropagation());
+    gallery.showModal();
+    const selected = gallery.querySelector<HTMLElement>('[aria-current="true"]');
+    selected?.focus({ preventScroll: true });
+    selected?.scrollIntoView({ block: 'nearest' });
+  };
 
   // Page mode: the sheet as SVG, one <svg> per page (for print) or one tall SVG (for download).
   function pageSvgs(): any {
@@ -5604,6 +5862,7 @@ import { runtime as TD } from '../runtime';
     finishEdit(); finishPoly(); commit();
     $('#impText').value = text || '';
     $('#impMsg').textContent = '';
+    $('#impDefs').value = '';
     imp.hidden = false;
     importReport();
     $('#impText').focus();
@@ -5614,31 +5873,32 @@ import { runtime as TD } from '../runtime';
   const markHow = () => document.querySelectorAll('#impHow [data-how]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.how === impHow));
   markHow();
   document.querySelectorAll('#impHow [data-how]').forEach((b) => ((b as HTMLElement).onclick = () => { impHow = (b as HTMLElement).dataset.how; store.set('diagramtex.importHow', impHow); markHow(); importReport(); }));
-  const importAs = (src: any) => TD.importLatex(src, { editable: impHow === 'shapes' });
+  const importAs = (src: any) => TD.importLatex(src, { editable: impHow === 'shapes', definitions: $('#impDefs').value });
   // as the code is typed or pasted: what will become shapes and what stays TikZ code, and why (with its line)
   function importReport() {
     const msg = $('#impMsg'), src = $('#impText').value;
     msg.classList.remove('report'); msg.textContent = '';
     if (!src.trim()) return;
     let res, conv = [];
-    try { res = TD.importLatex(src); if (impHow === 'shapes') { conv = (res.kept || []).filter((k: any) => k.preview); res = importAs(src); } } catch (err: any) { msg.textContent = uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message }); return; }
+    try { res = TD.importLatex(src, { definitions: $('#impDefs').value }); if (impHow === 'shapes') { conv = (res.kept || []).filter((k: any) => k.preview); res = importAs(src); } } catch (err: any) { msg.textContent = uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message }); return; }
     const shapes = res.blocks.flatMap((b: any) => b.shapes || []);
     const n = shapes.filter((x: any) => x.type !== 'tikz').length, kept = [...conv.map((k: any) => ({ ...k, conv: true })), ...(res.kept || [])].sort((a, b) => (a.line || 0) - (b.line || 0));
     const nConv = conv.length, nCode = kept.length - nConv;
-    if (!kept.length && !res.warnings.length && !(TD.lint && TD.lint(src).length)) return;
+    const unresolved = (res.analysis || []).filter((a: any) => a.status === 'unresolved').length;
+    const lintSource = ($('#impDefs').value ? $('#impDefs').value + '\n' : '') + src;
     const first = (c: any) => { const l = String(c).split('\n').find((x) => x.trim() && !/^\s*%/.test(x)) || ''; return l.trim().length > 60 ? l.trim().slice(0, 59) + '…' : l.trim(); };
     const rows = kept.slice(0, 40).map((k) => `<li><span class="ln">${k.line ? esc(uiText('imp.line', 'line {n}', { n: k.line })) : ''}</span><code>${esc(first(k.code))}</code><span class="why">${esc(k.issues.join('; '))}</span></li>`);
     msg.classList.add('report');
-    const lint = TD.lint ? TD.lint(src) : [];
+    const lint = TD.lint ? TD.lint(lintSource) : [];
     if (lint.length) msg.classList.add('report');
-    msg.innerHTML = (lint.length ? TD.lint.html(lint, 8) : '') + '<div>' + esc(n === 1 ? uiText('imp.shapes.one', '1 shape') : uiText('imp.shapes.many', '{n} shapes', { n }))
+    msg.innerHTML = (unresolved ? '<div class="warn">' + esc((unresolved === 1 ? uiText('imp.unresolved.one', '1 section has unresolved layout or no preview. Its source is preserved; it is not converted to shapes.') : uiText('imp.unresolved.many', '{n} sections have unresolved layout or no preview. Their source is preserved; they are not converted to shapes.', { n: unresolved }))) + '</div>' : '') + (lint.length ? TD.lint.html(lint, 8) : '') + '<div>' + esc(n === 1 ? uiText('imp.shapes.one', '1 shape') : uiText('imp.shapes.many', '{n} shapes', { n }))
       + (nConv ? ' · ' + esc(nConv === 1 ? uiText('imp.conv.one', "1 statement converted to shapes as drawn: what isn't read below is left out") : uiText('imp.conv.many', "{n} statements converted to shapes as drawn: what isn't read below is left out", { n: nConv })) : '')
-      + (nCode ? ' · ' + esc(nCode === 1 ? uiText('imp.code.one', '1 statement kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame') : uiText('imp.code.many', '{n} statements kept as TikZ code: exported exactly as written, drawn as an approximation in a dashed frame', { n: nCode })) : '') + '</div>'
+      + (nCode ? ' · ' + esc(nCode === 1 ? uiText('imp.preserved.one', '1 statement preserved as TikZ code') : uiText('imp.preserved.many', '{n} statements preserved as TikZ code', { n: nCode })) : '') + '</div>'
       + (rows.length ? `<ul>${rows.join('')}${kept.length > 40 ? `<li>${esc(uiText('imp.more', '… {n} more', { n: kept.length - 40 }))}</li>` : ''}</ul>` : '')
       + res.warnings.map((w: any) => `<div class="warn">${esc(w)}</div>`).join('');
   }
   let impTimer = 0;
-  $('#impText').addEventListener('input', () => { clearTimeout(impTimer); impTimer = setTimeout(importReport, 300); });
+  for (const id of ['#impText', '#impDefs']) $(id).addEventListener('input', () => { clearTimeout(impTimer); impTimer = setTimeout(importReport, 300); });
   // each picture comes in as one group, so it moves as one and its pieces don't scatter
   function groupPictures(res: any) {
     for (const b of res.blocks) if (b.type === 'diagram' && b.shapes.length > 1) { const g = uid(); for (const x of b.shapes) { x.g = g; delete x.gname; } }
@@ -5653,7 +5913,9 @@ import { runtime as TD } from '../runtime';
     const dx = bb ? Math.round((c.x - bb.x - bb.w / 2) / G) * G : 0, dy = bb ? Math.round((c.y - bb.y - bb.h / 2) / G) * G : 0;
     begin();
     state.sel.clear();
-    for (const sh of list) { sh.id = uid(); if (dx || dy) TD.translate(sh, dx, dy); addShape(sh); state.sel.add(sh.id); }
+    const idmap = new Map();
+    for (const sh of list) { const oldId = sh.id; sh.id = uid(); idmap.set(oldId, sh.id); if (dx || dy) TD.translate(sh, dx, dy); addShape(sh); state.sel.add(sh.id); }
+    remapLinks(list, idmap);
     commit();
     render(); renderProps();
   }
@@ -6094,9 +6356,12 @@ import { runtime as TD } from '../runtime';
     }
     const prefs: any = store.get(LS_PREFS, null);
     if (prefs) {
+      if (['show','locked','off'].includes(prefs.guideMode)) guideMode = prefs.guideMode;
       const savedGridStyle = prefs.gridStyle || prefs.gridStyles?.diagram;
       if (GRID_STYLES.includes(savedGridStyle)) state.gridStyle = savedGridStyle;
-      state.grid = prefs.grid ?? true; state.snap = prefs.snap ?? true;
+      state.grid = prefs.grid ?? true;
+      state.snapMode = SNAP_MODES.includes(prefs.snapMode) ? prefs.snapMode : prefs.snap === false ? 'off' : 'both';
+      state.snap = state.snapMode !== 'off';
       if (prefs.gridCm >= 0.05 && prefs.gridCm <= 5) state.gridCm = prefs.gridCm;
       Object.assign(state.defaults, prefs.defaults || {});
       if (prefs.sidebar === false) document.body.classList.add('no-files');
@@ -6285,6 +6550,7 @@ import { runtime as TD } from '../runtime';
   TD.app = {
     outputReady, outputAllowed, updateOutputAvailability,
     cancelMathViews: () => { sidebarVersion++; sidebarPending.clear(); changedMathShapes.clear(); mathPriorities.clear(); },
+    magnifier,
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
     parseProject, projectJson, // project files, for the tests
     recovery, restoreRecovery, openRecoveryCopy, // recovery copies, for the tests
@@ -6307,7 +6573,7 @@ import { runtime as TD } from '../runtime';
     // for the command search (src/ui/services/palette.ts)
     cmd: {
       runCmd, setMode, setQuick, inQuick, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
-      toggleSnap: () => { state.snap = !state.snap; savePrefs(); updateTopbar(); },
+      toggleSnap: cycleSnapMode,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
       canUndo: () => state.undo.length > 0 || canUndoFile(), canRedo: () => state.redo.length > 0 || canRedoFile(),

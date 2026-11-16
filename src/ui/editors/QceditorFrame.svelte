@@ -16,8 +16,10 @@
         <button class="icon flat" data-qe="fit" title={t("editor.qc.fit", "Fit the circuit in view (0)", {}, $locale)}>{@html model.p7}</button>
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-qe="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-qe="done" title="{model.p8}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-qe="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-qe="done" title="{model.p8}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -29,7 +31,7 @@
         <div class="cz-props"></div>
         <div class="cz-code">
           <div class="cz-code-head"><span>{t("editor.qc.lang", "quantikz", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-qe="copy" title={t("editor.qc.copyCode", "Copy the quantikz code", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
-          <textarea spellcheck="false" aria-label={t("editor.qc.code", "quantikz code", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("editor.qc.code", "quantikz code", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

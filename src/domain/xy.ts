@@ -425,8 +425,7 @@ import { runtime as TD } from '../runtime';
     return L;
   }
   const layout = (s: any) => layoutCd({ ...s, src: toCd(s.src) });
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
   const draw = (s: any, ctx: any) => D.draw(s, ctx, layout(s));
   function fullCode(src: any) {
     const t = String(src || '').trim();

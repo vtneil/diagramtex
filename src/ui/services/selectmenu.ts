@@ -90,12 +90,14 @@ import { caption } from '../../i18n';
     const s = sel;
     close();
     if (!s || !s.options[i] || s.options[i].disabled) return;
+    const focusBefore = document.activeElement;
     if (s.selectedIndex !== i) {
       s.selectedIndex = i;
       s.dispatchEvent(new Event('input', { bubbles: true }));
       s.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    if (s.isConnected) s.focus({ preventScroll: true });
+    // A change handler may deliberately return focus to its editing surface.
+    if (s.isConnected && document.activeElement === focusBefore) s.focus({ preventScroll: true });
   }
 
   // in a grid of tiles, up and down move a row (the tiles across the first row)

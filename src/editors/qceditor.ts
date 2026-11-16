@@ -147,10 +147,16 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   // ---------------------------------------------------------------- model
   // rows of cells; a cell keeps its text and, unless it holds commands this editor doesn't know
   // (opaque), its items { name, o: [options], a: [arguments] }. dirty cells are written from items.
+  const verticalWire = (it: any) => it.name === 'vqw' || it.name === 'vcw';
+  function exclusiveWires(items: any[]) {
+    let last = -1;
+    items.forEach((it, i) => { if (verticalWire(it)) last = i; });
+    return items.filter((it, i) => !verticalWire(it) || i === last);
+  }
   function parseCell(text: any) {
     let unknown = false;
     const items = Q.cell(text, () => (unknown = true));
-    return { text: text.trim(), items, opaque: unknown, dirty: false };
+    return { text: text.trim(), items: exclusiveWires(items), opaque: unknown, dirty: !unknown && items.filter(verticalWire).length > 1 };
   }
   const emptyCell = () => ({ text: '', items: [], opaque: false, dirty: false });
   const itemCode = (it: any) => (it.plain ? it.a[0] : `\\${it.name}${it.o.map((o: any) => `[${o}]`).join('')}${it.a.map((a: any) => `{${a}}`).join('')}`);
@@ -172,7 +178,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     return M.wrapped || !body ? `\\begin{quantikz}${M.env ? `[${M.env}]` : ''}\n${body}\n\\end{quantikz}` : body;
   }
   const mainOf = (c: any) => c.items.find((it: any) => MAIN.has(it.name));
-  const setItems = (c: any, items: any) => { c.items = items; c.opaque = false; c.dirty = true; };
+  const setItems = (c: any, items: any) => { c.items = exclusiveWires(items); c.opaque = false; c.dirty = true; };
   const intArg = (v: any) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : 0; };
   // [wires=n] in an option list: read / write (1 drops it)
   function spanOf(it: any) {
@@ -271,6 +277,15 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   const svg = $('.qe-svg', root), stage = $('.cz-stage', root), list = $('.qe-list', root), search = $('.cz-search input', root);
   const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
 
+  for (const [action, axis] of [['addrow', 'row'], ['addcol', 'col']]) {
+    const button = $('[data-qe="' + action + '"]', root);
+    button.addEventListener('pointerenter', () => {
+      if (!E || E.drag || !nR(E.M) || !nC(E.M)) return;
+      E.hover = axis === 'row' ? { r: nR(E.M), c: 0 } : { r: 0, c: nC(E.M) }; draw();
+    });
+    button.addEventListener('pointerleave', () => { if (E && !E.drag) { E.hover = null; draw(); } });
+  }
+
   // ---------------------------------------------------------------- state
   // { M, sel: {r1, c1, r2, c2} | null, arm, view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, st, codeAt, codeTimer, clip }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
@@ -334,7 +349,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       const add = Q.cell(code, () => {});
       const base = cell.opaque ? [] : cell.items;
       if (add.some((x: any) => MAIN.has(x.name))) setItems(cell, [...add, ...base.filter((x: any) => !MAIN.has(x.name))]);
-      else setItems(cell, [...base.filter((x: any) => !add.some((y: any) => y.name === x.name)), ...add]);
+      else setItems(cell, [...base.filter((x: any) => !add.some((y: any) => y.name === x.name || (verticalWire(x) && verticalWire(y)))), ...add]);
     }
     if (it.cells.length === 1) link(r, c);
     return true;
@@ -548,6 +563,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     return { r, c };
   }
   function fit() {
+    if (!E) return;
     const G = geom(), r = rect();
     // the paper's edges, with room past them for the delete gutters
     const x1 = Math.min(G.xs[0], G.L.bb.x) - 16, x2 = Math.max(G.xs[G.xs.length - 1], G.L.bb.x + G.L.bb.w) + 10;
@@ -824,7 +840,8 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>',
     left: '<path d="M16 10H4M8.5 5.5L4 10l4.5 4.5"/>', right: '<path d="M4 10h12M11.5 5.5L16 10l-4.5 4.5"/>',
     group: '<rect x="3" y="5" width="14" height="12" rx="2" stroke-dasharray="2.5 2"/><path d="M6 2.5h8"/>',
-    glabel: '<path d="M5 3h10M10 3v5"/><rect x="5" y="11" width="10" height="6" rx="1"/>',
+    glabel: '<path d="M3 16h14"/><text x="10" y="11" text-anchor="middle" fill="currentColor" stroke="none" font-size="11">A</text>',
+    glabelbelow: '<path d="M3 4h14"/><text x="10" y="17" text-anchor="middle" fill="currentColor" stroke="none" font-size="11">A</text>',
     gdel: '<rect x="3" y="5" width="14" height="12" rx="2" stroke-dasharray="2.5 2"/><path d="M7.5 8.5l5 5M12.5 8.5l-5 5"/>',
   };
   // the groups whose box covers a cell: [{ r, c, i, it }]
@@ -852,12 +869,27 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   }
   // a group over the selection, framed or (label) with no border; selects its cell and puts the caret in its label.
   // A tall gate in the selection is covered whole: the group reaches down to its last wire
-  function addGroup(s: any, label: any) {
+  function labelSide(selection: any): 'top' | 'bottom' {
+    const s = shownBox(selection);
+    if (s.r1 === 0) return 'top';
+    if (s.r2 === nR(E.M) - 1) return 'bottom';
+    const emptyAcross = (r: number) => {
+      for (let c = s.c1; c <= s.c2; c++) {
+        const o = owner(r, c);
+        if (o.r !== r || !wireOnly(at(r, c)) || groupsAt(r, c).length) return false;
+      }
+      return true;
+    };
+    if (emptyAcross(s.r1 - 1)) return 'top';
+    return emptyAcross(s.r2 + 1) ? 'bottom' : 'top';
+  }
+  function addGroup(s: any, label: any, side = 'top') {
     s = shownBox(s);
     const cell = at(s.r1, s.c1);
     if (!cell || cell.opaque) return;
     const w = s.r2 - s.r1 + 1, n = s.c2 - s.c1 + 1;
     const it = Q.cell(`\\gategroup[${w},steps=${n},style={${label ? 'draw=none' : 'dashed,rounded corners'}}]{${label ? 'label' : ''}}`, () => {})[0];
+    if (label && side === 'bottom') setGroupMode(it, 'bottom', '');
     edit(() => setItems(cell, [...cell.items, it]));
     E.sel = { r1: s.r1, c1: s.c1, r2: s.r1, c2: s.c1 }; draw(); renderProps();
     const f = $(`[data-f="Gx${s.r1}_${s.c1}_${cell.items.indexOf(it)}"]`, props);
@@ -882,8 +914,9 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       mItem('delete', nr * nc > 1 ? t('editor.qc.menu.clearCells', 'Clear Cells') : t('editor.qc.menu.clearCell', 'Clear Cell'), 'clear', 'Del');
     // groups: frame or label the selection; delete any group whose box covers the clicked cell
     const gb = shownBox(s), anchor = at(s.r1, s.c1), here = groupsAt(h.r, h.c), many = (gb.r2 - gb.r1 + 1) * nc > 1;
+    const side = labelSide(gb);
     let gh = mItem('gadd', many ? t('editor.qc.menu.groupSel', 'Group Selection') : t('editor.qc.menu.groupCell', 'Group Cell'), 'group', '', !anchor || anchor.opaque) +
-      mItem('glabel', many ? t('editor.qc.menu.labelAboveSel', 'Label Above Selection') : t('editor.qc.menu.labelAbove', 'Label Above'), 'glabel', '', !anchor || anchor.opaque);
+      mItem(side === 'bottom' ? 'glabelbelow' : 'glabel', side === 'bottom' ? (many ? t('editor.qc.menu.labelBelowSel', 'Label Below Selection') : t('editor.qc.menu.labelBelow', 'Label Below')) : (many ? t('editor.qc.menu.labelAboveSel', 'Label Above Selection') : t('editor.qc.menu.labelAbove', 'Label Above')), side === 'bottom' ? 'glabelbelow' : 'glabel', '', !anchor || anchor.opaque);
     here.forEach((g) => {
       const lb = (g.it.a[0] || '').trim(), name = lb ? `“${lb.length > 24 ? lb.slice(0, 23) + '…' : lb}”` : '';
       gh += mItem(`gdel:${g.r},${g.c},${g.i}`, here.length > 1 || name ? t('editor.qc.menu.deleteGroupNamed', 'Delete Group {name}', { name }).trim() : t('editor.qc.menu.deleteGroup', 'Delete Group'), 'gdel');
@@ -899,7 +932,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     if (!b) return;
     closeMenu();
     const q = (b as HTMLElement).dataset.qm;
-    if (q === 'gadd' || q === 'glabel') { addGroup(selBox(), q === 'glabel'); return; }
+    if (q === 'gadd' || q === 'glabel' || q === 'glabelbelow') { addGroup(selBox(), q !== 'gadd', q === 'glabelbelow' ? 'bottom' : 'top'); return; }
     if (q!.startsWith('gdel:')) {
       const [r, c, i] = q!.slice(5).split(',').map(Number), cell = at(r, c);
       if (cell) edit(() => setItems(cell, cell.items.filter((_: any, k: any) => k !== i)));
@@ -1011,6 +1044,18 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     m.o = head || m.o.length > 1 ? [head, ...m.o.slice(1)] : [];
   }
   const lsOf = (m: any) => Q.opts(Q.opts(m.o[0] || '').map['label style'] || '').list;
+  const labelShift = (it: any, axis: string) => lsOf(it).reduce((v: number, e: string) => {
+    const m = new RegExp(`^${axis}shift\\s*=\\s*(.+)$`).exec(e);
+    const len = m && /^\s*(-?[\d.]+)\s*(cm|mm|pt|bp|in|em)?\s*$/.exec(m[1]);
+    return v + (len ? +len[1] * (len[2] === 'em' ? 0.35 : CM[len[2] || 'pt'] || 1) : 0);
+  }, 0);
+  function setLabelShift(it: any, axis: string, value: number) {
+    setOpt(it, 'label style', [...lsOf(it).filter((e: string) => !new RegExp(`^${axis}shift\\s*=`).test(e)), `${axis}shift=${Math.round(value * 100) / 100}cm`]);
+  }
+  const offsetRows = (it: any, key: string): FormRow[] => ['x', 'y'].map(axis => {
+    const value = labelShift(it, axis), label = axis === 'x' ? t('editor.qc.offsetX', 'Offset X') : t('editor.qc.offsetY', 'Offset Y');
+    return row(label, { kind: 'input', value, attrs: { type: 'range', 'data-slider-default': axis === 'x' ? 0 : key.startsWith('B') || (it.name === 'gategroup' && groupMode(it) === 'bottom') ? -0.4 : it.name === 'slice' ? (sliceBottom(it) ? cmOf(styleOf(it)['shorten >']) : -cmOf(styleOf(it)['shorten <'])) : 0, min: String(Math.min(-2, value)), max: String(Math.max(2, value)), step: '0.05', 'data-f': `offset${axis}:${key}`, 'aria-label': label } }, { kind: 'text', class: 'slider-value', text: `${Math.round(value * 100) / 100} cm` });
+  });
   // A group's label: above (quantikz's own), below (label position=below, as far under as the top one is over),
   // or both (a second label={…} in its style).
   const GLOW = 'group label,label position=below,yshift=-0.4cm';
@@ -1022,10 +1067,16 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     const q = /\]\s*(?:\w+\s*)?:\s*([\s\S]*)$/.exec(styleOf(it).label || '');
     return q ? q[1].trim().replace(/^\{([\s\S]*)\}$/, '$1') : '';
   }
+  function lowerGroupLabel(it: any) {
+    const m = /\[([\s\S]*?)\]/.exec(styleOf(it).label || '');
+    return { o: [`label style={${m ? m[1] : GLOW}}`] };
+  }
   function setGroupMode(it: any, mode: any, low: any) {
+    const y = labelShift(it, 'y') + (groupMode(it) === 'bottom' ? 0.4 : 0);
     const keep = lsOf(it).filter((e: any) => !/^(label position|yshift)\s*=/.test(e) && e !== 'below' && e !== 'above');
-    setOpt(it, 'label style', mode === 'bottom' ? [...keep, 'label position=below', 'yshift=-0.4cm'] : keep);
-    setStyle(it, 'label', mode === 'both' ? `{[${GLOW}]:{${low}}}` : '');
+    setOpt(it, 'label style', mode === 'bottom' ? [...keep, 'label position=below', `yshift=${y - 0.4}cm`] : [...keep, `yshift=${y}cm`]);
+    const lower = groupMode(it) === 'both' ? lsOf(lowerGroupLabel(it)).join(',') : GLOW;
+    setStyle(it, 'label', mode === 'both' ? `{[${lower}]:{${low}}}` : '');
   }
   // A slice's label: at the top (quantikz's own), the bottom (label style={pos=1,anchor=north}), or both: a second,
   // borderless \slice in the same cell carries the bottom one. A slice over fewer wires is shortened at its ends
@@ -1059,11 +1110,14 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     return [cm(edgeT(q.g, a)), cm(edgeB(q.g, q.R, Math.max(a, b)))];
   }
   function placeSlice(main: any, comp: any, bottom: any) {
+    const oldStyle = styleOf(main), oldBase = sliceBottom(main) ? cmOf(oldStyle['shorten >']) : -cmOf(oldStyle['shorten <']);
+    const y = labelShift(main, 'y') - oldBase;
+    const compY = comp ? labelShift(comp, 'y') - cmOf(oldStyle['shorten >']) : 0;
     const [T, B] = sliceCut(main), keep = (it: any) => lsOf(it).filter((e: any) => !/^(pos|anchor|yshift)\s*=/.test(e));
     setStyle(main, 'shorten <', T ? `${T}cm` : ''); setStyle(main, 'shorten >', B ? `${B}cm` : '');
     if (!T && !B) delete main.wr;
-    setOpt(main, 'label style', [...keep(main), ...(bottom ? ['pos=1', 'anchor=north', ...(B ? [`yshift=${B}cm`] : [])] : T ? [`yshift=-${T}cm`] : [])]);
-    if (comp) setOpt(comp, 'label style', [...keep(comp), 'pos=1', 'anchor=north', ...(B ? [`yshift=${B}cm`] : [])]);
+    setOpt(main, 'label style', [...keep(main), ...(bottom ? ['pos=1', 'anchor=north', `yshift=${B + y}cm`] : [`yshift=${y - T}cm`])]);
+    if (comp) setOpt(comp, 'label style', [...keep(comp), 'pos=1', 'anchor=north', `yshift=${B + compY}cm`]);
   }
   // keep every shortened slice's cut on its wires as the rows around it change height
   function syncSlices() {
@@ -1086,7 +1140,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     cell.dirty = true;
   }
 
-  const AT = () => [['top', t('ui.top', 'Top')], ['bottom', t('editor.qc.bottom', 'Bottom')], ['both', t('editor.commonA.both', 'Both')]];
+  const AT = () => [['top', t('editor.commonA.side.above', 'Above')], ['bottom', t('editor.commonA.side.below', 'Below')], ['both', t('editor.commonA.both', 'Both')]];
   // a label field's name, as the panel shows it
   const labelName = (en: string): string => (({ Label: () => t('ui.label', 'Label'), Angle: () => t('ui.angle', 'Angle'), Order: () => t('editor.qc.order', 'Order'), 'Width of': () => t('editor.qc.widthOf', 'Width of'), Text: () => t('ui.text', 'Text') } as Record<string, () => string>)[en]?.() ?? en);
 
@@ -1135,7 +1189,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     const num = (label: string, key: string, value: number, max?: number) => numField(label, key, value, '', { min: '1', step: '1', ...(max ? { max: String(max) } : {}) });
     const dec = (label: string, key: string, value: number) => numField(label, key, value || '', 'cm', { min: '0', step: '0.1', placeholder: t('editor.qc.auto', 'auto') });
     const sg = (label: string, action: string, attrs: Attributes, current: string, options: string[][]): FormRow => ({ ...row(label, ...options.map(([value, text]) => ({ kind: 'button' as const, text, attrs: { 'data-qe': action, ...attrs, 'data-v': value, class: current === value ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' });
-    const hidden = (visible: boolean, rows: FormRow[]): FormRow => ({ kind: 'group', style: visible ? undefined : 'visibility:hidden', rows });
+    const hidden = (visible: boolean, rows: FormRow[]): FormRow => ({ kind: 'group', style: visible ? undefined : 'display:none', rows });
     const remove = (action: string, attrs: Attributes) => ({ text: '×', attrs: { class: 'flat qe-x', 'data-qe': action, ...attrs, title: t('editor.qc.remove', 'Remove') } });
     if (!b) { show([circuitProps()]); return; }
     if (!single()) {
@@ -1160,8 +1214,8 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       if (it.name === 'slice') {
         const { main, comp } = slicePair(cell); if (it === comp) return;
         const mode = it === main && comp ? 'both' : sliceBottom(it) ? 'bottom' : 'top', w = it === main ? sliceWires(it) : null, R = nR(E.M);
-        const rows: FormRow[] = [field(t('ui.label', 'Label'), 'x' + i, it.a[0] || '', { 'data-tx': 'text' })];
-        if (it === main) rows.push(sg(t('editor.qc.labelAt', 'Label at'), 'sl', { 'data-i': i }, mode, AT()), hidden(!!comp, [field(t('editor.qc.bottomLabel', 'Bottom label'), 'xb' + i, comp ? comp.a[0] || '' : '', { 'data-tx': 'text' })]), num(t('editor.qc.fromWire', 'From wire'), 'sa' + i, w![0] + 1, R), num(t('editor.qc.toWire', 'To wire'), 'sz' + i, w![1] + 1, R));
+        const rows: FormRow[] = [field(t('ui.label', 'Label'), 'x' + i, it.a[0] || '', { 'data-tx': 'text' }), ...offsetRows(it, String(i))];
+        if (it === main) rows.push(sg(t('editor.qc.labelAt', 'Label at'), 'sl', { 'data-i': i }, mode, AT()), hidden(!!comp, [field(t('editor.qc.bottomLabel', 'Bottom label'), 'xb' + i, comp ? comp.a[0] || '' : '', { 'data-tx': 'text' }), ...(comp ? offsetRows(comp, String(cell.items.indexOf(comp))) : [])]), num(t('editor.qc.fromWire', 'From wire'), 'sa' + i, w![0] + 1, R), num(t('editor.qc.toWire', 'To wire'), 'sz' + i, w![1] + 1, R));
         rows.push(hueSel(t('ui.colour', 'Colour'), 'cd' + i, styleOf(it).draw || styleOf(it).color || '', false));
         sections.push({ ...section(t('editor.qc.n.slice', 'Slice'), rows, 'sec'), titleAction: remove('drop', { 'data-i': i }) });
       } else if (it.name === 'setwiretype') {
@@ -1171,12 +1225,12 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     });
     for (const g of groupsAt(b.r1, b.c1)) {
       const k = `${g.r}_${g.c}_${g.i}`, d = groupDims(g.it), st = styleOf(g.it), away = g.r !== b.r1 || g.c !== b.c1, off = /^none$/i.test((st.draw || '').trim());
-      sections.push({ ...section(t('editor.qc.group', 'Group'), [field(t('ui.label', 'Label'), 'Gx' + k, g.it.a[0] || '', { 'data-tx': 'text' }), sg(t('editor.qc.labelAt', 'Label at'), 'gl', { 'data-g': k }, groupMode(g.it), AT()), hidden(groupMode(g.it) === 'both', [field(t('editor.qc.bottomLabel', 'Bottom label'), 'Gb' + k, groupLow(g.it), { 'data-tx': 'text' })]), num(t('editor.qc.cat.wires', 'Wires'), 'Gw' + k, d.wires), num(t('editor.qc.steps', 'Steps'), 'Gs' + k, d.steps), hueSel(t('ui.fill', 'Fill'), 'Gf' + k, st.fill || '', true), sg(t('editor.qc.border', 'Border'), 'gb', { 'data-g': k }, off ? '0' : '1', [['1', t('editor.qc.shown', 'Shown')], ['0', t('ui.none', 'None')]]), hidden(!off, [hueSel(t('ui.line', 'Line'), 'Gd' + k, off ? '' : st.draw || st.color || '', false)])], 'sec'), titleSpan: true, ...(away ? { summary: t('editor.qc.fromAt', 'from wire {r} · step {c}', { r: g.r + 1, c: g.c + 1 }) } : {}), titleAction: remove('gdrop', { 'data-g': k }) });
+      sections.push({ ...section(t('editor.qc.group', 'Group'), [field(t('ui.label', 'Label'), 'Gx' + k, g.it.a[0] || '', { 'data-tx': 'text' }), sg(t('editor.qc.labelAt', 'Label at'), 'gl', { 'data-g': k }, groupMode(g.it), AT()), ...offsetRows(g.it, 'G' + k), hidden(groupMode(g.it) === 'both', [field(t('editor.qc.bottomLabel', 'Bottom label'), 'Gb' + k, groupLow(g.it), { 'data-tx': 'text' }), ...offsetRows(lowerGroupLabel(g.it), 'B' + k)]), num(t('editor.qc.cat.wires', 'Wires'), 'Gw' + k, d.wires), num(t('editor.qc.steps', 'Steps'), 'Gs' + k, d.steps), hueSel(t('ui.fill', 'Fill'), 'Gf' + k, st.fill || '', true), sg(t('editor.qc.border', 'Border'), 'gb', { 'data-g': k }, off ? '0' : '1', [['1', t('editor.qc.shown', 'Shown')], ['0', t('ui.none', 'None')]]), hidden(!off, [hueSel(t('ui.line', 'Line'), 'Gd' + k, off ? '' : st.draw || st.color || '', false)])], 'sec'), titleSpan: true, ...(away ? { summary: t('editor.qc.fromAt', 'from wire {r} · step {c}', { r: g.r + 1, c: g.c + 1 }) } : {}), titleAction: remove('gdrop', { 'data-g': k }) });
     }
     sections.push({ class: 'sec', rows: [field(t('editor.commonA.code', 'Code'), 'code', cellText(cell), { class: 'mono' }), ...(cell.opaque ? [note(t('editor.qc.help.opaque', 'This cell has commands the editor doesn’t draw; they are kept as written.'))] : [])] }); show(sections);
   }
-  props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
-  props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
+  props.addEventListener('focusin', (e: any) => { if (E && !isViewUpdating() && e.target.matches('input, select')) begin(); });
+  props.addEventListener('focusout', (e: any) => { if (E && !isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
   props.addEventListener('input', (e: any) => {
     const t = e.target, f = t.dataset.f, s = single();
     if (f === 'Erow' || f === 'Ecol') {
@@ -1186,7 +1240,17 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     }
     if (!f || !s) return;
     const cell = at(s.r1, s.c1);
-    if (f === 'code') { Object.assign(cell, parseCell(t.value)); }
+    if (f.startsWith('offset')) {
+      const [axis, key] = f.slice(6).split(':');
+      const g = /^[GB]/.test(key) ? gref(key.slice(1)) : null;
+      const lower = key.startsWith('B');
+      const it = g ? (lower ? lowerGroupLabel(g.it) : g.it) : cell.items[+key];
+      if (!it) return;
+      setLabelShift(it, axis, parseFloat(t.value) || 0);
+      if (lower && g) setStyle(g.it, 'label', `{[${lsOf(it).join(',')}]:{${groupLow(g.it)}}}`);
+      (g ? g.cell : cell).dirty = true;
+    }
+    else if (f === 'code') { Object.assign(cell, parseCell(t.value)); }
     else if (/^G[xbwsfd]/.test(f)) {
       // a group's field, by its top-left cell; a filled group goes behind the circuit (background), or its fill hides the gates
       const g = gref(f.slice(2));
@@ -1399,7 +1463,8 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     let first = true;
     localeOff?.();
     localeOff = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); syncCode(); } });
-    requestAnimationFrame(fit);
+    fit();
+    requestAnimationFrame(() => { if (E) fit(); });
   }
   TD.qcEditor = { open };
 })();

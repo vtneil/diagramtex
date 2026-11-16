@@ -198,6 +198,8 @@ T.test('bytefield editor: ⌘A selects every row with fields; dragging from a fi
   ED.open(bf(src), (r) => { got = r; });
   await new Promise((r) => setTimeout(r, 50));
   const E = ED._state(), svg = document.querySelector('#bfModal .bf-svg'), R = svg.getBoundingClientRect();
+  // Synthetic PointerEvents have no active native pointer to capture in Gecko.
+  const capture = svg.setPointerCapture; svg.setPointerCapture = () => {};
   const key = (k, o = {}) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, metaKey: true, bubbles: true, ...o }));
   const ev = (t, x, y) => svg.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: R.left + x, clientY: R.top + y, button: 0, pointerId: 1 }));
   const mid = (txt) => { const it = E.M.items.findIndex((x) => x.text === txt), q = ED._scr(ED._lay().boxes.find((b) => b.ii === it)); return [q.x + q.w / 2, q.y + q.h / 2]; };
@@ -246,6 +248,7 @@ T.test('bytefield editor: ⌘A selects every row with fields; dragging from a fi
     T.eq(pop.value, 'D', 'holding the label');
     pop.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   } finally {
+    svg.setPointerCapture = capture;
     key('Enter');
   }
   T.eq(got, null, 'nothing changed, nothing saved');

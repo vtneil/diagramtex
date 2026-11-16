@@ -170,8 +170,8 @@ import { runtime as TD } from '../../runtime';
     st.paddingRight = parseFloat(cs.paddingRight) + Math.max(0, ta.offsetWidth - ta.clientWidth - bl - br) + 'px';
     st.width = cs.width; st.height = cs.height;
     st.display = 'block';
-    st.whiteSpace = input ? 'pre' : 'pre-wrap';
-    st.overflowWrap = input ? 'normal' : 'break-word';
+    st.whiteSpace = input || ta.wrap === 'off' ? 'pre' : cs.whiteSpace;
+    st.overflowWrap = input || ta.wrap === 'off' ? 'normal' : cs.overflowWrap;
     // a one-line input centres its text vertically
     if (input) st.lineHeight = parseFloat(cs.height) - bt - bb - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) + 'px';
     st.zIndex = /^\d+$/.test(cs.zIndex) ? +cs.zIndex + 1 : '';

@@ -657,8 +657,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
 
   function draw(s: any, ctx: any) {
     const L = layout(s), col = TD.css(s.color || '#000000'), bb = L.bb;

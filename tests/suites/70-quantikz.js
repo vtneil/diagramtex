@@ -248,3 +248,109 @@ T.test('quantikz editor: dragging a tall gate previews the actual full gate at c
     q('[data-qe="done"]').click();
   }
 });
+
+T.test('quantikz editor: vertical wires replace each other and imported last wire wins', async () => {
+  TD.qcEditor.open(qc(wrap('\\gate{H}\\vqw{1}\\vcw{1} & \\\\ &')), () => {});
+  await new Promise(r => setTimeout(r, 50));
+  const root = document.querySelector('#qcModal'), q = s => root.querySelector(s);
+  const src = () => q('.cz-code textarea').value;
+  const choose = name => {
+    const item = q(`[data-item="${name}"]`);
+    item.setPointerCapture = () => {};
+    for (const type of ['pointerdown', 'pointerup']) item.dispatchEvent(new PointerEvent(type, {bubbles:true, button:0, pointerId:1}));
+  };
+  const key = k => window.dispatchEvent(new KeyboardEvent('keydown', {key:k, bubbles:true}));
+  try {
+    T.ok(!src().includes('\\vqw') && src().includes('\\vcw'), 'last imported wire wins');
+    key('ArrowUp');
+    choose('vqw');
+    T.ok(src().includes('\\gate{H}') && src().includes('\\vqw') && !src().includes('\\vcw'), 'quantum replaces classical without removing gate');
+    key('ArrowLeft');
+    choose('vcw');
+    T.ok(src().includes('\\vcw') && !src().includes('\\vqw'), 'classical replaces quantum');
+    q('[data-qe="undo"]').click();
+    T.ok(src().includes('\\vqw') && !src().includes('\\vcw'), 'undo restores previous wire');
+  } finally { q('[data-qe="done"]').click(); }
+});
+
+T.test('quantikz editor: context label direction checks boundaries and the whole selection', async () => {
+  const cases = [
+    {body:' & \\\\ & \\\\ &', row:0, bottom:false},
+    {body:' & \\\\ & \\\\ &', row:2, bottom:true},
+    {body:' & \\\\ & \\\\ &', row:1, bottom:false},
+    {body:' & \\gate{X} \\\\ & \\\\ &', row:1, range:true, bottom:true},
+    {body:'\\gate{X} & \\\\ & \\\\ & \\gate{Y}', row:1, range:true, bottom:false},
+    {body:'\\gate[2]{U} & \\\\ & \\\\ & \\\\ &', row:2, bottom:true},
+  ];
+  for (const test of cases) {
+    TD.qcEditor.open(qc(wrap(test.body)), () => {});
+    await new Promise(r => setTimeout(r, 50));
+    const root = document.querySelector('#qcModal'), q = s => root.querySelector(s);
+    const key = (k, shiftKey=false) => window.dispatchEvent(new KeyboardEvent('keydown', {key:k, shiftKey, bubbles:true}));
+    try {
+      key('ArrowUp');
+      for (let i=0; i<test.row; i++) key('ArrowDown');
+      if (test.range) key('ArrowRight', true);
+      const b = q('.qe-sel').getBoundingClientRect();
+      q('.qe-sel').dispatchEvent(new MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:b.x+b.width/2, clientY:b.y+b.height/2}));
+      const action = q(`[data-qm="${test.bottom ? 'glabelbelow' : 'glabel'}"]`);
+      T.ok(action && action.textContent.includes(test.bottom ? 'Below' : 'Above'), 'menu direction: '+JSON.stringify(test));
+      T.eq(action.querySelector('svg text').textContent, 'A', 'label icon uses A');
+      T.eq(action.querySelector('svg path').getAttribute('d'), test.bottom ? 'M3 4h14' : 'M3 16h14', 'icon matches direction');
+      action.click();
+      T.ok(Array.from(q('.cz-props').querySelectorAll('button')).some(b => b.textContent === 'Above'), 'label position says Above');
+      T.eq(q('.cz-code textarea').value.includes('label position=below'), test.bottom, 'insert matches menu');
+    } finally { q('[data-qe="done"]').click(); }
+  }
+});
+
+T.test('quantikz editor: focused code stays unwrapped and shows edits while scrolling', async () => {
+  const long = '\\lstick{$q_0$} & ' + Array(24).fill('\\gate{H}').join(' & ');
+  TD.qcEditor.open(qc(wrap(long)), () => {});
+  await new Promise(r => setTimeout(r, 50));
+  const root = document.querySelector('#qcModal'), q = s => root.querySelector(s);
+  try {
+    const code = q('.cz-code textarea');
+    code.focus();
+    await new Promise(r => requestAnimationFrame(r));
+    let overlay = q('.tx-hl');
+    T.eq(code.wrap, 'off');
+    T.eq(getComputedStyle(overlay).whiteSpace, 'pre', 'focus preserves whitespace');
+    code.value = code.value.replace('q_0', 'changed_0');
+    code.dispatchEvent(new Event('input', {bubbles:true}));
+    await new Promise(r => requestAnimationFrame(r));
+    overlay = q('.tx-hl');
+    T.ok(overlay.textContent.includes('changed_0'), 'highlighted copy shows the edit');
+    T.ok(code.scrollWidth > code.clientWidth, 'long lines scroll horizontally');
+    code.scrollLeft = 150;
+    await new Promise(r => requestAnimationFrame(r));
+    T.ok(Math.abs(overlay.scrollLeft-code.scrollLeft) <= 1, 'horizontal scroll stays aligned');
+  } finally { q('[data-qe="done"]').click(); }
+});
+
+T.test('quantikz editor: label offset sliders update code and preview with undo', async () => {
+  for (const annotation of ['\\gategroup[1,steps=1,style={draw=none}]{offsetlabel}', '\\slice{offsetlabel}']) {
+    TD.qcEditor.open(qc(wrap('\\gate{H}' + annotation + ' & \\\\ &')), () => {});
+    await new Promise(r => setTimeout(r, 50));
+    const root = document.querySelector('#qcModal'), q = s => root.querySelector(s);
+    const src = () => q('.cz-code textarea').value;
+    const label = () => L(src()).ops.find(o => o.k === 'text' && o.t === 'offsetlabel');
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowUp', bubbles:true}));
+      const before = label();
+      for (const [axis, value] of [['x','0.5'], ['y','0.25']]) {
+        const slider = q(`input[data-f^="offset${axis}:"]`);
+        T.ok(slider && slider.type === 'range', 'offset slider exists');
+        slider.dispatchEvent(new FocusEvent('focusin', {bubbles:true}));
+        slider.value = value; slider.dispatchEvent(new Event('input', {bubbles:true}));
+        q(`input[data-f^="offset${axis}:"]`).dispatchEvent(new FocusEvent('focusout', {bubbles:true}));
+      }
+      T.ok(src().includes('xshift=0.5cm') && src().includes('yshift=0.25cm'), 'exports standard TikZ shifts');
+      const after = label();
+      near(after.x-before.x, 0.5*PX, 0.01, 'positive X moves right');
+      near(after.y-before.y, -0.25*PX, 0.01, 'positive Y moves up');
+      q('[data-qe="undo"]').click();
+      near(label().y, before.y, 0.01, 'undo restores vertical offset');
+    } finally { q('[data-qe="done"]').click(); }
+  }
+});

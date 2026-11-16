@@ -104,15 +104,37 @@ export function advancedBasicExamples(g: ExampleTools) {
     pts.forEach((p, i) => { const q = pts[(i + 1) % 3], m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]; line(m[0], m[1], O[0], O[1], { stroke: blue, dash: 'dashed' }); point(p[0], p[1]); }); point(...O as [number, number], '$O$');
     text(735, 435, 'Circumcentre from bisectors');
   });
-  example('RLC phasors and impedance triangle', 'A voltage phasor construction and its corresponding impedance triangle use projected vectors, angle arcs, construction circles and labelled dimensions.', () => {
-    arrow(55, 300, 380, 300); arrow(80, 330, 80, 50); text(385, 320, 'Re'); text(65, 40, 'Im');
-    ellipse(80, 300, 230, 230, { dash: 'dashed', stroke: '#aaaaaa', width: 1 });
-    arrow(80, 300, 300, 300, { stroke: blue, label: '$V_R$' }); arrow(300, 300, 300, 100, { stroke: red, label: '$V_L$' });
-    arrow(300, 100, 300, 175, { stroke: green, label: '$V_C$' }); arrow(80, 300, 300, 175, { width: 2.5, label: '$V$' });
-    line(80, 175, 300, 175, { stroke: grey, dash: 'dashed' }); arc(80, 300, 65, 0, 29.6); text(165, 273, '$\\phi$');
-    poly([[560, 300], [830, 300], [830, 145]], { fill: '#e8f0fb' });
-    text(690, 330, '$R$'); text(905, 220, '$X_L-X_C$'); text(650, 193, '$|Z|$');
-    arc(560, 300, 70, 0, 29.9); text(650, 274, '$\\phi$');
+  example('RLC phasors and impedance triangle', 'Rotating voltage phasors for an inductive series RLC circuit: the resistor voltage follows the current, the inductor leads by 90 degrees, and the capacitor lags by 90 degrees. Their vector sum is the supply voltage; the impedance triangle has the same phase angle.', () => {
+    const O = [240, 300], theta = 35, phi = 20, vr = 180, vl = 160;
+    const vc = vl - vr * Math.tan(phi * Math.PI / 180);
+    const vector = (length: number, angle: number) => [length * Math.cos(angle * Math.PI / 180), -length * Math.sin(angle * Math.PI / 180)];
+    const R = vector(vr, theta), L = vector(vl, theta + 90), C = vector(vc, theta - 90);
+    const at = (v: number[]) => [O[0] + v[0], O[1] + v[1]];
+    const E = [R[0] + L[0] + C[0], R[1] + L[1] + C[1]];
+    const violet = '#921b95', orange = '#e87800', supply = '#080884', resistor = '#008000';
+    arrow(40, O[1], 480, O[1]); arrow(O[0], 480, O[0], 75);
+    text(490, 315, '$x$'); text(222, 65, '$y$');
+    for (const [v, color] of [[L, violet], [C, orange], [R, resistor], [E, supply]] as const) {
+      const end = at(v); arrow(O[0], O[1], end[0], end[1], { stroke: color, width: 3 });
+    }
+    const r = at(R), e = at(E);
+    arrow(r[0], r[1], e[0], e[1], { stroke: violet, width: 3 });
+    text(105, 140, '$V_L$', { color: violet, size: 23 });
+    text(330, 405, '$V_C$', { color: orange, size: 23 });
+    text(425, 208, '$V_R$', { color: resistor, size: 23 });
+    text(335, 117, '$\\mathcal{E}$', { color: supply, size: 25 });
+    text(435, 140, '$V_C+V_L$', { color: violet, size: 21 });
+    arc(...O as [number, number], 55, 0, theta + phi, { endTip: 'stealth' });
+    arc(...O as [number, number], 105, 0, theta, { endTip: 'stealth' });
+    arc(...O as [number, number], 90, theta, theta + phi, { startTip: 'stealth' });
+    text(315, 274, '$\\omega t$'); text(386, 266, '$\\omega t-\\phi$'); text(321, 222, '$\\phi$');
+    const u = vector(22, theta), n = vector(22, theta + 90);
+    for (const sign of [-1, 1]) add('poly', 'poly', { pts: [at(u), at([u[0]+sign*n[0],u[1]+sign*n[1]]), at([sign*n[0],sign*n[1]])], closed: false, stroke: supply, width: 1 });
+    text(245, 450, '$\\mathcal{E}=V_R+V_L+V_C$');
+    const resistance = 230, reactance = resistance * Math.tan(phi * Math.PI / 180);
+    poly([[560, 300], [560 + resistance, 300], [560 + resistance, 300 - reactance]], { fill: '#e8f0fb' });
+    text(675, 330, '$R$'); text(855, 258, '$X_L-X_C$'); text(655, 230, '$|Z|$');
+    arc(560, 300, 70, 0, phi); text(645, 283, '$\\phi$');
     text(690, 420, '$Z=R+j(\\omega L-1/\\omega C)$'); text(690, 460, '$\\tan\\phi=(X_L-X_C)/R$');
   });
   example('De Casteljau subdivision of a cubic Bézier', 'The control polygon, two interpolation levels and the split point at t = 0.4 are separate editable shapes. The curve uses the app’s native Bézier tool.', () => {

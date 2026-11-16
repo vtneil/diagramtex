@@ -516,8 +516,7 @@ import { runtime as TD } from '../runtime';
     cache.set(key, L);
     return L;
   }
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
 
   const LEVEL: Record<string, any> = { L: 0, H: 1, Z: 0.5, X: 0.5, M: 0.5 };
   // a background style → { color } or { pattern, color } (null: none, as for draw=none)

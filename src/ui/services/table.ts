@@ -107,12 +107,19 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     num: '<span class="tb-glyph tb-mono" style="font-size:12px">.00</span>',
     more: ic('<path d="M6 8l4 4 4-4"/>'),
   };
+  // A quiet cell grid provides context; only the borders being applied carry ink.
+  const borderIcon = (path: string) => ic(`<path d="M3 3h14v14H3zM10 3v14M3 10h14" opacity=".2" stroke-width="1"/>${path ? `<path d="${path}" stroke-width="1.5"/>` : ''}`);
   const B: Record<BorderWhere, string> = {
-    all: ic('<path d="M3 3h14v14H3zM10 3v14M3 10h14"/>'), outer: ic('<path d="M3 3h14v14H3z"/><path d="M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'),
-    inner: ic('<path d="M10 3v14M3 10h14"/><path d="M3 3h14v14H3z" stroke-dasharray="1.5 2"/>'), innerH: ic('<path d="M3 10h14"/><path d="M3 3h14v14H3zM10 3v14" stroke-dasharray="1.5 2"/>'),
-    innerV: ic('<path d="M10 3v14"/><path d="M3 3h14v14H3zM3 10h14" stroke-dasharray="1.5 2"/>'), top: ic('<path d="M3 3h14"/><path d="M3 3v14h14V3M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'),
-    bottom: ic('<path d="M3 17h14"/><path d="M3 17V3h14v14M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'), left: ic('<path d="M3 3v14"/><path d="M3 3h14v14H3M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'),
-    right: ic('<path d="M17 3v14"/><path d="M17 3H3v14h14M10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'), none: ic('<path d="M3 3h14v14H3zM10 3v14M3 10h14" stroke-dasharray="1.5 2"/>'),
+    all: borderIcon('M3 3h14v14H3zM10 3v14M3 10h14'),
+    outer: borderIcon('M3 3h14v14H3z'),
+    inner: borderIcon('M10 3v14M3 10h14'),
+    innerH: borderIcon('M3 10h14'),
+    innerV: borderIcon('M10 3v14'),
+    top: borderIcon('M3 3h14'),
+    bottom: borderIcon('M3 17h14'),
+    left: borderIcon('M3 3v14'),
+    right: borderIcon('M17 3v14'),
+    none: borderIcon(''),
   };
   const BNAME = (): Record<BorderWhere, string> => ({ all: t('table.border.all', 'All borders'), outer: t('table.border.outer', 'Outer borders'), inner: t('table.border.inner', 'Inner borders'), innerH: t('table.border.innerH', 'Inner horizontal'), innerV: t('table.border.innerV', 'Inner vertical'), top: t('table.border.top', 'Top border'), bottom: t('table.border.bottom', 'Bottom border'), left: t('table.border.left', 'Left border'), right: t('table.border.right', 'Right border'), none: t('table.border.none', 'No borders') });
   // the presets' names and descriptions (the domain's PRESETS holds the English)
@@ -242,11 +249,10 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     // the strips past the last column and under the last row: hovering one shows a + that adds a column or a row
     const plus = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 5v10M5 10h10"/></svg>';
     g.innerHTML = `<div class="tg-box">${h}</tbody></table><button type="button" class="tg-add tg-addc" data-add="col" title="${esc(t('table.addCol', 'Add a column'))}" aria-label="${esc(t('table.addCol', 'Add a column'))}">${plus}</button><button type="button" class="tg-add tg-addr" data-add="row" title="${esc(t('table.addRow', 'Add a row'))}" aria-label="${esc(t('table.addRow', 'Add a row'))}">${plus}</button></div>`;
-    const head = g.querySelector('thead') as HTMLElement, corner = g.querySelector('.tg-corner') as HTMLElement;
     // a button doesn't stretch between top and bottom like a div does, so the strips get their size here
     const tbl = g.querySelector('table') as HTMLElement, addc = g.querySelector('.tg-addc') as HTMLElement, addr = g.querySelector('.tg-addr') as HTMLElement;
-    addc.style.top = head.offsetHeight + 'px'; addc.style.height = tbl.offsetHeight - head.offsetHeight + 'px';
-    addr.style.left = corner.offsetWidth + 'px'; addr.style.width = tbl.offsetWidth - corner.offsetWidth + 'px';
+    addc.style.top = '4px'; addc.style.height = Math.max(0, tbl.offsetHeight - 4) + 'px';
+    addr.style.left = '4px'; addr.style.width = Math.max(0, tbl.offsetWidth - 4) + 'px';
     wrap.scrollLeft = keep[0]; wrap.scrollTop = keep[1];
     syncSel();
   }
@@ -419,7 +425,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       value: cur, nullable: true, noneLabel: k === 'fg' ? t('table.automatic', 'Automatic') : t('table.noFill', 'No Fill'),
       onInput: (v: any) => { const hex = v ? TD.parseColor(v).hex : undefined; T.styleRange(M, g, { [k]: hex }); changed = true; paint(); preview(); },
       onChange: (v: any) => { const hex = v ? TD.parseColor(v).hex : undefined; T.styleRange(M, g, { [k]: hex }); changed = true; paint(); preview(); },
-      onClose: () => { if (changed && JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; fresh = false; save(); panel(); toolbarState(); } },
+      onClose: () => { if (changed && JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; fresh = false; save(); panel(); toolbarState(); } focusGrid(); },
     });
   }
   function toggleNum() {
@@ -464,7 +470,9 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
     menu.addEventListener('click', (e) => {
       const b = (e.target as Element).closest('[data-m]') as HTMLElement;
       if (!b || (b as HTMLButtonElement).disabled) return;
-      closeMenu(); menuAct(b.dataset.m!);
+      const action = b.dataset.m!;
+      closeMenu(); menuAct(action);
+      if (action.startsWith('b:') || action.startsWith('bw:')) focusGrid();
     });
   }
   // checked: a radio item (role menuitemradio) with a tick at its right end when it is the one picked
@@ -474,7 +482,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
   function bordersMenu(anchor: HTMLElement) {
     const r = anchor.getBoundingClientRect();
     const where: BorderWhere[] = ['all', 'outer', 'inner', 'innerH', 'innerV', 'top', 'bottom', 'left', 'right', 'none'];
-    openMenu(`<div class="tb-bgrid">${where.map((w) => `<button type="button" class="icon flat" data-m="b:${w}" title="${esc(BNAME()[w])}">${B[w]}</button>`).join('')}</div><hr>
+    openMenu(`<div class="tb-bgrid">${where.map((w) => `<button type="button" class="icon flat" data-m="b:${w}" title="${esc(BNAME()[w])}" aria-label="${esc(BNAME()[w])}">${B[w]}</button>`).join('')}</div><hr>
       ${item(t('table.rules.thick', 'Thick Rules'), 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 })}${item(t('table.rules.thin', 'Thin Rules'), 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 })}${item(t('table.rules.double', 'Double Rules'), 'bw:3', { icon: ic('<path d="M3 8h14M3 12h14"/>'), checked: borderW === 3 })}`, r.left, r.bottom + 6);
   }
   let borderW: Rule = 1;
@@ -903,10 +911,15 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
       case 'split': change(() => T.split(M, range())); break;
       case 'num': toggleNum(); break;
     }
+    // Formatting buttons act on the selection; return keyboard shortcuts to it.
+    if (['undo', 'redo', 'b', 'i', 'u', 'tt', 'al', 'border', 'merge', 'split', 'num'].includes(cmd)) focusGrid();
   });
   host.addEventListener('change', (e) => {
     const t = e.target as HTMLSelectElement;
-    if (t.dataset.t === 'preset') change(() => { const s = M.stripe; T.applyPreset(M, t.value); if (t.value === 'striped' && s) M.stripe = s; });
+    if (t.dataset.t === 'preset') {
+      change(() => { const s = M.stripe; T.applyPreset(M, t.value); if (t.value === 'striped' && s) M.stripe = s; });
+      focusGrid();
+    }
     if (t.dataset.o === 'dpi') { out.dpi = +t.value; saveOut(); }
   });
   // the formula bar: typing edits the active cell; Enter keeps it, Esc puts it back

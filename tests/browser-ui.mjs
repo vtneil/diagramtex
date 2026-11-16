@@ -1,6 +1,7 @@
 // Real input is essential: HTMLElement.click() skips Safari's mouse focus behaviour.
 import assert from 'node:assert/strict';
 import { PNG } from 'pngjs';
+import { waitForAppReady, reloadApp, STARTUP_TIMEOUT } from './browser.mjs';
 
 export async function runBrowserUI(page, filter = '') {
   const results = [];
@@ -26,10 +27,7 @@ export async function runBrowserUI(page, filter = '') {
       await language('th');
       assert.equal((await page.locator('#btnExport').textContent()).trim(), 'ส่งออก');
       assert.equal(await page.evaluate(() => TD.app.projectJson(TD.state.doc)), original, 'language preserves project');
-      await page.reload();
-      await page.waitForFunction(() => !!window.TD?.ready);
-      await page.evaluate(() => TD.ready);
-      await page.locator('#splash').waitFor({ state: 'hidden' });
+      await reloadApp(page);
       assert.equal(await page.locator('html').getAttribute('lang'), 'th', 'choice survives reload');
       await language('en');
       assert.equal((await page.locator('#btnExport').textContent()).trim(), 'Export');
@@ -152,8 +150,8 @@ export async function runBrowserUI(page, filter = '') {
             };
           }
         }, legacy);
-        const app = await context.newPage(); await app.goto(page.url());
-        await app.waitForFunction(() => !!window.TD?.ready); await app.evaluate(() => TD.ready);
+        const app = await context.newPage(); app.setDefaultNavigationTimeout(STARTUP_TIMEOUT); await app.goto(page.url());
+        await waitForAppReady(app);
         await app.evaluate(() => {
           const event = new Event('beforeinstallprompt', { cancelable: true });
           Object.assign(event, { prompt: async () => {}, userChoice: Promise.resolve({ outcome: 'accepted' }) });
@@ -196,8 +194,9 @@ export async function runBrowserUI(page, filter = '') {
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
             TD.clearTextCache();
             await Promise.all([...document.querySelectorAll('image.svg-label')].map(element => new Promise((resolve, reject) => {
-              const image = new Image(); image.onload = resolve; image.onerror = reject; image.src = element.getAttribute('href');
+              const image = new Image(); image.onload = () => image.decode().then(resolve, resolve); image.onerror = reject; image.src = element.getAttribute('href');
             })));
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
           });
           const metrics = await page.evaluate(() => {
             const shape = TD.state.doc.blocks[0].shapes[0], { w, h } = TD.textBox(shape.text, shape);
@@ -206,7 +205,12 @@ export async function runBrowserUI(page, filter = '') {
           assert.equal(metrics.engine, engine); assert.equal(metrics.project, project);
           const pictures = [];
           for (const selector of targets) {
-            const png = PNG.sync.read(await page.locator(selector).screenshot());
+            // SVG labels are transparent: element screenshots include the canvas
+            // grid below them. Chromium can rasterise that pattern at a different
+            // subpixel phase after repainting; compare the math on plain paper.
+            const png = PNG.sync.read(await page.locator(selector).screenshot({
+              style: '#gridRect, #origin { visibility: hidden !important; }',
+            }));
             pictures.push({ width: png.width, height: png.height, data: png.data });
           }
           if (!baseline) baseline = { metrics, pictures };

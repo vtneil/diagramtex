@@ -217,8 +217,7 @@ import { runtime as TD } from '../runtime';
   const SIZES: Record<string, any> = { tiny: 5, scriptsize: 7, footnotesize: 8, small: 9, normalsize: 10, large: 12, Large: 14.4, LARGE: 17.28, huge: 20.74, Huge: 24.88 };
   const HK = 0.74;
   const cache = new Map();
-  const clearText = TD.clearTextCache;
-  TD.clearTextCache = () => { cache.clear(); clearText(); };
+  TD.onTextMetricsChange(() => { cache.clear(); });
   function layout(s: any) {
     const key = [s.src, TD.math && TD.math.engine].join('\u0001');
     const hit = cache.get(key);

@@ -82,7 +82,7 @@ import { runtime as TD } from '../runtime';
   // the preview of edited code: parsed again where it was (its scopes and the names it uses)
   function refresh(s: any) {
     if (!TD.importInternals || !TD.importInternals.preview) return;
-    const r = TD.importInternals.preview(s.code, s.ctx, s.names, s.macros);
+    const r = TD.importInternals.preview(s.code, s.ctx, s.names, s.macros, s.definitions);
     s.prev = r.shapes;
     s.issues = r.issues;
   }

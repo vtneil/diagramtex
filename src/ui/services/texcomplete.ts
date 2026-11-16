@@ -51,6 +51,18 @@ import { t, message as msg, caption, type Message } from '../../i18n';
     'subset', 'supset', 'subseteq', 'supseteq', 'perp', 'parallel', 'mid', 'prec', 'succ', 'preceq', 'succeq', 'doteq', 'models', 'vdash', 'coloneqq']);
   add('Operator', ['pm', 'mp', 'times', 'div', 'cdot', 'ast', 'star', 'circ', 'bullet', 'oplus', 'otimes', 'ominus', 'odot', 'cup', 'cap', 'setminus',
     'wedge', 'vee', 'land', 'lor', 'neg', 'nabla', 'partial']);
+  add('Structure', [
+    ['left\\langle', '\\left\\langle | \\right\\rangle', '\\left\\langle x \\right\\rangle'],
+    ['left\\lvert', '\\left\\lvert | \\right\\rvert', '\\left\\lvert x \\right\\rvert'],
+    ['left\\lVert', '\\left\\lVert | \\right\\rVert', '\\left\\lVert x \\right\\rVert'],
+    ['right)', '\\right)', '\\left(x\\right)'], ['right]', '\\right]', '\\left[x\\right]'],
+    ['right\\}', '\\right\\}', '\\left\\{x\\right\\}'], ['right|', '\\right|', '\\left|x\\right|'],
+    ['middle|', '\\middle|', '\\left(x\\middle|y\\right)'],
+    ...['big', 'Big', 'bigg', 'Bigg'].flatMap(size => [
+      [size + 'l(', '\\' + size + 'l(', '\\' + size + 'l(x\\' + size + 'r)'],
+      [size + 'r)', '\\' + size + 'r)', '\\' + size + 'l(x\\' + size + 'r)'],
+    ]),
+  ]);
   add('Arrow', ['to', 'rightarrow', 'leftarrow', 'leftrightarrow', 'Rightarrow', 'Leftarrow', 'Leftrightarrow', 'implies', 'iff', 'mapsto',
     'longrightarrow', 'longleftarrow', 'Longrightarrow', 'uparrow', 'downarrow', 'updownarrow', 'nearrow', 'searrow', 'nwarrow', 'swarrow',
     'hookrightarrow', 'rightharpoonup', 'rightleftharpoons', 'gets', ['xrightarrow', '\\xrightarrow{|}', '\\xrightarrow{f}']]);
@@ -70,9 +82,12 @@ import { t, message as msg, caption, type Message } from '../../i18n';
   add('Spacing', [['quad', null, 'a\\quad b'], ['qquad', null, 'a\\qquad b']]);
 
   for (const c of C) {
-    if (!c.prev) c.prev = c.ins.replace('|', '').replace(/\{\}/g, '{\\square}');
-    c.after = c.ins.indexOf('|') >= 0 ? c.ins.length - c.ins.indexOf('|') - 1 : 0; // chars after the caret
-    c.text = c.ins.replace('|', '');
+    // A vertical-bar delimiter is literal; only the placeholder between spaces
+    // is the caret in a paired delimiter template.
+    const marker = c.ins.includes(' | ') ? c.ins.indexOf(' | ') + 1 : /^(right|middle)\|$/.test(c.name) ? -1 : c.ins.indexOf('|');
+    c.after = marker >= 0 ? c.ins.length - marker - 1 : 0;
+    c.text = marker >= 0 ? c.ins.slice(0, marker) + c.ins.slice(marker + 1) : c.ins;
+    if (!c.prev) c.prev = c.text.replace(/\{\}/g, '{\\square}');
   }
 
   // quantikz2: what goes in a circuit cell. `ex` is a snippet drawn as the preview (cells joined by &, rows by \\).
@@ -216,7 +231,7 @@ import { t, message as msg, caption, type Message } from '../../i18n';
     const pos = el.selectionStart;
     if (pos !== el.selectionEnd) return null;
     const before = el.value.slice(0, pos);
-    const m = before.match(/\\([A-Za-z]*)$/);
+    const m = before.match(/\\((?:left|right|middle)(?:\\[A-Za-z]*|\\[{}]|[()[\]|.])?|(?:big|Big|bigg|Bigg)[lrm]?[()[\]|.]|[A-Za-z]*)$/);
     if (!m) return null;
     const at = pos - m[0].length;
     // "\\" is a line break, not a command

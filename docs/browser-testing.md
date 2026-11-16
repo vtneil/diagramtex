@@ -42,7 +42,39 @@ node tests/run.mjs --dist          # after npm run build
 node tests/run.mjs --no-tex        # same suites/goldens; skips pdflatex
 ```
 
-The CI build runs the full suite against `dist/` in all three browsers with `--no-tex`.
+GitLab CI shows separate `build`, `typecheck`, and `label-glyphs` jobs. The build
+publishes `dist/` as an artifact; every browser-test job installs the locked
+dependencies and tests that same production build.
+
+The functional suite is split into `functional: [chromium]`, `functional: [webkit]`,
+and `functional: [firefox]`, each using `--dist --no-tex`. Specialist checks appear
+as separate jobs such as `browser-check: [label-clipping]`,
+`browser-check: [page-print]`, and `browser-check: [modal-responsive]`. Each specialist
+runner retains its existing browser coverage; cross-engine parity comparisons
+remain together. All browser-test jobs share the `browser-tests` resource group,
+so only one runs at a time, including across pipelines. The matrix expands named
+jobs; the shared resource group serializes their execution. This keeps browser
+startup, preview-fade checks, and performance measurements from competing with
+other browser suites. Build, typecheck, and glyph validation can run in parallel.
+See [GitLab resource groups](https://docs.gitlab.com/ci/resource_groups/).
+
+Test jobs depend only on the build, so a failing suite does not prevent the other
+suites from reporting results. A failed typecheck or glyph
+check still fails the pipeline.
+
+Existing diagnostic screenshots and reports are retained for one week on failed
+browser jobs. Download them from that job's artifacts. CI sets `TMPDIR` to
+`.ci-artifacts/` inside the checkout, and uploads only the `diagramtex-*` diagnostic
+directories, excluding temporary browser profiles. The npm download cache is
+read by every job and updated only by `build` to avoid concurrent cache writes.
+
+Browser startup and navigation have a separate 30-second budget; ordinary
+interactions and assertions retain their 10-second timeout. Initial loading and
+reload checks use the same readiness helper, covering runtime registration,
+`TD.ready`, fonts, and the loading screen. Startup failures retain `startup.json`
+(state, recent request/HTTP errors, script exceptions, resource timings) and a
+best-effort screenshot under `diagramtex-startup-*` in the failed job's artifacts.
+
 Local `npm test` also compiles the exported LaTeX, cached by content and TeX version.
 
 `npm run test:clipping` compares KaTeX label images with an unclipped copy of the
@@ -362,3 +394,35 @@ Playwright Firefox is an isolated patched build, not an installed personal
 Firefox profile. Native print dialogs still need manual checks. Playwright's
 PDF generation endpoint is Chromium-only; all three engines verify the prepared
 print sheets, and Chromium additionally verifies the generated PDF page count.
+
+### Construction tools and native nodes
+
+`npm run test:construction` exercises real pointer and keyboard interactions in
+Chromium, WebKit and Firefox: fill bucket hit testing, overlapping and locked
+shapes, local magnification without camera/history mutations, multi-selection,
+group scopes and layout controls, ruler guides, visibility/locking cycles, bounded coordinate prompts, context-menu/keyboard deletion, cancellation,
+undo/redo, persistence, guide snapping, and native node/anchor inspector edits.
+Screenshots cover the normal layout, a shorter tablet layout and the existing
+portrait-phone guard. Responsive rail checks cover two columns in Diagram, Page
+and Whiteboard, unchanged button sizes, flyouts, a scrolling fallback at tiny
+heights, and restoring one column when the window grows taller.
+
+The shared Construction suites compile native labels/pins, named anchor edges,
+rotated nodes, imported nodes and group scopes with pdfLaTeX. Pure smart-snap
+checks cover independent axes, equal spacing, negative coordinates, zoom-scaled
+tolerance and explicit guides. Construction guides never enter SVG/TikZ exports.
+
+`npm run test:modals` checks Import, LaTeX export and Chemistry dialogs at five
+window sizes in English and Thai across all three browsers. Headers must contain
+their controls without horizontal overflow, titles retain readable width, and
+close/cancel buttons remain reachable in short windows. Screenshots are saved
+for the compact layout.
+
+`node tests/context-menu-layout.mjs --dist` opens tall selection menus at the
+lower-right edge of short windows, scrolls their root menus and enters image,
+arrange, align and distribute submenus. All menu bounds must remain inside the
+viewport and submenu actions remain clickable in Chromium, WebKit and Firefox.
+
+`npm run test:snap-modes` checks the four-state magnet cycle, point placement,
+object dragging, connector attachments, Alt bypass, preference reload and
+migration from the old boolean setting in Chromium, WebKit and Firefox.

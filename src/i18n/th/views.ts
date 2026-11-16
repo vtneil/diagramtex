@@ -1,6 +1,7 @@
 // Thai for the document view, services (palette, table, quick, tour, inputs), panel models, forms and panel components,
 // and shape type names (shape.<type>, read by src/i18n/shapes.ts typeName()).
 export const thai: Record<string, string> = {
+  "pal.snapCycle": "เปลี่ยนโหมดการจัดแนว",
   "pal.newPage": "หน้ากระดาษใหม่",
   "pal.newWhiteboard": "ไวท์บอร์ดใหม่",
   "pal.newDocument": "เอกสารใหม่",
@@ -27,8 +28,6 @@ export const thai: Record<string, string> = {
   "pal.redo": "ทำซ้ำ",
   "pal.hideGrid": "ซ่อนกริด",
   "pal.showGrid": "แสดงกริด",
-  "pal.snapOff": "ปิดการจัดแนว",
-  "pal.snapOn": "เปิดการจัดแนว",
   "pal.zoomFit": "ซูมให้พอดี",
   "pal.zoomFitWidth": "ซูมให้พอดีความกว้าง",
   "pal.actualSize": "ขนาดจริง (100%)",

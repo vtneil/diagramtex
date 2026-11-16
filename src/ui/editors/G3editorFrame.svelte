@@ -14,8 +14,10 @@
         <button class="icon flat" data-ge="fit" title={t("editor.g3.fit", "Fit the picture in view (0)", {}, $locale)}>{@html model.p5}</button>
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-ge="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-ge="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-ge="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-ge="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -27,7 +29,7 @@
         <div class="cz-props"></div>
         <div class="cz-code">
           <div class="cz-code-head"><span class="g3-lang">{t("editor.g3.lang", "tikz-3dplot", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-ge="copy" title={t("editor.g3.copyCode", "Copy the tikz-3dplot code", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
-          <textarea spellcheck="false" aria-label={t("editor.g3.code", "tikz-3dplot code", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("editor.g3.code", "tikz-3dplot code", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

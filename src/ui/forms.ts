@@ -7,7 +7,7 @@ export type Control = { caption?: Message; captionAttrs?: Record<string, Message
   | { kind: 'select'; attrs: Attributes; value: string; options: (string | Message)[][] }
   | { kind: 'colour'; index: number; value: string; css: string }
   | { kind: 'fillColour'; attrs: Attributes; label: string; css: string; none: boolean }
-  | { kind: 'angle'; attrs: Attributes; numericAttrs: Attributes; value: string | number; numericValue: string | number; unit: string }
+  | { kind: 'angle'; attrs: Attributes; value: string | number; numericValue: string | number; unit: string }
   | { kind: 'button'; attrs: Attributes; text: string | Message; svg?: string; swatch?: { css: string; none: boolean } }
   | { kind: 'code'; text: string; class?: string }
   | { kind: 'spacer' }

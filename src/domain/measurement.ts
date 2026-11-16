@@ -8,6 +8,7 @@ let measure: HTMLDivElement;
 export function measurementRoot(): ShadowRoot {
   if (root) return root;
   const host = document.getElementById('measureHost')!;
+  host.lang = 'en';
   root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = katexCss.replace(/@font-face\s*\{[^}]*\}/g, '') + `

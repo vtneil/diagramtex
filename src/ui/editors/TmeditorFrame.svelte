@@ -14,8 +14,10 @@
         <button class="icon flat" data-te="fit" title={t("ui.fit.the.diagram.in.view.0", "Fit the diagram in view (0)", {}, $locale)}>{@html model.p5}</button>
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-te="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-te="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-te="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-te="done" title="{model.p6}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -27,7 +29,7 @@
         <div class="cz-props"></div>
         <div class="cz-code">
           <div class="cz-code-head"><span>{t("ui.tikz.timing", "tikz-timing", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-te="copy" title={t("ui.copy.the.timing.code", "Copy the timing code", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
-          <textarea spellcheck="false" aria-label={t("ui.tikz.timing.code", "tikz-timing code", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("ui.tikz.timing.code", "tikz-timing code", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

@@ -27,6 +27,23 @@ T.test('table: create, insert, delete, move keep spans and rules consistent', ()
   T.eq(JSON.stringify(n), JSON.stringify(m), 'normalize keeps a valid table as it is');
 });
 
+T.test('table: preset header rules stop at vertically merged cells', () => {
+  const t = TB();
+  for (const preset of ['booktabs', 'minimal', 'striped', 'grid']) {
+    const m = t.create(3, 4, preset);
+    m.cells[0][0].t = 'A12';
+    t.merge(m, { r0: 0, c0: 0, r1: 1, c1: 0 });
+    T.eq(m.hr[1], [0, 1, 1, 1], preset + ': header rule skips A1–A2');
+    t.applyPreset(m, preset);
+    T.eq(m.hr[1], [0, 1, 1, 1], preset + ': reapplying preserves the gap');
+    const code = t.toLatex(m).code;
+    T.ok(code.includes(preset === 'booktabs' ? '\\cmidrule(l){2-4}' : '\\cline{2-4}'), code);
+    const svg = new DOMParser().parseFromString('<svg>' + t.draw(m).svg + '</svg>', 'text/html');
+    const rules = [...svg.querySelectorAll('rect')].filter((r) => r.getAttribute('fill') === '#000000');
+    T.ok(rules.some((r) => +r.getAttribute('x') > 0 && +r.getAttribute('width') > +r.getAttribute('height')), preset + ': partial horizontal rule drawn');
+  }
+});
+
 T.test('table: normalize repairs untrusted data', () => {
   const t = TB();
   const bad = { cells: [[{ t: 'a', cs: 5 }, 7], [{ t: '<img src=x onerror=alert(1)>', rs: -2, fg: 'javascript:x', bg: '#zzz' }]], cols: 'no', head: 99, env: 'evil', size: '\\input', pad: 1e9 };
@@ -573,6 +590,37 @@ T.test('table workspace: open, import, type, keys, undo, paste, leave', async ()
   T.ok(W().model.cells[1][0].b, 'bold on the range');
   key('Backspace'); T.ok(W().model.cells.every((r) => r.every((x) => !x.t)), 'Delete clears the range');
   key('z', { metaKey: true, ctrlKey: true });
+  // Pointer toolbar actions leave keyboard undo/redo on the selected cells.
+  W().select([1, 1]);
+  const italic = document.querySelector('[data-t="i"]');
+  italic.focus(); italic.click();
+  T.ok(document.activeElement === grid, 'formatting returns focus to the grid');
+  T.ok(W().model.cells[1][1].i, 'toolbar italic applied');
+  const shortcut = (k, opts = {}) => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...opts }));
+  shortcut('z', { ctrlKey: true });
+  T.ok(!W().model.cells[1][1].i, 'Ctrl+Z undoes toolbar formatting');
+  shortcut('z', { metaKey: true, shiftKey: true });
+  T.ok(W().model.cells[1][1].i, 'Cmd+Shift+Z redoes toolbar formatting');
+  shortcut('z', { metaKey: true });
+  const borders = document.querySelector('[data-t="borders"]');
+  borders.focus(); borders.click();
+  const topBorder = document.querySelector('[data-m="b:top"]');
+  const beforeBorder = JSON.stringify(W().model);
+  topBorder.focus(); topBorder.click();
+  T.ok(document.activeElement === grid, 'border choice returns focus to the grid');
+  shortcut('z', { metaKey: true });
+  T.eq(JSON.stringify(W().model), beforeBorder, 'Cmd+Z undoes the border choice');
+  const preset = document.querySelector('[data-t="preset"]');
+  const beforePreset = JSON.stringify(W().model);
+  preset.focus();
+  preset.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+  const gridPreset = [...document.querySelectorAll('.selmenu-item')].find((b) => b.textContent.trim() === 'Grid');
+  T.ok(gridPreset, 'style dropdown opens');
+  gridPreset.click();
+  T.eq(W().model.preset, 'grid', 'dropdown applies Grid style');
+  T.ok(document.activeElement === grid, 'style dropdown preserves restored grid focus');
+  shortcut('z', { ctrlKey: true });
+  T.eq(JSON.stringify(W().model), beforePreset, 'Ctrl+Z undoes style dropdown change');
   // paste cells from a spreadsheet (TSV) at B2: the table grows
   W().select([1, 1]);
   W().pasteData('', 'x\ty\tz\n1\t2\t3\n');

@@ -21,6 +21,14 @@ try {
     check(captions.length===40 && captions.every(b=>b.text.includes('Reference:') && b.text.includes('https://')), 'all examples need research links');
     const figures=blocks.slice(start).filter(b=>b.type==='diagram');
     check(figures.length===40,'expected 40 figures, got '+figures.length);
+    const phasors=figures[7].shapes.filter(s=>s.type==='line' && s.x1===240 && s.y1===300 && s.width===3);
+    check(phasors.length===4,'four phasors share the origin');
+    const vector=color=>{const s=phasors.find(s=>s.stroke===color);check(s,'phasor '+color);return[s.x2-s.x1,s.y2-s.y1];};
+    const vr=vector('#008000'),vl=vector('#921b95'),vc=vector('#e87800'),emf=vector('#080884');
+    check(Math.abs(vr[0]*vl[0]+vr[1]*vl[1])<1e-8 && Math.abs(vr[0]*vc[0]+vr[1]*vc[1])<1e-8,'reactive voltages are perpendicular to resistor voltage');
+    check(vl[0]*vc[0]+vl[1]*vc[1]<0,'inductor and capacitor oppose');
+    check(emf.every((x,i)=>Math.abs(x-vr[i]-vl[i]-vc[i])<1e-8),'supply equals vector sum');
+
     const ids=figures.flatMap(b=>b.shapes.map(s=>s.id));check(new Set(ids).size===ids.length,'unique IDs');
     const rendered=[], warnings=[];
     for(let i=0;i<figures.length;i++) {

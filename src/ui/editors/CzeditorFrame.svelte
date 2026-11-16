@@ -20,8 +20,10 @@
         <button class="icon flat" data-cz="fit" title={t("ui.fit.the.circuit.in.view.0", "Fit the circuit in view (0)", {}, $locale)}>{@html model.p10}</button>
       </div>
       <span class="spacer" style="flex:1"></span>
-      <button data-cz="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
-      <button class="primary" data-cz="done" title="{model.p11}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      <div class="modal-actions">
+        <button data-cz="cancel">{t("ui.cancel", "Cancel", {}, $locale)}</button>
+        <button class="primary" data-cz="done" title="{model.p11}Enter">{t("ui.done", "Done", {}, $locale)}</button>
+      </div>
     </div>
     <div class="cz-body">
       <aside class="cz-pal">
@@ -33,7 +35,7 @@
         <div class="cz-props" id="czProps"></div>
         <div class="cz-code">
           <div class="cz-code-head"><span>{t("ui.circuitikz", "circuitikz", {}, $locale)}</span><small class="cz-count"></small><button class="flat" data-cz="copy" title={t("ui.copy.the.circuitikz.code", "Copy the circuitikz code", {}, $locale)}>{t("ui.copy", "Copy", {}, $locale)}</button></div>
-          <textarea spellcheck="false" aria-label={t("ui.circuitikz.code", "circuitikz code", {}, $locale)}></textarea>
+          <textarea wrap="off" spellcheck="false" aria-label={t("ui.circuitikz.code", "circuitikz code", {}, $locale)}></textarea>
           <div class="cz-msg"></div>
         </div>
       </aside>

@@ -53,14 +53,18 @@ export function createProjectFiles(types: Record<string, unknown>) {
       if (!doc.sheet || !validShapes(doc.sheet.shapes)) throw new Error('not a DiagramTeX page file');
       return { kind: 'page' as const, name, page: pageOf(doc.page),
         sheet: { pages: Math.max(1, (doc.sheet.pages ?? 0) | 0), shapes: doc.sheet.shapes,
-          ...(isObject(doc.sheet.vars) ? { vars: doc.sheet.vars } : {}) } };
+          ...(isObject(doc.sheet.vars) ? { vars: doc.sheet.vars } : {}),
+          ...(Array.isArray(doc.sheet.guides) ? { guides: doc.sheet.guides } : {}) } };
     }
     let blocks = doc.blocks || (Array.isArray(doc.shapes) ? [{ type: 'diagram', shapes: doc.shapes }] : null);
     if (!Array.isArray(blocks) || blocks.some(block => !isObject(block) || typeof block.type !== 'string' || (block.type === 'diagram' && !validShapes(block.shapes)))) {
       throw new Error('not a DiagramTeX file');
     }
     const kind = doc.kind === 'board' ? 'board' : 'classic';
-    if (kind === 'board') blocks = [{ type: 'diagram', shapes: blocks.filter(block => block.type === 'diagram').flatMap(block => block.shapes || []) }];
+    if (kind === 'board') {
+      const diagrams = blocks.filter(block => block.type === 'diagram'), guides = diagrams.flatMap(block => block.guides || []);
+      blocks = [{ type: 'diagram', shapes: diagrams.flatMap(block => block.shapes || []), ...(guides.length ? { guides } : {}) }];
+    }
     return { kind, name, page: pageOf(doc.page), blocks };
   }
   return { VERSION, normKind, validShapes, dropRetired, dropRetiredDoc, stringify, parse };
