@@ -1,0 +1,7 @@
+% expect: native match>=0.97
+\begin{tikzpicture}[xscale=2,yscale=0.6]
+  \draw[thick] (0,0) -- ++ (1,0) -- ++ (0,2) -- + (-1,0);
+  \draw (0,0) rectangle (2,1);
+  \draw[->] (0,3) -- (2,3);
+  \node at (1,4) {wide};
+\end{tikzpicture}

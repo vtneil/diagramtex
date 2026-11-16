@@ -1,0 +1,8 @@
+% expect: native match>=0.9
+\begin{tikzpicture}[thick,blue]
+\draw (0,0) -- (2,1);
+\draw[red] (0,0) -- (2,0);
+\node[draw] (a) at (3,0) {A};
+\node[draw=black,fill] at (4,1) {B};
+\draw[->] (a) -- (4,1);
+\end{tikzpicture}

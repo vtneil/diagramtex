@@ -1,7 +1,6 @@
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/cd.ts';
-const { layout, fullCode } = panelServices;
+import { layout, fullCode } from '../../domain/cd.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.cd = {

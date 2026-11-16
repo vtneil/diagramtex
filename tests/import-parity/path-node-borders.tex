@@ -1,0 +1,8 @@
+% expect: native match>=0.9
+\begin{tikzpicture}[thick, pt/.style = {circle, draw = black, fill = black, inner sep = 1.5pt}]
+\coordinate (O) at (0,0);
+\draw (O) -- node[above]{$0$} ++(-2,-1) node[pt] (L1) {};
+\draw (O) -- node[above]{$1$} ++(2,-1) node[pt] (R1) {};
+\draw (L1) -- ++(-1,-1) node[pt] {};
+\draw (R1) -- ++(1,-1) node[pt] {} +(0,-0.5) node {$\frac{2}{3}$};
+\end{tikzpicture}

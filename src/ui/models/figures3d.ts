@@ -1,8 +1,7 @@
 import { captions } from '../../i18n/messages';
 import { runtime as TD } from '../../runtime';
 import { message as msg, type Message } from '../../i18n';
-import { panelServices } from '../../domain/figures3d.ts';
-const { T, KINDS, SPRE, SDEF, V3, RDEF } = panelServices;
+import { T, KINDS, SPRE, SDEF, V3, RDEF } from '../../domain/figures3d.ts';
 import { row, input, section, select, errors, view, check, help, captioned } from '../forms';
 import { SOLID_ICONS } from '../solid-icons';
 // the Shape menu shows pictures (selectmenu.ts); 3D axes alone is no longer offered, but a solid that is one keeps it

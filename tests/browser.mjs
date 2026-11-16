@@ -56,10 +56,10 @@ async function recordStartupFailure(page, error) {
 
 const engines = { chromium, webkit, firefox };
 const chrome = process.env.CHROME || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(file => fs.existsSync(file));
-export async function launchBrowser(name, url, contextOptions = {}) {
+export async function launchBrowser(name, url, contextOptions = {}, launchOptions = {}) {
   if (!Object.hasOwn(engines, name)) throw new Error('Unknown browser: ' + name);
   const browser = await engines[name].launch({ headless: true,
-    ...(name === 'chromium' && chrome ? { executablePath: chrome } : {}) });
+    ...(name === 'chromium' && chrome ? { executablePath: chrome } : {}), ...launchOptions });
   try {
     const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1, serviceWorkers: 'block', locale: 'en-GB', ...contextOptions });
     const page = await context.newPage(), errors = consoleErrors(), logs = errors.logs, warnings = [];

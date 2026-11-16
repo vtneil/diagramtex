@@ -17,7 +17,7 @@ graphify-out/
 public/math-render-worker.js
 
 # Downloaded coverage corpus and generated comparison reports
-artifacts/datikz/
+artifacts/
 
 # GitLab browser-test diagnostics
 /.ci-artifacts/

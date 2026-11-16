@@ -1,8 +1,7 @@
 import { captions } from '../../i18n/messages';
 import { runtime as TD } from '../../runtime';
 import { message as msg } from '../../i18n';
-import { panelServices } from '../../domain/solid3d.ts';
-const { T, AXES, defLabel, V3, DEFAULT } = panelServices;
+import { T, AXES, defLabel, V3, DEFAULT } from '../../domain/solid3d.ts';
 import { section, row, select, input, errors, check, view, help, captioned } from '../forms';
 
 TD.panels = TD.panels || {};

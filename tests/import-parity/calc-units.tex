@@ -1,0 +1,11 @@
+% expect: native match>=0.9
+\usetikzlibrary{calc}
+\begin{tikzpicture}
+\coordinate (a) at (1,1);
+\coordinate (b) at (3,1);
+\def\w{2}
+\draw (-4 * 6mm,.25mm) -- (0:1 * 6mm) -- (0.2*\w,-0.5*\w);
+\draw ($(0,1)-sqrt(14)*(0,3/14)$) -- ($(a)+(b)-2*(1,0)$);
+\draw ($(a)!1cm!(b)$) -- ($(a)!.5!90:(b)$) -- ($ {1+1}*(a) $);
+\foreach \u in {-1/3,1/3} \draw (3*1+\u,0) circle (2pt);
+\end{tikzpicture}

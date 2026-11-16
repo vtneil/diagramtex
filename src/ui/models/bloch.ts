@@ -1,12 +1,11 @@
 import { runtime as TD } from '../../runtime';
 import { t, message as msg, type Message } from '../../i18n';
-import { panelServices } from '../../domain/bloch.ts';
-const { layout, colorsOf, r2, lengthPt, UNITS, num, states, setEnvKey, setColor, stateCode, cut, fullCode } = panelServices;
+import { layout, colorsOf, r2, lengthPt, UNITS, num, states, setEnvKey, setColor, stateCode, cut, fullCode } from '../../domain/bloch.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.bloch = {
     model(s) {
-      const L = layout(s), o = L.opts, C = colorsOf(s.src);
+      const L = layout(s), o = L.opts, C: Record<string, any> = colorsOf(s.src);
       return {
         src: s.src,
         radius: r2(lengthPt(o.radius) / UNITS.cm), tilt: num(o.tilt), rotation: num(o.rotation),

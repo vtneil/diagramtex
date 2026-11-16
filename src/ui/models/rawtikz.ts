@@ -1,7 +1,6 @@
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/rawtikz.ts';
-const { prevOf, refresh } = panelServices;
+import { prevOf, refresh } from '../../domain/rawtikz.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.tikz = {

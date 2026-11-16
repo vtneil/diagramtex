@@ -151,6 +151,28 @@ Harder cases, scored separately (0.5 mm / 1 mm):
 | pgf-umlsd: rounded and shaded instances, thread colours | 100 % | 100 % |
 | Patterns (Lines, Hatch, Grid, Dots, Bricks…) | 75.6 % | 100 % |
 
+## Importing TikZ written by hand
+
+The scores above cover TikZ the app writes. TikZ written elsewhere (pasted, imported from a `.tex` file) is
+checked the other way round. `npm run test:import-parity` imports each fixture in
+[tests/import-parity/](tests/import-parity/), draws it on the canvas, compiles the same source with pdflatex,
+aligns the two drawings on registration dots and scores them like the table above. It has 20 fixtures:
+
+- positioning, including the old `right of=`;
+- chains;
+- labels;
+- `calc`;
+- units;
+- path nodes;
+- `every node`;
+- edges and grids;
+- 3D coordinates;
+- scopes;
+- unit vectors.
+
+All 20 pass, and on average **99.9 % of the ink lands within 0.5 mm**. Results for a broader sample of real
+figures from the DaTikZ dataset are in [tests/corpus/README.md](tests/corpus/README.md).
+
 ## What changed in this round (1.40.0)
 
 - **Sequence diagrams (pgf-umlsd):** the export put the environment in a node with `inner sep=0pt`, which

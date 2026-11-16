@@ -55,11 +55,13 @@ T.test('structure: right=1cm of a is read and kept', () => {
   T.eq(S.map((s) => s.type), ['text', 'text', 'text', 'line'], 'all modelled');
   const [a, b, c] = S;
   T.eq([b.pos && b.pos.k, b.pos && b.pos.of, c.pos && c.pos.k], ['right', 'a', 'below'], 'the relations');
-  // placed as TikZ does: 1cm between the node borders (text box plus inner sep)
-  const sep = 3.33 / (72.27 / 2.54) * PX();
+  // placed as TikZ does: 1cm between the node borders (TeX's text box, inner sep 3.333pt and outer sep 0.2pt; the app's text box is that
+  // width plus a 1px margin on each side)
+  const sep = 3.533 / (72.27 / 2.54) * PX() - 1;
   const ba = TD.bbox(a), bb = TD.bbox(b), bc = TD.bbox(c);
   T.ok(Math.abs((bb.x - sep) - (ba.x + ba.w + sep) - PX()) < 0.5, `gap a→b is 1cm: ${(bb.x - sep) - (ba.x + ba.w + sep)}`);
-  T.ok(Math.abs((bc.y - sep) - (ba.y + ba.h + sep) - PX()) < 0.5, `gap a→c is the node distance: ${(bc.y - sep) - (ba.y + ba.h + sep)}`);
+  // vertically TeX's box is height + depth (Alpha 6.94pt + 1.94pt, Gamma 6.83pt): and outer sep 0.2pt each: centres 43.38pt apart in pdflatex
+  T.ok(Math.abs((c.y - a.y) * TD.PT_PER_PX - 43.38) < 0.3, `gap a→c is the node distance: centres ${(c.y - a.y) * TD.PT_PER_PX}pt apart`);
   T.eq(body(S), POS, 'unchanged: as written');
   b.color = '#0000ff';
   T.ok(/\\node\[text=\w+, right=1cm of a\] \(b\) \{Beta\};/.test(body(S)), 'edited, still placed by the relation: ' + body(S));
@@ -75,7 +77,13 @@ T.test('structure: right=1cm of a is read and kept', () => {
 T.test('structure: positioning beside code kept as written stays code', () => {
   const S = load(pic(`  \\node[draw, minimum width=3cm] (a) at (0,0) {A};
   \\node[right=of a] (b) {B};`));
-  T.eq(S.map((s) => s.type), ['tikz', 'tikz'], 'the size of a kept node is not known: the placed node is kept too');
+  // a drawn node is a rect of known size: the node placed beside it is exact (1cm from its east border)
+  T.eq(S.map((s) => s.type), ['rect', 'text']);
+  const sep = 3.533 / (72.27 / 2.54) * PX() - 1, ra = TD.bbox(S[0]), tb = TD.bbox(S[1]);
+  T.ok(Math.abs((tb.x - sep) - (ra.x + ra.w + 0.2 / TD.PT_PER_PX) - PX()) < 0.5, `gap a→b is 1cm: ${(tb.x - sep) - (ra.x + ra.w + 0.2 / TD.PT_PER_PX)}`);
+  const K = load(pic(`  \\node[draw, shape=star] (a) at (0,0) {A};
+  \\node[right=of a] (b) {B};`));
+  T.eq(K.map((s) => s.type), ['tikz', 'tikz'], 'the size of a kept node is not known: the placed node is kept too');
 });
 
 const LOOP = pic(`  \\foreach \\i in {0,...,3}
@@ -128,7 +136,7 @@ T.test('structure: styles and node distance set on the picture stay on it', () =
   T.eq(S.map((s) => s.type), ['text', 'text'], 'modelled');
   const [a, b] = S;
   T.eq(b.color, '#ff0000', 'the picture style applies');
-  const sep = 3.33 / (72.27 / 2.54) * PX(), ba = TD.bbox(a), bb = TD.bbox(b);
+  const sep = 3.533 / (72.27 / 2.54) * PX() - 1, ba = TD.bbox(a), bb = TD.bbox(b);
   T.ok(Math.abs((bb.x - sep) - (ba.x + ba.w + sep) - 2 * PX()) < 0.5, 'node distance 2cm');
   b.size = 'large';
   const out = body(S);

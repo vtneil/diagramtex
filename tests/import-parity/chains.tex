@@ -1,0 +1,11 @@
+% expect: native match>=0.9
+\usetikzlibrary{positioning,chains}
+\begin{tikzpicture}[node distance=5mm and 3mm, start chain=going right, every join/.style={->}]
+\begin{scope}[nodes={on chain}]
+\node[draw] (a) {Input};
+\node {$+$};
+\node[draw,join] (c) {Filter};
+\node[draw,join=by {dashed}] {Out};
+\end{scope}
+\draw (chain-2) -- ++(0,-1);
+\end{tikzpicture}

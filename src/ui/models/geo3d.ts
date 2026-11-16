@@ -1,8 +1,7 @@
 import { captions } from '../../i18n/messages';
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/geo3d.ts';
-const { layout, fmt, setScale, setView, fullCode } = panelServices;
+import { layout, fmt, setScale, setView, fullCode } from '../../domain/geo3d.ts';
 import { row, section } from '../forms';
 
 TD.panels = TD.panels || {};

@@ -1,0 +1,10 @@
+% expect: native match>=0.9
+\begin{tikzpicture}[node distance=2cm]
+\node[draw] (a) {one};
+\node[draw,right of=a] (b) {two};
+\node[draw,below of=a] (c) {three};
+\draw[->,thick] (a) to[out=60,in=120] (b);
+\draw[->] (a) to[bend right] (c);
+\draw[dashed] (c) to[out=0,in=-90,looseness=1.5] (b);
+\path (b) edge[->,red] (c);
+\end{tikzpicture}

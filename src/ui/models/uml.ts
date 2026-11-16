@@ -1,7 +1,6 @@
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/uml.ts';
-const { layout, libsOf, fullCode } = panelServices;
+import { layout, libsOf, fullCode } from '../../domain/uml.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.uml = {

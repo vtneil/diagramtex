@@ -1,0 +1,12 @@
+% expect: native match>=0.9
+\usetikzlibrary{positioning,shapes.geometric}
+\begin{tikzpicture}
+\node[draw,circle] (a) {A};
+\node[draw,above right=of a] (b) {B};
+\node[draw,below right=5mm and 1cm of a] (c) {Ccc};
+\node[draw,ellipse,right=of b] (d) {Dee};
+\draw[->] (a) -- (b);
+\draw[->] (a) -- (c);
+\draw (b) -- (d);
+\draw[red] (a.north) -- (a.30);
+\end{tikzpicture}

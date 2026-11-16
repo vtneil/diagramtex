@@ -42,6 +42,16 @@ async function main() {
   html = html.replace(scripts.block, `${indent(scripts.block)}<script src="js/bundle.js"></script>\n`);
   html = html.replace(styles.block, `${indent(styles.block)}<link rel="stylesheet" href="css/app.css">\n`);
   const joined = new Set([...scripts.files, ...styles.files]);
+  // other pages (the guides) may link a file the app joins, like css/language-menu.css: those still ship on their own
+  const linked = new Set();
+  (function pages(rel) {
+    for (const ent of fs.readdirSync(path.join(SRC, rel), { withFileTypes: true })) {
+      const r = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) { if (r !== 'vendor') pages(r); continue; }
+      if (!ent.name.endsWith('.html') || r === 'index.html') continue;
+      for (const m of read(r).matchAll(/(?:href|src)="([^"#?]+\.(?:css|js))"/g)) linked.add(path.posix.normalize(path.posix.join(rel, m[1])));
+    }
+  })('');
 
   let before = 0, after = 0, count = 0;
   function walk(rel) {
@@ -49,7 +59,7 @@ async function main() {
       if (ent.name === '.DS_Store') continue;
       const r = path.join(rel, ent.name).split(path.sep).join('/');
       if (ent.isDirectory()) { walk(r); continue; }
-      if (joined.has(r) || r.startsWith('js/') || r === 'index.html' || r === 'sw.js') continue; // written below
+      if ((joined.has(r) && !linked.has(r)) || r.startsWith('js/') || r === 'index.html' || r === 'sw.js') continue; // written below
       const ext = path.extname(ent.name);
       if ((ext === '.js' || ext === '.css') && !ent.name.includes('.min.')) {
         const code = read(r), out = minify(code, ext.slice(1), r);

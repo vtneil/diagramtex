@@ -1,0 +1,11 @@
+% expect: native match>=0.95
+\usetikzlibrary{matrix}
+\begin{tikzpicture}
+\matrix (q) [matrix of math nodes, nodes={draw, minimum size=8mm, anchor=center}, column sep={1.2cm,between origins}, row sep=-\pgflinewidth] {
+  a & b & \alpha \\
+  1 & 22 & 333 \\
+};
+\matrix (r) at (0,-2.5) [matrix of nodes, anchor=north west, nodes={anchor=west}, inner sep=2pt] {
+  left & x \\ much longer & yy \\
+};
+\end{tikzpicture}

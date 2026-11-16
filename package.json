@@ -22,6 +22,8 @@
     "test:scale": "node tests/object-scale.mjs",
     "test:engine-layout": "node tests/engine-layout.mjs",
     "test:parity": "node tests/rendering-parity.mjs",
+    "test:import-parity": "node tests/import-parity.mjs",
+    "test:datikz": "node tests/datikz-corpus.mjs",
     "test:clipping": "node tests/label-clipping.mjs",
     "test:alignment": "node tests/text-alignment.mjs",
     "test:performance": "node tests/math-performance.mjs",
@@ -61,9 +63,5 @@
     "svelte-check": "^4.7.8",
     "typescript": "^6.0.3",
     "wrangler": "4.161.0"
-  },
-  "dependencies": {
-    "@ui-sdk/core": "^0.1.0-beta.3",
-    "@ui-sdk/svelte": "^0.1.0-beta.3"
   }
 }

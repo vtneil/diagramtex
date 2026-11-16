@@ -1,7 +1,7 @@
 <script lang="ts">
   import GridStyleButtons from './GridStyleButtons.svelte';
   import { onMount } from 'svelte';
-  import { t, locale, setLocale, rich } from '../i18n';
+  import { t, caption, message, locale, setLocale, rich, type Message } from '../i18n';
 
   let modeSelectorsExpanded = $state(false);
   type InstallPrompt = Event & { prompt(): Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
@@ -36,6 +36,29 @@
       channel?.close();
     };
   });
+  const KINDS: [Message, string][] = [
+    [message('phone.kind.circuits', 'Circuits'), 'circuitikz'], [message('phone.kind.quantum', 'Quantum circuits'), 'quantikz'],
+    [message('phone.kind.cd', 'Commutative diagrams'), 'tikz-cd'], [message('phone.kind.plots', 'Plots and charts'), 'pgfplots'],
+    [message('phone.kind.3d', '3D figures'), 'tikz-3dplot'], [message('phone.kind.feynman', 'Feynman diagrams'), 'tikz-feynman'],
+    [message('phone.kind.trees', 'Trees'), 'forest'], [message('phone.kind.automata', 'State machines'), 'automata'],
+    [message('phone.kind.chem', 'Chemical structures'), 'chemfig'], [message('phone.kind.tables', 'Tables'), 'booktabs'],
+  ];
+  const GUIDE: [Message, string][] = [
+    [message('phone.g.start', 'Get started'), 'start'], [message('phone.g.drawing', 'Drawing'), 'drawing'], [message('phone.g.maths', 'LaTeX maths'), 'maths'],
+    [message('phone.g.blocks', 'Blocks: circuits, plots, 3D…'), 'blocks'], [message('phone.g.export', 'Getting TikZ and LaTeX out'), 'export'],
+    [message('phone.g.import', 'Importing TikZ'), 'import'], [message('phone.g.faq', 'Questions'), 'faq'],
+  ];
+  const guideHref = (anchor: string) => ($locale === 'th' ? 'guide/th.html' : 'guide/') + (anchor ? '#' + anchor : '');
+  // the editor needs a computer: send the address there (the share sheet, or the clipboard)
+  let shared = $state(false);
+  async function shareLink() {
+    const url = location.origin + '/';
+    try {
+      if (navigator.share) { await navigator.share({ title: 'DiagramTeX', url }); return; }
+      await navigator.clipboard.writeText(url);
+      shared = true; setTimeout(() => { shared = false; }, 2400);
+    } catch { /* the share sheet was closed */ }
+  }
   async function installApp() {
     const offer = installPrompt;
     if (!offer || installed) return;
@@ -47,14 +70,56 @@
   }
 </script>
 
-  <div id="phoneWall" role="alertdialog" aria-modal="true" aria-labelledby="phoneWallTitle" aria-describedby="phoneWallText">
-    <img src="icons/icon.svg" width="72" height="72" alt="">
-    <h1 id="phoneWallTitle">{t("ui.diagramtex", "DiagramTeX", {}, $locale)}</h1>
-    <p class="pw-lead">{t("ui.draw.physics.and.maths.diagrams.in.your.browser.and.export.them.as.latex.tikz.pd", "Draw physics and maths diagrams in your browser and export them as LaTeX/TikZ, PDF, SVG or PNG. Circuits, quantum circuits, commutative diagrams, Bloch spheres, trees and plots, with maths typeset as you type. Free, and it works offline.", {}, $locale)}</p>
-    <div class="pw-notice" data-nosnippet>
-      <p id="phoneWallText">{@html rich(t("shell.sentence1", "<b>The editor needs a bigger screen.</b> Open <strong>diagramtex.com</strong> on a computer or a tablet to start drawing.", {}, $locale))}</p>
-      <p class="pw-note">{t("ui.nothing.is.uploaded.your.files.stay.on.your.device", "Nothing is uploaded: your files stay on your device.", {}, $locale)}</p>
-    </div>
+  <!-- A phone held upright gets this short introduction instead of the editor. It is prerendered, so it is also
+       what search engines index for the page on a phone. -->
+  <div id="phoneWall">
+    <header class="pw-top">
+      <span class="pw-brand"><img src="icons/icon.svg" width="28" height="28" alt="">{t("ui.diagramtex", "DiagramTeX", {}, $locale)}</span>
+      <button type="button" class="pw-lang" lang={$locale === 'th' ? 'en' : 'th'} onclick={() => setLocale($locale === 'th' ? 'en' : 'th')}>{$locale === 'th' ? 'English' : 'ไทย'}</button>
+    </header>
+    <article class="pw-page" aria-labelledby="phoneWallTitle">
+      <section class="pw-hero">
+        <h1 id="phoneWallTitle">{t("phone.title", "Free online TikZ and LaTeX diagram editor", {}, $locale)}</h1>
+        <p class="pw-lead">{t("ui.draw.physics.and.maths.diagrams.in.your.browser.and.export.them.as.latex.tikz.pd", "Draw physics and maths diagrams in your browser and export them as LaTeX/TikZ, PDF, SVG or PNG. Circuits, quantum circuits, commutative diagrams, Bloch spheres, trees and plots, with maths typeset as you type. Free, and it works offline.", {}, $locale)}</p>
+        <div class="pw-notice" data-nosnippet>
+          <p id="phoneWallText">{@html rich(t("shell.sentence1", "<b>The editor needs a bigger screen.</b> Open <strong>diagramtex.com</strong> on a computer or a tablet to start drawing.", {}, $locale))}</p>
+          <div class="pw-actions">
+            <button type="button" class="pw-btn pw-share" onclick={shareLink}>{shared ? t("phone.copied", "Link copied", {}, $locale) : t("phone.send", "Send the link to my computer", {}, $locale)}</button>
+            <a class="pw-btn pw-out" href={guideHref('')}>{t("phone.guide", "Read the guide", {}, $locale)}</a>
+          </div>
+        </div>
+      </section>
+      <figure class="pw-shot">
+        <img src="guide/img/phone-canvas.webp" width="1000" height="530" loading="lazy" decoding="async" alt={t("phone.shot.alt", "A DiagramTeX canvas with formulae, a flowchart, an RC circuit, a plot, a quantum circuit and a commutative diagram", {}, $locale)}>
+        <figcaption>{t("phone.shot.caption", "One canvas: formulae, shapes, a circuit, a plot, a quantum circuit and a commutative diagram, all exported as TikZ.", {}, $locale)}</figcaption>
+      </figure>
+      <section aria-labelledby="pwHow">
+        <h2 id="pwHow">{t("phone.how", "How it works", {}, $locale)}</h2>
+        <ol class="pw-steps">
+          <li>{@html rich(t("phone.step1", "<b>Draw</b> with the mouse: shapes, arrows, text and ready-made blocks for circuits, plots and more.", {}, $locale))}</li>
+          <li>{@html rich(t("phone.step2", "<b>Type maths</b> in labels as LaTeX between dollar signs. It is typeset as you type.", {}, $locale))}</li>
+          <li>{@html rich(t("phone.step3", "<b>Copy the TikZ</b> into Overleaf or any LaTeX document, or export PDF, SVG or PNG.", {}, $locale))}</li>
+        </ol>
+      </section>
+      <section aria-labelledby="pwKinds">
+        <h2 id="pwKinds">{t("phone.kinds", "What you can draw", {}, $locale)}</h2>
+        <ul class="pw-kinds">
+          {#each KINDS as [name, pkg] (pkg)}<li><span>{caption(name, $locale)}</span><code>{pkg}</code></li>{/each}
+        </ul>
+      </section>
+      <section aria-labelledby="pwGuide">
+        <h2 id="pwGuide">{t("phone.guide.title", "Guide", {}, $locale)}</h2>
+        <ul class="pw-links">
+          {#each GUIDE as [name, anchor] (anchor)}<li><a href={guideHref(anchor)}>{caption(name, $locale)}</a></li>{/each}
+        </ul>
+      </section>
+      <ul class="pw-facts">
+        <li>{t("phone.fact.free", "Free and open source", {}, $locale)}</li>
+        <li>{t("phone.fact.offline", "Works offline", {}, $locale)}</li>
+        <li>{t("phone.fact.account", "No sign-up", {}, $locale)}</li>
+        <li>{t("ui.nothing.is.uploaded.your.files.stay.on.your.device", "Nothing is uploaded: your files stay on your device.", {}, $locale)}</li>
+      </ul>
+    </article>
   </div>
   <div id="splash" role="status" aria-label={t("ui.loading.diagramtex", "Loading DiagramTeX", {}, $locale)}><svg viewBox="0 0 256 256" aria-hidden="true"><path class="edge" d="M76 76L182 182"/><circle cx="76" cy="76" r="46" fill="#FF5A3C"/><rect x="138" y="138" width="88" height="88" rx="14" fill="#2F7BFF"/></svg></div>
   <header id="topbar" role="toolbar" aria-label={t("ui.document", "Document", {}, $locale)}>

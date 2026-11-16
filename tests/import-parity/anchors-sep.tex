@@ -1,0 +1,9 @@
+% expect: native match>=0.9
+\begin{tikzpicture}
+\node[draw,fill=green!20,inner sep=6pt] (x) at (0,0) {$x^2$};
+\node[draw,minimum size=1cm,anchor=south west] (y) at (2,0) {y};
+\node[circle,draw,inner sep=1pt] (z) at (1,-1.5) {z};
+\node[above=3pt] at (z.north) {top};
+\draw (x) -| (z);
+\draw (y.south) |- (z);
+\end{tikzpicture}

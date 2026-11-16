@@ -1,0 +1,7 @@
+% expect: native match>=0.97
+\begin{tikzpicture}
+  \draw[->] (0,0,0) -- (2,0,0) node[right] {$x$};
+  \draw[->] (0,0,0) -- (0,2,0) node[above] {$y$};
+  \draw[->] (0,0,0) -- (0,0,2) node[below left] {$z$};
+  \draw[blue] (1,0,0) -- (1,1,0) -- (0,1,0) -- (0,1,1) -- (0,0,1) -- (1,0,1) -- cycle;
+\end{tikzpicture}

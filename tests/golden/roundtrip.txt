@@ -1,21 +1,21 @@
 lines: 46/50 modelled · regenerated differs from line 4 (line → line,tikz)
 shapes: 26/43 modelled · regenerated differs from line 18 (arc,ball,curve,dot,ellipse,poly,rect,spring → arc,ball,curve,dot,ellipse,poly,rect,spring,tikz)
-text: 14/19 modelled · regenerated differs from line 4 (line,sym,text → line,text,tikz)
-labels: 11/12 modelled · regenerated differs from line 12 (curve,line → curve,line,text,tikz)
+text: 16/19 modelled · regenerated differs from line 4 (line,sym,text → line,text,tikz)
+labels: 12/12 modelled · regenerated differs from line 12 (curve,line → curve,line,text)
 pie: 12/20 modelled · regenerated differs from line 6 (pie → text,tikz)
 plot_function: 2/3 modelled · regenerated differs from line 4 (plot → tikz)
-plot_line: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
-plot_scatter: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
-plot_area: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_line: 2/2 modelled · regenerated differs from line 3 (plot → plot,tikz)
+plot_scatter: 2/2 modelled · regenerated differs from line 3 (plot → plot,tikz)
+plot_area: 2/2 modelled · regenerated differs from line 3 (plot → plot,tikz)
 plot_bar: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
 plot_contour: 11/12 modelled · regenerated differs from line 13 (plot → tikz)
 plot_heatmap: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
-plot_param3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
-plot_curve3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_param3d: 2/2 modelled · regenerated differs from line 3 (plot → plot,tikz)
+plot_curve3d: 2/2 modelled · regenerated differs from line 3 (plot → plot,tikz)
 plot_function3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
 plot_surface3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
 plot_mesh3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
-plot_scatter3d: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
+plot_scatter3d: 2/2 modelled · regenerated differs from line 3 (plot → plot,tikz)
 blk_qc: 1/1 modelled · regenerated same
 blk_cd: 1/1 modelled · regenerated differs from line 4 (cd → cd)
 blk_forest: 1/1 modelled · regenerated differs from line 4 (forest → forest)
@@ -30,13 +30,13 @@ blk_geo3d: 3/15 modelled · regenerated differs from line 5 (geo3d → tikz)
 blk_chem: 1/1 modelled · regenerated same
 blk_uml: 1/1 modelled · regenerated same
 blk_umlsd: 1/1 modelled · regenerated same
-blk_geo2d: 25/30 modelled · regenerated differs from line 2 (geo2d → coord,line,text,tikz)
+blk_geo2d: 42/43 modelled · regenerated differs from line 2 (geo2d → coord,dot,line,text,tikz)
 blk_bytefield: 1/1 modelled · regenerated same
 blk_physics: 4/24 modelled · regenerated differs from line 6 (physics → tikz)
-sym_basic: 1/53 modelled · regenerated differs from line 3 (sym → tikz)
-sym_flow: 5/69 modelled · regenerated differs from line 3 (sym → poly,tikz)
+sym_basic: 11/53 modelled · regenerated differs from line 3 (sym → text,tikz)
+sym_flow: 13/69 modelled · regenerated differs from line 3 (sym → poly,text,tikz)
 sym_elec: 3/58 modelled · regenerated differs from line 3 (sym → poly,tikz)
-sym_phys: 129/152 modelled · regenerated differs from line 3 (sym → line,poly,text,tikz)
+sym_phys: 130/152 modelled · regenerated differs from line 3 (sym → line,poly,text,tikz)
 tip_w04: 27/27 modelled · regenerated same
 tip_w1: 27/27 modelled · regenerated same
 tip_w2: 27/27 modelled · regenerated same
@@ -120,8 +120,8 @@ qc_cw: 1/1 modelled · regenerated same
 qc_small: 1/1 modelled · regenerated same
 qc_large: 1/1 modelled · regenerated same
 cz_e: 1/1 modelled · regenerated same
-plt_legend_sw: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
-plt_legend_se: 2/3 modelled · regenerated differs from line 4 (plot → tikz)
+plt_legend_sw: 2/2 modelled · regenerated differs from line 3 (plot → plot,tikz)
+plt_legend_se: 3/3 modelled · regenerated differs from line 4 (plot → plot,tikz)
 plt_middle_line: 1/2 modelled · regenerated differs from line 3 (plot → tikz)
 cd_long: 1/1 modelled · regenerated differs from line 4 (cd → cd)
 cd_bend: 1/1 modelled · regenerated differs from line 4 (cd → cd)
@@ -166,7 +166,7 @@ sd_delay: 1/1 modelled · regenerated same
 sd_callself: 1/1 modelled · regenerated same
 sd_messcall: 1/1 modelled · regenerated same
 sd_customize: 1/1 modelled · regenerated same
-img_png: 1/2 modelled · regenerated same
-img_jpg: 1/2 modelled · regenerated same
-img_svg: 1/2 modelled · regenerated same
-img_rot: 1/2 modelled · regenerated same
+img_png: 2/2 modelled · regenerated differs from line 2 (image,rect → rect,text)
+img_jpg: 2/2 modelled · regenerated differs from line 2 (image,rect → rect,text)
+img_svg: 2/2 modelled · regenerated differs from line 2 (image,rect → rect,text)
+img_rot: 2/2 modelled · regenerated differs from line 2 (image,rect → rect,text)

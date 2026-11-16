@@ -50,6 +50,51 @@ That path was not exercised in the initial run; the zero-dependency rows API was
 
 Before promoting corpus cases into committed regression fixtures, retain source attribution and review the upstream source's licence; the dataset does not provide one blanket licence for all underlying sources. Keep the bulk corpus and reference images local. Reduce failures to focused regression cases where practical, then validate edited exports through the existing reviewed TeX tests.
 
+## Importing the corpus (4,000-row sample)
+
+`npm run test:datikz -- --corpus artifacts/datikz-4k` imports 200 cases chosen from 4,000 training rows (seed
+20261115) and scores each against its dataset image (a scale-free ink match, 1 % tolerance). It never compiles
+dataset TeX. **display** scores what the canvas shows, including previews of code kept as written. **native**
+scores only the native objects.
+
+| | Start of this round | Now |
+|---|---:|---:|
+| Statements made native | 1230 | 1332 |
+| Statements kept as code | 1105 | 1001 |
+| Cases fully native | 37 | 39 |
+| Display ink match, mean | 0.629 | 0.664 |
+| Display cases at least 80 % | 54 | 65 |
+
+What the importer now reads, each one measured against pdflatex before it was written:
+
+- picture options: styles, `nodes={…}`, `node distance=a and b`, `every edge` and `every join`;
+- chains: `start chain`, `on chain`, `join=by …`;
+- node labels;
+- `calc` sums and partway points, including the `!1cm!` distance and `!t!90:(b)` angle forms;
+- units inside expressions;
+- borders of nodes placed on paths, and nodes placed above/below a `--` or `to`, including `to[pos=…]`;
+- labelled coordinates on paths;
+- `below=0.5`, read in cm when the positioning library is loaded and in pt when it is not;
+- pgfmath, with trig in degrees.
+- `\matrix`: code cells, `matrix of nodes` and `matrix of math nodes` (`|[…]|` cell options, `nodes`, `cells`,
+  row/column styles, `nodes in empty cells`, `ampersand replacement`), `column sep`/`row sep` with `between
+  origins`, `&[…]` and `\\[…]` gaps, `at`, `anchor` and positioning (`below=1cm of a`). The cells are native
+  nodes in one group, written back as the `\matrix` until one is edited; the matrix itself is a named node, so
+  `(m.north west)` still works afterwards. Delimiters and `execute at begin cell` are kept as code.
+
+`node tests/import-parity.mjs` (`npm run test:import-parity`) holds focused, hand-written fixtures for each
+feature. It compiles them with pdflatex and checks that the canvas ink lands within 0.5 mm.
+
+Still missing, most common first:
+
+- `plot`;
+- decorations;
+- `pin`;
+- `rectangle split`;
+- pics that take arguments;
+- chain branches (`start branch`);
+- `\ifnum` and macro arithmetic in loops.
+
 ## Tool checks
 
 ```sh

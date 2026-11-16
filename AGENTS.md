@@ -11,8 +11,3 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 - A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
-
-## ui-sdk
-
-- Before using ui-sdk, follow the `ui-sdk` skill in `.agents/skills/ui-sdk/SKILL.md` if it is installed, and read `node_modules/@ui-sdk/svelte/docs/llms.txt`.
-- When building a new component, also search `node_modules/@ui-sdk/svelte/docs/core.md` by heading and read the adjacent `rendering.md`.

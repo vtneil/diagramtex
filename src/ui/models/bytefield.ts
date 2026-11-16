@@ -1,7 +1,6 @@
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/bytefield.ts';
-const { layout, summary, exportCode } = panelServices;
+import { layout, summary, exportCode } from '../../domain/bytefield.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.bytefield = {

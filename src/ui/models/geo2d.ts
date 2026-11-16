@@ -1,8 +1,7 @@
 import { captions } from '../../i18n/messages';
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/geo2d.ts';
-const { layout, sliders, fmt, G, fullCode } = panelServices;
+import { layout, sliders, fmt, G, fullCode } from '../../domain/geo2d.ts';
 import { row, section } from '../forms';
 
 TD.panels = TD.panels || {};
@@ -13,7 +12,7 @@ TD.panels.geo2d = {
       let defaults = sliderDefaults.get(s.id);
       if (!defaults) { defaults = new Map(); sliderDefaults.set(s.id, defaults); }
       for (const x of S) if (!defaults.has(x.name)) defaults.set(x.name, x.v);
-      const rows = S.map((x: any) => ({ kind: 'row' as const, label: [x.name], labelClass: 'mono', labelTitle: '\\' + x.name, controls: [{ kind: 'angle' as const,
+      const rows: any[] = S.map((x: any) => ({ kind: 'row' as const, label: [x.name], labelClass: 'mono', labelTitle: '\\' + x.name, controls: [{ kind: 'angle' as const,
         value: x.v, numericValue: fmt(x.v, 3), unit: '',
         attrs: { 'data-slider-default': defaults.get(x.name), 'data-g2': x.name, min: x.lo, max: x.hi, step: x.step, 'aria-label': x.name } }] }));
       rows.push(row(captions["ui.scale"], { kind: 'input' as const, value: fmt(L.scale, 2), attrs: { type: 'number', 'data-g2': 'scale', step: '0.25', min: '0.1' } }));

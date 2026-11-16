@@ -145,14 +145,55 @@
 <body>
   <!--[--><!---->
 
-  <div id="phoneWall" role="alertdialog" aria-modal="true" aria-labelledby="phoneWallTitle" aria-describedby="phoneWallText">
-    <img src="icons/icon.svg" width="72" height="72" alt=""/>
-    <h1 id="phoneWallTitle">DiagramTeX</h1>
-    <p class="pw-lead">Draw physics and maths diagrams in your browser and export them as LaTeX/TikZ, PDF, SVG or PNG. Circuits, quantum circuits, commutative diagrams, Bloch spheres, trees and plots, with maths typeset as you type. Free, and it works offline.</p>
-    <div class="pw-notice" data-nosnippet="">
-      <p id="phoneWallText"><!----><b>The editor needs a bigger screen.</b> Open <strong>diagramtex.com</strong> on a computer or a tablet to start drawing.<!----></p>
-      <p class="pw-note">Nothing is uploaded: your files stay on your device.</p>
-    </div>
+  
+  <div id="phoneWall">
+    <header class="pw-top">
+      <span class="pw-brand"><img src="icons/icon.svg" width="28" height="28" alt=""/>DiagramTeX</span>
+      <button type="button" class="pw-lang" lang="th">ไทย</button>
+    </header>
+    <article class="pw-page" aria-labelledby="phoneWallTitle">
+      <section class="pw-hero">
+        <h1 id="phoneWallTitle">Free online TikZ and LaTeX diagram editor</h1>
+        <p class="pw-lead">Draw physics and maths diagrams in your browser and export them as LaTeX/TikZ, PDF, SVG or PNG. Circuits, quantum circuits, commutative diagrams, Bloch spheres, trees and plots, with maths typeset as you type. Free, and it works offline.</p>
+        <div class="pw-notice" data-nosnippet="">
+          <p id="phoneWallText"><!----><b>The editor needs a bigger screen.</b> Open <strong>diagramtex.com</strong> on a computer or a tablet to start drawing.<!----></p>
+          <div class="pw-actions">
+            <button type="button" class="pw-btn pw-share">Send the link to my computer</button>
+            <a class="pw-btn pw-out" href="guide/">Read the guide</a>
+          </div>
+        </div>
+      </section>
+      <figure class="pw-shot">
+        <img src="guide/img/phone-canvas.webp" width="1000" height="530" loading="lazy" decoding="async" alt="A DiagramTeX canvas with formulae, a flowchart, an RC circuit, a plot, a quantum circuit and a commutative diagram"/>
+        <figcaption>One canvas: formulae, shapes, a circuit, a plot, a quantum circuit and a commutative diagram, all exported as TikZ.</figcaption>
+      </figure>
+      <section aria-labelledby="pwHow">
+        <h2 id="pwHow">How it works</h2>
+        <ol class="pw-steps">
+          <li><!----><b>Draw</b> with the mouse: shapes, arrows, text and ready-made blocks for circuits, plots and more.<!----></li>
+          <li><!----><b>Type maths</b> in labels as LaTeX between dollar signs. It is typeset as you type.<!----></li>
+          <li><!----><b>Copy the TikZ</b> into Overleaf or any LaTeX document, or export PDF, SVG or PNG.<!----></li>
+        </ol>
+      </section>
+      <section aria-labelledby="pwKinds">
+        <h2 id="pwKinds">What you can draw</h2>
+        <ul class="pw-kinds">
+          <!--[--><li><span>Circuits</span><code>circuitikz</code></li><li><span>Quantum circuits</span><code>quantikz</code></li><li><span>Commutative diagrams</span><code>tikz-cd</code></li><li><span>Plots and charts</span><code>pgfplots</code></li><li><span>3D figures</span><code>tikz-3dplot</code></li><li><span>Feynman diagrams</span><code>tikz-feynman</code></li><li><span>Trees</span><code>forest</code></li><li><span>State machines</span><code>automata</code></li><li><span>Chemical structures</span><code>chemfig</code></li><li><span>Tables</span><code>booktabs</code></li><!--]-->
+        </ul>
+      </section>
+      <section aria-labelledby="pwGuide">
+        <h2 id="pwGuide">Guide</h2>
+        <ul class="pw-links">
+          <!--[--><li><a href="guide/#start">Get started</a></li><li><a href="guide/#drawing">Drawing</a></li><li><a href="guide/#maths">LaTeX maths</a></li><li><a href="guide/#blocks">Blocks: circuits, plots, 3D…</a></li><li><a href="guide/#export">Getting TikZ and LaTeX out</a></li><li><a href="guide/#import">Importing TikZ</a></li><li><a href="guide/#faq">Questions</a></li><!--]-->
+        </ul>
+      </section>
+      <ul class="pw-facts">
+        <li>Free and open source</li>
+        <li>Works offline</li>
+        <li>No sign-up</li>
+        <li>Nothing is uploaded: your files stay on your device.</li>
+      </ul>
+    </article>
   </div>
   <div id="splash" role="status" aria-label="Loading DiagramTeX"><svg viewBox="0 0 256 256" aria-hidden="true"><path class="edge" d="M76 76L182 182"></path><circle cx="76" cy="76" r="46" fill="#FF5A3C"></circle><rect x="138" y="138" width="88" height="88" rx="14" fill="#2F7BFF"></rect></svg></div>
   <header id="topbar" role="toolbar" aria-label="Document">

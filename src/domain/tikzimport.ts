@@ -13,8 +13,107 @@ import { runtime as TD } from '../runtime';
   // exact arrows.meta specs written by the exporter (TD.TIKZ_TIP), compared without spaces
   const TIP_EXACT = () => Object.fromEntries<any>(Object.entries<any>(TD.TIKZ_TIP || {}).map(([k, v]) => [v.toLowerCase().replace(/\s+/g, ''), k]));
 
+  // ---------- pgfmath (as TikZ evaluates coordinates and options: trig in degrees) ----------
+  // numbers, + - * / ^, unary - and !, postfix r (radians → degrees) and ! (factorial), comparisons, && ||, ?:,
+  // and pgfmath's functions; an unknown name (a macro left unexpanded) is NaN
+  const PGF_D = Math.PI / 180;
+  const PGF_FN: Record<string, (...a: number[]) => number> = {
+    sin: (a) => Math.sin(a * PGF_D), cos: (a) => Math.cos(a * PGF_D), tan: (a) => Math.tan(a * PGF_D),
+    sec: (a) => 1 / Math.cos(a * PGF_D), cosec: (a) => 1 / Math.sin(a * PGF_D), cot: (a) => 1 / Math.tan(a * PGF_D),
+    asin: (a) => Math.asin(a) / PGF_D, acos: (a) => Math.acos(a) / PGF_D, atan: (a) => Math.atan(a) / PGF_D,
+    atan2: (y, x) => Math.atan2(y, x) / PGF_D, deg: (a) => a / PGF_D, rad: (a) => a * PGF_D,
+    sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh, exp: Math.exp, ln: Math.log, log10: Math.log10, log2: Math.log2,
+    sqrt: Math.sqrt, abs: Math.abs, floor: Math.floor, ceil: Math.ceil, round: Math.round, sign: Math.sign,
+    int: Math.trunc, frac: (a) => a - Math.trunc(a), real: (a) => a, neg: (a) => -a, pow: Math.pow,
+    mod: (a, b) => a % b, Mod: (a, b) => ((a % b) + b) % b, divide: (a, b) => a / b, div: (a, b) => Math.trunc(a / b),
+    multiply: (a, b) => a * b, add: (a, b) => a + b, subtract: (a, b) => a - b,
+    min: (...a) => Math.min(...a), max: (...a) => Math.max(...a), veclen: (x, y) => Math.hypot(x, y),
+    iseven: (a) => +(Math.trunc(a) % 2 === 0), isodd: (a) => +(Math.abs(Math.trunc(a) % 2) === 1),
+    equal: (a, b) => +(a === b), greater: (a, b) => +(a > b), less: (a, b) => +(a < b), notequal: (a, b) => +(a !== b),
+    and: (a, b) => +(!!a && !!b), or: (a, b) => +(!!a || !!b), not: (a) => +!a, ifthenelse: (c, a, b) => (c ? a : b),
+    factorial: (a) => { let r = 1; for (let i = 2; i <= a; i++) r *= i; return r; },
+  };
+  const PGF_CONST: Record<string, number> = { pi: Math.PI, e: Math.E, true: 1, false: 0 };
+  function pgfEval(src: string): number {
+    const s = String(src);
+    let i = 0;
+    const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+    const peek = (t: string) => { ws(); return s.startsWith(t, i); };
+    const eat = (t: string) => { if (peek(t)) { i += t.length; return true; } return false; };
+    const fail = (): never => { throw new Error('pgfmath'); };
+    const ternary = (): number => {
+      const c = or();
+      if (eat('?')) { const a = ternary(); if (!eat(':')) fail(); const b = ternary(); return c ? a : b; }
+      return c;
+    };
+    const or = (): number => { let a = and(); while (eat('||')) { const b = and(); a = +(!!a || !!b); } return a; };
+    const and = (): number => { let a = cmp(); while (eat('&&')) { const b = cmp(); a = +(!!a && !!b); } return a; };
+    const cmp = (): number => {
+      let a = add();
+      for (;;) {
+        if (eat('==')) a = +(a === add()); else if (eat('!=')) a = +(a !== add());
+        else if (eat('<=')) a = +(a <= add()); else if (eat('>=')) a = +(a >= add());
+        else if (eat('<')) a = +(a < add()); else if (eat('>')) a = +(a > add());
+        else return a;
+      }
+    };
+    const add = (): number => { let a = mul(); for (;;) { if (eat('+')) a += mul(); else if (peek('-')) { i++; a -= mul(); } else return a; } };
+    const mul = (): number => { let a = unary(); for (;;) { if (eat('*')) a *= unary(); else if (eat('/')) a /= unary(); else return a; } };
+    const unary = (): number => { if (eat('-')) return -unary(); if (eat('+')) return unary(); if (peek('!') && !peek('!=')) { i++; return +!unary(); } return power(); };
+    const power = (): number => { const a = postfix(); if (eat('^')) return Math.pow(a, unary()); return a; };
+    const postfix = (): number => {
+      let a = atom();
+      for (;;) {
+        ws();
+        if (s[i] === 'r' && !/\w/.test(s[i + 1] || '')) { i++; a = a / PGF_D; continue; }
+        if (s[i] === '!' && s[i + 1] !== '=') { i++; a = PGF_FN.factorial(a); continue; }
+        return a;
+      }
+    };
+    const atom = (): number => {
+      ws();
+      if (eat('(')) { const v = ternary(); if (!eat(')')) fail(); return v; }
+      if (eat('{')) { const v = ternary(); if (!eat('}')) fail(); return v; }
+      const m = /^(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/i.exec(s.slice(i));
+      if (m) { i += m[0].length; return parseFloat(m[0]); }
+      const id = /^[A-Za-z]\w*/.exec(s.slice(i));
+      if (!id) fail();
+      i += id![0].length;
+      const name = id![0];
+      if (PGF_FN[name] && peek('(')) {
+        i++; const args = [ternary()];
+        while (eat(',')) args.push(ternary());
+        if (!eat(')')) fail();
+        return PGF_FN[name](...args);
+      }
+      if (name in PGF_CONST) return PGF_CONST[name];
+      if (PGF_FN[name] && /^(rnd|rand)$/.test(name)) fail();
+      return fail();
+    };
+    try { const v = ternary(); ws(); return i === s.length ? v : NaN; } catch { return NaN; }
+  }
+  const pgfNum = (src: any, fb: any): any => { const v = pgfEval(String(src ?? '')); return Number.isFinite(v) ? v : fb; };
+  TD.pgfEval = pgfNum;
+
   // ---------- small helpers ----------
   const hex2 = (n: any) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0');
+  // node text: a \\ (with an optional [skip]) outside math and braces is a line break; inside math it is TeX's (\substack, matrices)
+  function lineBreaks(text: string) {
+    let out = '', math = false, depth = 0;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '\\' && text[i + 1] === '\\' && !math && depth === 0) {
+        const m = /^\\\\(?:\[[^\]]*\])?\s*/.exec(text.slice(i))!;
+        out = out.replace(/\s+$/, '') + '\n'; i += m[0].length - 1; continue;
+      }
+      if (ch === '\\') { out += ch + (text[i + 1] ?? ''); if (text[i + 1] === '(' || text[i + 1] === '[') math = true; if (text[i + 1] === ')' || text[i + 1] === ']') math = false; i++; continue; }
+      if (ch === '$') math = !math;
+      else if (ch === '{') depth++;
+      else if (ch === '}') depth = Math.max(0, depth - 1);
+      out += ch;
+    }
+    return out.trim();
+  }
   function splitTop(s: any, sep: any) { // split at depth-0 separators (braces / brackets / parens)
     const out = []; let d = 0, buf = '';
     for (let i = 0; i < s.length; i++) {
@@ -62,20 +161,51 @@ import { runtime as TD } from '../runtime';
     let v = expandMac(m[3].trim());
     // a macro written in terms of itself (\def\a{\a\a}) doubles at every definition: give up past a sane size
     if (v.length > 4096) return null;
-    if (/^pgfmath/.test(name)) { const n = TD.evalNumber ? TD.evalNumber(v, NaN) : NaN; if (!isFinite(n)) return null; v = String(+n.toFixed(6)); }
+    if (/^pgfmath/.test(name)) { const n = pgfNum(v, NaN); if (!isFinite(n)) return null; v = String(+n.toFixed(6)); }
     return isFinite(len(v) as number) ? { nm: m[1], v } : null;
   }
   // length with unit -> px (default unit: cm for coordinates, pt for widths)
+  const PT_PER: Record<string, number> = { cm: 72.27 / 2.54, mm: 7.227 / 2.54, pt: 1, in: 72.27, bp: 72.27 / 72, sp: 1 / 65536, em: 10, ex: 4.3 };
   function len(v: any, defUnit = 'cm') {
     v = expandMac(v);
     const m = String(v).trim().match(/^([-+]?[\d.]*\d(?:e[-+]?\d+)?|[-+]?\.\d+)\s*(cm|mm|pt|in|em|ex|bp)?$/i);
-    if (!m) { const e = TD.evalNumber ? TD.evalNumber(v, NaN) : NaN; return isFinite(e) ? (defUnit === 'pt' ? e / K : e * PX) : NaN; }
+    if (!m) {
+      // an expression with lengths in it (-4*6mm, 2*\x cm+1pt): pgfmath reads each length in pt, and so is the result
+      const withUnits = String(v).replace(/(\d*\.?\d+(?:e[-+]?\d+)?)\s*(cm|mm|pt|in|bp|sp|em|ex)\b/gi, (_: any, n: any, u: any) => `(${n}*${PT_PER[u.toLowerCase()]})`);
+      if (withUnits !== String(v)) { const e = pgfNum(withUnits, NaN); return isFinite(e) ? e / K : NaN; }
+      const e = pgfNum(v, NaN); return isFinite(e) ? (defUnit === 'pt' ? e / K : e * PX) : NaN;
+    }
     const n = parseFloat(m[1]), u = (m[2] || defUnit).toLowerCase();
     return { cm: n * PX, mm: n * PX / 10, pt: n / K, bp: n * 1.00375 / K, in: n * 2.54 * PX, em: n * 10 / K, ex: n * 4.3 / K }[u];
   }
 
+  // the xyz coordinate system's unit vectors, in px with y up (TikZ's own orientation): x=1cm, y=1cm and
+  // z=(-3.85mm,-3.85mm) unless the picture or a scope sets them
+  const unitVectors = () => ({ vx: [PX, 0], vy: [0, PX], vz: [-0.385 * PX, -0.385 * PX] });
+  // a coordinate part: a length when it carries a unit, else a number of unit vectors
+  const UNIT = /(?:^|[^A-Za-z@\\])(?:\d|\.)\s*(?:cm|mm|pt|in|em|ex|bp|sp)\b|\\(?:pgflinewidth|textwidth|linewidth|baselineskip)\b/;
+  function part(v: any): { n?: number, d?: number } {
+    // (braces group in pgfmath as parentheses do: 3*0+{-1/3}, from a loop's values)
+    let e = expandMac(v);
+    if (/[{}]/.test(e) && !/\\/.test(e)) e = e.replace(/\{/g, '(').replace(/\}/g, ')');
+    if (UNIT.test(e)) { const d = len(e, 'pt'); return Number.isFinite(d) ? { d: d as number } : {}; }
+    const n = pgfNum(String(e), NaN);
+    return Number.isFinite(n) ? { n } : {};
+  }
+  // a unit vector option (x=2cm, y={(0.5cm,0.3cm)}, z={(-1,-1)}): [x, y] px, y up, or null
+  function unitVector(C: any, axis: 'x' | 'y' | 'z', v: any) {
+    const t = String(v).trim().replace(/^\{([\s\S]*)\}$/, '$1').trim();
+    if (t[0] === '(') {
+      const q = coord({ ...C, ...unitVectors() }, t);
+      return q ? [q.x, -q.y] : null;
+    }
+    const d = len(t, 'cm');
+    if (!Number.isFinite(d)) return null;
+    const D = d as number;
+    return axis === 'x' ? [D, 0] : axis === 'y' ? [0, D] : [-D * 0.385, -D * 0.385];
+  }
   function makeCtx() {
-    return { colors: { ...NAMED }, macros: new Map(), names: {}, sx: PX, sy: PX, warnings: [], styles: new Map(), boxes: {} };
+    return { colors: { ...NAMED }, macros: new Map(), names: {}, ...unitVectors(), warnings: [], styles: new Map(), boxes: {} };
   }
   // xcolor's svgnames (DarkBlue, ForestGreen, SteelBlue…) are the CSS colour names, written in CamelCase; the
   // browser knows their values. Lower-case names stay xcolor's own (green is #00ff00 there, not CSS's #008000).
@@ -144,7 +274,8 @@ import { runtime as TD } from '../runtime';
   }
   // Fixed and single-argument styles, default values, and append/prefix handlers.
   function addStyle(C: any, nm: any, body: any) {
-    if (/#(?:[2-9]|1\d)/.test(body) || /^every /.test(nm)) { C.styles.delete(nm); return; }
+    // of the `every …` styles, only the ones the importer applies are read (others would change what is drawn)
+    if (/#(?:[2-9]|1\d)/.test(body) || (/^every /.test(nm) && !/^every (node|(rectangle|circle|ellipse) node|edge|join|matrix)$/.test(nm))) { C.styles.delete(nm); return; }
     C.styles.set(nm, body);
   }
   function defineStyles(C: any, cmd: any, args: any) {
@@ -204,6 +335,9 @@ import { runtime as TD } from '../runtime';
         else if (k === 'dashed' || k === 'densely dashed' || k === 'loosely dashed') st.dash = 'dashed';
         else if (k === 'dotted' || k === 'densely dotted' || k === 'loosely dotted') st.dash = 'dotted';
         else if (k === 'dash dot' || k === 'dashdotted') st.dash = 'dashdot';
+        else if (k === 'help lines') { colorAll = '#808080'; st.width = 0.2 / K; }
+        else if (k === 'rounded corners') st.radius = 4 / K; // (TikZ's default radius)
+        else if (k === 'sharp corners') st.radius = 0;
         else if (k.includes('-') && arrowSpec(k)) { const a = arrowSpec(k); st.startTip = a!.start; st.endTip = a!.end; }
         else { const c = color(C, k); if (c !== undefined) colorAll = c; }
         continue;
@@ -215,9 +349,9 @@ import { runtime as TD } from '../runtime';
         case 'line width': st.width = len(v, 'pt'); break;
         case 'shorten >': st.shEnd = len(v, 'pt'); break;
         case 'shorten <': st.shStart = len(v, 'pt'); break;
-        case 'opacity': st.opacity = TD.evalNumber(expandMac(v), NaN); break;
-        case 'draw opacity': strokeOpacity = TD.evalNumber(expandMac(v), NaN); break;
-        case 'fill opacity': fillOpacity = TD.evalNumber(expandMac(v), NaN); break;
+        case 'opacity': st.opacity = pgfNum(expandMac(v), NaN); break;
+        case 'draw opacity': strokeOpacity = pgfNum(expandMac(v), NaN); break;
+        case 'fill opacity': fillOpacity = pgfNum(expandMac(v), NaN); break;
         case 'rounded corners': st.radius = len(v, 'pt'); break;
         case 'ball color': st.ballColor = color(C, v); break;
         case 'text': st.color = color(C, v); break;
@@ -231,14 +365,20 @@ import { runtime as TD } from '../runtime';
         }
         case 'decoration': st.decoration = v; break;
         case 'pos': st.pos = parseFloat(v); break;
+        case 'out': st.out = pgfNum(expandMac(v), NaN); break;
+        case 'in': st.in = pgfNum(expandMac(v), NaN); break;
+        case 'looseness': st.looseness = pgfNum(expandMac(v), NaN); break;
+        case 'step': st.step = len(v); break;
+        case 'xstep': st.xstep = len(v); break;
+        case 'ystep': st.ystep = len(v); break;
         case 'anchor': st.anchor = v; break;
         case 'rotate': st.rotate = parseFloat(v); break;
         case 'radius': st.r = len(v); break;
         case 'x radius': st.rx = len(v); break;
         case 'y radius': st.ry = len(v); break;
-        case 'start angle': st.a1 = TD.evalNumber(expandMac(v),NaN); break;
-        case 'end angle': st.a2 = TD.evalNumber(expandMac(v),NaN); break;
-        case 'delta angle': st.da = TD.evalNumber(expandMac(v),NaN); break;
+        case 'start angle': st.a1 = pgfNum(expandMac(v),NaN); break;
+        case 'end angle': st.a2 = pgfNum(expandMac(v),NaN); break;
+        case 'delta angle': st.da = pgfNum(expandMac(v),NaN); break;
         // bend left=0 is a straight bend, not the default 30°
         case 'bend left': { const b = parseFloat(v); st.bend = isFinite(b) ? b : 30; break; }
         case 'bend right': { const b = parseFloat(v); st.bend = -(isFinite(b) ? b : 30); break; }
@@ -250,8 +390,9 @@ import { runtime as TD } from '../runtime';
     if (opts.some((o: any) => o.k === 'bend left' && o.v === null)) st.bend = 30;
     if (opts.some((o: any) => o.k === 'bend right' && o.v === null)) st.bend = -30;
     if (colorAll) {
-      if (cmd !== 'fill' && cmd !== 'shade' && !opts.some((o: any) => o.k === 'draw')) st.stroke = colorAll;
-      if ((cmd === 'fill' || cmd === 'filldraw') && !opts.some((o: any) => o.k === 'fill')) st.fill = colorAll;
+      // a bare `draw`/`fill` takes the current colour; `draw=red` keeps its own
+      if (cmd !== 'fill' && cmd !== 'shade' && !opts.some((o: any) => o.k === 'draw' && o.v != null)) st.stroke = colorAll;
+      if ((cmd === 'fill' || cmd === 'filldraw' || opts.some((o: any) => o.k === 'fill' && o.v == null)) && !opts.some((o: any) => o.k === 'fill' && o.v != null)) st.fill = colorAll;
       if (!st.color) st.color = colorAll;
     }
     const gradient = new Map(opts.filter((o: any) => /^(left|right|middle|top|bottom) color$/.test(o.k)).map((o: any) => [o.k,color(C,o.v)]));
@@ -291,9 +432,9 @@ import { runtime as TD } from '../runtime';
       if (i >= s.length) break;
       const rest = s.slice(i);
       let m;
-      if (rest.startsWith('++(') || rest.startsWith('+(')) {
-        const rel = rest[1] === '+' ? 2 : 1;
-        const st = i + rel, e = shut(s, st, '(', ')');
+      if ((m = /^(\+\+?)\s*\(/.exec(rest))) {
+        const rel = m[1].length;
+        const st = i + m[0].length - 1, e = shut(s, st, '(', ')');
         toks.push({ t: 'coord', raw: s.slice(st + 1, e), rel });
         i = e + 1; continue;
       }
@@ -334,6 +475,45 @@ import { runtime as TD } from '../runtime';
     }
     return toks;
   }
+  // calc's sums: `(a)+(b)-2*(c)`, `sqrt(14)*(0,3/14)`, `{1+2}*(a)`: the terms with their sign and factor, or null
+  // when `raw` is not one (a single term without a factor is read as it is)
+  function calcTerms(raw: string, names: any = {}) {
+    // (x, y with arithmetic in it, as `0.2*(2),-0.5*(2)` from macros, is not a sum of points)
+    if (splitTop(raw, ',').length > 1) return null;
+    const pieces: { sign: number, text: string }[] = [];
+    let level = 0, from = 0, sign = 1;
+    const prevChar = (i: number) => { let j = i - 1; while (j >= 0 && /\s/.test(raw[j])) j--; return j < 0 ? '' : raw[j]; };
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+      if ('({['.includes(ch)) level++;
+      else if (')}]'.includes(ch)) level--;
+      else if (!level && (ch === '+' || ch === '-') && (i === 0 || prevChar(i) === ')')) {
+        const text = raw.slice(from, i).trim();
+        if (text) pieces.push({ sign, text });
+        sign = ch === '-' ? -1 : 1; from = i + 1;
+      }
+    }
+    const last = raw.slice(from).trim();
+    if (last) pieces.push({ sign, text: last });
+    const terms: { sign: number, factor: string | null, body: string }[] = [];
+    for (const p of pieces) {
+      if (!p.text.endsWith(')')) return null;
+      let d = 0, open = -1;
+      for (let i = p.text.length - 1; i >= 0; i--) { if (p.text[i] === ')') d++; else if (p.text[i] === '(' && !--d) { open = i; break; } }
+      if (open < 0) return null;
+      // a point is (x,y), (angle:r) or a name: `(2)` or `(1+2)` is arithmetic
+      const inner = p.text.slice(open + 1, -1).trim();
+      if (/^[-+\d.\s*/()]*$/.test(inner) && !names[inner]) return null;
+      const pre = p.text.slice(0, open).trim();
+      if (!pre) terms.push({ sign: p.sign, factor: null, body: p.text });
+      else if (pre.endsWith('*') && !pre.includes('!')) terms.push({ sign: p.sign, factor: pre.slice(0, -1).trim(), body: p.text.slice(open) });
+      else terms.push({ sign: p.sign, factor: null, body: p.text }); // a partway term, (a)!t!(b)
+    }
+    if (!terms.length || (terms.length === 1 && terms[0].factor == null && terms[0].sign === 1)) return null;
+    // a partway term alone in a sum is read by its own rule; here it would recurse on itself
+    if (terms.length === 1 && terms[0].body === raw) return null;
+    return terms;
+  }
   function coord(C: any, raw: any, cur?: any, depth = 0) : any {
     if (depth > 32) return null;
     raw = expandMac(raw.trim());
@@ -352,40 +532,76 @@ import { runtime as TD } from '../runtime';
         return a && b ? (op === '|-' ? { x: a.x, y: b.y } : { x: b.x, y: a.y }) : null;
       }
     }
-    const terms = splitTop(raw, '!');
-    if (terms.length === 3) {
-      const a = read(terms[0]), b = read(terms[2]), t = TD.evalNumber(expandMac(terms[1]), NaN);
-      return a && b && Number.isFinite(t) ? { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } : null;
-    }
-    if (raw[0] === '(') {
-      const end = matchClose(raw, 0, '(', ')'), op = raw.slice(end + 1).trim();
-      if (end > 0 && /^[+-]/.test(op)) {
-        const a = read(raw.slice(0, end + 1)), b = read(op.slice(1));
-        return a && b ? { x: a.x + (op[0] === '+' ? b.x : -b.x), y: a.y + (op[0] === '+' ? b.y : -b.y) } : null;
+    // calc: a sum of terms, each `(c)`, `factor*(c)` (factor a pgfmath expression) or a partway `(a)!…!(b)`
+    const sum = calcTerms(raw, C.names || {});
+    if (sum) {
+      let x = 0, y = 0;
+      for (const t of sum) {
+        let f = 1, body = t.body;
+        if (t.factor != null) { f = pgfNum(expandMac(t.factor.replace(/^\{([\s\S]*)\}$/, '$1')), NaN); if (!Number.isFinite(f)) return null; }
+        const q = read(body);
+        if (!q) return null;
+        x += t.sign * f * q.x; y += t.sign * f * q.y;
       }
+      return { x, y };
+    }
+    const terms = splitTop(raw, '!');
+    if (terms.length === 3 || terms.length === 5) {
+      // (a)!t!(b), (a)!1cm!(b) (that far towards b), (a)!t!angle:(b) (b turned about a first); five parts chain on
+      if (terms.length === 5) return read(`(${terms.slice(0, 3).join('!')})!${terms[3]}!${terms[4]}`);
+      const a = read(terms[0]);
+      let bs = terms[2].trim(), ang = 0;
+      const am = /^([^():]+):\s*(\([\s\S]*\))$/.exec(bs);
+      if (am) { ang = pgfNum(expandMac(am[1]), NaN); bs = am[2]; }
+      let b = read(bs);
+      if (!a || !b || !Number.isFinite(ang)) return null;
+      if (ang) { const r = -ang * Math.PI / 180, dx = b.x - a.x, dy = b.y - a.y; b = { x: a.x + dx * Math.cos(r) - dy * Math.sin(r), y: a.y + dx * Math.sin(r) + dy * Math.cos(r) }; }
+      const mid = expandMac(terms[1]).trim();
+      if (UNIT.test(mid)) {
+        const d = len(mid, 'pt') as number, n = Math.hypot(b.x - a.x, b.y - a.y);
+        return Number.isFinite(d) && n > 0 ? { x: a.x + (b.x - a.x) * d / n, y: a.y + (b.y - a.y) * d / n } : null;
+      }
+      const t = pgfNum(mid, NaN);
+      return Number.isFinite(t) ? { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } : null;
     }
     let m;
-    if ((m = raw.match(/^([^,:]+):([^,:]+)$/))) { // polar
-      const dirs: Record<string, number> = { right: 0, up: 90, left: 180, down: 270 };
-      const a = ((dirs[m[1].trim()] ?? TD.evalNumber(m[1], NaN)) * Math.PI) / 180, radii = m[2].split(/\s+and\s+/), rx = len(radii[0]), ry = radii[1] != null ? len(radii[1]) : rx;
-      if (![a,rx,ry].every(Number.isFinite)) return null;
-      return { x: Math.cos(a) * rx!, y: -Math.sin(a) * ry! };
+    const vx = C.vx || [PX, 0], vy = C.vy || [0, PX], vz = C.vz || [-0.385 * PX, -0.385 * PX];
+    if ((m = raw.match(/^([^,:]+):([^,:]+)$/))) { // polar: a radius without a unit is in x and y vectors
+      const dirs: Record<string, number> = { right: 0, up: 90, left: 180, down: 270, 'north': 90, 'south': 270, 'east': 0, 'west': 180 };
+      const a = ((dirs[m[1].trim()] ?? pgfNum(expandMac(m[1]), NaN)) * Math.PI) / 180, radii = m[2].split(/\s+and\s+/);
+      const rx = part(radii[0]), ry = radii[1] != null ? part(radii[1]) : rx;
+      if (!Number.isFinite(a) || (rx.n == null && rx.d == null) || (ry.n == null && ry.d == null)) return null;
+      const c = Math.cos(a), s = Math.sin(a);
+      const X = rx.d != null ? [c * rx.d, 0] : [c * rx.n! * vx[0], c * rx.n! * vx[1]];
+      const Y = ry.d != null ? [0, s * ry.d] : [s * ry.n! * vy[0], s * ry.n! * vy[1]];
+      return { x: X[0] + Y[0], y: -(X[1] + Y[1]) };
     }
     const parts = splitTop(raw, ',');
-    if (parts.length === 2) {
-      const x = len(parts[0]), y = len(parts[1]);
-      if (isFinite(x!) && isFinite(y!)) return { x: x! * (C.sx / PX), y: -y! * (C.sy / PX) };
+    if (parts.length === 2 || parts.length === 3) {
+      // each part: a length along its axis, or that many unit vectors
+      const P = parts.map(part), V = [vx, vy, vz];
+      if (P.every((q) => q.n != null || q.d != null)) {
+        let X = 0, Y = 0;
+        P.forEach((q, i) => {
+          if (q.n != null) { X += q.n * V[i][0]; Y += q.n * V[i][1]; }
+          else if (i === 0) X += q.d!; else if (i === 1) Y += q.d!; else { X += q.d! * vz[0] / PX; Y += q.d! * vz[1] / PX; }
+        });
+        return { x: X, y: -Y };
+      }
+      if (parts.length === 3) return null;
     }
-    if (parts.length === 3) return null; // 3d
     const nm = raw.replace(/\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|\d+)$/, '').trim();
     if (C.unresolved?.has(nm)) return null;
     if (C.names[nm]) {
+      const g = C.geo?.[nm], an = raw.slice(nm.length + 1).trim();
+      if (g && raw.trim() === nm) return toLocal(C, { ...C.names[nm], node: nm, bare: true });
+      if (g && an && an !== 'base' && an !== 'mid') { const q = anchorOf(g, an); if (q) return toLocal(C, { ...q, node: nm }); }
       const box = C.boxes[nm], anchor = raw.slice(nm.length + 1), uv = TD.nodeFeatures?.anchorUV(anchor,box?.shape?.type);
       if (box?.native && uv && TD.nodeFeatures.anchors.includes(anchor)) {
         const frame = TD.rotFrame(box.shape), [u,v] = uv;
-        if (frame) return { x:frame[0][0]+u*(frame[1][0]-frame[0][0])+v*(frame[3][0]-frame[0][0]), y:frame[0][1]+u*(frame[1][1]-frame[0][1])+v*(frame[3][1]-frame[0][1]), node:nm };
+        if (frame) return toLocal(C, { x:frame[0][0]+u*(frame[1][0]-frame[0][0])+v*(frame[3][0]-frame[0][0]), y:frame[0][1]+u*(frame[1][1]-frame[0][1])+v*(frame[3][1]-frame[0][1]), node:nm });
       }
-      return { ...C.names[nm], node: nm };
+      return toLocal(C, { ...C.names[nm], node: nm });
     }
     return null;
   }
@@ -393,13 +609,32 @@ import { runtime as TD } from '../runtime';
   // ---------- shapes from a path command ----------
   function pathToShapes(C: any, cmd: any, optStr: any, body: any) {
     const opts = parseOpts(optStr);
-    const st = style(C, opts, cmd);
+    let st = style(C, opts, cmd);
     const toks = tokenizePath(C, body, (w: any) => C.warnings.push(w));
-    const out: any[] = [];
+    const out: any[] = [], post: any[] = [];
     const L = { label: '', labelPos: 0.5, labelSide: 'left', size: 'normalsize', font: 'default', bold: false, italic: false, color: '#000000' };
-    const lineStyle = { stroke: st.stroke, width: st.width, dash: st.dash, opacity: st.opacity };
+    let lineStyle = { stroke: st.stroke, width: st.width, dash: st.dash, opacity: st.opacity };
+    // a bare node name stands for the node's border: where a ray from its centre towards `toward` leaves it
+    const geoAt = (p: any) => p && p.bare && C.geo?.[p.node];
+    const clip = (p: any, toward: any) => { const g = geoAt(p); return g ? toLocal(C, { ...borderToward(g, toAbs(C, toward)), node: p.node, border: true }) : p; };
+    // a `to` (or edge) between a and b: straight, or the curve out=/in=/bend give (controls 0.3915 × the distance
+    // between its ends, times looseness; ends on the nodes' borders in those directions)
+    const toSeg = (a0: any, b0: any, o: any) => {
+      const bend = o.bend, curved = Number.isFinite(o.out) || Number.isFinite(o.in) || (bend != null && bend !== 0);
+      if (!curved) { const a = clip(a0, b0), b = clip(b0, a0); return { k: 'L', pts: [a, b] }; }
+      const ang = Math.atan2(-(b0.y - a0.y), b0.x - a0.x) * 180 / Math.PI;
+      const outA = Number.isFinite(o.out) || Number.isFinite(o.in) ? (Number.isFinite(o.out) ? o.out : ang) : ang + bend;
+      const inA = Number.isFinite(o.out) || Number.isFinite(o.in) ? (Number.isFinite(o.in) ? o.in : ang + 180) : ang + 180 - bend;
+      const dir = (t: number) => ({ x: Math.cos(t * Math.PI / 180), y: -Math.sin(t * Math.PI / 180) });
+      const da = dir(outA), db = dir(inA);
+      const a = clip(a0, { x: a0.x + da.x, y: a0.y + da.y }), b = clip(b0, { x: b0.x + db.x, y: b0.y + db.y });
+      const L = Math.hypot(b.x - a.x, b.y - a.y) * 0.3915 * (Number.isFinite(o.looseness) ? o.looseness : 1);
+      return { k: 'C', pts: [a, { x: a.x + da.x * L, y: a.y + da.y * L }, { x: b.x + db.x * L, y: b.y + db.y * L }, b] };
+    };
     // Walk the path building "subpaths" of segments.
-    let cur: any = null, start = null;
+    // cur: where the path is (lines go on from it, nodes go at it); base: what +(…) is relative to (a + point
+    // moves the path there but leaves base where it was)
+    let cur: any = null, start = null, base: any = null;
     let segs: any[] = []; // {k:'L'|'C', pts:[...], label}
     let closed = false;
     const flush = () => {
@@ -421,20 +656,20 @@ import { runtime as TD } from '../runtime';
             out.push({ type: 'spring', x1: a.x, y1: a.y, x2: b.x, y2: b.y, coils: Math.max(1, Math.round((Lp - 2 * (pre || 0)) / (seg ? len(seg) : 10)!)), amplitude: amp ? len(amp) : 6, ...lineStyle, stroke: st.stroke || '#000000', dash: 'solid' });
             return;
           }
-          if (st.bend) { // to[bend ...] -> cubic
+          if (st.bend && false) { // to[bend ...] -> cubic (now built per `to` by toSeg)
             const u = { x: b.x - a.x, y: b.y - a.y }, d = Math.hypot(u.x, u.y), th = (st.bend * Math.PI) / 180;
             const ux = u.x / d, uy = u.y / d, c = Math.cos(th), sn = Math.sin(th), Lc = 0.3915 * d;
             const dA = { x: ux * c + uy * sn, y: -ux * sn + uy * c }, dB = { x: -ux * c + uy * sn, y: -ux * sn - uy * c };
             out.push({ type: 'curve', x1: a.x, y1: a.y, cx1: a.x + dA.x * Lc, cy1: a.y + dA.y * Lc, cx2: b.x + dB.x * Lc, cy2: b.y + dB.y * Lc, x2: b.x, y2: b.y, ...lineStyle, stroke: st.stroke || '#000000', startTip: tipStart, endTip: tipEnd, ...L, ...(g.label || {}) });
             return;
           }
-          out.push({ type: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...lineStyle, stroke: st.stroke || (st.fill ? null : '#000000'), startTip: tipStart, endTip: tipEnd, ...L, ...(g.label || {}) });
+          out.push({ type: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...lineStyle, stroke: st.stroke || (st.fill ? null : '#000000'), startTip: tipStart, endTip: tipEnd, ...L, ...(g.label || {}), ...(a.border ? { _b1: a.node } : {}), ...(b.border ? { _b2: b.node } : {}) });
           if (!st.stroke && st.fill) out[out.length - 1].stroke = st.fill;
           return;
         }
         if (g.k === 'C') {
           const [a, c1, c2, b] = g.pts;
-          out.push({ type: 'curve', x1: a.x, y1: a.y, cx1: c1.x, cy1: c1.y, cx2: c2.x, cy2: c2.y, x2: b.x, y2: b.y, ...lineStyle, stroke: st.stroke || '#000000', startTip: tipStart, endTip: tipEnd, ...L, ...(g.label || {}) });
+          out.push({ type: 'curve', x1: a.x, y1: a.y, cx1: c1.x, cy1: c1.y, cx2: c2.x, cy2: c2.y, x2: b.x, y2: b.y, ...lineStyle, stroke: st.stroke || '#000000', startTip: tipStart, endTip: tipEnd, ...L, ...(g.label || {}), ...(a.border ? { _b1: a.node } : {}), ...(b.border ? { _b2: b.node } : {}) });
           return;
         }
       }
@@ -460,10 +695,23 @@ import { runtime as TD } from '../runtime';
     const resolve = (tk: any) => {
       const p = coord(C, tk.raw, cur);
       if (!p) { C.warnings.push(`Unsupported coordinate (${tk.raw})`); return null; }
-      if (tk.rel && cur) return { x: cur.x + p.x, y: cur.y + p.y };
+      const b = base || cur;
+      if (tk.rel && b) return { x: b.x + p.x, y: b.y + p.y };
       return p;
     };
-    let pendingOp = null, ctrl = [], lastSegLabel = null, lastArc = null;
+    let pendingOp: any = null, ctrl: any[] = [], lastSegLabel: any = null, lastArc: any = null, toOpts: any[] = [], onSeg: any[] = [];
+    // nodes on a -- or to with a placement of their own (above, anchor=…): at pos along it, by that anchor
+    const placeOnSeg = (g: any) => {
+      for (const n of onSeg) {
+        const t = n.t, q = g.pts, P = g.k === 'C'
+          ? { x: (1 - t) ** 3 * q[0].x + 3 * (1 - t) ** 2 * t * q[1].x + 3 * (1 - t) * t * t * q[2].x + t ** 3 * q[3].x, y: (1 - t) ** 3 * q[0].y + 3 * (1 - t) ** 2 * t * q[1].y + 3 * (1 - t) * t * t * q[2].y + t ** 3 * q[3].y }
+          : { x: q[0].x + (q[1].x - q[0].x) * t, y: q[0].y + (q[1].y - q[0].y) * t };
+        const sh = textShape(C, n.text, n.no, P, st.color); delete sh._box; post.push(sh);
+      }
+      onSeg = [];
+    };
+    const no0 = (o: any) => parseOpts(o);
+    const pathTo = () => ({ bend: st.bend, out: st.out, in: st.in, looseness: st.looseness });
     for (let i = 0; i < toks.length; i++) {
       const tk = toks[i];
       if (tk.t === 'pic') {
@@ -471,7 +719,7 @@ import { runtime as TD } from '../runtime';
         if (code == null) { C.warnings.push(`Unresolved pic (${tk.body})`); continue; }
         if (++PIC_PASSES > 1000 || PS_DEPTH >= 32) { C.warnings.push('Pic expansion limit exceeded'); continue; }
         const P = { ...C, preview:false, stmts:[], struct:null, warnings:[], scopes:[],
-          styles:new Map(C.styles), macros:new Map(C.macros), names:{}, boxes:{}, kinds:{}, unresolved:new Set(), picIssue:null };
+          styles:new Map(C.styles), macros:new Map(C.macros), names:{}, boxes:{}, geo:{}, kinds:{}, unresolved:new Set(), picIssue:null };
         try {
           const made = parseStatements(P,blankComments(code));
           const raw = made.filter((p: any) => p.type === 'tikz' && p.kind !== 'defs');
@@ -488,11 +736,25 @@ import { runtime as TD } from '../runtime';
         const p = resolve(tk);
         if (!p) { pendingOp = null; continue; }
         if (pendingOp === 'controls') { ctrl.push({ ...p, rel: tk.rel, offset: tk.rel ? coord(C, tk.raw) : null }); continue; }
+        // nothing to draw from (the point before could not be read): this one starts the path again
+        if (!cur && pendingOp && pendingOp !== 'controls') { flush(); start = p; cur = base = p; pendingOp = null; toOpts = []; lastSegLabel = null; continue; }
         if (pendingOp === '--' || pendingOp === 'to' || pendingOp === '|-' || pendingOp === '-|') {
           if (pendingOp === '|-') segs.push({ k: 'L', pts: [cur, { x: cur.x, y: p.y }] }, { k: 'L', pts: [{ x: cur.x, y: p.y }, p] });
           else if (pendingOp === '-|') segs.push({ k: 'L', pts: [cur, { x: p.x, y: cur.y }] }, { k: 'L', pts: [{ x: p.x, y: cur.y }, p] });
-          else segs.push({ k: 'L', pts: [cur, p], label: lastSegLabel });
-          lastSegLabel = null;
+          else {
+            const o = pendingOp === 'to' ? { ...pathTo(), ...(toOpts.length ? (({ bend, out, in: inn, looseness }: any) => ({ ...(bend != null ? { bend } : {}), ...(Number.isFinite(out) ? { out } : {}), ...(Number.isFinite(inn) ? { in: inn } : {}), ...(Number.isFinite(looseness) ? { looseness } : {}) }))(style(C, toOpts, cmd)) : {}) } : {};
+            const g = toSeg(cur, p, o);
+            // TikZ starts a new piece where the path leaves a node's border
+            if (g.pts[0].border && segs.length) flush();
+            segs.push({ ...g, label: lastSegLabel });
+            placeOnSeg(g);
+          }
+          if (pendingOp === '|-' || pendingOp === '-|') {
+            const sg = segs.slice(-2);
+            sg[0].pts[0] = clip(sg[0].pts[0], sg[0].pts[1]); sg[1].pts[1] = clip(sg[1].pts[1], sg[1].pts[0]);
+            if (sg[0].pts[0].border && segs.length > 2) { const keep = segs.splice(-2); flush(); segs.push(...keep); }
+          }
+          lastSegLabel = null; toOpts = [];
         } else if (pendingOp === '..') {
           const c1 = ctrl[0], last = ctrl[1] || ctrl[0];
           const c2 = ctrl[1]?.rel && last.offset ? { x: p.x + last.offset.x, y: p.y + last.offset.y } : last;
@@ -505,28 +767,50 @@ import { runtime as TD } from '../runtime';
           out.push({ type: 'rect', x, y, w: Math.abs(p.x - cur.x), h: Math.abs(p.y - cur.y), radius: st.radius || 0, ...lineStyle, fill: st.fill });
         } else if (pendingOp === 'grid') {
           flush();
-          C.warnings.push('grid paths are drawn as a rectangle');
-          out.push({ type: 'rect', x: Math.min(cur.x, p.x), y: Math.min(cur.y, p.y), w: Math.abs(p.x - cur.x), h: Math.abs(p.y - cur.y), radius: 0, ...lineStyle, fill: null });
+          // lines at the multiples of the step (TikZ's grid is aligned to the origin) inside the rectangle
+          const gs = toOpts.length ? style(C, toOpts, cmd) : st;
+          const xs = gs.xstep ?? gs.step ?? st.xstep ?? st.step ?? PX, ys = gs.ystep ?? gs.step ?? st.ystep ?? st.step ?? PX;
+          const x0 = Math.min(cur.x, p.x), x1 = Math.max(cur.x, p.x), y0 = Math.min(cur.y, p.y), y1 = Math.max(cur.y, p.y);
+          if (!(xs > 0) || !(ys > 0) || (x1 - x0) / xs + (y1 - y0) / ys > 400) C.warnings.push('grid not understood');
+          else {
+            const e = 1e-6;
+            for (let n = Math.ceil(x0 / xs - e); n * xs <= x1 + e * xs; n++) out.push({ type: 'line', x1: n * xs, y1: y1, x2: n * xs, y2: y0, ...lineStyle, stroke: st.stroke || '#000000', startTip: 'none', endTip: 'none', ...L });
+            for (let n = Math.ceil(y0 / ys - e); n * ys <= y1 + e * ys; n++) out.push({ type: 'line', x1: x0, y1: n * ys, x2: x1, y2: n * ys, ...lineStyle, stroke: st.stroke || '#000000', startTip: 'none', endTip: 'none', ...L });
+          }
+          toOpts = [];
+        } else if (pendingOp === 'edge') {
+          // an edge: its own path from the current point (which stays where it is), drawn with the edge's options
+          // (every edge is `draw` unless the picture says otherwise: then a \path edge is drawn only if it says so)
+          let ee: any[] = [];
+          if (C.styles?.has('every edge')) { const su = styUsed; try { ee = parseOpts('every edge'); } catch { ee = []; } styUsed = su; }
+          const drawn = cmd !== 'path' || !C.styles?.has('every edge') || [...ee, ...toOpts].some((o: any) => o.k === 'draw' && o.v !== 'none');
+          const eo = [...ee, ...toOpts], es = style(C, [...opts, ...eo], cmd === 'path' ? 'draw' : cmd);
+          if (!drawn) { lastSegLabel = null; toOpts = []; pendingOp = null; continue; }
+          const g = toSeg(cur, p, { bend: es.bend, out: es.out, in: es.in, looseness: es.looseness });
+          const keep: any[] = [st, lineStyle];
+          st = es; lineStyle = { stroke: es.stroke, width: es.width, dash: es.dash, opacity: es.opacity };
+          try { emitSegs([{ ...g, label: lastSegLabel }], false); } finally { [st, lineStyle] = keep; }
+          lastSegLabel = null; toOpts = []; pendingOp = null;
+          continue;
         } else { // move-to
           flush();
           start = p;
         }
-        if (relKind !== 1) cur = p; else if (!cur) cur = p;
-        if (relKind === 1 && pendingOp) { /* + does not update current point */ }
+        cur = p; if (relKind !== 1 || !base) base = p;
         pendingOp = null;
         continue;
       }
       if (tk.t === 'op') {
         switch (tk.v) {
-          case '--': case 'to': case '|-': case '-|': case 'rectangle': case 'grid': pendingOp = tk.v; break;
+          case '--': case 'to': case '|-': case '-|': case 'rectangle': case 'grid': case 'edge': pendingOp = tk.v; toOpts = []; break;
           case '..': pendingOp = pendingOp === 'and' || pendingOp === 'controls' ? '..' : 'controls'; if (pendingOp === 'controls') ctrl = []; break;
           case 'controls': pendingOp = 'controls'; ctrl = []; break;
           case 'and': break;
           case 'cycle':
             if (pendingOp === '--' && start && cur) segs.push({ k: 'L', pts: [cur, start] });
-            closed = true; pendingOp = null; cur = start; flush(); break;
+            closed = true; pendingOp = null; cur = base = start; flush(); break;
           case 'circle': case 'ellipse': {
-            if (!cur) cur = {x:0,y:0};
+            if (!cur) cur = base = {x:0,y:0};
             let rx, ry;
             const nx = toks[i + 1];
             if (nx && nx.t === 'coord') { // (r) or (rx and ry)
@@ -546,7 +830,7 @@ import { runtime as TD } from '../runtime';
             const nx = toks[i + 1];
             let a1, a2, r, ry;
             if (nx && nx.t === 'opts') { const so = style(C, parseOpts(nx.v), cmd); a1 = so.a1; a2 = so.a2 ?? (so.da != null ? a1 + so.da : undefined); r = so.r ?? so.rx; ry = so.r != null ? r : so.ry ?? r; i++; }
-            else if (nx && nx.t === 'coord') { const q = nx.raw.split(':'); a1 = TD.evalNumber(expandMac(q[0]), NaN); a2 = TD.evalNumber(expandMac(q[1]), NaN); const rr = (q[2] || '').split(/\s+and\s+/); r = len(rr[0]); ry = rr[1] != null ? len(rr[1]) : r; i++; }
+            else if (nx && nx.t === 'coord') { const q = nx.raw.split(':'); a1 = pgfNum(expandMac(q[0]), NaN); a2 = pgfNum(expandMac(q[1]), NaN); const rr = (q[2] || '').split(/\s+and\s+/); r = len(rr[0]); ry = rr[1] != null ? len(rr[1]) : r; i++; }
             if (![a1, a2, r].every(isFinite) || !cur) { C.warnings.push('arc not understood'); break; }
             if (!isFinite(ry) || !(ry > 0)) ry = r;
             const c = { x: cur.x - r * Math.cos((a1 * Math.PI) / 180), y: cur.y + ry * Math.sin((a1 * Math.PI) / 180) };
@@ -561,30 +845,56 @@ import { runtime as TD } from '../runtime';
               for (let k = 1; k <= n; k++) { const a = ((a1 + ((a2 - a1) * k) / n) * Math.PI) / 180; pts.push({ x: c.x + r * Math.cos(a), y: c.y - ry * Math.sin(a) }); }
               segs.push({ k: 'A', pts });
             }
-            cur = end; lastArc = { c, r, a1, a2, end };
+            cur = base = end; lastArc = { c, r, a1, a2, end };
             break;
           }
           default: C.warnings.push(`Path operation “${tk.v}” not supported`);
         }
         continue;
       }
-      if (tk.t === 'opts') { const so = style(C, parseOpts(tk.v), cmd); if (so.bend) st.bend = so.bend; continue; }
+      if (tk.t === 'opts') {
+        if (pendingOp === 'to' || pendingOp === 'edge' || pendingOp === 'grid') { toOpts.push(...parseOpts(tk.v)); continue; }
+        const so = style(C, parseOpts(tk.v), cmd); if (so.bend) st.bend = so.bend; continue;
+      }
+      // coordinate (A) on a path: names the current point; its labels are text by that point
+      if (tk.t === 'node' && tk.coordinate) {
+        if (cur) {
+          // (kept as a named point, so the code after it that names it still finds it once this is rewritten)
+          if (tk.name) { C.names[tk.name] = toAbs(C, cur); (C.kinds ||= {})[tk.name] = 'coordinate'; if (C.geo) delete C.geo[tk.name]; if (C.boxes) delete C.boxes[tk.name]; post.push({ type: 'coord', x: cur.x, y: cur.y, tikzName: tk.name }); }
+          const ls = labelShapes(C, parseOpts(tk.opts), { kind: 'rect', c: { ...cur }, U: { x: 0, y: 0 }, V: { x: 0, y: 0 } }, st.color);
+          if (ls) post.push(...ls);
+        }
+        continue;
+      }
       if (tk.t === 'node') {
-        const no = parseOpts(tk.opts), ns = style(C, no, 'node');
+        const toPos = pendingOp === 'to' ? lastOpt(toOpts, 'pos') : null;
+        const no = [...(toPos && !no0(tk.opts).some((o: any) => ['pos', 'midway', 'near start', 'near end', 'at start', 'at end'].includes(o.k)) ? [toPos] : []), ...no0(tk.opts)], ns = style(C, no, 'node');
         const fs = fontStyle(ns.font);
         const lab = { label: tk.text, labelSide: no.some((o: any) => o.k === 'swap' || o.k === "'") ? 'right' : no.some((o: any) => o.k === 'fill') ? 'on' : 'left', labelPos: isFinite(ns.pos) ? ns.pos : no.some((o: any) => o.k === 'near start') ? 0.25 : no.some((o: any) => o.k === 'near end') ? 0.75 : 0.5, ...fs, color: ns.color || st.color || '#000000' };
-        if (pendingOp === '--' || pendingOp === 'to') { lastSegLabel = lab; continue; }
+        const placed = no.some((o: any) => PLACE_ANCHOR[o.k] || o.k === 'anchor') && !no.some((o: any) => ['sloped', 'auto', 'swap', "'", 'draw', 'fill'].includes(o.k)) && !tk.name;
+        if ((pendingOp === '--' || pendingOp === 'to') && placed && tk.text!.trim()) { onSeg.push({ text: tk.text, no, t: lab.labelPos }); continue; }
+        if (pendingOp === '--' || pendingOp === 'to' || pendingOp === 'edge') { lastSegLabel = lab; continue; }
         const along = no.some((o: any) => ['midway', 'near start', 'near end', 'pos', 'sloped', 'auto', 'swap'].includes(o.k));
         if (along && segs.length && segs[segs.length - 1].k === 'L' && segs.length === 1) { segs[0].label = lab; continue; }
         // midway (or pos=) on the arc just drawn: the point that far round it
         if (along && lastArc && lastArc.end === cur) {
           const A = lastArc, a = ((A.a1 + (A.a2 - A.a1) * lab.labelPos) * Math.PI) / 180;
-          if (tk.text!.trim()) out.push(textShape(C, tk.text, no, { x: A.c.x + A.r * Math.cos(a), y: A.c.y - A.r * Math.sin(a) }, st.color));
+          if (tk.text!.trim()) { const t = textShape(C, tk.text, no, { x: A.c.x + A.r * Math.cos(a), y: A.c.y - A.r * Math.sin(a) }, st.color); delete t._box; post.push(t); }
           continue;
         }
-        // node at the current point (e.g. after a coordinate): emit as a text shape
-        if (cur && tk.text!.trim()) out.push(textShape(C, tk.text, no, cur, st.color));
-        if (tk.name && cur) C.names[tk.name] = { ...cur };
+        // node at the current point (e.g. after a coordinate): a node with a border, or a text shape, drawn on top
+        const pno = [...everyNode(C, nodeShapeName(no) || 'rectangle'), ...no];
+        const border = pno.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none'), shp = nodeShapeName(pno) || (border ? 'rectangle' : null);
+        if (cur && shp && NODE_SHAPES[shp] && (border || pno.some((o: any) => /^minimum /.test(o.k)))) {
+          const pl = placeOf(pno, cur, C), B = boxNode(C, lineBreaks(tk.text!), pno, pl.at, pl.anchor, shp), made = B.shape;
+          if (tk.name) made.nodeName = tk.name;
+          delete made._importNodeAt;
+          post.push(made);
+          // named, untransformed: its border, so the paths after it stop there as TikZ does
+          const fr = tk.name && !(C.scopes || []).some((L: any) => L.xf && L.xf.length) && !opts.some((o: any) => XF_KEYS.has(o.k)) && TD.rotFrame(made);
+          if (fr) { const g = geoOf(B.kind, fr, B.os); (C.geo ||= {})[tk.name] = g; C.names[tk.name] = { ...g!.c }; (C.kinds ||= {})[tk.name] = 'node'; continue; }
+        } else if (cur && tk.text!.trim()) { const t = textShape(C, tk.text, pno, cur, st.color); delete t._box; post.push(t); }
+        if (tk.name && cur) { C.names[tk.name] = toAbs(C, cur); if (C.geo) delete C.geo[tk.name]; }
         continue;
       }
     }
@@ -601,12 +911,169 @@ import { runtime as TD } from '../runtime';
     };
     if (ends.length) { pull(ends[0], true, st.shStart); pull(ends[ends.length - 1], false, st.shEnd); }
     for (const x of out) delete x._rev;
+    pushAll(out, post);
     if (st.bend) for (const s of out) if (s.type === 'line') {
       // `to[bend]` handled above for single segments; nothing else to do
     }
     return out;
   }
 
+  // ---------- nodes: TikZ's box model ----------
+  // A node's size is its text's TeX box (width, height above and depth below the baseline) plus inner sep on
+  // each side, at least its minimum size. The app's text boxes are line boxes (taller than TeX's), so the height
+  // and depth come from Computer Modern's metrics per em instead.
+  const sizePt = (fs: any) => typeof fs.size === 'number' ? fs.size * K : ((TD.SIZES || []).find((q: any) => q[0] === fs.size)?.[1] ?? 10);
+  function texBox(text: string, fs: any) {
+    const em = sizePt(fs) / K, lines = String(text).split('\n'), tb = TD.textBox(text || ' ', fs);
+    const w = Math.max(0, tb.w - 2);
+    if (!String(text).trim()) return { w: 0, ht: 0, dp: 0 };
+    const one = (t: string) => {
+      if (/\\(?:frac|dfrac|tfrac|sum|int|prod|sqrt|binom|over|begin|underbrace|overbrace|left|right|displaystyle)\b|[\^_]/.test(t)) return null;
+      const p = t.replace(/\\(?:textbf|textit|textrm|textsf|texttt|emph|mathrm|mathbf|mathit|mathsf|text|bfseries|itshape|small|large|Large|footnotesize|scriptsize|tiny|huge)\b/g, '').replace(/[${}~]/g, '');
+      const greek = /\\[A-Za-z]+/.test(p), bare = p.replace(/\\[A-Za-z]+/g, '');
+      const ht = /[()[\]|/]/.test(bare) ? 0.75 : /[A-Z0-9bdfhkl!?'"`&%#@]/.test(bare) || /\\(?:[A-Z][a-z]+|beta|delta|zeta|theta|lambda|xi|phi|psi|ell|partial|infty|nabla)\b/.test(p) ? 0.694
+        : /[ijt]/.test(bare) ? 0.669 : /\S/.test(bare) || greek ? 0.431 : 0;
+      const dp = /[()[\]|/]/.test(bare) ? 0.25 : /[gjpqyQ,;]/.test(bare) || /\\(?:beta|gamma|zeta|eta|mu|xi|rho|phi|varphi|chi|psi)\b/.test(p) ? 0.194 : 0;
+      return { ht: ht * em, dp: dp * em };
+    };
+    const first = one(lines[0]), last = one(lines[lines.length - 1]);
+    if (!first || !last || lines.some((l) => !one(l))) return { w, ht: tb.h / 2, dp: tb.h / 2 };
+    const skip = 1.2 * em * (lines.length - 1);
+    return { w, ht: first.ht + skip / 2, dp: last.dp + skip / 2, lines: lines.length, base: skip };
+  }
+  // the node shapes the model holds: rectangle (rect), circle and ellipse (ellipse)
+  const NODE_SHAPES: Record<string, string> = { rectangle: 'rect', circle: 'ellipse', ellipse: 'ellipse' };
+  const NODE_BOX_KEYS = new Set(['inner sep', 'inner xsep', 'inner ysep', 'minimum size', 'minimum width', 'minimum height', 'outer sep', 'outer xsep', 'outer ysep', 'text width', 'align', 'text centered', 'rectangle', 'circle', 'ellipse', 'shape', 'rounded corners', 'node distance', 'on grid']);
+  // the shape a node's options ask for: null for a node without a border (text), undefined for a shape the model
+  // does not hold
+  function nodeShapeName(nopts: any[]) {
+    const o = [...nopts].reverse().find((q: any) => (q.v === null && q.k in NODE_SHAPES) || q.k === 'shape' || (q.v === null && /^(diamond|star|regular polygon|trapezium|semicircle|isosceles triangle|kite|dart|circular sector|cylinder|rounded rectangle|chamfered rectangle|cloud|signal|tape|single arrow|double arrow|circle split|rectangle split|ellipse split|forbidden sign|magnifying glass|cross out|strike out|circle ee|starburst)$/.test(q.k)));
+    return o ? (o.k === 'shape' ? String(o.v).trim() : o.k) : null;
+  }
+  // geometry of a node from its options and text: kind, full width and height (px), the separation used, text box
+  function innerSeps(nopts: any[]) {
+    let sep: number | undefined, sx = 3.333 / K, sy = 3.333 / K;
+    for (const o of nopts) {
+      if (o.k === 'inner sep') { sep = len(o.v, 'pt') as number; sx = sy = sep; }
+      else if (o.k === 'inner xsep') sx = len(o.v, 'pt') as number;
+      else if (o.k === 'inner ysep') sy = len(o.v, 'pt') as number;
+    }
+    return { sep, sx, sy };
+  }
+  function nodeSize(C: any, nopts: any[], text: string, fs: any, shapeName: string) {
+    const kind = NODE_SHAPES[shapeName];
+    const get = (k: string) => { const o = [...nopts].reverse().find((q: any) => q.k === k); return o ? len(o.v, 'pt') : undefined; };
+    const { sep, sx, sy } = innerSeps(nopts);
+    const ms = get('minimum size'), mw = get('minimum width') ?? ms, mh = get('minimum height') ?? ms;
+    const tb = texBox(text, fs), tw = get('text width');
+    const bw = (Number.isFinite(tw) ? (tw as number) : tb.w), bh = tb.ht + tb.dp;
+    let w = bw + 2 * sx, h = bh + 2 * sy;
+    if (shapeName === 'circle') { const d = 2 * Math.hypot(w / 2, h / 2); w = h = Math.max(d, Number.isFinite(ms) ? ms as number : 0, Number.isFinite(mw) ? mw as number : 0, Number.isFinite(mh) ? mh as number : 0); }
+    else {
+      if (shapeName === 'ellipse') { w *= Math.SQRT2; h *= Math.SQRT2; }
+      w = Math.max(w, Number.isFinite(mw) ? mw as number : 0); h = Math.max(h, Number.isFinite(mh) ? mh as number : 0);
+    }
+    // (a negative inner sep is allowed: TikZ draws the box that much smaller than the text)
+    const bad = [sep, sx, sy].some((v) => v !== undefined && !Number.isFinite(v)) || [mw, mh].some((v) => v !== undefined && !(Number.isFinite(v) && (v as number) >= 0)) || !(w > 0 && h > 0);
+    return { kind, w, h, sx, sy, tb, tw, bad };
+  }
+  // a node's border as geometry (px, y down): centre, its two half axes (rotated with the node) and its kind
+  // (anchors and line ends are on the outer border: `os`, outer sep, outside the drawn one)
+  function geoOf(kind: string, frame: any, os = 0) {
+    if (!frame) return null;
+    const [a, b, , d] = frame, c = { x: (frame[0][0] + frame[2][0]) / 2, y: (frame[0][1] + frame[2][1]) / 2 };
+    const grow = (x: number, y: number) => { const n = Math.hypot(x, y); return n > 0 ? { x: x * (n + os) / n, y: y * (n + os) / n } : { x: os, y: 0 }; };
+    return { kind, c, U: grow((b[0] - a[0]) / 2, (b[1] - a[1]) / 2), V: grow((d[0] - a[0]) / 2, (d[1] - a[1]) / 2) };
+  }
+  // outer sep: given, else half the line width (TikZ's default)
+  const outerSep = (nopts: any[], width: number) => { const o = lastOpt(nopts, 'outer sep'); const v = o ? len(o.v, 'pt') as number : NaN; return Number.isFinite(v) ? v : (width || 0.4 / K) / 2; };
+  // where a ray from the node's centre towards P leaves its border
+  function borderToward(g: any, P: any) {
+    const dx = P.x - g.c.x, dy = P.y - g.c.y, det = g.U.x * g.V.y - g.U.y * g.V.x;
+    if (!det || (!dx && !dy)) return { ...g.c };
+    const p = (dx * g.V.y - dy * g.V.x) / det, q = (g.U.x * dy - g.U.y * dx) / det;
+    const n = g.kind === 'ellipse' ? Math.hypot(p, q) : Math.max(Math.abs(p), Math.abs(q));
+    return n > 0 ? { x: g.c.x + dx / n, y: g.c.y + dy / n } : { ...g.c };
+  }
+  // an anchor of a node by name (compass, or a border angle such as 30), px y down
+  function anchorOf(g: any, a: string) {
+    a = String(a || 'center').trim();
+    if (TD.nodeFeatures?.anchors.includes(a)) {
+      const [u, v] = TD.nodeFeatures.anchorUV(a, g.kind === 'ellipse' ? 'ellipse' : 'rect'), p = 2 * u - 1, q = 2 * v - 1;
+      return { x: g.c.x + p * g.U.x + q * g.V.x, y: g.c.y + p * g.U.y + q * g.V.y };
+    }
+    const ang = Number(a);
+    if (Number.isFinite(ang)) { const r = ang * Math.PI / 180; return borderToward(g, { x: g.c.x + Math.cos(r), y: g.c.y - Math.sin(r) }); }
+    return null;
+  }
+  const PLACE_ANCHOR: Record<string, string> = { above: 'south', below: 'north', left: 'east', right: 'west', 'above left': 'south east', 'above right': 'south west', 'below left': 'north east', 'below right': 'north west' };
+  // `every node/.style` (and `every circle node` etc.): the options every node starts with
+  function everyNode(C: any, shape?: string) {
+    const keep = styUsed; styUsed = null;
+    try { return [...(C.styles?.has('every node') ? parseOpts('every node') : []), ...(shape && C.styles?.has(`every ${shape} node`) ? parseOpts(`every ${shape} node`) : [])]; }
+    finally { styUsed = keep; }
+  }
+  const OLD_OF = ['above of', 'below of', 'left of', 'right of', 'above left of', 'above right of', 'below left of', 'below right of'];
+  // start chain[=name] [going dir]: a chain's direction (right=of the last node, …), last node and count
+  function startChain(C: any, v: any, scoped: boolean) {
+    const m = /^\s*(?:(?!going\b)([^\s]+))?\s*(?:going\s+(.+?))?\s*$/.exec(String(v ?? ''));
+    if (!m) return false;
+    const name = m[1] || 'chain', dir = (m[2] || 'right').trim();
+    if (!PLACE_ANCHOR[dir]) return false;
+    (C.chains ||= {})[name] = { dir, last: null, n: 0, scoped };
+    C.chainCur = name;
+    return true;
+  }
+  const lastOpt = (opts: any[], k: string) => [...opts].reverse().find((o: any) => o.k === k);
+  // the anchor a node's options put at its position, and that position moved by above=2pt and the like
+  // below=0.5 (no `of`): a plain number is in cm with the positioning library, pt without (measured with pdflatex);
+  // a picture with no \usetikzlibrary seen is taken to have it
+  const placeUnit = (C: any) => !C?.libs || C.libs.includes('positioning') ? undefined : 'pt';
+  function placeOf(opts: any[], P: any, C?: any) {
+    const last = [...opts].reverse().find((o: any) => o.k === 'anchor' || PLACE_ANCHOR[o.k]);
+    if (!last) return { anchor: 'center', at: P, bad: null };
+    if (last.k === 'anchor') return { anchor: String(last.v || '').trim(), at: P, bad: null };
+    if (last.v == null || /\bof\b/.test(last.v)) return { anchor: PLACE_ANCHOR[last.k], at: P, bad: null };
+    const d = String(last.v).split(/\s+and\s+/).map((x: any) => len(x, placeUnit(C)) as number), sy = d[0], sx = d[1] ?? d[0];
+    if (!Number.isFinite(sx) || !Number.isFinite(sy)) return { anchor: PLACE_ANCHOR[last.k], at: P, bad: `${last.k}=${last.v}` };
+    return { anchor: PLACE_ANCHOR[last.k], at: { x: P.x + (/left/.test(last.k) ? -sx : /right/.test(last.k) ? sx : 0), y: P.y + (/above/.test(last.k) ? -sy : /below/.test(last.k) ? sy : 0) }, bad: null };
+  }
+  // a node with a border (rectangle, circle, ellipse) as a rect or ellipse holding its text; `at` is where its
+  // `anchor` goes. Returns the shape (before transforms), its size and the options it does not hold.
+  function boxNode(C: any, text: string, nopts: any[], at: any, anchor: string | null, shapeName: string) {
+    const st = style(C, nopts, 'node'), decoration = nodeDecorations(nopts), fs = fontStyle(st.font);
+    if (!nopts.some((o: any) => o.k === 'draw' && o.v !== 'none')) st.stroke = null;
+    const sz = nodeSize(C, nopts, text, fs, shapeName), bad: string[] = [];
+    const os = outerSep(nopts, st.width);
+    const g0 = { kind: sz.kind, c: { x: 0, y: 0 }, U: { x: sz.w / 2 + os, y: 0 }, V: { x: 0, y: sz.h / 2 + os } };
+    // base: the text's baseline ((height − depth)/2 below the centre); mid: half an ex above it
+    const bm = /^(base|mid)(?: (west|east))?$/.exec(String(anchor || '').trim());
+    const off = bm && (!bm[2] || sz.kind === 'rect')
+      ? { x: bm[2] === 'west' ? -(sz.w / 2 + os) : bm[2] === 'east' ? sz.w / 2 + os : 0, y: (sz.tb.ht - sz.tb.dp) / 2 - (bm[1] === 'mid' ? 2.15 * sizePt(fs) / 10 / K : 0) }
+      : anchorOf(g0, anchor || 'center');
+    if (!off) bad.push('anchor=' + anchor);
+    const c = { x: at.x - (off ? off.x : 0), y: at.y - (off ? off.y : 0) };
+    const made = TD.TYPES[sz.kind].create(c, st);
+    made.stroke = st.stroke ?? null; // (create gives a border by default: a node without draw has none)
+    Object.assign(made, sz.kind === 'rect' ? { x: c.x - sz.w / 2, y: c.y - sz.h / 2, w: sz.w, h: sz.h, radius: st.radius || 0 } : { cx: c.x, cy: c.y, rx: sz.w / 2, ry: sz.h / 2 }, fs, { color: st.color || '#000000' }, decoration.fields);
+    if (text) made.nodeText = text;
+    made._importNodeAt = { ...at };
+    const al = lastOpt(nopts, 'align')?.v?.trim(), centred = al === 'center' || nopts.some((o: any) => o.k === 'text centered');
+    if (al && !/^(center|left|right|flush center|flush left|flush right)$/.test(al)) bad.push('align=' + al);
+    if (Number.isFinite(sz.tw) && (!centred || sz.tb.w > (sz.tw as number) + 1)) bad.push('text width');
+    if (/\n/.test(text) && !centred) bad.push('align');
+    if (sz.bad) bad.push('inner sep');
+    // outer sep only moves where anchors and line ends are (geo): the drawing is the same
+    const allowed = new Set([...PATH_KEYS, ...NODE_KEYS, ...NODE_BOX_KEYS, ...OLD_OF]);
+    // labels the model does not hold: separate text shapes (not when the node is turned or scaled)
+    let labels: any[] = [], dIss = decoration.issues;
+    if (dIss.some((w: string) => /label/.test(w)) && !nopts.some((o: any) => o.k === 'pin')) {
+      const L = labelShapes(C, nopts, { ...g0, c }, st.color);
+      if (L) { labels = L; dIss = dIss.filter((w: string) => !/label/.test(w)); delete made.nodeLabel; delete made.nodeLabelPosition; }
+    }
+    bad.push(...unknownKeys(C, nopts, allowed), ...dIss);
+    return { shape: made, kind: sz.kind, w: sz.w, h: sz.h, os, bad, labels };
+  }
   function nodeDecorations(opts: any[]) {
     const fields: Record<string, any> = {}, issues: string[] = [];
     const seen = new Set();
@@ -625,22 +1092,60 @@ import { runtime as TD } from '../runtime';
     }
     return { fields, issues };
   }
-  function textShape(C: any, text: any, opts: any, P: any, inherit?: any) {
+  // labels a node's model does not hold (several, at an angle, with options): text shapes where TikZ puts them,
+  // or null. g: the node's border with its outer sep (px, y down). TikZ puts a label at the border point at its
+  // angle (above right = 45°), label distance further out, by its anchor on the other side (30° → south west),
+  // then moves it by its shift (all measured with pdflatex)
+  const LABEL_ANGLE: Record<string, number> = { above: 90, below: 270, left: 180, right: 0, 'above left': 135, 'above right': 45, 'below left': 225, 'below right': 315 };
+  const LABEL_SET = new Set(['shift', 'xshift', 'yshift', 'label distance', 'font', 'text', 'color', 'opacity', 'text opacity', 'inner sep', 'inner xsep', 'inner ysep', 'outer sep', 'anchor', 'name', 'align']);
+  function labelShapes(C: any, nopts: any[], g: any, inherit: any) {
+    const out: any[] = [];
+    for (const o of nopts) {
+      if (o.k !== 'label') continue;
+      let value = String(o.v || '').trim(), settings: any[] = [];
+      if (value[0] === '[') { const end = shut(value, 0, '[', ']'); settings = parseOpts(value.slice(1, end)); value = value.slice(end + 1); }
+      const parts = splitTop(value, ':'), position = parts.length > 1 ? parts.shift()!.trim() : 'above';
+      const text = parts.join(':').trim().replace(/^\{([\s\S]*)\}$/, '$1');
+      const th = LABEL_ANGLE[position] ?? pgfNum(expandMac(position), NaN);
+      if (!Number.isFinite(th) || !text) return null;
+      if (settings.some((x: any) => !LABEL_SET.has(x.k) && color(C, x.k) === undefined)) return null;
+      const r = th * Math.PI / 180, dir = { x: Math.cos(r), y: -Math.sin(r) };
+      const B = anchorOf(g, String(th));
+      if (!B) return null;
+      const dv = lastOpt(settings, 'label distance')?.v ?? C.labelDist, d = dv != null ? len(dv, 'pt') as number : 0;
+      if (!Number.isFinite(d)) return null;
+      let at = { x: B.x + d * dir.x, y: B.y + d * dir.y };
+      for (const x of settings) {
+        if (x.k === 'shift') { const q = coord(C, String(x.v).trim().replace(/^\{([\s\S]*)\}$/, '$1')); if (!q) return null; at = { x: at.x + q.x, y: at.y + q.y }; }
+        else if (x.k === 'xshift' || x.k === 'yshift') { const q = len(x.v) as number; if (!Number.isFinite(q)) return null; at = x.k === 'xshift' ? { x: at.x + q, y: at.y } : { x: at.x, y: at.y - q }; }
+      }
+      const h = Math.abs(dir.x) > 1e-3 ? (dir.x > 0 ? 'west' : 'east') : '', v = Math.abs(dir.y) > 1e-3 ? (dir.y < 0 ? 'south' : 'north') : '';
+      const own = lastOpt(settings, 'anchor')?.v?.trim();
+      const t = textShape(C, text, settings.filter((x: any) => !/^(shift|xshift|yshift|label distance|name|anchor)$/.test(x.k)), at, inherit, own || [v, h].filter(Boolean).join(' ') || 'center');
+      delete t._box; out.push(t);
+    }
+    return out;
+  }
+  function textShape(C: any, text: any, opts: any, P: any, inherit?: any, anchor?: string | null) {
     const st = style(C, opts, 'node');
     const fs = fontStyle(st.font);
     text = text.replace(/\$\s*\\displaystyle\b\s*([^$]*)\$/g, (m: any, x: any) => `$$${x.trim()}$$`);
-    const s = { ...nodeDecorations(opts).fields, type: 'text', x: P.x, y: P.y, text: text.replace(/\s*\\\\\s*/g, '\n').trim(), ...fs, color: st.color || inherit || '#000000', opacity: st.opacity ?? 1 };
-    // placement keys: shift by half the box + inner sep
-    const keys = opts.map((o: any) => o.k);
-    const b = TD.textBox(s.text || ' ', s);
-    const sh = 3.33 / K;
-    const pl = keys.find((k: any) => /^(above|below|left|right)( (left|right))?$/.test(k)) || '';
-    const anchor = st.anchor || '';
-    const dir = pl ? pl : anchor ? anchor.replace('north', 'below').replace('south', 'above').replace('east', 'left').replace('west', 'right') : '';
-    if (/above/.test(dir)) s.y -= b.h / 2 + (pl ? sh : 0);
-    if (/below/.test(dir)) s.y += b.h / 2 + (pl ? sh : 0);
-    if (/left/.test(dir)) s.x -= b.w / 2 + (pl ? sh : 0);
-    if (/right/.test(dir)) s.x += b.w / 2 + (pl ? sh : 0);
+    const s: any = { ...nodeDecorations(opts).fields, type: 'text', x: P.x, y: P.y, text: lineBreaks(text), ...fs, color: st.color || inherit || '#000000', opacity: st.opacity ?? 1 };
+    const al = lastOpt(opts, 'align')?.v?.trim();
+    if (al === 'left' || al === 'right' || al === 'flush left' || al === 'flush right') s.align = al.replace('flush ', '');
+    // TikZ puts the node's anchor (on its box: TeX's text box and inner sep) at the position
+    const tb = texBox(s.text, s), get = (k: string) => { const o = lastOpt(opts, k); return o ? len(o.v, 'pt') : undefined; };
+    const { sx, sy } = innerSeps(opts);
+    const os = outerSep(opts, st.width);
+    const hw = tb.w / 2 + (Number.isFinite(sx) ? sx as number : 3.333 / K) + os, hh = (tb.ht + tb.dp) / 2 + (Number.isFinite(sy) ? sy as number : 3.333 / K) + os;
+    let at = P;
+    if (anchor == null) { const pl = placeOf(opts, P, C); anchor = pl.anchor; at = pl.at; }
+    // base: the text's baseline ((height − depth)/2 below the centre); mid: half an ex above it
+    const bm = /^(base|mid)(?: (west|east))?$/.exec(String(anchor || '').trim());
+    const off = bm ? { x: bm[2] === 'west' ? -hw : bm[2] === 'east' ? hw : 0, y: (tb.ht - tb.dp) / 2 - (bm[1] === 'mid' ? 2.15 * sizePt(fs) / 10 / K : 0) }
+      : anchorOf({ kind: 'rect', c: { x: 0, y: 0 }, U: { x: hw, y: 0 }, V: { x: 0, y: hh } }, anchor || 'center') || { x: 0, y: 0 };
+    s.x = at.x - off.x; s.y = at.y - off.y;
+    s._box = { hw, hh, os };
     return s;
   }
 
@@ -648,7 +1153,7 @@ import { runtime as TD } from '../runtime';
   // ---------- coordinate transforms, in TikZ option order ----------
   // Returns the transform list in option order (TikZ applies the last one to points first),
   // and the options that are not transforms.
-  const XF_KEYS = new Set(['shift', 'xshift', 'yshift', 'rotate', 'rotate around', 'scale', 'scale around']);
+  const XF_KEYS = new Set(['shift', 'xshift', 'yshift', 'rotate', 'rotate around', 'scale', 'scale around', 'xscale', 'yscale']);
   function readXf(C: any, list: any) {
     const xf = [], rest = [], unresolved: string[] = [];
     for (const { k, v } of list) {
@@ -656,16 +1161,21 @@ import { runtime as TD } from '../runtime';
       if (k === 'shift' && v) { const c = coord(C, String(v).trim().replace(/^\{|\}$/g, '').trim().replace(/^\(|\)$/g, '')); if (c) xf.push({ dx: c.x, dy: c.y }); }
       else if (k === 'xshift' && v) { const d = len(v); if (isFinite(d!)) xf.push({ dx: d, dy: 0 }); }
       else if (k === 'yshift' && v) { const d = len(v); if (isFinite(d!)) xf.push({ dx: 0, dy: -d! }); }
-      else if (k === 'scale' && v) { const k = TD.evalNumber(expandMac(v), NaN); if (isFinite(k) && k > 0) xf.push({ scale: k, px: 0, py: 0 }); }
+      else if (k === 'scale' && v) { const k = pgfNum(expandMac(v), NaN); if (isFinite(k) && k > 0) xf.push({ scale: k, px: 0, py: 0 }); }
+      else if ((k === 'xscale' || k === 'yscale') && v) {
+        // one axis only (a negative factor mirrors): applied to coordinates, not to nodes' own size
+        const f = pgfNum(expandMac(v), NaN);
+        if (isFinite(f) && f !== 0) xf.push({ sx: k === 'xscale' ? f : 1, sy: k === 'yscale' ? f : 1, px: 0, py: 0 });
+      }
       else if (k === 'scale around' && v) {
         const m = String(v).match(/^([^:]+):\s*\((.*)\)\s*$/);
-        const k = m && TD.evalNumber(expandMac(m[1]), NaN), c = m && coord(C, m[2]);
+        const k = m && pgfNum(expandMac(m[1]), NaN), c = m && coord(C, m[2]);
         if (isFinite(k) && k > 0 && c) xf.push({ scale: k, px: c.x, py: c.y });
       }
-      else if (k === 'rotate' && v) { const a = TD.evalNumber(v, NaN); if (isFinite(a)) xf.push({ rot: a, px: 0, py: 0 }); }
+      else if (k === 'rotate' && v) { const a = pgfNum(v, NaN); if (isFinite(a)) xf.push({ rot: a, px: 0, py: 0 }); }
       else if (k === 'rotate around' && v) {
         const m = String(v).trim().replace(/^\{|\}$/g, '').match(/^([^:]+):\s*\((.*)\)\s*$/);
-        const a = m && TD.evalNumber(m[1], NaN), c = m && coord(C, m[2]);
+        const a = m && pgfNum(m[1], NaN), c = m && coord(C, m[2]);
         if (isFinite(a) && c) xf.push({ rot: a, px: c.x, py: c.y });
       } else rest.push({ k, v });
       if (XF_KEYS.has(k) && xf.length === before) unresolved.push(`Unresolved transform ${k}=${v}`);
@@ -673,8 +1183,61 @@ import { runtime as TD } from '../runtime';
     C.warnings.push(...unresolved);
     return { xf, rest, unresolved };
   }
+  // xscale / yscale about (px, py): coordinates scale per axis; nodes and blocks only move with their anchor (TikZ
+  // leaves a node's own size alone without `transform shape`); a circle arc becomes an elliptical one, or a
+  // polyline when mirrored
+  function scaleAxes(s: any, sx: number, sy: number, px: number, py: number) {
+    const point = (x: number, y: number) => [px + (x - px) * sx, py + (y - py) * sy];
+    const node = s.type === 'text' || s._importNodeAt || s.nodeText != null || s.nodeName || TD.blocks?.get(s.type);
+    if (node) {
+      const b = TD.bbox(s), anchor = s._importNodeAt || { x: b.x + b.w / 2, y: b.y + b.h / 2 }, [x, y] = point(anchor.x, anchor.y);
+      TD.translate(s, x - anchor.x, y - anchor.y);
+      if (s._importNodeAt) s._importNodeAt = { x, y };
+      return;
+    }
+    if (s.type === 'arc' && (sx < 0 || sy < 0)) {
+      const ry = s.ry ?? s.r, n = Math.max(8, Math.ceil(Math.abs(s.a2 - s.a1) / 4)), pts = [];
+      for (let k = 0; k <= n; k++) { const a = (s.a1 + (s.a2 - s.a1) * k / n) * Math.PI / 180; pts.push(point(s.cx + s.r * Math.cos(a), s.cy - ry * Math.sin(a))); }
+      const keep = { ...s };
+      for (const key of Object.keys(s)) delete s[key];
+      Object.assign(s, { ...keep, type: 'poly', pts, closed: false });
+      for (const key of ['cx', 'cy', 'r', 'ry', 'a1', 'a2']) delete s[key];
+      return;
+    }
+    const type = TD.TYPES[s.type];
+    if (s.type === 'rect') {
+      const [x1, y1] = point(s.x, s.y), [x2, y2] = point(s.x + s.w, s.y + s.h);
+      Object.assign(s, { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) });
+      return;
+    }
+    for (const [x, y] of type.pts || []) [s[x], s[y]] = point(s[x], s[y]);
+    if (s.type === 'poly') s.pts = s.pts.map(([x, y]: number[]) => point(x, y));
+    if (s.type === 'region') s.rings = s.rings.map((r: any[]) => r.map(([x, y]: number[]) => point(x, y)));
+    if (s.type === 'ellipse') { s.rx *= Math.abs(sx); s.ry *= Math.abs(sy); }
+    if (s.type === 'arc') { s.ry = (s.ry ?? s.r) * sy; s.r *= sx; if (Math.abs(s.ry - s.r) < 1e-9) delete s.ry; }
+    if (s.type === 'dot' || s.type === 'ball') s.r *= Math.sqrt(Math.abs(sx * sy));
+  }
   // apply transforms (innermost list first, each list last-option-first); text keeps its own angle
   // unless `transform shape` is on
+  // Names hold where a point is on the page (every scope's transform applied); a path inside a scope is read in
+  // that scope's own coordinates, so a name used there is taken back through the scopes' transforms first.
+  function scopeMap(C: any) {
+    const L = C.scopes || [];
+    if (!L.some((l: any) => l.xf?.length)) return null;
+    const f = (x: number, y: number) => { const d = applyXf([{ type: 'dot', cx: x, cy: y, r: 0 }], L.map((l: any) => ({ xf: l.xf, shape: false })))[0]; return [d.cx, d.cy]; };
+    const [ox, oy] = f(0, 0), [ax, ay] = f(1, 0), [bx, by] = f(0, 1);
+    return { ox, oy, a: ax - ox, b: bx - ox, c: ay - oy, d: by - oy };
+  }
+  function toAbs(C: any, p: any) {
+    const M = scopeMap(C);
+    return M ? { ...p, x: M.ox + M.a * p.x + M.b * p.y, y: M.oy + M.c * p.x + M.d * p.y } : { ...p };
+  }
+  function toLocal(C: any, p: any) {
+    const M = scopeMap(C), det = M ? M.a * M.d - M.b * M.c : 0;
+    if (!M || !det) return p;
+    const X = p.x - M.ox, Y = p.y - M.oy;
+    return { ...p, x: (M.d * X - M.b * Y) / det, y: (-M.c * X + M.a * Y) / det };
+  }
   function applyXf(shapes: any, lists: any) {
     for (const s of shapes) {
       for (let li = 0; li < lists.length; li++) {
@@ -682,6 +1245,7 @@ import { runtime as TD } from '../runtime';
         if (L.opacity != null) s.opacity = (s.opacity ?? 1) * L.opacity;
         for (let i = L.xf.length - 1; i >= 0; i--) {
           const t = L.xf[i];
+          if (t.sx !== undefined) { scaleAxes(s, t.sx, t.sy, t.px, t.py); continue; }
           if (t.scale !== undefined) {
             const k = t.scale, node = s.type === 'text' || s._importNodeAt || s.nodeText != null || s.nodeName || TD.blocks?.get(s.type);
             const point = (x: number, y: number) => [t.px + (x - t.px) * k, t.py + (y - t.py) * k];
@@ -704,13 +1268,14 @@ import { runtime as TD } from '../runtime';
             continue;
           }
           if (t.rot === undefined) { TD.translate(s, t.dx, t.dy); if (s._importNodeAt) { s._importNodeAt.x += t.dx; s._importNodeAt.y += t.dy; } continue; }
-          const keep = s.type === 'text' && !transformShape ? s.angle : null;
+          // a node turns with the picture only under transform shape: otherwise just its position moves
+          const upright = !transformShape && (s.type === 'text' || s.nodeText != null), keep = upright ? s.angle : null;
           TD.rotateShape(s, t.px, t.py, -t.rot);
           if (s._importNodeAt) {
             const a = -t.rot * Math.PI / 180, dx = s._importNodeAt.x - t.px, dy = s._importNodeAt.y - t.py;
             s._importNodeAt = { x: t.px + Math.cos(a) * dx - Math.sin(a) * dy, y: t.py + Math.sin(a) * dx + Math.cos(a) * dy };
           }
-          if (s.type === 'text' && !transformShape) { if (keep) s.angle = keep; else delete s.angle; }
+          if (upright) { if (keep) s.angle = keep; else delete s.angle; }
         }
       }
     }
@@ -731,9 +1296,10 @@ import { runtime as TD } from '../runtime';
   // A statement becomes shapes only when every option and coordinate in it is one the shapes hold exactly;
   // anything else stays TikZ code (src/domain/rawtikz.ts), with the shapes as its preview.
   const W_KEYS = ['ultra thin', 'very thin', 'thin', 'semithick', 'thick', 'very thick', 'ultra thick', 'dashed', 'densely dashed', 'loosely dashed', 'dotted', 'densely dotted', 'loosely dotted', 'dash dot', 'dashdotted'];
-  const PATH_KEYS = new Set([...W_KEYS, 'draw', 'fill', 'color', 'line width', 'opacity', 'draw opacity', 'fill opacity', 'rounded corners', 'ball color', 'left color', 'right color', 'middle color', 'top color', 'bottom color', 'dash pattern',
-    'radius', 'x radius', 'y radius', 'start angle', 'end angle', 'delta angle', 'bend left', 'bend right', 'even odd rule', 'shift', 'xshift', 'yshift', 'rotate', 'rotate around', 'scale', 'scale around', 'transform shape']);
-  const NODE_KEYS = new Set(['label', 'pin', 'outer sep', 'font', 'text', 'color', 'opacity', 'anchor', 'rotate', 'above', 'below', 'left', 'right', 'above left', 'above right', 'below left', 'below right', 'shift', 'xshift', 'yshift', 'scale', 'scale around', 'transform shape']);
+  const PATH_KEYS = new Set([...W_KEYS, 'draw', 'fill', 'color', 'line width', 'opacity', 'draw opacity', 'fill opacity', 'rounded corners', 'sharp corners', 'ball color', 'left color', 'right color', 'middle color', 'top color', 'bottom color', 'dash pattern',
+    'radius', 'x radius', 'y radius', 'start angle', 'end angle', 'delta angle', 'bend left', 'bend right', 'even odd rule', 'out', 'in', 'looseness', 'help lines', 'step', 'xstep', 'ystep', 'shift', 'xshift', 'yshift', 'rotate', 'rotate around', 'scale', 'scale around', 'transform shape']);
+  const NODE_KEYS = new Set(['name', 'on chain', 'join', 'label', 'pin', 'outer sep', 'font', 'text', 'color', 'opacity', 'anchor', 'rotate', 'above', 'below', 'left', 'right', 'above left', 'above right', 'below left', 'below right', 'shift', 'xshift', 'yshift', 'scale', 'scale around', 'transform shape']);
+  const TEXT_KEYS = new Set([...NODE_KEYS, 'inner sep', 'inner xsep', 'inner ysep', 'align', 'text centered', 'node distance', 'on grid', 'above left of', 'above right of', 'below left of', 'below right of', 'above of', 'below of', 'left of', 'right of']);
   const LABEL_KEYS = new Set(['above', 'below', 'left', 'right', 'midway', 'pos', 'near start', 'near end', 'swap', "'", 'auto', 'font', 'text', 'color', 'fill']);
   const COLOR_KEYS = new Set(['draw', 'fill', 'color', 'text', 'ball color', 'left color', 'right color', 'middle color', 'top color', 'bottom color']);
   function exactTip(t: any) {
@@ -771,6 +1337,8 @@ import { runtime as TD } from '../runtime';
     if (C.unresolved?.has(nm)) return `Unresolved layout dependency (${nm})`;
     if (C.approx && C.approx.has(nm)) return `(${nm}) is placed approximately`;
     if (anchor && C.boxes[nm]?.native && TD.nodeFeatures?.anchors.includes(r.slice(nm.length+1))) return null;
+    // a node whose border is known: lines stop at it as TikZ's do; its anchors are points on it
+    if (C.geo?.[nm] && (!anchor || !/\.(base|mid)$/.test(r))) return null;
     if ((C.kinds || {})[nm] !== 'coordinate') return anchor ? `an anchor of node (${nm})` : `node (${nm}) as an end (TikZ stops at its border)`;
     return null;
   }
@@ -780,18 +1348,31 @@ import { runtime as TD } from '../runtime';
     const keys = new Set(PATH_KEYS);
     if (own.some((o: any) => o.k === 'decorate') && own.some((o: any) => o.k === 'decoration')) { keys.add('decorate'); keys.add('decoration'); }
     const bad = unknownKeys(C, own, keys), pts = [];
-    for (const t of toks) {
-      if (t.t === 'opts') bad.push(...unknownKeys(C, parseOpts(t.v), PATH_KEYS));
+    for (let ti = 0; ti < toks.length; ti++) {
+      const t = toks[ti];
+      // to[pos=…] node {…}: the nodes on that to are put at pos (the to's options are around them)
+      if (t.t === 'opts') bad.push(...unknownKeys(C, parseOpts(t.v), toks[ti - 1]?.t === 'op' && toks[ti - 1].v === 'to' && toks[ti + 1]?.t === 'node' ? new Set([...PATH_KEYS, 'pos']) : PATH_KEYS));
+      // a coordinate with labels only (see pathToShapes)
+      if (t.t === 'node' && t.coordinate) {
+        const co = parseOpts(t.opts);
+        if (co.some((o: any) => o.k !== 'label' && o.k !== 'name') || !labelShapes(C, co, { kind: 'rect', c: { x: 0, y: 0 }, U: { x: 0, y: 0 }, V: { x: 0, y: 0 } }, null)) bad.push('coordinate on a path');
+        continue;
+      }
       if (t.t === 'node') {
-        const opts = parseOpts(t.opts), allowed = new Set(LABEL_KEYS);
+        const opts = [...everyNode(C), ...parseOpts(t.opts)], allowed = new Set(LABEL_KEYS);
+        for (const k of ['above left', 'above right', 'below left', 'below right', 'inner sep', 'inner xsep', 'inner ysep']) allowed.add(k);
+        const border = opts.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none') || opts.some((o: any) => /^minimum /.test(o.k)), shp = nodeShapeName(opts) || (border ? 'rectangle' : null);
+        if (shp && NODE_SHAPES[shp] && border && !opts.some((o: any) => ['midway', 'near start', 'near end', 'pos', 'sloped', 'auto', 'swap', "'"].includes(o.k))) {
+          for (const k of [...PATH_KEYS, ...NODE_KEYS, ...NODE_BOX_KEYS]) allowed.add(k);
+          allowed.add('anchor');
+        }
         // A node placed at the current point is a separate text object. Its anchor is
         // implemented by textShape; labels attached along a segment use a different model.
         const along = opts.some((o: any) => ['midway', 'near start', 'near end', 'pos', 'sloped', 'auto', 'swap'].includes(o.k));
         if (!along && opts.some((o: any) => o.k === 'anchor' && /^(center|north|south|east|west|north east|north west|south east|south west)$/.test(o.v))) allowed.add('anchor');
         bad.push(...unknownKeys(C, opts, allowed));
       }
-      if (t.t === 'node' && t.coordinate) bad.push('coordinate on a path');
-      if (t.t === 'op' && ['edge', 'let', 'plot', 'sin', 'cos', 'parabola', 'grid', 'in'].includes(t.v)) bad.push(t.v);
+      if (t.t === 'op' && ['let', 'plot', 'sin', 'cos', 'parabola', 'in'].includes(t.v)) bad.push(t.v);
       if (t.t === 'brace') bad.push('{…}');
       if (t.t === 'coord') { const w = nameIssue(C, t.raw); if (w) pts.push(w); }
     }
@@ -874,7 +1455,7 @@ import { runtime as TD } from '../runtime';
       try {
         for (const setting of evaluation) for (const assignment of splitTop(setting.v,';').filter((v: string) => v.trim())) {
           const m = /^\s*\\([A-Za-z@]+)\s*=\s*([\s\S]+)$/.exec(assignment);
-          const value = m ? TD.evalNumber(expandMac(m[2]),NaN) : NaN;
+          const value = m ? pgfNum(expandMac(m[2]),NaN) : NaN;
           if (!m || !Number.isFinite(value)) { C.warnings.push('Unsupported foreach evaluate assignment: no preview'); return; }
           P.macros.set(m[1],String(value));
         }
@@ -885,12 +1466,230 @@ import { runtime as TD } from '../runtime';
   }
   // the passes of a loop as statements of their own: their shapes when every one is exact, else null
   function foreachExact(C: any, f: any) {
-    const Q = { ...C, preview: false, stmts: [], struct: null, warnings: [], names: { ...C.names }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) } };
+    const Q = { ...C, preview: false, stmts: [], struct: null, warnings: [], names: { ...C.names }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) }, geo: { ...(C.geo || {}) } };
     let made;
-    try { made = expandForeach(Q, f); } catch (e: any) { return null; }
-    if (!made.length || Q.warnings.length || !Q.stmts.length || Q.stmts.some((st: any) => st.raw)) return null;
-    Object.assign(C.names, Q.names); C.kinds = Object.assign(C.kinds || {}, Q.kinds); C.boxes = Object.assign(C.boxes || {}, Q.boxes);
+    try { made = expandForeach(Q, f); } catch (e: any) { return { why: [] }; }
+    // why a pass is not held exactly: what its statements could not hold (said once each)
+    const why = [...new Set([...Q.warnings, ...Q.stmts.filter((st: any) => st.raw).flatMap((st: any) => st.shapes.flatMap((x: any) => x.issues || []))])];
+    if (!made.length || Q.warnings.length || !Q.stmts.length || Q.stmts.some((st: any) => st.raw)) return { why };
+    Object.assign(C.names, Q.names); C.kinds = Object.assign(C.kinds || {}, Q.kinds); C.boxes = Object.assign(C.boxes || {}, Q.boxes); C.geo = Object.assign(C.geo || {}, Q.geo);
     return { made, names: [...new Set(Q.stmts.flatMap((st: any) => st.names || []))] };
+  }
+  // ---------- \matrix ----------
+  // \matrix [opts] (name) at (x,y) {cells}: what TikZ draws for each cell (\node … ;, \draw … ;, or with `matrix of
+  // nodes` a node per cell), where pgf's matrix puts it (pgfmodulematrix.code.tex, measured with pdflatex):
+  // - in a column the cells' origins are on one vertical line, in a row on one horizontal line;
+  // - a column reaches as far left and right of its line as its widest cell does on that side; a row as far up and
+  //   down, and never less than its line (both start at 0pt);
+  // - column sep / row sep (and &[len], \\[len]) go between those borders, or with `between origins` between lines;
+  // - a cell's box is the node's border without its outer sep;
+  // - the matrix is a node round the cells (inner sep, outer sep, anchor center at `at`); cells inherit its node
+  //   options (inner sep, minimum size, outer sep, shape, font …) but not how it is drawn (draw, fill …);
+  // - matrix of (math) nodes: each cell is \node[anchor=base, cells, column/row styles, nodes] (name-r-c) {text}.
+  const MATRIX_OWN = new Set(['matrix', 'matrix of nodes', 'matrix of math nodes', 'column sep', 'row sep', 'nodes', 'cells', 'nodes in empty cells', 'ampersand replacement', 'name', 'anchor', 'at']);
+  const MATRIX_CELL_STYLE = /^(row \d+|column \d+|row \d+ column \d+|every (?:odd|even) (?:row|column))\/\.(append )?style$/;
+  const MATRIX_INHERIT = /^(inner sep|inner xsep|inner ysep|outer sep|outer xsep|outer ysep|minimum size|minimum width|minimum height|font|node font|text|text width|text opacity|align|text centered|shape|rectangle|circle|ellipse)$/;
+  const MATRIX_SHAPE = /^(shape|circle|ellipse)$/;
+  // the rows of a matrix body: cells as written, and the gaps &[len] and \\[len] add
+  function matrixRows(body: string, amp: string) {
+    const rows: string[][] = [], rowGap: string[] = [], colGap: string[][] = [];
+    let row: string[] = [], gaps: string[] = [], cell = '', d = 0, i = 0;
+    const arg = () => { let q = i; while (/\s/.test(body[q] || '')) q++; if (body[q] !== '[') return ''; const e = shut(body, q, '[', ']'); i = e + 1; return body.slice(q + 1, e); };
+    while (i < body.length) {
+      const c = body[i];
+      if (d === 0 && (body.startsWith('\\\\', i) || /^\\pgfmatrixendrow(?![A-Za-z@])/.test(body.slice(i, i + 17)))) {
+        i += body[i + 1] === '\\' ? 2 : 16;
+        row.push(cell); cell = '';
+        rows.push(row); colGap.push(gaps); rowGap.push(arg()); row = []; gaps = [];
+        continue;
+      }
+      const ampHit = amp === '&' ? c === '&' : body.startsWith(amp, i) && !(/[A-Za-z@]$/.test(amp) && /[A-Za-z@]/.test(body[i + amp.length] || ''));
+      if (d === 0 && ampHit) {
+        i += amp.length; row.push(cell); cell = ''; gaps.push(arg()); continue;
+      }
+      if (d === 0 && /^\\pgfmatrixnextcell(?![A-Za-z@])/.test(body.slice(i, i + 19))) { i += 18; row.push(cell); cell = ''; gaps.push(arg()); continue; }
+      if (c === '\\') { cell += body.slice(i, i + 2); i += 2; continue; }
+      if (c === '{') d++; else if (c === '}') d--;
+      cell += c; i++;
+    }
+    if (cell.trim() || row.length) { row.push(cell); rows.push(row); colGap.push(gaps); rowGap.push(''); }
+    return { rows, rowGap, colGap };
+  }
+  // a separation: its length (px) and whether it is between origins
+  function matrixSep(v: any) {
+    let n = 0, fixed = false, ok = true;
+    for (const p of splitTop(String(v ?? '').replace(/\\pgflinewidth\b/g, '0.4pt'), ',').map((q) => q.trim()).filter(Boolean)) {
+      if (p === 'between origins') fixed = true;
+      else if (p === 'between borders') fixed = false;
+      else { const d = len(p, 'pt') as number; if (Number.isFinite(d)) n += d; else ok = false; }
+    }
+    return { n, fixed, ok };
+  }
+  // the statement after \matrix: its shapes (the matrix's own node when it is drawn or named, then the cells'), the
+  // names it makes, and what it does not hold (none: native)
+  function matrixStatement(C: any, stmt: string) {
+    const issues: string[] = [], made: any[] = [], names: string[] = [];
+    let i = 0, name = '', atRaw: string | null = null, body: string | null = null;
+    const optList: string[] = [];
+    while (i < stmt.length) {
+      while (/\s/.test(stmt[i] || '')) i++;
+      if (i >= stmt.length) break;
+      const rest = stmt.slice(i);
+      if (stmt[i] === '[') { const e = shut(stmt, i, '[', ']'); optList.push(stmt.slice(i + 1, e)); i = e + 1; }
+      else if (stmt[i] === '(') { const e = shut(stmt, i, '(', ')'); name = stmt.slice(i + 1, e).trim(); i = e + 1; }
+      else if (/^at\s*\(/.test(rest)) { const q = stmt.indexOf('(', i), e = shut(stmt, q, '(', ')'); atRaw = stmt.slice(q + 1, e); i = e + 1; }
+      else if (stmt[i] === '{' && body == null) { const e = shut(stmt, i, '{', '}'); body = stmt.slice(i + 1, e); i = e + 1; }
+      else return { made, names, issues: ['\\matrix not understood'] };
+    }
+    if (body == null) return { made, names, issues: ['\\matrix without cells'] };
+    const every = C.styles?.has('every matrix') ? 'every matrix,' : '';
+    const opts = parseOpts(every + optList.join(','));
+    const last = (k: string) => lastOpt(opts, k);
+    const ofNodes = opts.some((o: any) => o.k === 'matrix of nodes' || o.k === 'matrix of math nodes'), math = opts.some((o: any) => o.k === 'matrix of math nodes');
+    if (last('name')?.v) name = String(last('name').v).trim();
+    if (last('at')?.v) atRaw = String(last('at').v).trim().replace(/^\(([\s\S]*)\)$/, '$1');
+    const colSep = matrixSep(last('column sep')?.v), rowSep = matrixSep(last('row sep')?.v);
+    if (!colSep.ok || !rowSep.ok) issues.push('matrix separation not understood');
+    const ampO = last('ampersand replacement'), amp = ampO?.v ? String(ampO.v).trim() : '&';
+    const emptyNodes = opts.some((o: any) => o.k === 'nodes in empty cells' && o.v !== 'false');
+    const xf = readXf(C, opts.filter((o: any) => XF_KEYS.has(o.k)));
+    if (xf.xf.some((t: any) => t.dx === undefined)) issues.push('matrix rotated or scaled');
+    const cellStyle: Record<string, string> = {};
+    const inherit: any[] = [], frame: any[] = [];
+    // placed like a node (below=1cm of a, right of=b …): with the positioning library's rules, by the node code
+    const placeKey = (o: any) => !!PLACE_ANCHOR[o.k] || OLD_OF.includes(o.k) || o.k === 'on grid' || o.k === 'node distance';
+    const placed = opts.some((o: any) => placeKey(o) && o.k !== 'on grid' && o.k !== 'node distance');
+    for (const o of opts) {
+      if (XF_KEYS.has(o.k) || MATRIX_OWN.has(o.k) || placeKey(o)) continue;
+      if (MATRIX_CELL_STYLE.test(o.k)) { const k = o.k.replace(/\/\.(append )?style$/, ''); cellStyle[k] = (/append/.test(o.k) && cellStyle[k] ? cellStyle[k] + ',' : '') + (o.v ?? ''); continue; }
+      if (MATRIX_INHERIT.test(o.k) || (o.v === null && NODE_SHAPES[o.k])) { inherit.push(o); if (!/^(font|node font|text|text opacity|align|text centered|text width)$/.test(o.k)) frame.push(o); continue; }
+      if (/^(execute at|every cell|every outer matrix|left delimiter|right delimiter|above delimiter|below delimiter|matrix anchor|append after command|label|pin)/.test(o.k)) { issues.push(`matrix option ${o.k}`); continue; }
+      frame.push(o);
+    }
+    if (Object.keys(cellStyle).length && !ofNodes) issues.push('row and column styles in a matrix of code cells');
+    const o2s = (L: any[]) => L.map((o: any) => o.v == null ? o.k : `${o.k}={${o.v}}`).join(', ');
+    const nodesOpt = opts.filter((o: any) => o.k === 'nodes' && o.v).map((o: any) => o.v).join(', ');
+    const cellsOpt = opts.filter((o: any) => o.k === 'cells' && o.v).map((o: any) => o.v).join(', ');
+    const { rows, rowGap, colGap } = matrixRows(body, amp);
+    if (!rows.length) return { made, names, issues: [...issues, '\\matrix without cells'] };
+    const transformShape = (C.scopes || []).some((L: any) => L.shape && L.xf?.length);
+    if (transformShape) issues.push('matrix in a scope with transform shape');
+    // each cell as TikZ code (null: no node) with its origin at (0,0)
+    const mname = name || '';
+    const code = rows.map((row, r) => row.map((cell, c) => {
+      const t = cell.trim();
+      if (!ofNodes || /^\\(node|draw|path|fill|filldraw|coordinate|shade|shadedraw|pic|foreach)\b/.test(t)) return t || null;
+      let own = '', text = t;
+      if (text[0] === '|') { const e = text.indexOf('|', 1); if (e < 0) { issues.push('matrix cell options not understood'); return null; } own = text.slice(1, e); text = text.slice(e + 1).trim(); }
+      if (!text && !own && !emptyNodes) return null;
+      const R = r + 1, K2 = c + 1, sty = [cellStyle[`column ${K2}`], cellStyle[`every ${K2 % 2 ? 'odd' : 'even'} column`], cellStyle[`row ${R}`], cellStyle[`every ${R % 2 ? 'odd' : 'even'} row`], cellStyle[`row ${R} column ${K2}`]].filter(Boolean);
+      // a cell style's own keys come before the matrix's nodes={…}; its nodes={…} is appended to that, so after it
+      const part = (v: string, inner: boolean) => parseOpts(v, 0, true).filter((o: any) => (o.k === 'nodes') === inner).map((o: any) => inner ? o.v : o.v == null ? o.k : `${o.k}={${o.v}}`).filter(Boolean).join(', ');
+      const styles = [cellsOpt, ...sty];
+      const pre = [o2s(inherit), 'anchor=base', ...styles.map((v) => part(v, false)), nodesOpt, ...styles.map((v) => part(v, true))].filter(Boolean).join(', ');
+      if (math && text) text = `$${text}$`;
+      return `\\node[${pre ? pre + ', ' : ''}name=${mname}-${R}-${K2}]${own} {${text}};`;
+    }));
+    // a cell's statements, parsed with its origin at `o` (px, y down); its shapes, the boxes of its nodes and what
+    // it does not hold. Transforms around the matrix move only the matrix: they are taken off here.
+    const plain = (C.scopes || []).map((L: any) => ({ ...L, xf: [] }));
+    // how the matrix's paths look (thick, dashed, a colour, rounded corners) holds for the cells' paths too
+    const base = [...(C.base || []), ...frame.filter((o: any) => baseOpt(C, o) || o.k === 'rounded corners')];
+    const sub = (src: string, o: any) => {
+      const every = !ofNodes && inherit.length ? `${C.styles.get('every node') ? C.styles.get('every node') + ', ' : ''}${o2s(inherit)}${nodesOpt ? ', ' + nodesOpt : ''}` : (!ofNodes && nodesOpt ? `${C.styles.get('every node') ? C.styles.get('every node') + ', ' : ''}${nodesOpt}` : null);
+      const Q: any = { ...C, preview: false, stmts: [], struct: null, warnings: [], names: { ...C.names }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) }, geo: { ...(C.geo || {}) }, styles: new Map(C.styles), macros: new Map(C.macros), cellBoxes: [], chainPending: null, base,
+        scopes: [{ xf: o.x || o.y ? [{ dx: o.x, dy: o.y }] : [], shape: false, opts: '' }, ...plain] };
+      if (every != null) Q.styles.set('every node', every);
+      let shapes: any[] = [];
+      try { shapes = parseStatements(Q, src); } catch (e: any) { Q.warnings.push('matrix cell: ' + e.message); } finally { STY = C.styles; MAC = C.macros; }
+      const why = [...Q.warnings, ...Q.stmts.filter((st: any) => st.raw).flatMap((st: any) => st.shapes.flatMap((x: any) => x.issues || []))];
+      return { Q, shapes, why };
+    };
+    // 1. each cell's extent about its origin (px, y down)
+    const ext = code.map((row) => row.map((src) => {
+      if (!src) return { x0: 0, x1: 0, y0: 0, y1: 0 };
+      const { Q, shapes } = sub(src, { x: 0, y: 0 });
+      const boxed = new Set(Q.cellBoxes.map((b: any) => b.s));
+      const parts = [...Q.cellBoxes.map((b: any) => ({ x0: b.c.x - b.hw, x1: b.c.x + b.hw, y0: b.c.y - b.hh, y1: b.c.y + b.hh })),
+        ...shapes.filter((x: any) => !boxed.has(x) && x.type !== 'coord').map((x: any) => { const b = TD.bbox(x); return { x0: b.x, x1: b.x + b.w, y0: b.y, y1: b.y + b.h }; })];
+      if (!parts.length) return { x0: 0, x1: 0, y0: 0, y1: 0 };
+      return { x0: least(parts.map((p) => p.x0)), x1: -least(parts.map((p) => -p.x1)), y0: least(parts.map((p) => p.y0)), y1: -least(parts.map((p) => -p.y1)) };
+    }));
+    // 2. the columns' and rows' lines: px from the first one (x right, y down)
+    const nc = Math.max(...rows.map((r) => r.length)), nr = rows.length;
+    const L: number[] = [], Rt: number[] = [], U: number[] = [], D: number[] = [];
+    for (let c = 0; c < nc; c++) {
+      const col = ext.map((row) => row[c]).filter(Boolean);
+      L[c] = -least(col.map((e) => e.x0)); Rt[c] = -least(col.map((e) => -e.x1));
+    }
+    for (let r = 0; r < nr; r++) { U[r] = Math.max(0, ...ext[r].map((e) => -e.y0)); D[r] = Math.max(0, ...ext[r].map((e) => e.y1)); }
+    const X = [0], Y = [0];
+    for (let c = 1; c < nc; c++) {
+      const g = colGap.find((gs) => gs.length >= c)?.[c - 1] || '', extra = matrixSep(g);
+      if (!extra.ok) issues.push('matrix separation not understood');
+      const fixed = colSep.fixed || extra.fixed, sep = colSep.n + extra.n;
+      X[c] = X[c - 1] + (fixed ? sep : Rt[c - 1] + sep + L[c]);
+    }
+    for (let r = 1; r < nr; r++) {
+      const extra = matrixSep(rowGap[r - 1]);
+      if (!extra.ok) issues.push('matrix separation not understood');
+      const fixed = rowSep.fixed || extra.fixed, sep = rowSep.n + extra.n;
+      Y[r] = Y[r - 1] + (fixed ? sep : D[r - 1] + sep + U[r]);
+    }
+    // 3. the matrix node round them: its box, and where its anchor puts it
+    const box = { x0: -L[0], x1: X[nc - 1] + Rt[nc - 1], y0: -U[0], y1: Y[nr - 1] + D[nr - 1] };
+    const { sx, sy } = innerSeps(frame);
+    const fst = style(C, frame, 'node'), os = outerSep(frame, fst.width);
+    const hw = (box.x1 - box.x0) / 2 + sx, hh = (box.y1 - box.y0) / 2 + sy;
+    const shapeO = [...frame].reverse().find((o: any) => MATRIX_SHAPE.test(o.k));
+    const anchorV = String(last('anchor')?.v ?? 'center').trim();
+    const off = anchorOf({ kind: 'rect', c: { x: 0, y: 0 }, U: { x: hw + os, y: 0 }, V: { x: 0, y: hh + os } }, anchorV);
+    if (!off) issues.push('matrix anchor=' + anchorV);
+    if (shapeO && (anchorV !== 'center' || frame.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none'))) issues.push('matrix shape ' + (shapeO.v ?? shapeO.k));
+    let at = atRaw != null ? coord(C, atRaw) : { x: 0, y: 0 };
+    if (!at) { issues.push(`Unresolved matrix position (${atRaw})`); at = { x: 0, y: 0 }; }
+    const P = applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], [{ xf: xf.xf, shape: false }, ...(C.scopes || [])]).map((d: any) => ({ x: d.cx, y: d.cy }))[0];
+    const keep = frame.filter((o: any) => !/^(inner sep|inner xsep|inner ysep|minimum size|minimum width|minimum height)$/.test(o.k));
+    const pt = (v: number) => `${+(v * K).toFixed(4)}pt`;
+    const frameSrc = (nm: string, where: any, more: any[] = []) => `\\node[${[o2s(keep), shapeO ? '' : 'rectangle', 'inner sep=0pt', `minimum width=${pt(2 * hw)}`, `minimum height=${pt(2 * hh)}`, o2s(more)].filter(Boolean).join(', ')}]${nm ? ` (${nm})` : ''} at (${pt(where.x)}, ${pt(-where.y)}) {};`;
+    let centre = { x: P.x - (off ? off.x : 0), y: P.y - (off ? off.y : 0) };
+    if (placed) {
+      // the matrix's box placed as a node of its size is placed (its anchor and placement keys in their order)
+      const run = sub(frameSrc('matrix-placed', P, opts.filter((o: any) => o.k === 'anchor' || placeKey(o))), { x: 0, y: 0 });
+      const g = run.Q.geo?.['matrix-placed'];
+      if (g) centre = { ...g.c }; else issues.push('matrix placement not understood');
+      issues.push(...run.why.map((w: string) => 'matrix placement: ' + w));
+      if (run.Q.libs !== C.libs) C.libs = run.Q.libs;
+    }
+    const origin = { x: centre.x - (box.x0 + box.x1) / 2, y: centre.y - (box.y0 + box.y1) / 2 };
+    // what a cell or the border made: its names (and the boxes, borders and libraries that come with them)
+    const adopt = (Q: any) => {
+      for (const nm of Object.keys(Q.names)) if (Q.names[nm] !== C.names[nm]) {
+        C.names[nm] = Q.names[nm];
+        if (!names.includes(nm)) names.push(nm);
+      }
+      C.kinds = Object.assign(C.kinds || {}, Q.kinds); C.boxes = Object.assign(C.boxes || {}, Q.boxes); C.geo = Object.assign(C.geo || {}, Q.geo);
+      if (Q.libs !== C.libs) C.libs = Q.libs;
+    };
+    // 4. the matrix's own node under the cells: drawn when the matrix is, and named, so that (m.north west) and
+    // the like still mean the matrix once its cells are written one by one
+    const drawn = frame.some((o: any) => (o.k === 'draw' || o.k === 'fill' || o.k === 'filldraw') && o.v !== 'none');
+    if (drawn || name) {
+      const { Q, shapes, why } = sub(frameSrc(name, centre), { x: 0, y: 0 });
+      issues.push(...why.map((w: string) => 'matrix border: ' + w));
+      pushAll(made, shapes);
+      adopt(Q);
+    }
+    // 5. the cells where they go
+    for (let r = 0; r < nr; r++) for (let c = 0; c < rows[r].length; c++) {
+      const src = code[r][c];
+      if (!src) continue;
+      const o = { x: origin.x + X[c], y: origin.y + Y[r] }, { Q, shapes, why } = sub(src, o);
+      issues.push(...why.map((w: string) => `cell ${r + 1}-${c + 1}: ${w}`));
+      pushAll(made, shapes);
+      adopt(Q);
+    }
+    return { made, names, issues: [...new Set(issues)] };
   }
   // \begin{env} … \end{env} with nesting: index just after the matching \end
   function envEnd(s: any, env: any, from: any) {
@@ -905,6 +1704,17 @@ import { runtime as TD } from '../runtime';
     const w = g('width') ? len(g('width'), 'pt') : 240 / K, h = g('height') ? len(g('height'), 'pt') : 207 / K;
     const at = g('at') ? coord(C, g('at').replace(/^\{|\}$/g, '').trim().replace(/^\(|\)$/g, '')) : null;
     return { at: at || { x: 0, y: 0 }, w: isFinite(w!) ? w : 240 / K, h: isFinite(h!) ? h : 207 / K };
+  }
+
+  // an axis read as a plot ({ shape, issues }), or null
+  function pgfAxis(C: any, s: any, e: any, stop: any, env: any) {
+    if (!TD.pgfplotsImport) return null;
+    let q = e + 1; while (/\s/.test(s[q])) q++;
+    const ob = s[q] === '[' ? matchClose(s, q, '[', ']') : -1;
+    const opt = ob > 0 ? s.slice(q + 1, ob) : '', body = s.slice(ob > 0 ? ob + 1 : e + 1, stop - env.length - 6);
+    try {
+      return TD.pgfplotsImport.fromAxis(env, opt, body, { color: (v: any) => color(C, v), len: (v: any, u: any) => len(v, u), expand: expandMac, coord: (v: any) => coord(C, v), styles: C.styles });
+    } catch (err: any) { return null; }
   }
 
   // blocks inside a node: the environment, the block type, and where the node puts the block
@@ -938,11 +1748,13 @@ import { runtime as TD } from '../runtime';
 
   // a statement that named styles: what the styles set (each field as styled and as without them), so the
   // export can name the styles again while those fields still hold (src/domain/shapes.ts styledCode)
-  function keepStyles(made: any, used: any, build: any) {
+  function keepStyles(made: any, used: any, build: any, C?: any) {
     if (!used.size || !made.length) return;
     let base = null;
+    // (the build without styles only shows what they changed: the names it would set are not the picture's)
+    const keep = C && { names: { ...C.names }, geo: { ...(C.geo || {}) }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) } };
     styOff = true;
-    try { base = build(); } catch (e: any) { base = null; } finally { styOff = false; }
+    try { base = build(); } catch (e: any) { base = null; } finally { styOff = false; if (keep) { C.names = keep.names; C.geo = keep.geo; C.kinds = keep.kinds; C.boxes = keep.boxes; } }
     if (!base || base.length !== made.length) return;
     const J = (v: any) => JSON.stringify(v ?? null);
     made.forEach((m: any, n: any) => {
@@ -985,8 +1797,24 @@ import { runtime as TD } from '../runtime';
     const scopeIssue = () => (C.scopes || []).map((L: any) => L.issue).filter(Boolean);
     // one statement: shapes when exact, else one code object previewing them
     const done = (start: any, end: any, made: any, issues: any, extra: Record<string, any> = {}) => {
-      issues = [...issues, ...scopeIssue(), ...(C.picIssue ? [C.picIssue] : [])];
+      if (C.chainPending) {
+        const P = C.chainPending; C.chainPending = null;
+        for (const t of ['names', 'geo', 'boxes', 'kinds']) if (C[t]?.[P.name] && P.alias !== P.name) C[t][P.alias] = C[t][P.name];
+        const lines: any[] = [];
+        for (const j of P.joins) {
+          const opt = [C.styles?.has('every join') ? 'every join' : '', j.by].filter(Boolean).join(', '), body = `(${j.from}) -- (${P.name})`;
+          const su = styUsed; styUsed = null;
+          try { lines.push(...applyXf(pathToShapes(C, 'draw', opt, body), C.scopes || [])); if (!preview) issues = [...issues, ...pathIssues(C, opt, body)]; }
+          catch (err: any) { issues = [...issues, 'join: ' + err.message]; }
+          finally { styUsed = su; }
+        }
+        made = [...made, ...lines];
+        if (!preview) for (const x of made) if (x.nodeName === P.name || (x.type === 'text' && extra.names?.includes(P.name))) x.chain = { name: P.chain };
+      }
+      const feat = (C.picFeat || []).filter((f: any) => f.re.test(s.slice(start, end))).map((f: any) => f.k);
+      issues = [...issues, ...scopeIssue(), ...(C.picIssue ? [C.picIssue] : []), ...(feat.length ? ['picture options the shapes do not hold: ' + feat.join(', ')] : [])];
       const unresolved = issues.some((w: string) => /Unresolved|Unsupported coordinate|layout not evaluated/.test(w));
+      if (extra.why?.length) issues = [...issues, ...extra.why.map((w: string) => 'in the loop: ' + w)];
       if (unresolved) {
         for (const nm of extra.names || []) (C.unresolved ||= new Set()).add(nm);
         made = []; // Never present invented positions as a usable approximation.
@@ -1041,8 +1869,32 @@ import { runtime as TD } from '../runtime';
             const shape = rest.some((x) => x.k === 'transform shape' && x.v !== 'false');
             // `transparency group, opacity=x` is how a translucent shape exports: the opacity belongs to the shapes inside
             const op = rest.find((x) => x.k === 'opacity'), opv = op ? parseFloat(op.v) : NaN;
-            const other = rest.filter((x) => x.k !== 'transform shape' && x.k !== 'transparency group' && x.k !== 'opacity' && x.k !== 'font');
-            L = { xf, shape, font: rest.filter((x: any) => x.k === 'font').map((x: any) => x.v).join(' '), ...(opv >= 0 && opv < 1 ? { opacity: opv } : {}), opts: str.replace(/\s+/g, ' ').trim() };
+            // what the scope sets for what is inside it: styles, unit vectors, node distance and how paths look
+            // (restored at \end{scope})
+            const saved = { vx: C.vx, vy: C.vy, vz: C.vz, base: C.base, nodeDist: C.nodeDist, nodeDistH: C.nodeDistH, styles: new Map(C.styles) };
+            const read = (x: any) => {
+              const sm = /^(.+?)\/\.(style|append style)$/.exec(x.k);
+              if (sm && x.v != null) { const nm = sm[1].trim(), old = C.styles.get(nm); addStyle(C, nm, sm[2] === 'append style' && old ? `${old},${x.v}` : x.v); return C.styles.has(nm); }
+              if ((x.k === 'x' || x.k === 'y' || x.k === 'z') && x.v) { const u = unitVector(C, x.k, x.v); if (u) { C['v' + x.k] = u; return true; } return false; }
+              if (x.k === 'node distance') {
+                const [a, b] = String(x.v).split(/\s+and\s+/).map((q: any) => len(q));
+                if (isFinite(a!) && (b == null || isFinite(b))) { C.nodeDist = a; C.nodeDistH = b ?? undefined; return true; }
+                return false;
+              }
+              if (baseOpt(C, x)) { C.base = [...(C.base || []), x]; return true; }
+              if (x.k === 'start chain') return startChain(C, x.v, true);
+              // nodes={…} and keys only nodes read: what every node in the scope takes
+              if ((x.k === 'nodes' && x.v) || (NODE_ONLY.test(x.k) && x.v != null)) {
+                const add = x.k === 'nodes' ? x.v : `${x.k}=${x.v}`, old = C.styles.get('every node');
+                addStyle(C, 'every node', old ? `${old},${add}` : add);
+                return C.styles.has('every node');
+              }
+              return false;
+            };
+            const rawRest = parseOpts(str, 0, true).filter((x: any) => !XF_KEYS.has(x.k));
+            const handled = new Set(rawRest.filter(read).map((x: any) => x.k));
+            const other = rest.filter((x) => x.k !== 'transform shape' && x.k !== 'transparency group' && x.k !== 'opacity' && x.k !== 'font' && !handled.has(x.k) && !(x.v === null && W_KEYS.includes(x.k)) && !(x.v === null && color(C, x.k) !== undefined));
+            L = { saved, xf, shape, font: rest.filter((x: any) => x.k === 'font').map((x: any) => x.v).join(' '), ...(opv >= 0 && opv < 1 ? { opacity: opv } : {}), opts: str.replace(/\s+/g, ' ').trim() };
             const scopeIssues = [...unresolved, ...(other.length ? ['scope options not drawn: ' + other.map((x) => x.k).join(', ')] : [])];
             if (scopeIssues.length) L.issue = scopeIssues.join('; ');
             i = e2 + 1;
@@ -1052,7 +1904,7 @@ import { runtime as TD } from '../runtime';
           if (C.struct) C.struct.push(i);
           continue;
         }
-        if (name === 'end' && env === 'scope') { if (C.scopes && C.scopes.length) { const scope = C.scopes.shift(); C.styles = scope.styles || C.styles; STY = C.styles; C.macros = scope.macros || C.macros; MAC = C.macros; } i = e + 1; if (C.struct) C.struct.push(i); continue; }
+        if (name === 'end' && env === 'scope') { if (C.scopes && C.scopes.length) { const scope = C.scopes.shift(); if (scope.saved) { C.vx = scope.saved.vx; C.vy = scope.saved.vy; C.vz = scope.saved.vz; C.base = scope.saved.base; C.nodeDist = scope.saved.nodeDist; C.nodeDistH = scope.saved.nodeDistH; scope.styles = scope.saved.styles; } C.styles = scope.styles || C.styles; STY = C.styles; C.macros = scope.macros || C.macros; MAC = C.macros; } i = e + 1; if (C.struct) C.struct.push(i); continue; }
         if (name === 'end') { i = e + 1; continue; }
         const stop = envEnd(s, env, e + 1);
         if (env === 'feynman' && TD.TYPES.feynman) {
@@ -1066,6 +1918,10 @@ import { runtime as TD } from '../runtime';
         }
         // any other environment (pgfonlayer, axis, …) is kept whole; its drawing statements preview it
         i = stop;
+        // a pgfplots axis: the app's own plot, native when it holds the axis as written (src/domain/pgfplots-import.ts)
+        const PA = /^(axis|semilogxaxis|semilogyaxis|loglogaxis)$/.test(env) ? pgfAxis(C, s, e, stop, env) : null;
+        if (PA && preview) { pushAll(shapes, applyXf([PA.shape], C.scopes || [])); continue; }
+        if (PA) { done(bs, stop, applyXf([PA.shape], C.scopes || []), PA.issues.length ? [`\\begin{${env}} is kept as code`, ...PA.issues] : []); continue; }
         if (preview) { if (!/axis$/.test(env)) pushAll(shapes, parseStatements(C, s.slice(e + 1, stop - env.length - 6))); continue; }
         const P = { ...C, preview: true, warnings: [], struct: null };
         const inner = /axis$|^tikzcd$/.test(env) ? [] : parseStatements(P, s.slice(e + 1, stop - env.length - 6));
@@ -1084,11 +1940,12 @@ import { runtime as TD } from '../runtime';
         const P = { ...C, preview: true, warnings: [], struct: null, names: { ...C.names } };
         // a loop whose every pass is shapes held exactly: those shapes, as one group, written as the loop until
         // one of them is edited (then as the shapes, unrolled)
-        const E = !preview && f.body != null ? foreachExact(C, f) : null;
-        if (E) { done(bs, f.end, E.made, [], { names: E.names.length ? E.names : undefined, group: 'foreach loop' }); continue; }
+        const E: any = !preview && f.body != null ? foreachExact(C, f) : null;
+        if (E && E.made) { done(bs, f.end, E.made, [], { names: E.names.length ? E.names : undefined, group: 'foreach loop' }); continue; }
         const made = f.body != null ? applyXf(expandForeach(P, f), C.scopes || []) : [];
         if (preview) { pushAll(shapes, made); continue; }
-        done(bs, f.end, made, ['\\foreach is kept as code', ...P.warnings], { raw: true });
+        // (why a pass is not held only explains: the loop's previews stay)
+        done(bs, f.end, made, ['\\foreach is kept as code', ...P.warnings], { raw: true, why: [...new Set((E?.why || []).map((w: string) => w.replace(/^(in the loop: )+/, '')).filter((w: string) => !P.warnings.includes(w) && !/^\\foreach is kept as code$/.test(w)))].slice(0, 4) });
         continue;
       }
       if (DEFS.has(name)) {
@@ -1139,13 +1996,20 @@ import { runtime as TD } from '../runtime';
           styUsed = null;
           const names = Object.keys(C.names).filter((n) => C.names[n] !== before[n]);
           if (!preview) {
-            keepStyles(made, su, build);
+            keepStyles(made, su, build, C);
             // named points the statement goes through: written by name again while the ends are still there
             const refs = [...new Set(tokenizePath(C, body).filter((t) => t.t === 'coord').map((t) => t.raw.trim()).filter((nm) => (C.kinds || {})[nm] === 'coordinate' && C.names[nm]))];
             if (refs.length) for (const x of made) x.refs = refs;
           }
           const viaSty = su.size && lossy.length ? [`styles used: ${[...su].join(', ')}`] : [];
           done(bs, k, made, [...issues(), ...lossy, ...viaSty], { names: names.length ? names : undefined });
+          continue;
+        }
+        if (name === 'matrix') {
+          const M = matrixStatement(C, stmt);
+          if (M.issues.length) for (const nm of M.names) (C.approx = C.approx || new Set()).add(nm);
+          if (preview) { pushAll(shapes, M.made); continue; }
+          done(bs, k, M.made, M.issues.length ? ['\\matrix is kept as code', ...M.issues] : [], { names: M.names.length ? M.names : undefined, group: 'matrix' });
           continue;
         }
         if (SEMI.has(name)) { if (preview) continue; done(bs, k, [], [`\\${name} is kept as code`], { raw: true }); continue; }
@@ -1165,87 +2029,139 @@ import { runtime as TD } from '../runtime';
         const placeIss: any[] = missingAt ? ['Unresolved explicit node position'] : [];
         let pos = null;
         for (const t of toks) if (t.t === 'at' || (t.t === 'coord' && t === toks.find((q) => q.t === 'coord'))) { const w = nameIssue(C, t.raw); if (w) placeIss.push(w); }
-        const nopts = parseOpts(node.opts || '');
+        const own0 = parseOpts(node.opts || '');
+        // name=… names the node as (…) does (the (…) written after the options wins)
+        if (!node.name && lastOpt(own0, 'name')?.v) node.name = String(lastOpt(own0, 'name').v).trim();
+        // `every node` (and `every <shape> node`) styles come first; a node with draw or fill is a rectangle
+        const ev0 = node.coordinate ? [] : everyNode(C);
+        let shapeName = nodeShapeName([...ev0, ...own0]);
+        const nopts = node.coordinate ? own0 : [...everyNode(C, shapeName || 'rectangle'), ...own0];
+        // chains: a node on chain goes the chain's way from its last node (right=of it, …); unnamed, it is
+        // chain-<n>; join draws a line from the node before it (by {…}: with those options; with x: from x)
+        const onc = node.coordinate ? null : lastOpt(nopts, 'on chain');
+        if (onc && !preview) C.chainPending = null;
+        if (onc) {
+          const cn = String(onc.v || '').trim() || C.chainCur || 'chain', ch = C.chains?.[cn];
+          if (!ch) placeIss.push(`on chain (${cn}) with no chain started`);
+          else if (ch.scoped) placeIss.push(`on chain (${cn}) started in a scope`);
+          else {
+            ch.n++;
+            if (!node.name) node.name = `${cn}-${ch.n}`;
+            if (ch.last && !hasAt && !nopts.some((o: any) => PLACE_ANCHOR[o.k] && /\bof\b/.test(String(o.v || '')))) nopts.push({ k: ch.dir, v: `of ${ch.last}` });
+            const joins = nopts.filter((o: any) => o.k === 'join').map((o: any) => {
+              const jm = /^\s*(?:with\s+(.+?))?\s*(?:by\s+([\s\S]*))?$/.exec(String(o.v ?? ''));
+              return jm ? { from: (jm[1] || ch.last || '').trim().replace(/^\(|\)$/g, ''), by: (jm[2] || '').trim().replace(/^\{([\s\S]*)\}$/, '$1') } : { bad: true };
+            }).filter((j: any) => j.bad || j.from);
+            if (joins.some((j: any) => j.bad)) placeIss.push('join not understood');
+            C.chainPending = { chain: cn, alias: `${cn}-${ch.n}`, name: node.name, joins: joins.filter((j: any) => !j.bad) };
+            ch.last = node.name;
+          }
+        }
+        const hasBorder = !node.coordinate && nopts.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none');
+        const explicitShape = !node.coordinate && !!nodeShapeName(nopts);
+        if (!node.coordinate) shapeName = nodeShapeName(nopts) || (hasBorder ? 'rectangle' : null);
         const layoutKeys = nopts.filter((o: any) => /^(fit|span|Minimum Width|Minimum Height|append after command|to path|east above|west above|north left|north right|east below|west below|south left|south right)$/.test(o.k));
         if (layoutKeys.length) placeIss.push('layout not evaluated: ' + layoutKeys.map((o: any) => o.k).join(', '));
+        // where the node goes: `at` is where its anchor is (center unless anchor=…, above, right=of a, …)
+        let myAnchor: string | null = null;
+        const dist = C.nodeDist ?? PX, transformed = (C.scopes || []).some((L: any) => L.xf && L.xf.length);
+        const OTHER: Record<string, string> = { above: 'north', below: 'south', left: 'west', right: 'east', 'above left': 'north west', 'above right': 'north east', 'below left': 'south west', 'below right': 'south east' };
         for (const { k: pk, v } of nopts) {
-          const pm = v && /^(above|below|left|right|above left|above right|below left|below right)$/.test(pk) && /^(?:(.*?)\s+)?of\s+(.+)$/.exec(v.trim());
+          const dx = /left/.test(pk) ? -1 : /right/.test(pk) ? 1 : 0, dy = /above/.test(pk) ? -1 : /below/.test(pk) ? 1 : 0;
+          // the old syntax, right of=a: centre to centre, the node distance apart (diagonals: that along each axis ÷ √2)
+          const old = /^(above|below|left|right|above left|above right|below left|below right) of$/.exec(pk);
+          if (old && v) {
+            const of = v.trim(), ref = coord(C, of);
+            if (!ref || C.unresolved?.has(of)) { placeIss.push(`Unresolved layout dependency (${of})`); continue; }
+            if (transformed || (C.approx && C.approx.has(of))) placeIss.push(`placed ${pk}=${of} in a transformed scope`);
+            const f = dx && dy ? Math.SQRT1_2 : 1;
+            at = { x: ref.x + dx * dist * f, y: ref.y + dy * dist * f }; myAnchor = 'center';
+            continue;
+          }
+          const pm = v && PLACE_ANCHOR[pk] && /^(?:(.*?)\s+)?of\s+(.+)$/.exec(v.trim());
           if (!pm) continue;
+          // `of` placement needs the library: the code written as is takes it with it (a snippet names none)
+          if (!(C.libs || []).includes('positioning')) C.libs = [...(C.libs || []), 'positioning'];
           const of = pm[2].trim(), resolved = coord(C, of), ref: any = resolved || at;
           if (!resolved || C.unresolved?.has(of)) placeIss.push(`Unresolved layout dependency (${of})`);
           const dd = (pm[1] || '').split(/\s+and\s+/).map((x: any) => len(x));
-          const diag = / /.test(pk), dist = C.nodeDist ?? PX;
-          let dy0 = isFinite(dd[0]) ? dd[0] : diag ? dist * Math.SQRT1_2 : dist, dx0 = isFinite(dd[1]) ? dd[1] : isFinite(dd[0]) ? dd[0] : dy0;
-          if (!diag) dx0 = dy0;
-          const dx = /left/.test(pk) ? -1 : /right/.test(pk) ? 1 : 0, dy = /above/.test(pk) ? -1 : /below/.test(pk) ? 1 : 0;
-          // the other node's border (its box and inner sep; a coordinate has none); this node's own half box and
-          // inner sep are added where the text is made (textShape reads the same key)
-          const bx = C.boxes[of], sep = bx && !bx.pt && !bx.native ? 3.33 / K : 0;
-          const hw = bx ? bx.w / 2 + sep : 0, hh = bx ? bx.h / 2 + sep : 0;
-          at = { x: ref.x + dx * (hw + dx0), y: ref.y + dy * (hh + dy0) };
-          const plain = !(C.scopes || []).some((L: any) => L.xf && L.xf.length) && bx && !(C.approx && C.approx.has(of)) && /^[^().,:$\\]+$/.test(of);
+          const diag = / /.test(pk);
+          // a diagonal moves the node distance along each axis (measured with pdflatex)
+          // (node distance=a and b: a vertically, b horizontally; one value both ways)
+          const dy0 = isFinite(dd[0]) ? dd[0] : dist, dx0 = isFinite(dd[1]) ? dd[1] : isFinite(dd[0]) ? dd[0] : (C.nodeDistH ?? dist);
+          const onGrid = nopts.some((o: any) => o.k === 'on grid' && o.v !== 'false');
+          // from the other node's border (its anchor on this side; a coordinate is its own point) to this one's
+          const g = resolved && resolved.bare && C.geo?.[of], bx = C.boxes[of];
+          let base = ref;
+          if (!onGrid && g) { const q = anchorOf(g, OTHER[pk]); base = q ? toLocal(C, q) : ref; }
+          else if (!onGrid && bx && !bx.pt) { const sep = bx.native ? 0 : 3.33 / K; base = { x: ref.x + dx * (bx.w / 2 + sep), y: ref.y + dy * (bx.h / 2 + sep) }; }
+          at = { x: base.x + dx * dx0, y: base.y + dy * dy0 };
+          myAnchor = onGrid ? 'center' : PLACE_ANCHOR[pk];
+          const plain = !transformed && bx && !(C.approx && C.approx.has(of)) && /^[^().,:$\\]+$/.test(of);
           if (plain && !pos && !nopts.some((o: any) => o.k === 'anchor')) pos = { k: pk, v: v.trim(), of };
-          else { placeIss.push(`placed ${pk} of (${of}) with the positioning library`); pos = null; }
+          // of a point (B.south, a |- b, a coordinate): placed from that point, written back at where it lands
+          else if (transformed || !resolved || (C.approx && C.approx.has(of)) || (resolved.node && (C.kinds || {})[resolved.node] !== 'coordinate' && !C.geo?.[resolved.node])) { placeIss.push(`placed ${pk} of (${of}) with the positioning library`); pos = null; }
+          else pos = null;
+        }
+        // an anchor=… after the placement wins over the anchor the placement set (right=of a, anchor=base)
+        if (myAnchor) {
+          const ks = nopts.map((o: any) => o.k), ai = ks.lastIndexOf('anchor');
+          const pi = Math.max(...ks.map((k: string, n: number) => (PLACE_ANCHOR[k] || /^(above|below|left|right|above left|above right|below left|below right) of$/.test(k)) ? n : -1));
+          if (ai > pi && nopts[ai].v) myAnchor = String(nopts[ai].v).trim();
+        }
+        if (!myAnchor) {
+          // the last of anchor=… and above / below left / … (which set the anchor, and with a value shift by it)
+          const last = [...nopts].reverse().find((o: any) => o.k === 'anchor' || PLACE_ANCHOR[o.k]);
+          if (last?.k === 'anchor') myAnchor = String(last.v || '').trim();
+          else if (last) {
+            myAnchor = PLACE_ANCHOR[last.k];
+            if (last.v != null && !/\bof\b/.test(last.v)) {
+              const d = String(last.v).split(/\s+and\s+/).map((x: any) => len(x, placeUnit(C)) as number), sy = d[0], sx = d[1] ?? d[0];
+              if (Number.isFinite(sx) && Number.isFinite(sy)) at = { x: at.x + (/left/.test(last.k) ? -sx : /right/.test(last.k) ? sx : 0), y: at.y + (/above/.test(last.k) ? -sy : /below/.test(last.k) ? sy : 0) };
+              else placeIss.push(`Unresolved placement ${last.k}=${last.v}`);
+            }
+          }
         }
         if (placeIss.length && node.name) (C.approx = C.approx || new Set()).add(node.name);
         const nodeIss = () => [...issues(), ...placeIss];
-        if (node.name) { C.names[node.name] = { ...at }; (C.kinds = C.kinds || {})[node.name] = node.coordinate ? 'coordinate' : 'node'; }
+        if (node.name) { C.names[node.name] = toAbs(C, at); (C.kinds = C.kinds || {})[node.name] = node.coordinate ? 'coordinate' : 'node'; }
         const names = node.name ? [node.name] : undefined;
         if (node.coordinate) {
           styUsed = null;
           const abs = applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], C.scopes || []).map((d: any) => ({ x: d.cx, y: d.cy }))[0];
           if (node.name) C.boxes[node.name] = { w: 0, h: 0, pt: true };
+          if (node.name && C.geo) delete C.geo[node.name];
           if (preview) continue;
           // \coordinate (A) at (x,y); is a named point the canvas shows and moves; lines through it keep the name
-          const plainPt = node.name && hasAt && !pos && !placeIss.length && !nopts.length && !toks.some((t2) => t2.t === 'op' || t2.t === 'brace' || t2.t === 'opts');
+          const placed = nopts.every((o: any) => /^(above|below|left|right|above left|above right|below left|below right)( of)?$/.test(o.k) && o.v != null) && nopts.length;
+          const plainPt = node.name && (hasAt || placed) && !placeIss.length && (!nopts.length || placed) && !toks.some((t2) => t2.t === 'op' || t2.t === 'brace' || t2.t === 'opts');
           if (plainPt) done(bs, k, [{ type: 'coord', x: abs.x, y: abs.y, tikzName: node.name }], issues(), { names });
           else done(bs, k, [], ['a named point: kept so the code that uses its name still works'], { raw: true, at: abs, names });
           continue;
         }
-        const shapeOption = [...nopts].reverse().find((o: any) => ['circle','ellipse','rectangle'].includes(o.k) || o.k === 'shape');
-        const shapeName = shapeOption?.k === 'shape' ? shapeOption.v : shapeOption?.k;
-        const shapeKind = shapeName === 'circle' || shapeName === 'ellipse' ? 'ellipse' : shapeName === 'rectangle' ? 'rect' : null;
-        const size = len(nopts.find((o: any) => o.k === 'minimum size')?.v);
-        let w = len(nopts.find((o: any) => o.k === 'minimum width')?.v), h = len(nopts.find((o: any) => o.k === 'minimum height')?.v);
-        if (shapeKind && (node.text.trim() || Number.isFinite(size) || (Number.isFinite(w) && Number.isFinite(h)))) {
-          const style0 = style(C,nopts,'node'), decoration = nodeDecorations(nopts);
-          if (!nopts.some((o: any) => o.k === 'draw')) style0.stroke = null;
-          const fs = fontStyle(style0.font), text = node.text.replace(/\s*\\\\\s*/g, '\n').trim();
-          const inner = nopts.find((o: any) => o.k === 'inner sep');
-          const sep = inner ? Number(len(inner.v, 'pt')) : 3.333 / K;
-          const tb = text ? TD.textBox(text,fs) : { w:0,h:0 };
-          w = Math.max(Number.isFinite(w) ? w! : 0, Number.isFinite(size) ? size! : 0, tb.w + 2*sep);
-          h = Math.max(Number.isFinite(h) ? h! : 0, Number.isFinite(size) ? size! : 0, tb.h + 2*sep);
-          if (shapeName === 'circle') w = h = Math.max(w,h, Math.hypot(tb.w+2*sep,tb.h+2*sep));
-          // Positioning places borders apart; include this node's own half-size.
-          const placement = pos && nopts.find((o: any) => o.k === pos.k);
-          if (placement && pos) {
-            at = { x:at.x + (/left/.test(pos.k) ? -w/2 : /right/.test(pos.k) ? w/2 : 0),
-              y:at.y + (/above/.test(pos.k) ? -h/2 : /below/.test(pos.k) ? h/2 : 0) };
-          }
-          const anchor = nopts.find((o: any) => o.k === 'anchor');
-          if (anchor && TD.nodeFeatures.anchors.includes(anchor.v)) {
-            const [u,v] = TD.nodeFeatures.anchorUV(anchor.v,shapeKind);
-            at = { x:at.x + (.5-u)*w, y:at.y + (.5-v)*h };
-          }
-          const made = TD.TYPES[shapeKind].create(at,style0);
-          made._importNodeAt = { ...at };
-          Object.assign(made, shapeKind === 'rect' ? {x:at.x-w!/2,y:at.y-h!/2,w,h,radius:style0.radius || 0} : {cx:at.x,cy:at.y,rx:w!/2,ry:h!/2}, fs, { color: style0.color || '#000000' }, decoration.fields);
-          if (text) made.nodeText = text;
+        const text = lineBreaks(node.text);
+        const sizeAsked = nopts.some((o: any) => /^minimum (size|width|height)$/.test(o.k));
+        // an empty node that only carries a label or pin: an undrawn box (inner sep round nothing) holding it
+        const labelOnly = !text && nopts.some((o: any) => o.k === 'label' || o.k === 'pin');
+        if (labelOnly && !shapeName) shapeName = 'rectangle';
+        if (shapeName && NODE_SHAPES[shapeName] && (hasBorder || sizeAsked || explicitShape || labelOnly)) {
+          const made0 = boxNode(C, text, nopts, at, myAnchor, shapeName);
+          const made = made0.shape;
           if (node.name) made.nodeName = node.name;
-          const xf = readXf(C,nopts);
-          const absolute = applyXf([made],[{xf:xf.xf.map((t: any)=>(t.rot!==undefined || t.scale!==undefined)?{...t,px:at.x,py:at.y}:t),shape:true},...(C.scopes || [])]);
-          const allowed = new Set([...PATH_KEYS,...NODE_KEYS,'rectangle','ellipse','circle','shape','minimum size','minimum width','minimum height','inner sep','outer sep']);
-          const bad = [...unknownKeys(C,nopts,allowed),...decoration.issues];
-          if (!Number.isFinite(sep) || sep < 0) bad.push('inner sep');
-          if (anchor && !TD.nodeFeatures.anchors.includes(anchor.v)) bad.push('anchor');
-          if (nopts.some((o: any) => o.k==='outer sep' && len(o.v,'pt')!==0)) bad.push('outer sep');
+          const xf = readXf(C, nopts);
+          // a node's own rotate and scale turn it about its own position (the point its anchor is at)
+          if (made0.labels.length && (xf.xf.length || (C.scopes || []).some((L: any) => L.xf && L.xf.length))) made0.bad.push('labels on a transformed node');
+          const absolute = applyXf([made, ...made0.labels], [{ xf: xf.xf.map((t: any) => (t.rot !== undefined || t.scale !== undefined) ? { ...t, px: at.x, py: at.y } : t), shape: true }, ...(C.scopes || [])]);
+          // (a matrix cell's box: the border without outer sep)
+          if (C.cellBoxes) { const a = absolute[0], c = a.type === 'rect' ? { x: a.x + a.w / 2, y: a.y + a.h / 2 } : { x: a.cx, y: a.cy }; C.cellBoxes.push({ s: a, c, hw: made0.w / 2, hh: made0.h / 2 }); }
           if (node.name) {
-            const frame = TD.rotFrame(absolute[0]);
-            C.names[node.name] = { x:(frame[0][0]+frame[2][0])/2, y:(frame[0][1]+frame[2][1])/2 };
-            C.boxes[node.name] = { w, h, native:true, shape:absolute[0] };
+            const frame = TD.rotFrame({ ...absolute[0], nodeLabel: '', nodePin: '' }), g = geoOf(made0.kind, frame, made0.os);
+            if (g) { C.names[node.name] = { ...g.c }; (C.geo ||= {})[node.name] = g; }
+            C.boxes[node.name] = { w: made0.w, h: made0.h, native: true, shape: absolute[0] };
           }
-          done(bs,k,absolute,[...nodeIss(),...bad],{names}); styUsed=null; continue;
+          const bad = [...made0.bad];
+          if (toks.some((t2) => t2.t === 'op' || t2.t === 'brace')) bad.push('path after the node');
+          done(bs, k, absolute, [...nodeIss(), ...(bad.length ? [`options the node does not hold: ${[...new Set(bad)].join(', ')}`] : [])], { names }); styUsed = null; continue;
         }
         const blk = nodeBlock(C, node, at, o.slice(bs, k), s.slice(bs, k));
         if (blk) {
@@ -1255,8 +2171,11 @@ import { runtime as TD } from '../runtime';
           styUsed = null; done(bs, k, applyXf([blk.shape], [{ xf, shape: true }, ...(C.scopes || [])]), [...nodeIss(), ...blk.issues], { names }); continue;
         }
         if (node.text.trim()) {
+          let tbox: any = null;
           const make = () => {
-            const no = parseOpts(node.opts), own = readXf(C, no), t = textShape(C, node.text, no, at);
+            const no = [...everyNode(C, 'rectangle'), ...parseOpts(node.opts)], own = readXf(C, no), t = textShape(C, node.text, no, at, undefined, myAnchor);
+            if (!tbox) tbox = t._box;
+            delete t._box;
             // a node's own rotate turns it about its own position
             (t as any)._importNodeAt = { ...at };
             const xf = own.xf.map((x) => ((x.rot !== undefined || x.scale !== undefined) && !x.px && !x.py ? { ...x, px: t.x, py: t.y } : x));
@@ -1264,19 +2183,39 @@ import { runtime as TD } from '../runtime';
           };
           const made = make();
           styUsed = null;
-          const bad = preview ? [] : [...unknownKeys(C, nopts, NODE_KEYS), ...nodeDecorations(nopts).issues];
+          if (C.cellBoxes && tbox && made[0]) C.cellBoxes.push({ s: made[0], c: { x: made[0].x, y: made[0].y }, hw: tbox.hw - tbox.os, hh: tbox.hh - tbox.os });
+          const bad = preview ? [] : [...unknownKeys(C, nopts, TEXT_KEYS), ...nodeDecorations(nopts).issues];
+          if (Number.isFinite(len(lastOpt(nopts, 'text width')?.v, 'pt'))) bad.push('text width');
+          const tal = lastOpt(nopts, 'align')?.v?.trim();
+          if (tal && !/^(center|left|right|flush center|flush left|flush right)$/.test(tal)) bad.push('align=' + tal);
           if (nopts.some((o: any) => o.k==='outer sep' && len(o.v,'pt')!==0)) bad.push('outer sep');
           if (toks.some((t2) => t2.t === 'op' || t2.t === 'brace')) bad.push('path after the node');
           if (!preview) {
-            keepStyles(made, su, make);
+            keepStyles(made, su, make, C);
             const t = made[0];
-            if (node.name && t) { const b = TD.bbox(t); C.boxes[node.name] = { w: b.w, h: b.h }; }
+            if (node.name && t) {
+              const b = TD.bbox(t); C.boxes[node.name] = { w: b.w, h: b.h };
+              if (tbox) (C.geo ||= {})[node.name] = { kind: 'rect', c: { x: t.x, y: t.y }, U: { x: tbox.hw, y: 0 }, V: { x: 0, y: tbox.hh } };
+              C.names[node.name] = { x: t.x, y: t.y };
+            }
             if (pos && t) { const r = C.names[pos.of]; t.pos = { ...pos, off: [t.x - r.x, t.y - r.y] }; }
           }
           done(bs, k, made, [...nodeIss(), ...(bad.length ? [`options the text does not hold: ${bad.join(', ')}${su.size ? ` (styles used: ${[...su].join(', ')})` : ''}`] : [])], { names });
           // a node kept as code has a size the canvas only estimates: nothing is placed beside it exactly
-          if (!preview && node.name && C.stmts.length && C.stmts[C.stmts.length - 1].raw) delete C.boxes[node.name];
-        } else if (!preview) done(bs, k, [], [...nodeIss(), 'empty node'], { raw: true, at, names });
+          if (!preview && node.name && C.stmts.length && C.stmts[C.stmts.length - 1].raw) { delete C.boxes[node.name]; if (C.geo) delete C.geo[node.name]; }
+        } else if (!preview) {
+          const ex = nopts.filter((o: any) => !['name', 'inner sep', 'outer sep', 'rectangle', 'shape', 'minimum size'].includes(o.k) && !(PLACE_ANCHOR[o.k] || OLD_OF.includes(o.k) || o.k === 'anchor' || o.k === 'node distance' || o.k === 'on grid'));
+          const abs = applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], C.scopes || []).map((d: any) => ({ x: d.cx, y: d.cy }))[0];
+          if (node.name && !ex.length && !placeIss.length && !toks.some((t2) => t2.t === 'op' || t2.t === 'brace')) {
+            // an empty node: a named point whose border (inner sep round nothing) lines stop at
+            const sep = len(lastOpt(nopts, 'inner sep')?.v ?? '3.333pt', 'pt') as number;
+            const os = outerSep(nopts, 0.4 / K);
+            (C.geo ||= {})[node.name] = { kind: 'rect', c: abs, U: { x: sep + os, y: 0 }, V: { x: 0, y: sep + os } };
+            C.names[node.name] = { ...abs };
+            if (C.cellBoxes) C.cellBoxes.push({ s: null, c: abs, hw: sep, hh: sep });
+            done(bs, k, [{ type: 'coord', x: abs.x, y: abs.y, tikzName: node.name }], issues(), { names });
+          } else done(bs, k, [], [...nodeIss(), 'empty node'], { raw: true, at, names });
+        }
         continue;
       }
       // anything else: its arguments (and a ; right after them) are one statement, kept as code
@@ -1295,8 +2234,7 @@ import { runtime as TD } from '../runtime';
   function pictureOpts(C: any, o: any) {
     C.base = [...(C.base || []), ...parseOpts(o).filter((x: any) => baseOpt(C, x))];
     for (const { k, v } of parseOpts(o)) {
-      if (k === 'x' && v) C.sx = len(v);
-      else if (k === 'y' && v) C.sy = len(v);
+      if ((k === 'x' || k === 'y' || k === 'z') && v) { const u = unitVector(C, k, v); if (u) C['v' + k] = u; }
       else if (k === '>' && v && exactTip(v)) gtTip = (arrowSpec('-' + v))!.end;
     }
   }
@@ -1305,6 +2243,18 @@ import { runtime as TD } from '../runtime';
     return src.split('\n').map((l: any) => { for (let i = 0; i < l.length; i++) { if (l[i] === '\\') { i++; continue; } if (l[i] === '%') return l.slice(0, i) + ' '.repeat(l.length - i); } return l; }).join('\n');
   }
   const PIC_ONLY = new Set(['remember picture', 'overlay', 'baseline', 'trim left', 'trim right']);
+  // picture keys only nodes read: every node takes them
+  const NODE_ONLY = /^(inner sep|inner xsep|inner ysep|outer sep|outer xsep|outer ysep|minimum size|minimum width|minimum height|align|text width|text centered|text height|text depth)$/;
+  // picture keys for one feature: [the key, what a statement using that feature has in it]
+  const PIC_FEATURE: [RegExp, RegExp][] = [
+    [/^(label distance|every label|every pin|pin distance|pin edge|label position)$/, /\b(label|pin)\b|"/],
+    [/^(angle radius|angle eccentricity|every angle|pic text|pic text options)$/, /\bpic\b/],
+    [/^(every edge|every edge quotes|every loop)$/, /\bedge\b|\bloop\b/],
+    [/^(start chain|every on chain|every join|continue chain|on chain)$/, /\bon chain\b|\bjoin\b|\\chainin/],
+    [/^(auto|swap|sloped|every to|every edge node)$/, /(--|\bto\b|\bedge\b|\.\.|\|-|-\||\bcurve\b|\barc\b)[\s\S]*\bnode\b|"|\bedge\b/],
+    [/^(level distance|sibling distance|level \d+|level|every child|every child node|edge from parent|grow|grow')$/, /\bchild\b/],
+    [/^(declare function)$/, /[\s\S]/],
+  ];
   const uid8 = () => Math.random().toString(36).slice(2, 10);
   // One picture: `s` its body with comments blanked, `o` as written, `open` the \begin{tikzpicture}[…] as written.
   // Each shape gets s.tex = { p, k, i, n, sig } (picture, statement, place in the statement's shapes, how many);
@@ -1313,7 +2263,7 @@ import { runtime as TD } from '../runtime';
   // nm (names it defines). The picture's first statement holds open and N (statements), the last one tail.
   function importPicture(C: any, s: any, o: any, open: any) {
     STY = C.styles;
-    C.sx = PX; C.sy = PX; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.unresolved = new Set(); C.picIssue = null; C.base = []; C.nodeDist = undefined; C.boxes = {}; gtTip = null;
+    Object.assign(C, unitVectors()); C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.unresolved = new Set(); C.picIssue = null; C.base = []; C.nodeDist = undefined; C.nodeDistH = undefined; C.chains = {}; C.chainCur = null; C.chainPending = null; C.labelDist = undefined; C.boxes = {}; C.geo = {}; gtTip = null;
     const optM = open && /^\\begin\{tikzpicture\}\s*\[([\s\S]*)\]\s*$/.exec(blankComments(open));
     const optStr = optM ? optM[1] : '';
     if (optStr) pictureOpts(C, optStr);
@@ -1325,16 +2275,36 @@ import { runtime as TD } from '../runtime';
     // styles and the node distance the picture sets: read, and kept on the picture for the code written from shapes
     const own = (x: any) => {
       const k = keyOf(x), v = splitTop(x, '=').slice(1).join('=').trim().replace(/^\{([\s\S]*)\}$/, '$1');
-      const sm = /^(.+?)\/\.style$/.exec(k);
-      if (sm && C.styles) { addStyle(C, sm[1].trim(), v); return C.styles.has(sm[1].trim()); }
-      if (k === 'node distance') { const d = len(v); if (isFinite(d!)) { C.nodeDist = d; return true; } }
+      const sm = /^(.+?)\/\.(style|append style)$/.exec(k);
+      if (sm && C.styles) { const nm = sm[1].trim(), old = C.styles.get(nm); addStyle(C, nm, sm[2] === 'append style' && old ? `${old},${v}` : v); return C.styles.has(nm); }
+      // nodes={…} and the keys only nodes read (inner sep, minimum size, align, …): what every node takes
+      if ((k === 'nodes' && v) || (NODE_ONLY.test(k) && v)) {
+        const add = k === 'nodes' ? v : x, old = C.styles?.get('every node');
+        addStyle(C, 'every node', old ? `${old},${add}` : add);
+        return C.styles.has('every node');
+      }
+      if (k === 'start chain') return startChain(C, x.includes('=') ? v : '', false);
+      // node distance=5mm and 3mm: vertical, then horizontal (the old `right of=` syntax takes the first for both)
+      if (k === 'node distance') {
+        const [a, b] = v.split(/\s+and\s+/).map((q: any) => len(q));
+        if (isFinite(a!) && (b == null || isFinite(b))) { C.nodeDist = a; C.nodeDistH = b ?? undefined; return true; }
+      }
       return false;
     };
     // >=Tip only sets what `>` means: shapes written from the model name their tips, so it stays on the picture
     const safe = keep.filter((x) => (keyOf(x) === '>' && gtTip) || own(x)), rest = keep.filter((x) => !safe.includes(x));
     const pictureXf = readXf(C, parseOpts(optStr));
     C.scopes = [{ xf: pictureXf.xf, shape: pictureXf.rest.some((o: any) => o.k === 'transform shape' && o.v !== 'false'), font: pictureXf.rest.filter((o: any) => o.k === 'font').map((o: any) => o.v).join(' '), opts: '' }];
-    const odd = rest.map(keyOf).filter((k) => !['x', 'y', 'font', 'transform shape', ...XF_KEYS].includes(k));
+    // widths and colours the picture sets are in C.base: every shape made here takes them
+    const baseKeys = new Set(parseOpts(optStr).filter((x: any) => baseOpt(C, x)).map((x: any) => x.k));
+    const odd0 = rest.map(keyOf).filter((k) => !['x', 'y', 'z', 'font', 'transform shape', ...XF_KEYS].includes(k) && !baseKeys.has(k));
+    // keys for one feature (labels, edges, chains, trees, angle pics…) only hold back the statements using it
+    C.picFeat = [];
+    const odd = odd0.filter((k) => {
+      const f = PIC_FEATURE.find(([kr]) => kr.test(k.replace(/\/\.(append )?style$/, '').trim()));
+      if (f) C.picFeat.push({ k, re: f[1] });
+      return !f;
+    });
     if (odd.length) C.picIssue = 'picture options the shapes do not hold: ' + odd.join(', ');
     if (pictureXf.unresolved.length) C.picIssue = pictureXf.unresolved.join('; ');
     const picCtx = rest.length ? [rest.join(', ')] : [];
@@ -1406,9 +2376,24 @@ import { runtime as TD } from '../runtime';
         const match = refs[index], target: any = match && nativeNodes.get(match[1]); if (!target) continue;
         const frame = TD.rotFrame({...target,nodeLabel:'',nodePin:''}); if (!frame) continue;
         const [u,v] = TD.nodeFeatures.anchorUV(match[2],target.type), x = frame[0][0]+u*(frame[1][0]-frame[0][0])+v*(frame[3][0]-frame[0][0]), y = frame[0][1]+u*(frame[1][1]-frame[0][1])+v*(frame[3][1]-frame[0][1]);
-        if (Math.hypot(edge[kx]-x,edge[ky]-y)<.25) edge[key] = {id:target.id,u,v};
+        if (Math.hypot(edge[kx]-x,edge[ky]-y)<1) edge[key] = {id:target.id,u,v}; // ends are on the outer border (outer sep 0.2pt)
       }
     }
+    // lines that stop at a node's border stay attached to that node at the point they touch (export: `(name)`)
+    const nodeByName = (nm: string) => shapes.find((n: any) => n.nodeName === nm && TD.nodeFeatures?.types.has(n.type)) || shapes.find((n: any) => n.type === 'text' && n.tex?.nm?.[0] === nm);
+    for (const edge of shapes) for (const [mark, key, kx, ky] of [['_b1', 'link1', 'x1', 'y1'], ['_b2', 'link2', 'x2', 'y2']]) {
+      const nm = edge[mark];
+      if (!nm) continue;
+      delete edge[mark];
+      const target: any = ['line', 'curve', 'spring'].includes(edge.type) && nodeByName(nm);
+      const f = target && TD.rotFrame({ ...target, nodeLabel: '', nodePin: '' });
+      if (!f || edge[key]) continue;
+      const ux = f[1][0] - f[0][0], uy = f[1][1] - f[0][1], vx = f[3][0] - f[0][0], vy = f[3][1] - f[0][1], det = ux * vy - uy * vx;
+      if (!det) continue;
+      const dx = edge[kx] - f[0][0], dy = edge[ky] - f[0][1];
+      edge[key] = { id: target.id, u: (dx * vy - dy * vx) / det, v: (ux * dy - uy * dx) / det, border: true };
+    }
+    for (const x of shapes) if (x.prev) for (const q of x.prev) { delete q._b1; delete q._b2; }
     // the signature, and one that a move does not change (rounded, with the first shape's corner): a statement
     // whose shapes only moved together is written as it was, in a shift scope
     for (const x of shapes) if (x._fromShape) { delete x._fromShape; x.tex.sig = 'new'; }
@@ -1522,13 +2507,27 @@ import { runtime as TD } from '../runtime';
     // pictures, and bare quantikz / forest / ZX / tikz-timing / bytefield environments (each becomes a picture holding the block)
     const found: any[] = [];
     // \begin{tikzpicture}[options] … \end{tikzpicture}, scanned by hand (a regex over nested brackets backtracks
-    // exponentially on an unclosed picture): the options run to the first ], when an \end follows them
+    // exponentially on an unclosed picture): the options run to the ] that closes them, outside braces (a style's
+    // body may hold [ ] of its own: mypic/.pic={\node [box] {…};}), else to the first ], when an \end follows them
     const BEG = '\\begin{tikzpicture}', END = '\\end{tikzpicture}';
+    const optsEnd = (t: string, r: number) => {
+      let d = 0, br = 0;
+      for (let j = r; j < t.length; j++) {
+        const c = t[j];
+        if (c === '\\') { j++; continue; }
+        if (c === '{') br++;
+        else if (c === '}') { if (br > 0) br--; }
+        else if (br === 0 && c === '[') d++;
+        else if (br === 0 && c === ']') { d--; if (d === 0) return j; }
+        if (t.startsWith(END, j)) return -1;
+      }
+      return -1;
+    };
     for (let p = bodyS.indexOf(BEG); p >= 0;) {
       const q = p + BEG.length;
       let r = q; while (r < bodyS.length && /\s/.test(bodyS[r])) r++;
       let inner = q;
-      if (bodyS[r] === '[') { const b = bodyS.indexOf(']', r); if (b >= 0 && bodyS.indexOf(END, b + 1) >= 0) inner = b + 1; }
+      if (bodyS[r] === '[') { const b0 = optsEnd(bodyS, r), b = b0 >= 0 ? b0 : bodyS.indexOf(']', r); if (b >= 0 && bodyS.indexOf(END, b + 1) >= 0) inner = b + 1; }
       const e = bodyS.indexOf(END, inner);
       if (e < 0) break;
       found.push({ at: p, end: e + END.length, open: p, inner, len: e - inner });
@@ -1578,7 +2577,7 @@ import { runtime as TD } from '../runtime';
     const bareCz = !found.length && (circuitBlock(bodyO, true) || (/^\s*\\(node|path|draw|tikzset)\b/.test(bodyS) && automataBlock(bodyO)));
     if (bareCz) blocks.push({ type: 'diagram', shapes: withDefs([bareCz], preDefs, C) });
     else if (!found.length) {
-      if (/\\(draw|fill|filldraw|node|shade|path|coordinate|foreach|tikzset|begin\{axis\})\b/.test(bodyS)) {
+      if (/\\(?:(?:draw|fill|filldraw|node|shade|path|coordinate|foreach|tikzset)\b|begin\{(?:axis|semilog[xy]axis|loglogaxis)\})/.test(bodyS)) {
         const shapes = importPicture(C, bodyS, bodyO, '');
         blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
       } else if (bodyS.trim()) blocks.push({ type: 'text', text: latexToText(bodyS) });

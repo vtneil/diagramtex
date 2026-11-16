@@ -1,7 +1,6 @@
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/kmap.ts';
-const { layout, varsOf, fullCode } = panelServices;
+import { layout, varsOf, fullCode } from '../../domain/kmap.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.kmap = {

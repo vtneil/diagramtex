@@ -1,0 +1,12 @@
+% expect: native match>=0.95
+\usetikzlibrary{matrix}
+\begin{tikzpicture}
+\matrix (m) [matrix of nodes, nodes={draw, minimum size=7mm}, column sep=4mm, row sep=3mm,
+  row 1/.style={nodes={fill=blue!15}}, column 3/.style={nodes={circle}}] {
+  A & Long text & g \\
+  xy & |[fill=red!20]| B & wide cell \\
+  1 & & yg \\
+};
+\draw[->] (m-1-1) -- (m-2-2);
+\draw[->] (m-3-1) -- (m-3-3);
+\end{tikzpicture}

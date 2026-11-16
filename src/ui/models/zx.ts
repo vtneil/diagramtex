@@ -1,6 +1,5 @@
 import { runtime as TD } from '../../runtime';
-import { panelServices } from '../../domain/zx.ts';
-const { layout, fullCode } = panelServices;
+import { layout, fullCode } from '../../domain/zx.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.zx = {

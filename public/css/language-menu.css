@@ -1,6 +1,6 @@
 /* Shared by the editor and both static guides. */
 .language-picker { position: relative; flex: none; font: 500 13px/1.5 var(--font-ui); color: var(--ink); }
-.language-picker > summary { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 3px 8px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; list-style: none; white-space: nowrap; user-select: none; }
+.language-picker > summary { box-sizing: border-box; display: flex; align-items: center; gap: 5px; min-height: 28px; padding: 2px 6px; font-size: 12px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; list-style: none; white-space: nowrap; user-select: none; }
 .language-picker > summary::-webkit-details-marker { display: none; }
 .language-picker > summary:hover, .language-picker[open] > summary { background: var(--wash); }
 .language-picker > summary:focus-visible, .language-picker .language-option:focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
@@ -17,7 +17,6 @@
 /* The top layer escapes the editor toolbar’s horizontal scroll clipping. */
 .language-picker .language-options[popover] { position: fixed; inset: auto; margin: 0; overflow: visible; }
 
-/* Keep the editor's language trigger compact beside the appearance control. */
-#languagePicker > summary { box-sizing: border-box; min-height: 28px; padding: 2px 6px; gap: 5px; font-size: 12px; }
-#languagePicker > summary .language-flag { font-size: 16px; }
-#languagePicker > summary .language-chevron { width: 10px; height: 10px; }
+/* The trigger is compact (flag, EN / TH, chevron), the same in the editor's top bar and the guides. */
+.language-picker > summary .language-flag { font-size: 16px; }
+.language-picker > summary .language-chevron { width: 10px; height: 10px; }

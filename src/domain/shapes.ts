@@ -5,7 +5,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.48.5'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.49.2'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -1753,6 +1753,7 @@ import { runtime as TD } from '../runtime';
       for (const pkg of s.tex?.pkgs || []) Y.pkgs.add(pkg);
       try { (T as Record<string, any>)[s.type].tikz(s, Y); } catch (e: any) { /* only the libraries matter here */ } }
     if (list.some((s: any) => s.pos)) Y.libs.add('positioning');
+    if (list.some((s: any) => s.chain)) Y.libs.add('chains');
     for (const l of Y.libs) X.libs.add(l);
     for (const p of Y.pkgs) X.pkgs.add(p);
   }
@@ -1885,21 +1886,24 @@ import { runtime as TD } from '../runtime';
     const items: any[] = [];
     const exportGroup = (s: any) => s.scopeGroup ? s.g : null;
     const linkedIds = new Set(shapes.flatMap((s: any) => [s.link1?.id,s.link2?.id].filter(Boolean)));
-    const nativeChanged = (s: any) => s.nodeName || s.nodeLabel || s.nodePin || (TD.nodeFeatures?.types.has(s.type) && linkedIds.has(s.id));
+    // node features set in the app (an imported node still as read holds them in its source, written as is)
+    const nativeChanged = (s: any) => !unchanged(s) && (s.nodeName || s.nodeLabel || s.nodePin || (TD.nodeFeatures?.types.has(s.type) && linkedIds.has(s.id)));
     if (shapes.some((s: any) => s.pos)) X.libs.add('positioning'); // right=1cm of a, as written or kept (posCode)
+    if (shapes.some((s: any) => s.chain)) X.libs.add('chains'); // \chainin, for the chain's nodes written from the model
     for (const s of shapes) {
       for (const lib of s.tex?.libs || []) X.libs.add(lib);
       for (const pkg of s.tex?.pkgs || []) X.pkgs.add(pkg);
-      const code = s.type === 'tikz' ? s.code : s.tex && s.tex.src;
+      for (const code of [s.type === 'tikz' ? s.code : s.tex && s.tex.src, s.tex?.preamble]) {
       if (!code || !code.includes('color')) continue;
       for (const m of code.matchAll(/\\(?:definecolor|colorlet)\s*\{([^}]*)\}/g)) (X.reserved = X.reserved || new Set()).add(m[1].trim());
       // \definecolor{name}{HTML|RGB|rgb}{…} at the top level: generated code may use the name for that colour
-      if (s.type === 'tikz' && !(s.ctx && s.ctx.length)) for (const m of code.matchAll(/\\definecolor\s*\{([^}]*)\}\s*\{(HTML|RGB|rgb)\}\s*\{([^}]*)\}/g)) {
+      if ((s.type === 'tikz' || code === s.tex?.preamble) && !(s.ctx && s.ctx.length)) for (const m of code.matchAll(/\\definecolor\s*\{([^}]*)\}\s*\{(HTML|RGB|rgb)\}\s*\{([^}]*)\}/g)) {
         const v = m[3].split(',').map((x: any) => x.trim());
         const n = m[2] === 'HTML' ? [0, 2, 4].map((i) => parseInt(v[0].slice(i, i + 2), 16)) : v.map((x: any) => Math.round(m[2] === 'rgb' ? +x * 255 : +x));
         if (n.length !== 3 || !n.every((x: any) => x >= 0 && x <= 255)) continue;
         const hex = '#' + n.map((x: any) => x.toString(16).padStart(2, '0')).join('');
         X.named = X.named || new Map(); if (!X.named.has(hex)) X.named.set(hex, m[1].trim());
+      }
       }
     }
     for (const preamble of new Set(shapes.map((s: any) => s.tex?.preamble).filter(Boolean))) {
@@ -1949,7 +1953,16 @@ import { runtime as TD } from '../runtime';
       // a node other statements still name keeps its name, as a coordinate where the text is (a named point
       // renamed here keeps its old name the same way, for the code kept as written that uses it)
       const old = t && t.nm && t.i === 0 ? t.nm.filter((nm: any) => !(s.type === 'coord' && nm === s.tikzName)) : [];
-      if (code && old.length && !placed && !nativeChanged(s) && (s.type === 'text' || s.type === 'coord')) code += '\n' + old.map((nm: any) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
+      // a node that was on a chain: written where it is, then put back in its chain (\chainin does not move it),
+      // so the nodes after it kept as written still follow it (a text node takes its name back for that)
+      let chainNm = s.chain && code ? s.nodeName || null : null;
+      if (s.chain && code && !chainNm && s.type === 'text' && old.length) {
+        const m = /^\\node(\[[^\]]*\])? at \(/.exec(code);
+        if (m) { code = code.replace(m[0], `\\node${m[1] || ''} (${old[0]}) at (`); chainNm = old[0]; }
+        else if (code.includes(`(${old[0]})`)) chainNm = old[0];
+      }
+      if (code && old.length && !placed && !chainNm && !nativeChanged(s) && (s.type === 'text' || s.type === 'coord')) code += '\n' + old.map((nm: any) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
+      if (code && chainNm) code += `\n\\chainin (${chainNm})${s.chain.name && s.chain.name !== 'chain' ? ` [on chain=${s.chain.name}]` : ''};`;
       if (code) items.push({ code: mark([s.id], code), ctx: [], group: exportGroup(s) });
       n++;
     }
@@ -1972,7 +1985,7 @@ import { runtime as TD } from '../runtime';
     const L = shapes.filter((s: any) => !s.hidden && !(s.type === 'tikz' && s.pre));
     const t0 = L.length && L[0].tex;
     const nativeIds = new Set(L.filter((s: any) => TD.nodeFeatures?.types.has(s.type)).map((s: any) => s.id));
-    if (L.some((s: any) => s.scopeGroup || s.nodeName || s.nodeLabel || s.nodePin || nativeIds.has(s.link1?.id) || nativeIds.has(s.link2?.id))) return null;
+    if (L.some((s: any) => s.scopeGroup || (!unchanged(s) && (s.nodeName || s.nodeLabel || s.nodePin || nativeIds.has(s.link1?.id) || nativeIds.has(s.link2?.id))))) return null;
     if (!t0 || t0.k !== 0 || t0.i !== 0 || !t0.open) return null;
     let k = 0, i = 0;
     for (const s of L) {

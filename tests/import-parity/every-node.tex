@@ -1,0 +1,7 @@
+% expect: native match>=0.9
+\begin{tikzpicture}[every node/.style={draw,circle,minimum size=8mm}]
+\node (a) at (0,0) {1};
+\node (b) at (2,0) {2};
+\node (c) at (1,1.5) {3};
+\draw (a) -- (b) -- (c) -- (a);
+\end{tikzpicture}

@@ -1,0 +1,10 @@
+% expect: native match>=0.9
+\begin{tikzpicture}
+\draw (0,0) -- (1,0);
+\begin{scope}[very thick,red,x=2cm,every node/.style={draw,circle}]
+\draw (0,0) -- (1,1);
+\node (p) at (1,0) {p};
+\end{scope}
+\draw (0,1) -- (1,1);
+\node[draw] at (0,-1) {q};
+\end{tikzpicture}

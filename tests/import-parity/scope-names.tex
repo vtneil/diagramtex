@@ -1,0 +1,25 @@
+% expect: native match>=0.95
+\begin{tikzpicture}
+\begin{scope}[shift={(1,0)}]
+\node[draw] (a) at (0,0) {A};
+\coordinate (k) at (0,2);
+\draw (a) -- (0,1) coordinate (pc) -- (1,1);
+\draw (k) -- (1,2);
+\draw (a) -- (k);
+\end{scope}
+\begin{scope}[rotate=30, scale=1.5]
+\node[draw] (r) at (1,0) {R};
+\coordinate (rk) at (0,1);
+\draw (r) -- (rk) -- (a);
+\draw (r.east) -- ++(0.5,0);
+\end{scope}
+\begin{scope}[xshift=3cm, yscale=0.5]
+\node[draw, circle] (t) at (1,1) {t};
+\draw (t) -- (a);
+\draw (t.south) -- ++(0,-1);
+\end{scope}
+\draw (a) -- (2,-1);
+\draw (k) -- (3,3);
+\draw (pc) -- (r);
+\draw (rk) -- (t);
+\end{tikzpicture}

@@ -1,0 +1,11 @@
+% expect: native match>=0.95
+\usetikzlibrary{matrix}
+\begin{tikzpicture}
+\matrix (p) at (1,-1) [draw, rounded corners, column sep=2mm, row sep=1mm] {
+  \node[draw] (a) {a}; & \node[draw,minimum size=1cm] (b) {B}; &[1cm] \node[draw,circle] (c) {c}; \\[3mm]
+  \node[draw] (d) {wide node}; & & \node (e) {e}; \\
+};
+\draw[->] (a) -- (d);
+\draw[->] (b) -- (c);
+\draw[dashed] (p.north west) -- (p.south east);
+\end{tikzpicture}

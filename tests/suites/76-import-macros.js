@@ -32,7 +32,9 @@ T.test('import macros: \\def values place circles, nodes, arcs and lines', () =>
   T.ok(prev.some((p) => p.type === 'line' && near(p.x1, -2 * 1.5 * CM) && near(p.x2, -1.5 * CM)), 'the left line from -2\\radius');
   T.ok(prev.some((p) => p.stroke && p.stroke.toLowerCase() === '#00008b'), 'DarkBlue (svgnames) read');
   // an edit of kept code previews with the macro it uses
-  const c = sh.find((s) => s.type === 'tikz' && /circle \(\\radius\)/.test(s.code || ''));
+  // (very thick is the picture's: the circle is a shape, the q0 arc with its shorten keys is kept)
+  T.ok(sh.some((s) => s.type === 'ellipse' && near(s.rx, 1.5 * CM)), 'the circle (\\radius) is a shape');
+  const c = sh.find((s) => s.type === 'tikz' && /arc \(140:40:0\.75\*\\radius\)/.test(s.code || ''));
   T.ok(c && c.macros && c.macros.radius === '1.5', 'the code object carries \\radius');
   const r = TD.importInternals.preview('\\draw (0,0) circle (2*\\radius);', c.ctx, c.names, c.macros);
   T.ok(r.shapes.some((p) => p.type === 'ellipse' && near(p.rx, 3 * CM)), 'edited code previews with \\radius');

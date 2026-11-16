@@ -2,7 +2,7 @@
 """Inventory TikZ constructs and select reproducible, provenance-bearing visual cases.
 
 Default: bounded rows API scan, no Python dependencies or bulk image/parquet download.
-Optional --backend datasets uses HF streaming at an exact dataset revision.
+Optional --backend datasets uses HF streaming at an exact dataset revision (with --images, references come from the stream).
 """
 import argparse
 import collections
@@ -154,14 +154,18 @@ def hub_rows(args, out, meta):
 
 
 def dataset_rows(args, out, meta):
-    # Optional code-column scan. Project metadata columns and never decode image pixels.
+    # Optional streaming scan at a pinned revision. Projects the text columns; with --images it also keeps each
+    # row's encoded image bytes (never decoded here) so selected cases get references without the rate-limited
+    # rows API.
     try:
-        from datasets import load_dataset
+        from datasets import load_dataset, Image
     except ImportError as error:
         raise SystemExit('Install datasets in a virtual environment for --backend datasets') from error
-    stream = load_dataset(DATASET, split=args.split, streaming=True, revision=meta['sha'],
-        columns=['code', 'uri', 'origin', 'augmented'])
-    stream = stream.select_columns(['code', 'uri', 'origin', 'augmented'])
+    columns = ['code', 'uri', 'origin', 'augmented'] + (['image'] if args.images else [])
+    stream = load_dataset(DATASET, split=args.split, streaming=True, revision=meta['sha'], columns=columns)
+    stream = stream.select_columns(columns)
+    if args.images:
+        stream = stream.cast_column('image', Image(decode=False))
     for idx, row in enumerate(stream):
         if idx >= args.max_rows:
             break
@@ -195,8 +199,6 @@ def main():
     parser.add_argument('--max-code-bytes', type=int, default=100000)
     parser.add_argument('--images', action='store_true', help='Download reference images for selected cases only')
     args = parser.parse_args()
-    if args.images and args.backend == 'datasets':
-        parser.error('--images uses the hub backend; datasets backend inventories projected text columns only')
     if args.max_rows < 1 or args.samples < 1 or args.max_code_bytes < 1:
         parser.error('row/sample/size limits must be positive')
     out = args.out.resolve()
@@ -248,7 +250,16 @@ def main():
         (out / 'cases').mkdir(exist_ok=True)
         (out / 'cases' / (row['id'] + '.tex')).write_text(row['code'])
         row['code_path'] = 'cases/' + row['id'] + '.tex'
-        if args.images and (row.get('image') or {}).get('src'):
+        encoded = (row.get('image') or {}).get('bytes') if isinstance(row.get('image'), dict) else None
+        if args.images and encoded:
+            if len(encoded) > 5_000_000:
+                raise ValueError('Reference image exceeds 5 MB')
+            kind = 'png' if encoded[:8] == b'\x89PNG\r\n\x1a\n' else 'jpg' if encoded[:2] == b'\xff\xd8' else None
+            if kind:
+                target = out / 'cases' / (row['id'] + '.' + kind)
+                target.write_bytes(encoded)
+                row['image_path'] = 'cases/' + target.name
+        elif args.images and (row.get('image') or {}).get('src'):
             url = row['image']['src']
             parts = urllib.parse.urlsplit(url)
             if parts.scheme != 'https' or parts.hostname != 'datasets-server.huggingface.co':
@@ -280,6 +291,8 @@ def main():
         # Signed viewer URLs expire; retain only local image metadata and provenance in the manifest.
         image = row.pop('image', None) or {}
         row['reference_size'] = {k: image[k] for k in ['width', 'height'] if k in image}
+    for row in eligible:
+        row.pop('image', None)
     inventory = {category: [{'token': key, 'occurrences': count, 'documents': documents[category][key]}
         for key, count in sorted(counts.items(), key=lambda p: (-documents[category][p[0]], p[0]))]
         for category, counts in occurrences.items()}

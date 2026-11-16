@@ -42,7 +42,7 @@ for (const type of NODE_TYPES) {
     const extra = annotations(s).map(a =>
       (a.kind==='Pin' ? `<path d="M${a.ax},${a.ay}L${a.x-a.dx*a.w/2},${a.y-a.dy*a.h/2}" fill="none" stroke="${TD.util.esc(s.color || s.stroke || '#000000')}" stroke-width="${s.width || 1}"/>` : '') +
       TD.textSvg(a.text,a.st,s.color || '#000000',a.x,a.y,ctx)).join('');
-    const body = type !== 'text' && s.nodeText ? TD.textSvg(String(s.nodeText),s,s.color || '#000000',bodyBox(s).x+bodyBox(s).w/2,bodyBox(s).y+bodyBox(s).h/2,ctx,s.opacity ?? 1) : '';
+    const body = type !== 'text' && s.nodeText ? TD.textSvg(String(s.nodeText),s,s.color || '#000000',bodyBox(s).x+bodyBox(s).w/2,bodyBox(s).y+bodyBox(s).h/2,ctx,s.opacity < 1 ? ` opacity="${s.opacity}"` : '') : '';
     return original.svg.call(this,s,ctx) + body + (s.opacity < 1 && extra ? `<g opacity="${s.opacity}">${extra}</g>` : extra);
   };
   T.tikz = function(s: any, X: any) {
@@ -82,7 +82,8 @@ for (const type of ['line','curve','spring']) {
     for(const [key,x,y] of [['link1','x1','y1'],['link2','x2','y2']]) {
       const link=s[key], target=link && X.nodeById.get(link.id);
       const anchor=link && TD.nodeFeatures.anchorName(link.u,link.v,target?.type);
-      if(target && NODE_TYPES.has(target.type) && anchor) refs.set(base(s[x],s[y]),`(${nameOf(target)}.${anchor})`);
+      if(target && NODE_TYPES.has(target.type) && link.border) refs.set(base(s[x],s[y]),`(${nameOf(target)})`);
+      else if(target && NODE_TYPES.has(target.type) && anchor) refs.set(base(s[x],s[y]),`(${nameOf(target)}.${anchor})`);
     }
     if(!refs.size) return original.call(this,s,X);
     return original.call(this,s,{...X,c:(x:number,y:number)=>refs.get(base(x,y)) || base(x,y)});

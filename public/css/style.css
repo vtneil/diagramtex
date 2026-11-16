@@ -1565,24 +1565,55 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .td-tip { transition: none; } }
 
 /* ---------- phone wall ----------
-   A phone held upright (narrow and portrait) gets a full-screen notice instead of the editor. Tablets, and
-   wide or landscape screens (iPad, iPhone Duo opened flat), are left alone. It has no close control. */
+   A phone held upright (narrow and portrait) gets a short introduction instead of the editor: what DiagramTeX is,
+   the note that the editor needs a bigger screen, and links into the guide. Tablets, and wide or landscape
+   screens (iPad, iPhone Duo opened flat), are left alone. */
 #phoneWall { display: none; }
 @media (max-width: 599px) and (orientation: portrait) {
   #phoneWall {
-    display: flex; position: fixed; inset: 0; z-index: 2147483647; flex-direction: column; align-items: center; justify-content: center;
-    gap: 12px; padding: 32px 24px calc(32px + env(safe-area-inset-bottom)); background: var(--paper); color: var(--ink); text-align: center;
-    font-family: var(--font-ui); overflow: auto;
+    display: block; position: fixed; inset: 0; z-index: 2147483647; overflow: auto; overscroll-behavior: contain;
+    background: var(--paper); color: var(--ink); font: 500 15px/1.5 var(--font-ui);
   }
-  #phoneWall img { width: 72px; height: 72px; margin-bottom: 8px; }
-  #phoneWall h1 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
-  #phoneWall p { margin: 0; font-size: 15px; line-height: 1.5; color: var(--graphite); max-width: 340px; text-wrap: pretty; }
+  #phoneWall .pw-top {
+    position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    height: calc(52px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 16px 0; background: var(--sheet); border-bottom: 1px solid var(--rule);
+  }
+  #phoneWall .pw-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
+  #phoneWall .pw-lang { height: 32px; padding: 0 12px; border: 1px solid var(--rule-strong); border-radius: var(--r); background: none; color: var(--ink); font: 500 13px var(--font-ui); }
+  #phoneWall .pw-page { display: flex; flex-direction: column; gap: 32px; max-width: 520px; margin: 0 auto; padding: 24px 16px calc(40px + env(safe-area-inset-bottom)); }
+  #phoneWall h1 { margin: 0 0 12px; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+  #phoneWall h2 { margin: 0 0 12px; font-size: 18px; line-height: 1.3; font-weight: 600; }
+  #phoneWall p { margin: 0; }
+  #phoneWall .pw-lead { color: var(--graphite); text-wrap: pretty; }
   #phoneWall b, #phoneWall strong { color: var(--ink); font-weight: 600; }
   #phoneWall strong { word-break: break-word; }
-  /* the notice: set apart from the description, as the one thing to act on */
-  #phoneWall .pw-notice { display: flex; flex-direction: column; gap: 8px; max-width: 340px; margin-top: 12px; padding: 16px; border: 1px solid var(--rule); border-radius: var(--r-lg); background: var(--sheet); }
-  #phoneWall .pw-note { font-size: 13px; color: var(--pencil); }
-  body > :not(#phoneWall) { visibility: hidden !important; } /* nothing behind it is reachable, by pointer or screen reader */
+  #phoneWall code { font: 12px var(--font-mono); color: var(--pencil); }
+  /* the notice: under a rule, as the one thing to act on */
+  #phoneWall .pw-notice { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule); }
+  #phoneWall .pw-actions { display: flex; flex-direction: column; gap: 8px; }
+  #phoneWall .pw-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: var(--r); font: 600 15px var(--font-ui); text-decoration: none; text-align: center; }
+  #phoneWall .pw-share { border: 0; background: var(--wash-strong); color: var(--ink); }
+  #phoneWall .pw-out { border: 1px solid var(--rule-strong); color: var(--ink); }
+  #phoneWall .pw-btn:active { background: var(--wash-strong); }
+  #phoneWall .pw-shot { margin: 0; }
+  #phoneWall .pw-shot img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: var(--r-lg); background: #fff; }
+  #phoneWall figcaption { margin-top: 8px; font-size: 13px; color: var(--pencil); }
+  #phoneWall .pw-steps { counter-reset: pw; display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+  #phoneWall .pw-steps li { counter-increment: pw; position: relative; padding-left: 28px; color: var(--graphite); }
+  #phoneWall .pw-steps li::before { content: counter(pw); position: absolute; left: 0; top: 0; color: var(--pencil); font: 600 15px/1.5 var(--font-mono); }
+  #phoneWall .pw-kinds, #phoneWall .pw-links { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+  #phoneWall .pw-kinds li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule-soft); }
+  #phoneWall .pw-links li { border-bottom: 1px solid var(--rule-soft); }
+  #phoneWall .pw-links a { display: flex; align-items: center; justify-content: space-between; min-height: 44px; color: var(--ink); text-decoration: none; }
+  #phoneWall .pw-links a::after { content: ""; width: 6px; height: 6px; border-top: 1.5px solid var(--pencil); border-right: 1.5px solid var(--pencil); transform: rotate(45deg); }
+  #phoneWall .pw-links a:active { color: var(--graphite); }
+  #phoneWall .pw-facts { display: flex; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--pencil); }
+  #phoneWall .pw-facts li:not(:last-child)::after { content: "·"; margin: 0 8px; color: var(--faint); }
+  #phoneWall :focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
+  html:lang(th) #phoneWall h1, html:lang(th) #phoneWall h2 { line-height: 1.5; letter-spacing: normal; }
+  /* nothing behind it is reachable, by pointer or screen reader; and the editor's toolbars, wider than a phone, must
+     not widen the page, or the phone zooms out to fit them */
+  body > :not(#phoneWall) { visibility: hidden !important; max-width: 100vw; overflow: hidden !important; }
 }
 
 /* Quick: one formula, copied as a picture. The file stays open underneath; only its chrome hides. */

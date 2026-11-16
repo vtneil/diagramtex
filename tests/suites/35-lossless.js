@@ -64,3 +64,26 @@ T.test('import: unbalanced input ends quickly', () => {
     T.ok(Date.now() - t0 < 2000, 'slow on: ' + c.split('\n')[1]);
   }
 });
+
+T.test('lossless: a \\matrix is native cells, written back as the matrix until edited', () => {
+  const src = String.raw`\usetikzlibrary{matrix}
+\begin{tikzpicture}
+\matrix (m) [matrix of nodes, nodes={draw}, column sep=5mm, row sep=3mm] {
+  A & B \\
+  C & |[fill=red!20, name=d]| D \\
+};
+\draw[->] (m-1-1) -- (d);
+\draw (m.north west) rectangle (m.south east);
+\end{tikzpicture}`;
+  const shapes = TD.importLatex(src).blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes);
+  T.ok(shapes.every((s) => s.type !== 'tikz'), 'every statement native');
+  T.eq(shapes.filter((s) => s.gname === 'matrix').map((s) => s.nodeName), ['m', 'm-1-1', 'm-1-2', 'm-2-1', 'd'], 'the matrix node and its cells, one group, by name (name= in a cell wins)');
+  const line = shapes.find((s) => s.type === 'line');
+  T.ok(line.link1 && line.link2, 'the arrow is attached to both cells');
+  T.eq(picOf(TD.toTikz(shapes, { standalone: true })), picOf(src), 'exported as written');
+  TD.translate(shapes.find((s) => s.nodeName === 'm-1-2'), 20, 0);
+  const out = picOf(TD.toTikz(shapes, { standalone: true }));
+  T.ok(/\\node\[[^\]]*\] \(m\) at /.test(out) && /\(m-1-2\) at /.test(out), 'edited: the matrix and its cells as nodes, by name');
+  T.ok(out.includes('\\draw (m.north west) rectangle (m.south east);'), 'code naming the matrix still has its node');
+  T.tex('lossless-matrix-edited', TD.toTikz(shapes, { standalone: true }));
+});

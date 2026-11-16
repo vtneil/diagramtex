@@ -1,0 +1,13 @@
+% expect: native match>=0.9
+\usetikzlibrary{positioning}
+\begin{tikzpicture}[node distance=5mm and 12mm, inner sep=1pt, every edge/.style={draw,dashed}]
+\node[draw] (a) {Aaaa};
+\node[draw, right=of a] (b) {B};
+\node[draw, below=of a] (c) {C};
+\begin{scope}[nodes={draw, circle}]
+\node[below=of c] (d) {D};
+\node[right=of d, anchor=base] (e) {e};
+\end{scope}
+\draw (a) -- (c);
+\path (b) edge (c) (c) edge (d);
+\end{tikzpicture}

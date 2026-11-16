@@ -1,8 +1,7 @@
 import { captions } from '../../i18n/messages';
 import { message as msg } from '../../i18n';
 import { runtime as TD } from '../../runtime';
-import { panelServices } from '../../domain/plots.ts';
-const { CMAPS, usesExprOnly, usesDataOnly, GRID_KINDS, evalSeries, withVars, KINDS3, KINDS2, MARKS, KIND_DEF, newSeries, SERIES_COLORS } = panelServices;
+import { CMAPS, usesExprOnly, usesDataOnly, GRID_KINDS, evalSeries, withVars, KINDS3, KINDS2, MARKS, KIND_DEF, newSeries, SERIES_COLORS } from '../../domain/plots.ts';
 import type { FormRow } from '../forms';
 import { row, section, errors, help, txAttrs, captioned } from '../forms';
 

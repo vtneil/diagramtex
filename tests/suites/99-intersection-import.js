@@ -12,7 +12,8 @@ T.test('intersection import: anchored terminal node is fully editable and keeps 
   T.ok(r.analysis.every(a => a.status === 'editable'), JSON.stringify(r.analysis));
   const text = sh[3], box = TD.bbox(text);
   T.eq(text.text, 'Intersection point');
-  T.ok(Math.abs(box.x) < .01 && Math.abs(text.y) < .01, 'west anchor starts the label at the intersection');
+  // TikZ puts the node's west border (inner sep 3.333pt before the text) at the intersection
+  T.ok(Math.abs(box.x + 1 - 3.333 / TD.PT_PER_PX) < .6 && Math.abs(text.y) < .01, 'west anchor starts the label one inner sep after the intersection');
   T.eq(sh[2].fill, '#000000');
   T.tex('intersection import source', TD.toTikz(sh, { standalone:true }));
 });

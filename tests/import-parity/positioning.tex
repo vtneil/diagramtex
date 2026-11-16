@@ -1,0 +1,9 @@
+% expect: native match>=0.9
+\usetikzlibrary{positioning}
+\begin{tikzpicture}[node distance=1.5cm]
+\node[draw] (a) {Start};
+\node[draw,right=of a] (b) {Middle};
+\node[draw,below=1cm of b] (c) {End};
+\draw[->] (a) -- (b);
+\draw[->] (b) -- (c);
+\end{tikzpicture}

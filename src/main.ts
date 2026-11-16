@@ -10,6 +10,7 @@ import './domain/table/index.ts';
 import './domain/fills.ts';
 import './ui/services/colorpicker.ts';
 import './domain/plots.ts';
+import './domain/pgfplots-import.ts';
 import './domain/view3d.ts';
 import './domain/solid3d.ts';
 import './domain/figures3d.ts';

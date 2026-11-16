@@ -1,7 +1,6 @@
 import { runtime as TD } from '../../runtime';
 import { t, message as msg } from '../../i18n';
-import { panelServices } from '../../domain/chemfig.ts';
-const { layout, counts } = panelServices;
+import { layout, counts } from '../../domain/chemfig.ts';
 
 TD.panels = TD.panels || {};
 TD.panels.chemfig = {
