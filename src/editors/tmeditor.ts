@@ -497,9 +497,9 @@ import { runtime as TD } from '../runtime';
     const se = sel && sel.x != null ? L.extra.filter((x: any) => x.xi === sel.x && (sel.j == null ? x.k === 'annot' : x.j === sel.j)) : [];
     for (const x of se) {
       const dd = x.k === 'annot' ? `M${r2(x.Xa)},${r2(x.Ya)}L${r2(x.Xb)},${r2(x.Yb)}` : x.d;
-      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})"><path class="ze-wsel" d="${dd}" stroke-width="${r2(10 / kk)}"/></g>`;
+      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})"><path class="ze-wsel" d="${dd}" stroke-width="${r2(10 / kk)}"/></g>`;
     }
-    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${T.draw({ type: 'timing', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
+    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${T.draw({ type: 'timing', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
     // under the last row: buttons that add a row there
     E.adds = [];
     {

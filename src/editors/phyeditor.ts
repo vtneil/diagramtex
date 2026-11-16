@@ -450,7 +450,7 @@ import { runtime as TD } from '../runtime';
     if (E.hover && E.hover.obj != null && !selList().includes(E.hover.obj) && !E.drag) out += halo(E.hover.obj, 'phy-hov');
     if (!r.empty) {
       const b = r.bb;
-      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${P.draw({ src: E.src, x: b.x0 * PX, y: -b.y1 * PX }, { export: true })}</g>`;
+      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${P.draw({ src: E.src, x: b.x0 * PX, y: -b.y1 * PX }, { export: true })}</g>`;
     } else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(D() ? uiText('editor.phy.emptyStart', 'Place an object from the left to start') : uiText('editor.phy.emptyNoDomain', 'Name a domain in the first line of the source'))}</text>`;
     for (const i of r.bad) if (i >= 0 && i !== E.sel) out += halo(i, 'phy-bad');
     // the selected object's handles

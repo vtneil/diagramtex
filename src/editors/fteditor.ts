@@ -421,7 +421,7 @@ import { runtime as TD } from '../runtime';
     }
     const b = L.bb;
     out += `<rect class="qe-paper" x="${X(b.x - 16)}" y="${Y(b.y - 16)}" width="${r2((b.w + 32) * k)}" height="${r2((b.h + 32) * k)}"/>`;
-    out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${TD.ft.draw({ ...blockOf(), x: b.x, y: b.y }, { paper: PAPER, export: true })}</g>`;
+    out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})">${TD.ft.draw({ ...blockOf(), x: b.x, y: b.y }, { paper: PAPER, export: true })}</g>`;
     const box = (g: any, cls: any, pad = 3) => `<rect class="${cls}" x="${r2(X(g.x - g.w / 2) - pad)}" y="${r2(Y(g.y - g.h / 2) - pad)}" width="${r2(g.w * k + 2 * pad)}" height="${r2(g.h * k + 2 * pad)}" rx="3"/>`;
     // phantom nodes: an outline, so they can be found
     for (const g of L.nodes) if (g.st.phantom) out += box(g, 'fe-phantom', 0);

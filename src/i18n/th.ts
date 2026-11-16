@@ -43,6 +43,8 @@ const core: Record<string, string> = {
   "block.uml.title": "แผนภาพคลาส UML เขียนสำหรับ pgf-umlcd",
   "block.automata.label": "ออโตมาตา",
   "block.automata.title": "เครื่องสถานะ เขียนด้วยไลบรารี automata ของ TikZ",
+  "block.graph.label": "กราฟ",
+  "block.graph.title": "กราฟของโหนดและเส้นเชื่อม เขียนด้วยไลบรารี graphs ของ TikZ",
   "block.bloch.label": "Bloch",
   "block.bloch.title": "ทรงกลม Bloch เขียนด้วยแพ็กเกจ blochsphere",
   "block.xy.label": "XyMatrix",

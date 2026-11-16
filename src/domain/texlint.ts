@@ -39,6 +39,8 @@ import { runtime as TD } from '../runtime';
     ['intersections', /\bname intersections\b|\bname path\s*=/],
     ['through', /\bcircle through\b/],
     ['automata', /[[,]\s*(?:state|initial|accepting)\s*[,\]]/],
+    ['graphs', /\\graph\b/],
+    ['quotes', /\\graph\b[\s\S]*\[\s*"[^"]*"/],
     ['mindmap', /\bmindmap\b/],
     ['spy', /\bspy using\b|\\spy\b/],
   ];

@@ -394,7 +394,7 @@ import { runtime as TD } from '../runtime';
       for (const b of L.bars) if (same(b.ref, sel) && !b.thread) { const [l, t] = P(b.x1, b.y2), [rr, bt] = P(b.x2, b.y1); out += `<rect class="ze-wsel" x="${r2(l)}" y="${r2(t)}" width="${r2(rr - l)}" height="${r2(bt - t)}" stroke-width="6"/>`; }
       for (const f of L.frames) if (same(f.ref, sel)) { const [l, t] = P(f.x1, f.y2), [rr, b] = P(f.x2, f.y1); out += `<rect class="ze-wsel" x="${r2(l)}" y="${r2(t)}" width="${r2(rr - l)}" height="${r2(b - t)}" fill="none" stroke-width="8"/>`; }
     }
-    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${U.draw({ type: 'umlsd', x: L.bb.x, y: L.bb.y, src: snapCode() }, { export: true })}</g>`;
+    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${U.draw({ type: 'umlsd', x: L.bb.x, y: L.bb.y, src: snapCode() }, { export: true })}</g>`;
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(uiText('editor.umlsd.emptyHint', 'Add an instance from the left to start'))}</text>`;
     for (const n of L.order) {
       const s = boxScr(instBox(n)), at = `x="${r2(s.l - 3)}" y="${r2(s.t - 3)}" width="${r2(s.r - s.l + 6)}" height="${r2(s.b - s.t + 6)}" rx="3"`;

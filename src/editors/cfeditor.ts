@@ -783,7 +783,7 @@ import { runtime as TD } from '../runtime';
     }
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/>${grid}`;
     const sb = selB(), sa = selA(), sv = selV(), sm = selM();
-    const tr = `transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})"`;
+    const tr = `transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})"`;
     if (sb) out += `<g ${tr}><path class="ze-wsel" d="M${r2(sb.X0)},${r2(sb.Y0)}L${r2(sb.X1)},${r2(sb.Y1)}" stroke-width="${r2(10 / k)}"/></g>`;
     if (sa) out += `<g ${tr}><path class="ze-wsel" d="M${r2(sa.x1)},${r2(sa.y1)}L${r2(sa.x2)},${r2(sa.y2)}" stroke-width="${r2(12 / k)}"/></g>`;
     if (sm) out += `<g ${tr}><path class="ze-wsel" d="${moveD(sm)}" stroke-width="${r2(10 / k)}"/></g>`;

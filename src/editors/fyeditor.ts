@@ -258,6 +258,7 @@ import { t as uiText, message, caption, onLocale } from '../i18n';
   });
   function pick(k: any) {
     if (k[0] === 'e') {
+      if (E.arm) { E.arm = null; draw(); }
       E.prop = k.slice(2);
       const e = selE();
       if (e) edit(() => setType(e, E.prop));
@@ -341,8 +342,8 @@ import { t as uiText, message, caption, onLocale } from '../i18n';
     const L = lay(), kk = k / PX;
     // the selected line, as a halo under the drawing
     const se = selE(), sl = se && L.edges.find((x: any) => x.i === E.sel.e);
-    if (sl) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})"><path class="ze-wsel" d="${sl.d}" stroke-width="${r2(10 / kk)}"/></g>`;
-    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${F.draw({ type: 'feynman', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
+    if (sl) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})"><path class="ze-wsel" d="${sl.d}" stroke-width="${r2(10 / kk)}"/></g>`;
+    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${F.draw({ type: 'feynman', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(uiText('editor.fy.emptyStart', 'Place a vertex from the left to start'))}</text>`;
     // every vertex has a point to grab, coordinates included
     const sv = selV(), dragE = E.drag && E.drag.mode === 'edge';
@@ -406,7 +407,7 @@ import { t as uiText, message, caption, onLocale } from '../i18n';
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     const kb = e.target.closest('.ze-knob');
-    if (kb) { E.drag = { mode: 'edge', from: kb.dataset.v, at: toCm(e) }; E.knobAt = null; return; }
+    if (kb) { E.drag = { mode: 'edge', from: kb.dataset.v, at: toCm(e), cx: e.clientX, cy: e.clientY }; E.knobAt = null; return; }
     if (E.arm) { const [x, y] = toCm(e, !e.altKey); addVertex(E.arm, x, y); return; }
     const vn = vertexAt(e), ei = vn == null ? edgeAt(e) : null;
     if (vn != null) {
@@ -465,6 +466,8 @@ import { t as uiText, message, caption, onLocale } from '../i18n';
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'edge') {
+      // a click on the handle, without dragging, does nothing
+      if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) { setTip(''); E.hover = null; draw(); return; }
       setTip('');
       const vn = vertexAt(e, 14);
       if (vn && vn !== d.from) addEdge(d.from, vn);

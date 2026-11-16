@@ -554,7 +554,7 @@ import { runtime as TD } from '../runtime';
     syncCode();
     const r = rect(), W = r.width, H = r.height, v = E.view, kk = v.k / PX;
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/>`;
-    const L = lay(), tr = `translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})`;
+    const L = lay(), tr = `translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})`;
     // the bit columns, under everything: a line a bit, darker every eight from the lowest bit
     const bwpx = L.cfg.bw / TD.PT_PER_PX, x0 = L.cols[0], t = L.tbox;
     if (bwpx * kk >= 3) {

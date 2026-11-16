@@ -103,7 +103,7 @@ T.test('paste in: a block environment, TikZ, a formula and text land on the canv
   // every block's own LaTeX, without the data the app embeds, pasted back: the same block, the same code, the same place
   {
     const strip = (c) => c.replace(/\\tddata\{[A-Za-z0-9+/=]*\}/g, '');
-    for (const t of ['cz', 'automata', 'uml', 'umlsd', 'qc', 'cd', 'xy', 'zx', 'forest', 'timing', 'kmap', 'bytefield', 'chemfig', 'bloch', 'feynman']) {
+    for (const t of ['cz', 'automata', 'graph', 'uml', 'umlsd', 'qc', 'cd', 'xy', 'zx', 'forest', 'timing', 'kmap', 'bytefield', 'chemfig', 'bloch', 'feynman']) {
       const s = TD.TYPES[t].create({ x: 37, y: 91 }, {}); s.id = 'a';
       const code = strip(TD.toTikz([s]));
       const back = TD.importLatex(code).blocks.flatMap((b) => b.shapes).filter((x) => !(x.type === 'tikz' && x.kind === 'defs'));

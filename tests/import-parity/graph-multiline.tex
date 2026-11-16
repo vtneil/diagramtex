@@ -1,0 +1,9 @@
+% expect: native match>=0.97
+\usetikzlibrary{graphs,quotes}
+\begin{tikzpicture}
+\graph[no placement, nodes={draw, rectangle}] {
+  a [as={top \\ $x_1$}, at={(0,0)}, align=center];
+  b/$b$ [at={(4,0)}, label={[align=center]below:one \\ two}];
+  a ->["$p$ \\ $q$", align=center] b;
+};
+\end{tikzpicture}

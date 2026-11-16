@@ -415,6 +415,7 @@ import { runtime as TD } from '../runtime';
   }
   // an arrow style: onto the selected arrow, else the style of the next arrows drawn
   function pickStyle(k: any) {
+    if (E.arm) { E.arm = null; draw(); }
     const a = E.arrow && arrowOf(E.arrow);
     if (a) {
       const cell = at(E.arrow[0], E.arrow[1]);
@@ -530,11 +531,11 @@ import { runtime as TD } from '../runtime';
     // the selected arrow, as a halo under the drawing
     const sa = E.arrow && L.arrows && L.arrows.find((a: any) => a.src.join() === E.arrow.join());
     if (sa) {
-      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})"><path class="ze-wsel" d="${D.curveD(sa.seg)}" stroke-width="${r2(8 / k)}"/>`;
+      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})"><path class="ze-wsel" d="${D.curveD(sa.seg)}" stroke-width="${r2(8 / k)}"/>`;
       for (const l of L.labels) if (l.src.slice(0, 3).join() === E.arrow.join()) out += `<rect class="ze-wsel" x="${r2(l.x - l.w / 2)}" y="${r2(l.y - l.h / 2)}" width="${r2(l.w)}" height="${r2(l.h)}" stroke-width="${r2(3 / k)}"/>`;
       out += '</g>';
     }
-    if (R && C && !L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${D.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true }, L)}</g>`;
+    if (R && C && !L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})">${D.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true }, L)}</g>`;
     if (!R || !C || L.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${esc(R && C ? t('editor.cd.empty.cells', 'Type in a cell, or drop an object') : t('editor.cd.empty.start', 'Drop an object here to start'))}</text>`;
     // an arrow being drawn
     if (E.drag && E.drag.mode === 'arrow') {

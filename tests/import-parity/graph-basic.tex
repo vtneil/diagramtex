@@ -1,0 +1,13 @@
+% expect: native match>=0.97
+\usetikzlibrary{graphs,quotes,arrows.meta}
+\begin{tikzpicture}[>=Stealth]
+\graph[no placement, nodes={draw, circle, minimum size=8mm}] {
+  a/$a$ [at={(0,0)}];
+  b/$b$ [at={(2,1)}];
+  c/$c$ [at={(2,-1)}];
+  d/$d$ [at={(4,0)}, fill=red!20];
+  a -- b; a -- c; b -- c;
+  b ->["$3$"] d;
+  c ->["$5$"'] d;
+};
+\end{tikzpicture}

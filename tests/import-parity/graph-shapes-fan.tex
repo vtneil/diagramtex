@@ -1,0 +1,14 @@
+% expect: native match>=0.97
+\usetikzlibrary{graphs,quotes,arrows.meta,shapes.geometric}
+\begin{tikzpicture}[>=Stealth]
+\graph[no placement, nodes={draw}] {
+  a/A [at={(0,0)}, rectangle, rounded corners];
+  b/B [at={(3,0)}, diamond];
+  c/C [at={(1.5,-2)}, ellipse, label=below:{note}];
+  p/ [at={(3,-2)}, circle, fill, inner sep=0pt, minimum size=4pt];
+  a ->[bend left=49] b; a -> b; a ->[bend right=49] b;
+  b <->[dashed] c;
+  c -- p;
+  a --[loop left] a;
+};
+\end{tikzpicture}

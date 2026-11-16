@@ -611,7 +611,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
     out += `<rect class="qe-grow" x="${X(xs[0])}" y="${Y(ys[R])}" width="${r2((xs[C] - xs[0]) * k)}" height="${r2((ys[R + 1] - ys[R]) * k)}"/>`;
     out += plus((xs[C] + xs[C + 1]) / 2, (ys[0] + ys[R]) / 2) + plus((xs[0] + xs[C]) / 2, (ys[R] + ys[R + 1]) / 2);
     }
-    out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${R && C ? Q.draw({ ...G.s, x: G.L.bb.x, y: G.L.bb.y }, { paper: PAPER, export: true }) : ''}</g>`;
+    out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})">${R && C ? Q.draw({ ...G.s, x: G.L.bb.x, y: G.L.bb.y }, { paper: PAPER, export: true }) : ''}</g>`;
     // a group whose border isn't drawn (draw=none, a label above): its box outlined here only, never exported
     if (!G.empty && G.L.groups) for (const g of G.L.groups) if (g.bare) out += `<rect class="qe-gbare" x="${X(g.x)}" y="${Y(g.y)}" width="${r2(g.w * k)}" height="${r2(g.h * k)}" rx="${r2(g.rx * k)}"/>`;
     if (G.empty) out += `<text class="qe-empty" x="${X((xs[0] + xs[1]) / 2)}" y="${Y(ys[0]) - 14}">${esc(t('editor.qc.empty', 'Drop or click an element to start'))}</text>`;

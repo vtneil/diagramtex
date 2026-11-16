@@ -1,0 +1,11 @@
+% expect: native match>=0.97
+\usetikzlibrary{automata,positioning,arrows.meta}
+\begin{tikzpicture}[->, >=Stealth, shorten >=1pt, auto, node distance=2.5cm, semithick]
+\node[state, initial] (q0) {$q_0$};
+\node[state] (q1) [right=of q0] {$q_1$};
+\node[state, accepting] (q2) [right=of q1] {$q_2$};
+\path (q0) edge node {$a$} (q1)
+      (q1) edge [loop above] node {$b$} ()
+      (q1) edge [bend left] node {$a$} (q2)
+      (q2) edge [bend left] node {$b$} (q1);
+\end{tikzpicture}

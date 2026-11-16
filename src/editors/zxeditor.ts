@@ -484,9 +484,9 @@ import { runtime as TD } from '../runtime';
     // the selected wire, as a halo under the drawing
     const sw = E.wire && L.wires && L.wires.find((w: any) => w.src.join() === E.wire.join());
     if (sw) {
-      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})"><path class="ze-wsel" d="${sw.segs.map((sg: any, i: any) => (i ? '' : `M${r2(sg.p0.x)},${r2(sg.p0.y)}`) + `C${r2(sg.c1.x)},${r2(sg.c1.y)} ${r2(sg.c2.x)},${r2(sg.c2.y)} ${r2(sg.p1.x)},${r2(sg.p1.y)}`).join('')}" stroke-width="${r2(8 / k)}"/></g>`;
+      out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})"><path class="ze-wsel" d="${sw.segs.map((sg: any, i: any) => (i ? '' : `M${r2(sg.p0.x)},${r2(sg.p0.y)}`) + `C${r2(sg.c1.x)},${r2(sg.c1.y)} ${r2(sg.c2.x)},${r2(sg.c2.y)} ${r2(sg.p1.x)},${r2(sg.p1.y)}`).join('')}" stroke-width="${r2(8 / k)}"/></g>`;
     }
-    if (R && C && !L.ops) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(k)})">${Z.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true })}</g>`;
+    if (R && C && !L.ops) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})">${Z.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true })}</g>`;
     if (!R || !C || L.ops) out += `<text class="qe-empty" x="${X((xs[0] + xs[Math.max(1, C)]) / 2)}" y="${Y(ys[0]) - 10}">${esc(R && C ? uiText('editor.zx.dropInCell', 'Drop a spider in a cell') : uiText('editor.zx.dropToStart', 'Drop a spider here to start'))}</text>`;
     // a wire being drawn
     if ((E.drag && E.drag.mode === 'wire') || E.wireStart) {

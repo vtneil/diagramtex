@@ -399,6 +399,7 @@ import { runtime as TD } from '../runtime';
   });
   function pick(k: string) {
     if (k[0] === 'r') {
+      if (E.arm) { E.arm = null; draw(); }
       E.kind = k.slice(2);
       const linked = E.sel && E.sel.n == null;
       if (linked) setLinkKind(E.kind);
@@ -497,7 +498,7 @@ import { runtime as TD } from '../runtime';
     if (E.sel && E.sel.n == null) for (const ln of L.lines) if (sameSel(refSel(ln.ref), E.sel)) {
       out += `<path class="ze-wsel" d="${ln.d.map((p: number[], i: number) => { const [X, Y] = P(p[0], p[1]); return `${i ? 'L' : 'M'}${r2(X)},${r2(Y)}`; }).join('')}" stroke-width="10"/>`;
     }
-    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${U.draw({ type: 'uml', x: L.bb.x, y: L.bb.y, src: snapCode() }, { export: true })}</g>`;
+    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${U.draw({ type: 'uml', x: L.bb.x, y: L.bb.y, src: snapCode() }, { export: true })}</g>`;
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(t('editor.uml.empty', 'Place a class from the left to start'))}</text>`;
     const dragE = E.drag && E.drag.mode === 'edge';
     for (const B of L.boxes) {
@@ -553,7 +554,7 @@ import { runtime as TD } from '../runtime';
     try { svg.setPointerCapture(e.pointerId); } catch (er) { /* a pointer the browser does not track */ }
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     const kb = e.target.closest('.ze-knob');
-    if (kb) { E.drag = { mode: 'edge', from: +kb.dataset.i, at: toCm(e) }; E.knobAt = null; return; }
+    if (kb) { E.drag = { mode: 'edge', from: +kb.dataset.i, at: toCm(e), cx: e.clientX, cy: e.clientY }; E.knobAt = null; return; }
     if (E.arm) { const [x, y] = toCm(e, !e.altKey); addNode(E.arm, x, y); return; }
     const B = boxAt(e);
     if (B) {
@@ -625,6 +626,8 @@ import { runtime as TD } from '../runtime';
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'edge') {
+      // a click on the handle, without dragging, does nothing
+      if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) { setTip(''); E.hover = null; draw(); return; }
       setTip('');
       const B = boxAt(e, 6);
       E.hover = null;

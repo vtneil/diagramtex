@@ -927,15 +927,7 @@ import { runtime as TD } from '../runtime';
     const em = sizePt(fs) / K, lines = String(text).split('\n'), tb = TD.textBox(text || ' ', fs);
     const w = Math.max(0, tb.w - 2);
     if (!String(text).trim()) return { w: 0, ht: 0, dp: 0 };
-    const one = (t: string) => {
-      if (/\\(?:frac|dfrac|tfrac|sum|int|prod|sqrt|binom|over|begin|underbrace|overbrace|left|right|displaystyle)\b|[\^_]/.test(t)) return null;
-      const p = t.replace(/\\(?:textbf|textit|textrm|textsf|texttt|emph|mathrm|mathbf|mathit|mathsf|text|bfseries|itshape|small|large|Large|footnotesize|scriptsize|tiny|huge)\b/g, '').replace(/[${}~]/g, '');
-      const greek = /\\[A-Za-z]+/.test(p), bare = p.replace(/\\[A-Za-z]+/g, '');
-      const ht = /[()[\]|/]/.test(bare) ? 0.75 : /[A-Z0-9bdfhkl!?'"`&%#@]/.test(bare) || /\\(?:[A-Z][a-z]+|beta|delta|zeta|theta|lambda|xi|phi|psi|ell|partial|infty|nabla)\b/.test(p) ? 0.694
-        : /[ijt]/.test(bare) ? 0.669 : /\S/.test(bare) || greek ? 0.431 : 0;
-      const dp = /[()[\]|/]/.test(bare) ? 0.25 : /[gjpqyQ,;]/.test(bare) || /\\(?:beta|gamma|zeta|eta|mu|xi|rho|phi|varphi|chi|psi)\b/.test(p) ? 0.194 : 0;
-      return { ht: ht * em, dp: dp * em };
-    };
+    const one = (t: string) => TD.texLineHD(t, em); // src/domain/automata.ts
     const first = one(lines[0]), last = one(lines[lines.length - 1]);
     if (!first || !last || lines.some((l) => !one(l))) return { w, ht: tb.h / 2, dp: tb.h / 2 };
     const skip = 1.2 * em * (lines.length - 1);
@@ -2569,7 +2561,7 @@ import { runtime as TD } from '../runtime';
       const uml = TD.uml && TD.uml.fromPicture(picO);
       if (uml) { blocks.push({ type: 'diagram', shapes: withDefs([uml], preDefs, C) }); continue; }
       // a picture drawn wholly with circuitikz parts: a Circuit block
-      const czq = circuitBlock(picO, true) || automataBlock(picO);
+      const czq = circuitBlock(picO, true) || automataBlock(picO) || graphBlock(picO);
       if (czq) { blocks.push({ type: 'diagram', shapes: withDefs([czq], preDefs, C) }); continue; }
       const shapes = importPicture(C, bodyS.slice(f.inner, f.inner + f.len), bodyO.slice(f.inner, f.inner + f.len), bodyO.slice(f.open, f.inner));
       blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
@@ -2681,7 +2673,22 @@ import { runtime as TD } from '../runtime';
     if (!M.states.length || M.warnings.length || [...M.pre, ...M.post].some((x: string) => !/^\\tikzset\b/.test(x))) return null;
     if (!M.states.every((st: any) => st.o.some((o: string) => /^state\b/.test(o)))) return null;
     const q: any = { ...TD.TYPES.automata.create({ x: 0, y: 0 }), src, id: uid8() };
-    if (u.at) { const b = TD.fsm.layout(q).bb; q.x = u.at[0] * TD.PX_PER_CM + b.x; q.y = -u.at[1] * TD.PX_PER_CM + b.y; }
+    // the picture's origin stays at the canvas origin (or where its shift puts it), as for pictures imported as shapes
+    if (u.at || /^\s*\\begin\{tikzpicture\}/.test(pic)) { const at = u.at || [0, 0], b = TD.fsm.layout(q).bb; q.x = at[0] * TD.PX_PER_CM + b.x; q.y = -at[1] * TD.PX_PER_CM + b.y; }
+    return q;
+  }
+  // a picture that is one TikZ \graph: a Graph block
+  function graphBlock(pic: string) {
+    if (!TD.graph || !TD.TYPES.graph || !/\\graph\b/.test(pic) || !/^\s*\\begin\{tikzpicture\}/.test(pic)) return null;
+    const u = unscope(pic);
+    if (!u) return null;
+    const lines = u.body.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n'), ind = least(lines.filter((l) => l.trim()).map((l) => (/^[ \t]*/.exec(l))![0].length));
+    const src = `\\begin{tikzpicture}${u.opts.length ? `[${u.opts.join(', ')}]` : ''}\n${lines.map((l) => (l.trim() ? '  ' + l.slice(isFinite(ind) ? ind : 0) : '')).join('\n')}\n\\end{tikzpicture}`;
+    const M = TD.graph.parse(src);
+    if (!M.found || !M.nodes.length || M.warnings.length || M.pre.length || M.post.length) return null;
+    const q: any = { ...TD.TYPES.graph.create({ x: 0, y: 0 }), src, id: uid8() };
+    const at = u.at || [0, 0], b = TD.graph.layout(q).bb;
+    q.x = at[0] * TD.PX_PER_CM + b.x; q.y = -at[1] * TD.PX_PER_CM + b.y;
     return q;
   }
   // packages a picture's code may need (others in a preamble are the document's own)

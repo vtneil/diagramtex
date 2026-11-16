@@ -64,6 +64,60 @@ const kv = (it: any) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.tr
 const unbrace = (v: any) => { v = String(v ?? '').trim(); while (v[0] === '{' && close(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
 const stripComments = (s: any) => s.replace(/(^|[^\\])%.*$/gm, '$1');
 const shown = (t: any) => String(t || '').replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$').replace(/\\\[([\s\S]*?)\\\]/g, '$$$1$$');
+// a line break in a label: \\ (with an optional [length]); drawn one line under another
+const BREAK = /\s*\\\\(?:\[[^\]]*\])?\s*/g;
+const isMultiline = (t: any) => /\\\\/.test(String(t || ''));
+const lines = (t: any) => String(t || '').replace(BREAK, '\n');
+// TeX's height and depth of one line of text (Computer Modern), em = the font size; null when it has
+// scripts, fractions or the like, which only a measure of the drawing can tell
+function lineHD(t: string, em: number): { ht: number; dp: number } | null {
+  if (/\\(?:frac|dfrac|tfrac|sum|int|prod|sqrt|binom|over|begin|underbrace|overbrace|left|right|displaystyle)\b/.test(t)) return null;
+  // simple scripts at 70%: raised at least sup1 (0.413em), lowered sub1 (0.15em) or sub2 (0.247em) beside a superscript
+  if (/[\^_]/.test(t)) {
+    const SCRIPT = /([_^])(\{(?:[^{}]|\{[^{}]*\})*\}|\\[A-Za-z]+|[^\s{}\\])/g, sup: string[] = [], sub: string[] = [];
+    const base = t.replace(SCRIPT, (_m, k, s) => { (k === '^' ? sup : sub).push(s.replace(/^\{|\}$/g, '')); return ''; });
+    if (/[\^_]/.test(base) || [...sup, ...sub].some((s) => /[\^_]/.test(s))) return null;
+    const B = lineHD(base, em) || { ht: 0, dp: 0 }, S = (s: string) => lineHD('$' + s + '$', 0.7 * em) || { ht: 0.694 * 0.7 * em, dp: 0 };
+    let { ht, dp } = B;
+    for (const s of sup) ht = Math.max(ht, 0.413 * em + S(s).ht);
+    for (const s of sub) dp = Math.max(dp, (sup.length ? 0.247 : 0.15) * em + S(s).dp);
+    return { ht, dp };
+  }
+  const p = t.replace(/\\(?:textbf|textit|textrm|textsf|texttt|emph|mathrm|mathbf|mathit|mathsf|text|bfseries|itshape|small|large|Large|footnotesize|scriptsize|tiny|huge)\b/g, '').replace(/[${}~]/g, '');
+  const greek = /\\[A-Za-z]+/.test(p), bare = p.replace(/\\[A-Za-z]+/g, '');
+  const ht = /[()[\]|/]/.test(bare) ? 0.75 : /[A-Z0-9bdfhkl!?'"`&%#@]/.test(bare) || /\\(?:[A-Z][a-z]+|beta|delta|zeta|theta|lambda|xi|phi|psi|ell|partial|infty|nabla)\b/.test(p) ? 0.694
+    : /[ijt]/.test(bare) ? 0.669 : /\S/.test(bare) || greek ? 0.431 : 0;
+  const dp = /[()[\]|/]/.test(bare) ? 0.25 : /[gjpqyQ,;]/.test(bare) || /\\(?:beta|gamma|zeta|eta|mu|xi|rho|phi|varphi|chi|psi)\b/.test(p) ? 0.194 : 0;
+  return { ht: ht * em, dp: dp * em };
+}
+TD.texLineHD = lineHD;
+// half the height TeX gives a node's text (b: its measured box; lines one under another, \baselineskip 1.2em):
+// the first line's height, the last one's depth and the skips between
+function halfH(t: string, b: any, em: number) {
+  const ls = String(t || '').split('\n');
+  if (!ls.some((l) => l.trim())) return 0;
+  const L = b.h / ls.length, fb = { ht: 0.55 * L, dp: 0.25 * L }, f = lineHD(ls[0], em) || fb, l = lineHD(ls[ls.length - 1], em) || fb;
+  return (f.ht + 1.2 * em * (ls.length - 1) + l.dp) / 2;
+}
+// how far above its box's middle a text is drawn (px, y down: subtract from y). The drawing centres the text's
+// measured box, which suits a capital (height 0.694em, no depth); TeX centres the node box on the first line's
+// height and the last line's depth, so x-height letters, descenders and lines 1.2em apart sit elsewhere
+function lift(t: string, b: any, em: number) {
+  const ls = String(t || '').split('\n');
+  if (!ls.some((l) => l.trim())) return 0;
+  const n = ls.length, f = lineHD(ls[0], em), l = lineHD(ls[n - 1], em);
+  const ht = f ? f.ht : 0.694 * em, dp = l ? l.dp : 0;
+  return ((n - 1) * (1.2 * em - b.h / n) + dp - ht) / 2 + 0.347 * em;
+}
+// where a label beside its edge goes, from the point on the edge (px, y down), (ux, uy) the side it goes to.
+// TikZ anchors it by a corner unless that side is within ~3° of an axis (tikz@auto@anchor: 0.05pt of a 1pt
+// vector), so a label of a sloping edge sits off the corner, not along the normal
+function besideAt(b: any, t: string, ux: number, uy: number, em: number, above: number) {
+  const sx = Math.abs(ux) > 0.05 ? Math.sign(ux) : 0, sy = Math.abs(uy) > 0.05 ? Math.sign(uy) : 0;
+  const hw = (b.w - 2) / 2 + INNER, hh = halfH(t, b, em) + INNER;
+  return [sx * hw, sy * hh + (sy < 0 ? above : 0)];
+}
+const needsAlign = (o: string[]) => !o.some((it) => /^(align|text width)$/.test(kv(it).k));
 const skip = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 function nextSemi(s: any, i: any) {
   for (let k = i; k < s.length; k++) {
@@ -211,12 +265,15 @@ function readPath(st: any, M: any, warn: any) {
 const num = (n: any) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); };
 function nodeCode(s: any) {
   const o = s.o.slice();
+  if (isMultiline(s.text) && needsAlign(o)) o.push('align=center');
   if (s.x == null && s.rel) o.push(relCode(s.rel));
   const at = s.x != null ? ` at (${num(s.x)},${num(s.y)})` : '';
   return `\\node${o.length ? `[${o.join(', ')}]` : ''} (${s.name})${at} {${s.text || ''}};`;
 }
 function edgeCode(e: any) {
-  const lbl = e.t != null ? ` node${e.lo && e.lo.length ? ` [${e.lo.join(', ')}]` : ''} {${e.t}}` : '';
+  const lo = (e.lo || []).slice();
+  if (isMultiline(e.t) && needsAlign(lo)) lo.push('align=center');
+  const lbl = e.t != null ? ` node${lo.length ? ` [${lo.join(', ')}]` : ''} {${e.t}}` : '';
   return `(${e.a}) edge${e.o.length ? ` [${e.o.join(', ')}]` : ''}${lbl} (${e.loop ? '' : e.b})`;
 }
 function write(M: any) {
@@ -377,12 +434,12 @@ function build(src: any) {
     const unknown: any[] = [];
     const S = applyNodeOpts({ ...P0, initial: false, accepting: false, state: false }, (s as any).o, unknown);
     for (const u of unknown) warn(`The state option "${u}" isn't drawn here (it is kept in the code)`);
-    const t = shown((s as any).text), b = t ? TD.textBox(t, TEXT) : { w: 2, h: 0 };
+    const t = lines(shown((s as any).text)), b = t ? TD.textBox(t, TEXT) : { w: 2, h: 0 };
     const n = { name: (s as any).name, S, t, b, x: 0, y: 0, r: 0, hw: 0, hh: 0, osep: S.lw / 2 };
     if (S.state) {
-      n.r = Math.max(S.stateMin / 2, Math.hypot((b.w - 2) / 2 + INNER, 0.4 * b.h + INNER));
+      n.r = Math.max(S.stateMin / 2, Math.hypot((b.w - 2) / 2 + INNER, halfH(t, b, EM) + INNER));
       if (S.accepting) n.osep = S.lw / 2 + DBL / 2;
-    } else { n.hw = (b.w - 2) / 2 + INNER; n.hh = 0.4 * b.h + INNER; n.osep = 0; }
+    } else { n.hw = (b.w - 2) / 2 + INNER; n.hh = halfH(t, b, EM) + INNER; n.osep = 0; }
     nodes.set((s as any).name, n);
   }
   // positions (cm, y up)
@@ -435,15 +492,15 @@ function build(src: any) {
         circles.push({ x: n.x, y: n.y, r: n.r - off, sw: S.lw, color: ink, line: true });
       } else circles.push({ x: n.x, y: n.y, r: n.r, fill: S.stateFill, sw: S.lw, color: ink, name: n.name, line: true });
     }
-    if (n.t) texts.push({ t: n.t, x: n.x, y: n.y, b: n.b, color: S.textColor });
+    if (n.t) texts.push({ t: n.t, x: n.x, y: n.y - lift(n.t, n.b, EM), b: n.b, color: S.textColor });
     if (S.initial) {
       const [ux, uy] = unit(DIRS[S.initWhere] ?? 180), rr = reach(n, ux, uy);
       const p0 = [n.x + ux * (rr + S.initDist), n.y + uy * (rr + S.initDist)], p1 = [n.x + ux * rr, n.y + uy * rr];
       const line = polyline([p0, p1]);
       arrowed(line, { ...P0, arrow: { s: null, e: '>' }, color: P0.color }, paths, tips, 'init:' + n.name);
       if (S.initText) {
-        const t = shown(S.initText), b = TD.textBox(t, TEXT), d = INNER + Math.abs(ux) * ((b.w - 2) / 2) + Math.abs(uy) * (0.4 * b.h) - Math.max(0, -uy) * ABOVE;
-        texts.push({ t, x: p0[0] + ux * d, y: p0[1] + uy * d, b });
+        const t = shown(S.initText), b = TD.textBox(t, TEXT), d = INNER + Math.abs(ux) * ((b.w - 2) / 2) + Math.abs(uy) * halfH(t, b, EM) - Math.max(0, -uy) * ABOVE;
+        texts.push({ t, x: p0[0] + ux * d, y: p0[1] + uy * d - lift(t, b, EM), b });
       }
     }
   }
@@ -486,7 +543,7 @@ function build(src: any) {
       const p = bez ? bezAt(bez, T.pos) : [pts[0][0] + (pts[1][0] - pts[0][0]) * T.pos, pts[0][1] + (pts[1][1] - pts[0][1]) * T.pos];
       const tan = bez ? bezTan(bez, T.pos) : [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]];
       const tl = Math.hypot(tan[0], tan[1]) || 1;
-      const t = shown((e as any).t), b = TD.textBox(t, TEXT);
+      const t = lines(shown((e as any).t)), b = TD.textBox(t, TEXT);
       let ux = 0, uy = 0;
       if (T.dir) [ux, uy] = unit(DIRS[T.dir]);
       else if (T.auto) {
@@ -494,9 +551,8 @@ function build(src: any) {
         // left of the direction of travel (y down on screen)
         ux = (tan[1] / tl) * side; uy = (-tan[0] / tl) * side;
       }
-      // TeX's south anchor sits on the text's depth, so a label above its edge is closer than the box's middle suggests
-      const dd = T.dir || T.auto ? INNER + Math.abs(ux) * ((b.w - 2) / 2) + Math.abs(uy) * (0.4 * b.h) - Math.max(0, -uy) * ABOVE : 0;
-      label = { t, x: p[0] + ux * dd, y: p[1] + uy * dd, b, color: T.textColor || T.color };
+      const [dx, dy] = T.dir || T.auto ? besideAt(b, t, ux, uy, EM, ABOVE) : [0, 0];
+      label = { t, x: p[0] + dx, y: p[1] + dy - lift(t, b, EM), b, color: T.textColor || T.color };
       texts.push(label);
     }
     edges.push({ i: idx, a: (e as any).a, b: (e as any).b, d: ptsD(pts), P, loop: (e as any).loop, label });
@@ -636,6 +692,10 @@ function autoLayout(M: any, mode = 'layers', step = 2.5) {
     }
     e.o.push(`bend ${pick > 0 ? 'left' : 'right'}${Math.abs(pick) !== 30 ? `=${Math.abs(pick)}` : ''}`);
   }
+  // three or more transitions between two states, or two the same way: a fan
+  const bundles = new Map<string, any[]>();
+  for (const e of M.edges) if (!e.loop && e.a !== e.b) { const k = [e.a, e.b].sort().join('\u0001'); (bundles.get(k) || bundles.set(k, []).get(k))!.push(e); }
+  for (const b of bundles.values()) if (b.length > 2 || (b.length === 2 && b[0].a === b[1].a)) fan(b, b[0].a);
   // loops: the side with the most room
   for (const e of M.edges) {
     if (!e.loop || !at.has(e.a)) continue;
@@ -743,7 +803,36 @@ TD.TYPES.automata = {
 
 
 // for the visual editor (src/editors/fsmeditor.ts)
-TD.fsm = { parse, write, layout, draw, along, kv, opts, unbrace, fullCode, shown, num, autoLayout, isInitial, isAccepting, applyNodeOpts, baseStyle, DIRS, LOOPS, TEXT, libsOf };
+// ---------------------------------------------------------------- fans of parallel edges
+// n edges between the same two nodes: bend angles (left of a→b positive) whose midpoints sit evenly apart
+// (a bend θ puts the middle 0.29·L·sin θ off the line): the outermost ±30° for two, ±49° for three, 60° from
+// four on; an odd count keeps a straight one in the middle
+function fanAngles(n: number) {
+  const s = n <= 1 ? 0 : Math.min(0.5 + 0.25 * (n - 2), Math.sin(Math.PI / 3)) / ((n - 1) / 2);
+  return Array.from({ length: n }, (_, i) => { const a = Math.round((Math.asin(s * (i - (n - 1) / 2)) * 180) / Math.PI); return a === 0 ? 0 : a; });
+}
+const isFanOpt = (it: string) => /^(bend left|bend right|out|in|looseness)$/.test(kv(it).k);
+// an edge's bend seen from a towards the other end (left positive)
+function bendFrom(e: any, a: string) {
+  for (const it of e.o) {
+    const { k, v } = kv(it);
+    if (k === 'bend left' || k === 'bend right') { const x = v == null ? 30 : parseFloat(v); const t = (k === 'bend left' ? 1 : -1) * (isFinite(x) ? x : 30); return e.a === a ? t : -t; }
+  }
+  return 0;
+}
+// bend every edge of a bundle (edges between a and one other node, either way) into a fan, keeping their
+// order from right to left of a→b; `last` (a new edge) takes the left end
+function fan(bundle: any[], a: string, last?: any) {
+  const order = bundle.filter((e) => e !== last).sort((p, q) => bendFrom(p, a) - bendFrom(q, a));
+  if (last) order.push(last);
+  const th = fanAngles(order.length);
+  order.forEach((e, i) => {
+    const t = e.a === a ? th[i] : -th[i];
+    e.o = e.o.filter((x: string) => !isFanOpt(x));
+    if (t) e.o.unshift(`bend ${t > 0 ? 'left' : 'right'}${Math.abs(t) !== 30 ? `=${Math.abs(t)}` : ''}`);
+  });
+}
+TD.fsm = { parse, write, layout, fan, lines, isMultiline, draw, along, kv, opts, unbrace, fullCode, shown, num, autoLayout, isInitial, isAccepting, applyNodeOpts, baseStyle, DIRS, LOOPS, TEXT, libsOf };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("automata", {
   menu: { order: 9, label: "Automaton", title: "State machine, written with the TikZ automata library", icon: "<svg viewBox=\"0 0 32 24\"><circle cx=\"9\" cy=\"14\" r=\"4.5\"/><circle cx=\"24\" cy=\"14\" r=\"4.5\" class=\"a1\"/><circle cx=\"24\" cy=\"14\" r=\"2.6\"/><path d=\"M13.5 14h6M17.5 12l2 2-2 2\"/><path d=\"M1 14h3.5M2.8 12.2l1.8 1.8-1.8 1.8\"/><path d=\"M7.4 9.8C5.5 3.5 12.5 3.5 10.6 9.8\"/></svg>" },
@@ -752,3 +841,5 @@ TD.blocks.register("automata", {
   editor: { get: () => TD.fsmEditor, alias: "fsmOpen", layout: (s) => TD.fsm.layout(s) }
 });
 export { layout, libsOf, fullCode };
+// shared with the Graph block (src/domain/graph.ts)
+export { fan, fanAngles, lines, isMultiline, halfH, lift, besideAt, close, split, opts, kv, unbrace, stripComments, shown, skip, nextSemi, cm, coord, num, applyOpts, baseStyle, polyline, along, cut, ptsD, unit, bezAt, bezTan, arrowed, tipSize, DIRS, LOOPS, TEXT, WIDTHS, POS };

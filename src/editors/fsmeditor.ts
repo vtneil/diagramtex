@@ -51,8 +51,15 @@ import { runtime as TD } from '../runtime';
   const codeOf = (M: any) => (M.dirty ? F.write(M) : M.raw);
   const sOf = (name: any) => E.M.states.find((s: any) => s.name === name) || null;
   // maths in a label: $x$ or \(x\) → x; written back as $x$
-  const mathOf = (t: any) => { t = F.unbrace(t || ''); const m = /^\$([\s\S]*)\$$/.exec(t) || /^\\\(([\s\S]*)\\\)$/.exec(t); return m ? m[1] : t; };
-  const wrapMath = (t: any) => { const v = mathOf(t).trim(); return v ? `$${v}$` : ''; };
+  const BR = /\s*\\\\(?:\[[^\]]*\])?\s*/;
+  const math1 = (t: string) => { const m = /^\$([\s\S]*)\$$/.exec(t) || /^\\\(([\s\S]*)\\\)$/.exec(t); return m ? m[1] : t; };
+  // a label of several lines ($a$ \\ $b$) shows its lines joined by sep: a new line in the popup, \\ in a field
+  const mathOf = (t: any, sep = ' \\\\ ') => F.unbrace(t || '').split(BR).map((l: string) => math1(l.trim())).join(sep);
+  const wrapMath = (t: any) => {
+    const ls = String(t || '').split(/\n|\s*\\\\(?:\[[^\]]*\])?\s*/).map((l) => math1(l.trim()).trim());
+    while (ls.length > 1 && !ls[ls.length - 1]) ls.pop();
+    return ls.some(Boolean) ? ls.map((l) => (l ? `$${l}$` : '')).join(' \\\\ ') : '';
+  };
   const val = (t: any) => (/[,=\]]/.test(t) || t === '' ? `{${t}}` : t);
   // state options by kind
   const isInitW = (it: any) => kv(it).k === 'initial where';
@@ -186,10 +193,12 @@ import { runtime as TD } from '../runtime';
     edit(() => {
       const g = groupFor();
       // a transition beside one between the same states (either way) bends, so neither hides the other
-      const twin = !loop && E.M.edges.filter((f: any) => !f.loop && ((f.a === a && f.b === b) || (f.a === b && f.b === a)));
-      const o = loop ? [`loop ${extra || freeSide(a)}`] : E.kind === 'bend' || (twin && twin.length) ? ['bend left'] : [];
-      if (twin) for (const f of twin) if (f.a === b && !f.o.some(isBend)) f.o.push('bend left');
-      E.M.edges.push({ a, b, o, lo: null, t: null, g, loop });
+      const twin = loop ? [] : E.M.edges.filter((f: any) => !f.loop && ((f.a === a && f.b === b) || (f.a === b && f.b === a)));
+      const o = loop ? [`loop ${extra || freeSide(a)}`] : E.kind === 'bend' ? ['bend left'] : [];
+      const e = { a, b, o, lo: null, t: null, g, loop };
+      E.M.edges.push(e);
+      // transitions already between the two states (either way) fan out with the new one
+      if (twin.length) F.fan(twin.concat(e), a, e);
     });
     E.sel = { e: E.M.edges.length - 1 }; draw(); renderProps();
     editLabel({ e: E.M.edges.length - 1 });
@@ -304,6 +313,7 @@ import { runtime as TD } from '../runtime';
   });
   function pick(k: any) {
     if (k[0] === 'e') {
+      if (E.arm) { E.arm = null; draw(); }
       E.kind = k.slice(2);
       const e = selE();
       if (e && !e.loop) edit(() => setBend(e, E.kind === 'bend' ? 'left' : '', 30));
@@ -395,8 +405,8 @@ import { runtime as TD } from '../runtime';
     const L = lay(), kk = k / PX;
     // the selected transition, as a halo under the drawing
     const se = selE(), sl = se && L.edges.find((x: any) => x.i === E.sel.e);
-    if (sl) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})"><path class="ze-wsel" d="${sl.d}" stroke-width="${r2(10 / kk)}"/></g>`;
-    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})">${F.draw({ type: 'automata', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
+    if (sl) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})"><path class="ze-wsel" d="${sl.d}" stroke-width="${r2(10 / kk)}"/></g>`;
+    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${F.draw({ type: 'automata', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">Place a state from the left to start</text>`;
     const ss = selS(), dragE = E.drag && E.drag.mode === 'edge', armLoop = E.arm && E.arm[0] === 'l';
     for (const [name, n] of L.nodes) {
@@ -467,7 +477,7 @@ import { runtime as TD } from '../runtime';
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     const kb = e.target.closest('.ze-knob');
-    if (kb) { E.drag = { mode: 'edge', from: kb.dataset.v, at: toCm(e) }; E.knobAt = null; return; }
+    if (kb) { E.drag = { mode: 'edge', from: kb.dataset.v, at: toCm(e), cx: e.clientX, cy: e.clientY }; E.knobAt = null; return; }
     const sn = stateAt(e);
     if (E.arm && E.arm[0] === 'l') { if (sn != null) addEdge(sn, sn, E.arm.slice(2)); return; }
     if (E.arm) { const [x, y] = toCm(e, !e.altKey); addState(E.arm, x, y); return; }
@@ -529,6 +539,8 @@ import { runtime as TD } from '../runtime';
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'edge') {
+      // a click on the handle, without dragging, does nothing
+      if (Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 4) { setTip(''); E.hover = null; draw(); return; }
       setTip('');
       const sn = stateAt(e, 14);
       E.hover = null;
@@ -609,7 +621,8 @@ import { runtime as TD } from '../runtime';
     if (!s && !e) return false;
     begin();
     const me: any = (Lb = { target });
-    const text = s ? mathOf(s.text || '') : mathOf(e.t || '');
+    // MathLive has no line breaks: there the lines stay joined by \\
+    const sep = TD.input.mode === 'mathlive' ? ' \\\\ ' : '\n', text = s ? mathOf(s.text || '', sep) : mathOf(e.t || '', sep);
     me.pop = TD.input.popup(stage, {
       text, math: true, bare: true,
       at: () => labelPos(target),

@@ -1,0 +1,10 @@
+% expect: native match>=0.97
+\usetikzlibrary{automata,arrows.meta}
+\begin{tikzpicture}[->, >=Stealth, auto, semithick]
+\node[state, initial, align=center] (p) at (0,0) {$p$ \\ $1$};
+\node[state, accepting] (q) at (4,0) {$q$};
+\path (p) edge [bend left=49] node {$a$} (q)
+      (p) edge node[align=center] {$b$ \\ $c$} (q)
+      (q) edge [bend left=49] node {$d$} (p)
+      (q) edge [loop right] node {$e$} ();
+\end{tikzpicture}

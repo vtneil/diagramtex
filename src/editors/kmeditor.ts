@@ -257,7 +257,7 @@ import { runtime as TD } from '../runtime';
     syncCode();
     const r = rect(), W = r.width, H = r.height, v = E.view, k = v.k, kk = k / PX;
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/>`;
-    const L = lay(), M = E.M, tr = `translate(${r2(v.ox)},${r2(v.oy)}) scale(${r2(kk)})`;
+    const L = lay(), M = E.M, tr = `translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})`;
     // the hovered cell, under the drawing
     if (E.hover != null && (!E.drag || E.drag.mode === 'paint')) {
       const c = L.cells.find((x: any) => x.n === E.hover);
