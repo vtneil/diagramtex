@@ -596,7 +596,8 @@ import { patchSvg } from '../ui/svg-patch';
       rows.push({ ...row(captions["ui.rotation"], ...[0, 90, 180, 270].map(angle => ({ kind: 'button' as const, text: angle + '°', attrs: { 'data-rot': angle, class: (it.rot || 0) === angle ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' });
       rows.push({ ...row(uiText('editor.cz.mirrored', 'Mirrored'), { kind: 'input' as const, value: '', checked: !!it.flip, attrs: { type: 'checkbox', id: 'czf-flip', 'data-f': 'flip' } }), labelFor: 'czf-flip' });
     } else {
-      if (!C.isWire(it)) rows.push(field('l', uiText('editor.cz.label', 'Label'), '$R_1$'), field('ann', uiText('editor.cz.annotation', 'Annotation'), '$1\\,\\mathrm{k\\Omega}$'), field('v', uiText('editor.cz.voltage', 'Voltage'), '$v_1$'), field('i', uiText('editor.cz.current', 'Current'), '$i_1$'));
+      if (!C.isWire(it)) rows.push(field('l', uiText('editor.cz.label', 'Label'), '$R_1$'), field('ann', uiText('editor.cz.annotation', 'Annotation'), '$1\\,\\mathrm{k\\Omega}$'),
+        field('v', uiText('editor.cz.voltage', 'Voltage'), '$v_1$'), markRow(it, 'v'), field('i', uiText('editor.cz.current', 'Current'), '$i_1$'), markRow(it, 'i'));
       const poles = /^([*o]?)-([*o]?)$/.exec(it.poles || '') || ['', '', ''];
       rows.push(row(uiText('editor.cz.ends', 'Ends'), ...[0, 1].map(end => ({ kind: 'select' as const, options: POLES(), value: poles[end + 1], attrs: { 'data-pole': end } }))));
       if (Object.keys(def.pins).length) rows.push(field('name', uiText('editor.cz.name', 'Name'), 'P1', true));
@@ -605,6 +606,29 @@ import { patchSvg } from '../ui/svg-patch';
     const pins = Object.keys(def.pins).filter(name => name !== 'center');
     if (pins.length) rows.push({ kind: 'help' as const, text: [uiText('editor.cz.pins', 'Pins: '), ...pins.flatMap((name, i) => [...(i ? [' '] : []), { code: name }])] });
     renderView(props, CircuitProperties, { name: def.name, command: `${it.p ? 'node' : 'to'}[${def.tikz}]`, rows });
+  }
+  // where a voltage's arrow or a current's arrow goes: its side of the part and the way it points. The icons
+  // turn with the part, so they match the canvas. Each choice is written as circuitikz's `v^<=` style mods.
+  const MARKS: [number, boolean][] = [[1, false], [1, true], [-1, false], [-1, true]];
+  function markIcon(kind: 'v' | 'i', it: any, s: number, back: boolean) {
+    const deg = -Math.atan2(it.b[1] - it.a[1], it.b[0] - it.a[0]) * 180 / Math.PI, y = (d: number) => 12 - s * d;
+    const head = (x: number, yy: number, dx: number, dy: number) => { const l = Math.hypot(dx, dy), ux = dx / l, uy = dy / l; return `M${x - 3.5 * ux - 2.5 * uy},${yy - 3.5 * uy + 2.5 * ux}L${x},${yy}L${x - 3.5 * ux + 2.5 * uy},${yy - 3.5 * uy - 2.5 * ux}`; };
+    let mark;
+    if (kind === 'v') {
+      const [x0, x1] = back ? [19, 5] : [5, 19];
+      mark = `<path d="M${x0},${y(4)}Q12,${y(13)} ${x1},${y(4)}"/><path d="${head(x1, y(4), x1 - 12, y(4) - y(13))}"/>`;
+    } else {
+      const x = back ? 4 : 20, d = back ? -1 : 1;
+      mark = `<path d="${head(x, 12, d, 0)}"/><circle cx="${x - d * 2}" cy="${y(5)}" r="1.2" fill="currentColor" stroke="none"/>`;
+    }
+    return `<svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke-width:1.25"><g transform="rotate(${Math.round(deg)} 12 12)"><path d="M1.5 12h7M15.5 12h7"/><rect x="8.5" y="10.5" width="7" height="3"/>${mark}</g></svg>`;
+  }
+  function markRow(it: any, kind: 'v' | 'i') {
+    const now = C.markOf(kind, it);
+    return { ...row(kind === 'v' ? uiText('editor.cz.voltageArrow', 'Voltage arrow') : uiText('editor.cz.currentArrow', 'Current arrow'),
+      ...MARKS.map(([s, back]) => ({ kind: 'button' as const, text: '', svg: markIcon(kind, it, s, back), attrs: {
+        'data-mark': `${kind}:${C.markMods(kind, s, back)}`, title: `${kind}${C.markMods(kind, s, back)}=`, 'aria-label': (kind === 'v' ? 'Voltage' : 'Current') + ' arrow ' + C.markMods(kind, s, back),
+        class: now.s === s && now.back === back ? 'on' : '', disabled: !it[kind] } }))), controlClass: 'ctl seg-ctl' };
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) commit(); });
@@ -622,6 +646,11 @@ import { patchSvg } from '../ui/svg-patch';
   // the panel follows each keystroke: the other fields show what this one changed (the Svelte view preserves the active field)
   props.addEventListener('input', () => { if (E && !isViewUpdating()) renderProps(); });
   props.addEventListener('click', (e: any) => {
+    const mk = e.target.closest('[data-mark]');
+    if (mk) {
+      const it = sel()[0], [kind, mods] = mk.dataset.mark.split(':');
+      begin(); it[kind + 'm'] = mods; commit(); draw(); renderProps(); return;
+    }
     const b = e.target.closest('[data-rot]');
     if (!b) return;
     const it = sel()[0];

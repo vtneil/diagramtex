@@ -274,7 +274,7 @@ function fo(text: string, st: any, color: string, x: number, y: number, w: numbe
     const image = labelImage(/class="katex(?:\s|")/.test(html) ? 'katex' : /class="td-math/.test(html) ? 'temml' : TD.math.engine, html, b.css, color, width, height, align);
     // no href: the picture was left for a later draw (labelBudget), shown as pending until then
     const ids = TD.math.isPending(b.html) ? TD.math.pendingIds(b.html).join(',') : '', pending = !!ids || !image.href;
-    return `<image class="svg-label${pending ? ' math-pending' : ''}"${ids ? ` data-math-pending="${ids}"` : ''}${image.later ? ` data-later="${image.later}" data-lx="${r2(x)}" data-ly="${r2(y)}"` : ''} x="${r2(x) + image.x}" y="${r2(y) + image.y}" width="${image.width}" height="${image.height}"${image.href ? ` href="${image.href}"` : ''} aria-label="${escAttr(text)}"/>`;
+    return `<image class="svg-label${pending ? ' math-pending' : ''}"${ids ? ` data-math-pending="${ids}"` : ''}${image.later ? ` data-later="${image.later}" data-lx="${r2(x)}" data-ly="${r2(y)}"` : ''} x="${r2(x) + image.x}" y="${r2(y) + image.y}" width="${image.width}" height="${image.height}" preserveAspectRatio="none"${image.href ? ` href="${image.href}"` : ''} aria-label="${escAttr(text)}"/>`;
   }
   return `<foreignObject x="${r2(x)}" y="${r2(y)}" width="${r2(Math.max(w, b.w))}" height="${r2(Math.max(h, b.h))}" style="overflow:visible;font-size:0;text-align:${align}"><div${ns} class="tx" style="${escAttr(b.css)}color:${color};text-align:${align}">${html}</div></foreignObject>`;
 }

@@ -5,7 +5,7 @@
 \begin{tikzpicture}[x=1cm, y=1cm]
   \begin{scope}[shift={(0,0)}, font=\large]
     \draw (0,0) to[european resistor, v=$u$, straight voltages] (3,0);
-    \draw (0,2) to[european resistor, straight voltages, v^<=$u$] (3,2);
+    \draw (0,2) to[european resistor, v^<=$u$, straight voltages] (3,2);
     \draw (0,4) to[capacitor, v=$u$, straight voltages] (3,4);
   \end{scope}
 \end{tikzpicture}

@@ -62,7 +62,9 @@ try {
           const overflow = await page.evaluate(() => {
             const root = document.querySelector('#docview'), sheet = root.querySelector('.doc-sheet');
             const css = getComputedStyle(root);
-            return root.scrollHeight - Math.max(root.clientHeight, sheet.getBoundingClientRect().height + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom));
+            // the content ends at the sheet's bottom (below the text toolbar, which keeps its room when hidden)
+            const bottom = sheet.getBoundingClientRect().bottom - root.getBoundingClientRect().top + root.scrollTop;
+            return root.scrollHeight - Math.max(root.clientHeight, bottom + parseFloat(css.paddingBottom));
           });
           assert(overflow < 2, `${name}: zooming out cannot leave a tall blank scroll area`);
         }

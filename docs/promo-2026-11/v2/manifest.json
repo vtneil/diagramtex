@@ -1,0 +1,62 @@
+[
+  {
+    "file": "01-hero.png",
+    "title": "A visual TikZ editor: draw instead of guessing coordinates, and get readable tikzpicture code"
+  },
+  {
+    "file": "02-plot3d.png",
+    "title": "2D and 3D pgfplots: functions, parametric, polar, implicit, contour, heatmap, bar and scatter"
+  },
+  {
+    "file": "03-blocks.png",
+    "title": "Blocks for tikz-cd, quantikz, circuitikz, forest, chemfig, tikz-feynman and more, each with its own editor"
+  },
+  {
+    "file": "04-circuit.png",
+    "title": "A drag-and-drop circuit editor with 415 circuitikz components that exports circuitikz code"
+  },
+  {
+    "file": "05-table.png",
+    "title": "Tables that work like a spreadsheet: import from Excel or CSV, and copy clean booktabs LaTeX"
+  },
+  {
+    "file": "06-shapes.png",
+    "title": "Build figures from basic shapes and lines, with LaTeX maths labels that render as you type"
+  },
+  {
+    "file": "07-physics.png",
+    "title": "Physics figures that are computed, not just drawn: Atwood machines, inclines, pendulums and linkages"
+  },
+  {
+    "file": "08-quantum.png",
+    "title": "A drag-and-drop quantikz editor for gates, controls and measurements, with the code live beside it"
+  },
+  {
+    "file": "09-document.png",
+    "title": "Lay out text, maths and figures on A4 or Letter pages and export a complete LaTeX article"
+  },
+  {
+    "file": "10-geo3d.png",
+    "title": "3D geometry in tikz-3dplot: turn the view by dragging, and add points, vectors, planes and surfaces"
+  },
+  {
+    "file": "11-imported.png",
+    "title": "Import existing TikZ: paste code or open a .tex file to keep editing figures you already have"
+  },
+  {
+    "file": "12-chem.png",
+    "title": "A chemfig editor for structural formulas and reaction schemes, with charges, lone pairs and arrows"
+  },
+  {
+    "file": "13-cd.png",
+    "title": "A tikz-cd editor: type objects on a grid and drag arrows from cell to cell, with live code"
+  },
+  {
+    "file": "14-quick.png",
+    "title": "Quick mode turns one formula into a picture: copy a PNG or SVG for slides, documents or chats"
+  },
+  {
+    "file": "15-export.png",
+    "title": "Export PNG at any DPI, vector SVG or PDF, and TikZ for everything or only the selection"
+  }
+]

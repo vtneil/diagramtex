@@ -747,6 +747,8 @@ export const thai: Record<string, string> = {
   "editor.cz.annotation": "หมายเหตุ",
   "editor.cz.voltage": "แรงดัน",
   "editor.cz.current": "กระแส",
+  "editor.cz.voltageArrow": "ลูกศรแรงดัน",
+  "editor.cz.currentArrow": "ลูกศรกระแส",
   "editor.cz.ends": "ปลายสาย",
   "editor.cz.optsPlaceholder": "เช่น {code}",
   "editor.cz.pins": "ขา: ",

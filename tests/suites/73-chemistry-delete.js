@@ -106,6 +106,16 @@
       T.ok(b.classList.contains('on') || /S/.test(code()), 'a click still picks the item');
     });
   });
+
+  T.test('chemistry palette: every wedge has its reversed form', async () => {
+    await run('\\chemfig{A-B}', async () => {
+      const keys = [...root().querySelectorAll('.qe-item[data-item^="b:"]')].map((x) => x.dataset.item);
+      for (const k of ['>', '>:', '>|']) T.ok(keys.includes('b:' + k) && keys.includes('b:<' + k.slice(1)), `${k} and its reverse: ${keys}`);
+      const b = q('.qe-item[data-item="b:<|"]'), r = b.getBoundingClientRect(), from = [r.left + 5, r.top + 5], to = bond(0);
+      fire(b, 'pointerdown', from); fire(b, 'pointermove', [from[0] + 20, from[1]]); fire(b, 'pointermove', to); fire(b, 'pointerup', to);
+      T.eq(code(), '\\chemfig{A<|B}', 'dropped on a bond, it makes a reversed hollow wedge');
+    });
+  });
 }
 
 T.test('chemistry arrow labels of several lines stay on their own side of the arrow', () => {

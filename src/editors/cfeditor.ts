@@ -29,9 +29,9 @@ import { patchSvg } from '../ui/svg-patch';
   const bondNames = (): Record<string, string> => ({ '-': t('editor.cf.bond.single', 'Single'), '=': t('editor.cf.bond.double', 'Double'), '~': t('editor.cf.bond.triple', 'Triple'), '>': t('editor.cf.bond.wedge', 'Wedge'), '<': t('editor.cf.bond.wedgeRev', 'Wedge, reversed'), '>:': t('editor.cf.bond.hashed', 'Hashed'), '<:': t('editor.cf.bond.hashedRev', 'Hashed, reversed'), '>|': t('editor.cf.bond.hollow', 'Hollow wedge'), '<|': t('editor.cf.bond.hollowRev', 'Hollow wedge, reversed'), '=^': t('editor.cf.bond.doubleLeft', 'Double, left'), '=_': t('editor.cf.bond.doubleRight', 'Double, right') });
   const arrowNames = (): Record<string, string> => ({ '->': t('editor.cf.arrow.reaction', 'Reaction'), '<=>': t('editor.cf.arrow.equilibrium', 'Equilibrium'), '<->>': t('editor.cf.arrow.eqRight', 'Equilibrium, to the right'), '<<->': t('editor.cf.arrow.eqLeft', 'Equilibrium, to the left'), '<->': t('editor.cf.arrow.resonance', 'Resonance'), '-/>': t('editor.cf.arrow.none', 'No reaction'), '<-': t('editor.cf.arrow.backwards', 'Backwards'), '0': t('editor.cf.arrow.invisible', 'Invisible'), '-U>': t('editor.cf.arrow.u', 'U arrow') });
   const say = (en: string): string => (({
-    Vertex: () => t('editor.cf.vertex', 'Vertex'), 'Hollow wedge': () => t('editor.cf.bond.hollow', 'Hollow wedge'), 'Wedge, reversed': () => t('editor.cf.bond.wedgeRev', 'Wedge, reversed'), 'Hashed, reversed': () => t('editor.cf.bond.hashedRev', 'Hashed, reversed'),
+    Vertex: () => t('editor.cf.vertex', 'Vertex'), 'Hollow wedge': () => t('editor.cf.bond.hollow', 'Hollow wedge'), 'Wedge, reversed': () => t('editor.cf.bond.wedgeRev', 'Wedge, reversed'), 'Hashed, reversed': () => t('editor.cf.bond.hashedRev', 'Hashed, reversed'), 'Hollow wedge, reversed': () => t('editor.cf.bond.hollowRev', 'Hollow wedge, reversed'),
     Single: () => t('editor.cf.bond.single', 'Single'), Double: () => t('editor.cf.bond.double', 'Double'), Triple: () => t('editor.cf.bond.triple', 'Triple'), Wedge: () => t('editor.cf.bond.wedge', 'Wedge'), Hashed: () => t('editor.cf.bond.hashed', 'Hashed'),
-    Aromatic: () => t('editor.cf.ring.aromatic', 'Aromatic'), Positive: () => t('editor.cf.charge.plus', 'Positive'), Negative: () => t('editor.cf.charge.minus', 'Negative'), 'Lone pair': () => t('editor.cf.charge.pair', 'Lone pair'), Radical: () => t('editor.cf.charge.radical', 'Radical'),
+    Aromatic: () => t('editor.cf.ring.aromatic', 'Aromatic'), Positive: () => t('editor.cf.charge.plus', 'Positive'), Negative: () => t('editor.cf.charge.minus', 'Negative'), 'Lone pair': () => t('editor.cf.charge.pair', 'Lone pair'), 'Lone pair (bar)': () => t('editor.cf.charge.bar', 'Lone pair (bar)'), Radical: () => t('editor.cf.charge.radical', 'Radical'),
     Arrow: () => t('editor.cf.arrow', 'Arrow'), Equilibrium: () => t('editor.cf.arrow.equilibrium', 'Equilibrium'), Resonance: () => t('editor.cf.arrow.resonance', 'Resonance'), 'No reaction': () => t('editor.cf.arrow.none', 'No reaction'),
     Plus: () => t('editor.cf.plus', 'Plus'), Merge: () => t('editor.cf.merge', 'Merge'), 'Curved arrow': () => t('editor.cf.curved', 'Curved arrow'),
   } as Record<string, () => string>)[en]?.() ?? en);
@@ -61,10 +61,10 @@ import { patchSvg } from '../ui/svg-patch';
   };
   const RINGS: Record<string, any> = { 3: '*3(---)', 4: '*4(----)', 5: '*5(-----)', 6: '*6(------)', benzene: '*6(-=-=-=)', arom: '**6(------)', 7: '*7(-------)' };
   const ATOMS = ['C', 'H', 'N', 'O', 'S', 'P', 'F', 'Cl', 'Br', 'I'];
-  const CHARGES = { plus: ['Positive', '\\chemfig{N^{+}}'], minus: ['Negative', '\\chemfig{O^{-}}'], pair: ['Lone pair', '\\chemfig{\\charge{90=\\:}{O}}'], rad: ['Radical', '\\chemfig{\\charge{90=\\.}{C}}'], dplus: ['δ+', '\\chemfig{\\charge{90=$\\delta+$}{C}}'], dminus: ['δ−', '\\chemfig{\\charge{90=$\\delta-$}{O}}'] };
+  const CHARGES = { plus: ['Positive', '\\chemfig{N^{+}}'], minus: ['Negative', '\\chemfig{O^{-}}'], pair: ['Lone pair', '\\chemfig{\\charge{90=\\:}{O}}'], bar: ['Lone pair (bar)', '\\chemfig{\\charge{90=\\|}{O}}'], rad: ['Radical', '\\chemfig{\\charge{90=\\.}{C}}'], dplus: ['δ+', '\\chemfig{\\charge{90=$\\delta+$}{C}}'], dminus: ['δ−', '\\chemfig{\\charge{90=$\\delta-$}{O}}'] };
   const PAL = [
     ['Atoms', [['a:', 'Vertex', '\\chemfig{-[:30]-[:-30]}', ''], ...ATOMS.map((x) => [`a:${x}`, x, `\\chemfig{${x}}`, x.length === 1 ? x : ''])]],
-    ['Bonds', [['b:-', 'Single', '\\chemfig{-}', '1'], ['b:=', 'Double', '\\chemfig{=}', '2'], ['b:~', 'Triple', '\\chemfig{~}', '3'], ['b:>', 'Wedge', '\\chemfig{>}', ''], ['b:>:', 'Hashed', '\\chemfig{>:}', ''], ['b:>|', 'Hollow wedge', '\\chemfig{>|}', ''], ['b:<', 'Wedge, reversed', '\\chemfig{<}', ''], ['b:<:', 'Hashed, reversed', '\\chemfig{<:}', '']]],
+    ['Bonds', [['b:-', 'Single', '\\chemfig{-}', '1'], ['b:=', 'Double', '\\chemfig{=}', '2'], ['b:~', 'Triple', '\\chemfig{~}', '3'], ['b:>', 'Wedge', '\\chemfig{>}', ''], ['b:>:', 'Hashed', '\\chemfig{>:}', ''], ['b:>|', 'Hollow wedge', '\\chemfig{>|}', ''], ['b:<', 'Wedge, reversed', '\\chemfig{<}', ''], ['b:<:', 'Hashed, reversed', '\\chemfig{<:}', ''], ['b:<|', 'Hollow wedge, reversed', '\\chemfig{<|}', '']]],
     ['Rings', [['r:benzene', 'Benzene', `\\chemfig{${RINGS.benzene}}`], ['r:arom', 'Aromatic', `\\chemfig{${RINGS.arom}}`], ['r:3', 'Cyclopropane', `\\chemfig{${RINGS[3]}}`], ['r:4', 'Cyclobutane', `\\chemfig{${RINGS[4]}}`], ['r:5', 'Cyclopentane', `\\chemfig{${RINGS[5]}}`], ['r:6', 'Cyclohexane', `\\chemfig{${RINGS[6]}}`], ['r:7', 'Cycloheptane', `\\chemfig{${RINGS[7]}}`]]],
     ['Groups', Object.keys(GROUPS).map((k) => [`g:${k}`, { NH2: 'NH₂', CH3: 'CH₃', OCH3: 'OCH₃', NO2: 'NO₂' }[k] || k, `\\chemfig{-[0]${GROUPS[k](0)}}`])],
     ['Charges', Object.entries<any>(CHARGES).map(([k, [n, mini]]) => [`c:${k}`, n, mini])],
@@ -345,6 +345,32 @@ import { patchSvg } from '../ui/svg-patch';
     writeAtoms(v, atoms);
     return true;
   }
+  // chemfig's electrons round an atom: a pair as two dots (\:) or a bar (\|), a single electron (\.)
+  const PAIR_KINDS = ['\\:', '\\|'];
+  const kindOf = (c: any) => c.what.replace(/\\[,;!]/g, '').trim();
+  const pairsOn = (a: any) => chargesOf(a).filter((c: any) => PAIR_KINDS.includes(kindOf(c)));
+  // the style the atom's pairs are drawn in, or the one last picked for an atom with none
+  let pairStyle = '\\:';
+  const styleOf = (a: any) => { const p = pairsOn(a); return p.length ? (p.every((c: any) => kindOf(c) === '\\|') ? '\\|' : p.every((c: any) => kindOf(c) === '\\:') ? '\\:' : '') : pairStyle; };
+  // a lone pair on one side: off if there is one (dots or bar), else on in the atom's style
+  function togglePair(v: any, angle: any) {
+    const atoms = atomsOf(v);
+    if (!atoms || !atoms.length) return false;
+    const a = atoms[Math.min(v.k, atoms.length - 1)], had = pairsOn(a).find((c: any) => Math.abs(c.angle - angle) < 1);
+    return toggleDecor(v, had ? had.what.trim() : styleOf(a) || pairStyle, angle);
+  }
+  // every pair on the atom redrawn as dots or as a bar
+  function setPairStyle(v: any, what: any) {
+    pairStyle = what;
+    const atoms = atomsOf(v);
+    if (!atoms || !atoms.length) return false;
+    const a = atoms[Math.min(v.k, atoms.length - 1)];
+    if (!pairsOn(a).length) return false;
+    const list = chargesOf(a).map((c: any) => (PAIR_KINDS.includes(kindOf(c)) ? { ...c, what } : { ...c }));
+    setAtomCharges(a, list);
+    writeAtoms(v, atoms);
+    return true;
+  }
   // a free spot for a charge: the quarter with no bond in it
   function freeSpot(v: any) {
     const d = dirsAt(v), atoms = atomsOf(v) || [], a = atoms[Math.min(v.k, atoms.length - 1)], taken = chargesOf(a).map((c: any) => c.angle);
@@ -490,7 +516,13 @@ import { patchSvg } from '../ui/svg-patch';
     return true;
   }
   function ungroup(sub: any) { const p = parentOf(sub); if (p) { p.list.splice(p.list.indexOf(sub), 1, ...sub.inner); E.M.dirty = true; } }
-  function setSubAngle(sub: any, v: any) { sub.opt = String(v).trim(); sub.pre = sub.opt ? `\\subscheme[${sub.opt}]{` : '\\subscheme{'; E.M.dirty = true; }
+  // chemfig reads \subscheme's option as settings: an angle is written arrow angle=…, other settings as typed
+  function setSubAngle(sub: any, v: any) {
+    const o = String(v).trim();
+    sub.opt = /^-?[\d.]+$/.test(o) ? `arrow angle=${o}` : o;
+    sub.pre = sub.opt ? `\\subscheme[${sub.opt}]{` : '\\subscheme{'; E.M.dirty = true;
+  }
+  const subAngleText = (sub: any) => { const m = /^\s*arrow angle\s*=\s*(-?[\d.]+)\s*$/.exec(sub.opt || ''); return m ? m[1] : sub.opt || ''; };
 
   // ---------------------------------------------------------------- curved arrows (\chemmove)
   // Each \draw in a \chemmove body is one curved arrow; the editor rewrites the k-th one in place.
@@ -558,7 +590,15 @@ import { patchSvg } from '../ui/svg-patch';
   function nameFor(t: any) {
     if (t.v) {
       const v = findV(t.v), atoms = v && atomsOf(v);
-      if (!atoms || !atoms.length) return null;
+      if (!atoms) return null;
+      // a bare atom (a carbon): @{name} alone names it
+      if (!atoms.length) {
+        const tail = C.splitAtoms(v.g ? v.g.raw : '').tail;
+        if (tail) return tail;
+        const n = freshName();
+        setLabel(v, `@{${n}}${v.g ? v.g.raw : ''}`); L = null;
+        return n;
+      }
       const a = atoms[Math.min(v.k, atoms.length - 1)];
       if (a.name) return a.name;
       a.name = freshName();
@@ -813,7 +853,7 @@ import { patchSvg } from '../ui/svg-patch';
       let ok = false;
       edit(() => {
         if (val === 'plus' || val === 'minus') { const s = val === 'plus' ? '+' : '-', cur = signOf((atomsOf(v) || [])[v.k]); ok = setSign(v, cur === s ? '' : s); }
-        else ok = toggleDecor(v, ({ pair: '\\:', rad: '\\.', dplus: '$\\delta+$', dminus: '$\\delta-$' } as Record<string, any>)[val], freeSpot(v));
+        else ok = toggleDecor(v, ({ pair: '\\:', bar: '\\|', rad: '\\.', dplus: '$\\delta+$', dminus: '$\\delta-$' } as Record<string, any>)[val], freeSpot(v));
       });
       reselect(v);
       return ok;
@@ -1162,6 +1202,8 @@ import { patchSvg } from '../ui/svg-patch';
     flip: '<path d="M3 7h12l-3-3M17 13H5l3 3"/>',
     mol: '<path d="M10 3l6 3.5v7L10 17l-6-3.5v-7z"/>',
     arrow: '<path d="M3 10h13M12 6l4 4-4 4"/>',
+    show: '<path d="M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/>',
+    hide: '<path d="M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10zM3.5 16.5l13-13"/>',
   };
   const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/del/.test(act) ? ' danger' : ''}" data-cm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
   function closeMenu() { menu.hidden = true; }
@@ -1180,7 +1222,10 @@ import { patchSvg } from '../ui/svg-patch';
       E.sel = { b: b.item };
       const bn = bondNames();
       menu.innerHTML = mItem('b:-', bn['-'], 'one', '1') + mItem('b:=', bn['='], 'two', '2') + mItem('b:~', bn['~'], 'three', '3') + mItem('b:>', bn['>'], 'wedge') + mItem('b:>:', bn['>:'], 'hash') +
-        (/^[<>]/.test(b.item.sym) ? mItem('bflip', t('editor.cf.reverseWedge', 'Reverse Wedge'), 'flip') : '') + '<hr>' + (hidden(b.item) ? mItem('bshow', t('editor.cf.drawBond', 'Draw Bond'), 'one') : mItem('bdel', t('editor.cf.deleteBond', 'Delete Bond'), 'del', '⌫')) + (b.ring ? mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del') : '') + (sch ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
+        (/^[<>]/.test(b.item.sym) ? mItem('bflip', t('editor.cf.reverseWedge', 'Reverse Wedge'), 'flip') : '') + '<hr>' +
+        // hidden: kept in the code with draw=none, so the drawing keeps its shape (a ring closure has no options of its own)
+        (b.hook ? '' : hidden(b.item) ? mItem('bshow', t('editor.cf.showBond', 'Show Bond'), 'show') : mItem('bhide', t('editor.cf.hideBond', 'Hide Bond'), 'hide')) +
+        (hidden(b.item) && b.ring ? '' : mItem('bdel', t('editor.cf.deleteBond', 'Delete Bond'), 'del', '⌫')) + (b.ring ? mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del') : '') + (sch ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
     } else if (a) {
       E.sel = { a: a.seg };
       menu.innerHTML = mItem('alabel', t('editor.cf.editConditions', 'Edit Conditions'), 'label', '↩') + '<hr>' + mItem('adel', a.seg.t === 'merge' ? t('editor.cf.deleteMerge', 'Delete Merge') : t('editor.cf.deleteArrow', 'Delete Arrow'), 'del', '⌫');
@@ -1264,20 +1309,22 @@ import { patchSvg } from '../ui/svg-patch';
     if (bk && !options.some(o => o[0] === bk)) options.push([bk, `${bk} ${lr.r}`]);
     const group = sub ? [{ text: t('editor.cf.ungroup', 'Ungroup'), attrs: { 'data-ce': 'ungroup', title: t('editor.cf.ungroupTitle', 'Take its {cmd} apart', { cmd: '\\subscheme' }) } }] : nextStep(mol) ? [{ text: t('editor.cf.groupNext', 'Group with Next'), attrs: { 'data-ce': 'group', title: t('editor.cf.groupNextTitle', 'Put it, the next arrow and the compound after it in a {cmd}', { cmd: '\\subscheme' }) } }] : [];
     return [{ ...section(t('editor.cf.compound', 'Compound'), [field(t('ui.name', 'Name'), 'mname', nameOf(mol), { 'data-tx': 'text', placeholder: t('editor.cf.namePh', 'none, shown under it') }), selectField(t('editor.cf.brackets', 'Brackets'), 'brk', bk, options),
-      ...(sub ? [field(t('editor.cf.arrowsAt', 'Arrows at'), 'subang', sub.opt, { class: 'mono', placeholder: t('editor.cf.defaultEg', 'default, e.g. {example}', { example: '90' }) })] : []), { kind: 'actions' as const, class: 'row', buttons: [...group, { text: t('editor.cf.deleteMolecule', 'Delete Molecule'), attrs: { class: 'danger', 'data-ce': 'mdel' } }] }], 'sec'), ...(sub ? { summary: t('editor.cf.inSubscheme', 'in a subscheme') } : {}) }];
+      ...(sub ? [field(t('editor.cf.arrowsAt', 'Arrows at'), 'subang', subAngleText(sub), { class: 'mono', placeholder: t('editor.cf.defaultEg', 'default, e.g. {example}', { example: '90' }) })] : []), { kind: 'actions' as const, class: 'row', buttons: [...group, { text: t('editor.cf.deleteMolecule', 'Delete Molecule'), attrs: { class: 'danger', 'data-ce': 'mdel' } }] }], 'sec'), ...(sub ? { summary: t('editor.cf.inSubscheme', 'in a subscheme') } : {}) }];
   }
   function renderProps() {
     if (!E) return;
     const Lo = lay(), v = selV(), b = selB(), a = selA(), mv = selM();
     const show = (title: any, summary: any, rows: any, mol?: any) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), ...(summary !== undefined ? { summary } : {}) }, ...(mol ? molSection(mol) : [])] });
     if (v) {
-      const n = dirsAt(v).length, atoms = atomsOf(v), main = atoms && atoms[Math.min(v.k, atoms.length - 1)], pairs = chargesOf(main).filter((c: any) => c.what.trim() === '\\:').map((c: any) => Math.round(c.angle)), sign = signOf(main), lbl = v.g ? v.g.raw.trim() : '';
-      const pairRow: any = segments(t('editor.cf.lonePairs', 'Lone pairs'), 'pair', '', [[90, '↑', t('editor.commonA.side.above', 'Above')], [0, '→', t('editor.commonA.side.right', 'Right')], [270, '↓', t('editor.commonA.side.below', 'Below')], [180, '←', t('editor.commonA.side.left', 'Left')]], !main);
-      // independent toggles: a lone pair on each side, so several can be on (no sliding knob)
-      pairRow.controlClass = 'ctl seg-ctl ze-flags';
-      for (const control of pairRow.controls) { const on = !!main && pairs.includes(+control.attrs['data-v']); control.attrs.class = on ? 'on' : ''; control.attrs['aria-pressed'] = String(on); }
+      const n = dirsAt(v).length, atoms = atomsOf(v), main = atoms && atoms[Math.min(v.k, atoms.length - 1)], pairs = pairsOn(main).map((c: any) => Math.round(c.angle)), singles = chargesOf(main).filter((c: any) => kindOf(c) === '\\.').map((c: any) => Math.round(c.angle)), sign = signOf(main), lbl = v.g ? v.g.raw.trim() : '';
+      const sides = () => [[90, '↑', t('editor.commonA.side.above', 'Above')], [0, '→', t('editor.commonA.side.right', 'Right')], [270, '↓', t('editor.commonA.side.below', 'Below')], [180, '←', t('editor.commonA.side.left', 'Left')]];
+      // independent toggles: one on each side, so several can be on (no sliding knob)
+      const flags = (row: any, on: any) => { row.controlClass = 'ctl seg-ctl ze-flags'; for (const control of row.controls) { const x = !!main && on.includes(+control.attrs['data-v']); control.attrs.class = x ? 'on' : ''; control.attrs['aria-pressed'] = String(x); } return row; };
+      const pairRow: any = flags(segments(t('editor.cf.lonePairs', 'Lone pairs'), 'pair', '', sides(), !main), pairs);
+      const styleRow: any = segments(t('editor.cf.pairStyle', 'Pairs as'), 'pstyle', main ? styleOf(main) : pairStyle, [['\\:', t('editor.cf.dots', 'Dots'), t('editor.cf.pairDots', 'Two dots (\\:)')], ['\\|', t('editor.cf.bar', 'Bar'), t('editor.cf.pairBar', 'A bar (\\|)')]], !main);
+      const singleRow: any = flags(segments(t('editor.cf.radicals', 'Radicals'), 'single', '', sides(), !main), singles);
       show(lbl ? t('editor.cf.atom', 'Atom') : t('editor.cf.vertex', 'Vertex'), n === 1 ? t('editor.cf.oneBond', '1 bond') : t('editor.cf.nBonds', '{n} bonds', { n }), [field(t('ui.label', 'Label'), 'label', lbl, { class: 'mono', 'data-tx': 'math', placeholder: t('editor.cf.labelPh', 'none: a carbon vertex') }),
-        segments(t('editor.cf.charge', 'Charge'), 'sign', sign, [['', t('ui.none', 'None')], ['+', '+', t('editor.cf.superscript', 'A superscript {sign}', { sign: '+' })], ['-', '−', t('editor.cf.superscript', 'A superscript {sign}', { sign: '−' })]], !main), pairRow,
+        segments(t('editor.cf.charge', 'Charge'), 'sign', sign, [['', t('ui.none', 'None')], ['+', '+', t('editor.cf.superscript', 'A superscript {sign}', { sign: '+' })], ['-', '−', t('editor.cf.superscript', 'A superscript {sign}', { sign: '−' })]], !main), pairRow, styleRow, singleRow,
         ...(!v.g ? [note(t('editor.cf.help.vertex', 'A vertex with no label is a carbon. Give it a label to put charges and lone pairs on it.'))] : []), delRow('vdel', delVertex(v), v.inRing)], v.mol); return;
     }
     if (b) {
@@ -1285,8 +1332,10 @@ import { patchSvg } from '../ui/svg-patch';
       show(t('editor.cf.bondTitle', '{kind} bond', { kind: bondNames()[it.sym] || t('editor.cf.bond', 'Bond') }), inRing ? t('editor.cf.ringOf', 'ring of {n}', { n: b.ring.n }) : b.hook ? t('editor.cf.ringClosure', 'ring closure') : '', [selectField(t('ui.type', 'Type'), 'sym', it.sym, Object.entries<any>(bondNames())),
         chemicalNumber(t('ui.angle', 'Angle'), 'angle', inRing ? null : Math.round(ang * 100) / 100, '°', inRing || b.hook ? { disabled: true } : { step: '15' }), chemicalNumber(t('editor.cf.length', 'Length'), 'len', inRing ? null : len, '×', inRing || b.hook ? { disabled: true } : { step: '0.25', min: '0.25' }),
         field(t('ui.options', 'Options'), 'tikz', arg[4] || '', { class: 'mono', placeholder: eg('red, line width=1pt'), ...(b.hook ? { disabled: true } : {}) }),
-        note(hidden(it) ? t('editor.cf.help.hiddenBond', 'A deleted bond chemfig needs to keep its place: it is not drawn (draw=none). Draw Bond, or pick a bond kind, brings it back.') : inRing ? t('editor.cf.help.ringSides', "A ring's sides follow the ring: they have no angle or length of their own.") : t('editor.cf.help.bondDrag', 'Drag the atom at its end to turn and stretch it.')),
-        hidden(it) ? { kind: 'actions' as const, class: 'row', buttons: [{ text: t('editor.cf.drawBond', 'Draw Bond'), attrs: { 'data-ce': 'bshow' } }, ...(inRing ? [{ text: t('editor.cf.deleteRing', 'Delete Ring'), attrs: { 'data-ce': 'rdel', class: 'danger' } }] : [])] } : delRow(b.hook ? null : 'bdel', t('editor.cf.deleteBond', 'Delete Bond'), inRing)], b.mol); return;
+        note(hidden(it) ? t('editor.cf.help.hiddenBond', 'A hidden bond keeps its place in chemfig but is not drawn (draw=none). Show Bond, or picking a bond kind, brings it back.') : inRing ? t('editor.cf.help.ringSides', "A ring's sides follow the ring: they have no angle or length of their own.") : t('editor.cf.help.bondDrag', 'Drag the atom at its end to turn and stretch it.')),
+        // Hide or Show beside the deletes; a ring side's Delete Bond only hides it, so a ring offers Delete Ring instead
+        b.hook ? delRow(null, '', inRing) : { kind: 'actions' as const, class: 'row', buttons: [hidden(it) ? { text: t('editor.cf.showBond', 'Show Bond'), attrs: { 'data-ce': 'bshow' } } : { text: t('editor.cf.hideBond', 'Hide Bond'), attrs: { 'data-ce': 'bhide' } },
+          inRing ? { text: t('editor.cf.deleteRing', 'Delete Ring'), attrs: { 'data-ce': 'rdel', class: 'danger' } } : { text: t('editor.cf.deleteBond', 'Delete Bond'), attrs: { 'data-ce': 'bdel', class: 'danger' } }] }], b.mol); return;
     }
     if (a && a.seg.t === 'merge') {
       const M = a.seg;
@@ -1381,7 +1430,9 @@ import { patchSvg } from '../ui/svg-patch';
     if (!v) return;
     edit(() => {
       if (f === 'sign') setSign(v, val);
-      else if (f === 'pair') toggleDecor(v, '\\:', +val);
+      else if (f === 'pair') togglePair(v, +val);
+      else if (f === 'pstyle') setPairStyle(v, val);
+      else if (f === 'single') toggleDecor(v, '\\.', +val);
     });
     reselect(v);
   });
@@ -1450,7 +1501,7 @@ import { patchSvg } from '../ui/svg-patch';
     else if (x === 'label') { if (v) editLabel(v); }
     else if (x === 'alabel') { if (a) editArrowLabel(a, 0); }
     else if (x === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { btn.textContent = t('ui.copied', 'Copied'); setTimeout(() => (btn.textContent = t('ui.copy', 'Copy')), 1200); });
-    else if (x === 'bshow' && b) edit(() => { setHidden(b.item, false); touch(b.mol); });
+    else if ((x === 'bshow' || x === 'bhide') && b) edit(() => { setHidden(b.item, x === 'bhide'); touch(b.mol); });
     else if (x === 'bflip' && b) edit(() => { const s = b.item.sym; b.item.sym = (s[0] === '>' ? '<' : '>') + s.slice(1); b.item.dirty = true; touch(b.mol); });
     else if (x.startsWith('b:') && b) apply(x, { b });
   }

@@ -263,7 +263,8 @@ import { patchSvg } from '../ui/svg-patch';
   const selBox = () => { const s = E.sel; return s && { r1: Math.min(s.r1, s.r2), r2: Math.max(s.r1, s.r2), c1: Math.min(s.c1, s.c2), c2: Math.max(s.c1, s.c2) }; };
   const single = () => { const b = selBox(); return b && b.r1 === b.r2 && b.c1 === b.c2 ? b : null; };
   const selectCell = (r: any, c: any) => { E.sel = { r1: r, c1: c, r2: r, c2: c }; E.arrow = null; };
-  const selectArrow = (w: any) => { E.arrow = w; E.sel = null; };
+  // w.lab: the label clicked (its index among the arrow's labels); the same arrow keeps the one being edited
+  const selectArrow = (w: any) => { const same = E.arrow && E.arrow.join() === w.slice(0, 3).join(); E.lab = w.lab != null ? w.lab : same ? E.lab || 0 : 0; E.arrow = w.slice(0, 3); E.sel = null; };
 
   // ---------------------------------------------------------------- editing
   function place(key: any, r: any, c: any) {
@@ -462,7 +463,7 @@ import { patchSvg } from '../ui/svg-patch';
     const G = E.G || (E.G = geom());
     if (!G.L.arrows) return null;
     const [x, y] = toL(e), tol = px / E.view.k;
-    for (const l of G.L.labels) if (Math.abs(x - l.x) <= l.w / 2 && Math.abs(y - l.y) <= l.h / 2) return l.src.slice(0, 3);
+    for (const l of G.L.labels) if (Math.abs(x - l.x) <= l.w / 2 && Math.abs(y - l.y) <= l.h / 2) return Object.assign(l.src.slice(0, 3), { lab: l.src[3] < 100 ? l.src[3] : null });
     let best = null, bd = tol;
     for (const a of G.L.arrows) for (let i = 0; i <= 32; i++) {
       const p = D.at(a.seg, i / 32), d = Math.hypot(p.x - x, p.y - y);
@@ -533,7 +534,9 @@ import { patchSvg } from '../ui/svg-patch';
     const sa = E.arrow && L.arrows && L.arrows.find((a: any) => a.src.join() === E.arrow.join());
     if (sa) {
       out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})"><path class="ze-wsel" d="${D.curveD(sa.seg)}" stroke-width="${r2(8 / k)}"/>`;
-      for (const l of L.labels) if (l.src.slice(0, 3).join() === E.arrow.join()) out += `<rect class="ze-wsel" x="${r2(l.x - l.w / 2)}" y="${r2(l.y - l.h / 2)}" width="${r2(l.w)}" height="${r2(l.h)}" stroke-width="${r2(3 / k)}"/>`;
+      // with several labels, only the one the panel edits
+      const ar = arrowOf(E.arrow), many = ar && labelsOf(ar).length > 1, li = ar ? labIndex(ar) : 0;
+      for (const l of L.labels) if (l.src.slice(0, 3).join() === E.arrow.join() && !(many && l.src[3] < 100 && l.src[3] !== li)) out += `<rect class="ze-wsel" x="${r2(l.x - l.w / 2)}" y="${r2(l.y - l.h / 2)}" width="${r2(l.w)}" height="${r2(l.h)}" stroke-width="${r2(3 / k)}"/>`;
       out += '</g>';
     }
     if (R && C && !L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${k})">${D.draw({ ...G.s, x: bb.x, y: bb.y }, { paper: PAPER, export: true }, L)}</g>`;
@@ -710,8 +713,10 @@ import { patchSvg } from '../ui/svg-patch';
     });
     return true;
   }
-  // the arrow's first label (one is added when it has none)
-  function firstLabel(a: any) { const i = a.items.findIndex((x: any) => D.label(x)); return i < 0 ? null : { i, L: D.label(a.items[i]) }; }
+  // the arrow's labels, { i (in items), L }; E.lab picks the one the panel edits (one past the last: a new label, added once it has text)
+  function labelsOf(a: any) { const r: any[] = []; a.items.forEach((x: any, i: number) => { const L = D.label(x); if (L) r.push({ i, L }); }); return r; }
+  function labIndex(a: any) { const n = labelsOf(a).length; return Math.max(0, Math.min(E.lab || 0, n)); }
+  function firstLabel(a: any) { return labelsOf(a)[labIndex(a)] || null; }
   function setLabel(a: any, fn: any) {
     const f = firstLabel(a);
     const L = f ? f.L : { t: '', swap: false, opts: [] };
@@ -732,8 +737,8 @@ import { patchSvg } from '../ui/svg-patch';
       text: f ? f.L.t : '', math: true, bare: true,
       at: () => {
         const G = E.G || (E.G = geom()), v = E.view, sr = stage.getBoundingClientRect(), vr = svg.getBoundingClientRect();
-        const ar = G.L.arrows.find((x: any) => x.src.join() === w.join());
-        const p = ar ? D.at(ar.seg, 0.5) : { x: G.cx(w[1]), y: G.cy(w[0]) };
+        const ar = G.L.arrows.find((x: any) => x.src.join() === w.join()), lb = G.L.labels.find((l: any) => l.src.slice(0, 3).join() === w.join() && l.src[3] === labIndex(a));
+        const p = lb ? { x: lb.x, y: lb.y } : ar ? D.at(ar.seg, 0.5) : { x: G.cx(w[1]), y: G.cy(w[0]) };
         return [vr.left - sr.left + v.ox + p.x * v.k, vr.top - sr.top + v.oy + p.y * v.k + 14];
       },
       onInput: (v: any) => { setLabel(a, (L: any) => { L.t = v; }); touch(cell); draw(); renderProps(); },
@@ -742,7 +747,7 @@ import { patchSvg } from '../ui/svg-patch';
     return true;
   }
   function closePop() { if (Pop) Pop.pop.close(); }
-  function focusField() { const f = $('[data-f]', props); if (f) { f.focus(); if (f.select) f.select(); } }
+  function focusField(name?: string) { const f = $(name ? `[data-f="${name}"]` : '[data-f]', props); if (f) { f.focus(); if (f.select) f.select(); } }
 
   // ---------------------------------------------------------------- properties
   const nameOf = (x: any) => Z.styleOf(x).name;
@@ -838,14 +843,21 @@ import { patchSvg } from '../ui/svg-patch';
     if (E.arrow) {
       const a = arrowOf(E.arrow);
       if (!a) { E.arrow = null; renderProps(); return; }
-      const [dr, dc] = delta(a.dirs), f = firstLabel(a), L = f ? f.L : { t: '', swap: false, opts: [] };
+      const [dr, dc] = delta(a.dirs), f = firstLabel(a), L = f ? f.L : { t: '', swap: false, opts: [] }, labs = labelsOf(a), li = labIndex(a);
       const side = L.opts.includes('description') || a.items.includes('description') ? 'on' : L.swap ? 'right' : 'left', p = L.opts.find((x: any) => POS_RE.test(Z.styleOf(x).name)) || '';
       const bend = find(a, /^bend (left|right)$/), shift = find(a, /^shift (left|right)$/), bendSide = bend ? nameOf(bend).slice(5) : '', bendA = bend ? Z.styleOf(bend).arg || '30' : '30', shiftSide = shift ? nameOf(shift).slice(6) : '';
       const sk = headKey(a.items), lk = lineOf(a.items), noLabel = !L.t;
       const none = t('ui.none', 'None'), left = t('ui.left', 'Left'), right = t('ui.right', 'Right');
-      const rows: FormRow[] = [field(t('ui.label', 'Label'), 'label', D.splitColor(L.t).body, { 'data-tx': 'math', placeholder: 'none' }), color(t('ui.colour', 'Colour'), 'arrow', (arrowColor(a) || {} as any).spec || null), color(t('editor.cd.labelColour', 'Label colour'), 'label', labelColor(a), noLabel && t('editor.cd.addLabelFirst', 'Add a label first')), sg(t('editor.cd.side', 'Side'), 'side', side, [['left', left], ['right', right, t('editor.cd.side.swapped', "Swapped (')")], ['on', t('editor.cd.side.on', 'On line'), 'description']], noLabel), sg(t('editor.cd.at', 'At'), 'pos', p, POSN(), noLabel),
-        { kind: 'controls', class: 'ze-shapes', controls: HEAD_STYLES.map(([k, , o]) => ({ kind: 'button', text: '', svg: styleMini(o), attrs: { class: 'ze-shape' + (sk === k ? ' on' : ''), 'data-cs': 'style', 'data-v': k, title: styleName(k) } })) },
-        sg(t('editor.cd.line', 'Line'), 'line', lk, [['', t('editor.commonA.solid', 'Solid')], ['dashed', t('ui.dashed', 'Dashed')], ['dotted', t('ui.dotted', 'Dotted')], ['squiggly', t('editor.cd.style.squiggly', 'Squiggly')]])];
+      const rows: FormRow[] = [];
+      // more than one label ("φ" near start, "η" near end): pick the one the fields below edit, or add another
+      if (labs.length > 1 || (labs.length && li >= labs.length)) {
+        const tabs = Array.from({ length: Math.max(labs.length, li + 1) }, (_, k) => ({ kind: 'button' as const, text: String(k + 1), attrs: { 'data-cs': 'lab', 'data-v': String(k), class: k === li ? 'on' : '', title: labs[k] ? D.splitColor(labs[k].L.t).body : t('editor.cd.newLabel', 'New label') } }));
+        rows.push({ ...row(t('editor.cd.labels', 'Labels'), ...tabs), controlClass: 'ctl seg-ctl' });
+      }
+      rows.push(field(t('ui.label', 'Label'), 'label', D.splitColor(L.t).body, { 'data-tx': 'math', placeholder: 'none' }), color(t('ui.colour', 'Colour'), 'arrow', (arrowColor(a) || {} as any).spec || null), color(t('editor.cd.labelColour', 'Label colour'), 'label', labelColor(a), noLabel && t('editor.cd.addLabelFirst', 'Add a label first')), sg(t('editor.cd.side', 'Side'), 'side', side, [['left', left], ['right', right, t('editor.cd.side.swapped', "Swapped (')")], ['on', t('editor.cd.side.on', 'On line'), 'description']], noLabel), sg(t('editor.cd.at', 'At'), 'pos', p, POSN(), noLabel));
+      if (f) rows.push({ kind: 'actions', class: 'row', buttons: [{ text: t('editor.cd.addLabel', 'Add Label'), attrs: { 'data-ce': 'addlabel', title: t('editor.cd.addLabelTitle', 'Another label on this arrow, e.g. one near the start and one near the end') } }, { text: t('editor.cd.removeLabel', 'Remove Label'), attrs: { class: 'danger', 'data-ce': 'rmlabel' } }] });
+      rows.push({ kind: 'controls', class: 'ze-shapes', controls: HEAD_STYLES.map(([k, , o]) => ({ kind: 'button', text: '', svg: styleMini(o), attrs: { class: 'ze-shape' + (sk === k ? ' on' : ''), 'data-cs': 'style', 'data-v': k, title: styleName(k) } })) },
+        sg(t('editor.cd.line', 'Line'), 'line', lk, [['', t('editor.commonA.solid', 'Solid')], ['dashed', t('ui.dashed', 'Dashed')], ['dotted', t('ui.dotted', 'Dotted')], ['squiggly', t('editor.cd.style.squiggly', 'Squiggly')]]));
       if (!E.X) rows.push(sg(t('editor.cd.crossing', 'Crossing'), 'cross', find(a, /^crossing over$/) ? '1' : '', [['', none], ['1', t('editor.cd.crossing.gap', 'Gap'), t('editor.cd.crossing.gapTitle', 'crossing over: a gap where it crosses another arrow')]]));
       rows.push(sg(t('editor.cd.bend', 'Bend'), 'bend', bendSide, [['', none], ['left', left], ['right', right]]));
       if (bendSide && !E.X) rows.push(numField(t('ui.angle', 'Angle'), 'bendA', bendA, '°', { min: '0', max: '90', step: '5' }));
@@ -905,6 +917,7 @@ import { patchSvg } from '../ui/svg-patch';
     const f = bt.dataset.cs, v = bt.dataset.v;
     const cell = at(E.arrow[0], E.arrow[1]), a = arrowOf(E.arrow);
     if (!a) return;
+    if (f === 'lab') { E.lab = +v; draw(); renderProps(); return; }
     edit(() => {
       if (f === 'style') applyStyle(a, v);
       else if (f === 'line') setItem(a, /^(dashed|dotted|squiggly)$/, v);
@@ -942,6 +955,8 @@ import { patchSvg } from '../ui/svg-patch';
     else if (a === 'arrowdel') { if (E.arrow) deleteArrow(E.arrow); }
     else if (a === 'reverse') { if (E.arrow) reverseArrow(E.arrow); }
     else if (a === 'label') { if (E.arrow) editLabel(E.arrow); }
+    else if (a === 'addlabel') { if (E.arrow && arrowOf(E.arrow)) { E.lab = labelsOf(arrowOf(E.arrow)).length; renderProps(); focusField('label'); } }
+    else if (a === 'rmlabel') { const w = E.arrow, ar = w && arrowOf(w), f = ar && firstLabel(ar); if (f) { const k = labIndex(ar); edit(() => { ar.items.splice(f.i, 1); touch(at(w[0], w[1])); }); E.lab = Math.min(k, Math.max(0, labelsOf(ar).length - 1)); renderProps(); draw(); } }
     else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
     else if (a === 'addrow') edit(() => ensure(M, nR(M) + 1, Math.max(nC(M), 1)));
     else if (a === 'addcol') edit(() => ensure(M, Math.max(nR(M), 1), nC(M) + 1));

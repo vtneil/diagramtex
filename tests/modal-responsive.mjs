@@ -16,8 +16,11 @@ try {
     for(const [width,height] of [[1600,1000],[960,700],[700,420],[600,300],[380,260]]) {
      await p.setViewportSize({width,height});
      for(const kind of ['import','code','chemistry']) {
+      // LaTeX output (the code dialog) opens only once the maths has rendered; a slow runner can still be busy
+      if(kind==='code')await p.waitForFunction(()=>TD.app.outputReady());
       await p.evaluate(kind=>{if(kind==='import')TD.app.openImport('');else if(kind==='code')TD.app.cmd.runCmd('tikz');else TD.chemEditor.open({src:'\\chemfig{-[:30]-[:-30]}'},()=>{});},kind);
       const selector=kind==='import'?'#importModal':kind==='code'?'#modal':'#cfModal',modal=p.locator(selector);
+      await modal.locator('.modal-head strong').waitFor({state:'visible'});
       await p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
       const metrics=await modal.evaluate(modal=>{
        const box=modal.querySelector('.modal-box'),head=box.querySelector('.modal-head'),r=box.getBoundingClientRect(),h=head.getBoundingClientRect();

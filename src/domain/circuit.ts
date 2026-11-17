@@ -112,7 +112,7 @@ const srcKind = (part: any) => (!/^src:/.test(part) || /nullator|norator/.test(p
 // circuitikz's defaults (no `oldvoltagedirection`): a part's voltage below and forward, a voltage source's above,
 // a current source's backward; `^ _` pick the side, `> <` the direction
 function voltOf(it: any, ox: any) {
-  const o = ox.v || (it.v ? { mods: '', t: it.v } : null);
+  const o = ox.v || (it.v ? { mods: it.vm || '', t: it.v } : null);
   if (!o) return null;
   const k = srcKind(it.part), md = o.mods;
   return { t: o.t, s: md.includes('^') ? 1 : md.includes('_') ? -1 : k === 'v' ? 1 : -1, back: md.includes('<') ? true : md.includes('>') ? false : k === 'i', gen: k === 'v' };
@@ -120,12 +120,18 @@ function voltOf(it: any, ox: any) {
 // currents: forward after the part above the wire; on a voltage source backward and before it.
 // `i<` is backward and before; with a side too, the order says where: `i>_` before, `i_>` after
 function currOf(it: any, ox: any) {
-  const o = ox.i || (it.i ? { mods: '', t: it.i } : null);
+  const o = ox.i || (it.i ? { mods: it.im || '', t: it.i } : null);
   if (!o) return null;
   const vs = srcKind(it.part) === 'v', md = o.mods, pi = md.search(/[_^]/), di = md.search(/[<>]/);
   let back = vs, before = vs;
   if (di >= 0) { back = md[di] === '<'; before = pi < 0 ? back : di < pi; }
   return { t: o.t, s: md[pi] === '_' ? -1 : 1, back, before };
+}
+// the mods (`^ _ < >`) that put a voltage or current mark on a side (1: left of the path, ^) and way (back: <);
+// a current's arrow sits before the part when it points back, as `i<=` puts it
+function markMods(kind: 'v' | 'i', s: number, back: boolean) {
+  const side = s > 0 ? '^' : '_';
+  return kind === 'v' ? side + (back ? '<' : '>') : back ? '<' + side : side + '>';
 }
 // circuitikz's voltage arc (european style): both ends sit 0.112 cm beside the part's pins, the controls come
 // from the part's -110/-70 degree anchors scaled by `bump b` 1.5. Frame: x along the path, y to its left.
@@ -300,8 +306,8 @@ function code(items: any, raw: any) {
     const o = [];
     if (it.l) o.push(`l=${brace(it.l)}`);
     if (it.ann) o.push(`a=${brace(it.ann)}`);
-    if (it.v) o.push(`v=${brace(it.v)}`);
-    if (it.i) o.push(`i=${brace(it.i)}`);
+    if (it.v) o.push(`v${it.vm || ''}=${brace(it.v)}`);
+    if (it.i) o.push(`i${it.im || ''}=${brace(it.i)}`);
     if (it.name) o.push(`n=${it.name}`);
     if (it.poles && it.poles !== '-') o.push(it.poles);
     if (it.opts) o.push(it.opts);
@@ -614,8 +620,9 @@ function readStmt(stmt: any, coord: any, named: any, st?: CzStyle) {
       if (hit.lab) it[({ v: 'v', i: 'i' } as Record<string, string>)[srcKind(hit.key)] || 'l'] = hit.lab;
       const rest = [];
       for (const x of hit.rest) {
-        const m = /^(l|a|v|i|n)\s*=\s*([\s\S]*)$/.exec(x);
-        if (m) it[({ l: 'l', a: 'ann', v: 'v', i: 'i', n: 'name' } as Record<string, any>)[(m[1] as any)]] = unbrace(m[2]);
+        const m = /^(l|a|v|i|n)\s*=\s*([\s\S]*)$/.exec(x), vi = /^(v|i)([_^<>]{1,3})\s*=\s*([\s\S]*)$/.exec(x);
+        if (vi) { it[vi[1]] = unbrace(vi[3]); it[vi[1] + 'm'] = vi[2]; }
+        else if (m) it[({ l: 'l', a: 'ann', v: 'v', i: 'i', n: 'name' } as Record<string, any>)[(m[1] as any)]] = unbrace(m[2]);
         else if (/^[*o]?-[*o]?$/.test(x)) it.poles = x;
         else rest.push(x);
       }
@@ -699,7 +706,8 @@ TD.TYPES.cz = {
 
 
 
-TD.cz = { vstyleOf, colorOf, pinsOf, nodeXf, bipXf, xfOf, itemsSvg, itemsBox, code, parse, layout, same, uid, isWire, NODE_R, RLEN, defaultItems };
+const markOf = (kind: 'v' | 'i', it: any) => (kind === 'v' ? voltOf : currOf)({ ...it, [kind]: it[kind] || ' ' }, {});
+TD.cz = { markOf, markMods, vstyleOf, colorOf, pinsOf, nodeXf, bipXf, xfOf, itemsSvg, itemsBox, code, parse, layout, same, uid, isWire, NODE_R, RLEN, defaultItems };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("cz", {
   menu: { order: 4, label: "Circuit", title: "Circuit, drawn with circuitikz parts", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M4 18V6h7M21 6h7v12H4\"/><path d=\"M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3\" class=\"c1\"/><path d=\"M14 18v-3M18 18v-3\" class=\"c1\"/><path d=\"M12 15h8M12 21h8\" class=\"c1\"/></svg>" },
