@@ -1,0 +1,14 @@
+% expect: native match>=0.97
+\usetikzlibrary{graphs,quotes,arrows.meta}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[scale around={1.5:(3,-1)}, transform shape]
+  \begin{scope}[shift={(1,-1)}, >=Stealth]
+    \graph[no placement, nodes={draw, circle, minimum size=7mm}] {
+      a/$a$ [at={(0,0)}];
+      b/$b$ [at={(2,1)}];
+      c/$c$ [at={(4,0)}];
+      a -> b; b ->["$w$"] c; a -- c;
+    };
+  \end{scope}
+  \end{scope}
+\end{tikzpicture}

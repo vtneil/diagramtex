@@ -2,6 +2,7 @@ import { srcText } from './images';
 import { previewFadeFinished } from './preview-fade';
 
 type Resource = { source: string; url: string; ready: Promise<void> };
+type Assignment = { resource: Resource; commit: () => void; seq: number };
 
 // Give the browser a reusable image resource rather than a large data URI on
 // each live SVG image. Keep the exact SVG bytes and intrinsic geometry; exports
@@ -10,7 +11,10 @@ type Resource = { source: string; url: string; ready: Promise<void> };
 export class SvgLabelResources {
   private sources = new Map<string, Resource>();
   private urls = new Map<string, Resource>();
-  private assignments = new Map<Element, { resource: Resource; commit: () => void }>();
+  // replacements still decoding, oldest first; the image keeps showing what it has until one is ready
+  private assignments = new Map<Element, Assignment[]>();
+  private shown = new WeakMap<Element, number>();
+  private seq = 0;
 
   update(root: Element): void {
     const used = new Set<Resource>();
@@ -23,28 +27,38 @@ export class SvgLabelResources {
       }
       if (resource) used.add(resource);
     }
-    for (const [image, assignment] of this.assignments) {
-      if (root.contains(image)) used.add(assignment.resource); else this.assignments.delete(image);
+    for (const [image, pending] of this.assignments) {
+      if (root.contains(image)) for (const a of pending) used.add(a.resource); else this.assignments.delete(image);
     }
     for (const resource of this.sources.values()) if (!used.has(resource)) this.release(resource);
   }
 
   source(url: string): string { return this.urls.get(url)?.source || url; }
-  assign(image: Element, source: string, commit = () => {}, defer = false): Promise<void> | undefined {
-    this.assignments.delete(image); // invalidate any older, still-decoding revision
-    if (this.source(image.getAttribute('href') || '') === source) { commit(); return defer ? previewFadeFinished(image) : undefined; }
+  // defer: a finished preview, swapped in once decoded. hold: the same label redrawn (a new wrap
+  // width, size or colour), which also keeps its picture until the new one has decoded, so a drag
+  // never paints a blank frame. Held replacements commit in order as each decodes: a newer one
+  // always wins, and an older one shows meanwhile rather than waiting for the drag to stop.
+  assign(image: Element, source: string, commit = () => {}, defer = false, hold = false): Promise<void> | undefined {
+    const seq = ++this.seq;
+    const show = (resource?: Resource) => {
+      this.shown.set(image, seq);
+      const pending = this.assignments.get(image)?.filter(a => a.seq > seq);
+      if (pending?.length) this.assignments.set(image, pending); else this.assignments.delete(image);
+      commit(); image.setAttribute('href', resource?.url || source);
+    };
+    if (this.source(image.getAttribute('href') || '') === source) { show(this.urls.get(image.getAttribute('href') || '')); return defer ? previewFadeFinished(image) : undefined; }
     const resource = source.startsWith('data:image/svg+xml') ? this.acquire(source) : undefined;
-    if (defer && resource && image.getAttribute('href')) {
-      const assignment = { resource, commit };
-      this.assignments.set(image, assignment);
-      return resource.ready.then(() => {
-        if (this.assignments.get(image) !== assignment || !image.isConnected) return;
-        this.assignments.delete(image);
-        assignment.commit(); image.setAttribute('href', resource.url);
-        return previewFadeFinished(image);
+    if (resource && (defer || hold) && image.getAttribute('href')) {
+      const assignment = { resource, commit, seq };
+      this.assignments.set(image, [...(this.assignments.get(image) || []), assignment]);
+      const done = resource.ready.then(() => {
+        if (!image.isConnected || (this.shown.get(image) || 0) > seq || !this.assignments.get(image)?.includes(assignment)) return;
+        show(resource);
+        return defer ? previewFadeFinished(image) : undefined;
       });
+      return defer ? done : undefined;
     }
-    commit(); image.setAttribute('href', resource?.url || source);
+    show(resource);
   }
   private acquire(source: string): Resource | undefined {
     const known = this.sources.get(source); if (known) return known;

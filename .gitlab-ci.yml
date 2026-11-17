@@ -94,6 +94,7 @@ browser-check:
           - math-priority
           - output-readiness
           - preview-fade
+          - label-swap
           - page-print
           - format-preview
           - construction-tools

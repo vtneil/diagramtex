@@ -2,7 +2,8 @@ import type { SvgLabelResources } from './svg-label-resources';
 import { runtime as TD } from '../runtime';
 import { previewFadeFinished } from './preview-fade';
 
-const revisions = new WeakMap<Element, object>();
+const shown = new WeakMap<Element, number>();
+let revision = 0;
 const decoded = new Map<string, Promise<void>>();
 function decode(source: string): Promise<void> {
   const known = decoded.get(source); if (known) return known;
@@ -33,7 +34,7 @@ export function updateSvg(root: Element, markup: string, resources?: SvgLabelRes
     const index = +next.getAttribute('data-label-slot')!;
     next.removeAttribute('data-label-slot');
     const image = previous[index] || next;
-    const revision = {}; revisions.set(image, revision);
+    const mine = ++revision;
     const provisional = image !== next && next.classList.contains('math-pending');
     const source = provisional ? (resources?.source(image.getAttribute('href') || '') || image.getAttribute('href') || sources[index]) : sources[index];
     const promoting = image.classList.contains('math-pending') && !next.classList.contains('math-pending');
@@ -41,15 +42,19 @@ export function updateSvg(root: Element, markup: string, resources?: SvgLabelRes
       for (const attr of [...image.attributes]) if (attr.name !== 'href' && !(provisional && ['width', 'height'].includes(attr.name)) && !next.hasAttribute(attr.name)) image.removeAttribute(attr.name);
       for (const attr of [...next.attributes]) if (!(provisional && ['width', 'height'].includes(attr.name)) && image.getAttribute(attr.name) !== attr.value) image.setAttribute(attr.name, attr.value);
     };
+    // the same text redrawn (a new wrap width, size or colour) keeps its picture until the new one has
+    // decoded, so it never paints a blank frame; other text in this element swaps at once
+    const same = image !== next && image.getAttribute('aria-label') === next.getAttribute('aria-label');
     let work: Promise<void> | undefined;
-    if (resources) work = resources.assign(image, source, commit, promoting);
-    else if (promoting && image.getAttribute('href') !== source) {
-      work = decode(source).then(() => {
-        if (revisions.get(image) !== revision || !image.isConnected) return;
-        commit(); image.setAttribute('href', source);
-        return previewFadeFinished(image);
+    if (resources) work = resources.assign(image, source, commit, promoting, same);
+    else if ((promoting || same) && image.getAttribute('href') !== source) {
+      const ready = decode(source).then(() => {
+        if ((shown.get(image) || 0) > mine || !image.isConnected) return;
+        shown.set(image, mine); commit(); image.setAttribute('href', source);
+        return promoting ? previewFadeFinished(image) : undefined;
       });
-    } else { commit(); image.setAttribute('href', source); if (promoting) work = previewFadeFinished(image); }
+      if (promoting) work = ready;
+    } else { shown.set(image, mine); commit(); image.setAttribute('href', source); if (promoting) work = previewFadeFinished(image); }
     if (work) TD.math.trackView(work);
     if (image !== next) next.replaceWith(image);
   }

@@ -5,7 +5,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.50.0'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.51.1'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -620,7 +620,10 @@ import { runtime as TD } from '../runtime';
   // milliseconds. measureBatch(fn) runs fn noting every text it has no size for, measures them all in one
   // layout pass, then runs fn again with the real sizes.
   let batch: any = null;
-  TD.measuring = () => !!batch; // true while sizes may still be placeholders
+  // true once this pass has handed out a placeholder size: what is drawn or laid out after that may be
+  // wrong and must not be kept. Before the first placeholder every size is real, so a pass with nothing
+  // to measure (the usual redraw) keeps its results like any other.
+  TD.measuring = () => !!batch && batch.size > 0;
   TD.measureBatch = (fn: any) => {
     if (batch) return fn();
     batch = new Map();

@@ -43,6 +43,7 @@
     "generate:label-glyphs": "node scripts/generate-label-glyphs.js",
     "test:output-readiness": "node tests/output-readiness.mjs",
     "test:preview-fade": "node tests/preview-fade.mjs",
+    "test:label-swap": "node tests/label-swap.mjs",
     "test:page-print": "node tests/page-print.mjs",
     "test:math-priority": "node tests/math-priority.mjs",
     "test:construction": "node tests/construction-tools.mjs",

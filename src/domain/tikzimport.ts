@@ -324,8 +324,8 @@ import { runtime as TD } from '../runtime';
   }
   // style from options
   function style(C: any, opts: any, cmd: any) {
-    const inheritedFonts = (C.scopes || []).slice().reverse().filter((L: any) => L.font).map((L: any) => ({ k: 'font', v: L.font }));
-    opts = [...(C.base || []), ...inheritedFonts, ...opts]; // the picture's own line width, dash and colour come first
+    const inherited = innermost(C)?.fonts;
+    opts = [...(C.base || []), ...(inherited ? [{ k: 'font', v: inherited }] : []), ...opts]; // the picture's own line width, dash and colour come first
     const st: Record<string, any> = { stroke: cmd === 'fill' || cmd === 'shade' || cmd === 'path' ? null : '#000000', fill: cmd === 'fill' || cmd === 'filldraw' ? '#000000' : null, width: 0.4 / K, dash: 'solid', opacity: 1, startTip: 'none', endTip: 'none' };
     let strokeOpacity = 1, fillOpacity = 1, colorAll = null;
     const W: Record<string, any> = { 'ultra thin': 0.1, 'very thin': 0.2, thin: 0.4, semithick: 0.6, thick: 0.8, 'very thick': 1.2, 'ultra thick': 1.6 };
@@ -726,7 +726,7 @@ import { runtime as TD } from '../runtime';
           if (raw.length) P.warnings.push(...raw.flatMap((p: any) => p.issues.length ? p.issues : ['Pic body is not fully supported']));
           const origin = cur || {x:0,y:0}, own = readXf(C,parseOpts(tk.opts));
           if (own.rest.length) P.warnings.push('Unsupported pic options: ' + own.rest.map((o: any) => o.k).join(', '));
-          pushAll(out,applyXf(made.filter((p: any) => p.type !== 'tikz'),[{xf:own.xf,shape:true},{xf:[{dx:origin.x,dy:origin.y}],shape:true}]));
+          pushAll(out,applyXf(made.filter((p: any) => p.type !== 'tikz'),[{xf:[{dx:origin.x,dy:origin.y}],shape:true},{xf:own.xf,shape:true}]));
           C.warnings.push(...P.warnings);
         } finally { STY=saved.STY; MAC=saved.MAC; styUsed=saved.styUsed; styOff=saved.styOff; }
         continue;
@@ -1209,7 +1209,16 @@ import { runtime as TD } from '../runtime';
     if (s.type === 'arc') { s.ry = (s.ry ?? s.r) * sy; s.r *= sx; if (Math.abs(s.ry - s.r) < 1e-9) delete s.ry; }
     if (s.type === 'dot' || s.type === 'ball') s.r *= Math.sqrt(Math.abs(sx * sy));
   }
-  // apply transforms (innermost list first, each list last-option-first); text keeps its own angle
+  // C.scopes runs outermost first, so opening and closing a scope is a push and a pop.
+  const innermost = (C: any) => { const L = C.scopes; return L && L.length ? L[L.length - 1] : null; };
+  // a scope as it opens: the fonts it inherits, joined once, so a style reads them without walking the scopes
+  function openScope(C: any, L: any) {
+    const up = innermost(C)?.fonts || '';
+    L.fonts = [up, L.font].filter(Boolean).join(' ');
+    (C.scopes = C.scopes || []).push(L);
+    return L;
+  }
+  // apply transforms (lists outermost first, so the innermost is applied first; each list last-option-first); text keeps its own angle
   // unless `transform shape` is on
   // Names hold where a point is on the page (every scope's transform applied); a path inside a scope is read in
   // that scope's own coordinates, so a name used there is taken back through the scopes' transforms first.
@@ -1231,9 +1240,11 @@ import { runtime as TD } from '../runtime';
     return { ...p, x: (M.d * X - M.b * Y) / det, y: (-M.c * X + M.a * Y) / det };
   }
   function applyXf(shapes: any, lists: any) {
+    const shapeFrom: boolean[] = new Array(lists.length);
+    for (let li = 0, on = false; li < lists.length; li++) shapeFrom[li] = on = on || !!lists[li].shape;
     for (const s of shapes) {
-      for (let li = 0; li < lists.length; li++) {
-        const L = lists[li], transformShape = L.shape || lists.slice(li + 1).some((outer: any) => outer.shape);
+      for (let li = lists.length - 1; li >= 0; li--) {
+        const L = lists[li], transformShape = shapeFrom[li];
         if (L.opacity != null) s.opacity = (s.opacity ?? 1) * L.opacity;
         for (let i = L.xf.length - 1; i >= 0; i--) {
           const t = L.xf[i];
@@ -1590,7 +1601,7 @@ import { runtime as TD } from '../runtime';
     const sub = (src: string, o: any) => {
       const every = !ofNodes && inherit.length ? `${C.styles.get('every node') ? C.styles.get('every node') + ', ' : ''}${o2s(inherit)}${nodesOpt ? ', ' + nodesOpt : ''}` : (!ofNodes && nodesOpt ? `${C.styles.get('every node') ? C.styles.get('every node') + ', ' : ''}${nodesOpt}` : null);
       const Q: any = { ...C, preview: false, stmts: [], struct: null, warnings: [], names: { ...C.names }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) }, geo: { ...(C.geo || {}) }, styles: new Map(C.styles), macros: new Map(C.macros), cellBoxes: [], chainPending: null, base,
-        scopes: [{ xf: o.x || o.y ? [{ dx: o.x, dy: o.y }] : [], shape: false, opts: '' }, ...plain] };
+        scopes: [...plain, { xf: o.x || o.y ? [{ dx: o.x, dy: o.y }] : [], shape: false, opts: '', fonts: plain.length ? plain[plain.length - 1].fonts : '' }] };
       if (every != null) Q.styles.set('every node', every);
       let shapes: any[] = [];
       try { shapes = parseStatements(Q, src); } catch (e: any) { Q.warnings.push('matrix cell: ' + e.message); } finally { STY = C.styles; MAC = C.macros; }
@@ -1640,7 +1651,7 @@ import { runtime as TD } from '../runtime';
     if (shapeO && (anchorV !== 'center' || frame.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none'))) issues.push('matrix shape ' + (shapeO.v ?? shapeO.k));
     let at = atRaw != null ? coord(C, atRaw) : { x: 0, y: 0 };
     if (!at) { issues.push(`Unresolved matrix position (${atRaw})`); at = { x: 0, y: 0 }; }
-    const P = applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], [{ xf: xf.xf, shape: false }, ...(C.scopes || [])]).map((d: any) => ({ x: d.cx, y: d.cy }))[0];
+    const P = applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], [...(C.scopes || []), { xf: xf.xf, shape: false }]).map((d: any) => ({ x: d.cx, y: d.cy }))[0];
     const keep = frame.filter((o: any) => !/^(inner sep|inner xsep|inner ysep|minimum size|minimum width|minimum height)$/.test(o.k));
     const pt = (v: number) => `${+(v * K).toFixed(4)}pt`;
     const frameSrc = (nm: string, where: any, more: any[] = []) => `\\node[${[o2s(keep), shapeO ? '' : 'rectangle', 'inner sep=0pt', `minimum width=${pt(2 * hw)}`, `minimum height=${pt(2 * hh)}`, o2s(more)].filter(Boolean).join(', ')}]${nm ? ` (${nm})` : ''} at (${pt(where.x)}, ${pt(-where.y)}) {};`;
@@ -1785,8 +1796,8 @@ import { runtime as TD } from '../runtime';
     let i = 0;
     // pgf-umlcd classes somewhere in this code: a shifted scope may hold a class diagram
     const umlIn = !!TD.uml && /\\begin\s*\{(?:class|interface|abstractclass|staticclass|object)\}/.test(s);
-    const scopeCtx = () => (C.scopes || []).slice().reverse().map((L: any) => L.opts).filter(Boolean);
-    const scopeIssue = () => (C.scopes || []).map((L: any) => L.issue).filter(Boolean);
+    const scopeCtx = () => (C.scopes || []).map((L: any) => L.opts).filter(Boolean);
+    const scopeIssue = () => (C.scopes || []).map((L: any) => L.issue).filter(Boolean).reverse();
     // one statement: shapes when exact, else one code object previewing them
     const done = (start: any, end: any, made: any, issues: any, extra: Record<string, any> = {}) => {
       if (C.chainPending) {
@@ -1892,11 +1903,11 @@ import { runtime as TD } from '../runtime';
             i = e2 + 1;
           } else i = e + 1;
           L.styles = new Map(C.styles); L.macros = new Map(C.macros);
-          (C.scopes = C.scopes || []).unshift(L);
+          openScope(C, L);
           if (C.struct) C.struct.push(i);
           continue;
         }
-        if (name === 'end' && env === 'scope') { if (C.scopes && C.scopes.length) { const scope = C.scopes.shift(); if (scope.saved) { C.vx = scope.saved.vx; C.vy = scope.saved.vy; C.vz = scope.saved.vz; C.base = scope.saved.base; C.nodeDist = scope.saved.nodeDist; C.nodeDistH = scope.saved.nodeDistH; scope.styles = scope.saved.styles; } C.styles = scope.styles || C.styles; STY = C.styles; C.macros = scope.macros || C.macros; MAC = C.macros; } i = e + 1; if (C.struct) C.struct.push(i); continue; }
+        if (name === 'end' && env === 'scope') { if (C.scopes && C.scopes.length) { const scope = C.scopes.pop(); if (scope.saved) { C.vx = scope.saved.vx; C.vy = scope.saved.vy; C.vz = scope.saved.vz; C.base = scope.saved.base; C.nodeDist = scope.saved.nodeDist; C.nodeDistH = scope.saved.nodeDistH; scope.styles = scope.saved.styles; } C.styles = scope.styles || C.styles; STY = C.styles; C.macros = scope.macros || C.macros; MAC = C.macros; } i = e + 1; if (C.struct) C.struct.push(i); continue; }
         if (name === 'end') { i = e + 1; continue; }
         const stop = envEnd(s, env, e + 1);
         if (env === 'feynman' && TD.TYPES.feynman) {
@@ -1982,7 +1993,7 @@ import { runtime as TD } from '../runtime';
             const po = parseOpts(optStr);
             if (po.some((x: any) => x.k === 'even odd rule')) L = evenOdd(L);
             const own = readXf(C, po);
-            return applyXf(L, [{ xf: own.xf, shape: true }, ...(C.scopes || [])]);
+            return applyXf(L, [...(C.scopes || []), { xf: own.xf, shape: true }]);
           };
           try { made = build(); } catch (err: any) { C.warnings.push(`\\${name}: ${err.message}`); }
           styUsed = null;
@@ -2143,7 +2154,7 @@ import { runtime as TD } from '../runtime';
           const xf = readXf(C, nopts);
           // a node's own rotate and scale turn it about its own position (the point its anchor is at)
           if (made0.labels.length && (xf.xf.length || (C.scopes || []).some((L: any) => L.xf && L.xf.length))) made0.bad.push('labels on a transformed node');
-          const absolute = applyXf([made, ...made0.labels], [{ xf: xf.xf.map((t: any) => (t.rot !== undefined || t.scale !== undefined) ? { ...t, px: at.x, py: at.y } : t), shape: true }, ...(C.scopes || [])]);
+          const absolute = applyXf([made, ...made0.labels], [...(C.scopes || []), { xf: xf.xf.map((t: any) => (t.rot !== undefined || t.scale !== undefined) ? { ...t, px: at.x, py: at.y } : t), shape: true }]);
           // (a matrix cell's box: the border without outer sep)
           if (C.cellBoxes) { const a = absolute[0], c = a.type === 'rect' ? { x: a.x + a.w / 2, y: a.y + a.h / 2 } : { x: a.cx, y: a.cy }; C.cellBoxes.push({ s: a, c, hw: made0.w / 2, hh: made0.h / 2 }); }
           if (node.name) {
@@ -2160,7 +2171,7 @@ import { runtime as TD } from '../runtime';
           blk.shape._importNodeAt = { ...at };
           const own = readXf(C, nopts);
           const xf = own.xf.map((x: any) => x.scale !== undefined ? { ...x, px: at.x, py: at.y } : x);
-          styUsed = null; done(bs, k, applyXf([blk.shape], [{ xf, shape: true }, ...(C.scopes || [])]), [...nodeIss(), ...blk.issues], { names }); continue;
+          styUsed = null; done(bs, k, applyXf([blk.shape], [...(C.scopes || []), { xf, shape: true }]), [...nodeIss(), ...blk.issues], { names }); continue;
         }
         if (node.text.trim()) {
           let tbox: any = null;
@@ -2171,7 +2182,7 @@ import { runtime as TD } from '../runtime';
             // a node's own rotate turns it about its own position
             (t as any)._importNodeAt = { ...at };
             const xf = own.xf.map((x) => ((x.rot !== undefined || x.scale !== undefined) && !x.px && !x.py ? { ...x, px: t.x, py: t.y } : x));
-            return applyXf([t], [{ xf, shape: true }, ...(C.scopes || [])]);
+            return applyXf([t], [...(C.scopes || []), { xf, shape: true }]);
           };
           const made = make();
           styUsed = null;
@@ -2286,7 +2297,8 @@ import { runtime as TD } from '../runtime';
     // >=Tip only sets what `>` means: shapes written from the model name their tips, so it stays on the picture
     const safe = keep.filter((x) => (keyOf(x) === '>' && gtTip) || own(x)), rest = keep.filter((x) => !safe.includes(x));
     const pictureXf = readXf(C, parseOpts(optStr));
-    C.scopes = [{ xf: pictureXf.xf, shape: pictureXf.rest.some((o: any) => o.k === 'transform shape' && o.v !== 'false'), font: pictureXf.rest.filter((o: any) => o.k === 'font').map((o: any) => o.v).join(' '), opts: '' }];
+    C.scopes = [];
+    openScope(C, { xf: pictureXf.xf, shape: pictureXf.rest.some((o: any) => o.k === 'transform shape' && o.v !== 'false'), font: pictureXf.rest.filter((o: any) => o.k === 'font').map((o: any) => o.v).join(' '), opts: '' });
     // widths and colours the picture sets are in C.base: every shape made here takes them
     const baseKeys = new Set(parseOpts(optStr).filter((x: any) => baseOpt(C, x)).map((x: any) => x.k));
     const odd0 = rest.map(keyOf).filter((k) => !['x', 'y', 'z', 'font', 'transform shape', ...XF_KEYS].includes(k) && !baseKeys.has(k));
@@ -2403,7 +2415,7 @@ import { runtime as TD } from '../runtime';
     STY = C.styles;
     C.preview = true; C.scopes = []; C.names = { ...(names || {}) };
     C.macros = new Map(Object.entries<any>(macros || {}));
-    for (const c of ctx || []) { pictureOpts(C, c); C.scopes.unshift({ ...readXf(C, parseOpts(c)), shape: false }); }
+    for (const c of ctx || []) { pictureOpts(C, c); openScope(C, { ...readXf(C, parseOpts(c)), shape: false }); }
     let shapes = [];
     try { shapes = parseStatements(C, blankComments(String(code || ''))); } catch (e: any) { C.warnings.push(e.message); }
     return { shapes, issues: [...new Set(C.warnings)] };
@@ -2557,11 +2569,13 @@ import { runtime as TD } from '../runtime';
       const picO = bodyO.slice(f.at, f.end);
       const data = embedded(picO);
       if (data) { blocks.push({ type: 'diagram', shapes: data }); continue; }
+      // a block copied with a scale is wrapped in a scale-around scope: read what is inside, then scale it back
+      const peeled = peelScale(picO), pic1 = peeled ? peeled.pic : picO, sc = peeled && peeled.scale;
       // a pgf-umlcd class diagram: the whole picture is the block's code
-      const uml = TD.uml && TD.uml.fromPicture(picO);
+      const uml = rescaled(TD.uml && TD.uml.fromPicture(pic1), sc);
       if (uml) { blocks.push({ type: 'diagram', shapes: withDefs([uml], preDefs, C) }); continue; }
       // a picture drawn wholly with circuitikz parts: a Circuit block
-      const czq = circuitBlock(picO, true) || automataBlock(picO) || graphBlock(picO);
+      const czq = rescaled(circuitBlock(pic1, true) || automataBlock(pic1) || graphBlock(pic1), sc);
       if (czq) { blocks.push({ type: 'diagram', shapes: withDefs([czq], preDefs, C) }); continue; }
       const shapes = importPicture(C, bodyS.slice(f.inner, f.inner + f.len), bodyO.slice(f.inner, f.inner + f.len), bodyO.slice(f.open, f.inner));
       blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
@@ -2613,6 +2627,42 @@ import { runtime as TD } from '../runtime';
     if (buf.trim()) out.push(buf.trim());
     return out.filter(Boolean);
   }
+  // A picture as DiagramTeX writes a scaled object (src/domain/scale.ts): its whole body in one
+  // \begin{scope}[scale around={k:(x,y)}, transform shape]. Gives the picture without that scope and the scale
+  // (k, and the point in px, y down), so a block read from the rest can be given the scale back; else null.
+  function peelScale(pic: string) {
+    const t = blankComments(pic), bm = /^\s*\\begin\{tikzpicture\}\s*/.exec(t), end = t.lastIndexOf('\\end{tikzpicture}');
+    if (!bm || end < 0) return null;
+    let i = bm[0].length;
+    if (t[i] === '[') { const e = matchClose(t, i, '[', ']'); if (e < 0) return null; i = e + 1; }
+    const sm = /^\s*\\begin\{scope\}\s*\[/.exec(t.slice(i, end));
+    if (!sm) return null;
+    const ob = i + sm[0].length - 1, oe = matchClose(t, ob, '[', ']');
+    if (oe < 0) return null;
+    const o = splitList(t.slice(ob + 1, oe)).map((x: string) => x.trim());
+    const sa = o.length === 2 && o.includes('transform shape') ? o.find((x: string) => /^scale around\s*=/.test(x)) : null;
+    const m = sa && /^scale around\s*=\s*\{\s*(-?[\d.]+)\s*:\s*\(\s*(-?[\d.]+)\s*(?:cm)?\s*,\s*(-?[\d.]+)\s*(?:cm)?\s*\)\s*\}$/.exec(sa);
+    if (!m || !(+m[1] > 0)) return null;
+    // the scope must close at the very end, holding everything
+    const se = t.lastIndexOf('\\end{scope}', end);
+    if (se < oe || t.slice(se + 11, end).trim()) return null;
+    let depth = 0;
+    for (const r of t.slice(oe, se).matchAll(/\\(begin|end)\{scope\}/g)) if ((depth += r[1] === 'begin' ? 1 : -1) < 0) return null;
+    if (depth) return null;
+    return {
+      pic: pic.slice(0, i) + pic.slice(oe + 1, se) + pic.slice(end),
+      scale: { k: +m[1], px: +m[2] * TD.PX_PER_CM, py: -m[3] * TD.PX_PER_CM },
+    };
+  }
+  // a block read from a picture peeled of its scale scope, given that scale back: it grows about the same point
+  // and keeps it as the object's scale (transform shape), as the export wrote it
+  function rescaled(q: any, sc: any) {
+    if (!q || !sc) return q;
+    // the export writes the centre and the block's shift to 0.01cm each: one that close is the block's own centre, so it doesn't creep
+    const b = TD.bboxOf(TD.TYPES[q.type].samples({ ...q, objectScale: 1 }), 0), cx = b.x + b.w / 2, cy = b.y + b.h / 2, tol = 0.0101 * TD.PX_PER_CM;
+    const at = Math.abs(cx - sc.px) <= tol && Math.abs(cy - sc.py) <= tol ? { px: cx, py: cy } : { px: sc.px, py: sc.py };
+    return applyXf([q], [{ xf: [{ scale: sc.k, ...at }], shape: true }])[0];
+  }
   // A picture as DiagramTeX writes one block: \begin{tikzpicture}[x=1cm, y=1cm] \begin{scope}[shift={(x,y)}, …] body
   // \end{scope} \end{tikzpicture}. Gives where the scope moves it (cm, y up), the scope's other options and the body
   // (the picture's own x=1cm, y=1cm are DiagramTeX's and dropped). Anything else: the picture's options and body as written.
@@ -2639,6 +2689,18 @@ import { runtime as TD } from '../runtime';
   // circuitikz environment) what can't be read is kept as code in the block.
   function circuitBlock(code: string, whole: boolean) {
     if (!TD.cz || !TD.TYPES.cz) return null;
+    // the environment's own scale: kept as the object's scale with transform shape; any other change of
+    // coordinates the block can't draw, so the picture is read some other way
+    let envScale = 1, coordsOnly = false;
+    {
+      const em = /^\s*\\begin\{(?:circuitikz|tikzpicture)\}\s*\[/.exec(blankComments(code));
+      if (em) {
+        const ob = em[0].length - 1, oe = matchClose(code, ob, '[', ']');
+        const own = oe > 0 ? ownScale(splitList(code.slice(ob + 1, oe)).map((x: string) => x.trim()).filter(Boolean)) : null;
+        if (!own) return null;
+        if (own.k !== 1) { envScale = own.k; coordsOnly = !own.shape; code = code.slice(0, ob) + (own.opts.length ? `[${own.opts.join(', ')}]` : '') + code.slice(oe + 1); }
+      }
+    }
     const u = /^\s*\\begin\{tikzpicture\}/.test(code) ? unscope(code) : null;
     let size = '', col = '';
     if (u && u.at) {
@@ -2659,13 +2721,39 @@ import { runtime as TD } from '../runtime';
     if (u && u.at) { q.x = u.at[0] * TD.PX_PER_CM; q.y = -u.at[1] * TD.PX_PER_CM; }
     if (size) q.size = size;
     if (col) q.color = col;
+    if (envScale !== 1 && coordsOnly) {
+      // scale without transform shape: the wires' coordinates scale, the parts keep their size (as in circuitikz).
+      // Statements kept as code would not scale with them, so then the picture is read some other way.
+      if (String(raw).split('\n').some((l: string) => l.trim() && !/^\\(ctikzset|tikzset)\b/.test(l.trim()))) return null;
+      const k = envScale, sc = (v: any) => (Array.isArray(v) ? [v[0] * k, v[1] * k] : v);
+      q.items = q.items.map((it: any) => ({ ...it, a: sc(it.a), b: sc(it.b), p: sc(it.p) }));
+      for (const it of q.items) for (const key of ['a', 'b', 'p']) if (it[key] === undefined) delete it[key];
+    } else if (envScale !== 1) rescaled(q, { k: envScale, px: 0, py: 0 });
     return q;
+  }
+  // A block's picture options and what they do to the whole: `scale=k` is taken out of the options (k), with
+  // `shape` when transform shape scales the nodes too, as an object's scale does; without it only coordinates
+  // scale, which the caller handles or refuses. Anything else that moves coordinates (xscale, rotate, x=2cm, …):
+  // null, so the picture is read as separate objects.
+  function ownScale(opts: string[]) {
+    let k = 1, shape = false, scaleAt = -1;
+    for (let i = 0; i < opts.length; i++) {
+      const { k: key, v } = (() => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(opts[i].trim()); return { k: m ? m[1].trim() : '', v: m && m[2] != null ? m[2].trim() : null }; })();
+      if (key === 'transform shape') { if (v == null || v === 'true') shape = true; continue; }
+      if (key === 'scale') { const f = Number(String(v).replace(/^\{|\}$/g, '')); if (!(f > 0)) return null; k = f; scaleAt = i; continue; }
+      if ((key === 'x' || key === 'y') && v != null && /^\{?\s*1\s*cm\s*\}?$/.test(v)) continue;
+      if (/^(xscale|yscale|scale around|rotate|rotate around|shift|xshift|yshift|x|y|xslant|yslant|cm)$/.test(key)) return null;
+    }
+    return { k, shape, opts: k === 1 ? opts : opts.filter((o, i) => i !== scaleAt && !/^transform shape\b/.test(o.trim())) };
   }
   // A picture of automata states (\node[state] …) and the transitions between them, and nothing else: an Automaton block
   function automataBlock(pic: string) {
     if (!TD.fsm || !TD.TYPES.automata || !/\bstate\b/.test(pic)) return null;
     const u = /^\s*\\begin\{tikzpicture\}/.test(pic) ? unscope(pic) : { at: null, opts: [], body: pic };
     if (!u) return null;
+    const own = ownScale(u.opts);
+    if (!own || (own.k !== 1 && !own.shape)) return null; // positions scaled, nodes not: drawn as separate objects
+    u.opts = own.opts;
     // its lines indented by two spaces, as the block keeps its code
     const lines = u.body.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n'), ind = least(lines.filter((l) => l.trim()).map((l) => (/^[ \t]*/.exec(l))![0].length));
     const src = `\\begin{tikzpicture}${u.opts.length ? `[${u.opts.join(', ')}]` : ''}\n${lines.map((l) => (l.trim() ? '  ' + l.slice(isFinite(ind) ? ind : 0) : '')).join('\n')}\n\\end{tikzpicture}`;
@@ -2675,6 +2763,8 @@ import { runtime as TD } from '../runtime';
     const q: any = { ...TD.TYPES.automata.create({ x: 0, y: 0 }), src, id: uid8() };
     // the picture's origin stays at the canvas origin (or where its shift puts it), as for pictures imported as shapes
     if (u.at || /^\s*\\begin\{tikzpicture\}/.test(pic)) { const at = u.at || [0, 0], b = TD.fsm.layout(q).bb; q.x = at[0] * TD.PX_PER_CM + b.x; q.y = -at[1] * TD.PX_PER_CM + b.y; }
+    // the picture's scale is about its origin
+    if (own.k !== 1) { const at = u.at || [0, 0]; rescaled(q, { k: own.k, px: at[0] * TD.PX_PER_CM, py: -at[1] * TD.PX_PER_CM }); }
     return q;
   }
   // a picture that is one TikZ \graph: a Graph block
@@ -2682,6 +2772,9 @@ import { runtime as TD } from '../runtime';
     if (!TD.graph || !TD.TYPES.graph || !/\\graph\b/.test(pic) || !/^\s*\\begin\{tikzpicture\}/.test(pic)) return null;
     const u = unscope(pic);
     if (!u) return null;
+    const own = ownScale(u.opts);
+    if (!own || (own.k !== 1 && !own.shape)) return null; // positions scaled, nodes not: drawn as separate objects
+    u.opts = own.opts;
     const lines = u.body.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n'), ind = least(lines.filter((l) => l.trim()).map((l) => (/^[ \t]*/.exec(l))![0].length));
     const src = `\\begin{tikzpicture}${u.opts.length ? `[${u.opts.join(', ')}]` : ''}\n${lines.map((l) => (l.trim() ? '  ' + l.slice(isFinite(ind) ? ind : 0) : '')).join('\n')}\n\\end{tikzpicture}`;
     const M = TD.graph.parse(src);
@@ -2689,6 +2782,8 @@ import { runtime as TD } from '../runtime';
     const q: any = { ...TD.TYPES.graph.create({ x: 0, y: 0 }), src, id: uid8() };
     const at = u.at || [0, 0], b = TD.graph.layout(q).bb;
     q.x = at[0] * TD.PX_PER_CM + b.x; q.y = -at[1] * TD.PX_PER_CM + b.y;
+    // the picture's scale is about its origin
+    if (own.k !== 1) rescaled(q, { k: own.k, px: at[0] * TD.PX_PER_CM, py: -at[1] * TD.PX_PER_CM });
     return q;
   }
   // packages a picture's code may need (others in a preamble are the document's own)

@@ -1,0 +1,9 @@
+% expect: native match>=0.97
+\usetikzlibrary{automata,arrows.meta}
+\begin{tikzpicture}[scale=1.4, transform shape, ->, >=Stealth, auto, semithick]
+\node[state, initial] (p) at (0,0) {$p$};
+\node[state, accepting] (q) at (3,0) {$q$};
+\path (p) edge [bend left] node {$a$} (q)
+      (q) edge [bend left] node {$b$} (p)
+      (q) edge [loop above] node {$c$} ();
+\end{tikzpicture}

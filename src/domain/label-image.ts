@@ -33,7 +33,9 @@ let probe: HTMLDivElement | undefined;
 export function labelImage(engine: 'katex' | 'temml', html: string, textStyle: string, color: string,
   width: number, height: number, align = 'center'): LabelImage {
   const key = JSON.stringify([engine, html, textStyle, color, width, height, align]);
-  const known = cache.get(key); if (known) return known;
+  // least recently used goes first: a full redraw walks the labels in the same order every time, so
+  // first-in-first-out would evict exactly what the next redraw needs once a scene outgrows the cache
+  const known = cache.get(key); if (known) { cache.delete(key); cache.set(key, known); return known; }
   if (!probe) {
     probe = document.createElement('div');
     probe.style.cssText = 'position:absolute;left:-100000px;top:0;visibility:hidden;font-size:0;contain:layout style size;';
@@ -61,6 +63,6 @@ export function labelImage(engine: 'katex' | 'temml', html: string, textStyle: s
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" lang="en" xml:lang="en" width="${paintWidth}" height="${paintHeight}" viewBox="${left} ${top} ${right - left} ${bottom - top}">${used.size ? `<style>${esc([...used].join('\n'))}</style>` : ''}${vector.body}</svg>`;
   const result = { href: svgToSrc(svg), x: left / scale, y: top / scale, width: paintWidth, height: paintHeight };
   cache.set(key, result);
-  if (cache.size > 256) cache.delete(cache.keys().next().value!);
+  if (cache.size > 1024) cache.delete(cache.keys().next().value!);
   return result;
 }

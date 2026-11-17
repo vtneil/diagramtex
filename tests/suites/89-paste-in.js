@@ -109,6 +109,17 @@ T.test('paste in: a block environment, TikZ, a formula and text land on the canv
       const back = TD.importLatex(code).blocks.flatMap((b) => b.shapes).filter((x) => !(x.type === 'tikz' && x.kind === 'defs'));
       T.eq(back.map((x) => x.type), [t], t + ': read back as its block');
       T.eq(strip(TD.toTikz(back)), code, t + ': writes the same code');
+      // copied with a scale (written in a scale-around scope with transform shape): the same block, scaled, in place
+      for (const k of [0.5, 2]) {
+        const sc = { ...s, objectScale: k }, c1 = strip(TD.toTikz([sc]));
+        const b1 = TD.importLatex(c1).blocks.flatMap((b) => b.shapes).filter((x) => !(x.type === 'tikz' && x.kind === 'defs'));
+        T.eq(b1.map((x) => [x.type, x.objectScale]), [[t, k]], `${t} ×${k}: read back as its block with its scale`);
+        const box = (x) => TD.bbox(x), p = box(sc), q = b1.length ? box(b1[0]) : { x: NaN, y: NaN, w: NaN, h: NaN };
+        T.ok(['x', 'y', 'w', 'h'].every((key) => Math.abs(p[key] - q[key]) <= 0.01 * TD.PX_PER_CM * k + 0.01), `${t} ×${k}: in the same place (${JSON.stringify(p)} vs ${JSON.stringify(q)})`);
+        // positions are written to 0.01cm, so the first read may settle by that much; after that nothing moves
+        const c2 = strip(TD.toTikz(b1)), b2 = TD.importLatex(c2).blocks.flatMap((b) => b.shapes).filter((x) => !(x.type === 'tikz' && x.kind === 'defs'));
+        T.eq(strip(TD.toTikz(b2)), c2, `${t} ×${k}: stable when copied again`);
+      }
     }
     const fsm = String.raw`\begin{tikzpicture}[shorten >=1pt, node distance=2cm, on grid, auto]
 \node[state, initial] (q_0) {$q_0$};
