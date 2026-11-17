@@ -5,7 +5,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.51.1'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.52.4'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -657,6 +657,7 @@ import { runtime as TD } from '../runtime';
     const ns = ctx.export ? ' xmlns="http://www.w3.org/1999/xhtml"' : '';
     const html = ctx.export ? TD.math.forXml(b.html) : b.html;
     if (/<math\b|class="td-math/.test(b.html)) {
+      if (TD.measuring()) return ''; // this pass is drawn again with real sizes: a picture now is wasted
       const align = ['left', 'center', 'right', 'justify'].includes(st?.align) ? st.align : st?.tw > 0 ? 'left' : 'center';
       const pending = TD.math.isPending(b.html), html = TD.math.cleanPreview(b.html);
       const image = labelImage(/class="katex(?:\s|")/.test(html) ? 'katex' : /class="td-math/.test(html) ? 'temml' : TD.math.engine, html, b.css, color, b.w, b.h, align);
@@ -1080,24 +1081,68 @@ import { runtime as TD } from '../runtime';
     },
   };
 
-  // Catmull-Rom spline through points → cubic segments [c1, c2, end]
-  function smoothSegs(P: any, closed: any) {
-    const n = P.length, out = [];
+  // Smooth curve through points → cubic segments [c1, c2, end]. With a `tension` this is TikZ's `plot[smooth]`
+  // exactly (pgflibraryplothandlers): a point's handles are ± 0.2775·tension·(next − previous), and an open
+  // curve's end handles sit on the end points. Without one, older shapes keep their Catmull-Rom spline
+  // (k = 1/6, ends clamped).
+  function smoothSegs(P: any, closed: any, tension?: any) {
+    const n = P.length, out = [], tikz = tension != null;
     const g = (i: any) => (closed ? P[((i % n) + n) % n] : P[Math.max(0, Math.min(n - 1, i))]);
-    const m = closed ? n : n - 1, k = 1 / 6;
+    const m = closed ? n : n - 1, k = tikz ? 0.2775 * tension : 1 / 6;
     for (let i = 0; i < m; i++) {
       const p0 = g(i - 1), p1 = g(i), p2 = g(i + 1), p3 = g(i + 2);
-      out.push([{ x: p1.x + (p2.x - p0.x) * k, y: p1.y + (p2.y - p0.y) * k }, { x: p2.x - (p3.x - p1.x) * k, y: p2.y - (p3.y - p1.y) * k }, p2]);
+      const c1 = tikz && !closed && i === 0 ? p1 : { x: p1.x + (p2.x - p0.x) * k, y: p1.y + (p2.y - p0.y) * k };
+      const c2 = tikz && !closed && i === m - 1 ? p2 : { x: p2.x - (p3.x - p1.x) * k, y: p2.y - (p3.y - p1.y) * k };
+      out.push([c1, c2, p2]);
     }
     return out;
   }
   TD.smoothSegs = smoothSegs;
+  // Curvature pen paths (Photoshop's Curvature Pen): the curve passes through every point. A smooth point's
+  // tangent is the tangent of the circle through it and its two neighbours. Each handle is 0.3905 × its
+  // segment, scaled by (cos α / cos 45°)^¼ where α is the angle between tangent and chord. That was fitted to
+  // Photoshop's output; four points on a square make a circle. A corner point (`corner[i]`) and an open path's
+  // ends have no tangent of their own: each side aims at the next handle, and two corners in a row make a
+  // straight segment.
+  function curvSegs(P: any, closed: any, corner: any) {
+    const n = P.length, out = [];
+    const at = (i: number) => (closed ? ((i % n) + n) % n : i);
+    const sharp = (i: number) => !!(corner && corner[at(i)]) || (!closed && (i === 0 || i === n - 1));
+    const unit = (x: number, y: number) => { const l = Math.hypot(x, y) || 1; return { x: x / l, y: y / l }; };
+    const tan = P.map((p: any, i: number) => {
+      if (sharp(i)) return null;
+      const a = P[at(i - 1)], b = P[at(i + 1)];
+      const ax = a.x - p.x, ay = a.y - p.y, bx = b.x - p.x, by = b.y - p.y, d = 2 * (ax * by - ay * bx);
+      const along = unit(b.x - a.x, b.y - a.y);
+      if (Math.abs(d) < 1e-9 * (ax * ax + ay * ay + bx * bx + by * by)) return along;
+      // centre of the circle through a, p, b (relative to p); the tangent is square to the radius
+      const A = ax * ax + ay * ay, B = bx * bx + by * by, cx = (by * A - ay * B) / d, cy = (ax * B - bx * A) / d;
+      const t = unit(-cy, cx);
+      return t.x * along.x + t.y * along.y < 0 ? { x: -t.x, y: -t.y } : t;
+    });
+    const lerp = (a: any, b: any, t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    const len = (t: any, c: number, ux: number, uy: number) => c * 0.3905 * Math.pow(Math.max(0.05, Math.abs(t.x * ux + t.y * uy)) / Math.SQRT1_2, 0.25);
+    for (let i = 0, m = closed ? n : n - 1; i < m; i++) {
+      const p1 = P[i], j = at(i + 1), p2 = P[j], c = Math.hypot(p2.x - p1.x, p2.y - p1.y), ux = (p2.x - p1.x) / (c || 1), uy = (p2.y - p1.y) / (c || 1);
+      let h1 = tan[i] && (() => { const d = len(tan[i], c, ux, uy); return { x: p1.x + tan[i].x * d, y: p1.y + tan[i].y * d }; })();
+      let h2 = tan[j] && (() => { const d = len(tan[j], c, ux, uy); return { x: p2.x - tan[j].x * d, y: p2.y - tan[j].y * d }; })();
+      if (!h1 && !h2) { h1 = lerp(p1, p2, 1 / 3); h2 = lerp(p1, p2, 2 / 3); }
+      else if (!h1) h1 = lerp(p1, h2, 0.5);
+      else if (!h2) h2 = lerp(p2, h1, 0.5);
+      out.push([h1, h2, p2]);
+    }
+    return out;
+  }
+  // the cubic segments of a smooth polyline, by its kind
+  const polySegs = (P: any, s: any) => (s.curv ? curvSegs(P, s.closed, s.corner) : smoothSegs(P, s.closed, s.tension));
+  TD.curvSegs = curvSegs;
+  TD.polySegs = polySegs;
 
   // Bends of a polyline (where "bend" arrow tips go): the inner vertices, or every vertex but the first when closed.
   function polyPathD(P: any, s: any, upto: any) {
     const A = P.slice(0, upto + 1);
     if (!(s.smooth && P.length > 2)) return A.map((p: any, i: any) => (i ? 'L' : 'M') + pt(p)).join('');
-    const segs = smoothSegs(P, s.closed).slice(0, upto);
+    const segs = polySegs(P, s).slice(0, upto);
     return 'M' + pt(P[0]) + segs.map(([a, b, c]) => `C${pt(a)} ${pt(b)} ${pt(c)}`).join('');
   }
   function polyBends(s: any, P: any) {
@@ -1105,7 +1150,7 @@ import { runtime as TD } from '../runtime';
     const out = [], last = s.closed ? P.length - 1 : P.length - 2;
     for (let i = 1; i <= last; i++) {
       let u;
-      if (s.smooth && P.length > 2) { const seg = smoothSegs(P, s.closed)[i - 1]; u = norm(sub(P[i], seg[1]), norm(sub(P[i], P[i - 1]))); }
+      if (s.smooth && P.length > 2) { const seg = polySegs(P, s)[i - 1]; u = norm(sub(P[i], seg[1]), norm(sub(P[i], P[i - 1]))); }
       else u = norm(sub(P[i], P[i - 1]));
       out.push({ P: P[i], u });
     }
@@ -1129,7 +1174,17 @@ import { runtime as TD } from '../runtime';
     setHandle(s: any, k: any, q: any) { const i = +k.slice(1); s.pts[i] = [q.x, q.y]; },
     translate(s: any, dx: any, dy: any) { s.pts = s.pts.map((p: any) => [p[0] + dx, p[1] + dy]); },
     anchors: (s: any) => s.pts.map((p: any) => ({ x: p[0], y: p[1] })),
-    samples: (s: any) => s.pts.map((p: any) => ({ x: p[0], y: p[1] })),
+    samples(s: any) {
+      const P = s.pts.map((p: any) => ({ x: p[0], y: p[1] }));
+      if (!((s.curv || s.tension != null) && s.smooth && P.length > 2)) return P;
+      const out = [P[0]];
+      for (const [a, b, c] of polySegs(P, s)) {
+        const o = out[out.length - 1];
+        for (let i = 1; i <= 8; i++) { const t = i / 8, u = 1 - t; out.push({ x: u * u * u * o.x + 3 * u * u * t * a.x + 3 * u * t * t * b.x + t * t * t * c.x, y: u * u * u * o.y + 3 * u * u * t * a.y + 3 * u * t * t * b.y + t * t * t * c.y }); }
+        out[out.length - 1] = c;
+      }
+      return out;
+    },
     svg(s: any, ctx: any) {
       const P = s.pts.map((p: any) => ({ x: p[0], y: p[1] }));
       const col = css(s.stroke || '#000');
@@ -1137,14 +1192,19 @@ import { runtime as TD } from '../runtime';
       const Q = P.map((p: any) => ({ ...p }));
       if (!s.closed && P.length >= 2) {
         const n = P.length;
-        const ue = norm(sub(P[n - 1], P[n - 2])), us = norm(sub(P[0], P[1]));
+        let ue = norm(sub(P[n - 1], P[n - 2])), us = norm(sub(P[0], P[1]));
+        if ((s.curv || s.tension != null) && s.smooth && n > 2) {
+          // TikZ aims a tip along the last handle that isn't on the end point
+          const G = polySegs(P, s), e = G[n - 2], b = G[0];
+          ue = norm(sub(P[n - 1], e[1]), norm(sub(P[n - 1], e[0]), ue)); us = norm(sub(P[0], b[0]), norm(sub(P[0], b[1]), us));
+        }
         const te = tip(s.endTip, P[n - 1], ue, s.width, col), ts = tip(s.startTip, P[0], us, s.width, col);
         Q[n - 1] = { x: P[n - 1].x - ue.x * te.back, y: P[n - 1].y - ue.y * te.back };
         Q[0] = { x: P[0].x - us.x * ts.back, y: P[0].y - us.y * ts.back };
         tips = ts.svg + te.svg;
       }
       const dOf = (A: any) => (s.smooth && A.length > 2
-        ? 'M' + pt(A[0]) + smoothSegs(A, s.closed).map(([a, b, c]) => `C${pt(a)} ${pt(b)} ${pt(c)}`).join('')
+        ? 'M' + pt(A[0]) + polySegs(A, s).map(([a, b, c]) => `C${pt(a)} ${pt(b)} ${pt(c)}`).join('')
         : A.map((p: any, i: any) => (i ? 'L' : 'M') + pt(p)).join('')) + (s.closed ? 'Z' : '');
       const fillHit = s.closed && s.fill;
       const H = !s.smooth && hopsFor(s, s.closed ? [...Q, Q[0]] : Q, ctx.scene);
@@ -1158,7 +1218,15 @@ import { runtime as TD } from '../runtime';
       let path;
       if (s.smooth && s.pts.length > 2) {
         const P = s.pts.map((p: any) => ({ x: p[0], y: p[1] }));
-        path = X.c(P[0].x, P[0].y) + smoothSegs(P, s.closed).map(([a, b, e]) => ` .. controls ${X.c(a.x, a.y)} and ${X.c(b.x, b.y)} .. ${X.c(e.x, e.y)}`).join('') + (s.closed ? ' -- cycle' : '');
+        const n = P.length, straight = (i: number) => s.curv && s.corner && (s.corner[i] || (!s.closed && i === 0)) && (s.corner[(i + 1) % n] || (!s.closed && i + 1 === n - 1));
+        if (s.tension != null && !s.curv) {
+          const t = +s.tension, o = (s.closed ? 'smooth cycle' : 'smooth') + (Math.abs(t - 0.5) > 1e-9 ? `, tension=${+t.toFixed(3)}` : '');
+          return `${c}${opts(styleOpts(s, X, { fill: s.closed, arrows: !s.closed, bends: polyBendFractions(s) }))} plot[${o}] coordinates {${s.pts.map((p: any) => X.c(p[0], p[1])).join(' ')}};`;
+        }
+        const segs = polySegs(P, s);
+        // a closed path's last segment ends where it starts: `cycle` closes it, curved or straight
+        path = !s.curv ? X.c(P[0].x, P[0].y) + segs.map(([a, b, e]: any) => ` .. controls ${X.c(a.x, a.y)} and ${X.c(b.x, b.y)} .. ${X.c(e.x, e.y)}`).join('') + (s.closed ? ' -- cycle' : '')
+          : X.c(P[0].x, P[0].y) + segs.map(([a, b, e]: any, i: number) => (straight(i) ? ' --' : ` .. controls ${X.c(a.x, a.y)} and ${X.c(b.x, b.y)} ..`) + ' ' + (s.closed && i === segs.length - 1 ? 'cycle' : X.c(e.x, e.y))).join('');
       } else {
         const P = s.pts.map((p: any) => ({ x: p[0], y: p[1] }));
         const H = hopsFor(s, s.closed ? [...P, P[0]] : P, X.scene);

@@ -108,6 +108,55 @@ T.test('table numbers: parse, round, uncertainty, exponent', () => {
   T.eq(t.tableFormat(['1.23(4)', '-22.1', '0.5e3'].map((s) => t.format(t.parseNum(s), {}))), '-2.2(1)e1');
   T.ok(t.looksNumeric(['1', '2.5', '3e4', 'n/a', '7']) && !t.looksNumeric(['a', 'b', '1']));
   T.eq(t.unitTex('\\kilo\\gram\\per\\metre\\squared'), '$\\mathrm{kg\\,m^{-2}}$');
+  // grouped thousands and decimal commas, as typed or pasted
+  T.eq(f('1,599.99', {}), '1599.99'); T.eq(f('-12,345', {}), '-12345'); T.eq(f('$1{,}955.98$', {}), '1955.98');
+  T.eq(f('1.599,99', {}), '1599.99'); T.eq(f('12,5', {}), '12.5'); T.eq(f('0,123', {}), '0.123', 'a leading 0 is not a thousands group');
+  T.eq(t.parseNum('1,2,3'), null); T.eq(t.parseNum('12,34.5'), null);
+  // the column's settings decide how it prints; they start from what was typed
+  T.eq(t.typedNum(['1,599.99', '6.55', '1292']), { group: 'comma' }, 'a column typed with commas starts grouped by commas');
+  T.eq(t.typedNum(['1.599,99', '6,5']), { dec: ',', group: 'point' }, 'a European column: decimal comma, points between thousands');
+  T.eq(t.typedNum(['12,5', '3,25']), { dec: ',' });
+  T.eq(t.typedNum(['1292', '6.55']), {}, "nothing typed: siunitx's defaults");
+  const parts = (s, o) => t.texParts(t.format(t.parseNum(s), o), 'paren', t.numStyle(o));
+  T.eq(parts('1599.99', { group: 'comma' }), ['1{,}599', '.99'], 'commas from four digits, integer part only');
+  T.eq(parts('1292', { group: 'comma' }), ['1{,}292', '']);
+  T.eq(parts('1599,99', { dec: ',', group: 'point' }), ['1.599', '{,}99']);
+  T.eq(parts('12345.678901', {}), ['12\\,345', '.678\\,901'], "siunitx's default: a thin space from five digits, decimals too");
+  T.eq(parts('1292', {}), ['1292', '']);
+  T.eq(parts('12345.678901', { group: 'none' }), ['12345', '.678901']);
+  T.eq(parts('1234.5678', { group: 'space', groupMin: 4, groupFrac: false }), ['1\\ 234', '.5678']);
+  T.eq(parts('12.5', { plus: true }), ['+12', '.5'], '+ on positive numbers');
+  T.eq(parts('12345', { exp: 'eng', prod: 'cdot' }), ['12', '.345\\cdot 10^{3}'], 'engineering, with a centred dot');
+  T.eq(parts('0.00123', { exp: 'eng' }), ['1', '.23\\times 10^{-3}']);
+  T.eq(parts('1.5e7', { exp: 'eng' }), ['15', '\\times 10^{6}']);
+  T.eq(t.siOptions({ group: 'comma' }), ['group-separator={,}', 'group-digits=integer', 'group-minimum-digits=4']);
+  T.eq(t.siOptions({ dec: ',', group: 'point' }), ['output-decimal-marker={,}', 'group-separator={.}', 'group-digits=integer', 'group-minimum-digits=4']);
+  T.eq(t.siOptions({ group: 'none', prod: 'cdot', plus: true, pos: 'l' }), ['group-digits=none', 'exponent-product=\\cdot', 'print-implicit-plus', 'table-number-alignment=left']);
+  T.eq(t.siOptions({ sig: 3 }), []);
+  // and they read back from the S column's options
+  for (const o of [{ group: 'comma' }, { dec: ',', group: 'point' }, { group: 'none', prod: 'cdot', plus: true, pos: 'r' }, { group: 'space', groupMin: 4 }, { group: 'space', groupFrac: true }, { groupMin: 4 }, { group: 'comma', groupFrac: true }])
+    T.eq(t.numFromSi(t.siOptions(o).join(', ')), o, `round trip ${JSON.stringify(o)}`);
+  T.eq(t.numFromSi('table-format=2.3, round-mode=places, round-precision=1, exponent-mode=engineering'), { dp: 1, exp: 'eng' });
+});
+
+T.test('table numbers: a grouped number aligns on its decimal point', () => {
+  const t = TB(), m = t.create(4, 1, 'plain');
+  m.head = 0;
+  ['9645', '1,599.99', '6.55', '12'].forEach((s, r) => { m.cells[r][0].t = s; });
+  m.cols[0].num = t.typedNum(m.cells.map((r) => r[0].t));
+  const { code } = t.toLatex(m);
+  T.ok(code.includes('S[table-format=4.2, group-separator={,}, group-digits=integer, group-minimum-digits=4]'), code);
+  T.ok(/\b1599\.99\b/.test(code), 'siunitx reads it without the comma');
+  const nums = t.layout(m).cells.filter((b) => b.num);
+  T.eq(nums.length, 4, 'every cell is a number');
+  T.ok(nums.find((b) => b.num.left.includes('1{,}599')), 'drawn with its comma');
+  T.ok(nums.find((b) => b.num.left.includes('9{,}645')), 'and so is a number typed without one: the column says how');
+  // the setting, not one cell, decides: no grouping prints none, whatever was typed
+  m.cols[0].num = { group: 'none' };
+  T.ok(t.layout(m).cells.every((b) => !b.num || !b.num.left.includes(',')), 'grouping off: no commas');
+  // the numbers' block at the column's left or right
+  const at = (pos) => { m.cols[0].num = pos ? { pos } : {}; m.cols[0].w = 0; m.cells[0][0].t = 'a long heading text'; m.head = 1; const d = t.draw(m); return d.svg; };
+  T.ok(at('l') !== at('r') && at('r') !== at(null), 'Position moves the numbers');
 });
 
 // ---------------------------------------------------------------- import
@@ -566,6 +615,8 @@ T.test('table: footer rows follow inserts and deletes', () => {
 // ---------------------------------------------------------------- the workspace
 T.test('table workspace: open, import, type, keys, undo, paste, leave', async () => {
   const C = TD.app.cmd, W = () => TD.tableWs;
+  const autoWas = W().autoMath; W().autoMath = false; // the text as typed (numbers as maths: its own test)
+  try {
   C.setTable(true); await wait(60);
   T.ok(document.body.classList.contains('mode-table') && !document.getElementById('tableview').hidden, 'workspace check 1');
   T.ok(document.querySelector('#kindSeg [data-table]').classList.contains('on'), 'workspace check 2');
@@ -691,6 +742,40 @@ T.test('table workspace: open, import, type, keys, undo, paste, leave', async ()
   C.setTable(true); await wait(60);
   T.eq(cellsOf(W().model), [['P', 'Q', '', ''], ['1', '2', 'y', 'z'], ['', '1', '2', '3']], 'the table is kept while the browser has it');
   C.setTable(false); await wait(60);
+  } finally { W().autoMath = autoWas; }
+});
+
+T.test('table workspace: numbers typed, pasted or imported become maths, unless turned off', async () => {
+  const C = TD.app.cmd, W = () => TD.tableWs, host = document.querySelector('#tableview');
+  if (!W().autoMathAvailable) return; // turned off for now (AUTO_MATH in src/ui/services/table.ts)
+  const autoWas = W().autoMath; W().autoMath = true;
+  try {
+    C.setTable(true); await wait(60);
+    W().importText('Item\tLength\tCode\nRod\t1,955.98 mm\tH2O\nBar\t1.955,98\tv1.2');
+    T.eq(cellsOf(W().model), [['Item', 'Length', 'Code'], ['Rod', '$1{,}955.98$ mm', 'H2O'], ['Bar', '$1.955{,}98$', 'v1.2']], 'imported: numbers become maths, codes stay');
+    W().select([2, 0]);
+    const grid = host.querySelector('.tb-gridwrap'); grid.focus();
+    grid.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await wait();
+    const ta = host.querySelector('.tb-edit') || document.querySelector('.tb-edit');
+    ta.value = 'about -3 V, or 12%'; ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    T.eq(W().model.cells[2][0].t, 'about $-3$ V, or 12%', 'typed: a number before a raw % is left (it would start a comment)');
+    const z = () => grid.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, ctrlKey: true, bubbles: true, cancelable: true }));
+    grid.focus(); z();
+    T.eq(W().model.cells[2][0].t, 'about -3 V, or 12%', '⌘Z takes the maths off and keeps the typing');
+    // a siunitx column keeps its numbers bare
+    const m = W().model; m.cols[1].num = {}; W().model = m;
+    W().select([1, 1]); W().pasteData('', '42.5');
+    T.eq(W().model.cells[1][1].t, '42.5', 'Align decimals: pasted bare');
+    W().select([1, 2]); W().pasteData('', '7');
+    T.eq(W().model.cells[1][2].t, '$7$', 'elsewhere: pasted as maths');
+    // the checkbox in the panel turns it off, for every table
+    const box = document.querySelector('#props [data-p="autoMath"]');
+    T.ok(box && box.checked, 'a checkbox in the table settings, on');
+    box.click();
+    T.ok(!W().autoMath, 'unticking turns it off');
+    W().importText('a\tb\n1,5\t2');
+    T.eq(cellsOf(W().model), [['a', 'b'], ['1,5', '2']], 'off: the text as it came');
+  } finally { W().autoMath = autoWas; C.setTable(false); await wait(60); }
 });
 
 // ---------------------------------------------------------------- the Table block on the canvas
@@ -762,4 +847,157 @@ T.test('table block: pasted cells and a pasted tabular become Table blocks; expo
   T.ok(P.model(tb).warnings.length === 1, 'with a note');
   P.apply(tb, { dataset: { p: 'src' }, value: '\\begin{tabular}{ll} p & r \\\\ \\end{tabular}' });
   T.eq(P.model(tb).warnings.length, 0);
+});
+
+// Formulae compile in the background (Temml): each round redraws only the cells waiting on one that finished,
+// a hidden preview waits for its tab, and the queue keeps more results than the table has formulae.
+T.test('table workspace: background maths fills cells by id and a hidden preview catches up on its tab', async () => {
+  const was = TD.math.engine, C = TD.app.cmd, W = () => TD.tableWs, host = document.querySelector('#tableview');
+  const tab = (name) => host.querySelector(`[data-tab="${name}"]`).click();
+  try {
+    TD.math.set('temml'); await TD.math.whenReady();
+    C.setTable(true); await wait(60);
+    tab('latex');
+    const salt = Date.now() % 100000; // formulae no earlier test compiled
+    W().importText(Array.from({ length: 12 }, (_, r) => [0, 1, 2].map((c) => `$y_{${salt}}^{${r * 3 + c}}$`).join('\t')).join('\n'));
+    const pending = host.querySelectorAll('.tg td .math-pending');
+    T.ok(pending.length > 0 && [...pending].every((s) => /^\d+(,\d+)*$/.test(s.dataset.mathPending)), 'pending cells name the formulae they wait for');
+    TD.app.updateOutputAvailability();
+    const out = (o) => host.querySelector(`.tb-outbar [data-o="${o}"]`);
+    T.ok(!out('copy').disabled && !out('dl-tex').disabled, 'the LaTeX outputs never wait for the maths');
+    T.ok(out('copy-png').disabled && out('dl-svg').disabled && out('dl-png').disabled && out('print').disabled, 'the picture outputs wait for it');
+    await TD.math.whenReady(); await wait(50);
+    T.eq(host.querySelectorAll('.tg td .math-pending').length, 0, 'every cell filled in');
+    T.ok(host.querySelector('.tb-prev .math-pending'), 'the hidden preview was left for later');
+    tab('preview'); await wait(400); await TD.math.whenReady();
+    T.eq(host.querySelectorAll('.tb-prev .math-pending').length, 0, 'opening the preview completes it');
+    T.ok(host.querySelectorAll('.tb-prev image.svg-label').length >= 36, 'with every formula drawn');
+  } finally { tab('preview'); C.setTable(false); await wait(60); TD.math.set(was); await TD.math.whenReady(); }
+});
+
+// A big table's preview makes its cell pictures over several frames (labelBudget), never in one long task.
+T.test('table workspace: a big preview draws its pictures a frame at a time', async () => {
+  const was = TD.math.engine, C = TD.app.cmd, W = () => TD.tableWs, host = document.querySelector('#tableview');
+  try {
+    TD.math.set('katex'); await TD.math.whenReady();
+    C.setTable(true); await wait(60);
+    host.querySelector('[data-tab="preview"]').click();
+    const salt = Date.now() % 100000;
+    // watch every frame until the maths is done: the longest gap between frames, and pictures left for later
+    let blank = 0, printWaited = false, gap = 0, last = performance.now(), done = false;
+    const watch = () => { if (done) return; const now = performance.now(); gap = Math.max(gap, now - last); last = now;
+      blank = Math.max(blank, host.querySelectorAll('.tb-prev image.svg-label:not([href])').length);
+      printWaited ||= host.querySelector('.tb-outbar [data-o="print"]').disabled; requestAnimationFrame(watch); };
+    requestAnimationFrame(watch);
+    W().importText(Array.from({ length: 40 }, (_, r) => Array.from({ length: 8 }, (_, c) => `$z_{${salt}}^{${r * 8 + c}}$`).join('\t')).join('\n'));
+    await TD.math.whenReady(); await wait(50); done = true;
+    T.ok(blank > 0, `pictures were left for later frames (${blank} at most, longest frame gap ${Math.round(gap)} ms)`);
+    T.ok(printWaited, 'printing waited for them');
+    T.eq(host.querySelectorAll('.tb-prev image.svg-label:not([href])').length, 0, 'later frames draw every picture');
+    T.eq(host.querySelectorAll('.tb-prev .math-pending').length, 0, 'and none is left pending');
+    T.ok(!host.querySelector('.tb-outbar [data-o="print"]').disabled, 'then printing is available');
+  } finally { C.setTable(false); await wait(60); TD.math.set(was); await TD.math.whenReady(); }
+});
+
+// A column's edge follows the pointer from either side of it, without a jump, and keeps its width after release.
+T.test('table workspace: the number format menu sets grouping and the marker', async () => {
+  const C = TD.app.cmd, W = () => TD.tableWs, host = document.querySelector('#tableview');
+  const autoWas = W().autoMath; W().autoMath = false;
+  try {
+    C.setTable(true); await wait(60);
+    W().importText('Item,Value\na,"1,599.99"\nb,6.55\nc,9645');
+    W().select([1, 1]); await wait(60);
+    const bar = host.querySelector('.tb-bar'), more = bar.querySelector('[data-t="numfmt"]');
+    T.ok(more && more.previousElementSibling?.dataset.t === 'num', 'a menu button sits next to .00');
+    T.ok(bar.scrollWidth <= bar.clientWidth + 1, `the toolbar still fits on one line (${bar.scrollWidth} / ${bar.clientWidth})`);
+    // aligning starts from what was typed
+    bar.querySelector('[data-t="num"]').click(); await wait(30);
+    T.eq(W().model.cols[1].num, { group: 'comma' }, 'typed commas: the column groups with commas');
+    more.click(); await wait(30);
+    const menu = document.querySelector('.tb-ctx');
+    T.ok(menu && menu.querySelector('[data-m="ng:comma"][aria-checked="true"]'), 'the menu ticks Comma');
+    menu.querySelector('[data-m="ng:none"]').click(); await wait(30);
+    T.eq(W().model.cols[1].num.group, 'none', 'None turns grouping off');
+    T.ok(!/group-separator/.test(TD.table.toLatex(W().model).code), 'and the LaTeX says so');
+    more.click(); await wait(30);
+    document.querySelector('.tb-ctx [data-m="nd:,"]').click(); await wait(30);
+    T.eq(W().model.cols[1].num.dec, ',', 'a decimal comma');
+    T.ok(/output-decimal-marker=\{,\}/.test(TD.table.toLatex(W().model).code), 'written for siunitx');
+    // the panel has the rest
+    const props = document.querySelector('#props');
+    for (const k of ['group', 'exp', 'plus']) T.ok(props.querySelector(`[data-p="${k}"]`), `panel field ${k}`);
+    for (const k of ['dec', 'prod', 'pos']) T.ok(props.querySelector(`[data-seg="${k}"]`), `panel switch ${k}`);
+  } finally { W().autoMath = autoWas; C.setTable(false); await wait(60); }
+});
+
+T.test('table workspace: the colour buttons apply the last colour picked; their arrows pick another', async () => {
+  const C = TD.app.cmd, W = () => TD.tableWs, host = document.querySelector('#tableview');
+  try {
+    C.setTable(true); await wait(60);
+    W().importText('a,b\nx,y');
+    W().select([1, 0]); await wait(60);
+    const bar = host.querySelector('.tb-bar'), fill = bar.querySelector('[data-t="bg"]');
+    T.eq(fill.nextElementSibling?.dataset.t, 'bgmore', 'an arrow sits next to the fill button');
+    T.ok(bar.scrollWidth <= bar.clientWidth + 1, `the toolbar still fits on one line (${bar.scrollWidth} / ${bar.clientWidth})`);
+    const sw0 = fill.querySelector('.sw').style.stroke;
+    fill.click(); await wait(30);
+    T.ok(W().model.cells[1][0].bg, 'the button fills the cell at once');
+    T.ok(!document.querySelector('.cp') || getComputedStyle(document.querySelector('.cp')).display === 'none', 'without opening the picker');
+    W().select([0, 1]); await wait(30);
+    T.eq(fill.isConnected ? fill.querySelector('.sw').style.stroke : host.querySelector('[data-t="bg"] .sw').style.stroke, sw0, 'its bar shows the last colour, not the selected cell\'s');
+    host.querySelector('[data-t="bgmore"]').click(); await wait(30);
+    T.eq(getComputedStyle(document.querySelector('.cp')).display, 'block', 'the arrow opens the colour picker');
+    TD.closeColorPicker(); await wait(30);
+  } finally { C.setTable(false); await wait(60); }
+});
+
+T.test('table workspace: dragging a column edge sets its width', async () => {
+  const C = TD.app.cmd, W = () => TD.tableWs, host = document.querySelector('#tableview');
+  const autoWas = W().autoMath; W().autoMath = false;
+  try {
+    C.setTable(true); await wait(60);
+    W().importText('Name\tValue\tNotes\nalpha\tx\tsome longer words here');
+    W().select([0, 0]); await wait(60);
+    const th = (c) => host.querySelector(`.tg th[data-ch="${c}"]`), width = (c) => th(c).getBoundingClientRect().width;
+    const grip = host.querySelector('.tg th[data-ch="1"] .tg-rs-l');
+    T.ok(grip && grip.dataset.rs === '0', "the edge's right half (on B) moves column A");
+    const r = grip.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, w0 = width(0);
+    const frame = () => new Promise((f) => requestAnimationFrame(() => requestAnimationFrame(f)));
+    T.ok(document.elementFromPoint(x, y) === grip, 'nothing covers it');
+    grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, button: 0 }));
+    const at = [];
+    for (const dx of [1, 30, 80]) { window.dispatchEvent(new PointerEvent('pointermove', { clientX: x + dx, clientY: y, pointerId: 1 })); await frame(); at.push(width(0) - w0 - dx); }
+    const badge = th(0).querySelector('.tg-chl i');
+    T.eq(badge && badge.textContent, `${W().model.cols[0].w}cm`, "while dragging, the header's badge shows the width");
+    const field = document.querySelector('#props [data-p="w"]');
+    T.eq(field && field.value, String(W().model.cols[0].w), "and so does the panel's Width field (column A is active)");
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: x + 80, clientY: y, pointerId: 1 })); await frame();
+    T.ok(at.every((d) => Math.abs(d) <= 3), `the edge follows the pointer (off by ${at.map(Math.round).join(', ')} px)`);
+    T.ok(Math.abs(width(0) - (w0 + 80)) <= 3, `and stays there (${Math.round(width(0))} vs ${Math.round(w0 + 80)})`);
+    T.ok(W().model.cols[0].w > 0, 'a width in cm is set');
+    // the grid wraps where the output does: the cell's text is the column's width wide (p{w}), its padding outside
+    const inner = host.querySelector('.tg td[data-r="1"][data-c="0"] .tg-in'), cs = getComputedStyle(inner);
+    const text = inner.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    T.ok(Math.abs(text - W().model.cols[0].w * TD.PX_PER_CM) <= 1, `the cell's text is ${W().model.cols[0].w} cm wide (${text} px)`);
+    // narrow: its cells wrap, and the header's badge doesn't widen it again
+    const g2 = host.querySelector('.tg th[data-ch="2"] .tg-rs:not(.tg-rs-l)').getBoundingClientRect(), x2 = g2.left + g2.width / 2;
+    const w2 = width(2);
+    host.querySelector('.tg th[data-ch="2"] .tg-rs:not(.tg-rs-l)').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: x2, clientY: y, pointerId: 1, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: x2 - (w2 - 60), clientY: y, pointerId: 1 })); await frame();
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: x2 - (w2 - 60), clientY: y, pointerId: 1 })); await frame();
+    T.ok(Math.abs(width(2) - 60) <= 3, `a narrow column keeps its width (${Math.round(width(2))} px)`);
+    // a double-click goes back to automatic
+    host.querySelector('.tg th[data-ch="1"] .tg-rs-l').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    T.eq(W().model.cols[0].w, 0, 'double-click: automatic again');
+    // a table wider than its pane: the columns aren't squeezed back to their minimum, so a set width shows
+    W().importText(Array.from({ length: 6 }, (_, r) => Array.from({ length: 50 }, (_, c) => String(r * 50 + c)).join(',')).join('\n'));
+    await wait(60);
+    T.ok(host.querySelector('.tg').offsetWidth > host.querySelector('.tb-gridwrap').clientWidth, 'the table is wider than its pane');
+    const gw = host.querySelector('.tg th[data-ch="3"] .tg-rs:not(.tg-rs-l)').getBoundingClientRect(), xw = gw.left + gw.width / 2, yw = gw.top + gw.height / 2, ww = width(3);
+    host.querySelector('.tg th[data-ch="3"] .tg-rs:not(.tg-rs-l)').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: xw, clientY: yw, pointerId: 1, button: 0 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: xw + 100, clientY: yw, pointerId: 1 })); await frame();
+    T.ok(Math.abs(width(3) - (ww + 100)) <= 3, `while dragging, a wide table's column follows (${Math.round(width(3))} vs ${Math.round(ww + 100)})`);
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: xw + 100, clientY: yw, pointerId: 1 })); await frame();
+    T.ok(Math.abs(width(3) - (ww + 100)) <= 3, `and keeps it (${Math.round(width(3))} px)`);
+  } finally { W().autoMath = autoWas; C.setTable(false); await wait(60); }
 });

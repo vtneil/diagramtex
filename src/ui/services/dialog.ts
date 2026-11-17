@@ -14,14 +14,19 @@ import { runtime as TD } from '../../runtime';
   const esc = (t: any) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
   let open: any = null; // { finish } of the dialog on screen; a new one cancels it
 
-  function dialog({ title, message = '', input = null, multiline = false, ok = msg("ui.ok", 'OK'), cancel = msg("ui.cancel", 'Cancel'), danger = false, readonly = false, placeholder = '' }: any) {
+  // preview: (value) => HTML shown under the field as it is typed (a title with maths, say)
+  function dialog({ title, message = '', input = null, multiline = false, ok = msg("ui.ok", 'OK'), cancel = msg("ui.cancel", 'Cancel'), danger = false, readonly = false, placeholder = '', preview = null }: any) {
     if (open) open.finish(false);
     const prev = document.activeElement;
     const root = document.createElement('div');
     root.className = 'td-dialog';
-    const component = mountFrame(root, Dialog, { title, message, input, multiline, ok, cancel, danger, readonly, placeholder });
+    const component = mountFrame(root, Dialog, { title, message, input, multiline, ok, cancel, danger, readonly, placeholder, preview: !!preview });
     document.body.appendChild(root);
-    const box = root.firstElementChild, inp = root.querySelector('.tdd-in');
+    const box = root.firstElementChild, inp = root.querySelector('.tdd-in'), pv = root.querySelector('.tdd-pv');
+    if (preview && inp && pv) {
+      const show = () => { pv.innerHTML = preview((inp as HTMLInputElement).value); };
+      show(); inp.addEventListener('input', show);
+    }
     const okBtn = root.querySelector('[data-r="1"]'), cancelBtn = root.querySelector('[data-r="0"]');
 
     return new Promise<boolean | string | null | undefined>((resolve) => {

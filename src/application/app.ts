@@ -71,7 +71,7 @@ import { runtime as TD } from '../runtime';
 
   const hasHand = (m: any) => m === 'board' || m === 'page'; // modes with a Hand tool
   const isDrawTool = (t: any) => !['select', 'hand', 'text', 'math', 'image', 'magnify', 'bucket'].includes(t);
-  const toolType = (t: any) => (({ arc3: 'arc', arrow: 'line', darrow: 'line', elbow: 'line', curvedconn: 'line', curvearrow: 'curve', blob: 'poly', smoothcurve: 'poly', pencil: 'poly', math: 'text' }) as Record<string, any>)[t] || t.split(':')[0];
+  const toolType = (t: any) => (({ arc3: 'arc', arrow: 'line', darrow: 'line', elbow: 'line', curvedconn: 'line', curvearrow: 'curve', blob: 'poly', smoothcurve: 'poly', curvpen: 'poly', pencil: 'poly', math: 'text' }) as Record<string, any>)[t] || t.split(':')[0];
   const TOOL_KEYS: Record<string, any> = { v: 'select', h: 'hand', z: 'magnify', k: 'bucket', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
   // How the Rectangle and Ellipse tools draw, chosen from the menu on their buttons and remembered: rows are
   // [mode, label, hint, icon (20 × 20)]. The first is the default. 'three' and 'circle3' are drawn click by
@@ -187,6 +187,19 @@ import { runtime as TD } from '../runtime';
     if (!st) return;
     state.undo.pop(); st.r = stamp(); state.redo.push(st); applyStep(st, true);
   }
+  // A Classic document's page has its own steps (src/application/doc-history.ts); they take turns with the
+  // file list's the same way.
+  function undoDocument(back: boolean) {
+    const dv = TD.docview;
+    if (back) {
+      const t = dv?.lastDone() || 0, f = canUndoFile() ? fileUndo[fileUndo.length - 1] : null;
+      if (f && (!t || f.t > t)) undoFile(); else if (t) dv.applyUndo(true);
+    } else {
+      const r = dv?.lastUndone() || 0, f = canRedoFile() ? fileRedo[fileRedo.length - 1] : null;
+      if (f && (!r || (f.r || 0) > r)) redoFile(); else if (r) dv.applyUndo(false);
+    }
+    updateTopbar();
+  }
   function redo() {
     finishEdit(); commit();
     const st = state.redo[state.redo.length - 1], f = canRedoFile() ? fileRedo[fileRedo.length - 1] : null;
@@ -214,9 +227,29 @@ import { runtime as TD } from '../runtime';
   const recovery = createRecovery(store, recoverySettings);
   const autosave = createAutosave(state, store, { index, inBin: (id) => bin().some((x) => (x as any).id === id), inDatabase: inDb, report: reportSave, showState: showSaveState, renderList: renderDocList,
     replacing: (id, stored, updated) => { recovery.take(id, stored, updated); } });
-  function scheduleSave() { autosave.scheduleSave(); }
-  function saveNow() { autosave.saveNow(); }
-  // Saving is continuous, so there is nothing to report while it works: the sidebar says autosave is on.
+  // A file linked to one on disk that the browser lets the page write to is also written there, a second
+  // after the last change (src/platform/filelink.ts); every file is also kept in the browser.
+  let fileTimer: ReturnType<typeof setTimeout> | undefined, fileId: string | null = null;
+  function writeLinked(id: string | null = state.docId) {
+    clearTimeout(fileTimer); fileTimer = undefined; fileId = null;
+    if (!id || id !== state.docId || !TD.files.autoSaving(id)) return;
+    TD.files.autoWrite(id, projectJson(state.doc)).then((r: string) => {
+      if (r === 'changed') {
+        const f = TD.files.fileOf(id);
+        showHint(uiText('hint.fileChangedOnDisk', '{file} changed on disk, so changes are no longer saved to it as you work. {key} saves over it.', { file: f?.name || '', key: isMac ? '⌘S' : 'Ctrl+S' }), 6000);
+      }
+      if (id === state.docId) showSaveState();
+    });
+  }
+  function scheduleSave() {
+    autosave.scheduleSave();
+    if (state.docId && TD.files.autoSaving(state.docId)) { clearTimeout(fileTimer); fileId = state.docId; fileTimer = setTimeout(() => writeLinked(fileId), 1000); }
+  }
+  function saveNow() { autosave.saveNow(); if (fileTimer) writeLinked(fileId); }
+  // Where autosave keeps the open file: nowhere (no IndexedDB), the browser, or also its file on disk.
+  const autosaveMode = (): 'none' | 'browser' | 'file' => !DS?.active ? 'none' : state.docId && TD.files.autoSaving(state.docId) ? 'file' : 'browser';
+  TD.files.onChange(() => { showSaveState(); });
+  // Saving is continuous, so there is nothing to report while it works: the top bar says where autosave goes.
   // A failure is the only news, shown there and once as a hint (the sidebar may be hidden).
   let saveOk = true, saveFull = false;
   function reportSave(ok: any, full: any) {
@@ -229,17 +262,26 @@ import { runtime as TD } from '../runtime';
   // Beside the file name: autosave, or, for a file linked to one on disk, that file's name, marked while the
   // document has changes not yet saved to it.
   function showSaveState() {
-    const st = $('#saveState'), f = TD.files.fileOf(state.docId);
-    const dirty = !!f && saveOk && !TD.files.isSaved(state.docId, projectJson(state.doc));
+    const st = $('#saveState'), f = TD.files.fileOf(state.docId), mode = autosaveMode();
+    // while autosave writes the file, there is nothing to mark between a change and its write
+    const dirty = !!f && saveOk && mode !== 'file' && !TD.files.isSaved(state.docId, projectJson(state.doc));
+    const note = $('#autosaveNote');
+    const noteText = mode === 'none' ? uiText('save.autosaveNone', 'Autosave is unsupported') : mode === 'file' ? uiText('save.autosaveFile', 'Autosave is enabled (File)') : uiText('save.autosaveBrowser', 'Autosave is enabled (browser)');
+    if (note.textContent !== noteText) note.textContent = noteText;
+    note.title = mode === 'none' ? uiText('save.autosaveNone.tip', 'This browser can’t keep your work as you go. Save it as a file to keep it.')
+      : mode === 'file' ? uiText('save.autosaveFile.tip', 'Every change is saved to {file} as you work, and kept in this browser', { file: f.name })
+      : f ? uiText('save.autosaveBrowserLinked.tip', 'Every change is saved in this browser as you work. {key} saves to {file}.', { file: f.name, key: isMac ? '⌘S' : 'Ctrl+S' })
+      : caption(captions["ui.every.change.is.saved.in.this.browser.as.you.work"]);
     const msg = !saveOk ? (saveFull ? uiText('save.state.full', 'Autosave failed: browser storage is full') : uiText('save.state.unavailable', 'Autosave failed: browser storage unavailable')) : f ? f.name : '';
-    $('#autosaveNote').classList.toggle('unavailable', !saveOk);
+    note.classList.toggle('unavailable', !saveOk && mode !== 'none');
     st.classList.toggle('err', !saveOk);
     st.classList.toggle('linked', saveOk && !!f);
     st.classList.toggle('dirty', dirty);
     if (st.textContent !== msg) st.textContent = msg; // unchanged text is not re-announced
     st.title = !saveOk ? msg // the full message where only "Not saved" fits
+      : mode === 'file' ? uiText('save.state.auto', 'Every change is saved to {file} as you work', { file: f.name })
       : f ? (dirty ? uiText('save.state.dirty', 'Changes not yet saved to {file}. Ctrl+S saves them.', { file: f.name }) : uiText('save.state.saved', 'Saved to {file}. Ctrl+S saves changes to it.', { file: f.name }))
-      : caption(captions["ui.every.change.is.saved.in.this.browser.as.you.work"]);
+      : note.title;
     const b = $('#topbar [data-cmd="save"]');
     if (b) b.title = f ? uiText('save.btn.linked', 'Save to {file} (Ctrl+S)', { file: f.name }) : TD.files.can ? uiText('save.btn.files', 'Save to a .diagramtex file on your computer; later saves go to the same file (Ctrl+Shift+S)') : caption(captions["ui.save.to.a.diagramtex.file.that.you.can.open.again.ctrl.shift.s"]);
   }
@@ -999,7 +1041,7 @@ import { runtime as TD } from '../runtime';
       if (t.major) h += `<text x="${t.pos + 3}" y="9">${fmtCm(t.c)}</text>`;
     }
     h = `<path class="tk" d="${d}"/>` + h;
-    if (cursorW) { const c = Math.round((cursorW.x - v.x) * z - RULER) + .5; h += `<path class="cur" d="M${c},0V${RULER}"/>`; }
+    h += `<path class="cur" d="${rulerCursor('x')}"/>`;
     rx.setAttribute('viewBox', `0 0 ${wX} ${RULER}`); rx.setAttribute('preserveAspectRatio', 'none'); rx.innerHTML = h;
     // vertical (TikZ y = −world y / PX)
     const hY = viewGeometry.rulerHeight || r.h - RULER - 24, yTop = -(v.y + RULER / z) / PX, yBot = -(v.y + r.h / z) / PX;
@@ -1011,8 +1053,19 @@ import { runtime as TD } from '../runtime';
       if (t.major) h += `<text transform="translate(9 ${t.pos - 3}) rotate(-90)">${fmtCm(pageY ? -t.c : t.c)}</text>`;
     }
     h = `<path class="tk" d="${d}"/>` + h;
-    if (cursorW) { const c = Math.round((cursorW.y - v.y) * z - RULER) + .5; h += `<path class="cur" d="M0,${c}H${RULER}"/>`; }
+    h += `<path class="cur" d="${rulerCursor('y')}"/>`;
     ry.setAttribute('viewBox', `0 0 ${RULER} ${hY}`); ry.setAttribute('preserveAspectRatio', 'none'); ry.innerHTML = h;
+  }
+  // the pointer's mark on each ruler: a pointer move changes only this, so it moves without redrawing the ticks
+  function rulerCursor(axis: 'x' | 'y'): string {
+    if (!cursorW) return '';
+    const v = state.view, c = Math.round((cursorW[axis] - v[axis]) * v.zoom - RULER) + .5;
+    return axis === 'x' ? `M${c},0V${RULER}` : `M0,${c}H${RULER}`;
+  }
+  function moveRulerCursor(): void {
+    const cx = $('#rulerX svg .cur'), cy = $('#rulerY svg .cur');
+    if (!cx || !cy || state.mode === 'document') { drawRulers(); return; }
+    cx.setAttribute('d', rulerCursor('x')); cy.setAttribute('d', rulerCursor('y'));
   }
   function updateStatus() {
     const sel = selected(), el = $('#selInfo');
@@ -1290,10 +1343,18 @@ import { runtime as TD } from '../runtime';
   // node, so it stays `right=1cm of a` in the code; moved on its own, it lets go
   function syncPos() {
     const L = shapes();
+    if (!L.some((s: any) => s.pos)) return;
+    // name → its first two holders in list order (a node never stands for itself), built once instead of a
+    // scan of every shape per positioned node: imports with `right=of a` position most nodes
+    const named = new Map<string, any[]>();
+    const add = (k: string, q: any) => { const m = named.get(k); if (!m) named.set(k, [q]); else if (m.length < 2 && m[0] !== q) m.push(q); };
+    for (const q of L) {
+      if (q.type === 'coord') { if (q.tikzName != null) add(q.tikzName, q); }
+      else if (q.tex && q.tex.i === 0 && q.tex.nm) for (const k of q.tex.nm) add(k, q);
+    }
     for (const s of L) {
       if (!s.pos) continue;
-      const nm = s.pos.of;
-      const r = L.find((q: any) => q !== s && (q.type === 'coord' ? q.tikzName === nm : !!(q.tex && q.tex.i === 0 && q.tex.nm && q.tex.nm.includes(nm))));
+      const r = (named.get(s.pos.of) || []).find((q: any) => q !== s);
       if (!r) continue;
       const pr = s._pr;
       s._pr = { x: r.x, y: r.y };
@@ -1614,6 +1675,16 @@ import { runtime as TD } from '../runtime';
       else if (P.length === 1) L(P[0], c); else L(P[0], P[1]);
       for (const q of P) out.push(`<circle class="arc-pt" cx="${q.x}" cy="${q.y}" r="${3 / z}"/>`);
     }
+    // the curvature pen's points while it draws, as Photoshop shows them: smooth round, corners square
+    const pd = polyDraft && byId(polyDraft);
+    if (pd && pd.curv) {
+      const q = 3 / z;
+      pd.pts.slice(0, -1).forEach((p: any, i: number) => out.push(pd.corner && pd.corner[i]
+        ? `<rect class="arc-pt" x="${p[0] - q}" y="${p[1] - q}" width="${2 * q}" height="${2 * q}"/>` : `<circle class="arc-pt" cx="${p[0]}" cy="${p[1]}" r="${q}"/>`));
+      // over the first point, a ring: clicking there closes the path
+      const f = pd.pts[0], l = pd.pts[pd.pts.length - 1];
+      if (pd.pts.length >= 3 && Math.hypot(l[0] - f[0], l[1] - f[1]) * z < 8) out.push(`<circle class="snap-ind" cx="${f[0]}" cy="${f[1]}" r="${6 / z}"/>`);
+    }
     if (sel.length === 1 && !polyDraft && !arcDraft) {
       const s = sel[0], t = TYPES[s.type];
       if (t.guides) for (const g of t.guides(s)) out.push(`<line class="guide" x1="${g[0]}" y1="${g[1]}" x2="${g[2]}" y2="${g[3]}"/>`);
@@ -1621,7 +1692,7 @@ import { runtime as TD } from '../runtime';
         // small "+" at the middle of each segment: drag it to add a point there
         const P = s.pts, n = s.closed ? P.length : P.length - 1;
         for (let i = 0; i < n; i++) {
-          const a = P[i], b = P[(i + 1) % P.length], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+          const a = P[i], b = P[(i + 1) % P.length], m = polyMid(s, i), mx = m.x, my = m.y;
           if (Math.hypot(b[0] - a[0], b[1] - a[1]) * z < 28) continue;
           out.push(`<g class="addpt" data-addpt="${i}" data-hid="${s.id}"><circle cx="${mx}" cy="${my}" r="${5 / z}"/><path d="M${mx - 2.6 / z} ${my}h${5.2 / z}M${mx} ${my - 2.6 / z}v${5.2 / z}"/></g>`);
         }
@@ -1633,6 +1704,8 @@ import { runtime as TD } from '../runtime';
         else {
           const q = 3.75 / z, on = s.type === 'poly' && state.vertex && state.vertex.id === s.id && 'v' + state.vertex.i === h.k;
           const lk = CONNECT.has(s.type) && END[h.k] && s[END[h.k][0]];
+          // a curvature pen path's smooth points are round, its corners square
+          if (s.curv && !(s.corner && s.corner[+h.k.slice(1)])) { out.push(`<circle class="handle${on ? ' on' : ''}" data-handle="${h.k}" data-hid="${s.id}" cx="${h.x}" cy="${h.y}" r="${4.25 / z}" style="cursor:${cur}"/>`); continue; }
           out.push(`<rect class="handle${on ? ' on' : ''}${lk ? ' linked' : ''}" data-handle="${h.k}" data-hid="${s.id}" x="${h.x - q}" y="${h.y - q}" width="${2 * q}" height="${2 * q}" style="cursor:${cur}"/>`);
         }
       }
@@ -1758,6 +1831,7 @@ import { runtime as TD } from '../runtime';
       : t === 'bucket' ? uiText('assist.bucketHelp', 'Choose Fill in Properties, then click a closed shape. Alt-click clears fill; Shift-click applies it to selected shapes.')
       : t === 'poly' ? uiText('tool.hint.poly', 'Click to add points · double-click / Enter to finish · click first point to close')
       : t === 'blob' ? uiText('tool.hint.blob', 'Click to add points of a smooth closed curve · double-click / Enter to finish')
+      : t === 'curvpen' ? uiText('tool.hint.curvpen', 'Click to add points the curve bends through · double-click or Alt-click for a corner · click the first point to close · Enter or Esc to finish')
       : t === 'smoothcurve' ? uiText('tool.hint.smoothcurve', 'Click to add points the curve passes through · double-click / Enter to finish')
       : t === 'elbow' ? uiText('tool.hint.elbow', 'Drag from start to end; the ends hold on to shapes · drag the middle handle to move the bend')
       : t === 'curvedconn' ? uiText('tool.hint.connector', 'Drag from start to end; the ends hold on to shapes')
@@ -1780,6 +1854,8 @@ import { runtime as TD } from '../runtime';
     ['curve', message('tool.curve', 'Bézier curve (C)'), '<path d="M4 16C10 2 20 22 30 8"/>'], ['curvearrow', message('tool.curvearrow', 'Curved arrow'), '<path d="M4 16C10 4 18 20 27 9M22 8l6 0-1 6"/>'],
   ];
   const FREE_TOOLS: any[][] = [
+    ['curvpen', message('tool.curvpen', 'Curvature pen: click points the curve bends through; double-click for a corner'), '<path d="M9.4 4.7C14.2 5.1 16 9.5 15.8 15.8"/><circle cx="7.5" cy="4.5" r="1.8"/><g transform="translate(17.5 21.5) rotate(45)"><path d="M0 0L5.8 -9.8L3.7 -14.4H-3.7L-5.8 -9.8Z"/><path d="M0 0V-7"/><circle cx="0" cy="-8.1" r="1.2" class="f"/><path d="M-4.1 -17.6H4.1"/></g>'],
+
     ['smoothcurve', message('tool.smoothcurve', 'Curve through points'), '<path d="M4 18Q9 5 16 11T29 7"/><circle cx="4" cy="18" r="1.6" class="f"/><circle cx="16" cy="11" r="1.6" class="f"/><circle cx="29" cy="7" r="1.6" class="f"/>'],
     ['poly', message('tool.poly', 'Polyline / polygon (P)'), '<path d="M5 19l5-14 9 10 9-11"/>'], ['blob', message('tool.blob', 'Smooth closed curve'), '<path d="M8 6c6-4 18-3 20 4s-4 10-10 9-15 0-14-6 1-5 4-7z"/>'],
     ['arc', message('tool.arc', 'Arc by centre (O) — click the centre, the start, then the end'), '<path d="M7 18h20M27 18a20 20 0 0 0-6.5-14.8"/><path d="M7 18L20.5 3.2" stroke-dasharray="2 2"/><circle cx="7" cy="18" r="1.8" class="f"/>'],
@@ -2054,8 +2130,12 @@ import { runtime as TD } from '../runtime';
     polyDraft = null;
     if (s) {
       s.pts.pop(); // remove rubber-band point
+      if (s.corner) s.corner.length = s.pts.length;
       // drop consecutive duplicates
-      s.pts = s.pts.filter((p: any, i: any, a: any) => i === 0 || dist({ x: p[0], y: p[1] }, { x: a[i - 1][0], y: a[i - 1][1] }) > 0.5);
+      const keep = s.pts.map((p: any, i: any, a: any) => i === 0 || dist({ x: p[0], y: p[1] }, { x: a[i - 1][0], y: a[i - 1][1] }) > 0.5);
+      s.pts = s.pts.filter((_: any, i: any) => keep[i]);
+      if (s.corner) s.corner = s.corner.filter((_: any, i: any) => keep[i]).map((c: any) => (c ? 1 : 0));
+      if (s.corner && !s.corner.some(Boolean)) delete s.corner;
       if (s._draft) { delete s._draft; if (s.pts.length < 3) s.closed = false; }
       if (s.pts.length < 2) removeShape(s.id);
     }
@@ -2329,16 +2409,28 @@ import { runtime as TD } from '../runtime';
       return;
     }
     if (pointsKind()) { arcDown(p, e); return; }
-    if (state.tool === 'poly' || state.tool === 'blob' || state.tool === 'smoothcurve') {
+    if (state.tool === 'poly' || state.tool === 'blob' || state.tool === 'smoothcurve' || state.tool === 'curvpen') {
       const q = snapPoint(p, e, polyDraft ? new Set([polyDraft]) : null);
       if (!polyDraft) {
         begin();
         const s = addShape(TYPES.poly.create(q, state.defaults));
-        if (state.tool === 'blob') { s.smooth = true; s.closed = true; s._draft = true; }
-        if (state.tool === 'smoothcurve') s.smooth = true;
+        // tension marks a TikZ `plot[smooth]` curve (0.5 is TikZ's own default)
+        if (state.tool === 'blob') { s.smooth = true; s.tension = 0.5; s.closed = true; s._draft = true; }
+        if (state.tool === 'smoothcurve') { s.smooth = true; s.tension = 0.5; }
+        if (state.tool === 'curvpen') { s.smooth = true; s.curv = true; s.corner = [e.altKey ? 1 : 0, 0]; }
         polyDraft = s.id; state.sel = new Set([s.id]);
       } else {
         const s = byId(polyDraft);
+        if (s!.curv) {
+          // Curvature pen: a double-click makes the point just placed a corner (Photoshop's way); Alt-click places one
+          if (dbl) { s!.corner[s!.pts.length - 2] = 1; render(); return; }
+          const first = { x: s!.pts[0][0], y: s!.pts[0][1] };
+          if (s!.pts.length >= 3 && dist(first, p) < 8 / state.view.zoom) { if (e.altKey) s!.corner[0] = 1; s!.closed = true; finishPoly(); return; }
+          s!.pts[s!.pts.length - 1] = [q.x, q.y]; s!.corner[s!.pts.length - 1] = e.altKey ? 1 : 0;
+          s!.pts.push([q.x, q.y]); s!.corner.push(0);
+          render();
+          return;
+        }
         if (dbl) { finishPoly(); return; }
         const first = { x: s!.pts[0][0], y: s!.pts[0][1] };
         if (s!.pts.length >= 3 && dist(first, p) < 8 / state.view.zoom) { s!.closed = true; finishPoly(); return; }
@@ -2390,7 +2482,7 @@ import { runtime as TD } from '../runtime';
       const hs = byId(h.dataset.hid);
       if (hs && hs.type === 'poly' && /^v\d+$/.test(h.dataset.handle)) {
         const i = +h.dataset.handle.slice(1);
-        if (dbl) { polyRemove(hs, i); return; }
+        if (dbl) { if (hs.curv) polyCorner(hs, i); else polyRemove(hs, i); return; }
         state.vertex = { id: hs.id, i };
         renderOverlay(); renderProps();
       }
@@ -2450,7 +2542,7 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('pointermove', (e: any) => {
     const p = toWorld(e);
     $('#cursorPos').textContent = `x ${fx(p.x / PX)} · y ${fx(-p.y / PX)} cm`;
-    cursorW = p; drawRulers();
+    cursorW = p; moveRulerCursor();
     if (state.tool === 'magnify') { magnifier.show(e); return; }
     if (state.tool === 'bucket' && !drag) return;
     if (!drag) {
@@ -2741,7 +2833,7 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('wheel', (e: WheelEvent) => { if (state.tool !== 'magnify') return; e.preventDefault(); e.stopImmediatePropagation(); magnifier.zoom(wheelZoomFactor(e)); }, { capture: true, passive: false });
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
-  svg.addEventListener('pointerleave', () => { magnifier.hide(); cursorW = null; drawRulers(); });
+  svg.addEventListener('pointerleave', () => { magnifier.hide(); cursorW = null; moveRulerCursor(); });
   svg.addEventListener('pointerleave', () => { if (!drag && state.tool !== 'select' && !polyDraft && !arcDraft && !lineDraft) { snapHint = null; renderOverlay(); } });
 
   svg.addEventListener('wheel', (e: any) => {
@@ -2885,13 +2977,32 @@ import { runtime as TD } from '../runtime';
   // ---------------- polyline points ----------------
   // Insert a point in the middle of segment i (i → i+1).
   function polyInsert(s: any, i: any) {
+    const m = polyMid(s, i);
+    s.pts.splice(i + 1, 0, [m.x, m.y]);
+    if (s.corner) s.corner.splice(i + 1, 0, 0);
+  }
+  // the middle of segment i: on the curve for a curvature pen path, so adding a point there keeps its shape
+  function polyMid(s: any, i: any) {
     const a = s.pts[i], b = s.pts[(i + 1) % s.pts.length];
-    s.pts.splice(i + 1, 0, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+    if (s.curv && s.smooth && s.pts.length > 2) {
+      const g = TD.polySegs(s.pts.map((p: any) => ({ x: p[0], y: p[1] })), s)[i];
+      if (g) return { x: (a[0] + 3 * g[0].x + 3 * g[1].x + b[0]) / 8, y: (a[1] + 3 * g[0].y + 3 * g[1].y + b[1]) / 8 };
+    }
+    return { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2 };
+  }
+  // a curvature pen point turns between smooth and corner
+  function polyCorner(s: any, i: any) {
+    begin();
+    const c = s.corner || (s.corner = s.pts.map(() => 0));
+    c[i] = c[i] ? 0 : 1;
+    if (!c.some(Boolean)) delete s.corner;
+    render(); commit(); renderProps();
   }
   function polyRemove(s: any, i: any) {
     if (s.pts.length <= (s.closed ? 3 : 2)) { showHint(s.closed ? 'A closed shape needs at least 3 points' : 'A polyline needs at least 2 points', 1400); return; }
     begin();
     s.pts.splice(i, 1);
+    if (s.corner) s.corner.splice(i, 1);
     state.vertex = null;
     render(); commit(); renderProps();
   }
@@ -2909,7 +3020,8 @@ import { runtime as TD } from '../runtime';
     }
     begin(); polyInsert(s, i); state.vertex = { id: s.id, i: i + 1 }; render(); commit(); renderProps();
   }
-  TD.polyPoints = { add: polyAddPoint, remove: (s: any) => state.vertex && state.vertex.id === s.id && polyRemove(s, state.vertex.i) };
+  TD.polyPoints = { add: polyAddPoint, remove: (s: any) => state.vertex && state.vertex.id === s.id && polyRemove(s, state.vertex.i),
+    corner: (s: any) => state.vertex && state.vertex.id === s.id && polyCorner(s, state.vertex.i) };
 
   // ---------------- properties panel ----------------
   const sizeOpts = TD.SIZES.map((s: any) => [s[0], s[0]]);
@@ -2939,6 +3051,7 @@ import { runtime as TD } from '../runtime';
     { key: 'shaft', label: message('prop.shaft', 'Shaft'), type: 'shaft' },
     { key: 'cross', label: message('prop.cross', 'Crossings'), type: 'select', options: TD.CROSSES },
     { key: 'closed', label: message('prop.closed', 'Closed'), type: 'checkbox' },
+    { key: 'tension', label: message('prop.tension', 'Tension'), type: 'number', min: 0, step: 0.05, hint: message('prop.tension.hint', 'TikZ’s plot tension: 0 is straight lines, 0.5 is TikZ’s default, higher is rounder') },
     { key: 'boxed', label: message('prop.boxed', 'Boxed'), type: 'checkbox' },
     { key: 'radius', label: message('prop.radius', 'Corner radius'), type: 'number', min: 0, step: 1, unit: 'px' },
     { key: 'coils', label: message('prop.coils', 'Coils'), type: 'number', min: 1, step: 1 },
@@ -3153,7 +3266,10 @@ import { runtime as TD } from '../runtime';
 
     if (sel.length === 1 && sel[0].type === 'poly') {
       const s = sel[0], vi = state.vertex && state.vertex.id === s.id ? state.vertex.i : -1;
-      before.push({ ...section(captions["ui.points"], [{ kind: 'actions', class: 'btns', buttons: [{ text: uiText('pt.add', 'Add Point'), attrs: { 'data-act': 'pt:add', title: uiText('pt.add.title', 'Add a point after the chosen one (or on the longest segment). You can also drag a + on the shape.') } }, { text: vi >= 0 ? uiText('pt.removeN', 'Remove Point {n}', { n: vi + 1 }) : uiText('pt.remove', 'Remove Point'), attrs: { 'data-act': 'pt:rm', title: uiText('pt.remove.title', 'Remove the chosen point. You can also double-click a point.'), ...(vi < 0 ? { disabled: true } : {}) } }] }, { kind: 'hint', text: [uiText('pt.help', 'Click a point to choose it. Drag a + to add a point there; double-click a point to remove it.')] }], 'sec'), summary: String(s.pts.length) });
+      before.push({ ...section(captions["ui.points"], [{ kind: 'actions', class: 'btns', buttons: [{ text: uiText('pt.add', 'Add Point'), attrs: { 'data-act': 'pt:add', title: uiText('pt.add.title', 'Add a point after the chosen one (or on the longest segment). You can also drag a + on the shape.') } }, { text: vi >= 0 ? uiText('pt.removeN', 'Remove Point {n}', { n: vi + 1 }) : uiText('pt.remove', 'Remove Point'), attrs: { 'data-act': 'pt:rm', title: s.curv ? uiText('pt.remove.title.curv', 'Remove the chosen point. You can also press Delete.') : uiText('pt.remove.title', 'Remove the chosen point. You can also double-click a point.'), ...(vi < 0 ? { disabled: true } : {}) } },
+        ...(s.curv ? [{ text: vi >= 0 && s.corner && s.corner[vi] ? uiText('pt.smooth', 'Make Smooth') : uiText('pt.corner', 'Make Corner'), attrs: { 'data-act': 'pt:corner', title: uiText('pt.corner.title', 'Turn the chosen point between smooth and corner. You can also double-click a point.'), ...(vi < 0 ? { disabled: true } : {}) } }] : [])] },
+        { kind: 'hint', text: [s.curv ? uiText('pt.help.curv', 'Click a point to choose it, Delete removes it. Drag a + to add a point there; double-click a point to turn it between smooth and corner.')
+          : uiText('pt.help', 'Click a point to choose it. Drag a + to add a point there; double-click a point to remove it.')] }], 'sec'), summary: String(s.pts.length) });
     }
     if (units().length > 1) after.push(section(captions["ui.align"], [{ kind: 'controls', class: 'align-row', controls: [
       ['left', 'M3 2v16M6 5h10v3.5H6zM6 11.5h6V15H6z', uiText('arr.left', 'Align left')], ['center', 'M10 2v16M4 5h12v3.5H4zM7 11.5h6V15H7z', uiText('arr.centres', 'Align centres')], ['right', 'M17 2v16M4 5h10v3.5H4zM8 11.5h6V15H8z', uiText('arr.right', 'Align right')],
@@ -3496,7 +3612,7 @@ import { runtime as TD } from '../runtime';
     if (act && act.startsWith('l:')) alignSel(act.slice(2));
     if (act === 'dup') duplicate();
     if (act === 'del') deleteSel();
-    if (act === 'pt:add' || act === 'pt:rm') { const s = selected()[0]; if (s && s.type === 'poly') TD.polyPoints[act === 'pt:add' ? 'add' : 'remove'](s); }
+    if (act === 'pt:add' || act === 'pt:rm' || act === 'pt:corner') { const s = selected()[0]; if (s && s.type === 'poly') TD.polyPoints[act === 'pt:add' ? 'add' : act === 'pt:rm' ? 'remove' : 'corner'](s); }
   });
   propsEl.addEventListener('focusin', (e: any) => {
     const b = formatButton(e.target);
@@ -3547,6 +3663,7 @@ import { runtime as TD } from '../runtime';
     d.blocks.splice(at, 0, ...blocks);
     const k = blocks.findIndex((b: any) => b.type === 'diagram');
     if (k >= 0) setActiveBlock(at + k, false); else scheduleSave();
+    TD.docview?.changed?.(); // one undo step in the document
     if (TD.docview) TD.docview.render();
     if (k >= 0) TD.docview?.scrollToDiagram(at + k);
     else requestAnimationFrame(() => document.querySelector(`#docview .blk[data-i="${at}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
@@ -3960,6 +4077,7 @@ import { runtime as TD } from '../runtime';
   // selected. Names: `name` on a shape, `gname` on every member of a group.
   const layersEl = $('#layers'), layersWin = $('#layersWin');
   const openGroups = new Set();
+  let layerEls = new Map<string, { html: string; el: Element }>();
   let layersKey = '', layersRaf = 0, layerHover: any = null, layerAnchor: any = null, layerDrag: any = null, layerPressKey: any = null;
   const pickable = (s: any) => s && !s.hidden && !s.locked;
   function pruneSel() { for (const id of [...state.sel]) if (!pickable(byId(id))) state.sel.delete(id); }
@@ -3968,7 +4086,11 @@ import { runtime as TD } from '../runtime';
     return t ? (t.length > 48 ? t.slice(0, 48) + '…' : t) : (TYPES[s.type] && typeName(s.type)) || s.type;
   }
   const layerName = (s: any) => s.name || autoName(s);
-  const groupName = (g: any) => shapes().find((q: any) => q.g === g && q.gname)?.gname || uiText('layers.group', 'Group');
+  // groups by id in one pass over the shapes, bottom member first; a rebuild of the panel reads it once
+  // per row instead of scanning every shape per group
+  let groupIndex: Map<any, any[]> | null = null;
+  const groupsOf = () => { const out = new Map(); for (const q of shapes()) if (q.g) { const m = out.get(q.g); if (m) m.push(q); else out.set(q.g, [q]); } return out; };
+  const groupName = (g: any) => ((groupIndex || groupsOf()).get(g) || []).find((q: any) => q.gname)?.gname || uiText('layers.group', 'Group');
   // a small picture of the shape, drawn as it exports; remembered against the shape's data
   const thumbs = new Map();
   function thumb(s: any) {
@@ -3992,22 +4114,23 @@ import { runtime as TD } from '../runtime';
   const lsvg = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   // the rows, top of the stack first; a group at its topmost member
   function layerRows() {
-    const all = shapes(), rows = [], seen = new Set();
+    const all = shapes(), rows = [], seen = new Set(), groups = groupIndex || groupsOf();
     for (let i = all.length - 1; i >= 0; i--) {
       const s = all[i];
       if (!s.g) { rows.push({ s }); continue; }
       if (seen.has(s.g)) continue;
       seen.add(s.g);
-      const m = all.filter((q: any) => q.g === s.g).reverse();
+      const m = groups.get(s.g).slice().reverse();
       rows.push({ g: s.g, m });
       if (openGroups.has(s.g)) for (const q of m) rows.push({ s: q, in: s.g });
     }
     return rows;
   }
+  let rowCaptions: any = null; // the button captions, looked up once per rebuild rather than once per row
   function rowHtml(r: any) {
     const flags = (list: any) => ({ on: list.every((q: any) => state.sel.has(q.id)), hid: list.every((q: any) => q.hidden), lk: list.every((q: any) => q.locked) });
     const cls = (f: any) => `${f.on ? ' on' : ''}${f.hid ? ' hid' : ''}${f.lk ? ' lk' : ''}`;
-    const eyeT = esc(caption(captions["ui.show"])), eyeF = esc(caption(captions["ui.hide"])), lockT = esc(caption(captions["ui.unlock"])), lockF = esc(caption(captions["ui.lock"]));
+    const { eyeT, eyeF, lockT, lockF } = rowCaptions || { eyeT: esc(caption(captions["ui.show"])), eyeF: esc(caption(captions["ui.hide"])), lockT: esc(caption(captions["ui.unlock"])), lockF: esc(caption(captions["ui.lock"])) };
     const eye = (f: any) => `<button class="ly-eye" data-la="eye" title="${f.hid ? eyeT : eyeF}" aria-label="${f.hid ? eyeT : eyeF}">${lsvg(IC[f.hid ? 'eyeoff' : 'eye'])}</button>`;
     const lock = (f: any) => `<button class="ly-lock" data-la="lock" title="${f.lk ? lockT : lockF}" aria-label="${f.lk ? lockT : lockF}">${lsvg(IC[f.lk ? 'lock' : 'unlock'])}</button>`;
     if (r.g) {
@@ -4031,11 +4154,35 @@ import { runtime as TD } from '../runtime';
     $('#layersCount').textContent = n ? String(n) : '';
     if (state.mode === 'document' || layersWin.classList.contains('collapsed')) { layersKey = ''; return; }
     if (drag || layerDrag || layersEl.querySelector('.ly-ed')) return; // the call after the drag or rename catches up
+    const forced = !layersKey;
     const key = [state.docId, state.mode, [...openGroups].join(), [...state.sel].join(), ...shapes().map((s: any) => JSON.stringify(s))].join('\u0001');
     if (key === layersKey) return;
     layersKey = key;
     const sc = layersEl.scrollTop;
-    layersEl.innerHTML = n ? layerRows().map(rowHtml).join('') : `<div class="ly-empty">${esc(uiText('layers.empty', 'Shapes you draw are listed here, the top one first.'))}</div>`;
+    if (!n) { layersEl.innerHTML = `<div class="ly-empty">${esc(uiText('layers.empty', 'Shapes you draw are listed here, the top one first.'))}</div>`; layerEls.clear(); }
+    else {
+      // only rows whose markup changed are parsed again; the rest keep their elements (parsing every row
+      // and its picture took ~30 ms per edit at 1000 shapes). A forced rebuild starts afresh.
+      groupIndex = groupsOf();
+      rowCaptions = { eyeT: esc(caption(captions["ui.show"])), eyeF: esc(caption(captions["ui.hide"])), lockT: esc(caption(captions["ui.unlock"])), lockF: esc(caption(captions["ui.lock"])) };
+      try {
+        const next = new Map(), els: any[] = [], fresh: any[] = [];
+        for (const row of layerRows()) {
+          const k = row.g ? 'g:' + row.g : row.s.id, html = rowHtml(row), old = !forced && layerEls.get(k);
+          if (old && old.html === html && !next.has(k)) { next.set(k, old); els.push(old.el); } else { fresh.push([k, html, els.length]); els.push(null); }
+        }
+        if (fresh.length) {
+          const tpl = document.createElement('template'); tpl.innerHTML = fresh.map((f) => f[1]).join('');
+          const made = [...tpl.content.children];
+          fresh.forEach(([k, html, i], j) => { els[i] = made[j]; next.set(k, { html, el: made[j] }); });
+        }
+        // the same rows in the same order: swap just the changed ones in place, so the panel isn't laid out afresh
+        const cur = [...layersEl.children], freshAt = new Set(fresh.map((f) => f[2]));
+        if (cur.length === els.length && els.every((el, i) => freshAt.has(i) || cur[i] === el)) { for (const i of freshAt) cur[i].replaceWith(els[i]); }
+        else layersEl.replaceChildren(...els);
+        layerEls = next;
+      } finally { groupIndex = null; rowCaptions = null; }
+    }
     layersEl.scrollTop = sc;
     const sel = state.sel.size;
     $('#layersFoot [data-la="newgroup"]').disabled = !canGroup();
@@ -4366,9 +4513,11 @@ import { runtime as TD } from '../runtime';
     if (outputReady(list)) return true;
     showHint(outputWait(), 2200); return false;
   }
+  const OUTPUT_BUTTONS: [string, string][] = [['topbar', '[data-cmd="export"], [data-cmd="print"], [data-cmd="tikz"]'], ['quick', '[data-q]'], ['tableview', 'button[data-render]']];
   function updateOutputAvailability(): void {
     const busy = !!TD.math.pending;
-    document.querySelectorAll<HTMLButtonElement>('#topbar [data-cmd="export"], #topbar [data-cmd="print"], #topbar [data-cmd="tikz"], #quick [data-q], #tableview button[data-o]').forEach(b => { if (b.disabled !== busy) b.disabled = busy; });
+    // runs on every maths progress round: searched within each container, not across a page that may hold a large table
+    for (const [id, sel] of OUTPUT_BUTTONS) (id === 'tableview' ? document.querySelector('#tableview .tb-outbar') : document.getElementById(id))?.querySelectorAll<HTMLButtonElement>(sel).forEach(b => { if (b.disabled !== busy) b.disabled = busy; });
     if (busy) expPop.hidden = true;
     if (!ctx.hidden) {
       const objectButtons = ctx.querySelectorAll<HTMLButtonElement>('[data-ctx^="img:"], [data-ctx="copytikz"]');
@@ -4976,6 +5125,8 @@ import { runtime as TD } from '../runtime';
   document.addEventListener('keydown', (e) => {
     const mod = e.metaKey || e.ctrlKey;
     if (mod && !e.altKey && e.key.toLowerCase() === 'p' && !outputAllowed()) { e.preventDefault(); return; }
+    // in Table, ⌘P prints the table (its Print button), not the page behind it
+    if (mod && !e.altKey && e.key.toLowerCase() === 'p' && inTable()) { e.preventDefault(); ($('#tableview .tb-outbar [data-o="print"]') as HTMLButtonElement | null)?.click(); return; }
     // Ctrl/⌘ + = − 0 zoom the canvas (the Document view handles its own, in docview.ts)
     const z = zoomKey(e);
     if (inTool()) return; // Quick and Table handle their own keys (nothing to zoom there)
@@ -4998,7 +5149,9 @@ import { runtime as TD } from '../runtime';
         else {
           saveNow();
           // without the File System Access API there is no file to keep in step, so remind people to keep one
-          const msg = uiText('hint.autosaved', 'Autosaved in this browser — {key} saves to a file', { key: isMac ? '⇧⌘S' : 'Ctrl+Shift+S' });
+          const key = isMac ? '⇧⌘S' : 'Ctrl+Shift+S';
+          if (!DS?.active) { showHint(uiText('hint.autosaveNone', 'This browser can’t autosave — {key} saves to a file', { key }), 3000); return; }
+          const msg = uiText('hint.autosaved', 'Autosaved in this browser — {key} saves to a file', { key });
           if (TD.files.can) showHint(msg, 1500);
           else showHint(uiText('hint.autosaved.remind', '{msg}\nRemember to occasionally save to file to prevent accidental losses.', { msg }), 4000);
         }
@@ -5011,8 +5164,7 @@ import { runtime as TD } from '../runtime';
     if (state.mode === 'document') {
       const k1 = e.key.toLowerCase();
       if (mod && !e.altKey && k1 === 'v') pasteSoon(); // a new diagram block
-      // the page has no steps of its own here: undo and redo reach the file list (a file moved to the bin)
-      else if (mod && !e.altKey && (k1 === 'z' || k1 === 'y')) { e.preventDefault(); if (k1 === 'y' || e.shiftKey) redoFile(); else undoFile(); }
+      else if (mod && !e.altKey && (k1 === 'z' || k1 === 'y')) { e.preventDefault(); undoDocument(k1 === 'z' && !e.shiftKey); }
       return;
     }
 
@@ -5034,7 +5186,14 @@ import { runtime as TD } from '../runtime';
     }
     if (e.key === ' ') { if (!spaceDown) { spaceDown = true; markTools(); } svg.classList.add('pan-ready'); e.preventDefault(); return; }
     if (state.mode === 'page' && (e.key === 'PageUp' || e.key === 'PageDown')) { e.preventDefault(); goToPage(currentPage() + (e.key === 'PageUp' ? -1 : 1)); return; }
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); if (selectedGuide) removeGuide(selectedGuide); else deleteSel(); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      const vs = state.vertex && state.sel.size === 1 && byId(state.vertex.id);
+      if (selectedGuide) removeGuide(selectedGuide);
+      else if (vs && vs.curv && state.sel.has(vs.id)) polyRemove(vs, state.vertex!.i); // Photoshop's way: the point, not the path
+      else deleteSel();
+      return;
+    }
     if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (TD.blocks.editable(s.type)) openBlock(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
       if (drag?.mode === 'guide') { if (drag.beforeGuides) home().guides = drag.beforeGuides; else delete home().guides; drag = null; documentHistory.cancel(); smartLines = []; renderOverlay(); renderProps(); return; }
@@ -5102,8 +5261,7 @@ import { runtime as TD } from '../runtime';
     const diagramIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
     $('#blockPrev').disabled = diagramIndex <= 0;
     $('#blockNext').disabled = diagramIndex < 0 || diagramIndex >= diagrams.length - 1;
-    $('#btnUndo').disabled = !state.undo.length && !canUndoFile();
-    $('#btnRedo').disabled = !state.redo.length && !canRedoFile();
+    undoButtons();
     updateSnapButton();
     $('#stage').classList.toggle('hide-grid', !state.grid);
     updateGridSelection();
@@ -5111,8 +5269,14 @@ import { runtime as TD } from '../runtime';
     updateStatus();
   }
   function toggleGrid() { state.grid = !state.grid; savePrefs(); updateTopbar(); }
-  $('#btnUndo').onclick = undo;
-  $('#btnRedo').onclick = redo;
+  // In Document view the buttons work on the page's own steps (src/application/doc-history.ts).
+  function undoButtons() {
+    const doc = state.mode === 'document';
+    $('#btnUndo').disabled = !(doc ? TD.docview?.canUndo() : state.undo.length) && !canUndoFile();
+    $('#btnRedo').disabled = !(doc ? TD.docview?.canRedo() : state.redo.length) && !canRedoFile();
+  }
+  $('#btnUndo').onclick = () => (state.mode === 'document' ? undoDocument(true) : undo());
+  $('#btnRedo').onclick = () => (state.mode === 'document' ? undoDocument(false) : redo());
   function chooseGridStyle(style: any, toggle = false) {
     if (!GRID_STYLES.includes(style)) return;
     state.grid = !(toggle && state.grid && state.gridStyle === style); state.gridStyle = style;
@@ -5655,7 +5819,10 @@ import { runtime as TD } from '../runtime';
       const G = pageGeom(), [defs, body] = pageSvgs();
       return Array.from<any, any>({ length: G.n }, (_, k) => ({ vb: [0, pageTop(k, G), G.w, G.h], inner: defs + body, page: true }));
     }
-    const list = shapes();
+    return shapeSources(shapes());
+  }
+  function shapeSources(list: any[]): any {
+    if (!TD.math.finalizing) return TD.math.synchronous(() => shapeSources(list));
     if (!list.length) return [];
     const b = TD.bboxOf(list.flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }), 8);
     const svg = shapesSvg(list, 8, false);
@@ -5814,8 +5981,8 @@ import { runtime as TD } from '../runtime';
   document.addEventListener('pointerdown', (e) => { if (!expPop.hidden && !expPop.contains((e.target as Node)) && !(e.target! as Element).closest('#btnExport')) expPop.hidden = true; });
   // Print one sheet per export source, each sized exactly to it: the browser's PDF output is vector,
   // with the fonts embedded, so "Save as PDF" here is the vector PDF export.
-  function printVector(srcs: any) {
-    if (!outputAllowed()) return;
+  function printVector(srcs: any, name = slug()) {
+    if (!outputAllowed() || !srcs.length) return;
     let host = $('#pagePrint');
     if (!host) { host = document.createElement('div'); host.id = 'pagePrint'; document.body.appendChild(host); }
     const cm = (v: any) => r2(v / PX);
@@ -5831,7 +5998,7 @@ import { runtime as TD } from '../runtime';
     st.textContent = srcs.map((s: any, k: any) => `@page p${k} { size: ${cm(s.vb[2])}cm ${cm(s.vb[3])}cm; margin: 0; }`).join('\n') +
       `\n@page { size: ${cm(srcs[0].vb[2])}cm ${cm(srcs[0].vb[3])}cm; margin: 0; }`;
     const title = document.title;
-    document.title = slug(); // the default file name in "Save as PDF"
+    document.title = name; // the default file name in "Save as PDF"
     document.body.classList.add('printing-page');
     setTimeout(() => { if (outputAllowed()) window.print(); document.body.classList.remove('printing-page'); host.innerHTML = ''; document.title = title; }, 300);
   }
@@ -6263,7 +6430,7 @@ import { runtime as TD } from '../runtime';
     line(372, 110, 632, 110, { dash: 'dashed', stroke: GREY });
     sym('p-source', 380, 92);
     sym('p-convex', 490, 55);
-    sym('p-screen', 610, 55);
+    sym('p-screen', 610, 55, { w: 10, h: 110 });
     for (const yl of [64, 156]) { line(406, 110, 502, yl, { stroke: RED }); line(502, yl, 610, 110, { stroke: RED, endTip: 'stealth' }); }
     // waveforms
     head(790, 30, 'WAVEFORMS');
@@ -6548,7 +6715,11 @@ import { runtime as TD } from '../runtime';
   TD.math.onReadiness(updateOutputAvailability);
   TD.state = state; // for debugging
   TD.app = {
+    undoDocument, noteEdit: () => { fileRedo.length = 0; undoButtons(); },
     outputReady, outputAllowed, updateOutputAvailability,
+    printShapes: (list: any[], name?: string) => printVector(shapeSources(list), name),
+    // renames the open file, keeping its folder (the document's title is its name)
+    renameOpen: (leaf: string) => { renameDoc(state.docId, joinPath(folderOf(state.doc.name), leaf)); renderDocList(); },
     cancelMathViews: () => { sidebarVersion++; sidebarPending.clear(); changedMathShapes.clear(); mathPriorities.clear(); },
     magnifier,
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,

@@ -8,6 +8,10 @@ import { runtime as TD } from '../runtime';
 import { t, onLocale } from '../i18n';
 import { downloadImage } from '../platform/download';
 import { readPicture } from '../platform/images';
+import { alignSwitch } from '../ui/align-switch';
+import { colourSplit, showSwatch } from '../ui/colour-split';
+import * as IE from './doc-inline';
+import { createDocHistory } from './doc-history';
 // Document view: a page of text blocks (LaTeX-flavoured, $math$) with embedded diagrams,
 // plus whole-document LaTeX export.
 (function () {
@@ -192,12 +196,18 @@ import { readPicture } from '../platform/images';
     });
     return out.join('') || '<p class="ph">Empty paragraph — click to write</p>';
   }
+  // what the in-place editor (doc-inline.ts) draws with: formulas typed into need no progress to follow
+  const IED: IE.InlineDeps = { katex: (s, d) => TD.math.synchronous(() => katex(s, d)), colorCss, safeUrl, words: WORDS, heading };
 
   // ---------- LaTeX export ----------
   const escTex = (line: any) => TD.segments(line).map((seg: any) => (seg.math ? `$${TD.mathTex(seg)}$` : seg.s.replace(/(^|[^\\])([%&#])/g, '$1\\$2').replace(/(^|[^\\])([%&#])/g, '$1\\$2'))).join('');
   // a name typed as plain text (a file name), every character as it is
   const PLAIN: Record<string, string> = { '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', $: '\\$', '%': '\\%', '&': '\\&', '#': '\\#', _: '\\_', '^': '\\textasciicircum{}', '~': '\\textasciitilde{}' };
   const plainTex = (t: any) => String(t).replace(/[\\{}$%&#_^~]/g, (c) => PLAIN[c]);
+  // The title is the file's name: plain text, except $…$, which is maths (a name like R&D_notes stays as typed).
+  const titleParts = (name: string) => String(name).split(/(\$[^$]+\$)/);
+  const titleHtml = (name: string) => titleParts(name).map((p, i) => i % 2 ? katex(p.slice(1, -1), false) : esc(p)).join('');
+  const titleTex = (name: string) => titleParts(name).map((p, i) => i % 2 ? p : plainTex(p)).join('');
   function textToLatex(text: any, ctx: Record<string, any> = {}) {
     const parts = String(text).split(/\$\$([\s\S]*?)\$\$/);
     const env: Record<string, any> = { ul: 'itemize', ol: 'enumerate', chk: 'itemize' };
@@ -338,7 +348,7 @@ import { readPicture } from '../platform/images';
       ...X.preDefs,
       ...(spread !== 1 ? [`\\linespread{${spread}}`] : []),
       '',
-      ...(P.title ? [`\\title{${plainTex(leafName(doc.name) || 'Untitled')}}`, '\\date{}', ''] : []),
+      ...(P.title ? [`\\title{${titleTex(leafName(doc.name) || 'Untitled')}}`, '\\date{}', ''] : []),
       '\\begin{document}',
       ...(P.title ? ['\\maketitle'] : []),
       '',
@@ -404,6 +414,8 @@ import { readPicture } from '../platform/images';
 
   // ---------- view ----------
   let editingIdx = -1, relayT: any;
+  // text blocks are edited in place; this switch edits their LaTeX source instead (kept per browser)
+  let srcMode = (() => { try { return localStorage.getItem('diagramtex.docSource') === '1'; } catch { return false; } })();
   const doc = () => app.state.doc;
   const diagramCount = () => doc().blocks.filter((b: any) => b.type === 'diagram').length;
   const SIZE_EM: Record<string, any> = { tiny: 0.5, scriptsize: 0.7, footnotesize: 0.8, small: 0.9, normalsize: 1, large: 1.2, Large: 1.44, LARGE: 1.728, huge: 2.074, Huge: 2.488 };
@@ -413,31 +425,41 @@ import { readPicture } from '../platform/images';
     left: 'M3 5h14M3 8.5h9M3 12h14M3 15.5h9', center: 'M3 5h14M5.5 8.5h9M3 12h14M5.5 15.5h9', right: 'M3 5h14M8 8.5h9M3 12h14M8 15.5h9', justify: 'M3 5h14M3 8.5h14M3 12h14M3 15.5h14',
     ul: 'M8 5.5h9M8 10h9M8 14.5h9M4 5.5h.01M4 10h.01M4 14.5h.01', ol: 'M8 5.5h9M8 10h9M8 14.5h9M3.5 4l1-.5v4M3.2 12.2c.4-.6 1.8-.6 1.8.3 0 .7-1.8 1.4-1.8 2.2H5',
     chk: 'M3 4h4v4H3zM3.8 13.5l1.2 1.2 2.2-2.6M10 6h7M10 14h7', link: 'M8.5 11.5l3-3M7 9.5L5.2 11.3a2.5 2.5 0 003.5 3.5L10.5 13M13 10.5l1.8-1.8a2.5 2.5 0 00-3.5-3.5L9.5 7',
-    math: 'M4 15l2.5-10L9 15M5 11h3M11 7l5 7M16 7l-5 7',
   };
   function insertBar(i: any) {
     return `<div class="ins" data-at="${i}"><button data-add="text">${esc(t('doc.add.text', '+ Text'))}</button><button data-add="diagram">${esc(t('doc.add.diagram', '+ Diagram'))}</button><button data-add="table">${esc(t('doc.add.table', '+ Table'))}</button><button data-add="image">${esc(t('doc.add.image', '+ Image'))}</button></div>`;
   }
-  // Formatting bar over the text block being edited (the source stays LaTeX-flavoured text).
+  // The text source stays LaTeX-flavoured text; the toolbar wraps the selection in commands.
   // LaTeX's size commands, named for the menu (the command itself is in the menu's tip)
   const SIZE_NAME = (): Record<string, string> => ({ tiny: t('table.size.tiny', 'Tiny'), scriptsize: t('table.size.script', 'Script'), footnotesize: t('table.size.footnote', 'Footnote'), small: t('table.size.small', 'Small'), normalsize: t('ui.normal', 'Normal'), large: t('table.size.large', 'Large'), Large: t('table.size.larger', 'Larger'), LARGE: t('doc.size.largest', 'Largest'), huge: t('quick.size.huge', 'Huge'), Huge: t('doc.size.huger', 'Huger') });
-  function textBar(b: any) {
-    const al = b.align || 'justify', sz = b.size || 'normalsize';
+  // The text toolbar: built like the Table toolbar (.tb-bar groups), pinned to the top of the view rather than
+  // following the block, and shown only while a text block is being edited. Its room is always kept.
+  const AL_KEY: Record<string, string> = { justify: 'j', left: 'l', center: 'c', right: 'r' };
+  const AL_NAME: Record<string, string> = { j: 'justify', l: 'left', c: 'center', r: 'right' };
+  const TB_I = {
+    b: '<b class="tb-glyph">B</b>', i: '<i class="tb-glyph" style="font-family:Georgia,serif">I</i>',
+    u: '<span class="tb-glyph" style="text-decoration:underline">U</span>', s: '<span class="tb-glyph" style="text-decoration:line-through">S</span>',
+    math: '<i class="tb-glyph tb-math">x</i>',
+  };
+  function textBar() {
+    const b = doc().blocks[editingIdx], on = !!b && b.type === 'text';
+    const al = (on && b.align) || 'justify', sz = (on && b.size) || 'normalsize';
     const names = SIZE_NAME();
-    return `<div class="fmt-bar" role="toolbar" aria-label="${esc(t('doc.fmt.aria', 'Text formatting'))}">
-      <select data-fmt="head" title="${esc(t('doc.fmt.style', 'Paragraph style'))}"><option value="">${esc(t('doc.fmt.paragraph', 'Paragraph'))}</option><option value="#">${esc(t('doc.fmt.section', 'Section'))}</option><option value="##">${esc(t('doc.fmt.subsection', 'Subsection'))}</option><option value="###">${esc(t('doc.fmt.subsubsection', 'Subsubsection'))}</option></select>
-      <select data-fmt="size" title="${esc(t('doc.fmt.size', 'Font size of this block ({cmd})', { cmd: '\\' + sz }))}">${TD.SIZES.map(([k]: any) => `<option value="${k}"${k === sz ? ' selected' : ''}>${esc(names[k] || k)}</option>`).join('')}</select>
-      <span class="sep"></span>
-      <button data-fmt="b" title="${esc(t('doc.fmt.bold', 'Bold (⌘B) — \\textbf'))}"><b>B</b></button><button data-fmt="i" title="${esc(t('doc.fmt.italic', 'Italic (⌘I) — \\textit'))}"><i>I</i></button>
-      <button data-fmt="u" title="${esc(t('doc.fmt.underline', 'Underline (⌘U) — \\underline'))}"><u>U</u></button><button data-fmt="s" title="${esc(t('doc.fmt.strike', 'Strikethrough — \\sout'))}"><s>S</s></button>
-      <button type="button" class="fmt-col" data-fpick="color" title="${esc(t('doc.fmt.colour', 'Text colour — \\textcolor'))}"><span class="glyph" style="border-bottom-color:${esc(TD.texColor.swatch(fmtColor))}">A</span></button>
-      <button type="button" class="fmt-col" data-fpick="hl" title="${esc(t('doc.fmt.highlight', 'Highlight — \\colorbox'))}"><span class="glyph hl" style="background:${esc(TD.texColor.swatch(fmtHl))}">ab</span></button>
-      <button data-fmt="link" title="${esc(t('doc.fmt.link', 'Link — \\href'))}">${ic(I.link)}</button><button data-fmt="math" title="${esc(t('doc.fmt.math', 'Inline maths $…$'))}">${ic(I.math)}</button>
-      <span class="sep"></span>
-      <button data-fmt="ul" title="${esc(t('doc.fmt.ul', 'Bulleted list (- item)'))}">${ic(I.ul)}</button><button data-fmt="ol" title="${esc(t('doc.fmt.ol', 'Numbered list (1. item)'))}">${ic(I.ol)}</button><button data-fmt="chk" title="${esc(t('doc.fmt.chk', 'Checklist (- [ ] item)'))}">${ic(I.chk)}</button>
-      <span class="sep"></span>
-      ${['justify', 'left', 'center', 'right'].map((a) => `<button data-fmt="al:${a}" class="${a === al ? 'on' : ''}" title="${esc(({ justify: t('doc.fmt.justify', 'Justified (LaTeX default)'), left: t('doc.fmt.left', 'Align left'), center: t('doc.fmt.center', 'Align center'), right: t('doc.fmt.right', 'Align right') } as Record<string, string>)[a])}">${ic(I[a])}</button>`).join('')}
-    </div>`;
+    const btn = (f: string, tip: string, body: string) => `<button type="button" class="icon" data-fmt="${f}" title="${esc(tip)}">${body}</button>`;
+    return `<div class="doc-fmt${on ? '' : ' off'}"${on ? '' : ' aria-hidden="true"'}><div class="tb-bar" role="toolbar" aria-label="${esc(t('doc.fmt.aria', 'Text formatting'))}">
+      <div class="tb-grp"><select data-fmt="head" class="doc-fmt-head" title="${esc(t('doc.fmt.style', 'Paragraph style'))}"${on ? '' : ' tabindex="-1"'}><option value="">${esc(t('doc.fmt.paragraph', 'Paragraph'))}</option><option value="#">${esc(t('doc.fmt.section', 'Section'))}</option><option value="##">${esc(t('doc.fmt.subsection', 'Subsection'))}</option><option value="###">${esc(t('doc.fmt.subsubsection', 'Subsubsection'))}</option></select><select data-fmt="size" class="doc-fmt-size" title="${esc(t('doc.fmt.size', 'Font size of this block ({cmd})', { cmd: '\\' + sz }))}"${on ? '' : ' tabindex="-1"'}>${TD.SIZES.map(([k]: any) => `<option value="${k}"${k === sz ? ' selected' : ''}>${esc(names[k] || k)}</option>`).join('')}</select></div>
+      <div class="tb-grp">${btn('b', t('doc.fmt.bold', 'Bold (⌘B) — \\textbf'), TB_I.b)}${btn('i', t('doc.fmt.italic', 'Italic (⌘I) — \\textit'), TB_I.i)}${btn('u', t('doc.fmt.underline', 'Underline (⌘U) — \\underline'), TB_I.u)}${btn('s', t('doc.fmt.strike', 'Strikethrough — \\sout'), TB_I.s)}</div>
+      <div class="tb-grp">${colourSplit({ icon: 'fg', name: t('doc.fmt.colour', 'Text colour — \\textcolor'), main: ' data-fapply="color"', more: ' data-fpick="color"' })}${colourSplit({ icon: 'bg', name: t('doc.fmt.highlight', 'Highlight — \\colorbox'), main: ' data-fapply="hl"', more: ' data-fpick="hl"' })}</div>
+      <div class="tb-grp">${btn('link', t('doc.fmt.link', 'Link — \\href'), ic(I.link))}${btn('math', t('doc.fmt.math', 'Inline maths $…$'), TB_I.math)}</div>
+      <div class="tb-grp">${btn('ul', t('doc.fmt.ul', 'Bulleted list (- item)'), ic(I.ul))}${btn('ol', t('doc.fmt.ol', 'Numbered list (1. item)'), ic(I.ol))}${btn('chk', t('doc.fmt.chk', 'Checklist (- [ ] item)'), ic(I.chk))}</div>
+      ${alignSwitch({ cls: 'tb-grp tb-seg', btn: ' data-fal', cur: AL_KEY[al], tips: { j: t('doc.fmt.justify', 'Justified (LaTeX default)'), l: t('doc.fmt.left', 'Align left'), c: t('doc.fmt.center', 'Align center'), r: t('doc.fmt.right', 'Align right') } })}
+      <div class="tb-grp"><button type="button" class="icon${srcMode ? ' on' : ''}" data-fmt="src" aria-pressed="${srcMode}" title="${esc(t('doc.fmt.source', 'Edit the LaTeX source'))}">${ic('M7 5.5L2.5 10 7 14.5M13 5.5l4.5 4.5-4.5 4.5M11 4l-2 12')}</button></div>
+    </div></div>`;
+  }
+  // the colour buttons show the colour they will apply
+  function paintSwatches() {
+    showSwatch(root!.querySelector('.doc-fmt [data-fapply="color"]'), TD.texColor.swatch(fmtColor));
+    showSwatch(root!.querySelector('.doc-fmt [data-fapply="hl"]'), TD.texColor.swatch(fmtHl));
   }
   function tableBar(b: any) {
     const R = b.rows || [[]], nr = R.length, nc = Math.max(1, ...R.map((r: any) => r.length)), al = b.colAlign || 'c', hdr = b.header !== false;
@@ -511,7 +533,7 @@ import { readPicture } from '../platform/images';
     const P = TD.pageSize(d.page);
     const tctx = { sec: [0, 0, 0], numbered: !!P.numbered };
     let fig = 0;
-    let h = `<div class="doc-page" style="${pageStyle(P)}"><div class="cm-probe"></div>${P.title ? `<h1 class="doc-title">${esc(d.name || 'Untitled')}</h1>` : ''}`;
+    let h = `<div class="doc-page" style="${pageStyle(P)}"><div class="cm-probe"></div>${P.title ? `<h1 class="doc-title"${forPrint ? '' : ` title="${esc(t('doc.title.renameTip', 'Double-click to rename the file'))}"`}>${titleHtml(leafName(d.name) || 'Untitled')}</h1>` : ''}`;
     d.blocks.forEach((b: any, i: any) => {
       if (!forPrint) h += insertBar(i);
       const ed = i === editingIdx && !forPrint;
@@ -523,10 +545,12 @@ import { readPicture } from '../platform/images';
       const edc = ed ? ' editing' : '';
       if (b.type === 'text') {
         const st = `text-align:${b.align || 'justify'}${b.size && b.size !== 'normalsize' ? `;font-size:${SIZE_EM[b.size]}em` : ''}`;
-        h += `<div class="blk blk-text${edc}" data-i="${i}">${tools}${ed
-          ? `${textBar(b)}<textarea class="blk-ed" spellcheck="true" placeholder="${esc(t('doc.text.ph', 'Write text. $x^2$ for math, $$…$$ for display math, # Section, - bullet, 1. numbered, - [ ] checkbox'))}">${esc(b.text || '')}</textarea>`
-          : `<div class="blk-body" lang="en" style="${st}">${textToHtml(b.text || '', tctx)}</div>`}</div>`;
-        if (ed) textToHtml(b.text || '', tctx); // keep section numbers counting
+        const ph = t('doc.text.ph', 'Write text. $x^2$ for math, $$…$$ for display math, # Section, - bullet, 1. numbered, - [ ] checkbox');
+        h += `<div class="blk blk-text${edc}" data-i="${i}">${tools}${!ed
+          ? `<div class="blk-body" lang="en" style="${st}">${textToHtml(b.text || '', tctx)}</div>`
+          : srcMode ? `<textarea class="blk-ed" spellcheck="true" placeholder="${esc(ph)}">${esc(b.text || '')}</textarea>`
+          : `<div class="blk-body blk-ie${b.text ? '' : ' empty'}" contenteditable="true" spellcheck="true" lang="en" role="textbox" aria-multiline="true" aria-label="${esc(t('doc.text.aria', 'Text'))}" data-ph="${esc(t('doc.text.phInline', 'Write text. Type $x^2$ for maths, # for a section, - for a list.'))}" style="${st}">${ieHtml(b, tctx)}</div>`}</div>`;
+        if (ed && srcMode) textToHtml(b.text || '', tctx); // keep section numbers counting
       } else if (b.type === 'table') {
         h += `<div class="blk blk-table${edc}" data-i="${i}">${tools}${ed ? tableBar(b) : ''}<div class="blk-body" lang="en">${tableHtml(b, ed)}</div></div>`;
       } else if (b.type === 'image') {
@@ -633,15 +657,19 @@ import { readPicture } from '../platform/images';
   function updateTitle() {
     const title = root!.querySelector('.doc-title');
     if (!title) return;
-    title.textContent = doc().name || 'Untitled';
+    title.innerHTML = TD.math.synchronous(() => titleHtml(leafName(doc().name) || 'Untitled')); // one short line, typed into: no progress to follow
     if (app.state.mode === 'document') layoutPage(TD.pageSize(doc().page));
   }
 
   function render(forPrint?: any): void {
     if (!forPrint && !TD.math.previewing) return TD.math.preview(() => render());
     if (forPrint && !TD.math.finalizing) return TD.math.synchronous(() => render(true));
+    // an editor drawn again (a setting changed while typing) keeps its caret
+    if (!forPrint && iePop) { const p = iePop; p.close(); iePop = null; }
+    const live = !forPrint && editor(), caret = live && live.contains(document.activeElement) && ieFor === editingIdx ? IE.caretOffset(live) : null;
+    if (!forPrint) H.sync(doc()); // what changed elsewhere (a diagram on the canvas) is the new starting point
     const { h: page, P } = pageHtml(forPrint);
-    let h = forPrint ? page : `<div class="doc-sheet">${page}</div>`;
+    let h = forPrint ? page : `${textBar()}<div class="doc-sheet">${page}</div>`;
     if (!forPrint) h += `<div class="doc-hud"><span class="pg-info"></span><button data-zoom="out" title="${esc(t('doc.zoom.outTip', 'Zoom out (Ctrl/⌘ −)'))}" aria-label="${esc(t('doc.zoom.out', 'Zoom out'))}">−</button><button data-zoom="in" title="${esc(t('doc.zoom.inTip', 'Zoom in (Ctrl/⌘ +)'))}" aria-label="${esc(t('doc.zoom.in', 'Zoom in'))}">+</button><button data-zoom="fit"${zoomMode === 'fit' ? ' class="on"' : ''} title="${esc(t('doc.zoom.fitTip', "Fit the page's width to the view"))}">${esc(t('ui.fit.width', 'Fit Width'))}</button><button data-zoom="1"${(zoomMode as any) === 1 ? ' class="on"' : ''} title="${esc(t('doc.zoom.actualTip', 'Actual size (Ctrl/⌘ 0)'))}">100%</button></div>`;
     sheetObserver.disconnect();
     root!.innerHTML = h;
@@ -651,8 +679,10 @@ import { readPicture } from '../platform/images';
     layoutPage(P, forPrint);
     if (!forPrint) sheetObserver.observe(root!.querySelector('.doc-page')!);
     if (!forPrint) requestAnimationFrame(() => layoutPage(P)); // after the side panel has laid out
+    if (!forPrint) paintSwatches();
     const ta = root!.querySelector('.blk-ed');
     if (ta) { autosize(ta); (ta as HTMLElement).focus({ preventScroll: true }); }
+    if (!forPrint) ieMount(caret);
   }
   // Re-render after a block opens or closes for editing, keeping the block that was clicked (or, from the
   // keyboard, the one that was being edited) where it was on screen, so the page doesn't jump.
@@ -668,6 +698,8 @@ import { readPicture } from '../platform/images';
     root!.scrollTop = st;
     const after = at()?.getBoundingClientRect().top;
     if (before != null && after != null) root!.scrollTop += after - before;
+    // opened by a click: the caret goes where the click was
+    if (hit && !fromKey && +hit.dataset.i === editingIdx) ieCaretAt(lastPt.x, lastPt.y);
   }
   // diagrams at true scale (40 canvas px = 1 cm), shrunk to the text width like \resizebox
   function sizeDiagrams(el: any) {
@@ -809,7 +841,40 @@ import { readPicture } from '../platform/images';
 
   const autosize = (ta: any) => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 4 + 'px'; };
 
-  function changed() { app.scheduleSave(); }
+  // Every change to the page goes through here: it is one undo step (doc-history.ts) and is saved.
+  // dirty: the indices of the only blocks that changed; edit: typing in one block (joins the last step).
+  const H = createDocHistory();
+  function changed(dirty: number[] | null = null, edit?: { index: number; typing?: boolean; caret?: number | null; cell?: [number, number] }) {
+    if (H.record(doc(), dirty, edit)) app.noteEdit?.();
+    app.scheduleSave();
+  }
+  // Undo and redo (app.undoDocument picks between these and the file list's steps).
+  function applyUndo(back: boolean): boolean {
+    if (iePop) { const p = iePop; iePop = null; p.close(); }
+    if (!H.owns(doc())) H.sync(doc());
+    const s = back ? H.undo() : H.redo();
+    if (!s) return false;
+    const e = s.edit, i = e ? doc().blocks.findIndex((b: any) => H.keyOf(b) === e.key) : -1, b = doc().blocks[i];
+    const caret = e ? (back ? e.before ?? null : e.caret ?? null) : null;
+    if (e && b && b.type === 'text' && i === editingIdx && editor()) ieRedraw(caret);
+    else {
+      editingIdx = e && b && ['text', 'table', 'image'].includes(b.type) ? i : -1;
+      render();
+      const ed = editor();
+      if (ed && caret != null) IE.setCaret(ed, caret);
+      if (e?.cell) (root!.querySelector(`.editing .cell[data-r="${e.cell[0]}"][data-c="${e.cell[1]}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
+    }
+    if (s.p0 !== undefined || s.p1 !== undefined) renderSettings(document.getElementById('props')!);
+    app.scheduleSave();
+    return true;
+  }
+  const undoKey = (e: KeyboardEvent) => {
+    const k = (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase();
+    if (k !== 'z' && k !== 'y') return false;
+    e.preventDefault();
+    app.undoDocument(k === 'z' && !e.shiftKey);
+    return true;
+  };
   function keepActive(fn: any) {
     const d = doc(), act = d.blocks[d.active];
     fn(d);
@@ -886,11 +951,380 @@ import { readPicture } from '../platform/images';
     else if (f === 'head') prefixLines(ta, val);
     else if (f.startsWith('al:')) {
       b.align = f.slice(3) === 'justify' ? undefined : f.slice(3);
-      root!.querySelectorAll('.editing [data-fmt^="al:"]').forEach((x) => x.classList.toggle('on', (x as HTMLElement).dataset.fmt === f));
+      root!.querySelectorAll<HTMLElement>('.doc-fmt [data-fal]').forEach((x) => x.classList.toggle('on', AL_NAME[x.dataset.v!] === f.slice(3)));
       changed(); ta.focus();
     } else if (f === 'size') { b.size = val === 'normalsize' ? undefined : val; changed(); ta.focus(); }
   }
 
+  const editingText = () => root!.querySelector('.blk-text.editing .blk-ed');
+  function textBarClick(el: Element) {
+    const ta = editingText(), ed = editor();
+    if (!ta && !ed) return;
+    const act = (f: string, v?: any) => (ed ? ieAction(f, v) : fmtAction(ta, f, v));
+    const al = el.closest<HTMLElement>('button[data-fal]');
+    if (al) { act('al:' + AL_NAME[al.dataset.v!]); return; }
+    // the colour buttons apply the last colour picked; their arrows open the app's colour picker, and the
+    // colour picked wraps the selection (as an xcolor name when it is one) when the picker closes
+    const fa = el.closest<HTMLElement>('button[data-fapply]');
+    if (fa) { const f = fa.dataset.fapply!; act(f, f === 'color' ? fmtColor : fmtHl); return; }
+    const fp = el.closest<HTMLElement>('button[data-fpick]');
+    if (fp) {
+      const f = fp.dataset.fpick!, main = fp.parentElement!.querySelector('[data-fapply]');
+      let picked: any = null;
+      const show = (v: any) => showSwatch(main, TD.texColor.swatch(v));
+      TD.openColorPicker(fp.parentElement, { value: TD.tikzColor(f === 'color' ? fmtColor : fmtHl),
+        onInput: (v: any) => { const x = TD.texColor.spec(TD.parseColor(v).hex); if (x) show(x); },
+        onChange: (v: any) => { picked = TD.texColor.spec(TD.parseColor(v).hex); if (picked) show(picked); },
+        onClose: () => { if (picked) act(f, picked); else { show(f === 'color' ? fmtColor : fmtHl); if (ed) ieRestore(); } } });
+      return;
+    }
+    const fb = el.closest<HTMLElement>('button[data-fmt]');
+    if (fb) act(fb.dataset.fmt!);
+  }
+
+  // ---------- editing a text block in place ----------
+  // The block is edited as it looks (src/application/doc-inline.ts turns its source into an editable view and
+  // back). Each change writes the source again, so saving, the preview and the LaTeX export are unchanged.
+  // The LaTeX source button on the toolbar switches to editing the source itself (the textarea above).
+  const editor = () => root!.querySelector<HTMLElement>('.blk-text.editing .blk-ie');
+  const ieOrig = new WeakMap<Element, string>();
+  let ieFor = -1; // the block the editor was set up for
+  let ieRange: Range | null = null; // the selection in the editor, kept while the toolbar or a dialog has the focus
+  let iePop: any = null;
+  const ieHtml = (b: any, ctx: any) => TD.math.synchronous(() => IE.editableHtml(b.text || '', ctx, IED)); // typed into: no progress to follow
+  // the section numbers the blocks above have used, so the editor numbers its headings as the page does
+  function secBefore(i: number) {
+    const P = TD.pageSize(doc().page), ctx = { sec: [0, 0, 0], numbered: !!P.numbered };
+    doc().blocks.slice(0, i).forEach((b: any) => {
+      if (b.type !== 'text') return;
+      String(b.text || '').split(/\$\$[\s\S]*?\$\$/).forEach((part) => part.split('\n').forEach((l) => { const h = l.replace(/\s+$/, '').match(HEAD_RE); if (h) heading(h[1].length, ctx.sec, ctx.numbered); }));
+    });
+    return ctx;
+  }
+  // Write the editor back to the block's source.
+  function ieSync(typing = false) {
+    const ed = editor(), b = doc().blocks[editingIdx];
+    if (!ed || !b) return;
+    const text = IE.serialise(ed, ieOrig);
+    ed.classList.toggle('empty', !text && !ed.querySelector('li, .dmath'));
+    if (!typing) H.cut(); // what is typed after Enter or a format is a step of its own
+    if (text !== (b.text || '')) {
+      b.text = text;
+      changed([editingIdx], { index: editingIdx, typing, caret: IE.caretOffset(ed) });
+      relayout();
+    }
+    ieState();
+  }
+  // Draw the editor again from the source (undo, paste), the caret at `caret`.
+  function ieRedraw(caret: number | null) {
+    const ed = editor(), b = doc().blocks[editingIdx];
+    if (!ed || !b) return;
+    ed.innerHTML = ieHtml(b, secBefore(editingIdx));
+    IE.recordOrig(ed, ieOrig);
+    ed.classList.toggle('empty', !b.text);
+    if (caret != null) IE.setCaret(ed, caret);
+    relayout(); ieState();
+  }
+  // Set up the editor after a render: its untouched content, the history, and the caret.
+  function ieMount(caret: number | null) {
+    const ed = editor();
+    if (!ed) { ieFor = -1; return; }
+    IE.recordOrig(ed, ieOrig);
+    ieFor = editingIdx;
+    ed.focus({ preventScroll: true });
+    if (caret != null) IE.setCaret(ed, caret); else IE.placeCaret(IE.lastPos(ed));
+    ieState();
+  }
+  // the caret where the pointer went down, when that is in the editor
+  function ieCaretAt(x: number, y: number) {
+    const ed = editor();
+    if (!ed) return;
+    const d = document as any;
+    let at: [Node, number] | null = null;
+    if (d.caretPositionFromPoint) { const p = d.caretPositionFromPoint(x, y); if (p) at = [p.offsetNode, p.offset]; }
+    else if (d.caretRangeFromPoint) { const r = d.caretRangeFromPoint(x, y); if (r) at = [r.startContainer, r.startOffset]; }
+    if (at && ed.contains(at[0]) && !(at[0].parentElement?.closest('[contenteditable="false"]'))) IE.placeCaret(at);
+  }
+  // put the kept selection back (a toolbar select or a dialog took the focus)
+  function ieRestore(): Range | null {
+    const ed = editor();
+    if (!ed) return null;
+    const sel = getSelection()!;
+    if (document.activeElement !== ed) ed.focus({ preventScroll: true });
+    if (ieRange && ed.contains(ieRange.startContainer) && (!sel.rangeCount || !ed.contains(sel.getRangeAt(0).startContainer))) { sel.removeAllRanges(); sel.addRange(ieRange); }
+    if (!sel.rangeCount || !ed.contains(sel.getRangeAt(0).startContainer)) IE.placeCaret(IE.lastPos(ed));
+    return sel.getRangeAt(0);
+  }
+  // the toolbar follows the caret: formats on, the block's kind
+  let ieStateFrame = 0;
+  function ieState() {
+    if (ieStateFrame) return;
+    ieStateFrame = requestAnimationFrame(() => {
+      ieStateFrame = 0;
+      const ed = editor(), sel = getSelection();
+      if (!ed || !sel || !sel.rangeCount || !ed.contains(sel.getRangeAt(0).startContainer)) return;
+      const r = sel.getRangeAt(0), on = IE.activeFormats(ed, r.startContainer), kind = IE.blockKind(IE.blockOf(r.startContainer, ed));
+      const set = (f: string, v: boolean) => { const x = root!.querySelector(`.doc-fmt [data-fmt="${f}"]`); if (x) { x.classList.toggle('on', v); x.setAttribute('aria-pressed', String(v)); } };
+      set('b', on.has('textbf')); set('i', on.has('textit') || on.has('emph')); set('u', on.has('underline') || on.has('uline')); set('s', on.has('sout'));
+      set('ul', kind === 'ul'); set('ol', kind === 'ol'); set('chk', kind === 'chk');
+      const head = root!.querySelector<HTMLSelectElement>('.doc-fmt [data-fmt="head"]');
+      if (head) head.value = /^#+$/.test(kind) ? kind : '';
+    });
+  }
+  document.addEventListener('selectionchange', () => {
+    const ed = editor(), sel = getSelection();
+    if (!ed || !sel || !sel.rangeCount || !ed.contains(sel.getRangeAt(0).startContainer)) return;
+    ieRange = sel.getRangeAt(0).cloneRange();
+    ieState();
+  });
+  const chipFrom = (html: string) => { const t = document.createElement('template'); t.innerHTML = html; return t.content.firstChild as HTMLElement; };
+  // put a node where the selection is, the caret after it
+  function ieInsert(r: Range, node: Node) {
+    r.deleteContents(); r.insertNode(node);
+    const after = document.createRange(); after.setStartAfter(node); after.collapse(true);
+    const sel = getSelection()!; sel.removeAllRanges(); sel.addRange(after);
+  }
+  // A formula: edited in the user's input mode (LaTeX or MathLive), in a box under it.
+  function ieEditChip(chip: HTMLElement) {
+    const ed = editor();
+    if (!ed || iePop) return;
+    let host = document.getElementById('docPop');
+    if (!host) { host = document.createElement('div'); host.id = 'docPop'; document.body.appendChild(host); }
+    const display = chip.classList.contains('ie-d');
+    let tex = chip.dataset.tex || '';
+    chip.classList.add('on');
+    iePop = TD.input.popup(host, {
+      text: tex, math: true,
+      at: () => { const r = chip.getBoundingClientRect(); return [r.left + r.width / 2, r.bottom + 6]; },
+      onInput: (v: string) => {
+        tex = v; chip.dataset.tex = v;
+        chip.innerHTML = v.trim() ? IED.katex(v, display) : display ? '<span class="ie-empty">$$</span>' : '';
+        ieSync(true); iePop?.place();
+      },
+      onDone: () => {
+        iePop = null;
+        chip.classList.remove('on');
+        if (!chip.isConnected || editor() !== ed) return;
+        ed.focus({ preventScroll: true });
+        if (!tex.trim()) { const r = document.createRange(); r.setStartBefore(chip); r.collapse(true); chip.remove(); IE.placeCaret([r.startContainer, r.startOffset]); }
+        else if (display) { const n = chip.nextElementSibling; if (n && !n.classList.contains('dmath')) IE.placeCaret(IE.firstPos(n)); else { const p = document.createElement('p'); p.innerHTML = '<br>'; chip.after(p); IE.placeCaret([p, 0]); } }
+        else { const r = document.createRange(); r.setStartAfter(chip); r.collapse(true); IE.placeCaret([r.startContainer, r.startOffset]); }
+        ieSync();
+      },
+    });
+  }
+  // a command shown as it is written (\LaTeX, or one with no editing form): its source, in a dialog
+  async function ieEditRaw(chip: HTMLElement) {
+    const v = await TD.prompt(t('doc.ie.raw', 'LaTeX'), chip.dataset.src || '', { ok: t('doc.ie.apply', 'Apply') });
+    const ed = editor();
+    if (typeof v !== 'string' || !ed || !chip.isConnected) return;
+    ed.focus({ preventScroll: true });
+    if (!v.trim()) chip.remove();
+    else {
+      const b = doc().blocks[editingIdx];
+      const mark = '', tmp = document.createElement('span');
+      chip.replaceWith(tmp); tmp.className = 'ie-raw'; tmp.dataset.src = v + mark;
+      ieRedrawAtMark(b, mark);
+      return;
+    }
+    ieSync();
+  }
+  // Source with a marker in it: drawn again, the marker taken out and the caret put where it was.
+  function ieRedrawAtMark(b: any, mark: string) {
+    const ed = editor();
+    if (!ed) return;
+    b.text = IE.serialise(ed, ieOrig);
+    ed.innerHTML = ieHtml(b, secBefore(editingIdx));
+    const w = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT);
+    let at: [Node, number] | null = null;
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (n.parentElement?.closest('[contenteditable="false"]')) continue;
+      const k = n.nodeValue!.indexOf(mark);
+      if (k >= 0) { n.nodeValue = n.nodeValue!.split(mark).join(''); if (!at) at = [n, k]; }
+    }
+    // the marker in a block's source, or inside a formula or a command (drawn again without it)
+    ed.querySelectorAll<HTMLElement>('[data-tex*=""], [data-src*=""]').forEach((e) => {
+      if (e.dataset.src) e.dataset.src = e.dataset.src.split(mark).join('');
+      const chip = e.getAttribute('contenteditable') === 'false';
+      if (!chip) return;
+      if (e.dataset.tex !== undefined) { e.dataset.tex = e.dataset.tex.split(mark).join(''); e.innerHTML = IED.katex(e.dataset.tex, e.classList.contains('ie-d')); }
+      else if (e.querySelector('.ie-src')) e.querySelector('.ie-src')!.textContent = e.dataset.src || '';
+      if (!at) { const r = document.createRange(); r.setStartAfter(e); at = [r.startContainer, r.startOffset]; }
+    });
+    b.text = String(b.text).split(mark).join('');
+    IE.recordOrig(ed, ieOrig);
+    ed.classList.toggle('empty', !b.text);
+    if (at) IE.placeCaret(at); else IE.placeCaret(IE.lastPos(ed));
+    changed([editingIdx], { index: editingIdx, caret: IE.caretOffset(ed) });
+    relayout(); ieState();
+  }
+  // Paste: the text is read as source (what copying from the editor gives), where the caret is.
+  function iePaste(text: string) {
+    const ed = editor(), b = doc().blocks[editingIdx];
+    if (!ed || !b) return;
+    const r = ieRestore();
+    if (!r) return;
+    const mark = '', tmp = document.createElement('span');
+    tmp.className = 'ie-raw'; tmp.dataset.src = text.replace(/\r\n?/g, '\n') + mark;
+    ieInsert(r, tmp);
+    ieRedrawAtMark(b, mark);
+  }
+  // the selection as source, for the clipboard
+  function ieCopy(e: ClipboardEvent, cut: boolean) {
+    const sel = getSelection(), ed = editor();
+    if (!sel || !sel.rangeCount || !ed || sel.isCollapsed) return;
+    const r = sel.getRangeAt(0), box = document.createElement('div');
+    box.appendChild(r.cloneContents());
+    // only part of one block: its text, without making a paragraph of it
+    const src = IE.serialise(box, new WeakMap());
+    e.preventDefault();
+    e.clipboardData!.setData('text/plain', src);
+    e.clipboardData!.setData('text/html', box.innerHTML);
+    if (cut) { r.deleteContents(); ieSync(); }
+  }
+  // Typed formulas: $x$ becomes a formula as the closing $ is typed; $$ on an empty line, displayed maths.
+  function ieTyped(e: InputEvent) {
+    const ed = editor(), sel = getSelection();
+    if (!ed || !sel || !sel.rangeCount || e.data !== '$') return;
+    const r = sel.getRangeAt(0), n = r.startContainer;
+    if (n.nodeType !== 3) return;
+    const before = n.nodeValue!.slice(0, r.startOffset);
+    const blk = IE.blockOf(n, ed);
+    if (before === '$$' && blk && blk.tagName === 'P' && (blk.textContent || '') === '$$') {
+      const chip = chipFrom(IE.displayChip('', IED));
+      blk.replaceWith(chip);
+      ieSync();
+      ieEditChip(chip);
+      return;
+    }
+    const m = /(^|[^\\$])\$([^$\s](?:[^$]*[^$\s\\])?)\$$/.exec(before);
+    if (!m) return;
+    const start = r.startOffset - (m[0].length - m[1].length);
+    const span = document.createRange(); span.setStart(n, start); span.setEnd(n, r.startOffset);
+    ieInsert(span, chipFrom(IE.mathChip(m[2], IED)));
+    ieSync();
+  }
+  // Markdown at the start of a paragraph: "# " a section, "- " a list, "1. " numbered, "[ ] " a checklist.
+  function ieShortcut(ed: HTMLElement): boolean {
+    const sel = getSelection()!, r = sel.getRangeAt(0);
+    if (!r.collapsed) return false;
+    const blk = IE.blockOf(r.startContainer, ed);
+    if (!blk || !(blk.tagName === 'P' || blk.tagName === 'LI')) return false;
+    const pre = document.createRange(), [n0, o0] = IE.firstPos(blk);
+    pre.setStart(n0, o0);
+    try { pre.setEnd(r.startContainer, r.startOffset); } catch { return false; }
+    const s = pre.toString();
+    const kind = blk.tagName === 'LI' ? (/^\[[ xX]?\]$/.test(s) ? 'chk' : '') : ({ '#': '#', '##': '##', '###': '###', '-': 'ul', '*': 'ul', '1.': 'ol', '1)': 'ol', '[]': 'chk', '[ ]': 'chk', '-[ ]': 'chk', '[x]': 'chk' } as Record<string, string>)[s] || '';
+    if (!kind) return false;
+    pre.deleteContents();
+    const [nb] = IE.setKind(ed, [blk], kind);
+    if (nb && /x/i.test(s)) nb.querySelector(':scope > .cbx')?.classList.add('on');
+    if (nb) IE.placeCaret(IE.firstPos(nb));
+    ieSync();
+    return true;
+  }
+  function ieKey(e: KeyboardEvent, ed: HTMLElement) {
+    if (e.isComposing) return;
+    const mod = (e.metaKey || e.ctrlKey) && !e.altKey, k = e.key.toLowerCase();
+    if (e.key === 'Escape') { const was = editingIdx; editingIdx = -1; renderKeep(was, true); return; }
+    if (mod && (k === 'b' || k === 'i' || k === 'u')) { e.preventDefault(); ieAction(k); return; }
+    if (undoKey(e)) return;
+    const sel = getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const r = sel.getRangeAt(0), blk = IE.blockOf(r.startContainer, ed);
+    if (e.key === 'Enter' && !mod) {
+      e.preventDefault();
+      if (e.shiftKey) {
+        // a line break inside the paragraph (\\)
+        const br = document.createElement('br');
+        ieInsert(r, br);
+        if (!br.nextSibling || (br.nextSibling.nodeType === 3 && !br.nextSibling.nodeValue && !br.nextSibling.nextSibling)) br.after(document.createElement('br'));
+      } else IE.splitBlock(ed);
+      ieSync();
+      return;
+    }
+    if (e.key === 'Tab' && blk && blk.tagName === 'LI') {
+      e.preventDefault();
+      const off = IE.caretOffset(ed);
+      if (e.shiftKey) IE.outdent(blk, ed, false); else IE.indent(blk);
+      if (off != null) IE.setCaret(ed, off);
+      ieSync();
+      return;
+    }
+    if (e.key === 'Backspace' && r.collapsed && blk && IE.atLineStart(blk, r)) {
+      // the start of an item or a heading: back to a paragraph (an item one level at a time)
+      if (blk.tagName === 'LI') { e.preventDefault(); IE.outdent(blk, ed, true); ieSync(); return; }
+      if (/^H[2-4]$/.test(blk.tagName)) { e.preventDefault(); const [p] = IE.setKind(ed, [blk], 'p'); if (p) IE.placeCaret(IE.firstPos(p)); ieSync(); return; }
+      const prev = blk.previousElementSibling as HTMLElement | null;
+      if (prev && prev.classList.contains('dmath')) { e.preventDefault(); prev.remove(); ieSync(); return; }
+    }
+    if (e.key === ' ' && !mod && ieShortcut(ed)) e.preventDefault();
+  }
+  // What the toolbar does to the editor (the source mode uses fmtAction).
+  const IE_TAG: Record<string, [string, string]> = { b: ['textbf', 'b'], i: ['textit', 'i'], u: ['underline', 'u'], s: ['sout', 's'] };
+  function colourAttrs(f: string, val: string): [Record<string, string>, string] {
+    const rgb = /^rgb/.test(val), hex = rgb && TD.tikzColor(val);
+    const attrs: Record<string, string> = rgb && hex ? { 'data-opt': 'HTML', 'data-arg': hexOf(hex) } : { 'data-arg': val };
+    const css = colorCss(attrs['data-opt'], attrs['data-arg']);
+    if (f === 'hl') attrs.class = 'cbox';
+    return [attrs, f === 'color' ? `color:${css}` : `background:${css}`];
+  }
+  function ieAction(f: string, val?: any) {
+    const ed = editor(), b = doc().blocks[editingIdx];
+    if (!ed || !b) return;
+    if (f.startsWith('al:')) {
+      b.align = f.slice(3) === 'justify' ? undefined : f.slice(3);
+      ed.style.textAlign = f.slice(3);
+      root!.querySelectorAll<HTMLElement>('.doc-fmt [data-fal]').forEach((x) => x.classList.toggle('on', AL_NAME[x.dataset.v!] === f.slice(3)));
+      changed([editingIdx]); ieRestore(); return;
+    }
+    if (f === 'size') { b.size = val === 'normalsize' ? undefined : val; ed.style.fontSize = val === 'normalsize' ? '' : SIZE_EM[val] + 'em'; changed([editingIdx]); relayout(); ieRestore(); return; }
+    if (f === 'src') { setSrcMode(true); return; }
+    const r = ieRestore();
+    if (!r) return;
+    if (IE_TAG[f]) IE.toggleFormat(ed, IE_TAG[f][0], IE_TAG[f][1]);
+    else if (f === 'color' || f === 'hl') {
+      if (f === 'color') fmtColor = val; else fmtHl = val;
+      const [attrs, style] = colourAttrs(f, val);
+      IE.toggleFormat(ed, f === 'color' ? 'textcolor' : 'colorbox', 'span', attrs, style, true);
+    } else if (f === 'math') {
+      const tex = r.collapsed ? '' : r.toString().trim();
+      const chip = chipFrom(IE.mathChip(tex, IED));
+      if (!tex) chip.innerHTML = '';
+      ieInsert(r, chip);
+      ieSync();
+      if (!tex) ieEditChip(chip);
+      return;
+    } else if (f === 'link') {
+      const keep = r.cloneRange(), sel = r.toString();
+      TD.prompt(t('doc.link.title', 'Link Address'), /^https?:\/\//.test(sel) ? sel : 'https://', { ok: t('doc.link.ok', 'Add Link') }).then((url: any) => {
+        if (!editor()) return;
+        ieRange = keep;
+        const r2 = ieRestore();
+        if (!r2 || !url || url === 'https://') return;
+        if (!sel || sel === url) {
+          const a = chipFrom(`<a data-cmd="url" class="tt" href="${esc(safeUrl(url))}">${esc(url)}</a>`);
+          ieInsert(r2, a);
+        } else IE.toggleFormat(ed, 'href', 'a', { 'data-arg': url, href: safeUrl(url) }, '', true);
+        ieSync();
+      });
+      return;
+    } else if (f === 'ul' || f === 'ol' || f === 'chk' || f === 'head') {
+      const kind = f === 'head' ? val || 'p' : f;
+      const blocks = IE.selectedBlocks(ed, r);
+      const off = IE.caretOffset(ed);
+      const all = f !== 'head' && blocks.length && blocks.every((x) => IE.blockKind(x) === kind);
+      const made = IE.setKind(ed, blocks, all ? 'p' : kind);
+      if (made.length === 1 && r.collapsed) IE.placeCaret(IE.lastPos(made[0]));
+      else if (off != null) IE.setCaret(ed, off);
+    }
+    ieSync();
+  }
+  function setSrcMode(on: boolean) {
+    srcMode = on;
+    try { localStorage.setItem('diagramtex.docSource', on ? '1' : ''); } catch { /* private window */ }
+    render();
+  }
   function addImage(at: any, replaceIdx?: any) {
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/gif,image/svg+xml,image/webp';
@@ -909,8 +1343,31 @@ import { readPicture } from '../platform/images';
 
   root!.addEventListener('mousedown', (e) => {
     // toolbar buttons must not take focus from the text being edited
-    if ((e.target! as Element).closest('.fmt-bar button')) e.preventDefault();
+    const tg = e.target as Element;
+    if (tg.closest('.fmt-bar button, .doc-fmt button')) e.preventDefault();
+    // in the editor: a checkbox ticks, a formula or a command opens for editing
+    const ed = editor();
+    if (!ed || !ed.contains(tg) || e.button !== 0) return;
+    const cbx = tg.closest('.cbx');
+    if (cbx) { e.preventDefault(); cbx.classList.toggle('on'); ieSync(); return; }
+    const chip = tg.closest<HTMLElement>('.ie-m, .ie-d, .ie-raw');
+    if (chip) { e.preventDefault(); if (chip.classList.contains('ie-raw')) ieEditRaw(chip); else ieEditChip(chip); }
   });
+  root!.addEventListener('beforeinput', (e) => {
+    if (!(e.target as Element).classList?.contains('blk-ie')) return;
+    const ed = e.target as HTMLElement, type = e.inputType;
+    if (type === 'historyUndo' || type === 'historyRedo') { e.preventDefault(); app.undoDocument(type === 'historyUndo'); }
+    else if (type === 'insertParagraph') { e.preventDefault(); IE.splitBlock(ed); ieSync(); }
+    else if (type === 'insertFromDrop' || type === 'deleteByDrag') e.preventDefault();
+  });
+  root!.addEventListener('paste', (e) => {
+    if (!(e.target as Element).closest?.('.blk-ie')) return;
+    e.preventDefault();
+    const text = e.clipboardData?.getData('text/plain');
+    if (text) iePaste(text);
+  });
+  root!.addEventListener('copy', (e) => { if ((e.target as Element).closest?.('.blk-ie')) ieCopy(e, false); });
+  root!.addEventListener('cut', (e) => { if ((e.target as Element).closest?.('.blk-ie')) ieCopy(e, true); });
   root!.addEventListener('click', (e) => {
     const zb = (e.target! as Element).closest('[data-zoom]');
     if (zb) {
@@ -930,6 +1387,10 @@ import { readPicture } from '../platform/images';
       changed(); render();
       if (kind === 'table') (root!.querySelector('.editing .cell') as HTMLElement)?.focus();
       return;
+    }
+    if ((e.target! as Element).closest('.doc-fmt')) {
+      if ((e.target as Element).closest('button[data-fmt="src"]')) { if (editingIdx >= 0) setSrcMode(!srcMode); return; }
+      textBarClick(e.target as Element); return;
     }
     const blk = (e.target! as Element).closest('.blk');
     if (!blk) return;
@@ -957,19 +1418,6 @@ import { readPicture } from '../platform/images';
       return;
     }
     if ((e.target! as Element).closest('a[href]') && editingIdx !== i) return; // follow links in the preview
-    const fp = (e.target! as Element).closest('button[data-fpick]');
-    if (fp) {
-      // the shared picker with xcolor's names; the chosen colour wraps the selection when the picker closes
-      const f = (fp as HTMLElement).dataset.fpick, ta = blk.querySelector('.blk-ed'), glyph = fp.querySelector('.glyph');
-      let picked: any = null;
-      const show = (v: any) => { const c = TD.texColor.swatch(v); if (f === 'color') (glyph! as any).style.borderBottomColor = c; else (glyph! as any).style.background = c; };
-      TD.openColorPicker(fp, { value: TD.tikzColor(f === 'color' ? fmtColor : fmtHl), tex: true,
-        onInput: (v: any) => show(TD.texColor.spec(v)), onChange: (v: any) => { picked = TD.texColor.spec(v); show(picked); },
-        onClose: () => { if (picked) fmtAction(ta, f, picked); } });
-      return;
-    }
-    const fb = (e.target! as Element).closest('[data-fmt]');
-    if (fb && fb.tagName === 'BUTTON') { fmtAction(blk.querySelector('.blk-ed'), (fb as HTMLElement).dataset.fmt); return; }
     const tb = (e.target! as Element).closest('button[data-tb]');
     if (tb) {
       const R = b.rows, nc = Math.max(1, ...R.map((r: any) => r.length));
@@ -991,17 +1439,35 @@ import { readPicture } from '../platform/images';
     if (['text', 'table', 'image'].includes(b.type) && editingIdx !== i) { const was = editingIdx; editingIdx = i; renderKeep(was); }
   });
   root!.addEventListener('change', (e) => {
-    const t = e.target, blk = (t! as Element).closest('.blk');
+    const t = e.target;
+    if ((t as Element).closest('.doc-fmt')) {
+      const f = (t as HTMLElement).dataset.fmt;
+      if (f && editor()) ieAction(f, (t as HTMLSelectElement).value);
+      else if (f) { fmtAction(editingText(), f, (t as HTMLSelectElement).value); if (f === 'head') (t as HTMLSelectElement).value = ''; }
+      return;
+    }
+    const blk = (t! as Element).closest('.blk');
     if (!blk) return;
     const b = doc().blocks[+(blk as HTMLElement).dataset.i!];
-    if ((t! as HTMLElement).dataset.fmt) { fmtAction(blk.querySelector('.blk-ed'), (t! as HTMLElement).dataset.fmt, (t! as HTMLInputElement).value); if ((t! as HTMLElement).dataset.fmt === 'head') (t! as HTMLInputElement).value = ''; return; }
     if ((t! as HTMLElement).dataset.tb) { b[((t! as HTMLElement).dataset.tb as any)] = (t! as any).type === 'checkbox' ? (t! as HTMLInputElement).checked : (t! as HTMLInputElement).value; changed(); render(); return; }
-    if ((t! as HTMLElement).dataset.im === 'caption') { b.caption = (t! as HTMLInputElement).value; changed(); }
+    if ((t! as HTMLElement).dataset.im === 'caption') { b.caption = (t! as HTMLInputElement).value; changed([editingIdx]); }
   });
   root!.addEventListener('dblclick', (e) => {
+    if ((e.target as Element).closest('.doc-title')) { renameFromTitle(); return; }
     const blk = (e.target! as Element).closest('.blk-diag');
     if (blk && !(e.target! as Element).closest('.blk-tools')) openDiagram(+(blk as HTMLElement).dataset.i!);
   });
+  // The title shows the file's name, so double-clicking it renames the file (keeping its folder).
+  async function renameFromTitle() {
+    const old = leafName(doc().name);
+    const v = await TD.prompt(t('doc.title.rename', 'Rename File'), old, {
+      message: t('doc.title.renameHint', "The title is the file's name. Put maths between $ signs, as in $x^2$."),
+      ok: t('ui.rename', 'Rename'), placeholder: 'Untitled',
+      preview: (value: string) => TD.math.synchronous(() => titleHtml(value.trim() || 'Untitled')), // a dialog doesn't follow maths progress
+    });
+    const name = typeof v === 'string' ? v.trim() : '';
+    if (name && name !== old) app.renameOpen(name);
+  }
   function openDiagram(i: any) {
     app.setActiveBlock(i);
     app.setMode('diagram');
@@ -1011,21 +1477,23 @@ import { readPicture } from '../platform/images';
   root!.addEventListener('input', (e) => {
     const t = e.target, b = doc().blocks[editingIdx];
     if (!b) return;
-    if ((t! as Element).classList.contains('blk-ed')) { b.text = (t! as HTMLInputElement).value; autosize(t); changed(); relayout(); return; }
-    if ((t! as Element).classList.contains('cell')) { const r = +(t! as HTMLElement).dataset.r!, c = +(t! as HTMLElement).dataset.c!; while (b.rows[r].length <= c) b.rows[r].push(''); b.rows[r][c] = (t! as HTMLInputElement).value; changed(); return; }
+    if ((t! as Element).classList.contains('blk-ed')) { b.text = (t! as HTMLInputElement).value; autosize(t); changed([editingIdx], { index: editingIdx, typing: true }); relayout(); return; }
+    if ((t! as Element).classList.contains('blk-ie')) { ieSync(true); if ((e as InputEvent).inputType === 'insertText') ieTyped(e as InputEvent); return; }
+    if ((t! as Element).classList.contains('cell')) { const r = +(t! as HTMLElement).dataset.r!, c = +(t! as HTMLElement).dataset.c!; while (b.rows[r].length <= c) b.rows[r].push(''); b.rows[r][c] = (t! as HTMLInputElement).value; changed([editingIdx], { index: editingIdx, typing: true, cell: [r, c] }); return; }
     if ((t! as HTMLElement).dataset.im === 'width') {
       b.width = +(t! as HTMLInputElement).value;
       const img = ((t! as Element).closest('.blk'))!.querySelector('img');
       if (img) img.style.width = b.width * 100 + '%';
       (t! as HTMLElement).nextElementSibling!.textContent = Math.round(b.width * 100) + '%';
-      changed(); relayout();
+      changed([editingIdx], { index: editingIdx, typing: true }); relayout();
     }
   });
   // Leaving the block being edited (by mouse or keyboard) shows its rendered form again.
   function leaveIfOutside(el: any) {
     if (editingIdx < 0) return;
     const cur = root!.querySelector('.blk.editing');
-    if (cur && el && cur.contains(el)) return;
+    // the toolbar, a formula's box, the colour picker, a menu or a dialog work on the block being edited
+    if (cur && el && (cur.contains(el) || (el.closest && el.closest('.doc-fmt, #docPop, .cp, .selmenu, .td-dialog')))) return;
     // pressing on another text / table / image block opens that one straight away
     const nb = el && el.closest && !el.closest('.blk-tools, .cbx, a[href]') && el.closest('.blk-text, .blk-table, .blk-image');
     const was = editingIdx;
@@ -1033,17 +1501,19 @@ import { readPicture } from '../platform/images';
     renderKeep(was);
   }
   root!.addEventListener('focusout', (e) => {
-    if (!(e.target! as Element).closest('.blk.editing')) return;
+    if (!(e.target! as Element).closest('.blk.editing, .doc-fmt')) return;
     setTimeout(() => { if (document.activeElement && document.activeElement !== document.body) leaveIfOutside(document.activeElement); }, 0);
   });
   document.addEventListener('pointerdown', (e) => {
     if (editingIdx < 0 || app.state.mode !== 'document') return;
-    if ((e.target! as Element).closest('.blk.editing') || (e.target! as Element).closest('.tc-pop, .texcomplete, .ddpop, .td-dialog')) return;
+    if ((e.target! as Element).closest('.blk.editing, .doc-fmt') || (e.target! as Element).closest('.tc-pop, .texcomplete, .ddpop, .td-dialog, #docPop, .cp, .selmenu')) return;
     if (!root!.contains((e.target as Node)) && !(e.target! as Element).closest('#docview')) return;
     setTimeout(() => leaveIfOutside((e.target! as HTMLElement).isConnected ? e.target : null), 0);
   }, true);
   root!.addEventListener('keydown', (e) => {
     const t = e.target;
+    if ((t! as Element).classList.contains('blk-ie')) { ieKey(e, t as HTMLElement); return; }
+    if ((t! as Element).classList.contains('blk-ed') || (t! as Element).classList.contains('cell')) { if (undoKey(e)) return; }
     if ((t! as Element).classList.contains('blk-ed')) {
       if (e.key === 'Escape') { const was = editingIdx; editingIdx = -1; renderKeep(was, true); return; }
       const k = (e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase();
@@ -1144,7 +1614,7 @@ ${box.innerHTML}
 `;
   };
 
-  TD.docview = { scrollToDiagram, render, renderProgress, beginEngineChange, cancelProgress, updateTitle, renderSettings, textToHtml, textToLatex, inl };
+  TD.docview = { applyUndo, canUndo: () => H.owns(doc()) && H.lastDone() > 0, canRedo: () => H.owns(doc()) && H.lastUndone() > 0, lastDone: () => (H.owns(doc()) ? H.lastDone() : 0), lastUndone: () => (H.owns(doc()) ? H.lastUndone() : 0), changed, scrollToDiagram, render, renderProgress, beginEngineChange, cancelProgress, updateTitle, renderSettings, textToHtml, textToLatex, inl };
   // the page's editing chrome follows the interface language
   let firstLocale = true;
   onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (app.state.mode === 'document') render(); });

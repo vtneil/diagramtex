@@ -10,6 +10,7 @@ import QceditorFrame from '../ui/editors/QceditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { GRID_ICON_PATHS } from '../ui/grid-icons';
+import { patchSvg } from '../ui/svg-patch';
 // Quantum circuit editor: the overlay that opens on a Quantum block. A palette of quantikz elements,
 // the circuit drawn by the canvas renderer over a grid of cells (wires × steps) where elements are
 // dropped, moved and linked, the selected cell's properties, and beside them the quantikz code, live
@@ -269,7 +270,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const QI = GRID_ICON_PATHS; // src/ui/grid-icons.ts, shared with the Table
   const qic = (k: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${QI[k]}</svg>`;
-  mountFrame(root, QceditorFrame, { p0: qic('below'), p1: qic('after'), p2: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, QceditorFrame, { p0: qic('below'), p1: qic('after'), p2: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -676,7 +677,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
       out += `<g class="qe-ghost" transform="translate(${gx + 12},${gy + 12})">${preview}</g>`;
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
     svg.classList.toggle('placing', !!E.arm);
   }
 
@@ -693,7 +694,7 @@ import { GRID_ICON_PATHS } from '../ui/grid-icons';
   // ---------------------------------------------------------------- pointer
   svg.addEventListener('pointerdown', (e: any) => {
     if (!E || (e.button !== 0 && e.button !== 1)) return;
-    // a double-click is detected here: redraws between the clicks swap the target, so no native dblclick arrives
+    // a double-click is detected here: a redraw between the clicks may replace the target, so a native dblclick can't be relied on
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const [sx, sy] = pos(e);

@@ -5,7 +5,7 @@ import { labelImage } from '../label-image';
 // own text renderer (KaTeX maths), so the preview, the SVG and the PNG are one picture.
 import type { TableModel, TCell } from './model';
 import { nRows, nCols, owners, stripeOf, isBold, alignOf, thickPt, lenPt } from './model';
-import { parseNum, format, texParts, unitTex } from './numbers';
+import { parseNum, format, texParts, unitTex, numStyle } from './numbers';
 import { envRanges } from './latex';
 import { runtime as TD } from '../../runtime';
 
@@ -21,7 +21,7 @@ export interface CellBox {
   text: string; st: Record<string, any>;
   tw: number; th: number;
   /** numbers: the two halves at the decimal marker */
-  num?: { left: string; right: string; lw: number; rw: number };
+  num?: { left: string; right: string; exp: string; lw: number; rw: number; ew: number };
 }
 export interface Layout {
   w: number; h: number;
@@ -70,7 +70,9 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
   const anchors: CellBox[] = [];
   const natural = new Array(nc).fill(0);
   // numbers per column: widths of the halves
-  const numL = new Array(nc).fill(0), numR = new Array(nc).fill(0);
+  // the parts siunitx lines up: integer, decimals, the power of ten
+  const numL = new Array(nc).fill(0), numR = new Array(nc).fill(0), numE = new Array(nc).fill(0);
+  const numSt = m.cols.map((col) => (col.num ? numStyle(col.num) : undefined));
   for (let r = 0; r < nr; r++) for (let c = 0; c < nc; c++) {
     if (own[r][c][0] !== r || own[r][c][1] !== c) continue;
     const x = m.cells[r][c], rs = x.rs || 1, cs = x.cs || 1, st: any = styleOf(m, r, x);
@@ -78,11 +80,13 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
     const box: CellBox = { r, c, rs, cs, x: 0, y: 0, w: 0, h: 0, text: '', st, tw: 0, th: 0 };
     const n = col.num && r >= m.head && cs === 1 ? parseNum(x.t) : null;
     if (n) {
-      const [a, b] = texParts(format(n, col.num), col.num!.unc || 'paren');
-      const L = TD.textBox(`$${a}$`, st), R = b ? TD.textBox(`$\\vphantom{1}{}${b}$`, st) : { w: 0, h: L.h };
-      box.num = { left: `$${a}$`, right: b ? `$${b}$` : '', lw: a ? L.w - 2 : 0, rw: b ? R.w - 2 : 0 };
-      box.tw = box.num.lw + box.num.rw; box.th = Math.max(L.h, R.h);
-      numL[c] = Math.max(numL[c], box.num.lw); numR[c] = Math.max(numR[c], box.num.rw);
+      const [a, ab] = texParts(format(n, col.num), col.num!.unc || 'paren', numSt[c]);
+      const at = ab.indexOf(numSt[c]!.prod + ' 10^'), b = at < 0 ? ab : ab.slice(0, at), e = at < 0 ? '' : ab.slice(at);
+      // {} before the product: spaced as a binary operator, as siunitx sets it, even after a whole number
+      const L = TD.textBox(`$${a}$`, st), R = b ? TD.textBox(`$\\vphantom{1}{}${b}$`, st) : { w: 0, h: L.h }, E = e ? TD.textBox(`$\\vphantom{1}{}${e}$`, st) : { w: 0, h: L.h };
+      box.num = { left: `$${a}$`, right: b ? `$${b}$` : '', exp: e ? `$\\vphantom{1}{}${e}$` : '', lw: a ? L.w - 2 : 0, rw: b ? R.w - 2 : 0, ew: e ? E.w - 2 : 0 };
+      box.tw = box.num.lw + box.num.rw + box.num.ew; box.th = Math.max(L.h, R.h, E.h);
+      numL[c] = Math.max(numL[c], box.num.lw); numR[c] = Math.max(numR[c], box.num.rw); numE[c] = Math.max(numE[c], box.num.ew);
     } else {
       box.text = decorate(shownText(m, r, c, x), x);
       if (cs === 1 && col.w > 0) st.tw = col.w * TD.PX_PER_CM;
@@ -97,7 +101,7 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
   }
   // column widths: fixed, the widest cell, or the room left (tabularx)
   const widths = m.cols.map((col, c) => {
-    if (col.num) return Math.max(natural[c], numL[c] + numR[c]);
+    if (col.num) return Math.max(natural[c], numL[c] + numR[c] + numE[c]);
     if (col.w > 0) return col.w * TD.PX_PER_CM;
     return natural[c];
   });
@@ -172,7 +176,7 @@ export function layout(m: TableModel, o: { textWidthCm?: number } = {}): Layout 
     b.h = rowY[b.r + b.rs - 1] + heights[b.r + b.rs - 1] - b.y;
   }
   // numbers: the column's halves aligned
-  for (const b of anchors) if (b.num) { (b as any).numL = numL[b.c]; (b as any).numR = numR[b.c]; }
+  for (const b of anchors) if (b.num) { (b as any).numL = numL[b.c]; (b as any).numR = numR[b.c]; (b as any).numE = numE[b.c]; }
   return { w: W, h: H, colX, rowY, rowH: heights, cells: anchors, pad: padX, caption, tableY };
 }
 
@@ -234,16 +238,20 @@ export function draw(m: TableModel, ctx: { export?: boolean } = {}): { svg: stri
   for (const b of L.cells) {
     const x = m.cells[b.r][b.c];
     const color = x.fg || '#000000';
-    const al = alignOf(m, b.c, x);
+    // text in an S column is centred, as siunitx sets it (table-text-alignment), unless the cell has its own
+    const al = m.cols[b.c].num && !x.al ? 'c' : alignOf(m, b.c, x);
     const inner = { x: b.x + padX, w: b.w - 2 * padX };
     // vertical place: single rows sit on the strut's baseline area (top), merges centre (\multirow), or as set
     const va = x.va || (b.rs > 1 ? 'm' : 't');
     const top = va === 'm' ? b.y + (b.h - b.th) / 2 : va === 'b' ? b.y + b.h - b.th - pt(1) : b.y + Math.max(pt(1), (Math.min(b.h, (TD.sizePx(m.size) * 1.2 * m.stretch)) - b.th) / 2);
     if (b.num) {
-      const NL = (b as any).numL as number, NR = (b as any).numR as number;
-      const cx0 = inner.x + (inner.w - NL - NR) / 2 + NL; // the decimal marker
+      const NL = (b as any).numL as number, NR = (b as any).numR as number, NE = (b as any).numE as number;
+      // the decimal marker: the numbers' block centred in the column, or at its left or right (table-number-alignment)
+      const pos = m.cols[b.c].num?.pos, room = inner.w - NL - NR - NE;
+      const cx0 = inner.x + (pos === 'l' ? 0 : pos === 'r' ? room : room / 2) + NL;
       out.push(fo(b.num.left, b.st, color, cx0 - b.num.lw - 1, top, b.num.lw + 2, b.th, ctx, 'right'));
       if (b.num.right) out.push(fo(b.num.right, b.st, color, cx0 - 1, top, b.num.rw + 2, b.th, ctx, 'left'));
+      if (b.num.exp) out.push(fo(b.num.exp, b.st, color, cx0 + NR - 1, top, b.num.ew + 2, b.th, ctx, 'left'));
       continue;
     }
     if (!b.text.trim()) continue;
@@ -260,10 +268,13 @@ function fo(text: string, st: any, color: string, x: number, y: number, w: numbe
   const ns = ctx.export ? ' xmlns="http://www.w3.org/1999/xhtml"' : '';
   const html = ctx.export ? TD.math.forXml(b.html) : b.html;
   if (/<math\b|class="td-math/.test(b.html)) {
+    if (TD.measuring?.()) return ''; // this pass is drawn again with real sizes: a picture now is wasted
     const width = r2(Math.max(w, b.w)), height = r2(Math.max(h, b.h));
-    const pending = TD.math.isPending(b.html), html = TD.math.cleanPreview(b.html);
+    const html = TD.math.cleanPreview(b.html);
     const image = labelImage(/class="katex(?:\s|")/.test(html) ? 'katex' : /class="td-math/.test(html) ? 'temml' : TD.math.engine, html, b.css, color, width, height, align);
-    return `<image class="svg-label${pending ? ' math-pending' : ''}"${pending ? ` data-math-pending="${TD.math.pendingIds(b.html).join(',')}"` : ''} x="${r2(x) + image.x}" y="${r2(y) + image.y}" width="${image.width}" height="${image.height}" href="${image.href}" aria-label="${escAttr(text)}"/>`;
+    // no href: the picture was left for a later draw (labelBudget), shown as pending until then
+    const ids = TD.math.isPending(b.html) ? TD.math.pendingIds(b.html).join(',') : '', pending = !!ids || !image.href;
+    return `<image class="svg-label${pending ? ' math-pending' : ''}"${ids ? ` data-math-pending="${ids}"` : ''}${image.later ? ` data-later="${image.later}" data-lx="${r2(x)}" data-ly="${r2(y)}"` : ''} x="${r2(x) + image.x}" y="${r2(y) + image.y}" width="${image.width}" height="${image.height}"${image.href ? ` href="${image.href}"` : ''} aria-label="${escAttr(text)}"/>`;
   }
   return `<foreignObject x="${r2(x)}" y="${r2(y)}" width="${r2(Math.max(w, b.w))}" height="${r2(Math.max(h, b.h))}" style="overflow:visible;font-size:0;text-align:${align}"><div${ns} class="tx" style="${escAttr(b.css)}color:${color};text-align:${align}">${html}</div></foreignObject>`;
 }

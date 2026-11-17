@@ -30,7 +30,10 @@ import { runtime as TD } from '../runtime';
   // Read every record into memory, so the app can ask synchronously whether a document is linked.
   const ready = !can ? Promise.resolve() : db().then((d: any) => new Promise<void>((res) => {
     const tx = d.transaction(OS, 'readonly'), os = tx.objectStore(OS), keys = os.getAllKeys(), vals = os.getAll();
-    tx.oncomplete = () => { keys.result.forEach((k: any, i: any) => mem.set(k, vals.result[i])); res(); };
+    tx.oncomplete = () => {
+      keys.result.forEach((k: any, i: any) => mem.set(k, vals.result[i]));
+      Promise.all(keys.result.filter((k: any) => String(k).startsWith('doc:')).map((k: any) => check(String(k).slice(4)))).then(() => res(), () => res());
+    };
     tx.onerror = tx.onabort = () => res();
   })).catch(() => {});
 
@@ -62,8 +65,53 @@ import { runtime as TD } from '../runtime';
   // ---- documents linked to files ----
   const fileOf = (id: any) => mem.get('doc:' + id) || null;
   // `text` is the document as the file holds it; `disk`, the file's own text when it was read from disk.
-  async function link(id: any, handle: any, text: any, disk = text) { await put('doc:' + id, { handle, name: handle.name, hash: hash(text), disk: hash(disk) }); }
-  async function unlink(id: any) { await put('doc:' + id, null); }
+  // `mtime`: when the file was last written, to tell whether something else changed it since.
+  async function link(id: any, handle: any, text: any, disk = text) {
+    let mtime = null;
+    try { mtime = (await handle.getFile()).lastModified; } catch { /* no read access yet */ }
+    held.delete(id);
+    await put('doc:' + id, { handle, name: handle.name, hash: hash(text), disk: hash(disk), mtime });
+    await check(id);
+  }
+  async function unlink(id: any) { writable.delete(id); held.delete(id); await put('doc:' + id, null); }
+
+  // ---- autosave to the linked file ----
+  // Only while the browser already lets the page write to the file: asking needs a click, so after a reload the
+  // document autosaves in the browser until a save (which asks) allows the file again. A file changed on disk by
+  // something else is not written over: autosave stops for it until the next save.
+  const writable = new Set(), held = new Set();
+  const listeners = new Set<() => void>();
+  const changed = () => listeners.forEach((f) => f());
+  async function check(id: any) {
+    const r = fileOf(id), was = writable.has(id);
+    let ok = false;
+    try { ok = !!r && (await r.handle.queryPermission({ mode: 'readwrite' })) === 'granted'; } catch { ok = false; }
+    if (ok) writable.add(id); else writable.delete(id);
+    if (ok !== was) changed();
+    return ok;
+  }
+  const autoSaving = (id: any) => !!fileOf(id) && writable.has(id) && !held.has(id);
+  const writing = new Map<any, Promise<any>>();
+  // Write the document's text to its file. 'saved', 'off' (no file, no access or a write that failed), or
+  // 'changed' (the file changed on disk since it was last written or opened).
+  function autoWrite(id: any, text: any): Promise<string> {
+    const run = async () => {
+      const r = fileOf(id);
+      if (!r || !autoSaving(id)) return 'off';
+      if (r.hash === hash(text)) return 'saved';
+      try {
+        if ((await r.handle.queryPermission({ mode: 'readwrite' })) !== 'granted') { writable.delete(id); changed(); return 'off'; }
+        const f = await r.handle.getFile();
+        if (r.mtime != null ? f.lastModified !== r.mtime : hash(await f.text()) !== r.disk) { held.add(id); changed(); return 'changed'; }
+        await write(r.handle, text);
+        await link(id, r.handle, text);
+        return 'saved';
+      } catch { writable.delete(id); changed(); return 'off'; }
+    };
+    const p = (writing.get(id) || Promise.resolve()).then(run, run);
+    writing.set(id, p);
+    return p;
+  }
   // Save `text` to the document's file, or pick one first (always, with `pick`). Returns the file name,
   // null if the person cancelled, or throws.
   async function saveDoc(id: any, text: any, suggestedName: any, pick: any) {
@@ -81,6 +129,7 @@ import { runtime as TD } from '../runtime';
       return saveDoc(id, text, suggestedName, true); // the file was moved or deleted: pick another
     }
     await link(id, h, text);
+    writable.add(id); changed(); // written just now, so access is granted
     await put('lastDir', h);
     return h.name;
   }
@@ -128,5 +177,6 @@ import { runtime as TD } from '../runtime';
 
   async function forget(id: any) { await unlink(id); await clearDir(id); }
 
-  TD.files = { can, ready, hash, fileOf, link, unlink, saveDoc, isSaved, isOnDisk, docFor, pickOpen, dirOf, pickDir, clearDir, exportDir, writeIn, forget, allowed };
+  TD.files = { can, ready, hash, fileOf, link, unlink, saveDoc, isSaved, isOnDisk, docFor, pickOpen, dirOf, pickDir, clearDir, exportDir, writeIn, forget, allowed,
+    autoSaving, autoWrite, check, onChange: (f: () => void) => { listeners.add(f); } };
 })();

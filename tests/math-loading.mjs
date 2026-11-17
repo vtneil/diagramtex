@@ -17,9 +17,12 @@ try {
           onmessage = null; onerror = null;
           constructor(...args) {
             this.native = new Native(...args);
+            // the worker answers batches: each result is held on its own
             this.native.onmessage = event => {
-              const deliver = () => this.onmessage?.(event);
-              if (window.__hold) window.__held.push(deliver); else deliver();
+              for (const data of [event.data].flat()) {
+                const deliver = () => this.onmessage?.({ data });
+                if (window.__hold) window.__held.push(deliver); else deliver();
+              }
             };
             this.native.onerror = event => this.onerror?.(event);
           }
@@ -139,23 +142,25 @@ try {
       });
       await b.page.locator('#engineBox [data-engine="temml"]').click();
       await b.page.locator('#docview .blk-text .blk-body').first().click();
-      await b.page.locator('#docview .blk-ed').fill('Typing while Temml is loading.');
+      await b.page.locator('#docview .blk-ie').fill('Typing while Temml is loading.');
       await b.page.evaluate(() => {
-        const editor = document.querySelector('#docview .blk-ed'); editor.setSelectionRange(3, 9); window.__editor = editor;
+        const editor = document.querySelector('#docview .blk-ie'), t = editor.querySelector('p')?.firstChild || editor.firstChild;
+        const r = document.createRange(); r.setStart(t, 3); r.setEnd(t, 9); getSelection().removeAllRanges(); getSelection().addRange(r);
+        window.__editor = editor; window.__text = t;
       });
       await b.page.waitForFunction(() => window.__held.length > 0);
       await b.page.evaluate(async () => { window.__hold = false; window.__held.splice(0).forEach(f => f()); await TD.math.whenReady(); });
       assert.deepEqual(await b.page.evaluate(() => {
-        const e = document.querySelector('#docview .blk-ed');
-        return { same: e === window.__editor, focus: document.activeElement === e, value: e.value, start: e.selectionStart, end: e.selectionEnd };
+        const e = document.querySelector('#docview .blk-ie'), r = getSelection().getRangeAt(0);
+        return { same: e === window.__editor, focus: document.activeElement === e, value: e.textContent, start: r.startContainer === window.__text && r.startOffset, end: r.endOffset };
       }), { same: true, focus: true, value: 'Typing while Temml is loading.', start: 3, end: 9 });
       assert.equal(await b.page.locator('#docview .math-pending').count(), 0);
       assert.equal(await b.page.locator('#docview .td-math style').count(), 0, 'Inline formula styles are shared instead of duplicated');
       assert(await b.page.locator('style[data-math-preview]').count() > 0, 'Shared inline styles remain available');
       await b.page.evaluate(async () => { TD.math.set('katex'); await TD.math.whenReady(); });
       assert(await b.page.evaluate(() => {
-        const e = document.querySelector('#docview .blk-ed');
-        return e === window.__editor && document.activeElement === e && e.selectionStart === 3 && e.selectionEnd === 9;
+        const e = document.querySelector('#docview .blk-ie'), r = getSelection().getRangeAt(0);
+        return e === window.__editor && document.activeElement === e && r.startContainer === window.__text && r.startOffset === 3 && r.endOffset === 9;
       }), 'Reverse Document updates also preserve the editor and selection');
       assert.equal(await b.page.locator('#docview .math-pending').count(), 0);
       // Cancelling midway through staged Document publication must also cancel

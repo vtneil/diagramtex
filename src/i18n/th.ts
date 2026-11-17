@@ -6,7 +6,9 @@ import { thai as editorsB } from './th/editors-b';
 const core: Record<string, string> = {
   "pwa.install": "ติดตั้ง",
   "pwa.install.tip": "ติดตั้ง DiagramTeX เป็นแอป",
-  "save.autosaveOn": "เปิดการบันทึกอัตโนมัติ",
+  "save.autosaveNone": "ไม่รองรับการบันทึกอัตโนมัติ",
+  "save.autosaveBrowser": "บันทึกอัตโนมัติ (เบราว์เซอร์)",
+  "save.autosaveFile": "บันทึกอัตโนมัติ (ไฟล์)",
   "output.waitForRendering": "กำลังเรนเดอร์ โปรดรอให้เสร็จก่อนพิมพ์หรือส่งออก",
   "engine.loading": "กำลังเรนเดอร์ {name}… คุณแก้ไขงานต่อได้",
   "engine.katex.note": "ตัวอักษรหนากว่า เหมาะกับการแสดงผลบนหน้าจอ",

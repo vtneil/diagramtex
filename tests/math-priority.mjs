@@ -1,5 +1,6 @@
 // Real worker dispatch order and real DOM publication order, including cached
 // results and the cooperative fallback. Background source order stays intact.
+// The worker takes batches (an array of jobs, in priority order), one batch at a time.
 import assert from 'node:assert/strict';
 import { prepare, APP_DIR } from './args.mjs';
 import { serve } from './chrome.mjs';
@@ -14,7 +15,7 @@ try {
     window.Worker=class {
      onmessage=null;onerror=null;
      constructor(...args){this.native=new Native(...args);this.native.onmessage=e=>{const fn=()=>this.onmessage?.(e);if(window.__hold)window.__held.push(fn);else fn();};this.native.onerror=e=>this.onerror?.(e);}
-     postMessage(job){window.__sent.push(job);this.native.postMessage(job);}terminate(){this.native.terminate();}
+     postMessage(job){window.__posts=(window.__posts||0)+1;for(const j of [job].flat())window.__sent.push(j);this.native.postMessage(job);}terminate(){this.native.terminate();}
     };
    });
    let nonce=60000;
@@ -31,16 +32,15 @@ try {
      TD.state.view={x:0,y:step*2+40,zoom:2};TD.app.render();await TD.math.whenReady();
      TD.state.sel=new Set(['visible-last']);TD.app.renderProps();
      if(document.querySelector('#props .pg-item'))throw new Error('The priority fixture must not rely on the page thumbnail panel');
-     window.__sent=[];window.__held=[];window.__hold=true;TD.math.set(target);
+     window.__sent=[];window.__posts=0;window.__held=[];window.__hold=true;TD.math.set(target);
     },{target,nonce});
     await b.page.waitForFunction(()=>window.__held.length>0);
     const first=await b.page.evaluate(()=>window.__sent.map(j=>j.tex));
-    assert.equal(first.length,1,'Only one compilation may be in flight');
+    assert.equal(await b.page.evaluate(()=>window.__posts),1,'Only one batch may be in flight');
     assert(first[0].includes(String(nonce+4)),`${browser}/${target}: the visible last object starts first: ${first}`);
     await b.page.evaluate(()=>window.__held.shift()());
     await b.page.waitForFunction(()=>window.__sent.length>=2);
     assert((await b.page.evaluate(()=>window.__sent[1].tex)).includes(String(nonce+3)),'The rest of the current page precedes earlier pages');
-    await b.page.waitForFunction(()=>window.__held.length>0);
     await b.page.evaluate(async()=>{window.__hold=false;window.__held.splice(0).forEach(f=>f());await TD.math.whenReady();});
     assert.equal(await b.page.locator('#content .math-pending').count(),0);
     console.log(`✓ ${browser} → ${target}: visible object, current page, then earlier background pages`);

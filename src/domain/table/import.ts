@@ -3,7 +3,7 @@
 import type { TableModel, TCell, HAlign, Rule, VAlign } from './model';
 import { create, normalize, nRows, nCols, applyPreset, fixSpans, owners, PRESETS, clone, lenPt } from './model';
 import { plainWithMath } from './latex';
-import { looksNumeric, parseNum } from './numbers';
+import { looksNumeric, parseNum, numFromSi } from './numbers';
 import { runtime as TD } from '../../runtime';
 
 export type Format = 'csv' | 'tsv' | 'markdown' | 'html' | 'latex' | 'xlsx';
@@ -680,7 +680,7 @@ export function fromLatex(src: string): { table: TableModel; warnings: string[] 
     m.cols[c].al = sp.al;
     m.cols[c].w = sp.w;
     if (sp.fill) m.cols[c].fill = true;
-    if (sp.num) m.cols[c].num = {};
+    if (sp.num) m.cols[c].num = numFromSi(sp.numOpts || '');
     // m{…} and b{…}: the column's cells sit in the middle or at the bottom; >{\columncolor}: their fill
     for (let r = 0; r < nRows(m); r++) {
       const x = m.cells[r][c];

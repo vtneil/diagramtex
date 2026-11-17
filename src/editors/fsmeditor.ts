@@ -7,6 +7,7 @@ import { field, numField, segments, note, actionRow, texColour } from '../ui/edi
 import FormPanel from '../ui/FormPanel.svelte';
 import FsmeditorFrame from '../ui/editors/FsmeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
+import { patchSvg } from '../ui/svg-patch';
 import { runtime as TD } from '../runtime';
 // State machine editor: the overlay that opens on a State machine block. A palette of states, transitions
 // and loops; the machine drawn by the canvas renderer on a centimetre grid, where states are placed and
@@ -131,7 +132,7 @@ import { runtime as TD } from '../runtime';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, FsmeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<circle cx="4.5" cy="10" r="2.2"/><circle cx="15.5" cy="5" r="2.2"/><circle cx="15.5" cy="15" r="2.2"/><path d="M6.6 9l6.8-3.2M6.6 11l6.8 3.2"/>'), p6: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p7: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, FsmeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<circle cx="4.5" cy="10" r="2.2"/><circle cx="15.5" cy="5" r="2.2"/><circle cx="15.5" cy="15" r="2.2"/><path d="M6.6 9l6.8-3.2M6.6 11l6.8 3.2"/>'), p6: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p7: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -461,7 +462,7 @@ import { runtime as TD } from '../runtime';
     // placing: where it lands
     if (E.arm && !armLoop && E.hover && E.hover.at || E.ghost && E.hover && E.hover.at) { const [X, Y] = m(...(E.hover.at as [any, any])); out += `<circle class="cz-snap on" cx="${r2(X)}" cy="${r2(Y)}" r="5"/>`; }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
     svg.classList.toggle('placing', !!E.arm && !armLoop);
   }
 
@@ -470,7 +471,7 @@ import { runtime as TD } from '../runtime';
     if (!E || (e.button !== 0 && e.button !== 1)) return;
     const fe = document.activeElement;
     if (fe && fe !== document.body && root.contains(fe) && fe.matches('input, textarea, select')) (fe as HTMLElement).blur();
-    // a double-click is detected here: redraws between the clicks swap the target, so no native dblclick arrives
+    // a double-click is detected here: a redraw between the clicks may replace the target, so a native dblclick can't be relied on
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const [sx, sy] = pos(e);

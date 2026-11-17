@@ -9,6 +9,7 @@ import FormPanel from '../ui/FormPanel.svelte';
 import ZxeditorFrame from '../ui/editors/ZxeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { patchSvg } from '../ui/svg-patch';
 // ZX editor: the overlay that opens on a ZX block. A palette of spiders, boxes and points; the diagram
 // drawn by the canvas renderer over its grid of cells, where nodes are dropped and moved and wires are
 // dragged from node to node; the selected node's or wire's properties; and beside them the zx-calculus
@@ -168,7 +169,7 @@ import { runtime as TD } from '../runtime';
   }
   const QI: Record<string, any> = { above: blocks(0, false, false), below: blocks(2, false, false), rowdel: blocks(0, true, false), before: blocks(0, false, true), after: blocks(2, false, true), coldel: blocks(0, true, true) };
   const qic = (k: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${QI[k]}</svg>`;
-  mountFrame(root, ZxeditorFrame, { p0: qic('below'), p1: qic('after'), p2: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, ZxeditorFrame, { p0: qic('below'), p1: qic('after'), p2: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -514,7 +515,7 @@ import { runtime as TD } from '../runtime';
       out += `<g class="qe-ghost" transform="translate(${gx + 12},${gy + 12})">${TD.zxMini(src, 24)}</g>`;
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
     svg.classList.toggle('placing', !!E.arm || E.tool === 'wire');
   }
 
@@ -524,7 +525,7 @@ import { runtime as TD } from '../runtime';
     // the stage takes no focus itself, so a field still focused would swallow the keys meant for the diagram
     const fe = document.activeElement;
     if (fe && fe !== document.body && root.contains(fe) && fe.matches('input, textarea, select')) (fe as HTMLElement).blur();
-    // a double-click is detected here: redraws between the clicks swap the target, so no native dblclick arrives
+    // a double-click is detected here: a redraw between the clicks may replace the target, so a native dblclick can't be relied on
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const [sx, sy] = pos(e); E.pointer = [sx, sy];

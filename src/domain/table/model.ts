@@ -31,10 +31,24 @@ export interface TNum {
   sig?: number;
   /** decimal places (round-mode=places); used when sig is not set */
   dp?: number;
-  /** 'input' keeps the exponent as typed; 'sci' always a × 10^n; 'fixed' never */
-  exp?: 'input' | 'sci' | 'fixed';
+  /** 'input' keeps the exponent as typed; 'sci' always a × 10^n; 'eng' a power of three; 'fixed' never */
+  exp?: 'input' | 'sci' | 'eng' | 'fixed';
   /** uncertainty written 1.23(4) or 1.23 ± 0.04 */
   unc?: 'paren' | 'pm';
+  /** digits grouped in threes by a thin space (siunitx's default), a comma, a point, a space, or not at all */
+  group?: 'thin' | 'comma' | 'point' | 'space' | 'none';
+  /** grouped from this many digits (5 for thin and space, 4 for comma and point) */
+  groupMin?: number;
+  /** the decimals grouped too (the default for thin space only) */
+  groupFrac?: boolean;
+  /** output-decimal-marker */
+  dec?: ',';
+  /** exponent-product: × (default) or · */
+  prod?: 'cdot';
+  /** print-implicit-plus: +12.5 */
+  plus?: boolean;
+  /** table-number-alignment: the numbers' block on the left or right of the column (centred by default) */
+  pos?: 'l' | 'r';
 }
 export interface TCol {
   al: HAlign;
@@ -155,8 +169,15 @@ export function normalize(input: unknown): TableModel {
       const n: TNum = {};
       if (x.num.sig != null) n.sig = int(x.num.sig, 1, 15, 3);
       if (x.num.dp != null) n.dp = int(x.num.dp, 0, 12, 2);
-      if (x.num.exp) n.exp = oneOf(x.num.exp, ['input', 'sci', 'fixed'] as const, 'input');
+      if (x.num.exp) n.exp = oneOf(x.num.exp, ['input', 'sci', 'eng', 'fixed'] as const, 'input');
       if (x.num.unc) n.unc = oneOf(x.num.unc, ['paren', 'pm'] as const, 'paren');
+      if (x.num.group) n.group = oneOf(x.num.group, ['thin', 'comma', 'point', 'space', 'none'] as const, 'thin');
+      if (x.num.groupMin != null) n.groupMin = int(x.num.groupMin, 1, 9, 5);
+      if (x.num.groupFrac != null) n.groupFrac = !!x.num.groupFrac;
+      if (x.num.dec === ',') n.dec = ',';
+      if (x.num.prod === 'cdot') n.prod = 'cdot';
+      if (x.num.plus) n.plus = true;
+      if (x.num.pos === 'l' || x.num.pos === 'r') n.pos = x.num.pos;
       col.num = n;
     }
     if (typeof x.unit === 'string' && x.unit.trim()) col.unit = x.unit.trim();

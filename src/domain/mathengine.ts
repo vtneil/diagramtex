@@ -75,7 +75,7 @@ import { t, onLocale } from '../i18n';
   const smallCaps = (tex: any) => tex.replace(/\\textsc\s*\{([^{}\\$]*)\}/g, (all: any, s: any) =>
     `\\text{${s.replace(/[a-z]+/g, (w: any) => `{\\footnotesize ${w.toUpperCase()}}`)}}`);
   let transitioning = false;
-  const progress: (() => void)[] = [];
+  const progress: ((ids: number[]) => void)[] = [];
   const readiness: (() => void)[] = [];
   const viewWork = new Set<Promise<void>>();
   const liveStyles = new Set<string>();
@@ -89,6 +89,10 @@ import { t, onLocale } from '../i18n';
     });
   }
   let previewDepth = 0, finalDepth = 0, deferDepth = 0, priority = 2;
+  // KaTeX is quick enough to compile in place, but thousands of new formulae at once would hold the page for
+  // seconds. A preview draw compiles in place for SYNC_BUDGET_MS, then hands the rest to the worker like Temml.
+  const SYNC_BUDGET_MS = 12;
+  let syncSpent = 0;
   const pendingIds = (html: string): number[] => [...html.matchAll(/<!--td-math-pending:(\d+)-->/g)].map(match => +match[1]);
   const isPending = (html: string) => html.includes('<!--td-math-pending:');
   const cleanPreview = (html: string) => html.replace(/<!--td-math-pending:\d+-->/g, '');
@@ -104,7 +108,7 @@ import { t, onLocale } from '../i18n';
     }
   }
   const queue = new MathRenderQueue(compileResult, ids => {
-    try { if (ids.length) { TD.clearPendingTextCache?.(ids); for (const fn of progress) fn(); } } finally { if (!queue.pending && !viewWork.size) transitioning = false; updateNote(); }
+    try { if (ids.length) { TD.clearPendingTextCache?.(ids); for (const fn of progress) fn(ids); } } finally { if (!queue.pending && !viewWork.size) transitioning = false; updateNote(); }
   });
   const resultKey = (e: string, source: string, display: boolean) => e + ':' + JSON.stringify([source, display]);
   function markup(e: string, result: { html: string; error?: string }, prepared: string, display: boolean) {
@@ -118,7 +122,7 @@ import { t, onLocale } from '../i18n';
     const M = macros(engine);
     if (M['\\textsc']) prepared = smallCaps(prepared);
     let result = queue.results.get(key);
-    if (!result && previewDepth && (engine === 'temml' || transitioning || deferDepth > 0)) {
+    if (!result && previewDepth && (engine === 'temml' || transitioning || deferDepth > 0 || syncSpent > SYNC_BUDGET_MS)) {
       const id = queue.request(key, { engine: engine as 'katex' | 'temml', tex: prepared, display, macros: M }, priority);
       const previousEngine = engine === 'temml' ? 'katex' : 'temml';
       const previous = queue.cached(resultKey(previousEngine, source, display));
@@ -126,14 +130,16 @@ import { t, onLocale } from '../i18n';
         : `<span class="td-math-placeholder" style="display:inline-block;width:${Math.min(24, Math.max(2, source.length * .35))}em;height:1em" aria-label="${esc(source)}"></span>`) + `<!--td-math-pending:${id}-->`;
     }
     if (!result) {
+      const start = previewDepth ? performance.now() : 0;
       result = { id: 0, ...compileResult({ engine: engine as 'katex' | 'temml', tex: prepared, display, macros: M }) };
-      queue.results.set(key, result);
-      if (queue.results.size > 1024) queue.results.delete(queue.results.keys().next().value!);
+      if (previewDepth) syncSpent += performance.now() - start;
+      queue.remember(key, result);
     }
     if (result.error && opts.throwOnError) throw new Error(result.error);
     return markup(engine, result, prepared, display);
   }
   function preview<T>(draw: () => T, defer = false): T {
+    if (!previewDepth) syncSpent = 0; // each outermost draw has its own budget
     previewDepth++; if (defer) deferDepth++;
     try { return draw(); } finally { previewDepth--; if (defer) deferDepth--; }
   }
@@ -200,7 +206,7 @@ import { t, onLocale } from '../i18n';
     get finalizing() { return finalDepth > 0; },
     get pending() { return queue.pending + viewWork.size; },
     hasPendingJob: (id: number) => queue.has(id),
-    trackView(work: Promise<void>) { viewWork.add(work); void work.finally(() => { viewWork.delete(work); if (!queue.pending && !viewWork.size) { transitioning = false; TD.clearPendingTextCache?.([]); } updateNote(); }); },
+    trackView(work: Promise<void>) { const first = !viewWork.size && !queue.pending; viewWork.add(work); if (first) updateNote(); void work.finally(() => { viewWork.delete(work); if (!queue.pending && !viewWork.size) { transitioning = false; TD.clearPendingTextCache?.([]); } updateNote(); }); },
     get usingWorker() { return queue.usingWorker; },
     async whenReady() { do { await queue.ready(); await Promise.all([...viewWork]); } while (queue.pending || viewWork.size); }, cancelPending: () => { transitioning = false; queue.cancel(); TD.docview?.cancelProgress?.(); TD.app?.cancelMathViews?.(); viewWork.clear(); TD.clearPendingTextCache?.(); updateNote(); },
     withPriority<T>(rank: number, draw: () => T): T {
@@ -209,7 +215,7 @@ import { t, onLocale } from '../i18n';
     },
     prioritize: (ids: number[], rank: number) => queue.promote(ids, rank),
     onReadiness(fn: () => void) { readiness.push(fn); fn(); },
-    onProgress(fn: () => void) { progress.push(fn); },
+    onProgress(fn: (ids: number[]) => void) { progress.push(fn); }, // ids: the formulae just finished
     // a command the engine in use lacks but draws with a stand-in (STAND_INS)
     drawsAs: (name: any) => !!macros(engine)['\\' + name],
     get engine() { return engine; },

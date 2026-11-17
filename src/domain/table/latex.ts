@@ -3,7 +3,7 @@
 // columns for aligned numbers, and \multirow placed so cell colours don't paint over it.
 import type { TableModel, TCell, HAlign, Rule, VAlign } from './model';
 import { nRows, nCols, owners, stripeOf, isBold, alignOf, thickPt } from './model';
-import { parseNum, format, siString, tableFormat, type Formatted } from './numbers';
+import { parseNum, format, siString, tableFormat, siOptions, type Formatted } from './numbers';
 
 // ---------------------------------------------------------------- escaping
 // Typed text can't break the table: an unmatched brace (\{ \}), & (\&), % (\%), # (\#), _ and ^ outside maths
@@ -133,8 +133,9 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
     }
     const list = fmt.filter(Boolean) as Formatted[];
     const opts: string[] = [];
-    const tf = tableFormat(list);
+    const tf = tableFormat(list, !!col.num.plus);
     if (tf) opts.push(`table-format=${tf}`);
+    opts.push(...siOptions(col.num));
     if (col.num.unc === 'pm' && list.some((f) => f.unc)) opts.push('uncertainty-mode=separate');
     const styled = (k: 'b' | 'i') => m.cells.some((row, r) => r >= m.head && fmt[r] && (k === 'b' ? isBold(m, r, row[c]) : row[c].i));
     if (styled('b')) opts.push('detect-weight');

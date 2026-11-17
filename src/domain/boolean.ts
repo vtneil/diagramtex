@@ -39,7 +39,7 @@ import { runtime as TD } from '../runtime';
       if (!s.smooth || s.pts.length < 3) return [s.pts.map((p: any) => [p[0], p[1]])];
       const P = s.pts.map((p: any) => ({ x: p[0], y: p[1] })), R = [];
       let prev = s.pts[0];
-      for (const [a, b, c] of TD.smoothSegs(P, true)) {
+      for (const [a, b, c] of TD.polySegs(P, s)) {
         for (let i = 1; i <= 12; i++) R.push(cubic(prev, [a.x, a.y], [b.x, b.y], [c.x, c.y], i / 12));
         prev = [c.x, c.y];
       }

@@ -10,6 +10,7 @@ import CircuitProperties from '../ui/editors/CircuitProperties.svelte';
 import CzeditorFrame from '../ui/editors/CzeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { patchSvg } from '../ui/svg-patch';
 // Circuit editor: the overlay that opens on a Circuit block. A searchable palette of circuitikz parts,
 // a drafting grid where parts are dropped, dragged, rotated and wired (ends snap to pins), the selected
 // part's properties, and beside them the circuitikz it writes, live both ways (edits there are read back).
@@ -41,7 +42,7 @@ import { runtime as TD } from '../runtime';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, CzeditorFrame, { p0: ic('<path d="M5 3l10 7-5 1-2 5z" class="f"/>'), p1: ic('<path d="M3 15h6V5h8"/><circle cx="3" cy="15" r="1.6" class="f"/><circle cx="17" cy="5" r="1.6" class="f"/>'), p2: ic('<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>'), p3: ic('<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>'), p4: ic('<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>'), p5: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p6: isMac ? '⌘' : 'Ctrl+', p7: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p8: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p9: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p10: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p11: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, CzeditorFrame, { p0: ic('<path d="M5 3l10 7-5 1-2 5z" class="f"/>'), p1: ic('<path d="M3 15h6V5h8"/><circle cx="3" cy="15" r="1.6" class="f"/><circle cx="17" cy="5" r="1.6" class="f"/>'), p2: ic('<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>'), p3: ic('<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>'), p4: ic('<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>'), p5: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p6: isMac ? '⌘' : 'Ctrl+', p7: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p8: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p9: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p10: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p11: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const svg = $('.cz-svg', root), stage = $('.cz-stage', root), list = $('.cz-list', root), search = $('.cz-search input', root);
   const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
@@ -393,7 +394,7 @@ import { runtime as TD } from '../runtime';
     // origin cross
     const [OX, OY] = m(0, 0);
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = `<rect width="${W}" height="${H}" class="cz-bg"/>${grid}<path class="cz-origin" d="M${OX - 6},${OY}h12M${OX},${OY - 6}v12"/>${body}${pins}${hs}${ghost}${mq}`;
+    patchSvg(svg, `<rect width="${W}" height="${H}" class="cz-bg"/>${grid}<path class="cz-origin" d="M${OX - 6},${OY}h12M${OX},${OY - 6}v12"/>${body}${pins}${hs}${ghost}${mq}`);
     svg.classList.toggle('placing', E.tool !== 'select');
   }
 

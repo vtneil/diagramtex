@@ -8,6 +8,7 @@ import FormPanel from '../ui/FormPanel.svelte';
 import CfeditorFrame from '../ui/editors/CfeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { patchSvg } from '../ui/svg-patch';
 // Chemistry editor: the overlay that opens on a Chemistry block. A palette of atoms, bonds, rings,
 // functional groups, charges and reaction arrows; the molecules and schemes drawn by the canvas renderer,
 // where atoms are picked, relabelled and grown by dragging their blue handle; the selected atom's, bond's
@@ -189,15 +190,110 @@ import { runtime as TD } from '../runtime';
     if (seg.owner) seg.owner.dirty = true;
     E.M.dirty = true;
   }
+  // Deleting takes away as little as it can, so the rest of the drawing stays where it is.
+  // A labelled atom loses only its label (it becomes a carbon vertex). A bond in a chain goes with what hangs
+  // after it. A ring's side can't leave a gap in chemfig, so it is kept but not drawn (draw=none, shown
+  // dashed here) and the ring stays; a bare ring corner hides its two sides. What is left with nothing
+  // drawn is then tidied away.
+  const optsOf = (item: any) => String((item.arg && item.arg[4]) || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const hidden = (item: any) => !!item && optsOf(item).some((o) => /^draw\s*=\s*none$/.test(o));
+  function setHidden(item: any, on: any) {
+    const arg = (item.arg || []).slice();
+    while (arg.length < 5) arg.push('');
+    const o = optsOf(item).filter((x) => !/^draw\s*=\s*none$/.test(x));
+    if (on) o.push('draw=none');
+    arg[4] = o.join(', ');
+    item.arg = arg; item.dirty = true;
+  }
+  // the label as seen: without the @{names} \chemmove uses
+  const shownLabel = (v: any) => (v && v.g ? v.g.raw.replace(/@\{[^}]*\}/g, '').trim() : '');
+  const bondsAt = (v: any) => lay().bonds.filter((b: any) => !b.hook && !b.sub && (sameV(b.a, v) || sameV(b.b, v)));
+  // a chain's end: a bare vertex nothing else leaves from, reached by its own bond
+  const isTip = (v: any) => !!v && !v.inRing && !!v.inBond && !shownLabel(v) && bondsAt(v).length === 1;
   function deleteVertex(v: any) {
-    if (v.inRing && v.ring) { deleteRing(v.ring, v.mol); return; }
-    if (v.inBond) { cutFrom(v.inBond, v.mol); return; }
-    deleteMol(v.mol);
+    const mol = v.mol, mine = bondsAt(v);
+    if (shownLabel(v)) {
+      if (!mine.length && !v.inRing) { deleteMol(mol); return; }
+      setLabel(v, namesIn(v.g.raw));
+    } else if (!mine.length) { deleteMol(mol); return; }
+    else if (mine.some((b: any) => b.ring)) {
+      // a ring corner: its sides hide, what leaves it outwards goes
+      for (const b of mine) if (b.ring && !hidden(b.item)) setHidden(b.item, true);
+      cutOutgoing(v, mol, (b: any) => !b.ring);
+    } else if (v.inBond) cutFrom(v.inBond, mol);
+    else {
+      // a bare start: its branches go, the next atom along starts the molecule
+      cutOutgoing(v, mol, (b: any) => b.item.parent !== mol.chain);
+      L = null;
+      if (bondsAt(vfind(v)).length && !dropFirstBond(mol)) {
+        // a ring right at the next atom would turn without its bond: the chain goes, as for a bond
+        const fb = mol.chain.items.find((it: any) => it.t !== 'ws');
+        if (fb && fb.t === 'bond') cutFrom(fb, mol);
+      }
+    }
+    touch(mol); prune(mol);
+  }
+  const vfind = (v: any) => findV(vkey(v)) || v;
+  // cut the bonds leaving v (one at a time: each cut moves the rest of its chain)
+  function cutOutgoing(v: any, mol: any, which: any) {
+    for (let guard = 0; guard < 50; guard++) {
+      L = null;
+      if (!parentOf(mol)) return;
+      const w = vfind(v), b = bondsAt(w).find((x: any) => sameV(x.a, w) && x.b && x.b.inBond === x.item && which(x));
+      if (!b) return;
+      cutFrom(b.item, mol);
+    }
   }
   function deleteBond(b: any) {
-    if (b.hook) return;
-    if (b.ring) { deleteRing(b.ring.item, b.mol); return; }
+    if (b.hook || hidden(b.item)) return;
+    if (b.ring) { setHidden(b.item, true); touch(b.mol); prune(b.mol); return; }
     cutFrom(b.item, b.mol);
+  }
+  // is a chain inside a ring item (its sides, or what branches off them)?
+  function insideRing(ch: any, ring: any) { for (; ch; ch = ch.owner && ch.owner.chain) if (ch.owner && ch.owner.item === ring) return true; return false; }
+  // after a delete: drop hidden bonds to bare ends, a hidden first bond, rings and molecules with nothing drawn
+  function prune(mol: any) {
+    for (let guard = 0; guard < 200; guard++) {
+      if (!parentOf(mol)) return;
+      L = null;
+      const Lo = lay(), bs = Lo.bonds.filter((b: any) => b.mol === mol && !b.hook && !b.sub), vs = Lo.verts.filter((v: any) => v.mol === mol && !v.sub);
+      // a hidden bond to a bare chain end
+      const tail = bs.find((b: any) => hidden(b.item) && !b.ring && b.b && b.b.inBond === b.item && isTip(b.b));
+      if (tail) { cutFrom(tail.item, mol); continue; }
+      // a hidden first bond from a bare start: the next atom starts the molecule
+      if (dropFirstBond(mol, true)) continue;
+      // a ring with no side drawn and nothing labelled in it
+      const ring = Lo.rings.find((r: any) => r.mol === mol && bs.filter((b: any) => insideRing(b.chain, r.item)).every((b: any) => hidden(b.item)) && !vs.some((v: any) => insideRing(v.chain, r.item) && shownLabel(v)));
+      if (ring) { deleteRing(ring.item, mol); continue; }
+      // nothing drawn at all
+      if (!bs.some((b: any) => !hidden(b.item)) && !vs.some((v: any) => shownLabel(v))) { deleteMol(mol); return; }
+      return;
+    }
+  }
+  // the first bond goes from a bare start (only when it is hidden, when tidying): the next atom starts the molecule
+  function dropFirstBond(mol: any, onlyHidden = false) {
+    const items = mol.chain.items, i = items.findIndex((it: any) => it.t !== 'ws');
+    const fb = items[i];
+    if (!fb || fb.t !== 'bond' || (onlyHidden && !hidden(fb))) return false;
+    L = null;
+    const r = lay().verts.find((v: any) => v.mol === mol && v.root);
+    if (!r || shownLabel(r) || bondsAt(r).length !== 1) return false;
+    // what hangs at the next atom keeps its angles: a ring there would turn, so it stays as written
+    let j = i + 1;
+    const fix = [];
+    for (; j < items.length && items[j].t !== 'bond'; j++) {
+      const it = items[j];
+      if (it.t === 'ring' || it.t === 'sub') return false;
+      if (it.t === 'branch') { const fb2 = it.chain.items.find((x: any) => x.t !== 'ws'); if (fb2 && fb2.t === 'bond') fix.push(fb2); }
+    }
+    if (items[j]) fix.push(items[j]);
+    for (const b of fix) {
+      const a0 = (b.arg && b.arg[0]) || '', rest = a0.replace(/^\s*@\{[^}]*\}\s*/, '');
+      if (/^::/.test(rest) && b.angleUsed != null) { const arg = b.arg.slice(); arg[0] = bondName(a0) + fmtA(b.angleUsed); b.arg = arg; b.dirty = true; }
+    }
+    items.splice(0, i + 1);
+    touch(mol);
+    return true;
   }
   function setLabel(v: any, text: any) {
     text = String(text);
@@ -538,7 +634,7 @@ import { runtime as TD } from '../runtime';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, CfeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, CfeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -590,7 +686,67 @@ import { runtime as TD } from '../runtime';
     if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
     if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
   });
-  list.addEventListener('click', (e: any) => { const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
+  // a click picks the item (see pick); dragging it drops it onto the atom or bond under the pointer
+  let palDrag: any = null;
+  // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
+  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
+  list.addEventListener('pointerdown', (e: any) => {
+    const b = e.target.closest('.qe-item');
+    if (!b || e.button !== 0 || !E) return;
+    palDrag = { k: b.dataset.item, x: e.clientX, y: e.clientY, moved: false, btn: b };
+    try { b.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer */ }
+  });
+  list.addEventListener('pointermove', (e: any) => {
+    const d = palDrag;
+    if (!d) return;
+    if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) {
+      if (d.k === 's:move') return; // a curved arrow is drawn atom to atom: it is clicked, not dropped
+      d.moved = true; E.ghost = d.k; d.btn.classList.add('cf-dragging');
+    }
+    if (!d.moved) return;
+    const to = dropAt(e, d.k), h = to && to.v ? { v: vkey(to.v) } : to && to.b ? { b: to.b.item } : null;
+    if ((h && h.v) !== (E.hover && E.hover.v) || (h && h.b) !== (E.hover && E.hover.b)) { E.hover = h; draw(); }
+    setTip(overStage(e) ? dropTip(d.k, to) : '');
+  });
+  const endPalDrag = (e: any, drop: boolean) => {
+    const d = palDrag;
+    if (!d) return;
+    palDrag = null; E.ghost = null; E.hover = null; d.btn.classList.remove('cf-dragging');
+    if (!d.moved) { if (drop) pick(d.k); return; }
+    setTip('');
+    const to = drop && overStage(e) ? dropAt(e, d.k) : null;
+    if (to) drop2(d.k, to); else draw();
+  };
+  list.addEventListener('pointerup', (e: any) => endPalDrag(e, true));
+  list.addEventListener('pointercancel', (e: any) => endPalDrag(e, false));
+  // what an item dragged from the palette lands on: { v } an atom, { b } a bond, { at: true } the drawing as a whole
+  function dropAt(e: any, k: any): any {
+    if (!overStage(e)) return null;
+    const kind = k[0], v = vertexAt(e, 12), b = v ? null : bondAt(e, 8);
+    if (kind === 's') return v ? { v, at: true } : b ? { b, at: true } : { at: true };
+    if (v) return { v };
+    if (b && (kind === 'b' || kind === 'r') && !b.hook) return { b };
+    if (lay().empty && (kind === 'a' || kind === 'r' || kind === 'g')) return { at: true };
+    return null;
+  }
+  function dropTip(k: any, to: any) {
+    const name = say(ITEM[k].name);
+    if (!to) return k[0] === 'b' || k[0] === 'r' ? t('editor.cf.tip.dropBond', '{name}: drop it on an atom or a bond', { name }) : t('editor.cf.tip.dropAtom', '{name}: drop it on an atom', { name });
+    return '';
+  }
+  function drop2(k: any, to: any) {
+    if (k[0] === 's') {
+      // a reaction step goes after the molecule it is dropped on
+      const m = to.v || to.b;
+      E.sel = m ? (to.v ? { v: vkey(to.v) } : { b: to.b.item }) : null;
+      apply(k, null);
+      return;
+    }
+    if (to.at) { apply(k, null); return; }
+    E.arm = null;
+    if (apply(k, to.v ? { v: to.v } : { b: to.b })) buildPalette();
+    else draw();
+  }
   // a palette item acts on the selection; with nothing selected it is armed, to click onto an atom or bond
   function pick(k: any) {
     const kind = k[0], val = k.slice(2);
@@ -635,7 +791,7 @@ import { runtime as TD } from '../runtime';
     }
     const v = on.v, b = on.b;
     if (b) {
-      if (kind === 'b') { if (b.hook) return false; edit(() => { b.item.sym = val; b.item.dirty = true; touch(b.mol); }); return true; }
+      if (kind === 'b') { if (b.hook) return false; edit(() => { b.item.sym = val; b.item.dirty = true; if (hidden(b.item)) setHidden(b.item, false); touch(b.mol); }); return true; }
       if (kind === 'r') {
         // fused onto this side of a ring: the new ring shares it
         if (!b.ring || !b.item.parent || b.item.pidx < 1) { setTip(b.ring ? t('editor.cf.tip.fuseOther', 'Fuse a ring onto another side: this one starts its ring') : t('editor.cf.tip.fuse', "Rings fuse onto a ring's side; pick an atom to attach a ring with a bond")); return false; }
@@ -793,12 +949,15 @@ import { runtime as TD } from '../runtime';
     if (E.hover && E.hover.b && (!sb || E.hover.b !== sb.item) && !E.drag) { const hb = Lo.bonds.find((b: any) => b.item === E.hover.b); if (hb) out += `<g ${tr}><path class="cf-bhov" d="M${r2(hb.X0)},${r2(hb.Y0)}L${r2(hb.X1)},${r2(hb.Y1)}" stroke-width="${r2(8 / k)}"/></g>`; }
     if (!Lo.empty) out += `<g ${tr}>${C.draw({ type: 'chemfig', x: Lo.bb.x, y: Lo.bb.y, src: '', color: INK }, { paper: PAPER, export: true }, Lo)}</g>`;
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(t('editor.cf.empty', 'Pick an atom, a ring or a group on the left to start'))}</text>`;
+    // bonds kept but not drawn (draw=none): dashed, so they can be picked and drawn again
+    const ghosts = Lo.bonds.filter((b: any) => !b.hook && !b.sub && hidden(b.item));
+    if (ghosts.length) out += `<path class="cf-hidden" d="${ghosts.map((b: any) => { const [x0, y0] = S(b.X0, b.Y0), [x1, y1] = S(b.X1, b.Y1); return `M${r2(x0)},${r2(y0)}L${r2(x1)},${r2(y1)}`; }).join('')}"/>`;
     // atoms: a point on each bare vertex, rings round the selected and hovered ones
     for (const vx of Lo.verts) {
       const [X, Y] = S(vx.X, vx.Y), rr = vRadius(vx);
       const key = vkey(vx);
       if ((sv && vkey(sv) === key) || (mf && mf.v === key)) out += `<circle class="fy-vsel" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr + 1)}"/>`;
-      else if (E.drag && E.drag.mode === 'grow' && E.hover && E.hover.v === key) out += `<circle class="fy-vtarget" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr + 1)}"/>`;
+      else if (((E.drag && E.drag.mode === 'grow') || E.ghost) && E.hover && E.hover.v === key) out += `<circle class="fy-vtarget" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr + 1)}"/>`;
       else if (E.hover && E.hover.v === key && !E.drag) out += `<circle class="fy-vhov" cx="${r2(X)}" cy="${r2(Y)}" r="${r2(rr)}"/>`;
     }
     // a bond being drawn, or an atom being turned
@@ -819,7 +978,7 @@ import { runtime as TD } from '../runtime';
       out += `<path class="ze-draft" d="M${r2(ax)},${r2(ay)}L${r2(cx)},${r2(cy)}"/><g class="ze-knob ze-mctl" data-i="${h.i}"><title>${esc(t('editor.cf.knob.bend', 'Drag to bend the arrow'))}</title><circle cx="${r2(cx)}" cy="${r2(cy)}" r="5.5"/></g>`;
     }
     // the handle on the selected (or hovered) atom: drag it out for a new bond
-    const kvx = !E.drag && !E.arm && (E.knobAt ? findV(E.knobAt) : sv);
+    const kvx = !E.drag && !E.arm && !E.ghost && (E.knobAt ? findV(E.knobAt) : sv);
     E.knobPos = null;
     if (kvx) {
       const ang = freeAngle(kvx), [X, Y] = S(kvx.X, kvx.Y), off = vRadius(kvx) + 12;
@@ -828,7 +987,7 @@ import { runtime as TD } from '../runtime';
       out += `<g class="ze-knob"><title>${esc(t('editor.cf.knob.bond', 'Drag out a {kind} bond; click for one at {deg}°', { kind: bondNames()[E.bond].toLowerCase(), deg: Math.round(ang) }))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6M${kx},${ky - 3}v6"/></g>`;
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
     svg.classList.toggle('placing', !!E.arm);
   }
 
@@ -989,7 +1148,7 @@ import { runtime as TD } from '../runtime';
   function reselectKey(key: any) { L = null; E.sel = findV(key) ? { v: key } : null; draw(); renderProps(); }
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.ptr)) { E.hover = null; E.knobAt = null; E.ptr = null; draw(); } });
   // double-clicking a bond steps it single → double → triple
-  function cycleBond(b: any) { const next = ({ '-': '=', '=': '~', '~': '-' } as Record<string, any>)[b.item.sym] || '-'; edit(() => { b.item.sym = next; b.item.dirty = true; touch(b.mol); }); }
+  function cycleBond(b: any) { const next = ({ '-': '=', '=': '~', '~': '-' } as Record<string, any>)[b.item.sym] || '-'; edit(() => { if (hidden(b.item)) setHidden(b.item, false); else b.item.sym = next; b.item.dirty = true; touch(b.mol); }); }
 
   // right-click: the atom's, bond's or arrow's actions
   const MI: Record<string, any> = {
@@ -1016,12 +1175,12 @@ import { runtime as TD } from '../runtime';
       menu.innerHTML = mItem('mvdel', t('editor.cf.deleteCurved', 'Delete Curved Arrow'), 'del', '⌫');
     } else if (v) {
       E.sel = { v: vkey(v) };
-      menu.innerHTML = mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' + mItem(v.inRing ? 'rdel' : 'vdel', delVertex(v), 'del', '⌫') + (sch && v.inBond ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
+      menu.innerHTML = mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' + mItem('vdel', delVertex(v), 'del', '⌫') + (v.inRing ? mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del') : '') + (sch && v.inBond ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
     } else if (b) {
       E.sel = { b: b.item };
       const bn = bondNames();
       menu.innerHTML = mItem('b:-', bn['-'], 'one', '1') + mItem('b:=', bn['='], 'two', '2') + mItem('b:~', bn['~'], 'three', '3') + mItem('b:>', bn['>'], 'wedge') + mItem('b:>:', bn['>:'], 'hash') +
-        (/^[<>]/.test(b.item.sym) ? mItem('bflip', t('editor.cf.reverseWedge', 'Reverse Wedge'), 'flip') : '') + '<hr>' + mItem(b.ring ? 'rdel' : 'bdel', b.ring ? t('editor.cf.deleteRing', 'Delete Ring') : t('editor.cf.deleteBond', 'Delete Bond'), 'del', '⌫') + (sch ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
+        (/^[<>]/.test(b.item.sym) ? mItem('bflip', t('editor.cf.reverseWedge', 'Reverse Wedge'), 'flip') : '') + '<hr>' + (hidden(b.item) ? mItem('bshow', t('editor.cf.drawBond', 'Draw Bond'), 'one') : mItem('bdel', t('editor.cf.deleteBond', 'Delete Bond'), 'del', '⌫')) + (b.ring ? mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del') : '') + (sch ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
     } else if (a) {
       E.sel = { a: a.seg };
       menu.innerHTML = mItem('alabel', t('editor.cf.editConditions', 'Edit Conditions'), 'label', '↩') + '<hr>' + mItem('adel', a.seg.t === 'merge' ? t('editor.cf.deleteMerge', 'Delete Merge') : t('editor.cf.deleteArrow', 'Delete Arrow'), 'del', '⌫');
@@ -1071,7 +1230,7 @@ import { runtime as TD } from '../runtime';
     begin();
     const A = a.seg, me: any = (Lb = {});
     me.pop = TD.input.popup(stage, {
-      text: C.unbrace(A.labels[which] || ''), math: false,
+      text: C.labelLines(A.labels[which] || '').join('\n'), math: false,
       at: () => { const w = lay().arrows.find((x: any) => x.seg === A) || a, [X, Y] = S((w.x1 + w.x2) / 2, (w.y1 + w.y2) / 2), sr = stage.getBoundingClientRect(), vr = svg.getBoundingClientRect(); return [vr.left - sr.left + X, vr.top - sr.top + Y + 24]; },
       onInput: (t: any) => { setArrowLabel(A, which, t); L = null; draw(); renderProps(); },
       onDone: () => { if (Lb === me) Lb = null; commit(); draw(); renderProps(); },
@@ -1079,17 +1238,22 @@ import { runtime as TD } from '../runtime';
     return true;
   }
   const brk = (t: any) => (/[\][]/.test(t) && !/^\{[\s\S]*\}$/.test(t) ? `{${t}}` : t);
+  // the label box's lines (Shift+Enter), or \\ typed in the panel, as other editors read them
+  const panelLabel = (code: any) => C.labelLines(code || '').join(' \\\\ ');
   function setArrowLabel(A: any, which: any, t: any) {
     const l = A.labels.slice();
     while (l.length < which) l.push('');
-    l[which] = t ? brk(t) : '';
+    const code = C.stackLines(String(t || '').split(/\n|\\\\/));
+    l[which] = code ? brk(code) : '';
     A.labels = l; A.dirty = true; E.M.dirty = true;
   }
   function closeLabel() { if (Lb) Lb.pop.close(); }
   function focusField() { const f = $('[data-f]', props); if (f) { f.focus(); if (f.select) f.select(); } }
 
   // ---------------------------------------------------------------- properties
-  const delVertex = (v: any) => (v.inRing ? t('editor.cf.deleteRing', 'Delete Ring') : v.inBond ? t('editor.cf.deleteAtom', 'Delete Atom') : t('editor.cf.deleteMolecule', 'Delete Molecule'));
+  const delVertex = (v: any) => (shownLabel(v) && (v.inRing || bondsAt(v).length) ? t('editor.cf.deleteLabel', 'Delete Label') : bondsAt(v).length ? t('editor.cf.deleteAtom', 'Delete Atom') : t('editor.cf.deleteMolecule', 'Delete Molecule'));
+  // the panel's delete buttons: the item's own, then its ring's
+  const delRow = (own: any, ownText: any, ring: any): any => ({ kind: 'actions' as const, class: 'row', buttons: [...(own ? [{ text: ownText, attrs: { 'data-ce': own, class: 'danger' } }] : []), ...(ring ? [{ text: t('editor.cf.deleteRing', 'Delete Ring'), attrs: { 'data-ce': 'rdel', class: 'danger' } }] : [])] });
   const eg = (example: string) => t('editor.commonA.eg', 'e.g. {example}', { example });
   const noneEg = (example: string) => t('editor.cf.noneEg', 'none, e.g. {example}', { example });
   const selectField = (label: any, key: any, value: any, options: any) => row(label, { kind: 'select' as const, value, options, attrs: { 'data-f': key } });
@@ -1109,27 +1273,30 @@ import { runtime as TD } from '../runtime';
     if (v) {
       const n = dirsAt(v).length, atoms = atomsOf(v), main = atoms && atoms[Math.min(v.k, atoms.length - 1)], pairs = chargesOf(main).filter((c: any) => c.what.trim() === '\\:').map((c: any) => Math.round(c.angle)), sign = signOf(main), lbl = v.g ? v.g.raw.trim() : '';
       const pairRow: any = segments(t('editor.cf.lonePairs', 'Lone pairs'), 'pair', '', [[90, '↑', t('editor.commonA.side.above', 'Above')], [0, '→', t('editor.commonA.side.right', 'Right')], [270, '↓', t('editor.commonA.side.below', 'Below')], [180, '←', t('editor.commonA.side.left', 'Left')]], !main);
-      for (const control of pairRow.controls) if (pairs.includes(+control.attrs['data-v'])) control.attrs.class = 'on';
+      // independent toggles: a lone pair on each side, so several can be on (no sliding knob)
+      pairRow.controlClass = 'ctl seg-ctl ze-flags';
+      for (const control of pairRow.controls) { const on = !!main && pairs.includes(+control.attrs['data-v']); control.attrs.class = on ? 'on' : ''; control.attrs['aria-pressed'] = String(on); }
       show(lbl ? t('editor.cf.atom', 'Atom') : t('editor.cf.vertex', 'Vertex'), n === 1 ? t('editor.cf.oneBond', '1 bond') : t('editor.cf.nBonds', '{n} bonds', { n }), [field(t('ui.label', 'Label'), 'label', lbl, { class: 'mono', 'data-tx': 'math', placeholder: t('editor.cf.labelPh', 'none: a carbon vertex') }),
         segments(t('editor.cf.charge', 'Charge'), 'sign', sign, [['', t('ui.none', 'None')], ['+', '+', t('editor.cf.superscript', 'A superscript {sign}', { sign: '+' })], ['-', '−', t('editor.cf.superscript', 'A superscript {sign}', { sign: '−' })]], !main), pairRow,
-        ...(!v.g ? [note(t('editor.cf.help.vertex', 'A vertex with no label is a carbon. Give it a label to put charges and lone pairs on it.'))] : []), actionRow('ce', v.inRing ? 'rdel' : 'vdel', delVertex(v))], v.mol); return;
+        ...(!v.g ? [note(t('editor.cf.help.vertex', 'A vertex with no label is a carbon. Give it a label to put charges and lone pairs on it.'))] : []), delRow('vdel', delVertex(v), v.inRing)], v.mol); return;
     }
     if (b) {
       const it = b.item, arg = it.arg || [], inRing = !!b.ring, ang = it.angleUsed != null ? it.angleUsed : b.angle, len = arg[1] ? parseFloat(arg[1]) : 1;
       show(t('editor.cf.bondTitle', '{kind} bond', { kind: bondNames()[it.sym] || t('editor.cf.bond', 'Bond') }), inRing ? t('editor.cf.ringOf', 'ring of {n}', { n: b.ring.n }) : b.hook ? t('editor.cf.ringClosure', 'ring closure') : '', [selectField(t('ui.type', 'Type'), 'sym', it.sym, Object.entries<any>(bondNames())),
         chemicalNumber(t('ui.angle', 'Angle'), 'angle', inRing ? null : Math.round(ang * 100) / 100, '°', inRing || b.hook ? { disabled: true } : { step: '15' }), chemicalNumber(t('editor.cf.length', 'Length'), 'len', inRing ? null : len, '×', inRing || b.hook ? { disabled: true } : { step: '0.25', min: '0.25' }),
         field(t('ui.options', 'Options'), 'tikz', arg[4] || '', { class: 'mono', placeholder: eg('red, line width=1pt'), ...(b.hook ? { disabled: true } : {}) }),
-        note(inRing ? t('editor.cf.help.ringSides', "A ring's sides follow the ring: they have no angle or length of their own.") : t('editor.cf.help.bondDrag', 'Drag the atom at its end to turn and stretch it.')), actionRow('ce', inRing ? 'rdel' : 'bdel', inRing ? t('editor.cf.deleteRing', 'Delete Ring') : t('editor.cf.deleteBond', 'Delete Bond'))], b.mol); return;
+        note(hidden(it) ? t('editor.cf.help.hiddenBond', 'A deleted bond chemfig needs to keep its place: it is not drawn (draw=none). Draw Bond, or pick a bond kind, brings it back.') : inRing ? t('editor.cf.help.ringSides', "A ring's sides follow the ring: they have no angle or length of their own.") : t('editor.cf.help.bondDrag', 'Drag the atom at its end to turn and stretch it.')),
+        hidden(it) ? { kind: 'actions' as const, class: 'row', buttons: [{ text: t('editor.cf.drawBond', 'Draw Bond'), attrs: { 'data-ce': 'bshow' } }, ...(inRing ? [{ text: t('editor.cf.deleteRing', 'Delete Ring'), attrs: { 'data-ce': 'rdel', class: 'danger' } }] : [])] } : delRow(b.hook ? null : 'bdel', t('editor.cf.deleteBond', 'Delete Bond'), inRing)], b.mol); return;
     }
     if (a && a.seg.t === 'merge') {
       const M = a.seg;
       show(t('editor.cf.mergeArrow', 'Merge arrow'), t('editor.cf.fromN', 'from {n}', { n: M.srcs.length }), [selectField(t('editor.cf.direction', 'Direction'), 'mdir', M.dir, [['>', t('editor.commonA.side.right', 'Right')], ['<', t('editor.commonA.side.left', 'Left')], ['^', t('editor.cf.up', 'Up')], ['v', t('editor.cf.down', 'Down')]]),
-        field(t('editor.commonA.side.above', 'Above'), 'above', C.unbrace(M.labels[0] || ''), { 'data-tx': 'text', placeholder: 'none' }), field(t('editor.commonA.side.below', 'Below'), 'below', C.unbrace(M.labels[1] || ''), { 'data-tx': 'text', placeholder: 'none' }), field(t('editor.cf.from', 'From'), 'msrc', M.srcs.join(', '), { class: 'mono', placeholder: eg('c1, c2') }), field(t('editor.cf.to', 'To'), 'mtgt', M.target, { class: 'mono', placeholder: t('editor.cf.targetPh', 'none, or a name for what follows') }),
+        field(t('editor.commonA.side.above', 'Above'), 'above', panelLabel(M.labels[0]), { 'data-tx': 'text', placeholder: 'none' }), field(t('editor.commonA.side.below', 'Below'), 'below', panelLabel(M.labels[1]), { 'data-tx': 'text', placeholder: 'none' }), field(t('editor.cf.from', 'From'), 'msrc', M.srcs.join(', '), { class: 'mono', placeholder: eg('c1, c2') }), field(t('editor.cf.to', 'To'), 'mtgt', M.target, { class: 'mono', placeholder: t('editor.cf.targetPh', 'none, or a name for what follows') }),
         note(t('editor.cf.help.merge', "From names the compounds whose lines join: c1 is a scheme's first compound, c2 the next, and so on.")), actionRow('ce', 'adel', t('editor.cf.deleteMerge', 'Delete Merge'))]); return;
     }
     if (a) {
       const A = a.seg, direct = isDirect(A);
-      show(t('editor.cf.arrowTitle', '{kind} arrow', { kind: arrowNames()[A.type] || t('editor.cf.arrow', 'Arrow') }), undefined, [selectField(t('ui.type', 'Type'), 'atype', A.type, Object.entries<any>(arrowNames())), field(t('editor.commonA.side.above', 'Above'), 'above', C.unbrace(A.labels[0] || ''), { 'data-tx': 'text', placeholder: noneEg('$\\Delta$') }), field(t('editor.commonA.side.below', 'Below'), 'below', C.unbrace(A.labels[1] || ''), { 'data-tx': 'text', placeholder: noneEg('H$_2$O') }),
+      show(t('editor.cf.arrowTitle', '{kind} arrow', { kind: arrowNames()[A.type] || t('editor.cf.arrow', 'Arrow') }), undefined, [selectField(t('ui.type', 'Type'), 'atype', A.type, Object.entries<any>(arrowNames())), field(t('editor.commonA.side.above', 'Above'), 'above', panelLabel(A.labels[0]), { 'data-tx': 'text', placeholder: noneEg('$\\Delta$') }), field(t('editor.commonA.side.below', 'Below'), 'below', panelLabel(A.labels[1]), { 'data-tx': 'text', placeholder: noneEg('H$_2$O') }),
         chemicalNumber(t('ui.angle', 'Angle'), 'aangle', direct ? null : A.opt[0] ? parseFloat(A.opt[0]) : a.ang, '°', { step: '15', ...(direct ? { disabled: true } : {}) }), chemicalNumber(t('editor.cf.length', 'Length'), 'alen', direct ? null : A.opt[1] ? parseFloat(A.opt[1]) : 1, '×', { step: '0.25', min: '0.25', ...(direct ? { disabled: true } : {}) }),
         field(t('editor.cf.ends', 'Ends'), 'aends', A.names ? A.names.slice(1, -1) : '', { class: 'mono', placeholder: t('editor.cf.endsPh', 'none, e.g. {a} or {b}', { a: 'c1--c2', b: '@c1--@c3' }) }), field(t('ui.style', 'Style'), 'astyle', A.opt.slice(2).filter((x: any) => x && x.trim()).join(', '), { class: 'mono', placeholder: noneEg('red, thick') }),
         direct ? note(t('editor.cf.help.direct', 'It joins two compounds already placed (@ names), so it has no angle or length of its own.')) : note(t('editor.cf.help.arrowDrag', 'Drag its head to turn and stretch it (15° steps; '), { kbd: '⌥' }, t('editor.cf.help.anyAngle', ' for any angle).')), actionRow('ce', 'adel', t('editor.cf.deleteArrow', 'Delete Arrow'))]); return;
@@ -1283,6 +1450,7 @@ import { runtime as TD } from '../runtime';
     else if (x === 'label') { if (v) editLabel(v); }
     else if (x === 'alabel') { if (a) editArrowLabel(a, 0); }
     else if (x === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { btn.textContent = t('ui.copied', 'Copied'); setTimeout(() => (btn.textContent = t('ui.copy', 'Copy')), 1200); });
+    else if (x === 'bshow' && b) edit(() => { setHidden(b.item, false); touch(b.mol); });
     else if (x === 'bflip' && b) edit(() => { const s = b.item.sym; b.item.sym = (s[0] === '>' ? '<' : '>') + s.slice(1); b.item.dirty = true; touch(b.mol); });
     else if (x.startsWith('b:') && b) apply(x, { b });
   }

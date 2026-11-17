@@ -50,7 +50,12 @@ import { limits as plotLimits } from './plots.ts';
   }
   const unbrace = (v: string) => { v = String(v ?? '').trim(); while (/^\{[\s\S]*\}$/.test(v) && matchClose(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
   type Opt = { k: string, v: string | null };
+  // Styles that each name another several times would expand exponentially within the depth limit:
+  // like the TikZ importer, one call expands at most STYLE_BUDGET styles in all, and keeps the rest as written.
+  const STYLE_BUDGET = 4096;
+  let styleBudget = 0;
   function parseOpts(str: string, styles?: Map<string, string>, depth = 0): Opt[] {
+    if (depth === 0) styleBudget = STYLE_BUDGET;
     const out: Opt[] = [];
     for (const raw of splitTop(String(str || ''), ',')) {
       const x = raw.trim();
@@ -58,7 +63,7 @@ import { limits as plotLimits } from './plots.ts';
       const eq = splitTop(x, '=');
       const o: Opt = eq.length > 1 ? { k: eq[0].trim().replace(/\s+/g, ' '), v: unbrace(eq.slice(1).join('=')) } : { k: x.replace(/\s+/g, ' '), v: null };
       const body = styles && o.v == null && depth < 8 ? styles.get(o.k) : undefined;
-      if (body != null && !/#1/.test(body)) { out.push(...parseOpts(body, styles, depth + 1)); continue; }
+      if (body != null && !/#1/.test(body) && --styleBudget >= 0) { for (const it of parseOpts(body, styles, depth + 1)) out.push(it); continue; }
       out.push(o);
     }
     return out;

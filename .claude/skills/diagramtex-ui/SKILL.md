@@ -49,8 +49,9 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
   and construction. Active states use ink. User content and the logo are the only other colour.
 - **Editable fields are white** (`--sheet-raised` with a `--rule-strong` border). A tinted (`--well`) box
   means read-only, so **a text field is never tinted**.
-- Buttons must not look like fields: panel actions use a `--wash-strong` fill with no border, and top-bar
-  output buttons are outlined. All buttons in a group share one colour; solid black was rejected as too loud.
+- **Every button is the app's one outlined button** (the default `button`): panel actions, top-bar output
+  buttons, list actions. No grey-filled (`--wash-strong`, borderless) buttons; the owner had them all changed.
+  Only `.primary` is solid, and solid black was rejected as too loud for anything else.
 - **Anything destructive turns red pen on hover**, everywhere: menus, block editors, the trash icon.
 - Maths inside LaTeX source fields is `--mathpen` green (`src/ui/services/texhighlight.ts`).
 - Icons are monotone line icons. Show emphasis with filled vs outlined, never with colour.

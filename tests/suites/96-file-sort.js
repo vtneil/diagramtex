@@ -121,6 +121,33 @@ T.test('Classic title: follows file renames from the top bar and sidebar', () =>
   T.eq(title().textContent, 'Sidebar title', 'sidebar rename updates the title');
 });
 
+T.test('Classic title: double-clicking it renames the file, with its maths shown as typed', async () => {
+  TD.app.newDoc('Notes/Old title', null, null, null, null, 'classic');
+  TD.app.state.doc.page.title = true;
+  TD.app.cmd.setMode('document');
+  const title = () => document.querySelector('#docview .doc-title');
+  T.eq(title().textContent, 'Old title', 'the title shows the name without its folder');
+  title().dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const box = document.querySelector('.td-dialog'), field = box?.querySelector('.tdd-in'), pv = box?.querySelector('.tdd-pv');
+  T.ok(box && field && pv, 'a rename dialog with a text field and a preview');
+  T.eq(field.value, 'Old title', 'the field holds the current name');
+  T.ok(/file/i.test(box.querySelector('#tddMsg').textContent), "it says the title is the file's name");
+  T.eq(document.activeElement, field, 'the field has the focus');
+  field.value = 'Area of $\\pi r^2$ & R_D';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  T.ok(pv.querySelector('.katex, math'), 'the preview typesets the maths');
+  T.ok(pv.textContent.includes('& R_D'), 'and keeps the rest as typed');
+  box.querySelector('[data-r="1"]').click(); await Promise.resolve();
+  T.eq(TD.app.state.doc.name, 'Notes/Area of $\\pi r^2$ & R_D', 'renamed, in the same folder');
+  T.ok(title().querySelector('.katex, math'), 'the page title typesets the maths');
+  T.ok(document.querySelector('#docName').value === TD.app.state.doc.name, 'the top bar follows');
+  title().dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  await new Promise((r) => requestAnimationFrame(r));
+  document.querySelector('.td-dialog [data-r="0"]').click(); await Promise.resolve();
+  T.eq(TD.app.state.doc.name, 'Notes/Area of $\\pi r^2$ & R_D', 'Cancel keeps the name');
+});
+
 T.test('Rulers: rendered zero and centimetre ticks track the canvas through pan and zoom', () => {
   TD.app.newDoc('Ruler alignment', null, null, null, null, 'classic');
   TD.app.cmd.setMode('diagram');

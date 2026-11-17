@@ -8,6 +8,7 @@ import FormPanel from '../ui/FormPanel.svelte';
 import TmeditorFrame from '../ui/editors/TmeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { patchSvg } from '../ui/svg-patch';
 // Timing editor: the overlay that opens on a timing block. A palette of signal values, rows and
 // annotations; the table drawn by the canvas renderer on a grid of periods, where transitions are dragged
 // along the time axis, values are painted onto rows and arrows are drawn between edges; the selected
@@ -162,7 +163,7 @@ import { runtime as TD } from '../runtime';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, TmeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, TmeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -530,7 +531,7 @@ import { runtime as TD } from '../runtime';
     // placing a marker: where it lands
     if ((E.arm === 'a:mark' || E.arm === 'a:brk') && E.hover && E.hover.at != null) { const [X] = m(E.hover.at, 0); out += `<path class="ze-draft" d="M${r2(X)},0V${H}"/>`; }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
     svg.classList.toggle('placing', !!E.arm);
   }
 

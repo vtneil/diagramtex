@@ -15,9 +15,9 @@ try {
         window.__hold=false;window.__held=[];window.__jobs={};window.__compiles=[];window.__prints=0;
         window.print=()=>{window.__prints++;};
         window.Worker=class {
-          onmessage=null;onerror=null;
-          constructor(...args){this.native=new Native(...args);this.native.onmessage=event=>{const deliver=()=>this.onmessage?.(event);if(window.__hold)window.__held.push({id:event.data.id,deliver});else deliver();};this.native.onerror=e=>this.onerror?.(e);}
-          postMessage(job){window.__jobs[job.id]=job;this.native.postMessage(job);}
+          onmessage=null;onerror=null; // the worker takes and answers batches: each result is held on its own
+          constructor(...args){this.native=new Native(...args);this.native.onmessage=event=>{for(const data of [event.data].flat()){const deliver=()=>this.onmessage?.({data});if(window.__hold)window.__held.push({id:data.id,deliver});else deliver();}};this.native.onerror=e=>this.onerror?.(e);}
+          postMessage(job){for(const j of [job].flat())window.__jobs[j.id]=j;this.native.postMessage(job);}
           terminate(){this.native.terminate();}
         };
         for(const engine of ['katex','temml']) {const render=window[engine].renderToString;window[engine].renderToString=(tex,opts)=>{if(/431|907|619/.test(tex))window.__compiles.push({engine,tex});return render(tex,opts);};}

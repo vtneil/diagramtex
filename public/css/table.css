@@ -25,6 +25,10 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-outbar > * { flex-shrink: 0; }
 .tb-outbar > .spacer, .tb-outbar > .tb-pk { flex-shrink: 1; }
 .tb-bar { flex: none; display: flex; align-items: center; gap: 4px; height: var(--ctl); }
+/* room for focus rings inside the clipping (overflow) box, taken back by the margin so nothing moves */
+.tb-bar { box-sizing: content-box; padding: 4px; margin: -4px; }
+/* the toolbar's drop-downs focus like every other field: a blue-pen border and a soft ring, no outline */
+.tb-bar select:focus, .tb-outbar select:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); }
 /* editing a Table block from the diagram: who the table belongs to, and the way back (Cancel, Done) */
 .tb-session { flex: none; display: flex; align-items: center; gap: 8px; min-height: calc(var(--ctl) + 8px); padding: 4px 4px 4px 12px; border-radius: var(--r-lg);
   background: var(--wash); color: var(--graphite); font-size: 12px; }
@@ -34,7 +38,10 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-session > button { flex: none; border-radius: var(--r); }
 .tb-grp { display: flex; align-items: center; gap: 2px; flex: none; }
 .tb-grp + .tb-grp { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--rule); }
-.tb-grp.tb-seg + .tb-grp, .tb-grp + .tb-grp.tb-seg { border-left: 0; padding-left: 4px; }
+.tb-grp.tb-seg + .tb-grp { border-left: 0; padding-left: 4px; }
+.tb-grp + .tb-grp.tb-seg { border-left: 0; padding-left: 3px; }
+/* the alignment switch is the app's own (.seg.seg-align), as in the panel; only the group's gap differs */
+.tb-grp.seg-align { gap: 3px; align-items: stretch; }
 .tb-bar button.icon { border-color: transparent; background: transparent; color: var(--graphite); }
 .tb-bar button.icon:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
 .tb-bar button.icon.on { background: var(--wash-strong); color: var(--ink); }
@@ -43,16 +50,22 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-imp svg { width: 16px; height: 16px; }
 .tb-glyph { display: inline-block; width: 16px; font: 600 15px/1 var(--font-ui); text-align: center; }
 .tb-mono { font-family: var(--font-mono); font-weight: 500; }
+/* inline maths: an italic maths x, as TeX sets it (content, so the maths face, not the UI's) */
+.tb-glyph.tb-math { font: italic 400 18px/1 KaTeX_Math, 'Latin Modern Math', 'Times New Roman', serif; }
+/* .00 is wider than an icon: the button fits it, with the same room on both sides before the menu arrow */
+.tb-bar button.icon[data-t="num"] { width: auto; padding: 0 6px; }
+.tb-bar button.icon[data-t="num"] .tb-glyph { width: auto; }
 .tb-preset { width: 112px; }
-.tb-bar .seg-ctl.tb-seg, .tb-bar .tb-seg { display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r); }
-.tb-bar .tb-seg button { width: 30px; height: 100%; padding: 0; border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); display: inline-flex; align-items: center; justify-content: center; }
-.tb-bar .tb-seg button:hover { background: var(--wash); color: var(--ink); }
-.tb-bar .tb-seg button.on { background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob); }
-.tb-bar .tb-seg svg { width: 16px; height: 16px; stroke-width: 2; stroke-linecap: butt; }
 .tb-split > button.icon { border-color: transparent; }
 .tb-split > .tb-more { width: 18px; border-color: transparent; background: transparent; color: var(--graphite); }
 .tb-split > .tb-more:hover { background: var(--wash); color: var(--ink); }
 .tb-split > .tb-more svg { width: 12px; height: 12px; }
+/* on (.00 for an aligned column): the button and its menu arrow are one filled control, not a fill cut off square */
+.tb-split { border-radius: var(--r); }
+.tb-split:has(> button.icon.on) { background: var(--wash-strong); }
+.tb-split > button.icon.on { background: transparent; }
+.tb-split:has(> button.icon.on) > .tb-more { color: var(--ink); }
+.tb-split:has(> button.icon.on) > button:hover { background: var(--wash-strong); }
 .tb-col .sw { stroke-linecap: butt; }
 
 /* ---- the cell's text ---- */
@@ -76,7 +89,7 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tg-addr { bottom: 4px; height: 20px; }
 .tg-add:hover, .tg-add:focus-visible { opacity: 1; border-color: rgba(28, 27, 25, .24); background: rgba(28, 27, 25, .045); color: #1c1b19; }
 @media (prefers-reduced-motion: reduce) { .tg-add { transition: none; } }
-.tg { border-collapse: collapse; table-layout: auto; color: #1c1b19; font-family: var(--font-tex, 'Latin Modern Roman', serif); line-height: 1.25; }
+.tg { border-collapse: collapse; table-layout: auto; width: max-content; color: #1c1b19; font-family: var(--font-tex, 'Latin Modern Roman', serif); line-height: 1.25; }
 .tg col.tg-rhc { width: 40px; }
 .tg td { border: 1px solid var(--tb-grid); padding: 0; min-width: 48px; background-clip: padding-box; cursor: cell; }
 .tg td .tg-in { padding: calc(3px * var(--tb-stretch, 1)) 8px; min-height: calc(1.25em + 6px); white-space: pre; }
@@ -90,9 +103,13 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tg .tg-corner { left: 0; z-index: 3; }
 .tg thead th.on, .tg .tg-rh.on { background: #f8e9e5; color: #c8361d; }
 .tg-ch { position: relative; white-space: nowrap; }
+/* the column's width is its cells' (or the one set): the label and its badges never widen it (inline-size containment), they clip */
+.tg-chl { display: block; contain: inline-size; overflow: hidden; text-overflow: clip; }
 .tg-ch i { font-style: normal; margin-left: 6px; padding: 0 4px; border-radius: var(--r-sm); background: rgba(28, 27, 25, .085); color: #5d5b55; font: 10px var(--font-mono); }
-.tg-rs { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 1; }
-.tg-rs:hover { background: color-mix(in srgb, var(--bluepen) 30%, transparent); }
+.tg-rs { position: absolute; top: 0; right: 0; width: 5px; height: 100%; cursor: col-resize; z-index: 1; }
+.tg-rs.tg-rs-l { left: 0; right: auto; }
+/* both halves of an edge light up together */
+.tg-rs:hover, .tg-ch:has(> .tg-rs:not(.tg-rs-l):hover) + .tg-ch > .tg-rs-l, .tg-ch:has(+ .tg-ch > .tg-rs-l:hover) > .tg-rs:not(.tg-rs-l) { background: color-mix(in srgb, var(--bluepen) 30%, transparent); }
 /* the range (red pen) and its active cell */
 .tb-selbox { position: absolute; z-index: 1; pointer-events: none; border: 2px solid var(--redpen); border-radius: 2px; box-sizing: border-box; }
 .tb-selbox.multi { background: rgba(200, 54, 29, .06); }
@@ -149,6 +166,8 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 
 /* ---- menus ---- */
 .tb-ctx { min-width: 220px; }
+/* a heading over a group of choices in a toolbar menu (Number format: Group Thousands, Decimal Marker) */
+.tb-ctx .ctx-head { padding: 6px 8px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--pencil); }
 .tb-ctx:has(.tb-bgrid) { min-width: 0; width: 232px; box-sizing: border-box; }
 .tb-bgrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 4px; }
 /* The grid sits 8px inside the menu: 4px menu padding + 4px grid padding. */

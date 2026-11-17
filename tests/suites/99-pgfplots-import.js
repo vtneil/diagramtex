@@ -117,3 +117,13 @@ T.test('pgfplots import: what the plot does not hold keeps the code, previewed b
   T.ok(/xticklabels/.test(iss) && /const plot/.test(iss) && /\\node/.test(iss), iss);
   T.ok(sh[0].code.includes('\\begin{axis}'), 'code kept as written');
 });
+
+// Styles that each name the next several times would expand ten to the eighth times within the depth limit.
+T.test('pgfplots import: styles that fan out are expanded within a budget', () => {
+  const styles = new Map();
+  for (let i = 0; i < 9; i++) styles.set('s' + i, i === 8 ? 'thick' : Array(10).fill('s' + (i + 1)).join(','));
+  const t = performance.now();
+  const r = TD.pgfplotsImport.fromAxis('axis', 's0', '\\addplot {x};', { styles });
+  T.ok(performance.now() - t < 2000, `finishes promptly (${Math.round(performance.now() - t)} ms)`);
+  T.ok(r && r.shape, 'the axis still imports');
+});

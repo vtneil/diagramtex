@@ -265,7 +265,7 @@ body.mode-page .seg.sub { display: none; }
 .diagram-nav select { max-width: 220px; text-overflow: ellipsis; }
 #blockSel { font: inherit; height: var(--ctl); }
 #blockSel[hidden] { display: none; }
-@media (max-width: 940px) { .seg button { padding: 0 7px; } .seg button svg { display: none; } #kindSeg button svg { display: block; } }
+@media (max-width: 940px) { .seg:not(.seg-align) button { padding: 0 7px; } .seg:not(.seg-align) button svg { display: none; } #kindSeg button svg { display: block; } } /* labelled switches drop their icons; an icon-only one (.seg-align) keeps them */
 
 #main { flex: 1; display: flex; min-height: 0; position: relative; }
 
@@ -320,7 +320,7 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 .bin-list .bin-nm { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .bin-list .bin-nm b { font-weight: 500; font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bin-list .bin-nm small { font-size: 11px; color: var(--pencil); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bin-list .bin-restore { flex: none; height: var(--ctl-sm); padding: 0 10px; border: 0; background: var(--wash-strong); font-size: 12px; }
+.bin-list .bin-restore { flex: none; height: var(--ctl-sm); padding: 0 10px; font-size: 12px; }
 .bin-list .bin-erase { flex: none; width: var(--ctl-sm); height: var(--ctl-sm); padding: 0; color: var(--pencil); }
 .bin-list .bin-erase svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .bin-list .bin-erase:hover { color: var(--redpen); background: none; }
@@ -640,9 +640,8 @@ input[type=range]:not(.cp input) { width: 100%; min-width: 0; accent-color: var(
 #props .swatches { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px 92px; }
 #props .sw { width: 16px; height: 16px; border: 1px solid var(--rule); border-radius: var(--r-sm); cursor: pointer; padding: 0; }
 #props .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-#props .btns button { font-size: 12px; font-weight: 500; background: var(--wash-strong); border-color: transparent; color: var(--ink); } /* actions: a soft fill, so they don't read as fields */
-#props .btns button:hover { background: color-mix(in srgb, var(--ink) 14%, transparent); border-color: transparent; }
-#props .btns button[data-act=del]:hover { color: var(--redpen); border-color: transparent; background: var(--redpen-wash); }
+#props .btns button { font-size: 12px; font-weight: 500; color: var(--ink); } /* actions: the app's own outlined button */
+#props .btns button[data-act=del]:hover { color: var(--redpen); background: var(--redpen-wash); }
 #props .help { color: var(--graphite); font-size: 12px; line-height: 1.55; }
 #props .hint { font-size: 11px; color: var(--pencil); margin: -4px 0 8px 92px; }
 #props .hint-line, .hint-line { font-size: 11px; color: var(--pencil); margin-top: 8px; line-height: 1.45; text-wrap: pretty; }
@@ -667,8 +666,10 @@ input[type=range]:not(.cp input) { width: 100%; min-width: 0; accent-color: var(
 #props .row > .ctl.seg-ctl { flex: 0 0 auto; gap: 2px; }
 #props .seg-ctl button { width: 40px; padding: 0; }
 #props .seg-ctl svg { width: 16px; height: 16px; }
-#props .seg-ctl[aria-label="Align"] button { width: 30px; }
-#props .seg-ctl[aria-label="Align"] svg { stroke-width: 2; stroke-linecap: butt; }
+/* The alignment switch (left, centre, right, justify), one component wherever it is: the style panel, the Table
+   toolbar and the Table panel. Narrow icon segments with the alignment icons' heavier, square-ended strokes. */
+.seg-align > button, #props .seg-ctl.seg-align > button { flex: none; width: 30px; padding: 0; }
+.seg-align svg, #props .seg-ctl.seg-align svg { width: 16px; height: 16px; stroke-width: 2; stroke-linecap: butt; }
 /* icon choices that fill the field's width (a line's Route and Direction) */
 #props .seg-ctl.fill { flex: 1 1 auto; min-width: 0; }
 #props .seg-ctl.fill button { flex: 1 1 0; width: auto; min-width: 0; }
@@ -790,6 +791,7 @@ input[type=range]:not(.cp input) { width: 100%; min-width: 0; accent-color: var(
 .tdd-in { display: block; width: 100%; margin-top: 12px; height: var(--ctl); padding: 0 8px; background: var(--sheet-raised); border: 1px solid var(--rule-strong); }
 textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); resize: vertical; }
 .tdd-in:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
+.tdd-pv { margin-top: 8px; padding: 10px 12px; min-height: 44px; background: var(--well); border-radius: var(--r); color: var(--ink); font: 18px/1.35 var(--font-tex); text-align: center; text-wrap: balance; overflow-wrap: anywhere; } /* read-only: how the typed title reads on the page */
 .tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; margin-right: calc(var(--tdd-inset) - 20px); }
 .tdd-btns button { min-width: 80px; }
 .tdd-btns button.danger { background: var(--redpen); border-color: var(--redpen); color: #fff; font-weight: 500; }
@@ -930,22 +932,14 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .fmt-bar button { height: var(--ctl-sm); min-width: 24px; padding: 0 4px; border: 0; border-radius: var(--r); background: transparent; color: var(--graphite);
   font: inherit; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .fmt-bar button.txt { padding: 0 10px; }
-.fmt-bar button b, .fmt-bar button i, .fmt-bar button u, .fmt-bar button s { font-family: var(--font-tex); font-size: 15px; font-weight: inherit; }
-.fmt-bar button b { font-weight: 700; }
 .fmt-bar button:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
 .fmt-bar button.on, .fmt-bar button.on:hover { background: var(--wash-strong); color: var(--ink); }
 .fmt-bar button:disabled { color: var(--faint); }
 .fmt-bar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .fmt-bar select, .fmt-bar input[type=text] { height: var(--ctl-sm); padding: 0 5px; border: 1px solid var(--rule-strong); border-radius: var(--r); background: var(--sheet-raised); color: var(--ink); font: inherit; }
-.fmt-bar select[data-fmt=head] { width: 96px; }
-.fmt-bar select[data-fmt=size] { width: 72px; }
 .fmt-bar input[type=text] { flex: 1; min-width: 120px; }
 .fmt-bar select:focus-visible, .fmt-bar input[type=text]:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 22%, transparent); }
 .fmt-bar .sep { width: 1px; height: 16px; background: var(--rule); margin: 0 2px; }
-.fmt-bar .fmt-col { position: relative; height: var(--ctl-sm); min-width: 24px; border-radius: var(--r); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-.fmt-bar .fmt-col:hover { background: var(--wash); }
-.fmt-bar .glyph { font: 600 14px var(--font-tex); border-bottom: 3px solid; line-height: 1.1; padding: 0 2px; }
-.fmt-bar .glyph.hl { border: 0; padding: 1px 3px; border-radius: 2px; }
 .fmt-bar .rng { display: inline-flex; align-items: center; gap: 8px; padding: 0 4px; color: var(--graphite); font-weight: 500; }
 .fmt-bar .rng input[type=range] { width: 120px; }
 /* a labelled stepper: Rows [− 3 +] */
@@ -956,6 +950,15 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .fmt-bar .fmt-step button:hover:not(:disabled) { background: var(--sheet-raised); box-shadow: var(--shadow-knob); }
 .fmt-bar .fmt-step svg { width: 14px; height: 14px; }
 .fmt-bar .fmt-step output { min-width: 20px; text-align: center; color: var(--ink); font-variant-numeric: tabular-nums; }
+/* The text toolbar (textBar in src/application/docview.ts): the Table toolbar's pieces (.tb-bar, .tb-grp, icon
+   buttons, the shared alignment switch), pinned to the top of the view while a text block is edited. Its room
+   is kept when it is hidden, so the page never moves as editing starts and stops. */
+.doc-fmt { position: sticky; top: -28px; z-index: 6; margin: -28px 0 0 -16px; padding: 8px 0 8px 16px; background: var(--paper); } /* sticks to the scroller's content edge, so -28px (its top padding) puts it flush with the view's top */
+.doc-fmt.off { visibility: hidden; }
+.doc-fmt .tb-bar { justify-content: flex-start; }
+.doc-fmt-head { width: 128px; }
+.doc-fmt-size { width: 96px; }
+@media print { .doc-fmt { display: none !important; } }
 /* the block being edited: a raised card on the page, with a blue edge while its text has focus */
 .blk.editing, .blk.editing:hover { border-color: var(--rule-strong); border-radius: var(--r-lg); background: var(--sheet-raised); box-shadow: var(--shadow-pop); }
 .blk.editing:focus-within { border-color: color-mix(in srgb, var(--bluepen) 55%, transparent); }
@@ -967,7 +970,7 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .blk-diag.active { border-color: var(--rule-soft); }
 .blk .ph { color: var(--pencil); font-style: italic; font-family: var(--font-ui); font-size: 13px; padding: 10px 0; }
 .blk-tools { position: absolute; right: 4px; top: -14px; display: none; gap: 0; background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow-knob); z-index: 4; font-family: var(--font-ui); }
-.blk.editing .blk-tools { right: var(--r-lg); top: calc((-1 * var(--ctl-sm) - 4px) * var(--unzoom, 1)); } /* clear of the formatting controls */
+.blk-table.editing .blk-tools, .blk-image.editing .blk-tools { right: var(--r-lg); top: calc((-1 * var(--ctl-sm) - 4px) * var(--unzoom, 1)); } /* clear of the formatting controls */
 .blk:hover .blk-tools { display: flex; }
 .blk-tools button { height: var(--ctl-sm); padding: 0 8px; border: 0; border-radius: 0; font-size: 12px; background: transparent; color: var(--graphite); display: inline-flex; align-items: center; justify-content: center; min-width: 28px; }
 .blk-tools svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -976,6 +979,23 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .blk-tools button:hover:not(:disabled) { color: var(--ink); background: var(--wash); }
 .blk-tools button[data-rm]:hover:not(:disabled) { color: var(--redpen); }
 .blk-ed { display: block; width: 100%; min-height: 80px; border: 0; border-radius: 0; padding: 0 0 4px; font: 13px/1.6 var(--font-mono); resize: none; outline: none; background: transparent; color: var(--ink); }
+/* A text block edited in place (doc-inline.ts): it looks as it does on the page. A formula or a command shown as
+   written is one piece; hovering shows it can be opened, and the one open has a blue outline. */
+.blk-ie { position: relative; outline: none; min-height: 1.6em; caret-color: var(--ink); white-space: pre-wrap; } /* typed spaces stay spaces (not ~) */
+.blk-ie.empty::before { content: attr(data-ph); position: absolute; left: 0; top: 0; color: var(--pencil); font: 13px/1.6 var(--font-ui); pointer-events: none; }
+.blk-ie .ie-m, .blk-ie .ie-d, .blk-ie .ie-raw { cursor: pointer; border-radius: var(--r-sm); }
+.blk-ie .ie-m:hover, .blk-ie .ie-d:hover, .blk-ie .ie-raw:hover { background: var(--wash); }
+.blk-ie .ie-m.on, .blk-ie .ie-d.on { box-shadow: 0 0 0 1.5px var(--bluepen); }
+.blk-ie .ie-m:empty { display: inline-block; width: 1.2em; height: 1em; vertical-align: -.15em; border: 1px dashed var(--pencil); }
+.blk-ie .ie-d { display: block; }
+.blk-ie .ie-empty { font: 13px var(--font-mono); color: var(--pencil); }
+.blk-ie .ie-src { font: .85em var(--font-mono); color: var(--mathpen, var(--graphite)); }
+.blk-ie .ie-secno { user-select: none; }
+.blk-ie .cbx { user-select: none; }
+.blk-ie a { cursor: text; }
+/* the box a formula is edited in: over the page, placed in the window's coordinates */
+#docPop { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+#docPop > * { pointer-events: auto; }
 .ins { display: flex; justify-content: center; gap: 0; height: 14px; opacity: 0; transition: opacity .12s var(--ease); font-family: var(--font-ui); position: relative; z-index: 1; }
 .ins:hover, .doc-page > .ins:last-child { opacity: 1; }
 .ins { gap: 4px; }
@@ -1245,7 +1265,7 @@ input[type=checkbox][role=switch]:focus-visible { outline: 2px solid var(--bluep
 
 /* ---------- toolbar overflow: drop the least important items first as the window narrows ---------- */
 @media (max-width: 1360px) { .brand .brand-word { display: none; } }
-@media (max-width: 1240px) { .seg button svg { display: none; } #kindSeg button svg { display: block; } }
+@media (max-width: 1240px) { .seg:not(.seg-align) button svg { display: none; } #kindSeg button svg { display: block; } }
 @media (max-width: 1140px) { #topbar .group > button:not(.icon) { padding: 0 10px; } #topbar .group > button:not(.icon) svg { display: none; } }
 #props .row > label, #props .row > .field-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #props .cval { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -1508,6 +1528,9 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .uml-sel { fill: none; stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; }
 .cf-bhov { fill: none; stroke: color-mix(in srgb, var(--bluepen) 22%, transparent); stroke-linecap: round; pointer-events: none; }
 .fy-vtarget { fill: color-mix(in srgb, var(--bluepen) 12%, transparent); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
+/* chemistry: a bond kept for chemfig but not drawn (draw=none), and a palette item being dragged onto the drawing */
+.cf-hidden { fill: none; stroke: var(--bluepen); stroke-width: 1; stroke-dasharray: 3 3; opacity: .6; pointer-events: none; }
+.qe-item.cf-dragging { cursor: copy; border-color: var(--bluepen); }
 /* 3D geometry editor: the xy-plane grid, points to drag, a moving point's drop to the floor, the axes gizmo */
 .g3-grid { stroke: var(--grid-major); stroke-width: 1; fill: none; pointer-events: none; }
 .g3-pt { fill: var(--sheet-raised); stroke: var(--bluepen); stroke-width: 1.5; pointer-events: none; }
@@ -1592,7 +1615,7 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
   #phoneWall .pw-notice { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule); }
   #phoneWall .pw-actions { display: flex; flex-direction: column; gap: 8px; }
   #phoneWall .pw-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: var(--r); font: 600 15px var(--font-ui); text-decoration: none; text-align: center; }
-  #phoneWall .pw-share { border: 0; background: var(--wash-strong); color: var(--ink); }
+  #phoneWall .pw-share { border: 1px solid var(--rule-strong); background: var(--sheet-raised); color: var(--ink); }
   #phoneWall .pw-out { border: 1px solid var(--rule-strong); color: var(--ink); }
   #phoneWall .pw-btn:active { background: var(--wash-strong); }
   #phoneWall .pw-shot { margin: 0; }
@@ -1780,8 +1803,8 @@ input.slider-value-editor, :is(#props, .cz-props, .fmt-bar) input.slider-value-e
 #impDefs { display: block; box-sizing: border-box; width: 100%; max-height: 160px; padding: 8px; resize: vertical; font: 12px/1.6 var(--font-mono); color: var(--ink); background: var(--sheet); border: 1px solid var(--rule); }
 
 /* Diagram chooser: keep the drawing previews on paper in either appearance. */
-#blockSel { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#blockSel::after { content: '⌄'; margin-left: 12px; color: var(--graphite); }
+#blockSel { padding-right: 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#blockSel::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 12px; vertical-align: middle; background: var(--select-chev) center / 10px 10px no-repeat; } /* the same chevron as every <select> */
 .diagram-gallery { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--rule); border-radius: var(--r-xl); background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow); overflow: hidden; }
 .diagram-gallery[open] { display: flex; flex-direction: column; }
 .diagram-gallery::backdrop { background: rgba(0,0,0,.35); }

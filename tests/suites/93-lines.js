@@ -5,10 +5,11 @@ const tz = (s) => L.tikz(s, TD.makeTikzContext());
 
 T.test('Lines: the menu runs straight, connectors, curves, then freeform', () => {
   const picks = [...document.querySelectorAll('#fly-lines [data-pick]')].map((b) => b.dataset.pick);
-  T.eq(picks.join(' '), 'line arrow darrow elbow curvedconn curve curvearrow smoothcurve poly blob arc arc3 spring');
+  T.eq(picks.join(' '), 'line arrow darrow elbow curvedconn curve curvearrow curvpen smoothcurve poly blob arc arc3 spring');
   T.eq([...document.querySelectorAll('#fly-lines .pop-title')].map((t) => t.textContent).join(','), 'Lines,Freeform');
   for (const t of ['darrow', 'elbow', 'curvedconn']) T.eq(TD.toolType(t), 'line', t + ' draws a line');
   T.eq(TD.toolType('smoothcurve'), 'poly');
+  T.eq(TD.toolType('curvpen'), 'poly');
 });
 
 T.test('Lines: a double arrow has a tip at each end', () => {
@@ -88,6 +89,27 @@ T.test('Lines: a curve through points is an open smooth polyline', () => {
   const s = { ...TD.TYPES.poly.create({ x: 0, y: 0 }, { width: 1, dash: 'solid' }), pts: [[0, 0], [50, -40], [100, 20], [150, -10]], smooth: true, id: 'sc' };
   const code = TD.TYPES.poly.tikz(s, TD.makeTikzContext());
   T.ok(/\.\. controls/.test(code) && !/cycle/.test(code), code);
+});
+
+T.test('Lines: a curve through points is TikZ’s plot[smooth], handles and all', () => {
+  const P = TD.TYPES.poly, X = () => TD.makeTikzContext();
+  const pts = [[0, 0], [50, -40], [100, 20], [150, -10]];
+  const s = { ...P.create({ x: 0, y: 0 }, { width: 1, dash: 'solid' }), pts, smooth: true, tension: 0.5, id: 'sc' };
+  const code = P.tikz(s, X());
+  T.ok(/ plot\[smooth\] coordinates \{\(0,0\) \(/.test(code) && !/tension/.test(code), code);
+  T.ok(/plot\[smooth cycle, tension=0\.8\]/.test(P.tikz({ ...s, closed: true, tension: 0.8 }, X())), 'cycle and tension');
+  // pgflibraryplothandlers: handles ± 0.2775·tension·(next − previous); an open curve's end handles on its ends
+  const Q = pts.map(([x, y]) => ({ x, y })), g = TD.polySegs(Q, s), k = 0.2775 * 0.5;
+  const near = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-9;
+  T.ok(near(g[0][0], Q[0]) && near(g[2][1], Q[3]), 'ends');
+  T.ok(near(g[0][1], { x: 50 - k * 100, y: -40 - k * 20 }) && near(g[1][0], { x: 50 + k * 100, y: -40 + k * 20 }), 'inner');
+  const c = TD.polySegs(Q, { ...s, closed: true });
+  T.eq(c.length, 4); T.ok(near(c[0][0], { x: k * (50 - 150), y: k * (-40 + 10) }), 'closed wraps');
+  // older smooth shapes (no tension) keep their spline and their output
+  T.ok(/\.\. controls/.test(P.tikz({ ...s, tension: undefined }, X())), 'old shapes unchanged');
+  // and TikZ's plot reads back as the same curve
+  const sh = TD.importLatex('\\begin{tikzpicture}\n\\draw[->] plot[smooth cycle, tension=0.7] coordinates {(0,0) (1,1) (2,0)};\n\\end{tikzpicture}').blocks[0].shapes;
+  T.eq(sh.length, 1); T.eq(sh[0].type, 'poly'); T.ok(sh[0].smooth && sh[0].closed && sh[0].tension === 0.7 && sh[0].pts.length === 3, JSON.stringify(sh[0]));
 });
 
 T.test('Lines: a flat elbow’s middle pulls out into a U; stacked ends make a ⊐', () => {
@@ -189,4 +211,36 @@ T.test('Lines: an elbow alone can be flipped but not rotated', () => {
   const l = mk('line', { id: 'nt2' });
   TD.state.doc.shapes.push(l); TD.state.sel = new Set(['nt2']); TD.app.render(); TD.app.renderProps();
   T.ok(/rotate, flip/.test(document.querySelector('#props').textContent), 'a straight line can be rotated');
+});
+
+T.test('Lines: the curvature pen passes through its points; corners and straight runs', () => {
+  const P = TD.TYPES.poly;
+  const mkc = (pts, o = {}) => ({ ...P.create({ x: 0, y: 0 }, { width: 1, dash: 'solid' }), pts, smooth: true, curv: true, id: 'cv', ...o });
+  // four points on a square, closed: a circle (the handles 0.39 of a chord)
+  const ring = mkc([[0, -100], [100, 0], [0, 100], [-100, 0]], { closed: true });
+  const r = P.samples(ring).map((q) => Math.hypot(q.x, q.y));
+  T.ok(Math.min(...r) > 99 && Math.max(...r) < 101, 'round: ' + Math.min(...r) + '..' + Math.max(...r));
+  const code = P.tikz(ring, TD.makeTikzContext());
+  T.ok(/\.\. controls .* \.\. cycle;$/.test(code), code);
+  // the curve passes through every point
+  const open = mkc([[0, 0], [100, -80], [200, 0], [300, -80]]);
+  const S = P.samples(open);
+  for (const p of open.pts) T.ok(S.some((q) => Math.hypot(q.x - p[0], q.y - p[1]) < 1e-6), 'through ' + p);
+  // a smooth point's handles are in line; a corner's are not
+  const segs = TD.polySegs(open.pts.map((p) => ({ x: p[0], y: p[1] })), open);
+  const cross = (g0, g1, p) => (p.x - g0[1].x) * (g1[0].y - p.y) - (p.y - g0[1].y) * (g1[0].x - p.x);
+  T.ok(Math.abs(cross(segs[0], segs[1], { x: 100, y: -80 })) < 1e-6, 'smooth point');
+  const cor = { ...open, corner: [0, 1, 0, 0] };
+  const sc = TD.polySegs(cor.pts.map((p) => ({ x: p[0], y: p[1] })), cor);
+  T.ok(Math.abs(cross(sc[0], sc[1], { x: 100, y: -80 })) > 1, 'corner point');
+  // two corners in a row (or a corner and an end) make a straight segment, written with --
+  T.ok(P.tikz({ ...open, corner: [0, 1, 1, 0] }, TD.makeTikzContext()).includes(' -- '), 'straight run');
+  // a smooth point's tangent is that of the circle through it and its neighbours (as Photoshop's)
+  const tri = mkc([[0, 0], [100, -100], [300, 0]]), tg = TD.polySegs(tri.pts.map((p) => ({ x: p[0], y: p[1] })), tri);
+  const cx = 150, cy = 50; // the circle through the three points
+  const hv = { x: tg[1][0].x - 100, y: tg[1][0].y + 100 };
+  T.ok(Math.abs(hv.x * (100 - cx) + hv.y * (-100 - cy)) < 1e-6 * Math.hypot(hv.x, hv.y) * 200, 'tangent to the circle');
+  // the + on a segment sits on the curve, and adding a point there keeps the shape
+  const before = P.samples(open).length;
+  T.ok(before > open.pts.length, 'sampled along the curve');
 });

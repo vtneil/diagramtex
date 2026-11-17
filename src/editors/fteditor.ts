@@ -8,6 +8,7 @@ import FormPanel from '../ui/FormPanel.svelte';
 import FteditorFrame from '../ui/editors/FteditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { patchSvg } from '../ui/svg-patch';
 // Tree editor: the overlay that opens on a Tree block. A palette of subtrees, templates and node and edge
 // styles; the tree drawn by the canvas renderer, where nodes are selected, added, relabelled and dragged
 // onto other nodes; the selection's properties; and beside them the forest code, live both ways.
@@ -116,7 +117,7 @@ import { runtime as TD } from '../runtime';
     const U = (L && L.U) || [1, 0], G = (L && L.G) || [0, 1], r = (v: any) => Math.round(v * 1000) / 1000;
     return `matrix(${r(U[0])} ${r(U[1])} ${r(G[0])} ${r(G[1])} ${r(10 - 10 * (U[0] + G[0]))} ${r(10 - 10 * (U[1] + G[1]))})`;
   }
-  mountFrame(root, FteditorFrame, { p0: fic('child'), p1: fic('sib'), p2: ic(FI.del), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, FteditorFrame, { p0: fic('child'), p1: fic('sib'), p2: ic(FI.del), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -417,7 +418,7 @@ import { runtime as TD } from '../runtime';
     let out = `<rect width="${W}" height="${H}" class="cz-bg"/>`;
     if (L.empty) {
       out += `<g class="fe-start" data-fe-start="1"><rect x="${X(-60)}" y="${Y(-30)}" width="${r2(120 * k)}" height="${r2(60 * k)}" rx="6"/><path d="M${X(0) - 6},${Y(-6)}h12M${X(0)},${Y(-6) - 6}v12"/><text x="${X(0)}" y="${Y(16)}">${esc(uiText('editor.ft.addRoot', 'Add a root node'))}</text></g>`;
-      svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.innerHTML = out; return;
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`); patchSvg(svg, out); return;
     }
     const b = L.bb;
     out += `<rect class="qe-paper" x="${X(b.x - 16)}" y="${Y(b.y - 16)}" width="${r2((b.w + 32) * k)}" height="${r2((b.h + 32) * k)}"/>`;
@@ -459,7 +460,7 @@ import { runtime as TD } from '../runtime';
       out += `<g class="qe-ghost" transform="translate(${gx + 12},${gy + 12})">${TD.ftMini(gsrc, 40)}</g>`;
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
   }
 
   // ---------------------------------------------------------------- pointer

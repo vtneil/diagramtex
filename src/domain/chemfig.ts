@@ -43,6 +43,24 @@ function split(s: any, sep = ',') {
   return out;
 }
 const unbrace = (v: any) => { v = String(v ?? '').trim(); while (v[0] === '{' && close(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
+// An arrow's label of several lines. chemfig sets a label in a plain TikZ node, where \\ doesn't break the
+// line, so the editor writes the lines in a one-column tabular (\shortstack is read too); a label written
+// with line breaks in the text (older drawings) is read as lines as well.
+const TABULAR = /^\\begin\s*\{tabular\}\s*\{@\{\}c@\{\}\}([\s\S]*)\\end\s*\{tabular\}$/;
+function labelLines(code: any): string[] {
+  const v = unbrace(code);
+  let m = TABULAR.exec(v);
+  if (!m) { const sm = /^\\shortstack\s*(?:\[[^\]]*\]\s*)?\{/.exec(v); if (sm && close(v, sm[0].length - 1) === v.length - 1) m = [v, v.slice(sm[0].length, -1)] as any; }
+  if (m) return m[1].split(/\\\\(?:\s*\[[^\]]*\])?/).map((x: string) => x.trim());
+  return /\n/.test(v) ? v.split('\n').map((x: string) => x.trim()) : [v];
+}
+// lines → a label's code: one line as it is, several in the tabular ({} keeps a line starting with [ from
+// being read as \\'s spacing)
+function stackLines(lines: string[]) {
+  const L = lines.map((x) => String(x).trim());
+  while (L.length > 1 && !L[L.length - 1]) L.pop();
+  return L.length > 1 ? `\\begin{tabular}{@{}c@{}}${L.map((x, i) => (i && x[0] === '[' ? `{}${x}` : x)).join('\\\\')}\\end{tabular}` : L[0] || '';
+}
 const skipWs = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 // a length → px ("3em", "2pt", "1cm", or a bare number of pt)
 function len(v: any, dflt: any) {
@@ -899,7 +917,10 @@ function layPieces(segs: any, P: any, warn: any, G: any, lead0?: any) {
       if ((lead || pendingSpace) && (F.pieces.length || (lead0 && g !== segs[0]))) x += 3.333 * PT;
       const tt = printable(body), b = TD.textBox(tt, TEXT), m = vmetrics(body.replace(/\$/g, ''));
       F.texts.push({ t: tt, cx: x + (b.w - 2) / 2, cy: -bo + b.h / 2, b, seg: g });
-      put({ kind: 'text', seg: g, x, w: b.w - 2, asc: Math.max(m.asc, 0.683 * EM), desc: Math.max(m.desc, /[gjpqy,;]/.test(body) ? 0.194 * EM : 0) });
+      // lines after the first hang below the first line's baseline: they count in the depth, so a label of
+      // several lines stays on its own side of the arrow
+      const lines = tt.split('\n').length, more = lines > 1 ? (b.h * (lines - 1)) / lines : 0;
+      put({ kind: 'text', seg: g, x, w: b.w - 2, asc: Math.max(m.asc, 0.683 * EM), desc: Math.max(m.desc, /[gjpqy,;]/.test(body) ? 0.194 * EM : 0) + more });
       x += b.w - 2; pendingSpace = trail; continue;
     }
     if (pendingSpace && F.pieces.length) x += 3.333 * PT;
@@ -1154,7 +1175,7 @@ function richLabel(txt: any, sg: any, mid: any, rot: any, P: any, warn: any, G: 
   }
   let sc = 1;
   while ((m = /^\s*\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)(?![A-Za-z])\s*/.exec(t))) { sc = SIZES[m[1]] / 10; t = t.slice(m[0].length); }
-  const F: any = layPieces(parseDoc(unbrace(t), warn, G.defs), P, warn, G);
+  const F: any = layPieces(parseDoc(labelLines(t).join('\n'), warn, G.defs), P, warn, G);
   if (!F.pieces.length) return null;
   const w = F.w * sc, h = (F.asc + F.desc) * sc;
   const vx = Math.cos(rad(rot + 90)), vy = -Math.sin(rad(rot + 90)); // the label frame's up
@@ -1641,7 +1662,7 @@ TD.TYPES.chemfig = {
 
 
 // for the visual editor (js/cfeditor.ts)
-TD.chem = { build, parseDoc, writeDoc, parseChain, writeChain, splitAtoms, layout, draw, angleOf, norm360, split, unbrace, close, markDirty, counts, TEXT, DEF, PT, EM };
+TD.chem = { build, parseDoc, writeDoc, parseChain, writeChain, splitAtoms, layout, draw, angleOf, norm360, split, unbrace, labelLines, stackLines, close, markDirty, counts, TEXT, DEF, PT, EM };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("chemfig", {
   menu: { order: 12, label: "Chemistry", title: "Chemistry: structural formulas and reaction schemes, written for chemfig", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M9 4.5l6 3.5v7l-6 3.5-6-3.5V8z\"/><path d=\"M11 7.4l2.4 1.4M5 9.5v4.2\"/><path d=\"M15 15l5 3\"/><path d=\"M21 12h8M26 9.5l3 2.5-3 2.5\"/></svg>" },

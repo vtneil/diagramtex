@@ -8,6 +8,7 @@ import FormPanel from '../ui/FormPanel.svelte';
 import BfeditorFrame from '../ui/editors/BfeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { patchSvg } from '../ui/svg-patch';
 // Bit field editor: the overlay that opens on a bit field block. A palette of fields (bit boxes, word
 // boxes, bits, skipped words, the bit header) and word groups; the field drawn as the package draws it over
 // a grid of its bit columns, where a click selects a field, a drag on the line between two fields moves it
@@ -87,7 +88,7 @@ import { runtime as TD } from '../runtime';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const TRASH = '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>';
-  mountFrame(root, BfeditorFrame, { p0: ic(TRASH), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, BfeditorFrame, { p0: ic(TRASH), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -593,7 +594,7 @@ import { runtime as TD } from '../runtime';
       for (const y of [q.y, q.y + q.h]) out += `<rect class="bf-handle" x="${r2(cx - 6)}" y="${r2(y - 3)}" width="12" height="6" rx="1.5"/>`;
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
   }
 
   // ---------------------------------------------------------------- pointer
@@ -607,7 +608,7 @@ import { runtime as TD } from '../runtime';
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     const h = hit(e);
     // a second press on the same field or brace, soon and close: edit its label. Each press redraws the stage,
-    // which replaces the element under the pointer, so the browser never sends click or dblclick here.
+    // which may replace the element under the pointer, so the browser's click and dblclick can't be relied on.
     const key = e.button === 0 && !e.shiftKey && h && !h.edge ? (h.t === 'box' ? `b${h.b.ii}:${h.b.sub}` : `g${h.g.beg}`) : null;
     const now = performance.now(), lp = E.lastPress;
     E.lastPress = key ? { key, t: now, x: sx, y: sy } : null;

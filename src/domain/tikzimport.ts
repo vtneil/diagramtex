@@ -468,6 +468,13 @@ import { runtime as TD } from '../runtime';
         toks.push({ t: 'node', opts, text, textStart, textEnd, name, coordinate: m[1] === 'coordinate' });
         continue;
       }
+      // plot[smooth] coordinates {(a) (b) …}: one token with the plot's options and its points
+      if ((m = rest.match(/^plot\s*(\[[^\]]*\])?\s*coordinates\s*\{/))) {
+        const e = shut(s, i + m[0].length - 1, '{', '}'), body = s.slice(i + m[0].length, e), raws = [];
+        for (let k = 0; k < body.length;) { const q = body.indexOf('(', k); if (q < 0) break; const r = shut(body, q, '(', ')'); raws.push(body.slice(q + 1, r)); k = r + 1; }
+        toks.push({ t: 'plot', opts: m[1] ? m[1].slice(1, -1) : '', raws });
+        i = e + 1; continue;
+      }
       if ((m = rest.match(/^(controls|and|rectangle|circle|ellipse|arc|cycle|to|grid|edge|let|in|plot|sin|cos|parabola)\b/))) { toks.push({ t: 'op', v: m[1] }); i += m[1].length; continue; }
       if (rest[0] === '{') { const e = shut(s, i, '{', '}'); toks.push({ t: 'brace', v: s.slice(i + 1, e) }); i = e + 1; continue; }
       warn && warn(`Unknown path text “${rest.slice(0, 12)}”`);
@@ -729,6 +736,21 @@ import { runtime as TD } from '../runtime';
           pushAll(out,applyXf(made.filter((p: any) => p.type !== 'tikz'),[{xf:[{dx:origin.x,dy:origin.y}],shape:true},{xf:own.xf,shape:true}]));
           C.warnings.push(...P.warnings);
         } finally { STY=saved.STY; MAC=saved.MAC; styUsed=saved.styUsed; styOff=saved.styOff; }
+        continue;
+      }
+      if (tk.t === 'plot') {
+        const po = parseOpts(tk.opts), has = (k: string) => po.some((o: any) => o.k === k);
+        const raws: string[] = tk.raws || [], P = raws.map((r: any) => coord(C, r, cur)).filter(Boolean);
+        if (P.length !== raws.length) C.warnings.push('Unsupported coordinate in a plot');
+        flush();
+        if (P.length >= 2) {
+          const smooth = has('smooth') || has('smooth cycle'), cl = has('smooth cycle') || has('sharp cycle');
+          const te = po.find((o: any) => o.k === 'tension'), tension = te ? parseFloat(te.v) : 0.5;
+          out.push({ type: 'poly', pts: P.map((p: any) => [p.x, p.y]), closed: cl, ...lineStyle, fill: cl ? st.fill : null, startTip: cl ? 'none' : st.startTip, endTip: cl ? 'none' : st.endTip,
+            ...(smooth ? { smooth: true, tension: Number.isFinite(tension) ? tension : 0.5 } : {}) });
+          cur = base = P[P.length - 1];
+        }
+        pendingOp = null;
         continue;
       }
       if (tk.t === 'coord') {
@@ -1375,6 +1397,11 @@ import { runtime as TD } from '../runtime';
         if (!along && opts.some((o: any) => o.k === 'anchor' && /^(center|north|south|east|west|north east|north west|south east|south west)$/.test(o.v))) allowed.add('anchor');
         bad.push(...unknownKeys(C, opts, allowed));
       }
+      if (t.t === 'plot') {
+        const po = parseOpts(t.opts);
+        if (po.some((o: any) => !['smooth', 'smooth cycle', 'sharp plot', 'sharp cycle', 'tension'].includes(o.k))) bad.push('plot');
+        for (const r of t.raws || []) { const w = nameIssue(C, r); if (w) pts.push(w); }
+      }
       if (t.t === 'op' && ['let', 'plot', 'sin', 'cos', 'parabola', 'in'].includes(t.v)) bad.push(t.v);
       if (t.t === 'brace') bad.push('{…}');
       if (t.t === 'coord') { const w = nameIssue(C, t.raw); if (w) pts.push(w); }
@@ -1469,13 +1496,20 @@ import { runtime as TD } from '../runtime';
   }
   // the passes of a loop as statements of their own: their shapes when every one is exact, else null
   function foreachExact(C: any, f: any) {
-    const Q = { ...C, preview: false, stmts: [], struct: null, warnings: [], names: { ...C.names }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) }, geo: { ...(C.geo || {}) } };
-    let made;
-    try { made = expandForeach(Q, f); } catch (e: any) { return { why: [] }; }
+    // the trial writes the picture's own name tables, logged: undone if the loop isn't held, kept if it is
+    // (copying four tables per loop was O(loops × names))
+    for (const k of ['kinds', 'boxes', 'geo']) C[k] ||= {};
+    const Q = { ...C, preview: false, stmts: [], struct: null, warnings: [] };
+    let made: any, log: any[] = [];
+    try { const run = recordTables(Q, ['names', 'kinds', 'boxes', 'geo'], () => expandForeach(Q, f)); made = run.result; log = run.log; }
+    catch (e: any) { return { why: [] }; }
     // why a pass is not held exactly: what its statements could not hold (said once each)
     const why = [...new Set([...Q.warnings, ...Q.stmts.filter((st: any) => st.raw).flatMap((st: any) => st.shapes.flatMap((x: any) => x.issues || []))])];
-    if (!made.length || Q.warnings.length || !Q.stmts.length || Q.stmts.some((st: any) => st.raw)) return { why };
-    Object.assign(C.names, Q.names); C.kinds = Object.assign(C.kinds || {}, Q.kinds); C.boxes = Object.assign(C.boxes || {}, Q.boxes); C.geo = Object.assign(C.geo || {}, Q.geo);
+    if (!made.length || Q.warnings.length || !Q.stmts.length || Q.stmts.some((st: any) => st.raw)) { undoLog(log); return { why }; }
+    // kept: what the loop set stays; a name it only deleted keeps its earlier value, as merging copies did
+    const before = new Map<any, Map<any, any>>();
+    for (const [o, key, had, old] of log) { let m = before.get(o); if (!m) before.set(o, m = new Map()); if (!m.has(key)) m.set(key, had ? { old } : null); }
+    for (const [o, m] of before) for (const [key, was] of m) if (was && !OWN.call(o, key)) o[key] = was.old;
     return { made, names: [...new Set(Q.stmts.flatMap((st: any) => st.names || []))] };
   }
   // ---------- \matrix ----------
@@ -1749,15 +1783,38 @@ import { runtime as TD } from '../runtime';
     return null;
   }
 
+  // Run fn with C's name tables (names, geo, kinds, boxes) recording each write: [table, key, had, old], oldest
+  // first. Copying whole tables per statement to see or undo what it wrote was O(statements × names).
+  // A table fn swaps for another object is left as fn set it.
+  const OWN = Object.prototype.hasOwnProperty;
+  function recordTables(C: any, keys: string[], fn: () => any) {
+    const log: any[] = [], swapped: [string, any, any][] = [];
+    for (const k of keys) {
+      const t = C[k] || (C[k] = {});
+      const p = new Proxy(t, {
+        set(o: any, key: any, v: any) { log.push([o, key, OWN.call(o, key), o[key]]); o[key] = v; return true; },
+        deleteProperty(o: any, key: any) { if (OWN.call(o, key)) { log.push([o, key, true, o[key]]); delete o[key]; } return true; },
+      });
+      C[k] = p; swapped.push([k, t, p]);
+    }
+    try { return { result: fn(), log }; } finally { for (const [k, t, p] of swapped) if (C[k] === p) C[k] = t; }
+  }
+  function undoLog(log: any[]) {
+    for (let i = log.length - 1; i >= 0; i--) { const [o, key, had, old] = log[i]; if (had) o[key] = old; else delete o[key]; }
+  }
+
   // a statement that named styles: what the styles set (each field as styled and as without them), so the
   // export can name the styles again while those fields still hold (src/domain/shapes.ts styledCode)
   function keepStyles(made: any, used: any, build: any, C?: any) {
     if (!used.size || !made.length) return;
     let base = null;
     // (the build without styles only shows what they changed: the names it would set are not the picture's)
-    const keep = C && { names: { ...C.names }, geo: { ...(C.geo || {}) }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) } };
+    const tables = C ? { names: C.names, geo: C.geo || (C.geo = {}), kinds: C.kinds || (C.kinds = {}), boxes: C.boxes || (C.boxes = {}) } : null;
     styOff = true;
-    try { base = build(); } catch (e: any) { base = null; } finally { styOff = false; if (keep) { C.names = keep.names; C.geo = keep.geo; C.kinds = keep.kinds; C.boxes = keep.boxes; } }
+    let log: any[] = [];
+    try { if (C) { const run = recordTables(C, ['names', 'geo', 'kinds', 'boxes'], () => { try { return build(); } catch (e: any) { return null; } }); base = run.result; log = run.log; } else base = build(); }
+    catch (e: any) { base = null; }
+    finally { styOff = false; if (tables) { undoLog(log); Object.assign(C, tables); } }
     if (!base || base.length !== made.length) return;
     const J = (v: any) => JSON.stringify(v ?? null);
     made.forEach((m: any, n: any) => {
@@ -1940,11 +1997,11 @@ import { runtime as TD } from '../runtime';
       if (name === 'foreach') {
         const f = foreachParse(s, j);
         i = f.end;
-        const P = { ...C, preview: true, warnings: [], struct: null, names: { ...C.names } };
         // a loop whose every pass is shapes held exactly: those shapes, as one group, written as the loop until
         // one of them is edited (then as the shapes, unrolled)
         const E: any = !preview && f.body != null ? foreachExact(C, f) : null;
         if (E && E.made) { done(bs, f.end, E.made, [], { names: E.names.length ? E.names : undefined, group: 'foreach loop' }); continue; }
+        const P = { ...C, preview: true, warnings: [], struct: null, names: { ...C.names } };
         const made = f.body != null ? applyXf(expandForeach(P, f), C.scopes || []) : [];
         if (preview) { pushAll(shapes, made); continue; }
         // (why a pass is not held only explains: the loop's previews stay)
@@ -1987,7 +2044,6 @@ import { runtime as TD } from '../runtime';
           let made = [];
           const su = styUsed = new Set();
           const lossy = preview ? [] : pathIssues(C, optStr, body);
-          const before = { ...C.names };
           const build = () => {
             let L = pathToShapes(C, PATHS[name], optStr, body);
             const po = parseOpts(optStr);
@@ -1995,9 +2051,15 @@ import { runtime as TD } from '../runtime';
             const own = readXf(C, po);
             return applyXf(L, [...(C.scopes || []), { xf: own.xf, shape: true }]);
           };
-          try { made = build(); } catch (err: any) { C.warnings.push(`\\${name}: ${err.message}`); }
+          // the names this statement set, in the order the names table holds them
+          const run = recordTables(C, ['names'], () => { try { return build(); } catch (err: any) { C.warnings.push(`\\${name}: ${err.message}`); return []; } });
+          made = run.result;
           styUsed = null;
-          const names = Object.keys(C.names).filter((n) => C.names[n] !== before[n]);
+          const first = new Map<string, any>(); // each key's value before the statement
+          for (const [o, key, had, old] of run.log) if (o === C.names && !first.has(key)) first.set(key, had ? old : undefined);
+          const set = new Set<string>();
+          for (const [key, old] of first) if (OWN.call(C.names, key) && C.names[key] !== old) set.add(key);
+          const names = set.size > 1 ? Object.keys(C.names).filter((n) => set.has(n)) : [...set];
           if (!preview) {
             keepStyles(made, su, build, C);
             // named points the statement goes through: written by name again while the ends are still there
@@ -2384,7 +2446,13 @@ import { runtime as TD } from '../runtime';
       }
     }
     // lines that stop at a node's border stay attached to that node at the point they touch (export: `(name)`)
-    const nodeByName = (nm: string) => shapes.find((n: any) => n.nodeName === nm && TD.nodeFeatures?.types.has(n.type)) || shapes.find((n: any) => n.type === 'text' && n.tex?.nm?.[0] === nm);
+    // (each name's first holder, as a search of the shapes would find it, looked up instead of searched per end)
+    const byNodeName = new Map<string, any>(), byTextName = new Map<string, any>();
+    for (const n of shapes) {
+      if (n.nodeName != null && TD.nodeFeatures?.types.has(n.type) && !byNodeName.has(n.nodeName)) byNodeName.set(n.nodeName, n);
+      if (n.type === 'text' && n.tex?.nm?.[0] != null && !byTextName.has(n.tex.nm[0])) byTextName.set(n.tex.nm[0], n);
+    }
+    const nodeByName = (nm: string) => byNodeName.get(nm) || byTextName.get(nm);
     for (const edge of shapes) for (const [mark, key, kx, ky] of [['_b1', 'link1', 'x1', 'y1'], ['_b2', 'link2', 'x2', 'y2']]) {
       const nm = edge[mark];
       if (!nm) continue;
@@ -2604,13 +2672,16 @@ import { runtime as TD } from '../runtime';
       for (const x of b.shapes) if (x.type !== 'tikz') delete x.tex;
     }
     // what was kept as code, in source order, with the line its statement starts on
-    let from = 0;
+    // statements are found in source order, so the line count runs on from the last one (not from the top each time)
+    let from = 0, counted = 0, line = 1;
     const lineAt = (code: any) => {
       const first = String(code || '').split('\n').find((l) => l.trim() && !/^\s*%/.test(l));
       const k = first ? o.indexOf(first.trim(), from) : -1;
       if (k < 0) return null;
       from = k + 1;
-      return o.slice(0, k).split('\n').length;
+      for (let n = o.indexOf('\n', counted); n >= 0 && n < k; n = o.indexOf('\n', n + 1)) line++;
+      counted = k;
+      return line;
     };
     const report = blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes).filter((x) => x.type === 'tikz' && x.kind !== 'defs' && x.tex)
       .map((x) => ({ code: x.code, line: lineAt(x.code), issues: x.issues || [], preview: (x.prev || []).length }));

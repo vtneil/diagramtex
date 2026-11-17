@@ -65,35 +65,136 @@ export async function runBrowserUI(page, filter = '') {
     await page.locator('#engineBox [data-engine="katex"]').click();
     assert.equal(await page.evaluate(() => TD.math.engine), 'katex');
   });
-  await test('Document text formatting stays compact and usable on narrow pages', async () => {
+  await test('Document text toolbar is pinned to the view and shown only while editing text in place', async () => {
     await page.evaluate(() => {
       TD.app.newDoc('Compact document editor', null, null,
         [{ type: 'text', text: 'Compact text with $x^2$.' }, { type: 'diagram', shapes: [] }], null, 'classic');
       TD.app.cmd.setMode('document');
     });
     await page.locator('#docview [data-zoom="1"]').click();
+    const strip = page.locator('#docview .doc-fmt'), bar = strip.locator('.tb-bar'), editor = page.locator('#docview .blk-ie');
+    const text = () => page.evaluate(() => TD.state.doc.blocks[0].text);
+    const select = (from, to) => editor.evaluate((ed, [a, z]) => { ed.focus(); const t = ed.querySelector('p').firstChild; const r = document.createRange(); r.setStart(t, a); r.setEnd(t, z); getSelection().removeAllRanges(); getSelection().addRange(r); }, [from, to]);
+    const pageTop = () => page.evaluate(() => document.querySelector('#docview .doc-page').getBoundingClientRect().top);
+    assert.equal(await strip.evaluate(e => getComputedStyle(e).visibility), 'hidden', 'no toolbar until a text block is edited');
+    const top0 = await pageTop();
     await page.locator('#docview .blk-text .blk-body').click();
-    const bar = page.locator('#docview .fmt-bar'), editor = page.locator('#docview .blk-ed');
     await editor.waitFor();
-    const source = await editor.inputValue();
+    assert.equal(await strip.evaluate(e => getComputedStyle(e).visibility), 'visible', 'editing text shows the toolbar');
+    assert.equal(await pageTop(), top0, 'showing the toolbar does not move the page');
+    const source = await text();
+    assert.equal(await editor.locator('.ie-m').count(), 1, 'the formula shows as maths while editing');
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('blk-ie')), true, 'the block is edited where it is');
     const metrics = await bar.evaluate(element => ({
-      height: element.getBoundingClientRect().height,
-      tops: [...element.querySelectorAll('button, select, .fmt-col')].map(e => e.getBoundingClientRect().top),
+      top: element.getBoundingClientRect().top - document.querySelector('#docview').getBoundingClientRect().top,
+      tops: [...element.children].map(e => Math.round(e.getBoundingClientRect().top)),
+      fits: element.scrollWidth <= element.clientWidth,
     }));
-    assert(metrics.height <= 40, 'formatting toolbar stays a compact single row at 100%');
+    assert(metrics.top <= 8, 'the toolbar sits at the top of the view');
     assert(Math.max(...metrics.tops) - Math.min(...metrics.tops) <= 1, 'controls share one row');
-    await editor.evaluate(element => { element.focus(); element.setSelectionRange(0, 7); });
+    assert(metrics.fits, 'the toolbar fits on one line at 1400px');
+    await select(0, 7);
     await bar.locator('[data-fmt="b"]').click();
-    assert((await editor.inputValue()).startsWith('\\textbf{Compact}'), 'bold keeps the editor selection');
+    assert((await text()).startsWith('\\textbf{Compact}'), 'bold writes \\textbf into the source');
+    assert.equal(await editor.locator('b').count(), 1, 'and shows the text bold');
+    await bar.locator('[data-fal][data-v="r"]').click();
+    assert.equal(await page.evaluate(() => TD.state.doc.blocks[0].align), 'right', 'the alignment switch aligns the block');
+    assert.equal(await bar.locator('[data-fal].on').getAttribute('data-v'), 'r');
+    assert((await text()).includes(source.slice(7)), 'formatting retains the rest of the text');
+    await editor.evaluate(ed => { ed.focus(); const t = ed.querySelector('p b').nextSibling; const r = document.createRange(); r.setStart(t, 1); r.setEnd(t, 5); getSelection().removeAllRanges(); getSelection().addRange(r); });
+    await bar.locator('[data-fapply="color"]').click();
+    assert((await text()).includes('\\textcolor{'), 'the colour button applies the last colour at once');
+    assert.equal(await page.evaluate(() => { const c = document.querySelector('.cp'); return !!c && getComputedStyle(c).display !== 'none'; }), false, 'without the picker');
+    await bar.locator('[data-fpick="color"]').click();
+    await page.locator('.cp .cp-edit').waitFor();
+    assert(await page.locator('.cp .cp-edit').isVisible(), "the arrow opens the app's own palette, with its editable presets");
+    await page.keyboard.press('Escape');
+    assert(await bar.locator('.tb-math').count(), 'inline maths shows a maths italic x');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#docview .blk-ie'));
+    assert.equal(await strip.evaluate(e => getComputedStyle(e).visibility), 'hidden', 'leaving the text hides the toolbar');
+    assert.equal(await pageTop(), top0, 'hiding the toolbar does not move the page');
+  });
+  await test('Document text is edited in place and written back as its LaTeX source', async () => {
+    const SRC = '# Intro\n\nSome \\textbf{bold}, $x^2$, ``quotes\'\' -- \\LaTeX{} and \\foo{bar}.\n\n- one\n  - nested\n- [ ] task\n\n$$\\int_0^1 f$$\n\nLast.';
+    await page.evaluate((text) => {
+      TD.app.newDoc('Inline editor', null, null, [{ type: 'text', text }, { type: 'diagram', shapes: [] }], null, 'classic');
+      TD.app.cmd.setMode('document');
+    }, SRC);
+    const editor = page.locator('#docview .blk-ie'), text = () => page.evaluate(() => TD.state.doc.blocks[0].text);
+    const geo = () => page.evaluate(() => { const r = document.querySelector('#docview .blk[data-i="0"] .blk-body').getBoundingClientRect(); return [r.top, r.height]; });
+    const before = await geo();
+    await page.locator('#docview .blk-text p').last().click();
+    await editor.waitFor();
+    assert.deepEqual(await geo(), before, 'the editor lays the text out as the page does');
+    await editor.evaluate(ed => { const p = [...ed.querySelectorAll(':scope > p')].pop(); const r = document.createRange(); r.setStart(p.firstChild, p.firstChild.nodeValue.length); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); });
+    assert.equal(await text(), SRC, 'opening the editor keeps the source exactly');
+    await page.keyboard.type(' Then $y$ ok');
+    assert((await text()).endsWith('Last. Then $y$ ok'), 'a closing $ turns the formula into maths');
+    assert.equal(await editor.locator('p:last-child .ie-m').count(), 1);
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('- item');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('sub');
+    await page.keyboard.press('Tab');
+    assert((await text()).endsWith('\n\n- item\n  - sub'), '"- " starts a list, Enter adds an item and Tab nests it');
+    await page.keyboard.press('ControlOrMeta+z');
+    assert(!(await text()).includes('  - sub'), 'undo takes back the last step');
+    await page.keyboard.press('ControlOrMeta+Shift+z');
+    assert((await text()).endsWith('  - sub'), 'redo puts it back');
+    assert((await text()).startsWith(SRC), 'what was not edited keeps its source');
+    await editor.locator('.cbx').click();
+    assert((await text()).includes('- [x] task'), 'a checkbox ticks in place');
+    await editor.locator('.ie-m').first().click();
+    const box = page.locator('#docPop .td-pop-ta');
+    await box.waitFor();
+    await box.fill('a+b');
+    await box.press('Enter');
+    assert((await text()).includes('$a+b$'), 'a formula opens in a box and its edit is written back');
+    await page.locator('#docview .doc-fmt [data-fmt="src"]').click();
+    assert.equal(await page.locator('#docview .blk-ed').inputValue(), await text(), 'the source button shows the LaTeX');
+    await page.locator('#docview .doc-fmt [data-fmt="src"]').click();
+    await editor.waitFor();
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#docview .blk-ie'));
+  });
+  await test('Document undo and redo cover blocks, typing, tables and page setup, and spare diagram edits', async () => {
     await page.evaluate(() => {
-      Object.assign(TD.state.doc.page, { paper: 'custom', w: 10, h: 20, ml: 2, mr: 2 });
-      TD.docview.render();
+      TD.app.newDoc('Document undo', null, null, [{ type: 'text', text: 'First.' }, { type: 'diagram', shapes: [] }], null, 'classic');
+      TD.app.cmd.setMode('document');
     });
-    assert(await bar.evaluate(e => e.scrollWidth > e.clientWidth), 'narrow paper uses horizontal toolbar scrolling');
-    await bar.locator('[data-fmt="al:right"]').click();
-    assert.equal(await page.evaluate(() => TD.state.doc.blocks[0].align), 'right', 'offscreen alignment button remains reachable');
-    assert((await editor.inputValue()).includes(source.slice(7)), 'formatting retains the rest of the text');
-    assert((await bar.boundingBox()).height <= 40, 'narrow paper does not add toolbar rows');
+    const sum = () => page.evaluate(() => TD.state.doc.blocks.map(b => b.type === 'text' ? 't:' + b.text : b.type === 'table' ? 'T:' + b.rows[0][0] : b.type[0] + b.shapes.length).join('|'));
+    const key = async (redo = false) => { await page.keyboard.press(redo ? 'ControlOrMeta+Shift+z' : 'ControlOrMeta+z'); };
+    const away = () => page.locator('#docview').click({ position: { x: 20, y: 400 } });
+    await page.locator('#docview .doc-page > .ins:last-child [data-add="text"]').click();
+    await page.keyboard.type('Hello');
+    assert.equal(await sum(), 't:First.|d0|t:Hello');
+    await key();
+    assert.equal(await sum(), 't:First.|d0|t:', 'undo takes back the typing, in the editor');
+    assert.equal(await page.locator('#docview .blk-ie').count(), 1);
+    await key();
+    assert.equal(await sum(), 't:First.|d0', 'then the new block');
+    await key(true); await key(true);
+    assert.equal(await sum(), 't:First.|d0|t:Hello', 'redo brings both back');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => document.querySelector('#docview .blk[data-i="0"] [data-rm]').click());
+    assert.equal(await sum(), 'd0|t:Hello');
+    // a diagram edited on the canvas keeps its edit through the document's undo
+    await page.evaluate(() => { TD.app.cmd.setMode('diagram'); TD.state.doc.shapes.push({ ...TD.TYPES.text.create({ x: 0, y: 0 }, {}), id: 'undo-kept' }); TD.app.cmd.setMode('document'); });
+    await away(); await key();
+    assert.equal(await sum(), 't:First.|d1|t:Hello', 'undo puts the deleted block back and leaves the diagram as edited');
+    await page.locator('#docview .doc-page > .ins:last-child [data-add="table"]').click();
+    await page.keyboard.type('abc');
+    await key();
+    assert.equal(await sum(), 't:First.|d1|t:Hello|T:', 'undo in a cell takes back its typing');
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('cell')), true, 'and keeps the cell focused');
+    await key();
+    assert.equal(await sum(), 't:First.|d1|t:Hello');
+    const mt = await page.evaluate(() => TD.state.doc.page.mt);
+    await page.locator('#props button', { hasText: 'Narrow' }).click();
+    assert.notEqual(await page.evaluate(() => TD.state.doc.page.mt), mt);
+    await away(); await key();
+    assert.equal(await page.evaluate(() => TD.state.doc.page.mt), mt, 'page setup is undone too');
   });
   await test('PWA Install follows browser eligibility, language and installation', async () => {
     const button = page.locator('#btnInstall');

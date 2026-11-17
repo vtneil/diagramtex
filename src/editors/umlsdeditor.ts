@@ -8,6 +8,7 @@ import FormPanel from '../ui/FormPanel.svelte';
 import UmlsdeditorFrame from '../ui/editors/UmlsdeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
+import { patchSvg } from '../ui/svg-patch';
 // Sequence diagram editor: the overlay that opens on a pgf-umlsd block. A palette of instances and threads,
 // the kinds of message (call, self call, message, call without return) and blocks; the diagram drawn as the
 // package draws it, where a message is dragged from one lifeline to another (on the same one: a self call) and
@@ -89,7 +90,7 @@ import { runtime as TD } from '../runtime';
   root.className = 'modal';
   root.hidden = true;
   const svgI = (d: string) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, UmlsdeditorFrame, { p0: svgI('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: svgI('<path d="M7 5L3 9l4 4"/><path d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: svgI('<path d="M13 5l4 4-4 4"/><path d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: svgI('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, UmlsdeditorFrame, { p0: svgI('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: svgI('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: svgI('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: svgI('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
   document.body.appendChild(root);
   const menu = document.createElement('div');
   menu.className = 'ctx qe-ctx'; menu.hidden = true;
@@ -425,7 +426,7 @@ import { runtime as TD } from '../runtime';
       }
     }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    svg.innerHTML = out;
+    patchSvg(svg, out);
   }
 
   // ---------------------------------------------------------------- pointer
@@ -433,7 +434,7 @@ import { runtime as TD } from '../runtime';
     if (!E || (e.button !== 0 && e.button !== 1)) return;
     const fe = document.activeElement;
     if (fe && fe !== document.body && root.contains(fe) && fe.matches('input, textarea, select')) (fe as HTMLElement).blur();
-    // a double-click is detected here: redraws between the clicks swap the target, so no native dblclick arrives
+    // a double-click is detected here: a redraw between the clicks may replace the target, so a native dblclick can't be relied on
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const [sx, sy] = pos(e);

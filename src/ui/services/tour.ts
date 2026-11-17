@@ -46,7 +46,7 @@ import { t } from '../../i18n';
       body: `<p>${esc(t('tour.right.body', 'The panel on the right shows the settings of whatever you select: colours, line styles, labels, a block’s options.'))}</p>
         <p>${esc(t('tour.right.fold', 'Click its heading to fold it out of the way.'))}</p>` },
     { at: 'save', title: t('tour.save.title', 'Keep a copy of what matters'), warn: true,
-      body: `<p>${esc(t('tour.save.body', 'Your work is saved in this browser as you go. Clearing the browser’s data, or using a private window, wipes it.'))}</p>
+      body: `<p>${esc(TD.docStore?.active === false ? t('tour.save.none', 'This browser can’t keep your work as you go.') : t('tour.save.body', 'Your work is saved in this browser as you go. Clearing the browser’s data, or using a private window, wipes it.'))}</p>
         <p>${fill(t('tour.save.how', 'For anything important, {save} it as a {file} file ({key}) and keep it somewhere safe.'), { save: b(t('ui.save', 'Save')), file: '<code>.diagramtex</code>', key: `<kbd>${kb('Ctrl+Shift+S')}</kbd>` })}</p>` },
   ];
 
