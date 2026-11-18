@@ -11,3 +11,8 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 - A committed graphify-out/graph.json is rewritten whole on every build, so a large diff to it in a pull request is expected. Do not flag it as churn or suggest skipping the graph rebuild or its hooks.
+
+## Documentation
+
+- The user guide (`public/guide/index.html`, with the Thai translation in `public/guide/th.html`) is the full manual: every tool, block, mode, export and shortcut. When a change is visible to users, update the guide.
+- `README.md` is a short overview that points to the guide. Update it only for a new block, mode or headline feature, or when the setup, test or deploy commands change. Do not add per-feature detail there.

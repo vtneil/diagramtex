@@ -311,12 +311,13 @@ import { patchSvg } from '../ui/svg-patch';
     if (E.src !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
     E.pending = null;
     updateTools();
+    dock.changed();
   }
   // a change to the code; keepSel: the selected statement stays the one at the same place in the list
   function edit(fn: any) { E.many = null; begin(); const r = fn(); if (typeof r === 'string') E.src = r; commit(); clampSel(); draw(); renderProps(); }
   function restore(src: any) { E.src = src; clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { E.many = null; commit(); if (!E.undo.length) return; E.redo.push(E.src); restore(E.undo.pop()); }
-  function redo() { E.many = null; commit(); if (!E.redo.length) return; E.undo.push(E.src); restore(E.redo.pop()); }
+  function undo() { E.many = null; commit(); if (!E.undo.length) return; E.redo.push(E.src); restore(E.undo.pop()); dock.changed(); }
+  function redo() { E.many = null; commit(); if (!E.redo.length) return; E.undo.push(E.src); restore(E.redo.pop()); dock.changed(); }
   const drawable = (st: any) => st && !['comment', 'begin', 'end', 'raw'].includes(st.k);
   function clampSel() { if (E.sel != null && !drawable(L().S[E.sel])) E.sel = null; }
   const selSt = () => (E.sel != null ? L().S[E.sel] || null : null);
@@ -1315,7 +1316,7 @@ import { patchSvg } from '../ui/svg-patch';
   window.addEventListener('keydown', (e) => {
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
     if (document.querySelector('.td-dialog')) return;
@@ -1366,10 +1367,11 @@ import { patchSvg } from '../ui/svg-patch';
     if (k) { e.preventDefault(); add(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') { E.space = false; if (!E.drag) svg.style.cursor = ''; } }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
   function save() {
+    if (E && dock.docked()) { commit(); return; }
     closeLabel();
     if (document.activeElement === codeTa) readCode();
     commit();
@@ -1379,8 +1381,11 @@ import { patchSvg } from '../ui/svg-patch';
     setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  TD.unsaved.push(() => !!E && E.src !== E.start);
+  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => E.src });
+  TD.unsaved.push(() => !!E && !dock.docked() && E.src !== E.start);
   async function finish(ok: any) {
+    if (dock.docked()) return;
     if (!E) return;
     closeLabel();
     if (document.activeElement === codeTa) readCode();
@@ -1407,13 +1412,13 @@ import { patchSvg } from '../ui/svg-patch';
     codeTa.setAttribute('aria-label', t('editor.commonA.langCode', '{lang} code', { lang }));
     $('[data-ge="copy"]', root).title = t('editor.commonA.copyCode', 'Copy the {lang} code', { lang });
   }
-  function open(block: any, done: any, opts: Record<string, any> = {}) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, opts: Record<string, any> = {}, host?: any) {
     FLAT = !!opts.flat;
     chrome();
     E = { src: String(block.src || ''), sel: null, many: null, view: { ox: 0, oy: 0, k: 120 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null, base: null };
     E.start = E.src;
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    dock.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, properties, hints and title follow the interface language while the editor is open
@@ -1424,8 +1429,8 @@ import { patchSvg } from '../ui/svg-patch';
       queueMicrotask(() => { if (E) chrome(); });
       if (E) { buildPalette(); renderProps(); draw(); syncCode(); }
     });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (dock.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.geo3dEditor = { open };
+  TD.geo3dEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
 })();

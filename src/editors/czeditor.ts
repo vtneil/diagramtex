@@ -60,10 +60,11 @@ import { patchSvg } from '../ui/svg-patch';
     if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
     E.pending = null;
     updateTools();
+    dock.changed();
   }
   function restore(j: any) { const v = JSON.parse(j); E.items = v.items; E.raw = v.raw; for (const id of [...E.sel]) if (!byId(id)) E.sel.delete(id); draw(); renderProps(); updateTools(); }
-  function undo() { if (E.wire) endWire(); commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); }
-  function redo() { if (E.wire) endWire(); commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); }
+  function undo() { if (E.wire) endWire(); commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); dock.changed(); }
+  function redo() { if (E.wire) endWire(); commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); dock.changed(); }
 
   // ---------------------------------------------------------------- palette
   function buildPalette() {
@@ -712,7 +713,7 @@ import { patchSvg } from '../ui/svg-patch';
   window.addEventListener('keydown', (e) => {
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; } // never the browser's Save Page
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return; // a label popup handles its own keys
     if (document.querySelector('.td-dialog')) return; // a confirm dialog on top handles its own keys
@@ -754,11 +755,12 @@ import { patchSvg } from '../ui/svg-patch';
     }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
   // Ctrl+S: write the circuit back to the page (one undo step there) and keep editing; Esc then has nothing to discard
   function save() {
+    if (E && dock.docked()) { commit(); return; }
     if (pop) pop.close();
     if (document.activeElement === codeTa) readCode();
     commit();
@@ -769,8 +771,11 @@ import { patchSvg } from '../ui/svg-patch';
   let savedT = 0;
   function flashSaved() { const saved = uiText('editor.commonB.saved', 'Saved to the page'); setTip(saved); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500); }
   // reloading or closing the tab asks first while this holds edits not yet applied (app.ts, beforeunload)
-  TD.unsaved.push(() => !!E && snap() !== E.start);
+  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap(), result: () => ({ items: clone(E.items), raw: E.raw }) });
+  TD.unsaved.push(() => !!E && !dock.docked() && snap() !== E.start);
   async function finish(ok: any) {
+    if (dock.docked()) return;
     closeMenu();
     if (!E) return;
     if (pop) pop.close();
@@ -785,19 +790,19 @@ import { patchSvg } from '../ui/svg-patch';
     E = null;
     if (ok && changed) done(res);
   }
-  function open(block: any, done: any) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     E = { items: clone(block.items || []), raw: block.raw || '', sel: new Set(), tool: 'select', part: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], done, pending: null, hover: null, drag: null, codeAt: null, codeTimer: null };
     E.start = snap();
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    dock.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and counts follow the interface language while open
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (dock.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.czEditor = { open };
+  TD.czEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
 })();

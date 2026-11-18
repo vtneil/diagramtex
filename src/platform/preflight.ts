@@ -39,4 +39,26 @@
       };
     })();
 
+    // Too small for the editor: html.small-screen shows the phone page (#phoneWall) instead. Set here, before the page
+    // draws, so the editor never flashes. A window under 600 px wide or 500 px tall is too small. On a touch screen
+    // the height comes from the screen's shorter side, not the window: the on-screen keyboard shortens the window
+    // while typing and must not swap the page under the caret. So a phone gets the phone page either way round,
+    // and a tablet keeps the editor with its keyboard up. quick.ts listens for 'td-smallscreen'.
+    (function () {
+      var root = document.documentElement, touch = matchMedia('(pointer: coarse)');
+      function small() {
+        if (innerWidth < 600) return true;
+        return touch.matches ? Math.min(screen.width, screen.height) < 600 : innerHeight < 500;
+      }
+      function apply() {
+        var on = small();
+        if (on === root.classList.contains('small-screen')) return;
+        root.classList.toggle('small-screen', on);
+        window.dispatchEvent(new Event('td-smallscreen'));
+      }
+      apply();
+      addEventListener('resize', apply);
+      touch.addEventListener('change', apply);
+    })();
+
 export {};

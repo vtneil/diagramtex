@@ -693,11 +693,12 @@ import { patchSvg } from '../ui/svg-patch';
     if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
     E.pending = null;
     updateTools();
+    dock.changed();
   }
   function edit(fn: any) { begin(); const r = fn(); L = null; commit(); clampSel(); draw(); renderProps(); return r; }
   function restore(code: any) { E.M = load(code); L = null; E.sel = null; draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); }
+  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
+  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() { if (E.sel && !selV() && !selB() && !selA() && !selM()) E.sel = null; }
 
   // ---------------------------------------------------------------- palette
@@ -1529,7 +1530,7 @@ import { patchSvg } from '../ui/svg-patch';
   window.addEventListener('keydown', (e) => {
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
     if (document.querySelector('.td-dialog')) return;
@@ -1561,10 +1562,11 @@ import { patchSvg } from '../ui/svg-patch';
     if (k && k[0] === 'b') { e.preventDefault(); if (b) apply(k, { b }); else pick(k); return; }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
   function save() {
+    if (E && dock.docked()) { commit(); return; }
     closeLabel();
     if (document.activeElement === codeTa) readCode();
     commit();
@@ -1575,8 +1577,14 @@ import { patchSvg } from '../ui/svg-patch';
     setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  TD.unsaved.push(() => !!E && snapCode() !== E.start);
+  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  // a bond is selected by its own object, which a reopened drawing doesn't share: it is kept by its place in the layout
+  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode(),
+    selOut: () => (E.sel?.v ? { v: E.sel.v } : E.sel?.b ? { bi: lay().bonds.findIndex((b: any) => b.item === E.sel.b) } : null),
+    selIn: (s: any) => { const b = s?.bi >= 0 ? lay().bonds[s.bi] : null; E.sel = s?.v && findV(s.v) ? { v: s.v } : b ? { b: b.item } : null; } });
+  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
   async function finish(ok: any) {
+    if (dock.docked()) return;
     if (!E) return;
     closeLabel();
     if (document.activeElement === codeTa) readCode();
@@ -1592,7 +1600,8 @@ import { patchSvg } from '../ui/svg-patch';
     if (ok && changed) done({ src });
   }
   let localeOff: (() => void) | undefined;
-  function open(block: any, done: any) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
     L = null;
     E = { M, sel: null, arm: null, bond: '-', view: { ox: 0, oy: 0, k: 2 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, codeAt: null, codeTimer: null };
@@ -1605,16 +1614,15 @@ import { patchSvg } from '../ui/svg-patch';
     } catch { /* private storage */ }
     updateGridTools();
     E.start = codeOf(M);
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    dock.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, properties and drawing's hints follow the interface language while the editor is open
     let first = true;
     localeOff?.();
     localeOff = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); syncCode(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (dock.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.chemEditor = { open };
+  TD.chemEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
 })();

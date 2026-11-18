@@ -1419,7 +1419,29 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-entry { margin-top: 8px; }
 .cz-entry code { font-family: var(--font-mono); font-size: 12px; }
 .cz-entry .help { color: var(--graphite); font-size: 12px; line-height: 1.45; }
-@media (max-width: 1100px) { .cz-body { grid-template-columns: 200px 1fr 300px; } }
+/* the palette narrows with the editor (a window, or Quick's pane), so the drawing keeps the room: 3 columns of objects,
+   then 2, then 1 (list rows become icons, with their names in the tooltip). Measured on the editor, not the window. */
+.cz-box { container: czbox / inline-size; }
+@container czbox (max-width: 1259px) {
+  .cz-body { grid-template-columns: 172px 1fr 400px; }
+  .cz-pal .qe-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container czbox (max-width: 1099px) { .cz-body { grid-template-columns: 172px 1fr 300px; } }
+@container czbox (max-width: 959px) {
+  .cz-body { grid-template-columns: 96px 1fr 300px; }
+  .cz-pal .qe-grid { grid-template-columns: minmax(0, 1fr); }
+  .cz-search { padding: 12px 8px 8px; }
+  .cz-search input { padding: 0 6px; }
+  .cz-list { padding: 0 4px 16px; }
+  .cz-cat-t { padding: 8px 4px 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .cz-cat-t small { display: none; }
+  .cz-pal .cz-part { justify-content: center; height: 40px; padding: 0; }
+  .cz-pal .cz-part > span { display: none; }
+  /* physics objects keep their names (wrapped), not their commands */
+  .cz-pal .phy-part { height: auto; min-height: 40px; padding: 4px; }
+  .cz-pal .phy-part code { display: none; }
+  .cz-pal .phy-part > span { display: block; white-space: normal; text-align: center; font-size: 11px; line-height: 1.2; overflow-wrap: anywhere; }
+}
 @media (max-width: 800px) { .cz-body { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } .cz-pal { display: none; } .cz-side { border-left: 0; border-top: 1px solid var(--rule); } }
 .cz-svg .hitfill { fill: transparent; pointer-events: none; }
 /* quantum circuit editor: same shell as the circuit editor, a cell grid on paper */
@@ -1588,56 +1610,70 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .td-tip { transition: none; } }
 
 /* ---------- phone wall ----------
-   A phone held upright (narrow and portrait) gets a short introduction instead of the editor: what DiagramTeX is,
-   the note that the editor needs a bigger screen, and links into the guide. Tablets, and wide or landscape
-   screens (iPad, iPhone Duo opened flat), are left alone. */
+   A screen too small for the editor gets a short introduction instead: what DiagramTeX is, the note that the
+   editor needs a bigger screen, Quick's formula, and links into the guide. html.small-screen is set by
+   src/platform/preflight.ts: a window under 600px wide or 500px tall, or on a touch screen, a screen whose
+   shorter side is under 600px (a phone either way round; the on-screen keyboard can't flip it). Tablets are left
+   alone. */
 #phoneWall { display: none; }
-@media (max-width: 599px) and (orientation: portrait) {
-  #phoneWall {
-    display: block; position: fixed; inset: 0; z-index: 2147483647; overflow: auto; overscroll-behavior: contain;
-    background: var(--paper); color: var(--ink); font: 500 15px/1.5 var(--font-ui);
-  }
-  #phoneWall .pw-top {
-    position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    height: calc(52px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 16px 0; background: var(--sheet); border-bottom: 1px solid var(--rule);
-  }
-  #phoneWall .pw-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
-  #phoneWall .pw-lang { height: 32px; padding: 0 12px; border: 1px solid var(--rule-strong); border-radius: var(--r); background: none; color: var(--ink); font: 500 13px var(--font-ui); }
-  #phoneWall .pw-page { display: flex; flex-direction: column; gap: 32px; max-width: 520px; margin: 0 auto; padding: 24px 16px calc(40px + env(safe-area-inset-bottom)); }
-  #phoneWall h1 { margin: 0 0 12px; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
-  #phoneWall h2 { margin: 0 0 12px; font-size: 18px; line-height: 1.3; font-weight: 600; }
-  #phoneWall p { margin: 0; }
-  #phoneWall .pw-lead { color: var(--graphite); text-wrap: pretty; }
-  #phoneWall b, #phoneWall strong { color: var(--ink); font-weight: 600; }
-  #phoneWall strong { word-break: break-word; }
-  #phoneWall code { font: 12px var(--font-mono); color: var(--pencil); }
-  /* the notice: under a rule, as the one thing to act on */
-  #phoneWall .pw-notice { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule); }
-  #phoneWall .pw-actions { display: flex; flex-direction: column; gap: 8px; }
-  #phoneWall .pw-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: var(--r); font: 600 15px var(--font-ui); text-decoration: none; text-align: center; }
-  #phoneWall .pw-share { border: 1px solid var(--rule-strong); background: var(--sheet-raised); color: var(--ink); }
-  #phoneWall .pw-out { border: 1px solid var(--rule-strong); color: var(--ink); }
-  #phoneWall .pw-btn:active { background: var(--wash-strong); }
-  #phoneWall .pw-shot { margin: 0; }
-  #phoneWall .pw-shot img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: var(--r-lg); background: #fff; }
-  #phoneWall figcaption { margin-top: 8px; font-size: 13px; color: var(--pencil); }
-  #phoneWall .pw-steps { counter-reset: pw; display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
-  #phoneWall .pw-steps li { counter-increment: pw; position: relative; padding-left: 28px; color: var(--graphite); }
-  #phoneWall .pw-steps li::before { content: counter(pw); position: absolute; left: 0; top: 0; color: var(--pencil); font: 600 15px/1.5 var(--font-mono); }
-  #phoneWall .pw-kinds, #phoneWall .pw-links { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
-  #phoneWall .pw-kinds li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule-soft); }
-  #phoneWall .pw-links li { border-bottom: 1px solid var(--rule-soft); }
-  #phoneWall .pw-links a { display: flex; align-items: center; justify-content: space-between; min-height: 44px; color: var(--ink); text-decoration: none; }
-  #phoneWall .pw-links a::after { content: ""; width: 6px; height: 6px; border-top: 1.5px solid var(--pencil); border-right: 1.5px solid var(--pencil); transform: rotate(45deg); }
-  #phoneWall .pw-links a:active { color: var(--graphite); }
-  #phoneWall .pw-facts { display: flex; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--pencil); }
-  #phoneWall .pw-facts li:not(:last-child)::after { content: "·"; margin: 0 8px; color: var(--faint); }
-  #phoneWall :focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
-  html:lang(th) #phoneWall h1, html:lang(th) #phoneWall h2 { line-height: 1.5; letter-spacing: normal; }
-  /* nothing behind it is reachable, by pointer or screen reader; and the editor's toolbars, wider than a phone, must
-     not widen the page, or the phone zooms out to fit them */
-  body > :not(#phoneWall) { visibility: hidden !important; max-width: 100vw; overflow: hidden !important; }
+html.small-screen #phoneWall {
+  display: block; position: fixed; inset: 0; z-index: 2147483647; overflow: auto; overscroll-behavior: contain;
+  background: var(--paper); color: var(--ink); font: 500 15px/1.5 var(--font-ui);
 }
+html.small-screen #phoneWall .pw-top {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: calc(52px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 16px 0; background: var(--sheet); border-bottom: 1px solid var(--rule);
+}
+html.small-screen #phoneWall .pw-brand { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
+html.small-screen #phoneWall .pw-lang { height: 32px; padding: 0 12px; border: 1px solid var(--rule-strong); border-radius: var(--r); background: none; color: var(--ink); font: 500 13px var(--font-ui); }
+html.small-screen #phoneWall .pw-page { display: flex; flex-direction: column; gap: 32px; max-width: 520px; margin: 0 auto; padding: 24px 16px calc(40px + env(safe-area-inset-bottom)); }
+html.small-screen #phoneWall h1 { margin: 0 0 12px; font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+html.small-screen #phoneWall h2 { margin: 0 0 12px; font-size: 18px; line-height: 1.3; font-weight: 600; }
+html.small-screen #phoneWall p { margin: 0; }
+html.small-screen #phoneWall .pw-lead { color: var(--graphite); text-wrap: pretty; }
+html.small-screen #phoneWall b, html.small-screen #phoneWall strong { color: var(--ink); font-weight: 600; }
+html.small-screen #phoneWall strong { word-break: break-word; }
+html.small-screen #phoneWall code { font: 12px var(--font-mono); color: var(--pencil); }
+/* the notice: under a rule, as the one thing to act on */
+html.small-screen #phoneWall .pw-notice { display: flex; flex-direction: column; gap: 16px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule); }
+html.small-screen #phoneWall .pw-actions { display: flex; flex-direction: column; gap: 8px; }
+html.small-screen #phoneWall .pw-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: var(--r); font: 600 15px var(--font-ui); text-decoration: none; text-align: center; }
+html.small-screen #phoneWall .pw-share { border: 1px solid var(--rule-strong); background: var(--sheet-raised); color: var(--ink); }
+html.small-screen #phoneWall .pw-out { border: 1px solid var(--rule-strong); color: var(--ink); }
+html.small-screen #phoneWall .pw-btn:active { background: var(--wash-strong); }
+html.small-screen #phoneWall .pw-shot { margin: 0; }
+html.small-screen #phoneWall .pw-shot img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: var(--r-lg); background: #fff; }
+html.small-screen #phoneWall figcaption { margin-top: 8px; font-size: 13px; color: var(--pencil); }
+html.small-screen #phoneWall .pw-steps { counter-reset: pw; display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+html.small-screen #phoneWall .pw-steps li { counter-increment: pw; position: relative; padding-left: 28px; color: var(--graphite); }
+html.small-screen #phoneWall .pw-steps li::before { content: counter(pw); position: absolute; left: 0; top: 0; color: var(--pencil); font: 600 15px/1.5 var(--font-mono); }
+html.small-screen #phoneWall .pw-kinds, html.small-screen #phoneWall .pw-links { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+html.small-screen #phoneWall .pw-kinds li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule-soft); }
+html.small-screen #phoneWall .pw-links li { border-bottom: 1px solid var(--rule-soft); }
+html.small-screen #phoneWall .pw-links a { display: flex; align-items: center; justify-content: space-between; min-height: 44px; color: var(--ink); text-decoration: none; }
+html.small-screen #phoneWall .pw-links a::after { content: ""; width: 6px; height: 6px; border-top: 1.5px solid var(--pencil); border-right: 1.5px solid var(--pencil); transform: rotate(45deg); }
+html.small-screen #phoneWall .pw-links a:active { color: var(--graphite); }
+html.small-screen #phoneWall .pw-facts { display: flex; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--pencil); }
+html.small-screen #phoneWall .pw-facts li:not(:last-child)::after { content: "·"; margin: 0 8px; color: var(--faint); }
+html.small-screen #phoneWall :focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
+/* Quick's formula on the phone page: the same pieces, sized for a thumb (iOS zooms into fields under 16px) */
+html.small-screen #phoneWall .pw-sub { margin: -4px 0 16px; color: var(--graphite); text-wrap: pretty; }
+html.small-screen #phoneWall .qk { gap: 12px; }
+html.small-screen #phoneWall .qk-row[hidden] { display: none; }
+html.small-screen #phoneWall .qk-ta { font-size: 16px; min-height: 64px; }
+html.small-screen #phoneWall .qk-stage { min-height: 120px; padding: 20px 16px; }
+html.small-screen #phoneWall .qk-msg { margin-top: -4px; }
+html.small-screen #phoneWall .qk-bar { flex-direction: column; align-items: stretch; gap: 12px; }
+html.small-screen #phoneWall .qk-opts { justify-content: space-between; }
+html.small-screen #phoneWall .qk-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+html.small-screen #phoneWall .qk-acts button { height: 44px; justify-content: center; font-size: 15px; }
+html.small-screen #phoneWall .qk-acts .primary { min-width: 0; }
+html.small-screen #phoneWall .qk-foot { flex-direction: column; align-items: flex-start; gap: 8px; }
+html.small-screen #phoneWall .qk-src { min-height: 32px; font-size: 13px; }
+html.small-screen:lang(th) #phoneWall h1, html.small-screen:lang(th) #phoneWall h2 { line-height: 1.5; letter-spacing: normal; }
+/* nothing behind it is reachable, by pointer or screen reader; and the editor's toolbars, wider than a phone, must
+   not widen the page, or the phone zooms out to fit them */
+html.small-screen body > :not(#phoneWall) { visibility: hidden !important; max-width: 100vw; overflow: hidden !important; }
 
 /* Quick: one formula, copied as a picture. The file stays open underneath; only its chrome hides. */
 #quick { display: none; }
@@ -1647,7 +1683,7 @@ body.mode-quick #inputBox,
 body.mode-quick #topbar .group:not(.files-grp),
 body.mode-quick #blockNav, body.mode-quick #classicSeg { display: none !important; }
 /* hidden but keeping their space, so the mode switch and the sidebar's engine box stay where they are in the other modes */
-body.mode-quick #docName, body.mode-quick #saveState, body.mode-quick #autosaveNote, body.mode-quick #topbar .files-grp, body.mode-quick #files .panel-head, body.mode-quick #docList, body.mode-quick #binRow, body.mode-quick #gridFlags { visibility: hidden; }
+body.mode-quick #docName, body.mode-quick #saveState, body.mode-quick #autosaveNote, body.mode-quick #topbar .files-grp, body.mode-quick #files .panel-head, body.mode-quick #binRow, body.mode-quick #gridFlags { visibility: hidden; }
 .qk { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .qk-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .qk-label { font-size: 15px; font-weight: 600; color: var(--ink); }
@@ -1679,6 +1715,71 @@ body.mode-quick #docName, body.mode-quick #saveState, body.mode-quick #autosaveN
 .qk-foot { margin: 0; font-size: 12px; color: var(--pencil); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .qk-src { flex: none; height: auto; padding: 0; border: 0; background: none; color: var(--graphite); font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
 .qk-src:hover { color: var(--ink); background: none; }
+/* Quick's list takes the file list's place (same slot, same rows), so nothing below it moves */
+#quickList { display: none; }
+body.mode-quick #docList { display: none; }
+body.mode-quick #quickList { display: flex; flex-direction: column; gap: 4px; flex: 1; overflow: auto; list-style: none; margin: 0; padding: 0 8px 8px; }
+#quickList li { display: flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 4px 0 8px; border-radius: var(--r); color: var(--graphite); flex: none; cursor: pointer; }
+#quickList li:hover { background: var(--wash); color: var(--ink); }
+#quickList li.active { background: var(--wash-strong); color: var(--ink); font-weight: 600; }
+#quickList li:focus-visible { outline: 2px solid var(--bluepen); outline-offset: -2px; }
+#quickList li .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#quickList svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+#quickList .qk-ic svg { position: relative; top: 2px; width: 21px; height: 16px; margin: 0 -2.5px; stroke-width: 1.3; }
+#quickList .qk-ic svg [class] { stroke: currentColor; stroke-width: 1.3; } /* monotone, like every interface icon */
+#quickList li.qk-head { height: auto; padding: 12px 8px 4px; font-size: 11px; font-weight: 600; color: var(--pencil); cursor: default; }
+#quickList li.qk-head:hover { background: none; color: var(--pencil); }
+/* a block's row heads its drafts: the open block is ink and semibold but unfilled; the draft open in it is the
+   filled row, with a filled mark. A rule under the block's icon joins the drafts to it. */
+#quickList li.qk-block.open { color: var(--ink); font-weight: 600; }
+#quickList li.qk-block.open:hover { background: var(--wash); }
+#quickList .qk-n { flex: none; min-width: 20px; padding-right: 4px; text-align: right; font: 11px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--pencil); font-weight: 400; }
+#quickList li.qk-hist { position: relative; padding-left: 32px; font-variant-numeric: tabular-nums; }
+#quickList li.qk-hist::before { content: ""; position: absolute; left: 16px; top: -4px; bottom: 0; border-left: 1px solid var(--rule); }
+#quickList li.qk-hist .qk-dot { width: 12px; height: 12px; margin: 0 -2px 0 -4px; }
+#quickList li.qk-hist .qk-dot circle { fill: none; stroke: var(--pencil); stroke-width: 1.4; }
+#quickList li.qk-hist.active { background: var(--wash-strong); color: var(--ink); font-weight: 600; }
+#quickList li.qk-hist.active .qk-dot circle { fill: currentColor; stroke: currentColor; }
+#quickList li.qk-new { color: var(--pencil); }
+#quickList .qk-rn { height: 24px; font-weight: 500; }
+#quickList li.qk-new svg { margin-left: -2px; }
+#quickList li .del { visibility: hidden; border: 0; background: none; height: 20px; width: 20px; padding: 0; color: var(--pencil); border-radius: var(--r-sm); display: inline-flex; align-items: center; justify-content: center; }
+#quickList li .del svg { width: 14px; height: 14px; }
+#quickList li:hover .del, #quickList li .del:focus-visible { visibility: visible; }
+#quickList li .del:hover { color: var(--redpen); }
+/* a block in Quick: its editor fills the pane, embedded rather than over the page, with the output bar below */
+/* a block fills the pane edge to edge, as part of the page rather than a window over it: no frame, no gap, the
+   output bar a strip along the bottom */
+body.mode-quick #quick.qk-blocks { display: flex; flex-direction: column; overflow: hidden; padding: 0; scrollbar-gutter: auto; background: var(--sheet-raised); }
+.qk-blk { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.qk-dock { flex: 1; min-height: 0; display: flex; }
+/* the output bar sits at the right end of the editor's own top bar (moved there by quick.ts), sized like its controls */
+.qk-blk .qk-bar { flex: none; gap: 8px; flex-wrap: nowrap; }
+.qk-blk .modal-head > .spacer { display: none; } /* .qk-push does its job */
+/* grows to push the bar right; its own gap is taken back, and when the bar wraps it stays behind, so the bar starts left */
+.qk-blk .qk-push { flex: 1 1 0; min-width: 0; margin-right: -12px; }
+.qk-blk .qk-opts, .qk-blk .qk-acts { flex-wrap: nowrap; gap: 6px; }
+.qk-blk .qk-acts button { height: var(--ctl); padding: 0 8px; }
+.qk-blk .qk-acts .primary { min-width: 0; }
+.qk-blk .qk-msg { margin: 0; min-height: 0; max-width: 240px; }
+.qk-blk .qk-msg:empty { display: none; }
+.qk-exp { display: inline-flex; align-items: center; gap: 6px; }
+.qk-exp svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* Quick's Export menu: the app's export popover; its two actions share the last row */
+.qk-exp-pop { width: 240px; }
+.qk-exp-pop .exp-row select { width: 96px; }
+.qk-exp-go { display: flex; gap: 8px; }
+.qk-exp-go button { flex: 1 1 0; height: var(--ctl); justify-content: center; }
+.qk-exp-go .qk-dl { display: inline-flex; align-items: center; gap: 6px; }
+/* a block with no drafts: what it is, and the one way to start one */
+.qk-blk.qk-none { align-items: center; justify-content: center; gap: 12px; color: var(--graphite); background: var(--paper); }
+.qk-none p { margin: 0; font-size: 13px; }
+.qk-none-ic svg { display: block; width: 64px; height: 48px; fill: none; stroke: var(--pencil); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.qk-none-ic svg [class] { stroke: var(--pencil); }
+.qk-none button { height: var(--ctl); padding: 0 14px; }
+.modal.docked { position: relative; inset: auto; z-index: auto; flex: 1; min-width: 0; min-height: 0; background: none; display: flex; }
+.modal.docked > .cz-box { width: 100% !important; height: 100% !important; max-width: none; max-height: none; box-shadow: none; animation: none; border: 0; border-radius: 0; }
+.modal.docked .modal-actions { display: none; }
 
 /* ---------- search ("/"): tools, shapes, commands, modes and files in one field ---------- */
 #cmdk { position: fixed; inset: 0; z-index: 60; }

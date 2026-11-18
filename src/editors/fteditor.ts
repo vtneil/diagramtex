@@ -51,6 +51,7 @@ import { patchSvg } from '../ui/svg-patch';
       ['circle', message('editor.ft.circle', 'Circle'), 'shape', 'circle', wrapF('[$n$, circle, draw]')],
       ['ellipse', message('editor.ft.ellipse', 'Ellipse'), 'shape', 'ellipse', wrapF('[Node, ellipse, draw]')],
       ['shade', message('editor.ft.shaded', 'Shaded'), 'fill', 'black!8', wrapF('[Node, draw, fill=black!8]')],
+      ['phantom', message('editor.ft.phantom', 'Phantom'), 'phantom', 'phantom', wrapF('[A [B] [, phantom] [C]]')],
     ]],
     [message('editor.ft.cat.edge', 'Edge'), [
       ['line', message('editor.ft.line', 'Line'), 'edge', 'line', wrapF('[A [B]]')],
@@ -108,6 +109,9 @@ import { patchSvg } from '../ui/svg-patch';
     del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
     copy: '<rect class="qo" x="6.5" y="6.5" width="10" height="11"/><path class="qo" d="M3.5 13.5v-10h10"/>',
     paste: '<rect class="qo" x="4.5" y="3.5" width="11" height="14"/><path class="qo" d="M7.5 3.5v-1h5v1M7.5 9.5h5M7.5 12.5h5"/>',
+    // a phantom keeps its place but isn't drawn: a dashed node; making one visible again draws it solid
+    phantom: '<rect class="qo" x="4.5" y="6" width="11" height="8" stroke-dasharray="2 1.6"/>',
+    visible: '<rect class="qo" x="4.5" y="6" width="11" height="8"/>',
   };
   // tree icons are drawn growing down with siblings left to right; TURNS says which follow the tree's direction
   const TURNS = new Set(['child', 'sib', 'sibBefore', 'parent', 'earlier', 'later', 'lift', 'unwrap']);
@@ -137,6 +141,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
     E.pending = null;
     updateTools();
+    dock.changed();
   }
   function edit(fn: any) { begin(); fn(); commit(); cleanSel(); draw(); keepInView(); renderProps(); }
   function restore(code: any) {
@@ -146,8 +151,8 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = idx.map((i: any) => o[i]).filter(Boolean);
     draw(); renderProps(); updateTools();
   }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); }
+  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); dock.changed(); }
+  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); dock.changed(); }
   function cleanSel() { const o = new Set(order(E.T)); E.sel = E.sel.filter((n: any) => o.has(n)); }
   const one = () => (E.sel.length === 1 ? E.sel[0] : null);
   const select = (nodes: any) => { E.sel = nodes; draw(); renderProps(); };
@@ -244,6 +249,12 @@ import { patchSvg } from '../ui/svg-patch';
   function fillOf(g: any) { const f = g.st.fill; if (!f) return 'none'; const hit = FILLS.find((x) => TD.tikzColor && TD.tikzColor(x[0]) === f); return hit ? hit[0] : 'custom'; }
   // a style on the selected nodes, or on every node through `for tree` when none is selected
   function applyStyle(kind: any, v: any, nodes = E.sel) {
+    if (kind === 'phantom') { // a node at a time: a whole tree of phantoms draws nothing
+      if (nodes.length) { setPhantom(true, nodes); return; }
+      const m = uiText('editor.ft.phantomPick', 'Select a node first, or drag Phantom onto one');
+      setTip(m); setTimeout(() => { if (E && tip.textContent === m) setTip(''); }, 2400);
+      return;
+    }
     const opts = kind === 'shape' ? SHAPES[v] : kind === 'edge' ? EDGES[v] : v === 'none' ? [] : [`fill=${v}`];
     // line, arrow and dashed are styles: they keep a forked path; roof and fork are paths and replace each other
     // (fork keeps the style; it can't be hidden or a roof)
@@ -303,6 +314,7 @@ import { patchSvg } from '../ui/svg-patch';
   function tipOf(it: any) {
     const name = caption(it.name);
     if (it.kind === 'tree') return uiText('editor.ft.tipTree', '{name}: added under the selected node, or drag it onto a node', { name });
+    if (it.kind === 'phantom') return uiText('editor.ft.tipPhantom', '{name}: the selected nodes keep their place but are not drawn, nor their edges; or drag it onto a node', { name });
     if (it.kind === 'template') return uiText('editor.ft.tipTemplate', '{name}: replaces the tree (undo brings it back)', { name });
     return uiText('editor.ft.tipStyle', '{name}: for the selected nodes, or for every node when none is selected', { name });
   }
@@ -525,6 +537,7 @@ import { patchSvg } from '../ui/svg-patch';
     menu.innerHTML = mItem('child', uiText('editor.ft.addChild', 'Add Child'), 'child', 'Tab', many) + mItem('before', uiText('editor.ft.addSiblingBefore', 'Add Sibling Before'), 'sibBefore', '⇧↵', many || isRoot) + mItem('after', uiText('editor.ft.addSiblingAfter', 'Add Sibling After'), 'sib', '↵', many || isRoot) + mItem('parent', uiText('editor.ft.addParent', 'Add Parent'), 'parent', '', many) + '<hr>' +
       mItem('earlier', uiText('editor.ft.moveEarlier', 'Move Earlier'), 'earlier', alt + '←', many || !p || at === 0) + mItem('later', uiText('editor.ft.moveLater', 'Move Later'), 'later', alt + '→', many || !p || at === p.k.length - 1) +
       mItem('outdent', uiText('editor.ft.moveUpLevel', 'Move Up a Level'), 'lift', '⇧Tab', many || !p || isRoot || !parentOf(E.T, p)) + '<hr>' +
+      (allPhantom() ? mItem('visible', uiText('editor.ft.makeVisible', 'Make Visible'), 'visible', '') : mItem('phantom', uiText('editor.ft.makePhantom', 'Make Phantom'), 'phantom', '')) + '<hr>' +
       mItem('copy', uiText('ui.copy', 'Copy'), 'copy', isMac ? '⌘C' : 'Ctrl+C') + mItem('paste', uiText('editor.ft.pasteAsChild', 'Paste as Child'), 'paste', isMac ? '⌘V' : 'Ctrl+V', many || !E.clip) + '<hr>' +
       mItem('lift', uiText('editor.ft.deleteKeepChildren', 'Delete, Keep Children'), 'unwrap', '', !n.k.length) + mItem('delete', many ? uiText('editor.ft.deleteNodes', 'Delete {n} Nodes', { n: E.sel.length }) : uiText('ui.delete', 'Delete'), 'del', '⌫');
     menu.hidden = false;
@@ -594,7 +607,8 @@ import { patchSvg } from '../ui/svg-patch';
       ] }); return;
     }
     const gs = E.sel.map(geoOf).filter(Boolean);
-    const style = [segments(uiText('editor.ft.shape', 'Shape'), 'shape', same(gs.map(shapeOf)), SHAPE_SEG()), edgeField(same(gs.map(edgeOf)), gs.length > 0 && gs.every((g: any) => g.st.fork)), fills(same(gs.map(fillOf)))];
+    const style = [segments(uiText('editor.ft.show', 'Show'), 'vis', same(gs.map((g: any) => (g.st.phantom ? 'phantom' : 'visible'))), [['visible', uiText('editor.ft.visible', 'Visible')], ['phantom', uiText('editor.ft.phantom', 'Phantom'), uiText('editor.ft.phantomTitle', 'Keeps its place in the tree, but neither the node nor its edge is drawn')]]),
+      segments(uiText('editor.ft.shape', 'Shape'), 'shape', same(gs.map(shapeOf)), SHAPE_SEG()), edgeField(same(gs.map(edgeOf)), gs.length > 0 && gs.every((g: any) => g.st.fork)), fills(same(gs.map(fillOf)))];
     if (E.sel.length > 1) {
       renderView(props, FormPanel, { sections: [section(uiText('editor.ft.nNodes', '{n} nodes', { n: E.sel.length }), [...style, note(uiText('editor.ft.dragHelp', 'Drag a node to move it; ⌥-drag copies.'))], 'sec')] }); return;
     }
@@ -625,6 +639,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (!b || !E) return;
     const f = b.dataset.fs, v = b.dataset.v;
     if (f === 'shape' || f === 'edge' || f === 'fill') applyStyle(f, v);
+    else if (f === 'vis') setPhantom(v === 'phantom');
     else if (f === 'dir') edit(() => {
       // forest gives a node's own children the default south: a direction for the whole tree goes in `for tree`,
       // as a bare `grow` in the preamble turns the root's children only
@@ -663,6 +678,7 @@ import { patchSvg } from '../ui/svg-patch';
     else if (a === 'copy' && b && b.closest('.cz-code-head')) navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
     else if (a === 'copy') { if (E.sel.length) E.clip = tops(E.sel).map(clone); }
     else if (a === 'paste') paste();
+    else if (a === 'phantom' || a === 'visible') setPhantom(a === 'phantom');
     else if (a === 'child') { if (n) addChildTo(n); else if (!E.T.root) addRoot(); else addChildTo(E.T.root); }
     else if (!n) return;
     else if (a === 'sib' || a === 'after') addSibling(n, false);
@@ -671,6 +687,12 @@ import { patchSvg } from '../ui/svg-patch';
     else if (a === 'earlier') shift(n, -1);
     else if (a === 'later') shift(n, 1);
     else if (a === 'outdent') outdent(n);
+  }
+  // phantom: the node keeps its place in the layout, but neither it nor its edge is drawn (forest's `phantom`)
+  const allPhantom = () => E.sel.length > 0 && E.sel.every((n: any) => geoOf(n)?.st.phantom);
+  function setPhantom(on: boolean, nodes = E.sel) {
+    if (!nodes.length) return;
+    edit(() => { for (const n of nodes) n.o = [...drop(n.o, ['phantom']), ...(on ? ['phantom'] : [])]; });
   }
   function paste() {
     if (!E.clip || !E.clip.length) return;
@@ -722,7 +744,7 @@ import { patchSvg } from '../ui/svg-patch';
   window.addEventListener('keydown', (e) => {
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
     if (document.querySelector('.td-dialog')) return;
@@ -770,10 +792,11 @@ import { patchSvg } from '../ui/svg-patch';
     if (n && e.key.length === 1 && !e.altKey && TD.input && TD.input.mode !== 'mathlive') { e.preventDefault(); editLabel(n, e.key); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
   function save() {
+    if (E && dock.docked()) { commit(); return; }
     closeLabel();
     if (document.activeElement === codeTa) readCode();
     commit();
@@ -784,8 +807,12 @@ import { patchSvg } from '../ui/svg-patch';
     setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  TD.unsaved.push(() => !!E && snap() !== E.start);
+  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap(),
+    selOut: () => E.sel.map((n: any) => order(E.T).indexOf(n)), selIn: (idx: any) => { const o = order(E.T); E.sel = (idx || []).map((i: any) => o[i]).filter(Boolean); } });
+  TD.unsaved.push(() => !!E && !dock.docked() && snap() !== E.start);
   async function finish(ok: any) {
+    if (dock.docked()) return;
     if (!E) return;
     closeLabel();
     if (document.activeElement === codeTa) readCode();
@@ -800,21 +827,21 @@ import { patchSvg } from '../ui/svg-patch';
     E = null;
     if (ok && changed) done({ src });
   }
-  function open(block: any, done: any) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     const T = load(block.src);
     E = { T, sel: [], view: { ox: 0, oy: 0, k: 1.5 }, undo: [], redo: [], pending: null, done, drag: null, hover: -1, drop: null, ghost: null, st: { size: block.size || 'normalsize', font: block.font || 'default' }, codeAt: null, codeTimer: null, clip: null, L: null };
     // an untouched tree hands its own text back
     E.start = codeOf(T);
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    dock.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (dock.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.ftEditor = { open };
+  TD.ftEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
 })();

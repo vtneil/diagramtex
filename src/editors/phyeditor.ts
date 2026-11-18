@@ -44,7 +44,7 @@ import { patchSvg } from '../ui/svg-patch';
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   let stopLocale: (() => void) | null = null;
   const snapshot = () => E.src;
-  const { begin, commit, undo, redo } = TD.editorSession.history({ state: () => E, snapshot, restore: (src) => { setSrc(src); clampSel(); draw(); renderProps(); }, updateTools: () => updateTools() });
+  const { begin, commit, undo, redo } = TD.editorSession.history({ state: () => E, snapshot, restore: (src) => { setSrc(src); clampSel(); draw(); renderProps(); }, updateTools: () => updateTools(), changed: () => session.changed() });
   function setSrc(src: any) { E.src = src; E.M = P.parse(src); E.poly = null; E.multi = null; }
   // write the parsed lines back; only the lines edited through P.setOpt/P.setArg change
   function flush() { E.src = P.serialize(E.M); }
@@ -819,7 +819,7 @@ import { patchSvg } from '../ui/svg-patch';
   window.addEventListener('keydown', (e) => {
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || session.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if (document.querySelector('.td-dialog')) return;
     const mod = e.metaKey || e.ctrlKey, inField = !!((e.target! as Element).closest && (e.target! as Element).closest('input, textarea, select'));
@@ -865,30 +865,31 @@ import { patchSvg } from '../ui/svg-patch';
   // space held: the open hand; moving the view: the closed hand, as on the main canvas
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') { E.space = false; svg.classList.remove('pan-ready'); } }, true);
   window.addEventListener('blur', () => { if (E) E.space = false; svg.classList.remove('pan-ready', 'panning'); });
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
-  const { save, finish } = TD.editorSession.lifecycle({
+  const session = TD.editorSession.lifecycle({
     state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot, commit, root, code: codeTa, readCode, setTip, tip,
     discardTitle: () => uiText('editor.phy.discard', 'Discard changes to this figure?'), beforeClose: closeMenu,
   });
-  function open(block: any, done: any) {
+  const { save, finish } = session;
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     E = { src: '', M: null, arm: null, view: { ox: 0, oy: 0, k: 40 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, ghost: null, tool: null, poly: null, multi: null, codeAt: null, codeTimer: null };
     // choosing one object (E.sel = i, or null) ends a multiple selection
     let sel1: any = null;
     Object.defineProperty(E, 'sel', { get: () => sel1, set: (v) => { sel1 = v; E.multi = null; }, enumerable: true });
     setSrc(String(block.src || ''));
     E.start = E.src;
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    session.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (session.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.physicsEditor = { open };
+  TD.physicsEditor = { open, dockable: true, close: () => session.detach() };
 })();

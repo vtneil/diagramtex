@@ -102,7 +102,7 @@ import { patchSvg } from '../ui/svg-patch';
   let E: any = null;
   const snapCode = () => codeOf(E.M);
   const { begin, commit, undo, redo } = TD.editorSession.history({
-    state: () => E, snapshot: snapCode, restore, updateTools,
+    state: () => E, snapshot: snapCode, restore, updateTools, changed: () => session.changed(),
   });
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
@@ -1026,7 +1026,7 @@ import { patchSvg } from '../ui/svg-patch';
   window.addEventListener('keydown', (e) => {
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || session.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if (document.querySelector('.td-dialog')) return;
     // the label popup handles its own keys (Enter and Esc finish it); this listener runs first, in capture
@@ -1062,28 +1062,29 @@ import { patchSvg } from '../ui/svg-patch';
     add(k);
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
   // ⌘S: write the field back to the page (one undo step there) and keep editing
-  const { save, finish } = TD.editorSession.lifecycle({
+  const session = TD.editorSession.lifecycle({
     state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: snapCode, commit,
     root, code: codeTa, readCode, setTip, tip, discardTitle: () => t('editor.bf.discard', 'Discard changes to this bit field?'), beforeClose: () => { if (LB) LB.pop.close(); },
   });
+  const { save, finish } = session;
   let localeOff: (() => void) | undefined;
-  function open(block: any, done: any) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
     E = { M, sel: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, hoverKey: '', codeAt: null, codeTimer: null };
     E.start = codeOf(M);
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    session.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette and properties follow the interface language while the editor is open
     localeOff?.();
     localeOff = onLocale(() => { if (E) { buildPalette(); renderProps(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (session.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.bytefieldEditor = { open, _state: () => E, _placeGroup: placeGroup, _groupSpan: groupSpan, _rows: () => selRowRange(), _scr: (b: any) => scr(b), _lay: () => lay() };
+  TD.bytefieldEditor = { open, dockable: true, close: () => session.detach(), _state: () => E, _placeGroup: placeGroup, _groupSpan: groupSpan, _rows: () => selRowRange(), _scr: (b: any) => scr(b), _lay: () => lay() };
 })();

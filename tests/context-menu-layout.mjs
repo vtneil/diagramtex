@@ -11,7 +11,7 @@ try {
  for(const browser of testBrowsers()) {
   const b=await launchBrowser(browser,`http://127.0.0.1:${server.port}/`),p=b.page;
   try {
-   for(const [width,height] of [[960,700],[700,360],[480,300]]) {
+   for(const [width,height] of [[960,700],[700,500],[600,500]]) {
     await p.setViewportSize({width,height});
     await p.evaluate(()=>{
      document.body.classList.add('no-files');document.querySelector('#rightCol').style.display='none';

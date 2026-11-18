@@ -6,7 +6,7 @@
   <title>DiagramTeX: draw diagrams, export LaTeX/TikZ</title>
   <meta name="description" content="Free diagram editor for physics and maths: circuits, quantum circuits, commutative diagrams, Bloch spheres and plots. Export TikZ, LaTeX, PDF, SVG or PNG.">
   <!-- Nothing is loaded from another site: every script, style, font and image is served from here (or made in the page). -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-li1QTcekhCxAfzgAze9HymaDZkFM7+ooqZcgo+SlLJU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-qIzbr9+6GAwZcH/6kNC/doxbakYwCqCueX+vXTpFcZs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <link rel="canonical" href="https://diagramtex.com/">
   <!-- link previews (Slack, Discord, X, iMessage…) -->
@@ -112,6 +112,22 @@
       }
     };
   })();
+  (function() {
+    var root = document.documentElement, touch = matchMedia("(pointer: coarse)");
+    function small() {
+      if (innerWidth < 600) return true;
+      return touch.matches ? Math.min(screen.width, screen.height) < 600 : innerHeight < 500;
+    }
+    function apply() {
+      var on = small();
+      if (on === root.classList.contains("small-screen")) return;
+      root.classList.toggle("small-screen", on);
+      window.dispatchEvent(new Event("td-smallscreen"));
+    }
+    apply();
+    addEventListener("resize", apply);
+    touch.addEventListener("change", apply);
+  })();
 })();
 </script>
 
@@ -167,6 +183,12 @@
         <img src="guide/img/phone-canvas.webp" width="1000" height="530" loading="lazy" decoding="async" alt="A DiagramTeX canvas with formulae, a flowchart, an RC circuit, a plot, a quantum circuit and a commutative diagram"/>
         <figcaption>One canvas: formulae, shapes, a circuit, a plot, a quantum circuit and a commutative diagram, all exported as TikZ.</figcaption>
       </figure>
+      
+      <section class="pw-quick" aria-labelledby="pwQuickTitle" data-nosnippet="">
+        <h2 id="pwQuickTitle">Try it: a formula as a picture</h2>
+        <p class="pw-sub">Type LaTeX, then copy the formula as a PNG for chats, slides or notes. Diagrams, blocks and the full editor are waiting on a computer.</p>
+        <div id="pwQuick"></div>
+      </section>
       <section aria-labelledby="pwHow">
         <h2 id="pwHow">How it works</h2>
         <ol class="pw-steps">
@@ -178,7 +200,7 @@
       <section aria-labelledby="pwKinds">
         <h2 id="pwKinds">What you can draw</h2>
         <ul class="pw-kinds">
-          <!--[--><li><span>Circuits</span><code>circuitikz</code></li><li><span>Quantum circuits</span><code>quantikz</code></li><li><span>Commutative diagrams</span><code>tikz-cd</code></li><li><span>Plots and charts</span><code>pgfplots</code></li><li><span>3D figures</span><code>tikz-3dplot</code></li><li><span>Feynman diagrams</span><code>tikz-feynman</code></li><li><span>Trees</span><code>forest</code></li><li><span>State machines</span><code>automata</code></li><li><span>Chemical structures</span><code>chemfig</code></li><li><span>Tables</span><code>booktabs</code></li><!--]-->
+          <!--[--><li><span>Circuits</span><code>circuitikz</code></li><li><span>Quantum circuits</span><code>quantikz</code></li><li><span>Commutative diagrams</span><code>tikz-cd</code></li><li><span>Plots and charts</span><code>pgfplots</code></li><li><span>3D figures</span><code>tikz-3dplot</code></li><li><span>Feynman diagrams</span><code>tikz-feynman</code></li><li><span>Trees</span><code>forest</code></li><li><span>Graphs</span><code>graphs</code></li><li><span>State machines</span><code>automata</code></li><li><span>Chemical structures</span><code>chemfig</code></li><li><span>Tables</span><code>booktabs</code></li><!--]-->
         </ul>
       </section>
       <section aria-labelledby="pwGuide">
@@ -286,6 +308,7 @@
         </div>
       </div>
       <ul id="docList"></ul>
+      <ul id="quickList" aria-label="Quick"></ul>
       <button type="button" id="binRow" class="bin-row" title="Recycle Bin: deleted files and folders, kept for 30 days"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"></path></svg><span>Recycle Bin</span><span class="bin-n"></span></button>
       <section id="inputBox" aria-label="Text input"></section>
       <section id="engineBox" aria-label="LaTeX engine"></section>

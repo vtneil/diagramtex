@@ -184,6 +184,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
     E.pending = null;
     updateTools();
+    dock.changed();
   }
   function edit(fn: any) { begin(); fn(); syncBreaks(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   // a break crosses every row that draws something (not blank rows), at its row's height
@@ -198,8 +199,8 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = { x: E.M.ext.length - 1 }; draw(); renderProps();
   }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); }
+  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
+  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() {
     const s = E.sel;
     if (!s) return;
@@ -986,7 +987,7 @@ import { patchSvg } from '../ui/svg-patch';
   window.addEventListener('keydown', (e) => {
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
     if (document.querySelector('.td-dialog')) return;
@@ -1016,11 +1017,12 @@ import { patchSvg } from '../ui/svg-patch';
     if (k) { e.preventDefault(); pick(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
   // ⌘S: write the diagram back to the page (one undo step there) and keep editing
   function save() {
+    if (E && dock.docked()) { commit(); return; }
     closeLabel();
     if (document.activeElement === codeTa) readCode();
     commit();
@@ -1031,8 +1033,11 @@ import { patchSvg } from '../ui/svg-patch';
     setTimeout(() => { if (E && tip.textContent === saved) setHint(''); }, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  TD.unsaved.push(() => !!E && snapCode() !== E.start);
+  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode() });
+  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
   async function finish(ok: any) {
+    if (dock.docked()) return;
     if (!E) return;
     closeLabel();
     if (document.activeElement === codeTa) readCode();
@@ -1047,20 +1052,20 @@ import { patchSvg } from '../ui/svg-patch';
     E = null;
     if (ok && changed) done({ src });
   }
-  function open(block: any, done: any) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
     E = { M, sel: null, arm: null, view: { ox: 0, oy: 0, k: 30 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null };
     E.start = codeOf(M);
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    dock.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setHint('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (dock.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.timingEditor = { open, paint, norm };
+  TD.timingEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); }, paint, norm };
 })();

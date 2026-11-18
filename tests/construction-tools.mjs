@@ -157,10 +157,12 @@ try {
    await p.locator('#tools [data-fly="shapes"]').click();assert(await p.locator('#fly-shapes').isVisible(),'flyouts open from the two-column rail');
    await p.keyboard.press('Escape');
    await p.screenshot({path:path.join(artifacts,browser+'-compact.png')});
-   await p.setViewportSize({width:960,height:360});await frame();await p.locator('[data-tool="pencil"]').scrollIntoViewIfNeeded();await p.locator('[data-tool="pencil"]').click();
+   await p.setViewportSize({width:960,height:500});await frame();await p.locator('[data-tool="pencil"]').scrollIntoViewIfNeeded();await p.locator('[data-tool="pencil"]').click();
    assert.equal(await p.evaluate(()=>TD.state.tool),'pencil','tiny windows retain scrolling as a fallback');
    await p.setViewportSize({width:1600,height:1000});await frame();assert.equal(await columns(),1,'resizing taller restores one column');
    await p.setViewportSize({width:390,height:844});await frame();assert(await p.locator('#phoneWall').isVisible(),'existing portrait-phone screen guard is preserved');
+   await p.setViewportSize({width:960,height:499});await frame();assert(await p.locator('#phoneWall').isVisible(),'a window too short for the editor shows the phone page');
+   await p.setViewportSize({width:599,height:900});await frame();assert(await p.locator('#phoneWall').isVisible(),'a window too narrow for the editor shows the phone page');
    assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}: bucket, local magnifier, grouping/layout, guides/history/persistence, native node labels/pins/anchors`);
   } finally {await b.close();}
  }

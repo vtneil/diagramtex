@@ -2,11 +2,18 @@ import { onLocale } from '../i18n';
 import { blockCaption } from '../i18n/shapes';
 // Typed extension registry. Domain modules register behavior; the app owns transactions.
 import type { Shape } from './contracts';
+import type { EditorHost, EditorMemo } from './editor-session';
 export interface Box { x: number; y: number; w: number; h: number }
 export interface PositionedShape extends Shape { x: number; y: number; src: string }
 export interface BlockResult { src: string; [key: string]: unknown }
+/** An editor view. A dockable one can also open embedded in a pane (Quick), handing back every edit, until close(). */
+export interface BlockEditorView {
+  open(shape: PositionedShape, done: (result: BlockResult) => void, options?: unknown, host?: EditorHost): void;
+  dockable?: boolean;
+  close?(): void;
+}
 export interface BlockEditor {
-  get(): { open(shape: PositionedShape, done: (result: BlockResult) => void, options?: unknown): void } | null | undefined;
+  get(): BlockEditorView | null | undefined;
   alias: string;
   available?(): boolean;
   prepare?(shape: PositionedShape): void;
@@ -72,5 +79,21 @@ export function createBlocks(types: Record<string, unknown>, alias: (name: strin
       }), editor.options ? editor.options() : undefined);
       return true;
     },
+    // Quick: blocks whose editor can be embedded in a pane
+    dockable: (type: string) => !!definitions.get(type)?.editor?.get()?.dockable,
+    // Embed the block's editor in `dock`, editing `shape` in place; changed() follows every edit. Nothing on the
+    // canvas is touched, so the layout shift that keeps a placed block still is not needed here. `memo` reopens it
+    // where it was left (view, selection, undo history); keep() receives that memo when it is taken out again.
+    dock(shape: PositionedShape, dock: HTMLElement, changed: (shape: PositionedShape) => void, memo?: EditorMemo | null, keep?: (memo: EditorMemo) => void) {
+      const editor = definitions.get(shape.type)?.editor, view = editor?.get();
+      if (!editor || !view?.dockable || (editor.available && !editor.available())) return false;
+      if (editor.prepare) editor.prepare(shape);
+      view.open(shape, (result) => {
+        if (editor.apply) editor.apply(shape, result); else shape.src = result.src;
+        changed(shape);
+      }, editor.options ? editor.options() : undefined, { dock, memo, keep });
+      return true;
+    },
+    undock(type: string) { definitions.get(type)?.editor?.get()?.close?.(); },
   };
 }

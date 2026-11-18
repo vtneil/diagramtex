@@ -40,7 +40,7 @@ import { t } from '../../i18n';
         <div class="tour-tags"><span>${esc(t('ui.quantum.circuit', 'Quantum circuit'))}</span><span>${esc(t('ui.circuit', 'Circuit'))}</span><span>${esc(t('ui.chemistry', 'Chemistry'))}</span><span>${esc(t('ui.tree', 'Tree'))}</span><span>${esc(t('tour.tag.timing', 'Timing'))}</span><span>${esc(t('ui.bloch.sphere', 'Bloch sphere'))}</span></div>
         <p>${esc(t('tour.left.pick', 'Pick one, click the canvas to place it, then double-click it to edit.'))}</p>` },
     { at: 'top', title: t('tour.top.title', 'What you’re making, on top'),
-      body: `<p>${fill(t('tour.top.body', 'The top bar picks the kind of work: {classic} diagrams and documents, a {page}, a {whiteboard}, a {table} or a {quick} formula.'), { classic: b(t('ui.classic', 'Classic')), page: b(t('ui.page', 'Page')), whiteboard: b(t('ui.whiteboard', 'Whiteboard')), table: b(t('ui.table', 'Table')), quick: b(t('ui.quick', 'Quick')) })}</p>
+      body: `<p>${fill(t('tour.top.body', 'The top bar picks the kind of work: {classic} diagrams and documents, a {page}, a {whiteboard}, a {table}, or {quick}: a formula or a block, without a file.'), { classic: b(t('ui.classic', 'Classic')), page: b(t('ui.page', 'Page')), whiteboard: b(t('ui.whiteboard', 'Whiteboard')), table: b(t('ui.table', 'Table')), quick: b(t('ui.quick', 'Quick')) })}</p>
         <p>${esc(t('tour.top.export', 'Export and LaTeX on the right take it out as a picture, a PDF or code.'))}</p>` },
     { at: 'right', title: t('tour.right.title', 'Settings on the right'),
       body: `<p>${esc(t('tour.right.body', 'The panel on the right shows the settings of whatever you select: colours, line styles, labels, a block’s options.'))}</p>

@@ -40,7 +40,7 @@
     [message('phone.kind.circuits', 'Circuits'), 'circuitikz'], [message('phone.kind.quantum', 'Quantum circuits'), 'quantikz'],
     [message('phone.kind.cd', 'Commutative diagrams'), 'tikz-cd'], [message('phone.kind.plots', 'Plots and charts'), 'pgfplots'],
     [message('phone.kind.3d', '3D figures'), 'tikz-3dplot'], [message('phone.kind.feynman', 'Feynman diagrams'), 'tikz-feynman'],
-    [message('phone.kind.trees', 'Trees'), 'forest'], [message('phone.kind.automata', 'State machines'), 'automata'],
+    [message('phone.kind.trees', 'Trees'), 'forest'], [message('phone.kind.graphs', 'Graphs'), 'graphs'], [message('phone.kind.automata', 'State machines'), 'automata'],
     [message('phone.kind.chem', 'Chemical structures'), 'chemfig'], [message('phone.kind.tables', 'Tables'), 'booktabs'],
   ];
   const GUIDE: [Message, string][] = [
@@ -93,6 +93,12 @@
         <img src="guide/img/phone-canvas.webp" width="1000" height="530" loading="lazy" decoding="async" alt={t("phone.shot.alt", "A DiagramTeX canvas with formulae, a flowchart, an RC circuit, a plot, a quantum circuit and a commutative diagram", {}, $locale)}>
         <figcaption>{t("phone.shot.caption", "One canvas: formulae, shapes, a circuit, a plot, a quantum circuit and a commutative diagram, all exported as TikZ.", {}, $locale)}</figcaption>
       </figure>
+      <!-- Quick's formula, usable right here (src/ui/services/quick.ts draws it into #pwQuick) -->
+      <section class="pw-quick" aria-labelledby="pwQuickTitle" data-nosnippet>
+        <h2 id="pwQuickTitle">{t("phone.quick.title", "Try it: a formula as a picture", {}, $locale)}</h2>
+        <p class="pw-sub">{t("phone.quick.sub", "Type LaTeX, then copy the formula as a PNG for chats, slides or notes. Diagrams, blocks and the full editor are waiting on a computer.", {}, $locale)}</p>
+        <div id="pwQuick"></div>
+      </section>
       <section aria-labelledby="pwHow">
         <h2 id="pwHow">{t("phone.how", "How it works", {}, $locale)}</h2>
         <ol class="pw-steps">
@@ -211,6 +217,7 @@
         </div>
       </div>
       <ul id="docList"></ul>
+      <ul id="quickList" aria-label={t("quick.list", "Quick", {}, $locale)}></ul>
       <button type="button" id="binRow" class="bin-row" title={t("ui.recycle.bin.deleted.files.and.folders.kept.for.30.days", "Recycle Bin: deleted files and folders, kept for 30 days", {}, $locale)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/></svg><span>{t("ui.recycle.bin", "Recycle Bin", {}, $locale)}</span><span class="bin-n"></span></button>
       <section id="inputBox" aria-label={t("ui.text.input", "Text input", {}, $locale)}></section>
       <section id="engineBox" aria-label={t("ui.latex.engine", "LaTeX engine", {}, $locale)}></section>

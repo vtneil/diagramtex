@@ -351,11 +351,12 @@ import { patchSvg } from '../ui/svg-patch';
     if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
     E.pending = null;
     updateTools();
+    dock.changed();
   }
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); if (E.M.nodes.length) fitIfOut(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); }
+  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
+  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() {
     const s = E.sel;
     if (s && s.n) { s.n = s.n.filter((x: string) => nOf(x)); if (!s.n.length) E.sel = null; }
@@ -1100,7 +1101,7 @@ import { patchSvg } from '../ui/svg-patch';
 
   window.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target as Element).closest && (e.target as Element).closest('.td-pop-ta, .td-pop-ml')) return;
     if (document.querySelector('.td-dialog')) return;
@@ -1141,7 +1142,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (k) { e.preventDefault(); pick(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
   // pasting onto the canvas: copied nodes, or a graph written down in any of the formats
   window.addEventListener('paste', (e: ClipboardEvent) => {
     if (!E || root.hidden || document.querySelector('.td-dialog')) return;
@@ -1154,6 +1155,7 @@ import { patchSvg } from '../ui/svg-patch';
 
   // ---------------------------------------------------------------- open / close
   function save() {
+    if (E && dock.docked()) { commit(); return; }
     closeLabel();
     if (document.activeElement === codeTa) readCode();
     commit();
@@ -1161,8 +1163,11 @@ import { patchSvg } from '../ui/svg-patch';
     if (src !== E.start) { E.start = src; E.done({ src }); }
     flash(uiText('editor.commonB.saved', 'Saved to the page'), 1500);
   }
-  TD.unsaved.push(() => !!E && snapCode() !== E.start);
+  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode() });
+  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
   async function finish(ok: any) {
+    if (dock.docked()) return;
     if (!E) return;
     closeLabel();
     if (document.activeElement === codeTa) readCode();
@@ -1177,20 +1182,20 @@ import { patchSvg } from '../ui/svg-patch';
     E = null;
     if (ok && changed) done({ src });
   }
-  function open(block: any, done: any) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
     const directed = M.edges.length && M.edges.filter((e: any) => e.op !== '--').length > M.edges.length / 2;
     E = { M, sel: null, arm: null, kind: directed ? 'arrow' : 'line', bent: false, dashed: false, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
     E.start = codeOf(M);
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    dock.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     stopLocale?.();
     let first = true;
     stopLocale = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (dock.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.graphEditor = { open };
+  TD.graphEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
 })();

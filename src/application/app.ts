@@ -3914,6 +3914,17 @@ import { runtime as TD } from '../runtime';
     const step = G * 2 * c.n++;
     pasteShapes(c.shapes, Math.round((cx - b.x - b.w / 2) / G) * G + step, Math.round((cy - b.y - b.h / 2) / G) * G + step);
   }
+  // Quick's Add to Document / Diagram / Page / Whiteboard: leave Quick and add the shapes to the open file, in the middle of the visible view (a new
+  // diagram at the cursor in a document), selected but not opened
+  function placeOnCanvas(list: any[]) {
+    setQuick(false);
+    const shapes = list.map((o) => { const s = clone(o); s.id = uid(); return s; });
+    if (state.mode === 'document') { insertBlocks([{ type: 'diagram', shapes }]); return; }
+    const r = fitArea(), v = state.view, G = TD.GRID;
+    const cx = v.x + r.w / 2 / v.zoom, cy = v.y + r.h / 2 / v.zoom;
+    const b = TD.bboxOf(shapes.flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }));
+    pasteShapes(shapes, Math.round((cx - b.x - b.w / 2) / G) * G, Math.round((cy - b.y - b.h / 2) / G) * G);
+  }
   // ---------- combine (shape booleans) ----------
   const COMBINE = [['unite'], ['intersect'], ['subtract'], ['exclude'], ['divide']];
   function combineName(key: string) {
@@ -4513,7 +4524,7 @@ import { runtime as TD } from '../runtime';
     if (outputReady(list)) return true;
     showHint(outputWait(), 2200); return false;
   }
-  const OUTPUT_BUTTONS: [string, string][] = [['topbar', '[data-cmd="export"], [data-cmd="print"], [data-cmd="tikz"]'], ['quick', '[data-q]'], ['tableview', 'button[data-render]']];
+  const OUTPUT_BUTTONS: [string, string][] = [['topbar', '[data-cmd="export"], [data-cmd="print"], [data-cmd="tikz"]'], ['quick', '[data-q]'], ['pwQuick', '[data-q]'], ['tableview', 'button[data-render]']];
   function updateOutputAvailability(): void {
     const busy = !!TD.math.pending;
     // runs on every maths progress round: searched within each container, not across a page that may hold a large table
@@ -4865,6 +4876,14 @@ import { runtime as TD } from '../runtime';
     ctx.querySelectorAll<HTMLElement>('.sub').forEach(sub=>sub.style.display='none');
     ctx.scrollTop=0; positionMenu(ctx,x,y);
   }
+  // A menu of a few actions for another part of the app (Quick's sidebar list), drawn and placed like this one.
+  let menuPick: ((act: string) => void) | null = null;
+  function openMenu(entries: { label: string; act: string; ic?: string; danger?: boolean; dis?: boolean; sep?: boolean }[], x: number, y: number, pick: (act: string) => void) {
+    menuPick = pick;
+    ctx.innerHTML = entries.map(e => (e.sep ? hr : '') + item(esc(e.label), 'menu:' + e.act, { ic: e.ic, danger: e.danger, dis: e.dis })).join('');
+    ctx.dataset.doc = ''; ctx.dataset.layer = '';
+    placeCtx(x, y);
+  }
   function openDocCtx(id: any, x: any, y: any) {
     const it = id && docEntry(id), page = state.doc.kind === 'page', d = (k: any) => 'doc:' + k, lf = id && TD.files.fileOf(id);
     let h;
@@ -5011,7 +5030,7 @@ import { runtime as TD } from '../runtime';
   });
   // the empty part of the sidebar's list area also offers New / Open / Paste
   $('#files')?.addEventListener('contextmenu', (e: any) => {
-    if (e.target.closest('#docList, input, textarea, button')) return;
+    if (e.target.closest('#docList, #quickList, input, textarea, button')) return;
     e.preventDefault();
     openDocCtx(null, e.clientX, e.clientY);
   });
@@ -5048,6 +5067,7 @@ import { runtime as TD } from '../runtime';
     const [a, arg] = (b as HTMLElement).dataset.ctx!.split(':');
     if (a === 'guide') { if (arg === 'edit') void editGuide(ctx.dataset.guideId!); else removeGuide(ctx.dataset.guideId!,arg === 'deleteAll'); return; }
     if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
+    if (a === 'menu') { const pick = menuPick; menuPick = null; pick?.(arg); return; }
     if (a === 'edit') { const s = selected()[0]; if (!openBlock(s.id)) startEdit(s.id, s.type === 'text' ? 'text' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
@@ -6308,21 +6328,22 @@ import { runtime as TD } from '../runtime';
     '',
     '# What you can draw',
     '- \\textbf{Text and maths}: labels, formulae and paragraphs typed as \\LaTeX, or in a visual maths editor.',
-    '- \\textbf{Lines and arrows}: straight and curved lines, arrows with many heads, polylines, smooth closed curves, angle marks, springs, and wavy, double or ticked lines.',
+    '- \\textbf{Lines and arrows}: straight and curved lines, connectors that hold on to shapes, arrows with many heads, curves through points, a curvature pen, polylines, smooth closed curves, arcs, springs, and wavy, double or ticked lines.',
     '- \\textbf{Shapes}: rectangles with rounded or cut corners, circles, polygons, stars, clouds and more basic shapes, 28 flowchart symbols and 28 block arrows.',
-    '- \\textbf{Electrical}: a circuit editor with about 250 circuitikz parts, common symbols, logic gates and waveforms such as sine, square and sawtooth.',
+    '- \\textbf{Electrical}: a circuit editor with 415 circuitikz parts, common symbols, logic gates and waveforms such as sine, square and sawtooth.',
     '- \\textbf{Physics}: ground, walls and ceilings, blocks, inclines, carts, pulleys and pendulums; lenses, mirrors, prisms, screens, slits, rays and light sources.',
     '- \\textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.',
     '- \\textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.',
     '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; and 3D geometry in tikz-3dplot (points, vectors, planes, rotated frames, projections and angles), edited by dragging.',
-    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), UML class diagrams (pgf-umlcd), UML sequence diagrams (pgf-umlsd), Karnaugh maps (karnaugh-map), and molecules and reactions (chemfig).',
+    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), graphs (TikZ graphs), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), UML class diagrams (pgf-umlcd), UML sequence diagrams (pgf-umlsd), Karnaugh maps (karnaugh-map), bit fields (bytefield), molecules and reactions (chemfig), 2D geometry (TikZ), tables (booktabs) and computed physics figures.',
     '- \\textbf{Images} and \\textbf{freehand} pencil strokes.',
     '',
-    '# Four modes',
+    '# Five modes',
     '- \\textbf{Classic}: diagrams arranged with text, like this file. Familiar with Mathcha? Classic mode offers a similar editing workflow.',
     '- \\textbf{Page}: a free-form sheet. Place anything anywhere, for posters and handouts.',
     '- \\textbf{Whiteboard}: an endless canvas for sketching.',
-    '- \\textbf{Quick}: one formula, copied as a PNG or SVG.',
+    '- \\textbf{Table}: one table, imported from a spreadsheet or typed in a grid, copied as booktabs \\LaTeX.',
+    '- \\textbf{Quick}: one figure without a file: a formula, or any block drawn in its own editor, copied as a PNG, SVG or TikZ.',
   ].join('\n');
   // A short manual, read top to bottom: draw, write maths, use the blocks, arrange, write the document,
   // get the LaTeX out. Keys are spelled out (Cmd on a Mac, Ctrl elsewhere) so the text also compiles.
@@ -6341,7 +6362,7 @@ import { runtime as TD } from '../runtime';
     '- Double-click any text or label to edit it in place. Under \\textbf{Text input} in the sidebar, choose \\LaTeX\\ source or the visual MathLive editor.',
     '',
     '## Blocks',
-    '- Circuits, quantum circuits, commutative diagrams, trees, ZX and Feynman diagrams, Bloch spheres, 3D geometry, timing diagrams, state machines, Karnaugh maps and chemistry are each drawn from their own \\LaTeX\\ package.',
+    '- Circuits, quantum circuits, commutative diagrams, trees, graphs, ZX and Feynman diagrams, Bloch spheres, 2D and 3D geometry, timing diagrams, state machines, UML, Karnaugh maps, bit fields and chemistry are each drawn from their own \\LaTeX\\ package.',
     '- Double-click a block, or select it and press ' + key('Enter') + ', to open its editor. The drawing and the code beside it stay in step, both ways.',
     '',
     '## Arrange',
@@ -6350,7 +6371,7 @@ import { runtime as TD } from '../runtime';
     '',
     '## Write the document',
     '- In Classic, switch between \\textbf{Document} and \\textbf{Diagram} at the top, or double-click a diagram to draw in it.',
-    '- In a text block, start a line with \\texttt{\\#} for a section, \\texttt{-} for a bullet or \\texttt{1.} for a numbered list.',
+    '- Text is edited in place, as it looks on the page. Start a line with \\texttt{\\#} for a section, \\texttt{-} for a bullet or \\texttt{1.} for a numbered list.',
     '- Your work saves in this browser as you go. ' + key('Mod+S') + ' saves a \\texttt{.diagramtex} file to keep or share, and ' + key('Mod+O') + ' opens one. \\textbf{Import} reads TikZ or \\LaTeX\\ back in.',
     '',
     '## Get the LaTeX out',
@@ -6733,6 +6754,7 @@ import { runtime as TD } from '../runtime';
     get slug() { return slug(); },
     // pictures of shapes that are not on the canvas (Quick): a standalone SVG, or a PNG at `dpi`
     svgOf: (list: any) => shapesSvg(list, 4),
+    defaults: () => state.defaults, // a new shape's style (Quick makes its blocks with them)
     async pngOf(list: any, dpi: any, transparent: any, objectOnly = false) {
       if (!outputReady(objectOnly ? list : undefined)) throw new Error(outputWait());
       const b = TD.bboxOf(list.flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }), 4);
@@ -6743,7 +6765,7 @@ import { runtime as TD } from '../runtime';
     svgWithFonts, // a standalone SVG with the maths fonts embedded (Table's SVG download)
     // for the command search (src/ui/services/palette.ts)
     cmd: {
-      runCmd, setMode, setQuick, inQuick, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
+      runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
       toggleSnap: cycleSnapMode,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,

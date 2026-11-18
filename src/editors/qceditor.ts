@@ -298,6 +298,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
     E.pending = null;
     updateTools();
+    dock.changed();
   }
   // one edit: begin, change, commit, redraw
   function edit(fn: any) { begin(); fn(); commit(); clampSel(); draw(); keepInView(); renderProps(); }
@@ -305,8 +306,8 @@ import { patchSvg } from '../ui/svg-patch';
   // or zooms, the camera stays where they put it until Fit is pressed again
   function keepInView() { if (E.G && E.fitted) fit(); }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); }
+  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); dock.changed(); }
+  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); dock.changed(); }
   const at = (r: any, c: any) => (E.M.rows[r] && E.M.rows[r][c]) || null;
   function clampSel() {
     const s = E.sel;
@@ -1360,7 +1361,7 @@ import { patchSvg } from '../ui/svg-patch';
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
-    if (!E || root.hidden) return;
+    if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; } // never the browser's Save Page
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return; // a label popup handles its own keys
     // a focused palette item is a button: Enter and Space choose it, as a click does
@@ -1418,11 +1419,12 @@ import { patchSvg } from '../ui/svg-patch';
     if (k && s) { e.preventDefault(); put(k, s.r1, s.c1, true); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
-  window.addEventListener('resize', () => { if (E && !root.hidden) draw(); });
+  TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
   // Ctrl+S: write the circuit back to the page (one undo step there) and keep editing; Esc then has nothing to discard
   function save() {
+    if (E && dock.docked()) { commit(); return; }
     closeLabel();
     if (document.activeElement === codeTa) readCode();
     commit();
@@ -1433,8 +1435,11 @@ import { patchSvg } from '../ui/svg-patch';
   let savedT = 0;
   function flashSaved() { const saved = t('editor.commonA.saved', 'Saved to the page'); setTip(saved); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500); }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  TD.unsaved.push(() => !!E && snap() !== E.start);
+  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap() });
+  TD.unsaved.push(() => !!E && !dock.docked() && snap() !== E.start);
   async function finish(ok: any) {
+    if (dock.docked()) return;
     if (!E) return;
     closeLabel();
     if (document.activeElement === codeTa) readCode();
@@ -1451,21 +1456,21 @@ import { patchSvg } from '../ui/svg-patch';
     if (ok && changed) done({ src });
   }
   let localeOff: (() => void) | undefined;
-  function open(block: any, done: any) {
+  // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
+  function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
     E = { M, sel: null, arm: null, view: { ox: 0, oy: 0, k: 1.5 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, ghost: null, st: { size: block.size || 'normalsize', font: block.font || 'default' }, codeAt: null, codeTimer: null, clip: null };
     // an untouched circuit hands its own text back
     E.start = codeOf(M);
-    root.hidden = false;
-    document.body.classList.add('cz-open');
+    dock.show(host);
     search.value = '';
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, properties and drawing's hints follow the interface language while the editor is open
     let first = true;
     localeOff?.();
     localeOff = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); syncCode(); } });
-    fit();
-    requestAnimationFrame(() => { if (E) fit(); });
+    if (dock.resumed()) draw(); // back where it was left (Quick)
+    else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.qcEditor = { open };
+  TD.qcEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
 })();
