@@ -5,7 +5,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.55.1'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.55.2'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -2137,9 +2137,10 @@ import { runtime as TD } from '../runtime';
       // a snippet: the packages on one comment line, and any compatibility lines (each its own line) to copy
       const c = TD.preambleCompat(X), extra = [...c.before, ...c.after, ...need.defs];
       const head = '% Requires: ' + pre.filter((l) => !extra.includes(l)).join(' ');
+      const alt = pre.includes('\\usetikzlibrary{quantikz2}') ? ['% (or \\usepackage{quantikz} in place of \\usetikzlibrary{quantikz2})'] : [];
       const note = c.before.length ? ['% and, in the preamble, these lines (the first block before \\usetikzlibrary{quantikz2}):', ...extra.map((l) => '%   ' + l)]
         : extra.length ? ['% and, in the preamble, these lines:', ...extra.map((l) => '%   ' + l)] : [];
-      return [head, ...note, ...notesOf(X), pic, ''].join('\n');
+      return [head, ...alt, ...note, ...notesOf(X), pic, ''].join('\n');
     }
     return [
       ...notesOf(X),
