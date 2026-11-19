@@ -30,9 +30,7 @@ T.test('architecture: every block editor opens through Enter, panel alias and co
       document.activeElement?.blur();
       key('Enter'); T.eq(calls, 1, type + ' Enter');
       TD[definition.editor.alias](s.id); T.eq(calls, 2, type + ' panel API');
-      const ctx = document.querySelector('#ctxMenu');
-      const button = document.createElement('button'); button.dataset.ctx = 'edit';
-      ctx.appendChild(button); button.click(); button.remove();
+      TD.app.cmd.ctxAct('edit');
       T.eq(calls, 3, type + ' context command');
       const before = JSON.stringify(s);
       const edited = () => { const t = JSON.parse(JSON.stringify(s.table)); t.cells[0][0].t = 'integration test'; return t; };

@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { caption, locale, type Message } from '../i18n';
+  import type { Message } from '../i18n';
   import FormRows from './FormRows.svelte';
   import type { FormRow } from './forms';
   export interface Model { title: string | Message; rows: FormRow[] }
+  // the rows of the Geometry section; its title is the section's (MainProperties)
   let { model }: { model: Model } = $props();
 </script>
-<div class="sec-title">{caption(model.title, $locale)}</div><FormRows rows={model.rows}/>
+<FormRows rows={model.rows}/>

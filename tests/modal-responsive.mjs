@@ -13,7 +13,8 @@ try {
   try {
    for(const language of ['en','th']) {
     await p.evaluate(language=>{document.querySelector('#languagePicker summary').click();document.querySelector(`[data-language="${language}"]`).click();},language);
-    for(const [width,height] of [[1600,1000],[960,700],[700,420],[600,300],[380,260]]) {
+    // 600×500 and up: a smaller window gets the phone page instead of the app (v1.54.2)
+    for(const [width,height] of [[1600,1000],[960,700],[800,560],[600,500]]) {
      await p.setViewportSize({width,height});
      for(const kind of ['import','code','chemistry']) {
       // LaTeX output (the code dialog) opens only once the maths has rendered; a slow runner can still be busy
@@ -39,11 +40,11 @@ try {
       }
       if(width===600 && language==='en')await p.screenshot({path:path.join(artifacts,`${browser}-${kind}.png`)});
       const close=modal.locator(kind==='import'?'#impClose':kind==='code'?'#modalClose':'[data-ce="cancel"]');
-      await close.click();assert(await modal.isHidden(),'close remains usable: '+context);
+      await close.click();await modal.waitFor({state:'hidden',timeout:1000}).catch(()=>assert.fail('close remains usable: '+context)); // it fades out
      }
     }
    }
-   assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}: responsive import, code and Chemistry modals in English/Thai, five window sizes`);
+   assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}: responsive import, code and Chemistry modals in English/Thai, four window sizes from 600×500 up`);
   } finally {await b.close();}
  }
 } finally {server.close();}

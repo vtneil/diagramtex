@@ -1,14 +1,17 @@
 import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
-import { onLocale, t } from '../i18n';
+import { onLocale, t, message } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { section, row } from '../ui/forms';
+import { section, row, switchRow } from '../ui/forms';
 import { field, numField, segments, codeRow, note, actionRow, texColour } from '../ui/editor-fields';
 import FormPanel from '../ui/FormPanel.svelte';
 import BfeditorFrame from '../ui/editors/BfeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Bit field editor: the overlay that opens on a bit field block. A palette of fields (bit boxes, word
 // boxes, bits, skipped words, the bit header) and word groups; the field drawn as the package draws it over
 // a grid of its bit columns, where a click selects a field, a drag on the line between two fields moves it
@@ -18,9 +21,8 @@ import { patchSvg } from '../ui/svg-patch';
 // TD.bytefieldEditor.open(block, onDone) — block: { src }; onDone({ src }) on Done.
 (function () {
   const F = TD.bytefield;
-  const { esc, r2 } = TD.util;
+  const { r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const INK = '#1c1b19';
   const PX = TD.PX_PER_CM;
   const BOXES = new Set(['bitbox', 'bitboxes', 'wordbox']);
@@ -88,13 +90,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const TRASH = '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>';
-  mountFrame(root, BfeditorFrame, { p0: ic(TRASH), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, BfeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.bf-svg', root), stage = $('.cz-stage', root), list = $('.bf-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.bf-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('editor.commonA.search', 'Search'), searchLabel: message('editor.commonA.searchPalette', 'Search the palette'), label: message('editor.commonA.elements', 'Elements'), listClass: 'bf-list', onpick: (k) => add(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: { t: 'box', ii, sub, fo, all } | { t: 'group', beg } | null (fo: a range's far field, see selBoxes),
@@ -433,30 +432,15 @@ import { patchSvg } from '../ui/svg-patch';
   }
 
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter(([k, name, , , tp]: any) => !q || `${name} ${title} ${tp} ${k} ${palText(k).join(' ')} ${palTitle(title)}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(palTitle(title))}</div><div class="qe-grid">${hits.map(([k, , , key]: any) => { const [name, tp] = palText(k); return `<button class="qe-item" data-item="${esc(k)}" title="${esc(tp)}${key ? ` (${key})` : ''}"><span class="qe-fig">${ITEM[k].mini}</span><span>${esc(name)}</span></button>`; }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list, 64, 40, 1.6);
+    pal.render(PAL.map(([title, items]: any) => ({
+      id: title, title: palTitle(title),
+      // the shown name and tooltip, the English ones and the category's find it
+      items: items.map(([k, name, , key, tp]: any) => { const [label, tip] = palText(k); return { id: k, label, title: tip, key, alt: name, keywords: `${tp} ${title} ${palTitle(title)}`, svg: fitMini(ITEM[k].mini, 64, 40, 1.6) }; }),
+    })));
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) add(b.dataset.item); search.blur(); }
-  });
   list.addEventListener('click', (e: any) => { const b = e.target.closest('.qe-item'); if (b) add(b.dataset.item); });
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -766,77 +750,50 @@ import { patchSvg } from '../ui/svg-patch';
   }
 
   // ---------------------------------------------------------------- context menu
-  // the Quantum editor's three-bar icons (src/editors/qceditor.ts): outlined bars stay, the filled one is inserted (offset to
-  // where it goes) or deleted (with a knocked-out ×); rows are horizontal bars, fields the same transposed
-  function blocks(at: any, del: any, cols: any) {
-    const P = (x: any, y: any) => { const r = (v: any) => +v.toFixed(2); return cols ? `${r(y)},${r(x)}` : `${r(x)},${r(y)}`; };
-    const box = (x: any, y: any, w: any, h: any) => `M${P(x, y)}L${P(x + w, y)}L${P(x + w, y + h)}L${P(x, y + h)}Z`;
-    const out = (x: any, y: any, w: any, h: any) => `<path class="qo" d="${box(x + 0.5, y + 0.5, w - 1, h - 1)}"/>`;
-    const solid = (d: any) => `<path class="qf" fill-rule="evenodd" d="${d}"/>`;
-    if (del) {
-      const a = 2.6, t = 0.75, k = Math.SQRT1_2, cx = 12, cy = 10;
-      const arm = [[t, a], [t, t], [a, t], [a, -t], [t, -t], [t, -a], [-t, -a], [-t, -t], [-a, -t], [-a, t], [-t, t], [-t, a]]
-        .map(([x, y], i) => `${i ? 'L' : 'M'}${P(cx + (x - y) * k, cy + (x + y) * k)}`).join('') + 'Z';
-      return out(1.5, 1, 12, 4) + out(1.5, 15, 12, 4) + solid(box(5.5, 6.5, 13, 7) + arm);
-    }
-    return [1.5, 8, 14.5].map((y, i) => (i === at ? solid(box(6.5, y, 12, 4)) : out(1.5, y, 12, 4))).join('');
-  }
-  const MI: Record<string, any> = {
-    del: TRASH, check: '<path d="M4 10.5l4 4 8-9"/>',
-    above: blocks(0, false, false), below: blocks(2, false, false), rowdel: blocks(0, true, false),
-    before: blocks(0, false, true), after: blocks(2, false, true),
-  };
-  const mItem = (act: any, label: any, icon?: any, key?: any, danger?: any, off?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-bm="${act}"${off ? ' disabled' : ''}>${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="ic"></span>'}<span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons: inserting and deleting rows and fields are the grids' three-bar icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { del: 'delete', above: 'rowAbove', below: 'rowBelow', rowdel: 'rowDelete', before: 'colBefore', after: 'colAfter' };
+  const mItem = (act: string, label: string, icon?: string | null, key?: string, danger?: boolean, off?: boolean) => menuRow(act, label, icon ? MI[icon] : null, key, { danger: !!danger, disabled: !!off });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
     if (!E) return;
     const h = hit(e);
-    let html = '';
+    const menuRows: MenuEntry[] = [];
     if (h && h.t === 'box') {
       // inside a row range the range stays, and the menu is the range's first field's
       const keep = isRange() && selBoxes().some((q: any) => q.ii === h.b.ii && q.sub === h.b.sub);
       if (!keep) E.sel = { t: 'box', ii: h.b.ii, sub: h.b.sub };
       const b = keep ? boxOf(E.sel.ii, E.sel.sub) : h.b, it = E.M.items[b.ii];
       const box = BOXES.has(it.k), bit = it.k === 'bitbox', w = num(it.w);
-      html += box ? mItem('label', t('editor.commonA.menu.editLabel', 'Edit Label…'), null, '↩') : '';
-      if (bit) html += mItem('half', t('editor.bf.menu.half', 'Split in Half'), null, 'S', false, !(w! >= 2 && w === Math.round(w!))) + mItem('bits', t('editor.bf.menu.bits', 'Split into Bits'), null, '', false, !(w! >= 2 && w === Math.round(w!) && w <= 64));
-      if (it.k === 'wordbox') html += mItem('half', t('editor.bf.menu.rows', 'Split into Rows'), null, 'S', false, !(w! >= 2 && w === Math.round(w!)));
-      if (it.k === 'bitboxes') html += mItem('half', t('editor.bf.menu.boxes', 'Split into Bit Boxes'), null, 'S');
+      if (box) menuRows.push(mItem('label', t('editor.commonA.menu.editLabel', 'Edit Label…'), null, '↩'));
+      if (bit) menuRows.push(mItem('half', t('editor.bf.menu.half', 'Split in Half'), null, 'S', false, !(w! >= 2 && w === Math.round(w!))), mItem('bits', t('editor.bf.menu.bits', 'Split into Bits'), null, '', false, !(w! >= 2 && w === Math.round(w!) && w <= 64)));
+      if (it.k === 'wordbox') menuRows.push(mItem('half', t('editor.bf.menu.rows', 'Split into Rows'), null, 'S', false, !(w! >= 2 && w === Math.round(w!))));
+      if (it.k === 'bitboxes') menuRows.push(mItem('half', t('editor.bf.menu.boxes', 'Split into Bit Boxes'), null, 'S'));
       if (bit) {
         const nx = neighbour(b.ii, 1), pv = neighbour(b.ii, -1);
-        html += mItem('mnext', t('editor.bf.menu.mergeNext', 'Merge with Next'), null, 'M', false, !(nx != null && E.M.items[nx].k === 'bitbox')) + mItem('mprev', t('editor.bf.menu.mergePrev', 'Merge with Previous'), null, '⇧M', false, !(pv != null && E.M.items[pv].k === 'bitbox'));
+        menuRows.push(mItem('mnext', t('editor.bf.menu.mergeNext', 'Merge with Next'), null, 'M', false, !(nx != null && E.M.items[nx].k === 'bitbox')), mItem('mprev', t('editor.bf.menu.mergePrev', 'Merge with Previous'), null, '⇧M', false, !(pv != null && E.M.items[pv].k === 'bitbox')));
       }
-      html += '<hr>';
-      if (it.k === 'bitbox' || it.k === 'bitboxes') html += mItem('fbefore', t('editor.bf.menu.fieldBefore', 'Insert Field Before'), 'before') + mItem('fafter', t('editor.bf.menu.fieldAfter', 'Insert Field After'), 'after');
-      html += mItem('rabove', t('editor.commonA.menu.rowAbove', 'Insert Row Above'), 'above') + mItem('rbelow', t('editor.commonA.menu.rowBelow', 'Insert Row Below'), 'below');
-      html += '<hr>' + mItem('gright', t('editor.bf.menu.groupRight', 'Group Rows Right'), null, 'R') + mItem('gleft', t('editor.bf.menu.groupLeft', 'Group Rows Left'), null, 'L');
+      menuRows.push('-');
+      if (it.k === 'bitbox' || it.k === 'bitboxes') menuRows.push(mItem('fbefore', t('editor.bf.menu.fieldBefore', 'Insert Field Before'), 'before'), mItem('fafter', t('editor.bf.menu.fieldAfter', 'Insert Field After'), 'after'));
+      menuRows.push(mItem('rabove', t('editor.commonA.menu.rowAbove', 'Insert Row Above'), 'above'), mItem('rbelow', t('editor.commonA.menu.rowBelow', 'Insert Row Below'), 'below'));
+      menuRows.push('-', mItem('gright', t('editor.bf.menu.groupRight', 'Group Rows Right'), null, 'R'), mItem('gleft', t('editor.bf.menu.groupLeft', 'Group Rows Left'), null, 'L'));
       const dl = rangeDelLabel();
-      if (dl) html += '<hr>' + mItem('fdel', dl, wholeRows() ? 'rowdel' : 'del', '⌫', true);
+      if (dl) menuRows.push('-', mItem('fdel', dl, wholeRows() ? 'rowdel' : 'del', '⌫', true));
       else {
-        html += '<hr>' + mItem('fdel', it.k === 'wordbox' || it.k === 'skip' ? t('editor.commonA.menu.deleteRow', 'Delete Row') : t('editor.bf.deleteField', 'Delete Field'), it.k === 'wordbox' || it.k === 'skip' ? 'rowdel' : 'del', '⌫', true);
-        if (it.k !== 'wordbox' && it.k !== 'skip' && it.k !== 'bitheader') html += mItem('rdel', t('editor.commonA.menu.deleteRow', 'Delete Row'), 'rowdel', '', true);
+        menuRows.push('-', mItem('fdel', it.k === 'wordbox' || it.k === 'skip' ? t('editor.commonA.menu.deleteRow', 'Delete Row') : t('editor.bf.deleteField', 'Delete Field'), it.k === 'wordbox' || it.k === 'skip' ? 'rowdel' : 'del', '⌫', true));
+        if (it.k !== 'wordbox' && it.k !== 'skip' && it.k !== 'bitheader') menuRows.push(mItem('rdel', t('editor.commonA.menu.deleteRow', 'Delete Row'), 'rowdel', '', true));
       }
     } else if (h && h.t === 'group') {
       E.sel = { t: 'group', beg: h.g.beg };
-      html += mItem('label', t('editor.commonA.menu.editLabel', 'Edit Label…'), null, '↩') + mItem('gflip', h.g.side === 'r' ? t('editor.bf.menu.toLeft', 'Move to the Left') : t('editor.bf.menu.toRight', 'Move to the Right')) + '<hr>' + mItem('gdel', t('editor.bf.deleteGroup', 'Delete Group'), 'del', '⌫', true);
+      menuRows.push(mItem('label', t('editor.commonA.menu.editLabel', 'Edit Label…'), null, '↩'), mItem('gflip', h.g.side === 'r' ? t('editor.bf.menu.toLeft', 'Move to the Left') : t('editor.bf.menu.toRight', 'Move to the Right')), '-', mItem('gdel', t('editor.bf.deleteGroup', 'Delete Group'), 'del', '⌫', true));
     }
-    if (!html) { closeMenu(); return; }
-    menu.innerHTML = html;
+    if (!menuRows.length) { closeMenu(); return; }
     draw(); renderProps();
-    menu.hidden = false;
-    const rr = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - rr.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - rr.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-bm]');
-    if (!b || (b as HTMLButtonElement).disabled) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.bm);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- properties
   const ENDS = () => [['', t('ui.default', 'Default')], ['little', t('editor.bf.end.little', 'Little'), t('editor.bf.end.littleTitle', 'Bit 0 at the left')], ['big', t('editor.bf.end.big', 'Big'), t('editor.bf.end.bigTitle', 'Bit 0 at the right')]];
@@ -861,7 +818,7 @@ import { patchSvg } from '../ui/svg-patch';
       const title = word ? t('editor.bf.wordBox', 'Word box') : many ? t('editor.bf.bits', 'Bits') : t('editor.bf.bitBox', 'Bit box');
       const small = b ? (b.k === 'skip' ? t('editor.bf.skippedWords', 'Skipped words') : b.k === 'wordbox' ? rowsText(num(it.w)) : bitsHead(b)) : '';
       const BORDERS = [['l', 'L', t('editor.bf.border.left', 'Left line')], ['r', 'R', t('editor.bf.border.right', 'Right line')], ['t', 'T', t('editor.bf.border.top', 'Top line')], ['b', 'B', t('editor.bf.border.bottom', 'Bottom line')]];
-      const flags = { ...row(t('editor.bf.borders', 'Borders'), ...BORDERS.map(([key, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-fb': key, class: sd[key] ? 'on' : '', title } }))), controlClass: 'ctl seg-ctl ze-flags' };
+      const flags = switchRow(t('editor.bf.borders', 'Borders'), BORDERS.map(([key, text, title]) => ({ text, title, on: !!sd[key], attrs: { 'data-fb': key } })), { many: true });
       show(title, small, [field(many ? t('editor.bf.bitLabel', 'Bit {n} label', { n: E.sel.sub != null ? E.sel.sub + 1 : '' }) : t('ui.label', 'Label'), 'text', label, { 'data-tx': 'text', placeholder: 'none' }),
         ...(many ? [field(t('editor.bf.allLabels', 'All labels'), 'all', it.text, { 'data-tx': 'text' })] : []), numField(word ? t('editor.bf.rows', 'Rows') : many ? t('editor.bf.bitsEach', 'Bits each') : t('editor.bf.bits', 'Bits'), 'w', it.w, '', { min: '0', step: '1' }), flags,
         { ...row(captions["ui.fill"], texColour(TD.texColor.unwrap(F.getKey(it.opts, 'bgcolor')), { 'data-f': 'bg' }, { nullable: true, defaultLabel: t('ui.none', 'None'), title: t('ui.fill', 'Fill') })), controlClass: 'ctl tc' },
@@ -983,7 +940,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = lay().warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, lay().warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -992,7 +949,7 @@ import { patchSvg } from '../ui/svg-patch';
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps();
-    codeMsg.innerHTML = F.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
@@ -1024,6 +981,7 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = { t: 'box', ii: best.ii, sub: best.sub }; draw(); renderProps(); setTip(boxTip(best));
   }
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || session.elsewhere(e)) return;
@@ -1037,7 +995,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
     }
@@ -1078,7 +1036,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { M, sel: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, hoverKey: '', codeAt: null, codeTimer: null };
     E.start = codeOf(M);
     session.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette and properties follow the interface language while the editor is open
     localeOff?.();

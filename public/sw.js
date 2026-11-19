@@ -5,7 +5,7 @@
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate. (This literal is for the
 // dev server only: scripts/build.js names dist/sw.js's cache after a hash of everything it precaches.)
-const CACHE = 'diagramtex-v115';
+const CACHE = 'diagramtex-v118';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
@@ -18,14 +18,32 @@ const PRECACHE = [
     'guide/img/06-circuit-dark.png',
     'guide/img/09-uml.png',
     'guide/img/10-table.png',
+    'css/tokens.css',
+    'css/kit.css',
     'css/style.css',
     'css/kmap.css',
     'css/bytefield.css',
     'css/table.css',
-    'fonts/InterDisplay-Medium.woff2',
-    'fonts/InterDisplay-SemiBold.woff2',
-    'fonts/InterDisplay-Bold.woff2',
-    'fonts/InterDisplay-Italic.woff2',
+    'fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2',
+    'fonts/atkinson-hyperlegible-next-latin-ext-wght-normal.woff2',
+    'fonts/atkinson-hyperlegible-next-latin-wght-italic.woff2',
+    'fonts/atkinson-hyperlegible-next-latin-ext-wght-italic.woff2',
+    'fonts/atkinson-hyperlegible-mono-latin-wght-normal.woff2',
+    'fonts/atkinson-hyperlegible-mono-latin-ext-wght-normal.woff2',
+    'fonts/atkinson-hyperlegible-mono-latin-wght-italic.woff2',
+    'fonts/atkinson-hyperlegible-mono-latin-ext-wght-italic.woff2',
+    'fonts/tlwg-garuda.woff2',
+    'fonts/tlwg-garuda-bold.woff2',
+    'fonts/tlwg-garuda-oblique.woff2',
+    'fonts/tlwg-garuda-boldoblique.woff2',
+    'fonts/tlwg-kinnari.woff2',
+    'fonts/tlwg-kinnari-bold.woff2',
+    'fonts/tlwg-kinnari-italic.woff2',
+    'fonts/tlwg-kinnari-bolditalic.woff2',
+    'fonts/tlwg-laksaman.woff2',
+    'fonts/tlwg-laksaman-bold.woff2',
+    'fonts/tlwg-laksaman-italic.woff2',
+    'fonts/tlwg-laksaman-bolditalic.woff2',
     'icons/apple-touch-icon.png',
     'icons/favicon-32.png',
     'icons/favicon.svg',

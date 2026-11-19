@@ -194,10 +194,6 @@ import { runtime as TD } from '../runtime';
     }
     return out.sort((a, b) => a.line - b.line);
   }
-  // the list as HTML rows for a dialog foot or a panel
-  const esc = (t: any) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-  lint.html = (list: any, max = 12) => list.slice(0, max).map((d: any) => `<div class="lint ${d.sev}"><span class="ln">line ${d.line}</span> ${esc(d.msg)}</div>`).join('')
-    + (list.length > max ? `<div class="lint info">… ${list.length - max} more</div>` : '');
   // the TikZ libraries and packages a piece of code uses (for code kept as written: the export loads them)
   lint.uses = (code: any) => {
     const b = blank(String(code || '')), libs: any[] = [], pkgs = [];

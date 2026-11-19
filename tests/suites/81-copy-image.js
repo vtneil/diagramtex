@@ -1,8 +1,5 @@
 // Right-click › Copy as Image / Save as Image: the selection as PNG or SVG, to the clipboard or a file.
-const ctxClick = (arg) => {
-  const ctx = document.querySelector('#ctxMenu'), b = document.createElement('button');
-  b.dataset.ctx = arg; ctx.appendChild(b); b.click(); b.remove();
-};
+const ctxClick = (arg) => TD.app.cmd.ctxAct(arg);
 const until = async (f) => { for (let i = 0; i < 200 && !f(); i++) await new Promise((r) => setTimeout(r, 20)); };
 const blobText = (b) => new Response(b).text();
 
@@ -12,12 +9,12 @@ T.test('copy image: the context menu offers Copy as Image and Save as Image, PNG
   const el = document.querySelector(`[data-id="${s.id}"]`), r = el.getBoundingClientRect();
   el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
   const menu = document.querySelector('#ctxMenu');
-  for (const a of ['copy-png', 'copy-png-t', 'copy-svg', 'save-png', 'save-png-t', 'save-svg']) T.ok(menu.querySelector(`[data-ctx="img:${a}"]`), a);
+  for (const a of ['copy-png', 'copy-png-t', 'copy-svg', 'save-png', 'save-png-t', 'save-svg']) T.ok(menu.querySelector(`[data-act="img:${a}"]`), a);
   T.ok(/Copy as Image/.test(menu.textContent) && /Save as Image/.test(menu.textContent), 'labels');
-  const saveRow = menu.querySelector('[data-ctx="img:save-png"]').closest('.has-sub');
+  const saveRow = menu.querySelector('[data-act="img:save-png"]').closest('.has-sub');
   T.ok(saveRow && /M10 3v9/.test(saveRow.querySelector('svg').innerHTML), 'Save as Image uses the download (down-arrow) icon');
-  T.eq(menu.querySelector('[data-ctx="img:copy-png"]').textContent.trim(), 'PNG (Background)');
-  T.eq(menu.querySelector('[data-ctx="img:save-png-t"]').textContent.trim(), 'PNG (Transparent)');
+  T.eq(menu.querySelector('[data-act="img:copy-png"]').textContent.trim(), 'PNG (Background)');
+  T.eq(menu.querySelector('[data-act="img:save-png-t"]').textContent.trim(), 'PNG (Transparent)');
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 });
 

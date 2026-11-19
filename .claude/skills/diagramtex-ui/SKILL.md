@@ -12,14 +12,51 @@ interface is put together, what to reuse, and rules that have each earned a corr
 ## 0. How the interface is built
 
 - **Shell:** `src/index.html` is the template and `src/ui/AppShell.svelte` the shell, prerendered into
-  `public/index.html` by `scripts/prerender.js`. `src/main.ts` boots everything. Services are registered on the
+  `public/index.html` by `scripts/prerender.js`. Prerendering runs outside a browser, so whatever
+  AppShell imports (kit components included) must load without `window` or `document` (`runtime.ts` and the
+  tooltip service check for them). `src/main.ts` boots everything. Services are registered on the
   shared `runtime` object (`src/runtime.ts`, also `window.TD`) in `src/register-services.ts` and
-  `src/register-blocks.ts`. Styles are `public/css/style.css`, plus one file for each large area (`table.css`,
-  `kmap.css`, `bytefield.css`, `language-menu.css`).
-- **Most of the app is still imperative.** `src/application/app.ts` (canvas, panel and menus),
+  `src/register-blocks.ts`. Styles load in this order: `public/css/tokens.css` (every token, light, dark and
+  Increase Contrast), `kit.css` (the kit's controls), `style.css` (areas), then one file for each large area
+  (`table.css`, `kmap.css`, `bytefield.css`, `language-menu.css`).
+- **The interface kit** (`src/ui/kit`, imported from `'../kit'`) holds the app's controls as Svelte components:
+  `Icon` (a named icon from `icons.ts`; `iconSvg(name)` gives the same markup to string-building code),
+  `Button` (`variant` default / `primary` / `flat`, `size` `sm`, `danger`, optional leading `icon`), `IconButton`
+  (icon only, `title` required, `flat` by default), `Segmented` (a switch: `options`, `many` for toggles, `panel`
+  for the properties track), `Checkbox` and `Switch`, `Select` (every pick-one list: option drawings, notes, swatches and groups; `columns` for tiles; `custom` for a typed value; `attached` for a chevron joined to a field; `pics`), `TextField`, `TexField`
+  (`tx` math/text, `none`), `NumberField`, `ColourButton` (swatch and name), `Slider` (with its readout; `defaultValue` for the double-click reset), `Menu` and
+  `openContextMenu(items, x, y, pick, { below, owner })` (a right-click menu from data; `below` opens it under a control, `owner` lets that control toggle it), `TextPopup` and `openTextPopup(host, opts)`
+  (the in-place label editor, LaTeX or MathLive), `Tooltip` (what every `title` becomes), `Popover` (a panel opened from a control, `below` or `beside`; `openPopover(anchor, { content })` from string-building code)
+  and `Flyout` (a tool group that opens on hover; `panel` shows an element the app builds, as the rail's groups do), `PanelSection` / `FormRow` / `Help` (panel sections, labelled
+  rows, help, hint and error lines), `Badge`, `EmptyState`, `SearchField`, `Tile` / `TileGrid` (the flyouts' tiles; app-level `ui/ToolPanel.svelte` draws a flyout's sections from data, `ui/ExportPanel.svelte` both Export panels), `SplitButton`,
+  `ListRow` (renamed in place), `Toolbar` / `ToolbarGroup`, `Palette` and `CodePane` (a block editor's columns), `EditorFrame` (a block editor's whole window),
+  `Dialog` (what `TD.confirm` and friends draw), a `soon` option on buttons and tiles, `Kbd`
+  (`keyLabel()` turns `Ctrl+Z` into ⌘Z on a Mac), `Separator` and `Spacer`. Fields keep `liveValue` inside.
+  Their CSS is global and class-based in `kit.css`, so code that still builds HTML strings matches them;
+  `buttonClass()` gives the button classes; `emptyStateHtml()` / `badgeHtml()` / `splitButtonHtml()` (`kit/markup.ts`)
+  an empty message, a count and a split button; `fitToolbar(el)` (`kit/toolbar.ts`) gives a string-built bar the
+  Toolbar's narrowing (icons dropped, sideways scroll, edge fades, wheel). Lists are Svelte on `ListRow`
+  (`src/ui/FileList.svelte`, `LayerList.svelte`, `QuickList.svelte`), mounted with `renderView` into the list
+  element; the area's code keeps its drag, menu and click handlers, which find rows by their data attributes. Behaviour stays in the shared services (`segthumb.ts`,
+  `selectmenu.ts`, `sliders.ts`, `tooltip.ts`), which act on every matching element, kit-drawn or not. Never
+  hand-write markup the kit has a component for, and never pass icons into a component as SVG strings: add the
+  drawing to `icons.ts` once. `npm run dev` serves every component and variant at `/kit.html` (light, dark,
+  English, Thai); a new component or variant goes there too. `npm run check` runs `tests/legacy-ui.mjs`, which
+  fails when hand-written control markup grows in any file and asks for the baseline to be lowered (`--update`)
+  when it shrinks.
+- **Moving to the kit, smallest pieces first.** Primitives (done; `Control.svelte`, `FormRows.svelte` and the
+  hand-written panels are built from them), then composites (Menu and MenuItem for the eight editors'
+  `mItem` copies, Popover/Flyout, Toolbar, Palette, CodePane), then one `EditorFrame` layout for the block
+  editors (all built; now replacing the copies from `.interface-design/kit-map.md`), then the app's areas (tool rail, status line, file list, top bar, `app.ts` menus). Each step replaces
+  every copy of what it covers and deletes the CSS it takes over. The drawing itself stays imperative: the
+  canvas, editor stages (`patchSvg`) and the Document page.
+- **The rest of the app is still imperative.** `src/application/app.ts` (canvas, panel and menus),
   `docview.ts` (Document view) and the block editors (`src/editors/*.ts`) build DOM and wire events
-  themselves. Svelte owns the shell, the properties panels and the editor frames. Add to whichever side
-  already owns the area; don't port an area to Svelte as a side effect.
+  themselves. Svelte owns the shell, the properties panels, the editor frames, Quick's views, the Table's
+  (`ui/TableWorkspace.svelte`, `ui/TablePanel.svelte`: models drawn in place; the grid stays imperative) and the
+  Document's controls (`ui/DocumentView.svelte`, `ui/DocBlockChrome.svelte`; the page stays markup). Add to whichever side
+  already owns the area, using kit components and classes; port an area to Svelte only as a planned kit step,
+  not as a side effect.
 - **A block** (an object with its own package, such as `kmap` or `chemfig`) is spread over these files:
   - `src/domain/<block>.ts`: parser and writer, layout, canvas drawing and export. It defines
     `TD.TYPES.<type>` (`create`, `svg`, `tikz`, `anchors`…) and calls
@@ -32,13 +69,14 @@ interface is put together, what to reuse, and rules that have each earned a corr
     summary, code, warnings and actions); scientific objects use `FormPanel`; a block that needs more gets
     its own `*Panel.svelte`.
   - `src/editors/<x>editor.ts` with `src/ui/editors/<X>editorFrame.svelte`: the overlay editor. The frame
-    is static markup mounted once with `mountFrame` (`src/ui/mount-frame.ts`). It takes icons and key
-    names as `p0…pn` props and translates its captions with `t(…, $locale)`. The controller fills it.
-- **Every block editor has the same layout,** copied from an existing frame: `.modal-box.cz-box` with a
-  `.modal-head` (icon, title, `.cz-tools` flat icon buttons, a spacer, then Cancel and **Done** (primary)),
-  and a `.cz-body` with `.cz-pal` (search field and list), `.cz-stage` (the SVG and `.cz-tip`) and
-  `.cz-side` (`.cz-props` over `.cz-code`: a head with the package name, a count and Copy, the textarea,
-  and `.cz-msg`). Don't invent a new arrangement.
+    is one `<EditorFrame …>` (`src/ui/kit/EditorFrame.svelte`) mounted once with `mountFrame`
+    (`src/ui/mount-frame.ts`): its name, `data-<act>` prefix, title, icon, captions (`t(…, $locale)`) and a
+    `tools` snippet of `IconButton`s and `Separator`s. The controller fills it, finding its parts by class.
+- **Every block editor has the same layout,** EditorFrame's: `.modal-box.cz-box` with a `.modal-head` (icon,
+  title, `.cz-tools` flat icon buttons, a spacer, then Cancel and **Done** (primary)), and a `.cz-body` with
+  `.cz-pal` (search field and list), `.cz-stage` (the SVG and `.cz-tip`) and `.cz-side` (`.cz-props` over
+  `.cz-code`: a head with the package name, a count and Copy, the textarea, and `.cz-msg`). Every editor is
+  the same size, one rule in kit.css. Don't invent a new arrangement or a per-editor size.
 
 ## 1. Nothing moves unless the user moved it
 
@@ -86,7 +124,8 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
   and construction. Active states use ink. `--marker` (amber) only marks something waiting: unsaved changes
   or a newer version. User content and the logo are the only other colour.
 - **Editable fields are white** (`--sheet-raised` with a `--rule-strong` border). A tinted (`--well`) box
-  means read-only, so **a text field is never tinted**.
+  means read-only, so **a text field is never tinted**. The one exception is a search field (`SearchField`): tinted
+  while unfocused, white once focused.
 - **Every button is the app's one outlined button** (the default `button`): panel actions, top-bar output
   buttons, list actions. No grey-filled (`--wash-strong`, borderless) buttons; the owner had them all changed.
   Only `.primary` is solid, and only for the one main action (Done, Copy PNG). Solid black was rejected as
@@ -100,10 +139,10 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 
 ## 5. Shape and spacing
 
-- 4px grid. Controls are `--ctl` 28px; `--ctl-sm` 24px only for dense secondary ones. UI text is Inter
-  Display (Medium as normal, 13px; labels 12px; section titles 11px/600 in pencil) plus mono with tabular
-  numbers for values. Nothing below 10px. **No serif in the UI**: `--font-tex` is for content only.
-- Radii (style.css `:root`): `--r-sm` 4px (swatches, kbd, segments), `--r` 8px (buttons, inputs, tracks,
+- 4px grid. Controls are `--ctl` 28px; `--ctl-sm` 24px only for dense secondary ones. UI text is Atkinson
+  Hyperlegible Next (Medium as normal, 13px; labels 12px; section titles 11px/600 in pencil) plus Atkinson
+  Hyperlegible Mono with tabular numbers for values and code, both served from `public/fonts/`. Nothing below 10px. **No serif in the UI**: `--font-tex` is for content only.
+- Radii (`tokens.css`): `--r-sm` 4px (swatches, kbd, segments), `--r` 8px (buttons, inputs, tracks,
   menu rows), `--r-lg` 12px (menus, popovers, cards: 8 + 4 inset), `--r-xl` 20px (modals: head buttons sit
   12px in, 8 + 12).
 - **Corners nest concentrically**: inner radius = outer radius − inset. When you make a new container, work
@@ -114,7 +153,7 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
   | container | content inset | corner |
   |---|---|---|
   | segment in a `.seg` track | 3px | `calc(var(--r) - 3px)` = 5px inside the 8px track |
-  | menu, select menu, autocomplete, dash/width (`.ctx`, `.selmenu`, `.ddpop`) | 4px | `--r-lg` 12px (8 + 4) |
+  | menu, select menu (dash, width, tips too), autocomplete (`.ctx`, `.selmenu`) | 4px | `--r-lg` 12px (8 + 4) |
   | properties / layers window, cards, popovers | 8px from the stage | `--r-lg` 12px |
   | tool flyout (`.popover.flyout`) | 8px | `calc(var(--r) + 8px)` = 16px |
   | Export popover (`.exp-pop`) | 12px | `calc(var(--r) + 12px)` = 20px |
@@ -124,7 +163,7 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 
 - Gaps between options equal the container's padding. Segmented tracks use 3px padding and a 3px gap: 2px
   felt cramped and 4px looked worse. Menus have 4px padding round `--ctl` 28px rows with `--r` corners;
-  select and dash/width rows sit 4px apart, while context-menu rows touch and are grouped by `hr` rules.
+  select rows sit 4px apart, while context-menu rows touch and are grouped by `hr` rules.
 - Measurements to match: top bar two 44px rows; groups 16px apart; tool rail 48px with 32px buttons; file
   list 200px with 28px rows inset 8px; properties panel 280px, sections 12×16px, an 84px label column,
   40px head; rulers 18px; status line 24px; on/off switch 28×16 with a 12px knob; picture-menu tiles 76px.
@@ -141,43 +180,63 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 Before writing a control, look for it here. Build a new shared piece only when two places need it, and then
 replace the copies.
 
+- **Buttons and icons:** `Button`, `IconButton` and `Icon` from `src/ui/kit` (see section 0). Shortcuts in a
+  title are written the Windows way (`Ctrl+Enter`); never build them from `isMac`. In Svelte, a key on its own
+  is `<Kbd key="Ctrl+D" />`; in strings, `keyLabel()`.
+
 - **Panel forms:** build `FormPanelModel` sections with the helpers in `src/ui/forms.ts` (`section`, `row`,
   `input`, `number`, `check`, `select`, `help`, `errors`) and, in editors, `src/ui/editor-fields.ts`
   (`field`, `numField` with a unit, `segments` for an icon or text switch, `codeRow`, `note`, `actionRow`,
   `texColour`). `Control.svelte` / `FormRows.svelte` render them, with the label column, ARIA names and
   translated captions already handled. TeX fields set `data-tx: 'math' | 'text'`, which gives the standard
-  placeholders **Maths, without $** and **Text, $math$**.
+  placeholders **Maths, without $** and **Text, $math$**. A row whose `controlClass` is a `seg-ctl` track of
+  buttons is drawn as the kit's `Segmented`. In a hand-written Svelte panel, use the kit's fields directly.
 - **Field values in Svelte:** use `{@attach liveValue(x)}` (`src/ui/live-value.ts`), never `value={x}`. A plain
   binding rewrites the field while the user types (e.g. `0.` becomes `0`). The exception is a dialog's prompt
   field, which gets its text once and is never written again. Every input needs a name: `aria-label` or a
   linked `<label>`.
-- **Dropdowns:** a plain `<select>` gets the custom menu from `src/ui/services/selectmenu.ts`; add
+- **Dropdowns:** `Select` from the kit in Svelte, for plain and drawn lists alike (dash, width presets, tips, shafts: built by
+  `drawnPicker` in app.ts); never a button that opens its own picker. Any `<select>` gets the custom menu from `src/ui/services/selectmenu.svelte.ts`; add
   `data-pics="name"` with `TD.selectPics[name]` for a grid of picture tiles. Don't build another, and never
   let a native menu show.
-- **Switches:** `.seg` plus `src/ui/services/segthumb.ts` for the sliding knob (220ms, `--ease`, still under
-  reduced motion). On/off flags that belong together share one `.seg.ze-flags` track with no knob. A single
-  on/off setting is a checkbox with `role="switch"`. Alignment is `src/ui/align-switch.ts`.
-- **Colours:** always `.cbtn` swatch + `.cval` name + `TD.openColorPicker`; in LaTeX blocks,
-  `TD.texColor` / `texColour()` so presets are written as xcolor names. Toolbar colour buttons are
-  `colourSplit` (`src/ui/colour-split.ts`). Never `<input type="color">` or a swatch dropdown.
-- **Sliders:** native range with `accent-color: var(--ink)` and a `.slider-value` readout
+- **Switches:** `Segmented` in Svelte (`.seg`, or `.seg-ctl` with `panel`), plus `src/ui/services/segthumb.ts` for the sliding knob (220ms, `--ease`, still under
+  reduced motion). On/off flags that belong together share one `.seg.ze-flags` track (`many`) with no knob; the
+  toggled one fades instead (200ms, from the same service). `Segmented` starts the service itself. A single
+  on/off setting is `Switch` (a checkbox with `role="switch"`). Alignment is `Segmented` with `class="seg-align"` and the registry's align icons (`ALIGN_ICON` in `src/ui/kit/icons.ts`).
+- **Colours:** always `ColourButton` (the `.cbtn` swatch + `.cval` name) + `TD.openColorPicker` (src/ui/ColorPicker.svelte in the kit
+  Popover; a grid of colour chips is the kit's `Swatches`); in LaTeX blocks,
+  `TD.texColor` / `texColour()` so presets are written as xcolor names. Toolbar colour buttons are a
+  `SplitButton` with `toolbar`, `icon="textColour"` or `"fillColour"` and `swatch` (the colour, which tints the icon's `.sw` bar). Never `<input type="color">` or a swatch dropdown.
+- **Sliders:** `Slider`: a native range with `accent-color: var(--ink)` and a `.slider-value` readout
   (`src/ui/services/sliders.ts`).
 - **Dialogs:** `TD.confirm` / `TD.prompt` / `TD.alert` (`src/ui/services/dialog.ts`), never `alert` /
   `confirm` / `prompt`. The title asks the question; buttons name the action; destructive ones pass
   `danger: true`.
-- **Tooltips:** a `title` becomes the app's tooltip (`src/ui/services/tooltip.ts`). Write shortcuts the
+- **Tooltips:** a `title` becomes the app's tooltip (the kit's `Tooltip`, shown by `src/ui/services/tooltip.ts`); never
+  build a tooltip element. Write "Name (key): what it does" for a tool that needs a description. Write shortcuts the
   Windows way once ("Undo (Ctrl+Z)"); on a Mac they show as ⌘ / ⌥ / ⇧ glyphs, never "Ctrl".
-- **Menus:** the main app and Quick use the shared `#ctxMenu` (`TD.app.cmd.openMenu`). Block editors build
-  a `.ctx` menu of `.ctx-item` rows (icon, label, `<kbd>`, `danger` class), placed with `positionMenu`
-  (`src/ui/menu-position.ts`). Copy an existing editor's `mItem` rather than inventing a new row.
+- **Menus:** a new menu is `openContextMenu()` from the kit, with rows as data (a row's `svg` may be a whole `<svg>`; a grid
+  of icon choices is a `{ tiles, columns }` entry, as the Table's borders). The Table's menus are the kit's (`openMenu` in
+  `src/ui/services/table.ts`, `class: 'tb-ctx'`). The block editors' right-click
+  menus are the kit's, through `src/editors/editor-menu.ts` (`openEditorMenu`, `menuRow`, and `inEditorMenu` as the
+  first line of an editor's window keydown handler, so keys reach the menu); menu icons are kit names in
+  `src/ui/kit/icons.ts`. The main app's menus are the kit's too: the canvas, Layers, guide, file and folder menus
+  build rows with `item()` and open with `placeCtx()` as `#ctxMenu` (`ctxAct` does a row's act); Quick asks for one
+  with `TD.app.cmd.openMenu`. A menu that opens on hover passes `focus: false` and keeps itself open from the element
+  `openContextMenu` returns (the draw-mode and sort menus). Don't build a `.ctx` by hand.
+- **Editor notes:** the code pane's message and the stage tip go through `showCodeNotes(codeMsg, lines)` and
+  `stageTip(tip)` (`set(text)`, `flash(text, ms)` for "Saved to the page") from `src/ui/editor-notes.ts`; never write
+  HTML into `.cz-msg` or `.cz-tip`.
 - **Editor plumbing:** undo/redo via `TD.editorSession.history`; Cancel/Done/⌘S, the discard prompt and
   `TD.unsaved` via `TD.editorSession.lifecycle`; embedding in Quick via `TD.editorSession.dockable`
-  (`src/core/editor-session.ts`). Label editing in place uses `TD.input.popup`, which follows the user's
+  (`src/core/editor-session.ts`). Label editing in place uses `TD.input.popup` (a wrapper round the kit's `openTextPopup`, which is also the canvas's
+  text editor), which follows the user's
   LaTeX or MathLive setting. Grid editors share the delete gutters (`TD.gridDel`) and the insert/delete
-  icons (`src/ui/grid-icons.ts`).
+  icons (`rowAbove` … `colDelete` in `src/ui/kit/icons.ts`).
 - **Cursors:** standard CSS cursors (`*-resize`, `move`, `grab`). The hand (`pointer`) is for buttons and
   links only, never canvas handles.
-- **Palette items** in block editors are `<button>`s (no `role="listitem"`) and must work with Enter and
+- **Block editor palettes** are the kit Palette, drawn from data: `editorPalette(root, …)` and `pal.render(categories)`
+  (src/editors/editor-palette.svelte.ts), with `fitMini` for the drawings. Never build a palette's HTML. Palette items are `<button>`s (no `role="listitem"`) and must work with Enter and
   Space, not only with the pointer.
 - **Coming soon:** a feature not yet built is shown as `.soon` (`aria-disabled`, dashed, 45%), never hidden.
 
@@ -212,6 +271,16 @@ replace the copies.
 - Icons point the way they act: tree-direction icons follow the tree, and insert-before/after icons show
   where the new item goes.
 - Every open and close animates (about 220–240ms, `--ease`, eased out) and respects reduced motion.
+- A click never leaves a control highlighted: focus rings are for the keyboard (`:focus-visible`). Only a field
+  being typed into keeps its ring. Never write a `:focus` rule that would also catch checkboxes, switches,
+  sliders or selects; wrap such exclusions in `:where()` so the rule keeps its specificity.
+- Everything clicked presses: it shrinks while held and springs back on release (kit.css). Every `<button>`
+  presses on its own, hand-written ones too (the tool rail, the top bar, swatches, zoom), so no class is needed;
+  so do list rows, `role=button` rows, `summary` heads, links, menu rows, selects and sliders, all to 95%; a switch
+  to 90% and a checkbox to 85% (its label presses the box). Not `.soon`, a row holding its submenu, or a row while a
+  button or field inside it is held. A panel head that folds its panel presses its fold button. Fields typed into
+  don't press. Check a new area with the press audit: force `:active` through CDP on everything clickable and read
+  `scale` (turn transitions off first, or it reads mid-way).
 
 ## 9. Before saying a UI change is done
 

@@ -1,11 +1,39 @@
 <script lang="ts">
-  import { t, caption, locale, translatedAttrs } from '../i18n';
+  // One control of a form panel (src/ui/forms.ts), drawn with the interface kit.
+  import { caption, locale, translatedAttrs } from '../i18n';
+  import { controlCaptions, type Control } from './forms';
+  import { Button, Checkbox, ColourButton, Select, Slider, Spacer, TextField } from './kit';
   import { liveValue } from './live-value';
-  import { txCaptions, type Control } from './forms';
   let { control, labelledby }: { control: Control; labelledby?: string } = $props();
   // a field without its own name is named by its row's caption
-  // the TeX placeholders are captions too; the control's own captions win
-  const captionsOf = (c: Control) => 'attrs' in c ? { ...txCaptions(c.attrs), ...c.captionAttrs } : c.captionAttrs;
   const named = (attrs: Record<string, unknown> | undefined) => !!attrs && (attrs['aria-label'] != null || attrs['aria-labelledby'] != null);
+  // the control's attributes, with its captions in the current language (title, aria-label, placeholder)
+  const attrs = $derived('attrs' in control ? translatedAttrs(control.attrs, $locale, controlCaptions(control)) as Record<string, any> : {});
+  const name = $derived('attrs' in control && named(control.attrs) ? undefined : labelledby);
+  const text = (fallback: Parameters<typeof caption>[0]) => caption(control.caption ?? fallback, $locale);
 </script>
-{#if control.kind === 'input'}{#key control.attrs.type}{#if control.attrs.type === 'checkbox'}<input {...translatedAttrs(control.attrs, $locale, captionsOf(control))} aria-labelledby={named(control.attrs) ? undefined : labelledby} checked={control.checked}>{:else}<input {...translatedAttrs(control.attrs, $locale, captionsOf(control))} aria-labelledby={named(control.attrs) ? undefined : labelledby} {@attach liveValue(control.value)}>{/if}{/key}{:else if control.kind === 'select'}<select {...translatedAttrs(control.attrs, $locale, captionsOf(control))} aria-labelledby={named(control.attrs) ? undefined : labelledby} {@attach liveValue(control.value, control.options)}>{#each control.options as [value, label]}<option {value}>{caption(label, $locale)}</option>{/each}</select>{:else if control.kind === 'colour'}<button type="button" class="cbtn" data-sercolor={control.index} title={control.value}><span style:background={control.css}></span></button>{:else if control.kind === 'fillColour'}<button type="button" class={'cbtn' + (control.none ? ' none' : '')} {...translatedAttrs(control.attrs, $locale, captionsOf(control))}><span style:background={control.css}></span></button><span class="cval">{caption(control.caption ?? control.label, $locale)}</span>{:else if control.kind === 'angle'}<input type="range" {...translatedAttrs(control.attrs, $locale, captionsOf(control))} aria-labelledby={named(control.attrs) ? undefined : labelledby} {@attach liveValue(control.value)}><span class="slider-value">{control.numericValue}{control.unit}</span>{:else if control.kind === 'button'}<button {...translatedAttrs(control.attrs, $locale, captionsOf(control))}>{#if control.swatch}<i style:background={control.swatch.css} class={control.swatch.none ? 'none' : undefined}></i>{/if}{#if control.svg}{@html control.svg}{/if}{caption(control.caption ?? control.text, $locale)}</button>{:else if control.kind === 'spacer'}<div class="spacer"></div>{:else if control.kind === 'code'}<code class={control.class}>{control.text}</code>{:else if control.kind === 'texColour'}<button type="button" class={'cbtn' + (control.none ? ' none' : '')} data-tc={control.nullable ? 'n' : ''} title={caption(control.title, $locale)} data-dl={control.defaultLabel} data-dsw={control.defaultSwatch}><span style:background={control.css}></span></button><span class="cval">{caption(control.caption ?? control.label, $locale)}</span><input type="hidden" {...translatedAttrs(control.attrs, $locale, captionsOf(control))} {@attach liveValue(control.value)}>{:else}<span class={control.class}>{caption(control.caption ?? control.text, $locale)}</span>{/if}
+{#if control.kind === 'input'}
+  {#key control.attrs.type}
+    {#if control.attrs.type === 'checkbox'}<Checkbox {...attrs} aria-labelledby={name} checked={control.checked} />
+    {:else}<TextField {...attrs} aria-labelledby={name} value={control.value} />{/if}
+  {/key}
+{:else if control.kind === 'select'}
+  <Select {...attrs} aria-labelledby={name} value={control.value} options={control.options.map(([value, label]) => ({ value: String(value), label: caption(label, $locale) }))} />
+{:else if control.kind === 'colour'}
+  <ColourButton data-sercolor={control.index} title={control.value} css={control.css} />
+{:else if control.kind === 'fillColour'}
+  <ColourButton {...attrs} css={control.css} none={control.none} label={text(control.label)} />
+{:else if control.kind === 'angle'}
+  <Slider {...attrs} aria-labelledby={name} value={control.value} readout={`${control.numericValue}${control.unit}`} />
+{:else if control.kind === 'button'}
+  {@const { class: cls, ...rest } = attrs}
+  <Button {...rest} class={cls || undefined}>{#if control.swatch}<i style:background={control.swatch.css} class={control.swatch.none ? 'none' : undefined}></i>{/if}{#if control.svg}{@html control.svg}{/if}{text(control.text)}</Button>
+{:else if control.kind === 'spacer'}
+  <Spacer />
+{:else if control.kind === 'code'}
+  <code class={control.class}>{control.text}</code>
+{:else if control.kind === 'texColour'}
+  <ColourButton css={control.css} none={control.none} data-tc={control.nullable ? 'n' : ''} title={caption(control.title, $locale)} data-dl={control.defaultLabel} data-dsw={control.defaultSwatch} label={text(control.label)} /><input type="hidden" {...attrs} {@attach liveValue(control.value)}>
+{:else}
+  <span class={control.class}>{text(control.text)}</span>
+{/if}

@@ -6,21 +6,21 @@ T.test('Draw modes: the menu on the Rectangle and Ellipse buttons sets how they 
     const rect = document.querySelector('#fly-shapes [data-modes="rect"]');
     T.ok(rect && document.querySelector('#fly-shapes [data-modes="ellipse"]'), 'both buttons have a menu');
     rect.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    const menu = document.querySelector('#modeMenu');
-    T.ok(!menu.hidden, 'opens');
-    T.eq([...menu.querySelectorAll('[data-mode]')].map((b) => b.textContent).join(','), 'Corner to corner,From the centre,Three points');
-    T.eq(menu.querySelector('[aria-checked="true"]').dataset.mode, 'rect:corner', 'corner to corner by default');
-    menu.querySelector('[data-mode="rect:three"]').click();
-    T.ok(menu.hidden, 'a choice closes it');
+    const menu = () => document.querySelector('#modeMenu'); // the open one: a closed menu is gone
+    T.ok(menu(), 'opens');
+    T.eq([...menu().querySelectorAll('[data-act]')].map((b) => b.textContent).join(','), 'Corner to corner,From the centre,Three points');
+    T.eq(menu().querySelector('[aria-checked="true"]').dataset.act, 'rect:corner', 'corner to corner by default');
+    menu().querySelector('[data-act="rect:three"]').click();
+    T.ok(!menu(), 'a choice closes it');
     T.eq(TD.state.tool, 'rect', 'and takes the tool');
     T.eq(JSON.parse(localStorage.getItem('diagramtex.drawModes')).rect, 'three', 'remembered');
     rect.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    T.eq(menu.querySelector('[aria-checked="true"]').dataset.mode, 'rect:three', 'ticked next time');
+    T.eq(menu().querySelector('[aria-checked="true"]').dataset.act, 'rect:three', 'ticked next time');
     T.ok(rect.querySelector('svg path'), 'the button shows the turned rectangle');
     document.querySelector('#fly-shapes [data-modes="ellipse"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    T.eq([...menu.querySelectorAll('[data-mode]')].map((b) => b.dataset.mode.split(':')[1]).join(' '), 'corner center circle circle2 circle3');
+    T.eq([...menu().querySelectorAll('[data-act]')].map((b) => b.dataset.act.split(':')[1]).join(' '), 'corner center circle circle2 circle3');
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    T.ok(menu.hidden, 'a click elsewhere closes it');
+    T.ok(!menu(), 'a click elsewhere closes it');
   } finally {
     try { saved == null ? localStorage.removeItem('diagramtex.drawModes') : localStorage.setItem('diagramtex.drawModes', saved); } catch (e) { /* blocked */ }
     TD.app.cmd.setTool('select');
@@ -31,7 +31,7 @@ T.test('Draw modes: each mode draws the shape it says', () => {
   const pick = (tool, m) => {
     const b = document.querySelector(`#fly-shapes [data-modes="${tool}"]`);
     b.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    document.querySelector(`#modeMenu [data-mode="${tool}:${m}"]`).click();
+    document.querySelector(`#modeMenu [data-act="${tool}:${m}"]`).click();
   };
   TD.app.newDoc('Draw modes', null, null, null, null, 'board');
   const svg = document.querySelector('#canvas'), r = svg.getBoundingClientRect();
@@ -85,7 +85,7 @@ T.test('Draw modes: each mode draws the shape it says', () => {
 T.test('Draw modes: a rectangle or ellipse also draws with two clicks; a symbol still goes in with one', () => {
   const pick = (tool, m) => {
     document.querySelector(`#fly-shapes [data-modes="${tool}"]`).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-    document.querySelector(`#modeMenu [data-mode="${tool}:${m}"]`).click();
+    document.querySelector(`#modeMenu [data-act="${tool}:${m}"]`).click();
   };
   TD.app.newDoc('Two-click boxes', null, null, null, null, 'board');
   const svg = document.querySelector('#canvas'), r = svg.getBoundingClientRect();

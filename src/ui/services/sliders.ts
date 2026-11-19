@@ -45,6 +45,11 @@ function editValue(readout: HTMLElement, slider: HTMLInputElement) {
   (readout.parentElement || document.body).append(input); editor = input; finishEditor = finish; input.focus(); input.select();
 }
 // Block editors capture Escape at window level; numeric entry must handle it first.
+let installed = false;
+/** Start the slider gestures (once): the app at boot, and the kit's Slider as it mounts. */
+export function installSliders() {
+  if (installed || typeof document === 'undefined') return;
+  installed = true;
 window.addEventListener('keydown', e => {
   if (e.target !== editor || (e.key !== 'Enter' && e.key !== 'Escape')) return;
   e.preventDefault(); e.stopImmediatePropagation();
@@ -80,6 +85,16 @@ document.addEventListener('keydown', e => {
     if (slider && !slider.disabled) { e.preventDefault(); e.stopPropagation(); editValue(readout, slider); }
   }
 }, true);
+// A slider presses (shrinks while held, kit.css) about its thumb, so the thumb stays under the pointer: --thumb-at
+// is where the value sits along the track (0–1), set as the press starts and as the value moves.
+function thumbAt(e: Event) {
+  const r = e.target;
+  if (!(r instanceof HTMLInputElement) || r.type !== 'range') return;
+  const min = r.min === '' ? 0 : +r.min, max = r.max === '' ? 100 : +r.max;
+  r.style.setProperty('--thumb-at', String(max > min ? Math.min(1, Math.max(0, (+r.value - min) / (max - min))) : 0.5));
+}
+document.addEventListener('pointerdown', thumbAt, true);
+document.addEventListener('input', thumbAt, true);
 // Readouts added by any panel share keyboard access and the same affordance.
 function decorate() {
   if (editor && (!editor.isConnected || editor.closest('[hidden]'))) finishEditor?.(false);
@@ -95,3 +110,6 @@ function decorate() {
 }
 new MutationObserver(decorate).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'hidden'] });
 decorate();
+}
+// starts on import, as the app has always loaded it (src/main.ts keeps the order); kit components call it again, harmlessly
+installSliders();

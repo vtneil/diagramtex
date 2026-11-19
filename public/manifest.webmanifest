@@ -9,7 +9,7 @@
   "background_color": "#f4f2ec",
   "theme_color": "#fffdf8",
   "file_handlers": [
-    { "action": "./", "accept": { "application/vnd.diagramtex+json": [".diagramtex"], "application/json": [".json"], "text/x-tex": [".tex", ".tikz"] } }
+    { "action": "./", "accept": { "application/vnd.diagramtex+json": [".diagramtex"] } }
   ],
   "launch_handler": { "client_mode": "focus-existing" },
   "icons": [

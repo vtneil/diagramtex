@@ -2,22 +2,24 @@ import { wireIntersections } from '../domain/circuit-crossings';
 import { connectedWires, projectOnWire, wireJunctions } from './circuit-wires';
 import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
-import { t as uiText, onLocale } from '../i18n';
+import { t as uiText, message, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { section, row } from '../ui/forms';
+import { section, row, switchRow } from '../ui/forms';
 import FormPanel from '../ui/FormPanel.svelte';
 import CircuitProperties from '../ui/editors/CircuitProperties.svelte';
 import CzeditorFrame from '../ui/editors/CzeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Circuit editor: the overlay that opens on a Circuit block. A searchable palette of circuitikz parts,
 // a drafting grid where parts are dropped, dragged, rotated and wired (ends snap to pins), the selected
 // part's properties, and beside them the circuitikz it writes, live both ways (edits there are read back).
 // TD.czEditor.open(block, onDone) — block: { items, raw }; onDone({ items, raw }) on Done.
 (function () {
   const CZ = TD.CZ, C = TD.cz;
-  const { esc } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
   const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const GRID = 0.25;                 // cm
@@ -42,10 +44,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, CzeditorFrame, { p0: ic('<path d="M5 3l10 7-5 1-2 5z" class="f"/>'), p1: ic('<path d="M3 15h6V5h8"/><circle cx="3" cy="15" r="1.6" class="f"/><circle cx="17" cy="5" r="1.6" class="f"/>'), p2: ic('<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>'), p3: ic('<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>'), p4: ic('<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>'), p5: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p6: isMac ? '⌘' : 'Ctrl+', p7: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p8: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p9: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p10: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p11: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, CzeditorFrame);
   document.body.appendChild(root);
-  const svg = $('.cz-svg', root), stage = $('.cz-stage', root), list = $('.cz-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.cz-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search.parts', 'Search parts'), label: message('ui.elements', 'Elements'), layout: 'rows', collapsible: true, isOpen, ontoggle: (id, open) => { if (isOpen(id) !== open) lsSet(OPEN_KEY, { ...lsGet(OPEN_KEY, {}), [id]: open }); }, empty: (query) => uiText('editor.cz.noPartMatches', 'No part matches “{query}”', { query }), onpick: (k) => arm(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   let stopLocale: (() => void) | null = null;
@@ -67,37 +69,20 @@ import { patchSvg } from '../ui/svg-patch';
   function redo() { if (E.wire) endWire(); commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); dock.changed(); }
 
   // ---------------------------------------------------------------- palette
+  // categories fold (opening or closing one is remembered; nothing else opens one); "Recently used" and "Common" are
+  // shown while browsing, not in a search
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    const match = (d: any) => !q || q.split(/\s+/).every((w: any) => `${d.name} ${d.tikz} ${d.keywords || ''} ${d.cat}`.toLowerCase().includes(w));
-    let html = '';
-    const section = (id: any, title: any, keys: any) => {
-      const rows = keys.map((k: any) => `<button class="cz-part${E && (E.part === k || k === 'short' && E.tool === 'wire') ? ' on' : ''}" data-part="${k}" title="${k === 'short' ? 'Wire (W)' : `${esc(CZ.parts[k].name)} — ${CZ.parts[k].kind === 'node' ? 'node' : 'to'}[${esc(CZ.parts[k].tikz)}]`}">${CZ.icon(k, 44, 26)}<span>${esc(CZ.parts[k].name)}</span></button>`).join('');
-      html += q ? `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div>${rows}</div>`
-        : `<details class="cz-cat" data-cat="${id}"${isOpen(id) ? ' open' : ''}><summary class="cz-cat-t">${esc(title)} <small>${keys.length}</small></summary>${rows}</details>`;
+    const row = (k: any) => {
+      const d = CZ.parts[k];
+      return { id: k, label: d.name, title: k === 'short' ? uiText('editor.cz.wireTip', 'Wire (W)') : `${d.name} — ${d.kind === 'node' ? 'node' : 'to'}[${d.tikz}]`, keywords: `${d.tikz} ${d.keywords || ''} ${d.cat}`, svg: CZ.icon(k, 44, 26), on: !!E && (E.part === k || (k === 'short' && E.tool === 'wire')), attrs: { 'data-part': k } };
     };
-    if (!q) {
-      const recent = lsGet(RECENT_KEY, []).filter((k: any) => CZ.parts[k]);
-      if (recent.length) section('recent', uiText('editor.cz.recent', 'Recently used'), recent);
-      section('common', uiText('editor.cz.common', 'Common'), COMMON.filter((k) => CZ.parts[k]));
-    }
-    for (const [cat, title] of CZ.CATS) {
-      const keys = CZ.order.filter((k: any) => CZ.parts[k].cat === cat && match(CZ.parts[k]));
-      if (keys.length) section(cat, title, keys);
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.cz.noPartMatches', 'No part matches “{query}”', { query: search.value }))}</div>`;
+    const recent = lsGet(RECENT_KEY, []).filter((k: any) => CZ.parts[k]);
+    pal.render([
+      ...(recent.length ? [{ id: 'recent', title: uiText('editor.cz.recent', 'Recently used'), browse: true, items: recent.map(row) }] : []),
+      { id: 'common', title: uiText('editor.cz.common', 'Common'), browse: true, items: COMMON.filter((k) => CZ.parts[k]).map(row) },
+      ...CZ.CATS.map(([cat, title]: any) => ({ id: cat, title, items: CZ.order.filter((k: any) => CZ.parts[k].cat === cat).map(row) })),
+    ]);
   }
-  // opening or closing a section is remembered; nothing else opens one
-  list.addEventListener('toggle', (e: any) => {
-    const d = e.target, id = d.dataset && d.dataset.cat;
-    if (!id || !d.matches('details') || isOpen(id) === d.open) return;
-    lsSet(OPEN_KEY, { ...lsGet(OPEN_KEY, {}), [id]: d.open });
-  }, true);
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.cz-part', list); if (b) arm(b.dataset.part); search.blur(); }
-  });
   // click a part to arm it; drag it onto the grid to drop it
   let palDrag: any = null;
   // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
@@ -130,7 +115,7 @@ import { patchSvg } from '../ui/svg-patch';
     updateTools(); buildPalette(); draw();
     setTip(E.part ? (CZ.parts[part].kind === 'node' ? uiText('editor.cz.armNodeTip', '{name}: click to place. Esc when done.', { name: CZ.parts[part].name }) : uiText('editor.cz.armBipoleTip', '{name}: click, or drag from start to end. Esc when done.', { name: CZ.parts[part].name })) : '');
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- view
   const rect = () => svg.getBoundingClientRect();
@@ -533,21 +518,13 @@ import { patchSvg } from '../ui/svg-patch';
   // ---------------------------------------------------------------- right-click menu
   // The same .ctx menu as the quantum and tree editors: it acts on the selection when the click is inside it,
   // otherwise selects the item under the pointer first.
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const MI: Record<string, any> = {
-    label: '<path d="M4 15l1-4 8-8 3 3-8 8z"/><path d="M11 5l3 3"/>',
-    rotate: '<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>',
-    mirrory: '<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>',
-    mirrorx: '<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>',
-    dup: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M4 13V4.5A1.5 1.5 0 015.5 3H13"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-  };
-  const mItem = (act: any, label: any, icon: any, key: any, off?: any, danger?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-cm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { label: 'edit', rotate: 'rotate', mirrory: 'mirrorH', mirrorx: 'mirrorV', dup: 'duplicate', del: 'delete' };
+  const mItem = (act: string, label: string, icon: string, key: string, off?: boolean, danger?: boolean) => menuRow(act, label, MI[icon], key, { disabled: !!off, danger: !!danger });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const g = e.target.closest('[data-id]');
     if (!g) { closeMenu(); return; }
@@ -555,27 +532,17 @@ import { patchSvg } from '../ui/svg-patch';
     if (E.tool !== 'select') setTool('select');
     if (!E.sel.has(g.dataset.id)) { E.sel = new Set([g.dataset.id]); draw(); renderProps(); }
     const s = sel(), n = s.length, one = n === 1 ? s[0] : null, mod = isMac ? '⌘' : 'Ctrl+';
-    menu.innerHTML = mItem('label', uiText('editor.cz.editLabel', 'Edit Label'), 'label', '', !one || C.isWire(one)) + '<hr>' +
-      mItem('rotate', uiText('editor.cz.rotate90', 'Rotate 90°'), 'rotate', 'R') + mItem('mirrory', uiText('editor.cz.mirrorLR', 'Mirror Left to Right'), 'mirrory', 'X') + mItem('mirrorx', uiText('editor.cz.mirrorTB', 'Mirror Top to Bottom'), 'mirrorx', 'Y') + mItem('dup', uiText('editor.cz.duplicate', 'Duplicate'), 'dup', mod + 'D') + '<hr>' +
-      mItem('delete', n > 1 ? uiText('editor.cz.deleteItems', 'Delete {n} Items', { n }) : uiText('editor.cz.delete', 'Delete'), 'del', '⌫', false, true);
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    menuRows = [mItem('label', uiText('editor.cz.editLabel', 'Edit Label'), 'label', '', !one || C.isWire(one)), '-', mItem('rotate', uiText('editor.cz.rotate90', 'Rotate 90°'), 'rotate', 'R'), mItem('mirrory', uiText('editor.cz.mirrorLR', 'Mirror Left to Right'), 'mirrory', 'X'), mItem('mirrorx', uiText('editor.cz.mirrorTB', 'Mirror Top to Bottom'), 'mirrorx', 'Y'), mItem('dup', uiText('editor.cz.duplicate', 'Duplicate'), 'dup', mod + 'D'), '-', mItem('delete', n > 1 ? uiText('editor.cz.deleteItems', 'Delete {n} Items', { n }) : uiText('editor.cz.delete', 'Delete'), 'del', '⌫', false, true)];
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-cm]');
-    if (!b || (b as HTMLButtonElement).disabled || !E) return;
-    closeMenu();
-    const a = (b as HTMLElement).dataset.cm;
+  function pickMenu(a: string) {
+    if (!E) return;
     if (a === 'label') editLabel(sel()[0].id);
     else if (a === 'rotate') rotateSel();
     else if (a === 'mirrorx' || a === 'mirrory') mirrorSel(a.slice(-1));
     else if (a === 'dup') duplicateSel();
     else if (a === 'delete') deleteSel();
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  }
 
   // ---------------------------------------------------------------- properties
   const POLES = () => [['', uiText('editor.cz.poleNone', 'None')], ['*', uiText('editor.cz.poleDot', 'Dot ●')], ['o', uiText('editor.cz.poleOpen', 'Open ○')]];
@@ -594,7 +561,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (it.p) {
       if (Object.keys(def.pins).some(name => name !== 'center')) rows.push(field('name', uiText('editor.cz.name', 'Name'), 'Q1', true));
       rows.push(field('text', uiText('editor.cz.text', 'Text')));
-      rows.push({ ...row(captions["ui.rotation"], ...[0, 90, 180, 270].map(angle => ({ kind: 'button' as const, text: angle + '°', attrs: { 'data-rot': angle, class: (it.rot || 0) === angle ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' });
+      rows.push(switchRow(captions["ui.rotation"], [0, 90, 180, 270].map(angle => ({ text: angle + '°', on: (it.rot || 0) === angle, attrs: { 'data-rot': angle } }))));
       rows.push({ ...row(uiText('editor.cz.mirrored', 'Mirrored'), { kind: 'input' as const, value: '', checked: !!it.flip, attrs: { type: 'checkbox', id: 'czf-flip', 'data-f': 'flip' } }), labelFor: 'czf-flip' });
     } else {
       if (!C.isWire(it)) rows.push(field('l', uiText('editor.cz.label', 'Label'), '$R_1$'), field('ann', uiText('editor.cz.annotation', 'Annotation'), '$1\\,\\mathrm{k\\Omega}$'),
@@ -626,10 +593,9 @@ import { patchSvg } from '../ui/svg-patch';
   }
   function markRow(it: any, kind: 'v' | 'i') {
     const now = C.markOf(kind, it);
-    return { ...row(kind === 'v' ? uiText('editor.cz.voltageArrow', 'Voltage arrow') : uiText('editor.cz.currentArrow', 'Current arrow'),
-      ...MARKS.map(([s, back]) => ({ kind: 'button' as const, text: '', svg: markIcon(kind, it, s, back), attrs: {
-        'data-mark': `${kind}:${C.markMods(kind, s, back)}`, title: `${kind}${C.markMods(kind, s, back)}=`, 'aria-label': (kind === 'v' ? 'Voltage' : 'Current') + ' arrow ' + C.markMods(kind, s, back),
-        class: now.s === s && now.back === back ? 'on' : '', disabled: !it[kind] } }))), controlClass: 'ctl seg-ctl' };
+    return switchRow(kind === 'v' ? uiText('editor.cz.voltageArrow', 'Voltage arrow') : uiText('editor.cz.currentArrow', 'Current arrow'),
+      MARKS.map(([s, back]) => ({ svg: markIcon(kind, it, s, back), title: `${kind}${C.markMods(kind, s, back)}=`, name: (kind === 'v' ? 'Voltage' : 'Current') + ' arrow ' + C.markMods(kind, s, back),
+        on: now.s === s && now.back === back, disabled: !it[kind], attrs: { 'data-mark': `${kind}:${C.markMods(kind, s, back)}` } })));
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) commit(); });
@@ -696,7 +662,7 @@ import { patchSvg } from '../ui/svg-patch';
   }
   function showRaw() {
     const n = E.raw ? E.raw.split('\n').filter((l: any) => l.trim()).length : 0;
-    codeMsg.textContent = n ? (n === 1 ? uiText('editor.cz.rawOne', "1 line can't be drawn here and will be kept as written.") : uiText('editor.cz.rawMany', "{n} lines can't be drawn here and will be kept as written.", { n })) : '';
+    showCodeNotes(codeMsg, n ? [n === 1 ? uiText('editor.cz.rawOne', "1 line can't be drawn here and will be kept as written.") : uiText('editor.cz.rawMany', "{n} lines can't be drawn here and will be kept as written.", { n })] : []);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -711,6 +677,7 @@ import { patchSvg } from '../ui/svg-patch';
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -722,7 +689,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (inField) { (e.target! as HTMLElement).blur(); return; }
       if (E.tool !== 'select') { setTool('select'); setTip(''); return; }
       if (E.sel.size) { E.sel.clear(); draw(); renderProps(); return; }
@@ -768,8 +735,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (now !== E.start) { E.start = now; E.done({ items: clone(E.items), raw: E.raw }); }
     flashSaved();
   }
-  let savedT = 0;
-  function flashSaved() { const saved = uiText('editor.commonB.saved', 'Saved to the page'); setTip(saved); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500); }
+  function flashSaved() { stageNote.flash(uiText('editor.commonB.saved', 'Saved to the page'), 1500); }
   // reloading or closing the tab asks first while this holds edits not yet applied (app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
   const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap(), result: () => ({ items: clone(E.items), raw: E.raw }) });
@@ -795,7 +761,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { items: clone(block.items || []), raw: block.raw || '', sel: new Set(), tool: 'select', part: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], done, pending: null, hover: null, drag: null, codeAt: null, codeTimer: null };
     E.start = snap();
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and counts follow the interface language while open
     stopLocale?.();

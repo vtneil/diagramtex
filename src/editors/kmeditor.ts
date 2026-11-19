@@ -2,13 +2,16 @@ import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { message, onLocale, t } from '../i18n';
 import type { FormRow } from '../ui/forms';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { section, row } from '../ui/forms';
+import { section, row, switchRow } from '../ui/forms';
 import { field, segments, codeRow, note, actionRow } from '../ui/editor-fields';
 import FormPanel from '../ui/FormPanel.svelte';
 import KmeditorFrame from '../ui/editors/KmeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Karnaugh map editor: the overlay that opens on a Karnaugh map block. A palette of map sizes and cell
 // values; the map drawn by the canvas renderer, where a click turns a cell through 0, 1 and don't care and
 // a drag across cells draws a group (past an edge, it wraps round); the selected group's or the map's
@@ -19,7 +22,6 @@ import { patchSvg } from '../ui/svg-patch';
   const F = TD.kmap;
   const { esc, r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const INK = '#1c1b19';
   const PX = TD.PX_PER_CM;
 
@@ -79,13 +81,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const TRASH = '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>';
-  mountFrame(root, KmeditorFrame, { p0: ic(TRASH), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, KmeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.km-svg', root), stage = $('.cz-stage', root), list = $('.km-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.km-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('editor.commonA.search', 'Search'), searchLabel: message('editor.commonA.searchPalette', 'Search the palette'), label: message('editor.commonA.elements', 'Elements'), listClass: 'km-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: { g: index } | null, arm: 'v:1' … | 'g:' | null, mode: 'sop' | 'pos', view: { k (px per cm), ox, oy },
@@ -137,37 +136,21 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = null; renderProps();
     const how = E.mode === 'pos' ? t('editor.km.solve.sums', 'the 0s as sums') : t('editor.km.solve.products', 'the 1s as products');
     const msg = g.length ? (g.length === 1 ? t('editor.km.solve.one', '1 group: {how}', { how }) : t('editor.km.solve.many', '{n} groups: {how}', { n: g.length, how })) : t('editor.km.solve.none', 'No {value}s to group', { value: E.mode === 'pos' ? '0' : '1' });
-    setTip(msg);
-    setTimeout(() => { if (E && tip.textContent === msg) setTip(''); }, 1800);
+    stageNote.flash(msg, 1800);
   }
 
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
     const cur = E ? `m:${E.M.X},${E.M.Y},${E.M.Z}` : '';
-    for (const [title, items] of PAL) {
-      const hits = items.filter(([k, name]: any) => !q || `${name} ${itemName(k, name)} ${title} ${palTitle(title)} ${sizeTip(k.slice(2))} ${k === 'v:-' ? 'dont care x indeterminant' : ''}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(palTitle(title))}</div><div class="qe-grid">${hits.map(([k, name0, , key]: any) => {
-        const on = E && (E.arm === k || k === cur), name = itemName(k, name0);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(k[0] === 'm' ? `${sizeTip(k.slice(2))} (${name})` : name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${ITEM[k].mini}</span><span>${esc(name)}</span></button>`;
-      }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list, 64, 40, 1.6);
+    pal.render(PAL.map(([title, items]: any) => ({
+      id: title, title: palTitle(title),
+      // the shown name, the English one, the category's and a size's description find it
+      items: items.map(([k, name0, , key]: any) => {
+        const name = itemName(k, name0);
+        return { id: k, label: name, title: k[0] === 'm' ? `${sizeTip(k.slice(2))} (${name})` : name, key, alt: name0, keywords: `${title} ${palTitle(title)} ${sizeTip(k.slice(2))} ${k === 'v:-' ? 'dont care x indeterminant' : ''}`, svg: fitMini(ITEM[k].mini, 64, 40, 1.6), on: k === cur };
+      }),
+    })), { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   list.addEventListener('click', (e: any) => { const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
   // a size changes the map; a value is armed for painting cells; Group arms drawing groups (a click makes a one-cell group)
   function pick(k: any) {
@@ -176,7 +159,7 @@ import { patchSvg } from '../ui/svg-patch';
     buildPalette(); draw();
     setTip(!E.arm ? '' : k === 'g:' ? t('editor.km.tip.group', 'Group: click a cell or drag across cells. Esc when done.') : t('editor.km.tip.value', '{value}: click or drag over cells to set them. Esc when done.', { value: itemName(k, ITEM[k].name) }));
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -419,38 +402,30 @@ import { patchSvg } from '../ui/svg-patch';
   }
 
   // right-click: the cell's values, and the group's delete
-  const MI: Record<string, any> = { del: TRASH, check: '<path d="M4 10.5l4 4 8-9"/>' };
-  const mItem = (act: any, label: any, icon: any, key: any, danger?: any) => `<button class="ctx-item${danger ? ' danger' : ''}" data-km="${act}">${icon ? `<svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg>` : '<span class="ic"></span>'}<span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { del: 'delete' };
+  const mItem = (act: string, label: string, icon: string | null, key: string, danger?: boolean, on?: boolean) => menuRow(act, label, icon ? MI[icon] : null, key, { danger: !!danger, checked: on });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
     if (!E) return;
     const n = cellUnder(e), gi = groupAt(e, true);
-    let html = '';
+    const menuRows: MenuEntry[] = [];
     if (n != null) {
       const v = valOf(n);
       E.menuCell = n;
-      html += [['1', t('editor.km.v.one', 'One'), '1'], ['0', t('editor.km.v.zero', 'Zero'), '0'], ['-', t('editor.km.menu.dontCare', 'Don’t Care'), 'D'], ['', t('editor.km.v.empty', 'Empty'), 'E']].map(([val, nm, key]) => mItem(`set:${val}`, nm, v === val ? 'check' : null, key)).join('');
+      // a pick-one group: the cell's value is ticked
+      menuRows.push(...[['1', t('editor.km.v.one', 'One'), '1'], ['0', t('editor.km.v.zero', 'Zero'), '0'], ['-', t('editor.km.menu.dontCare', 'Don’t Care'), 'D'], ['', t('editor.km.v.empty', 'Empty'), 'E']].map(([val, nm, key]) => mItem(`set:${val}`, nm, null, key, false, v === val)));
     }
-    if (gi != null) { E.sel = { g: gi }; html += (html ? '<hr>' : '') + mItem('gdel', t('editor.km.deleteGroup', 'Delete Group'), 'del', '⌫', true); }
-    if (!html) { closeMenu(); return; }
-    menu.innerHTML = html;
+    if (gi != null) { E.sel = { g: gi }; menuRows.push('-', mItem('gdel', t('editor.km.deleteGroup', 'Delete Group'), 'del', '⌫', true)); }
+    if (!menuRows.length) { closeMenu(); return; }
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-km]');
-    if (!b) return;
-    closeMenu();
-    const a = (b as HTMLElement).dataset.km;
-    if (a!.startsWith('set:')) { const n = E.menuCell; edit(() => setCell(n, a!.slice(4))); return; }
+  function pickMenu(a: string) {
+    if (a.startsWith('set:')) { const n = E.menuCell; edit(() => setCell(n, a.slice(4))); return; }
     act(a);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  }
 
   // ---------------------------------------------------------------- properties
   const math = (t: any) => TD.textHtml ? TD.textHtml(`$${t}$`) : esc(t);
@@ -464,7 +439,7 @@ import { patchSvg } from '../ui/svg-patch';
       const status = G.ok ? (G.redundant ? t('editor.km.status.redundant', 'Valid, but its {value}s are all in other groups', { value: want }) : G.prime ? t('editor.km.status.prime', 'Valid and as large as it can be') : t('editor.km.status.larger', 'Valid, but it could be larger')) : G.why;
       const rows: FormRow[] = [{ kind: 'rendered' as const, class: 'km-term', svgOrMath: G.ok ? math(G.term) : '—' },
         { kind: 'status' as const, class: 'km-status ' + (G.ok && G.prime && !G.redundant ? 'ok' : 'bad'), icon: G.ok ? OK : BAD, text: status }];
-      if (M.Z > 1) rows.push({ ...row(t('editor.km.subMaps', 'Sub maps'), ...Array.from<any, any>({ length: M.Z }, (_, m) => ({ kind: 'button' as const, text: M.Z === 2 ? String(m) : m.toString(2).padStart(2, '0'), attrs: { 'data-fm': m, class: g.maps.includes(m) ? 'on' : '', title: M.Z === 2 ? t('editor.km.subMap', 'Sub map {n}', { n: m }) : t('editor.km.subMapBits', 'Sub map {n} ({bits})', { n: m, bits: m.toString(2).padStart(2, '0') }) } }))), controlClass: 'ctl seg-ctl ze-flags km-maps' });
+      if (M.Z > 1) rows.push(switchRow(t('editor.km.subMaps', 'Sub maps'), Array.from<any, any>({ length: M.Z }, (_, m) => ({ text: M.Z === 2 ? String(m) : m.toString(2).padStart(2, '0'), on: g.maps.includes(m), title: M.Z === 2 ? t('editor.km.subMap', 'Sub map {n}', { n: m }) : t('editor.km.subMapBits', 'Sub map {n} ({bits})', { n: m, bits: m.toString(2).padStart(2, '0') }), attrs: { 'data-fm': m } })), { many: true, class: 'km-maps' }));
       rows.push(codeRow(groupCode(g)), note(t('editor.km.help.group', 'Drag its outline to move it, or a handle to resize it; past an edge it wraps round. Arrow keys move it, '), { kbd: '⇧' }, t('editor.km.help.groupResize', ' arrows resize it.')), actionRow('ke', 'gdel', t('editor.km.deleteGroup', 'Delete Group')));
       renderView(props, FormPanel, { sections: [{ ...section(t('editor.km.groupN', 'Group {n}', { n: i + 1 }), rows, 'sec'), swatch: swatch(i), summary: `${R.h} × ${R.w}${g.maps.length > 1 ? ` × ${g.maps.length}` : ''}` }] }); return;
     }
@@ -557,7 +532,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = F.layout({ src: c }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: c }).warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -566,7 +541,7 @@ import { patchSvg } from '../ui/svg-patch';
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); buildPalette(); draw(); renderProps();
-    codeMsg.innerHTML = F.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
@@ -584,6 +559,7 @@ import { patchSvg } from '../ui/svg-patch';
     setTip(groupTip(n));
   }
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || session.elsewhere(e)) return;
@@ -595,7 +571,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -637,7 +613,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { M, sel: null, arm: null, mode, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null };
     E.start = codeOf(M);
     session.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette and properties follow the interface language while the editor is open
     localeOff?.();

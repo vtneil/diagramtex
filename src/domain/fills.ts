@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { patternName, gradientName } from './fill-names';
 // Rich fills: gradients (linear / radial) and hatch patterns, plus the line-width and dash presets.
 // A fill is either a colour string ('#rrggbb[aa]') or an object:
 //   gradient: { g: 'linear'|'radial', angle (deg, CCW), scale (%), cx, cy (% of the box), stops: [[0..1, '#hex'], ...] }
@@ -6,7 +7,7 @@ import { runtime as TD } from '../runtime';
 // On the canvas they become <linearGradient>/<radialGradient>/<pattern> defs (collected per render).
 // In TikZ, gradients become \pgfdeclare…shading declarations and patterns use patterns.meta.
 (function () {
-  const { r2, esc } = TD.util;
+  const { r2 } = TD.util;
   const f = TD.fmt;
   const K = TD.PT_PER_PX;
 
@@ -91,8 +92,7 @@ import { runtime as TD } from '../runtime';
     if (v.g) return cssGrad(v);
     return `#fff url("data:image/svg+xml,${encodeURIComponent(patSvgPreview(v, 48, 48))}") 0 0/48px 48px`;
   };
-  TD.fillLabel = (v: any) => (!v ? 'none' : !isObj(v) ? v.toUpperCase() : v.g ? (v.g === 'radial' ? 'Radial' : 'Linear') + ' gradient'
-    : (TD.PATTERNS.find((p: any) => p[0] === v.p) || [0, 'Pattern'])[1]);
+  TD.fillLabel = (v: any) => (!v ? 'none' : !isObj(v) ? v.toUpperCase() : v.g ? gradientName(v.g) : patternName(v.p));
 
   // ---------- TikZ ----------
   const rgb = (c: any) => { const n = parseInt(TD.parseColor(c).hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((x) => x / 255); };
@@ -177,102 +177,19 @@ import { runtime as TD } from '../runtime';
     ['p:1.5 1.5', 'Densely dashed'], ['p:6 3', 'Long dashes'], ['p:6 2 1 2 1 2', 'Dash dot dot']];
   TD.WIDTHS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6];
 
-  // ---------- picker panes (used by the colour picker's Gradient / Pattern tabs) ----------
-  const swatches = (attr: any) => `<div class="fp-sw">${(TD.colorPresets ? TD.colorPresets() : []).map((c: any) => `<button type="button" ${attr}="${c}" style="background:${TD.css(c)}" title="${c}"></button>`).join('')}</div>`;
+  // ---------- the colour picker's Gradient / Pattern panes (src/ui/GradientPane.svelte, PatternPane.svelte) ----------
   const hexOk = (v: any) => { v = v.trim().replace('#', ''); if (/^[0-9a-f]{3}$/i.test(v)) v = v.split('').map((c: any) => c + c).join(''); return /^([0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) ? '#' + v.toLowerCase() : null; };
-
   TD.fillPanes = {
     defaultGrad: (base: any) => ({ g: 'linear', angle: 0, scale: 100, cx: 50, cy: 50, stops: [[0, '#ffffff'], [1, base && !isObj(base) ? base : '#5b8ede']] }),
     defaultPat: (base: any) => ({ p: 'ne', size: 8, lw: 0.75, color: base && !isObj(base) && !/^#fff(fff)?/i.test(base) ? base : '#000000' }),
-
-    // el: pane element; get(): current gradient; set(v, final)
-    grad(el: any, get: any, set: any) {
-      let sel = 0;
-      const draw = () => {
-        const v = gnorm(get());
-        sel = Math.min(sel, v.stops.length - 1);
-        const bar = `linear-gradient(90deg, ${v.stops.map(([t, c]: any) => `${TD.css(c)} ${r2(t * 100)}%`).join(', ')})`;
-        el.innerHTML =
-          `<div class="fp-presets">${TD.GRAD_PRESETS.map((p: any, i: any) => `<button type="button" data-gp="${i}" style="background:${cssGrad(p)}"></button>`).join('')}</div>` +
-          `<div class="fp-preview" style="background:${cssGrad(v)}"></div>` +
-          `<div class="fp-seg"><button type="button" data-gk="linear" class="${v.g === 'linear' ? 'on' : ''}">Linear</button><button type="button" data-gk="radial" class="${v.g === 'radial' ? 'on' : ''}">Radial</button></div>` +
-          `<div class="fp-fields">` +
-          (v.g === 'linear' ? `<label><span>Rotate</span><input type="number" data-gf="angle" step="15" value="${r2(v.angle)}"><i>°</i></label>` : '') +
-          `<label><span>Scale</span><input type="number" data-gf="scale" min="5" step="10" value="${r2(v.scale)}"><i>%</i></label>` +
-          `<label><span>Center</span><input type="number" data-gf="cx" step="5" value="${r2(v.cx)}"><input type="number" data-gf="cy" step="5" value="${r2(v.cy)}"><i>%</i></label></div>` +
-          `<div class="fp-stops" title="Click the bar to add a stop; drag a stop to move it"><div class="fp-bar" style="background:${bar}"></div>` +
-          v.stops.map(([t, c]: any, i: any) => `<b data-st="${i}" class="${i === sel ? 'on' : ''}" style="left:${r2(t * 100)}%"><span style="background:${TD.css(c)}"></span></b>`).join('') + `</div>` +
-          `<div class="fp-stop-ed"><span>Stop</span><input data-sthex value="${esc(v.stops[sel][1].replace('#', '').toUpperCase())}" maxlength="8"><input type="number" data-stpos min="0" max="100" step="5" value="${Math.round(v.stops[sel][0] * 100)}"><i>%</i>` +
-          `<button type="button" data-stdel ${v.stops.length < 3 ? 'disabled' : ''} title="Remove stop">✕</button></div>` + swatches('data-stc');
-      };
-      const upd = (fn: any, final = true) => { const v = gnorm(get()); fn(v); set(v, final); if (final) draw(); };
-      el.onclick = (e: any) => {
-        const t = e.target.closest('button,[data-st]');
-        if (!t) return;
-        if (t.dataset.gp != null) { const p = gnorm(TD.GRAD_PRESETS[t.dataset.gp]); sel = 0; set(p, true); draw(); }
-        else if (t.dataset.gk) upd((v: any) => { v.g = t.dataset.gk; });
-        else if (t.dataset.stc) upd((v: any) => { v.stops[sel][1] = t.dataset.stc; });
-        else if (t.hasAttribute('data-stdel')) upd((v: any) => { v.stops.splice(sel, 1); sel = Math.max(0, sel - 1); });
-      };
-      el.onchange = (e: any) => {
-        const t = e.target;
-        if (t.dataset.gf) { const n = parseFloat(t.value); if (isFinite(n)) upd((v: any) => { v[t.dataset.gf] = t.dataset.gf === 'scale' ? Math.max(5, n) : n; }); }
-        else if (t.hasAttribute('data-sthex')) { const c = hexOk(t.value); if (c) upd((v: any) => { v.stops[sel][1] = c; }); else draw(); }
-        else if (t.hasAttribute('data-stpos')) { const n = parseFloat(t.value); if (isFinite(n)) upd((v: any) => { const st = v.stops[sel]; st[0] = Math.max(0, Math.min(1, n / 100)); v.stops.sort((a: any, b: any) => a[0] - b[0]); sel = v.stops.indexOf(st); }); }
-      };
-      el.onpointerdown = (e: any) => {
-        const box = e.target.closest('.fp-stops');
-        if (!box) return;
-        e.preventDefault();
-        const r = box.getBoundingClientRect(), tAt = (ev: any) => Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
-        const v = gnorm(get());
-        let st;
-        const h = e.target.closest('[data-st]');
-        if (h) st = v.stops[+h.dataset.st];
-        else {
-          // add a stop with the colour the bar shows there
-          const t = tAt(e), pts = v.stops;
-          let c = pts[0][1];
-          for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) { c = (t - pts[i - 1][0]) < (pts[i][0] - t) ? pts[i - 1][1] : pts[i][1]; break; } else c = pts[i][1];
-          st = [t, c]; v.stops.push(st);
-        }
-        v.stops.sort((a: any, b: any) => a[0] - b[0]);
-        sel = v.stops.indexOf(st);
-        set(v, false); draw();
-        const move = (ev: any) => { st[0] = tAt(ev); v.stops.sort((a: any, b: any) => a[0] - b[0]); sel = v.stops.indexOf(st); set(v, false);
-          const hs = el.querySelectorAll('[data-st]'); v.stops.forEach((s2: any, i: any) => { if (hs[i]) { hs[i].style.left = r2(s2[0] * 100) + '%'; hs[i].querySelector('span').style.background = TD.css(s2[1]); hs[i].classList.toggle('on', i === sel); } });
-          el.querySelector('.fp-bar').style.background = `linear-gradient(90deg, ${v.stops.map(([t, c]: any) => `${TD.css(c)} ${r2(t * 100)}%`).join(', ')})`;
-          el.querySelector('.fp-preview').style.background = cssGrad(v); };
-        const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); set(v, true); draw(); };
-        addEventListener('pointermove', move); addEventListener('pointerup', up);
-      };
-      draw();
-    },
-
-    pat(el: any, get: any, set: any) {
-      const draw = () => {
-        const v = pnorm(get());
-        el.innerHTML =
-          `<div class="fp-pats">${TD.PATTERNS.map(([k, n]: any) => `<button type="button" data-pk="${k}" title="${n}" class="${k === v.p ? 'on' : ''}">${patSvgPreview({ ...v, p: k, size: Math.min(v.size, 10) }, 40, 26)}</button>`).join('')}</div>` +
-          `<div class="fp-preview pat">${patSvgPreview(v, 214, 54)}</div>` +
-          `<div class="fp-fields"><label><span>Size</span><input type="number" data-pf="size" min="2" step="1" value="${r2(v.size)}"><i>px</i></label>` +
-          `<label><span>${v.p === 'dots' ? 'Radius' : 'Line width'}</span><input type="number" data-pf="lw" min="0.25" step="0.25" value="${r2(v.lw)}"><i>px</i></label>` +
-          `<label><span>Colour</span><input data-phex value="${esc(v.color.replace('#', '').toUpperCase())}" maxlength="8"></label></div>` + swatches('data-pc');
-      };
-      const upd = (fn: any) => { const v = pnorm(get()); fn(v); set(v, true); draw(); };
-      el.onclick = (e: any) => {
-        const t = e.target.closest('button');
-        if (!t) return;
-        if (t.dataset.pk) upd((v: any) => { v.p = t.dataset.pk; });
-        else if (t.dataset.pc) upd((v: any) => { v.color = t.dataset.pc; });
-      };
-      el.onchange = (e: any) => {
-        const t = e.target;
-        if (t.dataset.pf) { const n = parseFloat(t.value); if (isFinite(n)) upd((v: any) => { v[t.dataset.pf] = Math.max(t.dataset.pf === 'size' ? 2 : 0.25, n); }); }
-        else if (t.hasAttribute('data-phex')) { const c = hexOk(t.value); if (c) upd((v: any) => { v.color = c; }); else draw(); }
-      };
-      el.onpointerdown = null;
-      draw();
-    },
+    /** a gradient or pattern with every field filled in (stops sorted) */
+    gradNorm: gnorm, patNorm: pnorm,
+    /** CSS for a gradient's preview, and the bar of its stops left to right */
+    gradCss: cssGrad,
+    stopsCss: (v: any) => `linear-gradient(90deg, ${v.stops.map(([t, c]: any) => `${TD.css(c)} ${r2(t * 100)}%`).join(', ')})`,
+    /** a pattern drawn as <svg> markup, w × h */
+    patSvg: patSvgPreview,
+    /** a typed colour (3, 6 or 8 hex digits, with or without #) as #rrggbb[aa], or null */
+    hex: hexOk,
   };
 })();

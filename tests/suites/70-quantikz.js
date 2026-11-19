@@ -209,6 +209,31 @@ T.test('quantikz editor: span drag grows wires downward and stops at the top', a
   }
 });
 
+T.test('quantikz editor: nothing is placed over any wire of a tall gate (a gate over two wires, a permutation, a swap gate); a CNOT\'s wires take one each', async () => {
+  TD.qcEditor.open(qc(wrap('\\gate[2]{U} & \\permute{2,1} & \\ctrl{1} & \\gate[2,swap]{} \\\\\n & & \\targ{} &')), () => {});
+  await new Promise((r) => setTimeout(r, 50));
+  const root = document.querySelector('#qcModal'), q = (s) => root.querySelector(s), code = () => q('.cz-code textarea').value;
+  const key = (k) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+  const selH = () => Number(q('.qe-sel').getAttribute('height'));
+  try {
+    const start = code();
+    key('ArrowUp'); const tall = selH();
+    for (const [move, what] of [[null, 'the gate'], ['ArrowDown', 'the wire under the gate'], ['ArrowRight', 'the wire under the permutation'], ['ArrowUp', 'the permutation'], ['ArrowRight', 'the control (moving on)'], ['ArrowRight', 'the swap gate'], ['ArrowDown', 'the wire under the swap gate']]) {
+      if (move) key(move);
+      if (what.includes('moving on')) continue;
+      key('x');
+      T.eq(code(), start, `nothing placed on ${what}`);
+    }
+    T.ok(/several wires/.test(q('.cz-tip').textContent), 'the tip says why');
+    key('ArrowUp'); key('ArrowLeft'); key('ArrowLeft');
+    T.eq(selH(), tall, 'a permutation is as tall as the wires it orders');
+    key('ArrowDown'); key('ArrowRight'); key('x');
+    T.ok(/\\gate\{X\}/.test(code()) && !/\\targ/.test(code()), 'the target of a CNOT is replaced');
+  } finally {
+    q('[data-qe="done"]').click();
+  }
+});
+
 T.test('quantikz: library math inherits ink outside the isolated label image', () => {
   const host = document.createElement('div');
   host.style.color = 'rgb(230, 225, 215)';
@@ -293,7 +318,7 @@ T.test('quantikz editor: context label direction checks boundaries and the whole
       if (test.range) key('ArrowRight', true);
       const b = q('.qe-sel').getBoundingClientRect();
       q('.qe-sel').dispatchEvent(new MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:b.x+b.width/2, clientY:b.y+b.height/2}));
-      const action = q(`[data-qm="${test.bottom ? 'glabelbelow' : 'glabel'}"]`);
+      const action = document.querySelector(`.qe-ctx:not(.leaving) [data-act="${test.bottom ? 'glabelbelow' : 'glabel'}"]`);
       T.ok(action && action.textContent.includes(test.bottom ? 'Below' : 'Above'), 'menu direction: '+JSON.stringify(test));
       T.eq(action.querySelector('svg text').textContent, 'A', 'label icon uses A');
       T.eq(action.querySelector('svg path').getAttribute('d'), test.bottom ? 'M3 4h14' : 'M3 16h14', 'icon matches direction');

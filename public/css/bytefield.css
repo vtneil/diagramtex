@@ -1,5 +1,4 @@
 /* Bit field editor (src/editors/bfeditor.ts): the frame, panel and palette pieces come from the cz-* and qe-* rules */
-#bfModal .cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
 /* palette: fields and groups drawn in the package's lines */
 .bf-mini path { fill: none; stroke: currentColor; stroke-width: 1; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .bf-mini text { fill: currentColor; font: 9px var(--font-tex); text-anchor: middle; }

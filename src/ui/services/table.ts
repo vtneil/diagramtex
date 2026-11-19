@@ -1,8 +1,11 @@
 import { previewFadeFinished } from '../../platform/preview-fade';
 import { runtime as TD } from '../../runtime';
-import { gridIcon } from '../grid-icons';
-import { alignSwitch, ALIGN_ICONS } from '../align-switch';
-import { colourSplit, showSwatch } from '../colour-split';
+import { renderView, destroyView } from '../render-view.svelte';
+import { openContextMenu, closeContextMenu } from '../kit/context-menu';
+import type { MenuEntry, MenuItemSpec } from '../kit/menu';
+import type { IconName } from '../kit/icons';
+import TableWorkspace, { type TableWorkspaceModel } from '../TableWorkspace.svelte';
+import TablePanel, { type TablePanelModel } from '../TablePanel.svelte';
 import { t, message as msg, caption, onLocale, type Message } from '../../i18n';
 import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../domain/table/model';
 import { patchSvg } from '../svg-patch';
@@ -65,7 +68,7 @@ const PICTURE_MS = 10;
     saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ table: M, fresh })); } catch (e: any) { /* too large or blocked */ } }, 200);
   }
   /** One undoable change: fn edits M; the grid, panel and preview follow. */
-  function change(fn: () => unknown, opts: { keepPanel?: boolean } = {}) {
+  function change(fn: () => unknown) {
     const before = JSON.stringify(M);
     const res = fn();
     if (res === false) return false;
@@ -77,7 +80,7 @@ const PICTURE_MS = 10;
     clampSel();
     save();
     paint();
-    if (!opts.keepPanel) panel(); else syncPanel();
+    panel(); // in place: a field being typed in keeps its text
     preview();
     return true;
   }
@@ -94,7 +97,7 @@ const PICTURE_MS = 10;
       const v = T.wrapNumbers(cell.t);
       if (v !== cell.t) next.push([r, c, v]);
     }
-    if (next.length) change(() => { for (const [r, c, v] of next) M.cells[r][c].t = v; }, { keepPanel: true });
+    if (next.length) change(() => { for (const [r, c, v] of next) M.cells[r][c].t = v; });
   }
   const whole = (): Range => ({ r0: 0, c0: 0, r1: T.nRows(M) - 1, c1: T.nCols(M) - 1 });
 
@@ -121,13 +124,10 @@ const PICTURE_MS = 10;
     dl: ic('<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>'),
     print: ic('<path d="M5.5 7.5V3h9v4.5M5.5 14.5h-3v-7h15v7h-3"/><path d="M5.5 11.5h9v6h-9z"/>'),
     b: '<b class="tb-glyph">B</b>', i: '<i class="tb-glyph" style="font-family:Georgia,serif">I</i>', u: '<span class="tb-glyph" style="text-decoration:underline">U</span>', tt: '<span class="tb-glyph tb-mono">T</span>',
-    al: ALIGN_ICONS as Record<string, string>,
-    va: { t: ic('<path d="M3 3.5h14M10 7v9M7 9.5l3-3 3 3"/>'), m: ic('<path d="M3 10h14M10 2.5v5M10 12.5v5M7.5 5.5l2.5 2 2.5-2M7.5 14.5l2.5-2 2.5 2"/>'), b: ic('<path d="M3 16.5h14M10 4v9M7 10.5l3 3 3-3"/>') } as Record<string, string>,
     border: ic('<path d="M3 3h14v14H3z" stroke-dasharray="1.5 2"/><path d="M3 17h14"/>'),
     merge: ic('<path d="M3 4h14v12H3z"/><path d="M7 10h6M11 8l2 2-2 2M9 8l-2 2 2 2" />'),
     split: ic('<path d="M3 4h14v12H3zM10 4v12"/><path d="M4.5 10h3M6 8.5L7.5 10 6 11.5M15.5 10h-3M14 8.5L12.5 10l1.5 1.5"/>'),
     num: '<span class="tb-glyph tb-mono" style="font-size:12px">.00</span>',
-    more: ic('<path d="M6 8l4 4 4-4"/>'),
   };
   // A quiet cell grid provides context; only the borders being applied carry ink.
   const borderIcon = (path: string) => ic(`<path d="M3 3h14v14H3zM10 3v14M3 10h14" opacity=".2" stroke-width="1"/>${path ? `<path d="${path}" stroke-width="1.5"/>` : ''}`);
@@ -155,61 +155,43 @@ const PICTURE_MS = 10;
   const presetName = (p: any) => (PRESET[p.key] ? caption(PRESET[p.key][0]) : p.name);
   const presetTip = (p: any) => (PRESET[p.key] ? caption(PRESET[p.key][1]) : p.title);
 
-  // ---------------------------------------------------------------- the frame
+  // ---------------------------------------------------------------- the frame (ui/TableWorkspace.svelte)
+  // The toolbar, the cell-text bar, the output bar and the start screen are drawn from shellModel(), in place; the
+  // grid, the preview and the LaTeX are drawn into its empty panes here.
+  let built = false;
   function build() {
-    host!.innerHTML = `<div class="tbw${session ? ' tb-in-block' : ''}">
-      ${session ? `<div class="tb-session" role="region" aria-label="${esc(t('table.session.aria', 'Editing a table from the diagram'))}"><span>${esc(t('table.session.editing', 'Editing a table from the diagram.'))} <b>${esc(t('ui.done', 'Done'))}</b> ${esc(t('table.session.back', "puts it back; the Table workspace's own table is left as it was."))}</span><div class="spacer"></div><button type="button" data-ses="cancel">${esc(t('ui.cancel', 'Cancel'))}</button><button type="button" class="primary" data-ses="done" title="${esc(t('table.session.doneTip', 'Put the table back in the diagram ({key} keeps editing)', { key: MOD + 'S' }))}">${esc(t('ui.done', 'Done'))}</button></div>` : ''}
-      <div class="tb-bar" role="toolbar" aria-label="${esc(t('ui.table', 'Table'))}">
-        <div class="tb-grp"><button type="button" data-t="import" class="tb-imp" title="${esc(t('table.importTip', 'Import a table: paste or open CSV, TSV, Excel (.xlsx), Markdown, HTML or LaTeX'))}" aria-haspopup="menu">${I.imp}${esc(t('table.import', 'Import'))}</button></div>
-        <div class="tb-grp"><button type="button" class="icon" data-t="undo" title="${esc(t('table.undoTip', 'Undo ({key})', { key: MOD + 'Z' }))}">${I.undo}</button><button type="button" class="icon" data-t="redo" title="${esc(t('table.redoTip', 'Redo ({key})', { key: SHIFT + MOD + 'Z' }))}">${I.redo}</button></div>
-        <div class="tb-grp"><select data-t="preset" class="tb-preset" aria-label="${esc(t('table.style', 'Table style'))}" title="${esc(t('table.styleTip', 'Table style: rules, stripes and header'))}">${T.PRESETS.map((p: any) => `<option value="${p.key}" title="${esc(presetTip(p))}">${esc(presetName(p))}</option>`).join('')}<option value="custom" disabled>${esc(t('ui.custom', 'Custom'))}</option></select></div>
-        <div class="tb-grp"><button type="button" class="icon" data-t="b" title="${esc(t('table.boldTip', 'Bold ({key})', { key: MOD + 'B' }))}">${I.b}</button><button type="button" class="icon" data-t="i" title="${esc(t('table.italicTip', 'Italic ({key})', { key: MOD + 'I' }))}">${I.i}</button><button type="button" class="icon" data-t="u" title="${esc(t('table.underlineTip', 'Underline ({key})', { key: MOD + 'U' }))}">${I.u}</button><button type="button" class="icon" data-t="tt" title="${esc(t('table.monoTip', 'Monospace (\\texttt)'))}">${I.tt}</button></div>
-        <div class="tb-grp">${colourSplit({ icon: 'fg', name: t('table.textColour', 'Text colour'), main: ' data-t="fg"', more: ' data-t="fgmore"' })}${colourSplit({ icon: 'bg', name: t('table.cellFill', 'Cell fill'), main: ' data-t="bg"', more: ' data-t="bgmore"' })}</div>
-        ${alignSwitch({ cls: 'tb-grp tb-seg', btn: ' data-t="al"' })}
-        <div class="tb-grp"><span class="split-btn tb-split"><button type="button" class="icon" data-t="border" title="${esc(t('table.bordersLast', 'Borders: the last one picked'))}">${B.all}</button><button type="button" class="tb-more" data-t="borders" title="${esc(t('table.borders', 'Borders'))}" aria-haspopup="menu">${I.more}</button></span></div>
-        <div class="tb-grp"><button type="button" class="icon" data-t="merge" title="${esc(t('table.mergeTip', 'Merge cells (\\multicolumn, \\multirow)'))}">${I.merge}</button><button type="button" class="icon" data-t="split" title="${esc(t('table.splitTip', 'Split cells'))}">${I.split}</button></div>
-        <div class="tb-grp"><span class="split-btn tb-split"><button type="button" class="icon" data-t="num" title="${esc(t('table.numTip', 'Numbers: align on the decimal point (siunitx), round, scientific notation'))}">${I.num}</button><button type="button" class="tb-more" data-t="numfmt" title="${esc(t('table.numFormat', 'Number format: grouping and decimal marker'))}" aria-haspopup="menu">${I.more}</button></span></div>
-      </div>
-      <div class="tb-fx"><span class="tb-ref" title="${esc(t('table.activeCell', 'The active cell'))}"></span><input class="tb-fxin" data-tx="text" spellcheck="false" autocomplete="off" aria-label="${esc(t('table.cellTextAria', 'Cell text (LaTeX)'))}" placeholder="${esc(t('table.cellTextPh', 'Cell text: plain words, $maths$, \\textbf{…}'))}"></div>
-      <div class="tb-gridwrap" tabindex="0" aria-label="${esc(t('table.cells', 'Table cells'))}" role="grid"><div class="tb-grid"></div><div class="tb-selbox" aria-hidden="true"></div></div>
-      <div class="tb-out">
-        <div class="tb-outbar">
-          <div class="seg tb-tabs" role="tablist"><button type="button" role="tab" data-tab="preview">${esc(t('ui.preview', 'Preview'))}</button><button type="button" role="tab" data-tab="latex">LaTeX</button></div>
-          <span class="tb-pk" title="${esc(t('table.packagesShort', 'Packages the LaTeX needs'))}"></span>
-          <div class="spacer"></div>
-          <button type="button" class="primary" data-o="copy" title="${esc(t('table.copyLatexTip', 'Copy the LaTeX ({key})', { key: SHIFT + MOD + 'C' }))}">${esc(t('table.copyLatex', 'Copy LaTeX'))}</button>
-          <button type="button" data-o="copy-png" data-render title="${esc(t('table.copyPngTip', 'Copy the table as a PNG picture'))}">${esc(t('table.copyPng', 'Copy PNG'))}</button>
-          <span class="tb-join" role="group" aria-label="${esc(t('ui.download', 'Download'))}"><button type="button" data-o="dl-tex" title="${esc(t('table.dlTexTip', 'Download the LaTeX: a document that compiles on its own'))}">${I.dl}.tex</button><button type="button" data-o="dl-svg" data-render title="${esc(t('table.dlSvgTip', 'Download a vector SVG (maths fonts embedded)'))}">SVG</button><button type="button" data-o="dl-png" data-render title="${esc(t('table.dlPngTip', 'Download a PNG at the resolution on the right'))}">PNG</button></span>
-          <select data-o="dpi" aria-label="${esc(t('table.pngRes', 'PNG resolution'))}" title="${esc(t('table.pngRes', 'PNG resolution'))}">${[150, 300, 600].map((d) => `<option value="${d}"${d === +out.dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}</select>
-          <button type="button" class="icon" data-o="print" data-render title="${esc(t('table.printTip', 'Print the table or save it as a PDF ({key})', { key: MOD + 'P' }))}" aria-label="${esc(t('table.print', 'Print'))}">${I.print}</button>
-        </div>
-        <div class="tb-prev" data-pane="preview"></div>
-        <div class="tb-code codeview" data-pane="latex" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label="${esc(t('ui.latex.code', 'LaTeX code'))}"></div>
-      </div>
-      <div class="tb-start" hidden></div>
-    </div>`;
-    paint(); panel(); preview(); tabs(); startScreen();
+    renderView(host!, TableWorkspace, shellModel());
+    built = true;
+    paint(); panel(); preview(); startScreen();
+  }
+  function renderShell() { if (built && shown) renderView(host!, TableWorkspace, shellModel()); }
+  let copied = '', copiedTimer: any = null, packages = { text: '', title: '' };
+  function shellModel(): TableWorkspaceModel {
+    const x = M.cells[act[0]][act[1]], all = anchorsSel(), g = range();
+    return {
+      session: !!session, fresh, mod: MOD, shift: SHIFT,
+      icons: { imp: I.imp, b: I.b, i: I.i, u: I.u, tt: I.tt, merge: I.merge, split: I.split, num: I.num, dl: I.dl, print: I.print, border: B[lastBorder] },
+      // the colour buttons' bars show the colour they apply
+      colours: { ...lastColour },
+      borderName: borderPicked ? BNAME()[lastBorder] : '',
+      presets: [...T.PRESETS.map((p: any) => ({ value: p.key, label: presetName(p), title: presetTip(p) })), { value: 'custom', label: t('ui.custom', 'Custom'), disabled: true }],
+      preset: M.preset,
+      on: {
+        b: all.every((y, i) => !!y.b || (M.headBold && rowOfAnchor(g, i) < M.head)),
+        i: all.every((y) => !!y.i), u: all.every((y) => !!y.u), tt: all.every((y) => !!y.tt), num: !!M.cols[act[1]].num,
+      },
+      align: T.alignOf(M, act[1], x),
+      can: { undo: undoStack.length > 0, redo: redoStack.length > 0, merge: g.r0 !== g.r1 || g.c0 !== g.c1, split: all.some((y) => y.rs || y.cs) },
+      ref: g.r0 === g.r1 && g.c0 === g.c1 ? T.cellName(act[0], act[1]) : `${T.cellName(g.r0, g.c0)}:${T.cellName(g.r1, g.c1)}`,
+      fx: x.t.replace(/\n/g, ' \\\\ '),
+      tab: out.tab === 'latex' ? 'latex' : 'preview', dpi: +out.dpi, copied, packages,
+    };
   }
 
   // ---------------------------------------------------------------- the start screen (nothing imported yet)
   function startScreen() {
-    const s = $('.tb-start');
-    s.hidden = !fresh;
     host!.classList.toggle('is-fresh', fresh);
-    if (!fresh) { s.innerHTML = ''; return; }
-    s.innerHTML = `<div class="tb-drop">
-      <div class="tb-drop-t">${esc(t('table.start.title', 'Make a table'))}</div>
-      <p>${esc(t('table.start.body', 'Paste cells from Excel or Google Sheets ({key}), drop a file here, or paste CSV, Markdown, HTML or a LaTeX', { key: MOD + 'V' }))} <code>tabular</code> ${esc(t('table.start.below', 'below.'))}</p>
-      <textarea class="tb-paste" spellcheck="false" placeholder="Name, Mass, Speed&#10;Ball, 0.45, 12.3&#10;…" aria-label="${esc(t('table.start.pasteAria', 'Table text to import'))}"></textarea>
-      <div class="tb-drop-acts">
-        <button type="button" data-t="file">${esc(t('ui.choose.file', 'Choose File…'))}</button>
-        <span class="spacer"></span>
-        <button type="button" data-t="blank" title="${esc(t('table.start.blankTip', 'An empty 4 × 3 table'))}">${esc(t('table.start.blank', 'Start Empty'))}</button>
-        <button type="button" class="primary" data-t="import-text">${esc(t('table.import', 'Import'))}</button>
-      </div>
-      <p class="tb-drop-foot">CSV, TSV, Excel (.xlsx), Markdown, HTML ${esc(t('table.start.and', 'and'))} LaTeX (<code>tabular</code>, <code>tabularx</code>, <code>longtable</code>, booktabs, <code>\\multicolumn</code>, <code>\\multirow</code>). ${esc(t('table.start.local', 'Nothing leaves your browser.'))}</p>
-    </div>`;
-    requestAnimationFrame(() => (s.querySelector('.tb-paste') as HTMLElement)?.focus({ preventScroll: true }));
+    renderShell();
   }
 
   // ---------------------------------------------------------------- the grid
@@ -332,8 +314,7 @@ const PICTURE_MS = 10;
       const el = e as HTMLElement, c = el.dataset.ch, r = el.dataset.rh;
       el.classList.toggle('on', c != null ? +c >= g.c0 && +c <= g.c1 : +r! >= g.r0 && +r! <= g.r1);
     });
-    const ref = $('.tb-ref');
-    if (ref) ref.textContent = g.r0 === g.r1 && g.c0 === g.c1 ? T.cellName(act[0], act[1]) : `${T.cellName(g.r0, g.c0)}:${T.cellName(g.r1, g.c1)}`;
+    // (the cell's name and text are in the frame's model; the text is written here too, for an edit put back)
     const fx = $('.tb-fxin') as HTMLInputElement;
     if (fx && document.activeElement !== fx) fx.value = M.cells[act[0]][act[1]].t.replace(/\n/g, ' \\\\ ');
     if (scroll) {
@@ -470,8 +451,8 @@ const PICTURE_MS = 10;
     if (g.r0 === 0 && g.r1 === T.nRows(M) - 1) change(() => { for (let c = g.c0; c <= g.c1; c++) M.cols[c].al = a; T.styleRange(M, g, { al: undefined }); });
     else change(() => T.styleRange(M, g, { al: a }));
   }
-  let lastBorder: BorderWhere = 'all';
-  function border(where: BorderWhere, w: Rule = 1) { lastBorder = where; ($('[data-t="border"]') as HTMLElement).innerHTML = B[where]; ($('[data-t="border"]') as HTMLElement).title = t('table.border.last', '{name} (the last one picked)', { name: BNAME()[where] }); change(() => T.setBorders(M, range(), where, w)); }
+  let lastBorder: BorderWhere = 'all', borderPicked = false;
+  function border(where: BorderWhere, w: Rule = 1) { lastBorder = where; borderPicked = true; if (!change(() => T.setBorders(M, range(), where, w))) renderShell(); }
   // The colour buttons apply the last colour picked (not the cell's own); their arrows pick another, which
   // applies to the selection as it is picked and becomes the last colour.
   const lastColour: Record<'fg' | 'bg', string> = { fg: '#c62828', bg: '#f5e44c' };
@@ -485,13 +466,13 @@ const PICTURE_MS = 10;
     let changed = false;
     const set = (v: any) => {
       const hex = v ? TD.parseColor(v).hex : undefined;
-      if (hex) { lastColour[k] = hex; showSwatch($(`[data-t="${k}"]`), hex); }
+      if (hex) { lastColour[k] = hex; renderShell(); }
       T.styleRange(M, g, { [k]: hex }); changed = true; paint(); preview();
     };
     TD.openColorPicker(btn, {
       value: lastColour[k], nullable: true, noneLabel: k === 'fg' ? t('table.automatic', 'Automatic') : t('table.noFill', 'No Fill'),
       onInput: set, onChange: set,
-      onClose: () => { if (changed && JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; fresh = false; save(); panel(); toolbarState(); } focusGrid(); },
+      onClose: () => { if (changed && JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; fresh = false; save(); panel(); renderShell(); } focusGrid(); },
     });
   }
   function toggleNum() {
@@ -500,54 +481,30 @@ const PICTURE_MS = 10;
     change(() => { for (const c of cols) M.cols[c].num = on ? null : startNum(c); });
     if (!on) hint(t('table.hint.numOn', 'Numbers aligned on the decimal point (siunitx S column). Round them in the panel on the right.'), 2600);
   }
-  function toolbarState() {
-    const x = M.cells[act[0]][act[1]], all = anchorsSel(), g = range();
-    const tog = (k: string, on: boolean) => $(`[data-t="${k}"]`)?.classList.toggle('on', on);
-    tog('b', all.every((y, i) => !!y.b || (M.headBold && rowOfAnchor(g, i) < M.head)));
-    tog('i', all.every((y) => !!y.i)); tog('u', all.every((y) => !!y.u)); tog('tt', all.every((y) => !!y.tt));
-    const al = T.alignOf(M, act[1], x);
-    host!.querySelectorAll('[data-t="al"]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.v === al));
-    tog('num', !!M.cols[act[1]].num);
-    showSwatch($('[data-t="fg"]'), lastColour.fg); showSwatch($('[data-t="bg"]'), lastColour.bg);
-    const sel = $('[data-t="preset"]') as HTMLSelectElement;
-    if (sel) sel.value = M.preset;
-    const multi = g.r0 !== g.r1 || g.c0 !== g.c1;
-    ($('[data-t="merge"]') as HTMLButtonElement).disabled = !multi;
-    ($('[data-t="split"]') as HTMLButtonElement).disabled = !anchorsSel().some((y) => y.rs || y.cs);
-    ($('[data-t="undo"]') as HTMLButtonElement).disabled = !undoStack.length;
-    ($('[data-t="redo"]') as HTMLButtonElement).disabled = !redoStack.length;
-  }
+  /** the toolbar follows the selection (shellModel) */
+  const toolbarState = renderShell;
 
-  // ---------------------------------------------------------------- menus (borders, right-click)
-  let menu: HTMLElement | null = null;
-  function closeMenu() { if (menu) { menu.remove(); menu = null; } }
-  function openMenu(html: string, x: number, y: number, alignRight = false) {
-    closeMenu();
-    menu = document.createElement('div');
-    menu.className = 'ctx tb-ctx';
-    menu.innerHTML = html;
-    document.body.appendChild(menu);
-    const w = menu.offsetWidth, h = menu.offsetHeight;
-    const left = alignRight ? x - w : x;
-    menu.style.left = Math.max(8, Math.min(left, innerWidth - w - 8)) + 'px';
-    menu.style.top = (y + h > innerHeight - 8 ? Math.max(8, y - h) : y) + 'px';
-    menu.addEventListener('click', (e) => {
-      const b = (e.target as Element).closest('[data-m]') as HTMLElement;
-      if (!b || (b as HTMLButtonElement).disabled) return;
-      const action = b.dataset.m!;
-      closeMenu(); menuAct(action);
-      if (action.startsWith('b:') || action.startsWith('bw:')) focusGrid();
-    });
+  // ---------------------------------------------------------------- menus (the kit menu: borders, number format, import, right-click)
+  let menuFrom: Element | null = null, menuOpen = false;
+  function closeMenu() { if (menuOpen) closeContextMenu(); }
+  /** a menu at a point, or under the control that opens it (pressing that control again shuts it) */
+  function openMenu(items: MenuEntry[], at: { x: number; y: number } | HTMLElement) {
+    const from = at instanceof HTMLElement ? at : null;
+    if (from && menuOpen && menuFrom === from) { closeMenu(); return; }
+    openContextMenu(items, from ? 0 : (at as { x: number }).x, from ? 0 : (at as { y: number }).y, (a) => {
+      menuAct(a);
+      if (a.startsWith('b:') || a.startsWith('bw:') || a.startsWith('ng:') || a.startsWith('nd:')) focusGrid();
+    }, { class: 'tb-ctx', below: from?.getBoundingClientRect(), owner: from ?? undefined, minWidth: from ? 220 : undefined, onclose: () => { menuOpen = false; menuFrom = null; } });
+    menuOpen = true; menuFrom = from;
   }
-  // checked: a radio item (role menuitemradio) with a tick at its right end when it is the one picked
-  const TICK = '<svg class="ck" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>';
-  const item = (label: string, act2: string, o: { icon?: string; key?: string; dis?: boolean; danger?: boolean; checked?: boolean } = {}) =>
-    `<button class="ctx-item${o.danger ? ' danger' : ''}" data-m="${act2}"${o.checked != null ? ` role="menuitemradio" aria-checked="${o.checked}"` : ''}${o.dis ? ' disabled' : ''}>${o.icon || '<span class="ic"></span>'}<span class="lb">${esc(label)}</span>${o.key ? `<kbd>${o.key}</kbd>` : ''}${o.checked != null ? (o.checked ? TICK : '<span class="ck"></span>') : ''}</button>`;
+  // o.name: a registry icon (kit/icons.ts); o.icon: one of the Table's own drawings
+  const item = (label: string, act2: string, o: { name?: IconName; icon?: string; key?: string; dis?: boolean; danger?: boolean; checked?: boolean } = {}): MenuItemSpec =>
+    ({ act: act2, label, icon: o.name, svg: o.name ? undefined : o.icon, key: o.key, disabled: o.dis, danger: o.danger, checked: o.checked });
   // ---- number format (siunitx): a column's numbers start out as they were typed (1,955.98 keeps its commas)
   const startNum = (c: number) => T.typedNum(M.cells.slice(M.head).map((row: TCell[]) => (row[c].cs && row[c].cs! > 1 ? '' : row[c].t)));
   /** a change to the number settings of the selected columns; a column that wasn't aligned is aligned first */
-  function setNum(cols: number[], f: (n: any) => void, o: any = {}) {
-    change(() => { for (const c of cols) { const n = { ...(M.cols[c].num || startNum(c)) }; f(n); M.cols[c].num = n; } }, o);
+  function setNum(cols: number[], f: (n: any) => void) {
+    change(() => { for (const c of cols) { const n = { ...(M.cols[c].num || startNum(c)) }; f(n); M.cols[c].num = n; } });
   }
   // the decimal marker and the grouping mark can't be the same: picking one moves the other
   function setGroup(n: any, g: string) {
@@ -565,33 +522,32 @@ const PICTURE_MS = 10;
     ['thin', t('table.group.thin', 'Thin space: 12\u2009345')], ['comma', t('table.group.comma', 'Comma: 1,234')], ['point', t('table.group.point', 'Point: 1.234')],
     ['space', t('table.group.space', 'Space: 12 345')], ['none', t('table.group.none', 'None: 12345')]];
   function numMenu(anchor: HTMLElement) {
-    const r = anchor.getBoundingClientRect(), n = M.cols[act[1]].num, g = n?.group || 'thin', d = n?.dec || '.';
-    openMenu(`<div class="ctx-head">${esc(t('table.groupThousands', 'Group Thousands'))}</div>${GROUP_NAMES().map(([k, l]) => item(l, `ng:${k}`, { checked: !!n && g === k })).join('')}<hr>
-      <div class="ctx-head">${esc(t('table.decimalMarker', 'Decimal Marker'))}</div>${item(t('table.dec.point', 'Point: 1.5'), 'nd:.', { checked: !!n && d === '.' })}${item(t('table.dec.comma', 'Comma: 1,5'), 'nd:,', { checked: !!n && d === ',' })}`, r.left, r.bottom + 6);
+    const n = M.cols[act[1]].num, g = n?.group || 'thin', d = n?.dec || '.';
+    openMenu([{ heading: t('table.groupThousands', 'Group Thousands') }, ...GROUP_NAMES().map(([k, l]) => item(l, `ng:${k}`, { checked: !!n && g === k })), '-',
+      { heading: t('table.decimalMarker', 'Decimal Marker') }, item(t('table.dec.point', 'Point: 1.5'), 'nd:.', { checked: !!n && d === '.' }), item(t('table.dec.comma', 'Comma: 1,5'), 'nd:,', { checked: !!n && d === ',' })], anchor);
   }
   function bordersMenu(anchor: HTMLElement) {
-    const r = anchor.getBoundingClientRect();
     const where: BorderWhere[] = ['all', 'outer', 'inner', 'innerH', 'innerV', 'top', 'bottom', 'left', 'right', 'none'];
-    openMenu(`<div class="tb-bgrid">${where.map((w) => `<button type="button" class="icon flat" data-m="b:${w}" title="${esc(BNAME()[w])}" aria-label="${esc(BNAME()[w])}">${B[w]}</button>`).join('')}</div><hr>
-      ${item(t('table.rules.thick', 'Thick Rules'), 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 })}${item(t('table.rules.thin', 'Thin Rules'), 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 })}${item(t('table.rules.double', 'Double Rules'), 'bw:3', { icon: ic('<path d="M3 8h14M3 12h14"/>'), checked: borderW === 3 })}`, r.left, r.bottom + 6);
+    openMenu([{ tiles: where.map((w) => ({ act: `b:${w}`, label: BNAME()[w], svg: B[w] })), columns: 5 }, '-',
+      item(t('table.rules.thick', 'Thick Rules'), 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 }), item(t('table.rules.thin', 'Thin Rules'), 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 }), item(t('table.rules.double', 'Double Rules'), 'bw:3', { icon: ic('<path d="M3 8h14M3 12h14"/>'), checked: borderW === 3 })], anchor);
   }
   let borderW: Rule = 1;
   function ctxMenu(x: number, y: number) {
     const g = range(), rows = g.r1 - g.r0 + 1, cols = g.c1 - g.c0 + 1, nr = T.nRows(M), nc = T.nCols(M);
     const multi = rows > 1 || cols > 1, merged = anchorsSel().some((q) => q.rs || q.cs);
     const many = rows > 1, manyC = cols > 1;
-    openMenu(
-      item(t('ui.cut', 'Cut'), 'cut', { key: MOD + 'X' }) + item(t('ui.copy', 'Copy'), 'copy', { key: MOD + 'C' }) + item(t('ui.paste', 'Paste'), 'paste', { key: MOD + 'V' }) + '<hr>' +
-      item(many ? t('table.insertRowsAbove', 'Insert {n} Rows Above', { n: rows }) : t('table.insertRowAbove', 'Insert Row Above'), 'row-above', { icon: gridIcon('above') }) +
-      item(many ? t('table.insertRowsBelow', 'Insert {n} Rows Below', { n: rows }) : t('table.insertRowBelow', 'Insert Row Below'), 'row-below', { icon: gridIcon('below') }) +
-      item(manyC ? t('table.insertColsLeft', 'Insert {n} Columns Left', { n: cols }) : t('table.insertColLeft', 'Insert Column Left'), 'col-left', { icon: gridIcon('before') }) +
-      item(manyC ? t('table.insertColsRight', 'Insert {n} Columns Right', { n: cols }) : t('table.insertColRight', 'Insert Column Right'), 'col-right', { icon: gridIcon('after') }) + '<hr>' +
-      item(t('table.moveUp', 'Move Up'), 'up', { dis: g.r0 === 0 }) + item(t('table.moveDown', 'Move Down'), 'down', { dis: g.r1 === nr - 1 }) + item(t('table.moveLeft', 'Move Left'), 'left', { dis: g.c0 === 0 }) + item(t('table.moveRight', 'Move Right'), 'right', { dis: g.c1 === nc - 1 }) + '<hr>' +
-      item(t('table.mergeCells', 'Merge Cells'), 'merge', { icon: I.merge, dis: !multi }) + item(t('table.splitCells', 'Split Cells'), 'split', { icon: I.split, dis: !merged }) +
-      item(g.r1 < M.head && g.r0 === 0 ? t('table.headerAbove', 'Header: rows above this one') : t('table.headerRows', 'Header: rows 1–{n}', { n: g.r1 + 1 }), 'head', { icon: ic('<path d="M3 3h14v14H3z"/><path d="M3 7.5h14" stroke-width="2.5"/>') }) + '<hr>' +
-      item(t('table.clearText', 'Clear Text'), 'clear-text', { key: '⌫' }) + item(t('table.clearFormat', 'Clear Formatting'), 'clear-format') +
-      item(many ? t('table.deleteRows', 'Delete {n} Rows', { n: rows }) : t('table.deleteRow', 'Delete Row'), 'del-rows', { danger: true, dis: rows >= nr, icon: gridIcon('rowdel') }) +
-      item(manyC ? t('table.deleteCols', 'Delete {n} Columns', { n: cols }) : t('table.deleteCol', 'Delete Column'), 'del-cols', { danger: true, dis: cols >= nc, icon: gridIcon('coldel') }), x, y);
+    openMenu([
+      item(t('ui.cut', 'Cut'), 'cut', { key: 'Ctrl+X' }), item(t('ui.copy', 'Copy'), 'copy', { key: 'Ctrl+C' }), item(t('ui.paste', 'Paste'), 'paste', { key: 'Ctrl+V' }), '-',
+      item(many ? t('table.insertRowsAbove', 'Insert {n} Rows Above', { n: rows }) : t('table.insertRowAbove', 'Insert Row Above'), 'row-above', { name: 'rowAbove' }),
+      item(many ? t('table.insertRowsBelow', 'Insert {n} Rows Below', { n: rows }) : t('table.insertRowBelow', 'Insert Row Below'), 'row-below', { name: 'rowBelow' }),
+      item(manyC ? t('table.insertColsLeft', 'Insert {n} Columns Left', { n: cols }) : t('table.insertColLeft', 'Insert Column Left'), 'col-left', { name: 'colBefore' }),
+      item(manyC ? t('table.insertColsRight', 'Insert {n} Columns Right', { n: cols }) : t('table.insertColRight', 'Insert Column Right'), 'col-right', { name: 'colAfter' }), '-',
+      item(t('table.moveUp', 'Move Up'), 'up', { dis: g.r0 === 0 }), item(t('table.moveDown', 'Move Down'), 'down', { dis: g.r1 === nr - 1 }), item(t('table.moveLeft', 'Move Left'), 'left', { dis: g.c0 === 0 }), item(t('table.moveRight', 'Move Right'), 'right', { dis: g.c1 === nc - 1 }), '-',
+      item(t('table.mergeCells', 'Merge Cells'), 'merge', { icon: I.merge, dis: !multi }), item(t('table.splitCells', 'Split Cells'), 'split', { icon: I.split, dis: !merged }),
+      item(g.r1 < M.head && g.r0 === 0 ? t('table.headerAbove', 'Header: rows above this one') : t('table.headerRows', 'Header: rows 1–{n}', { n: g.r1 + 1 }), 'head', { icon: ic('<path d="M3 3h14v14H3z"/><path d="M3 7.5h14" stroke-width="2.5"/>') }), '-',
+      item(t('table.clearText', 'Clear Text'), 'clear-text', { key: 'Del' }), item(t('table.clearFormat', 'Clear Formatting'), 'clear-format'),
+      item(many ? t('table.deleteRows', 'Delete {n} Rows', { n: rows }) : t('table.deleteRow', 'Delete Row'), 'del-rows', { danger: true, dis: rows >= nr, name: 'rowDelete' }),
+      item(manyC ? t('table.deleteCols', 'Delete {n} Columns', { n: cols }) : t('table.deleteCol', 'Delete Column'), 'del-cols', { danger: true, dis: cols >= nc, name: 'colDelete' })], { x, y });
   }
   function menuAct(a: string) {
     const g = range();
@@ -764,126 +720,81 @@ const PICTURE_MS = 10;
   }
 
   // ---------------------------------------------------------------- the right panel
-  const rowsHtml = (rows: [string, string, string?][]) => rows.map(([l, ctl, title]) => `<div class="row"${title ? ` title="${esc(title)}"` : ''}><label>${esc(l)}</label><div class="ctl">${ctl}</div></div>`).join('');
-  const seg = (key: string, list: [string, string, string?][], cur: string) => `<div class="seg-ctl" data-seg="${key}">${list.map(([v, l, tip]) => `<button type="button" data-v="${v}" class="${v === cur ? 'on' : ''}"${tip ? ` title="${esc(tip)}"` : ''}>${l}</button>`).join('')}</div>`;
-  const opt = (list: [string, string][], cur: string) => list.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(l)}</option>`).join('');
-  const SIZE_NAMES = (): [string, string][] => [['tiny', t('table.size.tiny', 'Tiny')], ['scriptsize', t('table.size.script', 'Script')], ['footnotesize', t('table.size.footnote', 'Footnote')], ['small', t('table.size.small', 'Small')], ['normalsize', t('ui.normal', 'Normal')], ['large', t('table.size.large', 'Large')], ['Large', t('table.size.larger', 'Larger')]];
-  const swatch = (k: string, v: string | undefined, none: string) => `<button type="button" class="tb-swatch" data-color="${k}" title="${esc(v || none)}"><i style="background:${v || 'transparent'}"${v ? '' : ' class="none"'}></i><span>${v ? v.toUpperCase() : esc(none)}</span></button>`;
   let detailsOpen = false;
-  const floatCtl = () => M.env === 'longtable' ? `<span class="tb-unit">${esc(t('table.longtableNoFloat', 'longtable: over pages, no float'))}</span>`
-    : (M.caption.trim() || M.label.trim()) ? `<label class="tb-chk" title="${esc(t('table.floatForced', 'A caption or label always puts the table in a table environment'))}"><input type="checkbox" checked disabled> ${esc(t('table.tableEnv', 'table environment'))}</label>`
-    : `<label class="tb-chk" title="${esc(t('table.floatTip', 'In a table environment, placed by LaTeX (h t b p)'))}"><input type="checkbox" data-p="float"${M.float ? ' checked' : ''}> ${esc(t('table.tableEnv', 'table environment'))}</label>`;
+  function panelModel(): TablePanelModel {
+    const c = act[1], col = M.cols[c], x = M.cells[act[0]][act[1]], g = range(), n = col.num;
+    const round = !n ? 'none' : n.sig != null ? 'sig' : n.dp != null ? 'dp' : 'none';
+    const style = n ? T.numStyle(n) : null;
+    return {
+      rows: T.nRows(M), cols: T.nCols(M),
+      presets: [...T.PRESETS.map((p: any) => ({ value: p.key, label: presetName(p) })), { value: 'custom', label: t('table.customRules', 'Custom rules') }], preset: M.preset,
+      head: M.head, headBold: !!M.headBold, booktabs: !!M.booktabs,
+      striped: !!(M.stripe || M.stripe2), stripe: M.stripe || '', stripe2: M.stripe2 || '',
+      autoMath: AUTO_MATH ? out.autoMath !== false : null,
+      col: {
+        name: T.colName(c) + (g.c1 > g.c0 ? `–${T.colName(g.c1)}` : ''), al: col.al, w: col.w || 0, fill: M.env === 'tabularx' ? !!col.fill : null, unit: col.unit || '',
+        num: n ? { round, prec: (round === 'sig' ? n.sig : round === 'dp' ? n.dp : null) ?? null, group: n.group || 'thin', groupMin: style!.min, groupFrac: !!style!.frac,
+          dec: n.dec || '.', exp: n.exp || 'input', prod: n.prod || 'times', unc: n.unc || 'paren', plus: !!n.plus, pos: n.pos || 'c' } : null,
+      },
+      cell: {
+        name: g.r0 === g.r1 && g.c0 === g.c1 ? T.cellName(act[0], act[1]) : `${T.cellName(g.r0, g.c0)}:${T.cellName(g.r1, g.c1)}`,
+        va: x.va || ((x.rs || 1) > 1 ? 'm' : 't'), sz: x.sz || '', fg: x.fg || '', bg: x.bg || '',
+      },
+      latex: {
+        session: !!session, caption: M.caption, label: M.label, place: M.place,
+        float: M.env === 'longtable' ? 'long' : (M.caption.trim() || M.label.trim()) ? 'forced' : M.float ? 'on' : 'off',
+        env: M.env, width: M.width, foot: M.env === 'longtable' && !session ? M.foot : null, footMax: T.nRows(M) - M.head, floatPos: M.floatPos, capTop: !!M.capTop,
+        size: M.size, pad: M.pad, stretch: M.stretch, ruleW: M.ruleW, ruleColor: M.ruleColor || '', unitStyle: M.unitStyle,
+      },
+      more: detailsOpen,
+    };
+  }
+  /** the right panel (ui/TablePanel.svelte), drawn in place */
   function panel() {
     if (!shown) return;
     const el = document.getElementById('props');
     if (!el) return;
     const keep = el.scrollTop;
-    const c = act[1], col = M.cols[c], x = M.cells[act[0]][act[1]], g = range();
-    const n = col.num;
-    const round = !n ? 'none' : n.sig != null ? 'sig' : n.dp != null ? 'dp' : 'none';
-    el.innerHTML = `<h3>${esc(t('ui.table', 'Table'))} <small>${T.nRows(M)} × ${T.nCols(M)}</small></h3>
-    <div class="sec">${rowsHtml([
-      [t('ui.style', 'Style'), `<select data-p="preset" aria-label="${esc(t('table.style', 'Table style'))}">${opt([...T.PRESETS.map((p: any) => [p.key, presetName(p)]), ['custom', t('table.customRules', 'Custom rules')]], M.preset)}</select>`],
-      [t('table.headerRowsLabel', 'Header rows'), `<input type="number" data-p="head" min="0" max="${T.nRows(M)}" step="1" value="${M.head}" aria-label="${esc(t('table.headerRowsLabel', 'Header rows'))}"><label class="tb-chk" title="${esc(t('table.headBoldTip', 'The header rows in bold'))}"><input type="checkbox" data-p="headBold"${M.headBold ? ' checked' : ''}> ${esc(t('ui.bold', 'Bold'))}</label>`],
-      [t('table.rules', 'Rules'), seg('booktabs', [['1', 'booktabs', t('table.rules.booktabsTip', 'Rules of different weights, with space round them (\\toprule, \\midrule, \\bottomrule)')], ['0', esc(t('table.rules.lines', 'Lines')), t('table.rules.linesTip', '\\hline and \\cline: thin lines, no extra space')]], M.booktabs ? '1' : '0')],
-      [t('table.stripes', 'Stripes'), `<label class="tb-chk"><input type="checkbox" data-p="striped"${M.stripe || M.stripe2 ? ' checked' : ''}> ${esc(t('table.everyOtherRow', 'Every other row'))}</label>${M.stripe || M.stripe2 ? swatch('stripe', M.stripe, t('ui.none', 'None')).replace('class="tb-swatch"', `class="tb-swatch bare" aria-label="${esc(t('table.stripeColour', 'Stripe colour'))}"`) : ''}`],
-      ...(M.stripe || M.stripe2 ? [[t('table.otherRows', 'Other rows'), swatch('stripe2', M.stripe2, t('ui.none', 'None')), t('table.otherRowsTip', "The rows between the stripes (\\rowcolors' other colour)")] as [string, string, string]] : []),
-      ...(AUTO_MATH ? [[t('table.numbersAsMaths', 'Numbers'), `<label class="tb-chk" title="${esc(t('table.autoMathTip', 'Numbers you type, paste or import become maths: 1,955.98 mm → $1{,}955.98$ mm. {key} after a change takes it off; columns with Align decimals keep theirs bare.', { key: MOD + 'Z' }))}"><input type="checkbox" data-p="autoMath"${out.autoMath !== false ? ' checked' : ''}> ${esc(t('table.autoMath', 'Typeset as maths ($…$)'))}</label>`] as [string, string]] : []),
-    ])}</div>
-    <div class="sec"><div class="sec-title">${esc(t('table.columnTitle', 'Column {name}', { name: T.colName(c) + (g.c1 > g.c0 ? `–${T.colName(g.c1)}` : '') }))}</div>${rowsHtml([
-      [t('ui.align', 'Align'), alignSwitch({ seg: 'colAl', cur: col.al })],
-      [t('ui.width', 'Width'), `<input type="number" data-p="w" min="0" step="0.1" value="${col.w || ''}" placeholder="${esc(t('ui.auto', 'Auto'))}" aria-label="${esc(t('table.colWidthAria', 'Column width (cm)'))}" title="${esc(t('table.colWidthTip', 'A width in cm makes the column wrap (p{…}); empty: as wide as its text'))}"><span class="tb-unit">cm</span>${M.env === 'tabularx' ? `<label class="tb-chk" title="${esc(t('table.colFillTip', 'The column takes the rest of the line (X)'))}"><input type="checkbox" data-p="fill"${col.fill ? ' checked' : ''}> ${esc(t('table.fill', 'Fill'))}</label>` : ''}`],
-      [t('table.numbers', 'Numbers'), `<label class="tb-chk" title="${esc(t('table.numbersTip', 'Numbers align on the decimal point in a siunitx S column'))}"><input type="checkbox" data-p="num"${n ? ' checked' : ''}> ${esc(t('table.alignDecimals', 'Align decimals'))}</label>`],
-    ])}${n ? `<div class="tb-sub">${rowsHtml([
-      [t('table.round', 'Round'), `<select data-p="round" aria-label="${esc(t('table.rounding', 'Rounding'))}">${opt([['none', t('table.asTyped', 'As typed')], ['sig', t('table.sigFigs', 'Significant figures')], ['dp', t('table.decimals', 'Decimal places')]], round)}</select>${round !== 'none' ? `<input type="number" class="tb-n" data-p="prec" min="${round === 'sig' ? 1 : 0}" max="15" step="1" value="${round === 'sig' ? n.sig : n.dp}" aria-label="${round === 'sig' ? esc(t('table.sigFigs', 'Significant figures')) : esc(t('table.decimals', 'Decimal places'))}">` : ''}`],
-      [t('table.group', 'Group'), `<select data-p="group" aria-label="${esc(t('table.groupThousands', 'Group Thousands'))}" title="${esc(t('table.groupTip', 'Digits in threes (group-separator)'))}">${opt(GROUP_NAMES(), n.group || 'thin')}</select>`],
-      ...(n.group !== 'none' ? [[t('table.groupFrom', 'From'), `<input type="number" class="tb-n" data-p="groupMin" min="1" max="9" step="1" value="${T.numStyle(n).min}" aria-label="${esc(t('table.groupFromAria', 'Group from this many digits'))}" title="${esc(t('table.groupFromTip', 'group-minimum-digits: a part with fewer digits is left whole'))}"><span class="tb-unit">${esc(t('table.digits', 'digits'))}</span><label class="tb-chk" title="${esc(t('table.groupFracTip', 'Group the decimals too (group-digits=all)'))}"><input type="checkbox" data-p="groupFrac"${T.numStyle(n).frac ? ' checked' : ''}> ${esc(t('table.decimalsToo', 'Decimals'))}</label>`] as [string, string]] : []),
-      [t('table.marker', 'Marker'), seg('dec', [['.', '1.5', t('table.dec.pointTip', 'Decimal point')], [',', '1,5', t('table.dec.commaTip', 'Decimal comma (output-decimal-marker)')]], n.dec || '.')],
-      [t('table.exponent', 'Exponent'), `<select data-p="exp" aria-label="${esc(t('table.exponent', 'Exponent'))}">${opt([['input', t('table.asTyped', 'As typed')], ['sci', t('table.scientific', 'Scientific (× 10ⁿ)')], ['eng', t('table.engineering', 'Engineering (× 10³ⁿ)')], ['fixed', t('table.never', 'Never')]], n.exp || 'input')}</select>`],
-      [t('table.product', 'Product'), seg('prod', [['times', '× 10³', t('table.prod.timesTip', 'Times sign (exponent-product)')], ['cdot', '· 10³', t('table.prod.cdotTip', 'Centred dot (exponent-product=\\cdot)')]], n.prod || 'times')],
-      [t('table.uncertainty', 'Uncertainty'), seg('unc', [['paren', '1.23(4)'], ['pm', '1.23 ± 0.04']], n.unc || 'paren')],
-      [t('table.sign', 'Sign'), `<label class="tb-chk" title="${esc(t('table.plusTip', 'print-implicit-plus: +12.5'))}"><input type="checkbox" data-p="plus"${n.plus ? ' checked' : ''}> ${esc(t('table.plus', '+ on positive numbers'))}</label>`],
-      [t('table.position', 'Position'), seg('pos', [['l', I.al.l, t('table.pos.left', 'Numbers on the left (table-number-alignment)')], ['c', I.al.c, t('table.pos.centre', 'Numbers centred')], ['r', I.al.r, t('table.pos.right', 'Numbers on the right')]], n.pos || 'c')],
-    ])}</div>` : ''}${rowsHtml([
-      [t('table.unit', 'Unit'), `<input type="text" data-p="unit" value="${esc(col.unit || '')}" placeholder="kg, m/s, \\kilo\\gram" aria-label="${esc(t('table.unit', 'Unit'))}" spellcheck="false" title="${esc(t('table.unitTip', 'siunitx unit, shown after the header text: Mass (kg)'))}">`],
-    ])}</div>
-    <div class="sec"><div class="sec-title">${esc(t('table.cellTitle', 'Cell {name}', { name: g.r0 === g.r1 && g.c0 === g.c1 ? T.cellName(act[0], act[1]) : `${T.cellName(g.r0, g.c0)}:${T.cellName(g.r1, g.c1)}` }))}</div>${rowsHtml([
-      [t('ui.vertical', 'Vertical'), seg('va', [['t', I.va.t, t('ui.top', 'Top')], ['m', I.va.m, t('table.middle', 'Middle')], ['b', I.va.b, t('ui.bottom', 'Bottom')]], x.va || ((x.rs || 1) > 1 ? 'm' : 't'))],
-      [t('ui.size', 'Size'), `<select data-p="sz" aria-label="${esc(t('table.textSize', 'Text size'))}">${opt([['', t('table.asTable', 'As the table')], ...SIZE_NAMES()], x.sz || '')}</select>`],
-      [t('ui.text', 'Text'), swatch('fg', x.fg, t('table.automatic', 'Automatic'))],
-      [t('ui.fill', 'Fill'), swatch('bg', x.bg, t('ui.none', 'None'))],
-    ])}</div>
-    <div class="sec"><div class="sec-title">LaTeX</div>${session ? `<div class="hint-line">${esc(t('table.inDiagram', 'In the diagram the table is a tabular in a node: no caption, label or float.'))}</div>` : ''}${rowsHtml(session ? [] : [
-      [t('table.caption', 'Caption'), `<input type="text" data-p="caption" value="${esc(M.caption)}" placeholder="${esc(t('ui.none', 'None'))}" aria-label="${esc(t('table.caption', 'Caption'))}">`],
-      [t('ui.label', 'Label'), `<input type="text" data-p="label" value="${esc(M.label)}" placeholder="tab:results" aria-label="${esc(t('ui.label', 'Label'))}" spellcheck="false">`],
-      [t('table.float', 'Float'), `<span class="tb-floatctl">${floatCtl()}</span>`],
-      [t('table.place', 'Place'), seg('place', [['left', I.al.l, t('ui.left', 'Left')], ['center', I.al.c, t('ui.centre', 'Centre')], ['right', I.al.r, t('ui.right', 'Right')]], M.place)],
-    ])}
-    <details class="tb-more-sec"${detailsOpen ? ' open' : ''}><summary>${esc(t('table.moreOptions', 'More options'))}</summary>${rowsHtml([
-      [t('table.environment', 'Environment'), `<select data-p="env" aria-label="${esc(t('table.environment', 'Environment'))}">${opt([['tabular', 'tabular'], ['tabularx', t('table.env.tabularx', 'tabularx (full width)')], ...(session ? [] : [['longtable', t('table.env.longtable', 'longtable (over pages)')] as [string, string]])], M.env)}</select>`],
-      ...(M.env === 'tabularx' ? [[t('ui.width', 'Width'), `<input type="number" data-p="width" min="10" max="100" step="5" value="${Math.round(M.width * 100)}" aria-label="${esc(t('ui.width', 'Width'))}"><span class="tb-unit">${esc(t('table.ofLine', '% of the line'))}</span>`] as [string, string]] : []),
-      ...(M.env === 'longtable' && !session ? [[t('table.footerRows', 'Footer rows'), `<input type="number" data-p="foot" min="0" max="${T.nRows(M) - M.head}" step="1" value="${M.foot}" aria-label="${esc(t('table.footerRows', 'Footer rows'))}">`, t('table.footerTip', 'The bottom rows: written once, at the end of the table (\\endlastfoot); the other pages end with the rule above them')] as [string, string, string]] : []),
-      ...(M.env !== 'longtable' && !session ? [[t('table.placement', 'Placement'), `<input type="text" data-p="floatPos" value="${esc(M.floatPos)}" placeholder="htbp" aria-label="${esc(t('table.floatPlacement', 'Float placement'))}" spellcheck="false" maxlength="5" title="${esc(t('table.placementTip', 'Where LaTeX may put the table: h here, t top, b bottom, p own page, ! try harder, H exactly here (float package)'))}">`] as [string, string]] : []),
-      ...(session ? [] : [[t('table.captionAt', 'Caption at'), seg('capTop', [['1', esc(t('ui.top', 'Top'))], ['0', esc(t('ui.bottom', 'Bottom'))]], M.capTop ? '1' : '0')] as [string, string]]),
-      [t('ui.font.size', 'Font size'), `<select data-p="size" aria-label="${esc(t('ui.font.size', 'Font size'))}">${opt(SIZE_NAMES(), M.size)}</select>`],
-      [t('table.padding', 'Padding'), `<input type="number" data-p="pad" min="0" max="30" step="0.5" value="${M.pad}" aria-label="${esc(t('table.paddingAria', 'Cell padding (pt)'))}" title="${esc(t('table.paddingTip', '\\tabcolsep: the space on each side of a column'))}"><span class="tb-unit">pt</span>`],
-      [t('table.rowHeight', 'Row height'), `<input type="number" data-p="stretch" min="0.5" max="4" step="0.05" value="${M.stretch}" aria-label="${esc(t('table.rowHeight', 'Row height'))}" title="${esc(t('table.rowHeightTip', "\\arraystretch: 1 is LaTeX's own"))}"><span class="tb-unit">×</span>`],
-      [t('table.ruleWidth', 'Rule width'), `<input type="number" data-p="ruleW" min="0.1" max="5" step="0.1" value="${M.ruleW}" aria-label="${esc(t('table.ruleWidthAria', 'Rule width (pt)'))}" title="${esc(t('table.ruleWidthTip', "\\arrayrulewidth: thin rules and | (LaTeX's 0.4 pt)"))}"><span class="tb-unit">pt</span>${swatch('ruleColor', M.ruleColor, t('table.black', 'Black')).replace('class="tb-swatch"', `class="tb-swatch bare" aria-label="${esc(t('table.ruleColour', 'Rule colour'))}"`).replace(/title="[^"]*"/, `title="\\arrayrulecolor: ${M.ruleColor || 'black'}"`)}`],
-      [t('table.unitsAs', 'Units as'), `<select data-p="unitStyle" aria-label="${esc(t('table.unitsAsAria', 'How units follow the header'))}">${opt([['paren', t('table.units.paren', 'Mass (kg)')], ['bracket', t('table.units.bracket', 'Mass [kg]')], ['slash', t('table.units.slash', 'Mass / kg')]], M.unitStyle)}</select>`],
-    ])}</details></div>
-    <div class="sec tb-keys"><div class="sec-title">${esc(t('table.keys', 'Keys'))}</div><div class="hint-line">${esc(t('table.keys.replace', 'Type to replace a cell'))} · <kbd>Enter</kbd> ${esc(t('table.keys.edit', 'or double-click to edit'))} · <kbd>${SHIFT}Enter</kbd> ${esc(t('table.keys.newline', 'new line'))} · <kbd>${SHIFT}</kbd>${esc(t('table.keys.select', '+arrows select'))} · <kbd>${MOD}C</kbd> <kbd>${MOD}V</kbd> ${esc(t('table.keys.clip', 'copy and paste with Excel and Sheets'))} · ${esc(t('table.keys.menu', 'right-click for rows, columns and merging.'))}</div></div>`;
+    renderView(el, TablePanel, panelModel());
     // the heading moves into the window's head (app.ts does it too, but later, from a MutationObserver);
     // moving it now keeps the height the scroll is restored against, so ticking a box doesn't scroll up
     const h = el.firstElementChild, head = document.getElementById('propsHead');
     if (h && h.tagName === 'H3' && head) { const old = head.querySelector('h3'); if (old) old.replaceWith(h); else head.prepend(h); }
     el.scrollTop = keep;
   }
-  function syncPanel() {
-    // after an edit typed in the panel: only the summary needs to follow (the field keeps its focus)
-    const s = document.querySelector('#propsHead h3 small');
-    if (s) s.textContent = `${T.nRows(M)} × ${T.nCols(M)}`;
-  }
   function panelChange(e: Event) {
     const t = e.target as HTMLInputElement, k = t.dataset.p;
     if (!k || !shown) return;
     const g = range(), c = act[1], cols = Array.from({ length: g.c1 - g.c0 + 1 }, (_, i) => g.c0 + i);
     const num = (v: string, lo: number, hi: number) => { const n = parseFloat(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : null; };
-    const live = e.type === 'input';
-    const typing = live && t.type === 'text';
-    const o = { keepPanel: typing || (live && t.type === 'number') };
     switch (k) {
       case 'preset': if (t.value !== 'custom') change(() => { const s = M.stripe; T.applyPreset(M, t.value); if (t.value === 'striped' && s) M.stripe = s; }); break;
-      case 'head': { const v = num(t.value, 0, T.nRows(M)); if (v != null) change(() => { M.head = Math.round(v); T.restyle(M); }, o); break; }
+      case 'head': { const v = num(t.value, 0, T.nRows(M)); if (v != null) change(() => { M.head = Math.round(v); T.restyle(M); }); break; }
       case 'headBold': change(() => { M.headBold = t.checked; }); break;
       case 'autoMath': out.autoMath = t.checked; saveOut(); break; // how text comes in, for every table: not part of this one
       case 'striped': change(() => { M.stripe = t.checked ? '#eef2f7' : ''; if (!t.checked) { M.stripe2 = ''; M.stripeFrom = -1; } if (M.preset === 'striped' && !t.checked) M.preset = 'custom'; }); break;
-      case 'foot': { const v = num(t.value, 0, T.nRows(M) - M.head); if (v != null) change(() => { M.foot = Math.round(v); }, o); break; }
-      case 'floatPos': { const v = t.value.trim(); if (/^[htbpH!]{1,5}$/.test(v) || !v) change(() => { M.floatPos = v || 'htbp'; }, o); break; }
-      case 'ruleW': { const v = num(t.value, 0.1, 5); if (v != null) change(() => { M.ruleW = v; }, o); break; }
-      case 'w': { const v = t.value === '' ? 0 : num(t.value, 0, 40); if (v != null) change(() => { for (const k2 of cols) M.cols[k2].w = v; }, o); break; }
+      case 'foot': { const v = num(t.value, 0, T.nRows(M) - M.head); if (v != null) change(() => { M.foot = Math.round(v); }); break; }
+      case 'floatPos': { const v = t.value.trim(); if (/^[htbpH!]{1,5}$/.test(v) || !v) change(() => { M.floatPos = v || 'htbp'; }); break; }
+      case 'ruleW': { const v = num(t.value, 0.1, 5); if (v != null) change(() => { M.ruleW = v; }); break; }
+      case 'w': { const v = t.value === '' ? 0 : num(t.value, 0, 40); if (v != null) change(() => { for (const k2 of cols) M.cols[k2].w = v; }); break; }
       case 'fill': change(() => { for (const k2 of cols) M.cols[k2].fill = t.checked || undefined; }); break;
       case 'num': change(() => { for (const k2 of cols) M.cols[k2].num = t.checked ? startNum(k2) : null; }); break;
       case 'group': setNum(cols, (n) => setGroup(n, t.value as any)); break;
-      case 'groupMin': { const v = num(t.value, 1, 9); if (v != null) setNum(cols, (n) => { n.groupMin = Math.round(v); }, o); break; }
+      case 'groupMin': { const v = num(t.value, 1, 9); if (v != null) setNum(cols, (n) => { n.groupMin = Math.round(v); }); break; }
       case 'groupFrac': setNum(cols, (n) => { n.groupFrac = t.checked; }); break;
       case 'plus': setNum(cols, (n) => { if (t.checked) n.plus = true; else delete n.plus; }); break;
       case 'round': change(() => { for (const k2 of cols) { const n = M.cols[k2].num || {}; delete n.sig; delete n.dp; if (t.value === 'sig') n.sig = 3; if (t.value === 'dp') n.dp = 2; M.cols[k2].num = n; } }); break;
-      case 'prec': { const v = num(t.value, 0, 15); if (v != null) change(() => { for (const k2 of cols) { const n = M.cols[k2].num || {}; if (n.sig != null) n.sig = Math.max(1, Math.round(v)); else n.dp = Math.round(v); M.cols[k2].num = n; } }, o); break; }
+      case 'prec': { const v = num(t.value, 0, 15); if (v != null) change(() => { for (const k2 of cols) { const n = M.cols[k2].num || {}; if (n.sig != null) n.sig = Math.max(1, Math.round(v)); else n.dp = Math.round(v); M.cols[k2].num = n; } }); break; }
       case 'exp': change(() => { for (const k2 of cols) { const n = M.cols[k2].num || {}; if (t.value === 'input') delete n.exp; else n.exp = t.value as any; M.cols[k2].num = n; } }); break;
-      case 'unit': change(() => { for (const k2 of cols) { if (t.value.trim()) M.cols[k2].unit = t.value.trim(); else delete M.cols[k2].unit; } }, o); break;
+      case 'unit': change(() => { for (const k2 of cols) { if (t.value.trim()) M.cols[k2].unit = t.value.trim(); else delete M.cols[k2].unit; } }); break;
       case 'sz': change(() => T.styleRange(M, g, { sz: t.value || undefined })); break;
-      case 'caption': case 'label': {
-        change(() => { if (k === 'caption') M.caption = t.value; else M.label = t.value.trim(); }, o);
-        const f = document.querySelector('#props .tb-floatctl');
-        if (f) f.innerHTML = floatCtl();
-        break;
-      }
+      case 'caption': case 'label': change(() => { if (k === 'caption') M.caption = t.value; else M.label = t.value.trim(); }); break;
       case 'float': change(() => { M.float = t.checked; }); break;
       case 'env': change(() => { M.env = t.value as any; }); break;
-      case 'width': { const v = num(t.value, 10, 100); if (v != null) change(() => { M.width = v / 100; }, o); break; }
+      case 'width': { const v = num(t.value, 10, 100); if (v != null) change(() => { M.width = v / 100; }); break; }
       case 'size': change(() => { M.size = t.value; }); break;
-      case 'pad': { const v = num(t.value, 0, 30); if (v != null) change(() => { M.pad = v; }, o); break; }
-      case 'stretch': { const v = num(t.value, 0.5, 4); if (v != null) change(() => { M.stretch = v; }, o); break; }
+      case 'pad': { const v = num(t.value, 0, 30); if (v != null) change(() => { M.pad = v; }); break; }
+      case 'stretch': { const v = num(t.value, 0.5, 4); if (v != null) change(() => { M.stretch = v; }); break; }
       case 'unitStyle': change(() => { M.unitStyle = t.value as any; }); break;
     }
     void c;
@@ -938,7 +849,7 @@ const PICTURE_MS = 10;
   function previewNow(pictureOnly = false): void {
     if (!TD.math.previewing) return TD.math.preview(() => previewNow(pictureOnly));
     if (!shown) return;
-    const p = $('.tb-prev'), code = $('.tb-code'), pk = $('.tb-pk');
+    const p = $('.tb-prev'), code = $('.tb-code');
     if (!p) return;
     try {
       // a big table makes its cell pictures over several frames, so typing and scrolling never wait for them
@@ -957,21 +868,22 @@ const PICTURE_MS = 10;
     const text = (r.packages.length ? `% ${r.packages.join(' ')}\n` : '') + r.code;
     codeText = text;
     code.innerHTML = text.split('\n').map((l: string, i: number) => `<div class="cl" data-n="${i + 1}">${esc(l) || ' '}</div>`).join('');
-    pk.textContent = r.packages.length ? r.packages.map((x: string) => /\{([^}]*)\}$/.exec(x)![1]).join(', ') : t('table.noPackages', 'No packages');
-    pk.title = r.packages.length ? t('table.packagesTip', 'Packages the LaTeX needs (in the preamble):') + '\n' + r.packages.join('\n') : t('table.noPackagesTip', 'Plain LaTeX: no packages needed');
+    packages = {
+      text: r.packages.length ? r.packages.map((x: string) => /\{([^}]*)\}$/.exec(x)![1]).join(', ') : t('table.noPackages', 'No packages'),
+      title: r.packages.length ? t('table.packagesTip', 'Packages the LaTeX needs (in the preamble):') + '\n' + r.packages.join('\n') : t('table.noPackagesTip', 'Plain LaTeX: no packages needed'),
+    };
+    renderShell();
   }
   function tabs() {
-    host!.querySelectorAll('[data-tab]').forEach((b) => { const on = (b as HTMLElement).dataset.tab === out.tab; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
-    host!.querySelectorAll('[data-pane]').forEach((p) => ((p as HTMLElement).hidden = (p as HTMLElement).dataset.pane !== out.tab));
+    renderShell();
     if (out.tab === 'preview' && host!.querySelector('.tb-prev .math-pending')) previewProgress();
   }
   const saveOut = () => { try { localStorage.setItem(OUT_KEY, JSON.stringify(out)); } catch (e: any) { /* storage blocked */ } };
-  function flash(btn: HTMLElement | null, text: string) {
-    if (!btn) return;
-    const old = btn.dataset.label || btn.innerHTML;
-    btn.dataset.label = old; btn.textContent = text;
-    clearTimeout((btn as any)._t);
-    (btn as any)._t = setTimeout(() => { btn.innerHTML = old; delete btn.dataset.label; }, 1200);
+  /** a copy button says Copied for a moment */
+  function flash(what: string) {
+    copied = what; renderShell();
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => { copied = ''; renderShell(); }, 1200);
   }
   const fileName = () => (M.label.replace(/^tab:/, '') || M.caption.replace(/\\[A-Za-z]+|[$\\{}]/g, '')).trim().replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).toLowerCase() || 'table';
   // The LaTeX is ready at once; the picture outputs wait until every cell's maths is drawn.
@@ -983,7 +895,7 @@ const PICTURE_MS = 10;
       if (what === 'copy') {
         const r = T.toLatex(M, { bare: !!session });
         await navigator.clipboard.writeText((r.packages.length ? `% Preamble: ${r.packages.join(' ')}\n` : '') + r.code + '\n');
-        flash(btn, t('ui.copied', 'Copied'));
+        flash(what);
       } else if (what === 'dl-tex') TD.app.downloadBlob(fileName() + '.tex', new Blob([T.toLatex(M, { standalone: true }).code], { type: 'text/x-tex' }));
       else if (what === 'dl-svg') {
         const svg = await TD.app.svgWithFonts(TD.app.svgOf([shape()]));
@@ -992,7 +904,7 @@ const PICTURE_MS = 10;
       else if (what === 'print') TD.app.printShapes([shape()], fileName());
       else if (what === 'copy-png') {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': TD.app.pngOf([shape()], +out.dpi, false) })]);
-        flash(btn, t('ui.copied', 'Copied'));
+        flash(what);
       }
     } catch (e: any) { hint(what.startsWith('dl') ? t('table.hint.fileFailed', "Couldn't make the file: {error}", { error: e.message || e }) : t('table.hint.copyFailedWhy', "Couldn't copy: {error}", { error: e.message || e }), 2600); }
   }
@@ -1014,13 +926,11 @@ const PICTURE_MS = 10;
     const cmd = b.dataset.t;
     if (!cmd) return;
     switch (cmd) {
-      case 'import': {
-        const r = b.getBoundingClientRect();
-        openMenu(item(t('table.menu.paste', 'Paste a Table…'), 'imp-text', { icon: ic('<path d="M7 3.5h6v2H7z"/><path d="M13 4.5h2.5v13h-11v-13H7"/><path d="M7.5 10h5M7.5 13h3"/>') })
-          + item(t('table.menu.open', 'Open a File…'), 'imp-file', { icon: ic('<path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/>') })
-          + '<hr>' + item(t('table.menu.blank', 'New Empty Table'), 'imp-blank', { icon: ic('<path d="M3 4h14v12H3zM3 8h14M3 12h14M8 4v12"/>') }), r.left, r.bottom + 6);
+      case 'import':
+        openMenu([item(t('table.menu.paste', 'Paste a Table…'), 'imp-text', { icon: ic('<path d="M7 3.5h6v2H7z"/><path d="M13 4.5h2.5v13h-11v-13H7"/><path d="M7.5 10h5M7.5 13h3"/>') }),
+          item(t('table.menu.open', 'Open a File…'), 'imp-file', { icon: ic('<path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/>') }),
+          '-', item(t('table.menu.blank', 'New Empty Table'), 'imp-blank', { icon: ic('<path d="M3 4h14v12H3zM3 8h14M3 12h14M8 4v12"/>') })], b);
         break;
-      }
       case 'file': chooseFile(); break;
       case 'blank': replaceTable(T.create(4, 3, 'booktabs')); break;
       case 'import-text': {
@@ -1268,8 +1178,6 @@ const PICTURE_MS = 10;
     e.preventDefault(); e.stopPropagation();
     importFile(f);
   });
-  document.addEventListener('pointerdown', (e) => { if (menu && !menu.contains(e.target as Node)) closeMenu(); }, true);
-  document.addEventListener('keydown', (e) => { if (menu && e.key === 'Escape') { e.preventDefault(); closeMenu(); } }, true);
   addEventListener('resize', () => { if (shown) syncSel(); });
   host.addEventListener('scroll', (e) => { closeMenu(); if ((e.target as Element).matches?.('.tb-gridwrap')) rankVisibleMaths(); }, true);
   if (TD.math && TD.math.onChange) TD.math.onChange(() => { if (shown) { paint(); preview(); } });
@@ -1381,11 +1289,11 @@ const PICTURE_MS = 10;
   TD.tableBlockEditor = { open: editBlock };
   // a language switch while the table is on screen redraws its frame (the model and selection stay)
   let firstLocale = true;
-  onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (shown) { finishEdit(); closeMenu(); build(); requestAnimationFrame(() => syncSel()); } });
+  onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (shown) { finishEdit(); closeMenu(); build(); requestAnimationFrame(() => syncSel()); } }); // captions follow by themselves; the grid's are drawn again
 
   TD.tableWs = {
     show() { shown = true; host.hidden = false; build(); requestAnimationFrame(() => { syncSel(); if (!fresh) focusGrid(); }); },
-    hide() { finishEdit(); closeMenu(); closeBlock(true); shown = false; host.hidden = true; host.innerHTML = ''; },
+    hide() { finishEdit(); closeMenu(); closeBlock(true); shown = false; host.hidden = true; destroyView(host); built = false; },
     get inBlock() { return !!session; },
     renderProps() { panel(); },
     undo, redo, canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0,

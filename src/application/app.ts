@@ -30,15 +30,34 @@ import { createRecovery, RECOVERY_DEFAULTS, RECOVERY_EVERY, RECOVERY_KEEP, RECOV
 import { createDocumentFactory } from '../core/document';
 import { conformShape } from '../core/conform';
 import { createDocumentHistory, stamp } from '../core/history';
-import { positionMenu } from '../ui/menu-position';
 import MainProperties from '../ui/MainProperties.svelte';
 import type { Model as StyleModel } from '../ui/StyleField.svelte';
 import type { Model as PageModel } from '../ui/PageProperties.svelte';
 import { row, section } from '../ui/forms';
 import type { FormRow, FormSection } from '../ui/forms';
 import { mountFrame } from '../ui/mount-frame';
+import { keyLabel } from '../ui/kit/keys';
+import type { IconName } from '../ui/kit/icons';
 import { unmount } from 'svelte';
 import { runtime as TD } from '../runtime';
+import { emptyStateHtml } from '../ui/kit/markup';
+import { openPopover, type PopoverHandle } from '../ui/kit/open-popover';
+import { openTextPopup, type TextPopupHandle } from '../ui/kit/text-popup.svelte';
+import { closeFlyouts, flyoutOpen, holdFlyout, releaseFlyout, onFlyoutClose } from '../ui/kit/Flyout.svelte';
+import { openContextMenu, closeContextMenu, contextMenuOpen } from '../ui/kit/context-menu';
+import { tidy as tidyMenu, type MenuEntry, type MenuItemSpec } from '../ui/kit/menu';
+import { fitToolbar } from '../ui/kit/toolbar';
+import { renderView as renderSvelteView } from '../ui/render-view.svelte';
+import BinDialog, { type BinDialogModel } from '../ui/BinDialog.svelte';
+import RecoveryDialog, { type RecoveryDialogModel } from '../ui/RecoveryDialog.svelte';
+import ToolPanel, { type ToolPanelModel, type ToolSection, type ToolSymbol, type ToolTileSpec } from '../ui/ToolPanel.svelte';
+import ExportPanel, { type ExportPanelModel, type ExportRow, type ExportAction } from '../ui/ExportPanel.svelte';
+import LintList, { type LintListModel } from '../ui/LintList.svelte';
+import ImportReport, { type ImportReportModel } from '../ui/ImportReport.svelte';
+import DiagramGallery, { type DiagramGalleryModel } from '../ui/DiagramGallery.svelte';
+import { openModal as showModalEl, closeModal as hideModalEl, closeDialogElement, fadeOutDialog } from '../ui/kit/modal';
+import FileList, { type FileRow, type FileListModel } from '../ui/FileList.svelte';
+import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.svelte';
 // DiagramTeX editor: state, interaction, history, properties panel, storage and export.
 (function () {
   const { TYPES, util } = TD;
@@ -69,7 +88,6 @@ import { runtime as TD } from '../runtime';
   const PX = TD.PX_PER_CM;
   const fx = (n: any) => (Math.abs(n) < 0.005 ? 0 : n).toFixed(2).replace('-', '−');
 
-  const hasHand = (m: any) => m === 'board' || m === 'page'; // modes with a Hand tool
   const isDrawTool = (t: any) => !['select', 'hand', 'text', 'math', 'image', 'magnify', 'bucket'].includes(t);
   const toolType = (t: any) => (({ arc3: 'arc', arrow: 'line', darrow: 'line', elbow: 'line', curvedconn: 'line', curvearrow: 'curve', blob: 'poly', smoothcurve: 'poly', curvpen: 'poly', pencil: 'poly', math: 'text' }) as Record<string, any>)[t] || t.split(':')[0];
   const TOOL_KEYS: Record<string, any> = { v: 'select', h: 'hand', z: 'magnify', k: 'bucket', l: 'line', a: 'arrow', c: 'curve', p: 'poly', o: 'arc', s: 'spring', r: 'rect', e: 'ellipse', b: 'ball', d: 'dot', t: 'text', m: 'math', n: 'pencil', i: 'image' };
@@ -429,7 +447,6 @@ import { runtime as TD } from '../runtime';
     document.body.classList.toggle('mode-doc', m === 'document');
     document.body.classList.toggle('mode-page', m === 'page');
     document.body.classList.toggle('mode-board', m === 'board');
-    if (!hasHand(m) && state.tool === 'hand') setTool('select'); // the hand tool is a whiteboard's and a page's
     document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.mode === m));
     document.querySelectorAll('[data-kind]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.kind === kindOf(m)));
     if (m === 'document') { if (fit) fitLater = true; if (TD.docview) TD.docview.render(); }
@@ -612,12 +629,7 @@ import { runtime as TD } from '../runtime';
     const prev = document.activeElement;
     const root = document.createElement('div');
     root.className = 'td-dialog'; root.id = 'binDlg';
-    root.innerHTML = `<div class="tdd-box bin-box" role="dialog" aria-modal="true" aria-labelledby="binTitle">
-      <h2 id="binTitle">${esc(caption(captions["ui.recycle.bin"]))}</h2><p class="bin-sub">${esc(uiText('bin.sub', 'Deleted files and folders stay here for {days} days, then they are removed for good.', { days: BIN_DAYS }))}</p>
-      <ul class="bin-list" role="list"></ul>
-      <div class="tdd-btns"><button type="button" class="bin-empty danger-text">${esc(uiText('bin.empty', 'Empty Bin…'))}</button><span class="sp"></span><button type="button" class="primary bin-done">${esc(caption(captions["ui.done"]))}</button></div></div>`;
     document.body.appendChild(root);
-    const list = root.querySelector('.bin-list');
     const KIND_WORD: Record<string, any> = { page: caption(captions["ui.page"]), board: caption(captions["ui.whiteboard"]), classic: caption(captions["ui.classic"]) };
     const inFolder = (f: string) => f ? ' · ' + uiText('bin.inFolder', 'in {folder}', { folder: f }) : '';
     const draw = () => {
@@ -630,12 +642,17 @@ import { runtime as TD } from '../runtime';
           rows.push({ ids: g.map((y) => y.id), ic: FOLDER_IC, name: leafOf(x.folder), detail: `${g.length === 1 ? uiText('bin.files.one', '1 file') : uiText('bin.files.many', '{n} files', { n: g.length })} · ${KIND_WORD[x.kind]}${inFolder(folderOf(x.folder))}`, t: x.deleted });
         } else rows.push({ ids: [x.id], ic: KIND_IC[x.kind] || KIND_IC.classic, name: leafOf(x.name), detail: `${KIND_WORD[x.kind]}${inFolder(folderOf(x.name))}`, t: x.deleted });
       }
-      list!.innerHTML = rows.length ? rows.map((r) => `<li data-ids="${r.ids.join(',')}"><span class="bin-ic">${r.ic}</span><span class="bin-nm"><b>${esc(r.name)}</b><small>${esc(r.detail)} · ${esc(uiText('bin.deletedWhen', 'deleted {ago}, {left}', { ago: ago(r.t), left: left(r.t) }))}</small></span>
-        <button type="button" class="bin-restore">${esc(uiText('bin.restore', 'Restore'))}</button><button type="button" class="icon flat bin-erase" title="${esc(uiText('bin.deleteForGood', 'Delete for good'))}" aria-label="${esc(uiText('bin.deleteForGood.aria', 'Delete {name} for good', { name: r.name }))}"><svg viewBox="0 0 20 20">${IC.del}</svg></button></li>`).join('')
-        : `<li class="bin-none">${esc(uiText('bin.isEmpty', 'The Recycle Bin is empty.'))}</li>`;
-      ((root.querySelector('.bin-empty'))! as HTMLButtonElement).disabled = !rows.length;
+      renderSvelteView(root, BinDialog, { title: caption(captions["ui.recycle.bin"]),
+        sub: uiText('bin.sub', 'Deleted files and folders stay here for {days} days, then they are removed for good.', { days: BIN_DAYS }),
+        emptyLabel: uiText('bin.empty', 'Empty Bin…'), canEmpty: rows.length > 0, doneLabel: caption(captions["ui.done"]),
+        list: { empty: uiText('bin.isEmpty', 'The Recycle Bin is empty.'),
+        rows: rows.map((r) => ({ key: r.ids.join(','), attrs: { 'data-ids': r.ids.join(',') }, svg: r.ic, name: r.name,
+          detail: `${r.detail} · ${uiText('bin.deletedWhen', 'deleted {ago}, {left}', { ago: ago(r.t), left: left(r.t) })}`,
+          restore: { label: uiText('bin.restore', 'Restore') },
+          act: { class: 'bin-erase', icon: 'delete' as const, title: uiText('bin.deleteForGood', 'Delete for good'), label: uiText('bin.deleteForGood.aria', 'Delete {name} for good', { name: r.name }) } })) } } satisfies BinDialogModel);
     };
-    const close = () => { root.remove(); if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); };
+    // the focus goes back at once; the dialog fades out, then goes
+    const close = () => { root.id = ''; if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); fadeOutDialog(root, () => { destroyView(root); root.remove(); }); };
     draw();
     root.addEventListener('click', async (e) => {
       const li = (e.target! as Element).closest('li[data-ids]'), ids = li ? (li as HTMLElement).dataset.ids!.split(',') : [];
@@ -719,33 +736,30 @@ import { runtime as TD } from '../runtime';
     const prev = document.activeElement;
     const root = document.createElement('div');
     root.className = 'td-dialog'; root.id = 'recDlg';
-    const opts = (vals: number[], cur: number, word: (v: number) => string) => vals.map((v) => `<option value="${v}"${v === cur ? ' selected' : ''}>${word(v)}</option>`).join('');
-    const s0 = recoverySettings();
-    root.innerHTML = `<div class="tdd-box bin-box rec-box" role="dialog" aria-modal="true" aria-labelledby="recTitle">
-      <h2 id="recTitle">${esc(uiText('rec.title', 'Recovery Copies'))}</h2><p class="bin-sub"></p>
-      <ul class="bin-list rec-list" role="list"></ul>
-      <div class="rec-set">
-        <label>${esc(uiText('rec.keepCopy', 'Keep a copy'))} <select name="every" aria-label="${esc(uiText('rec.keepCopy.aria', 'How often a copy is kept'))}">${opts(RECOVERY_EVERY, s0.every, (v) => esc(v ? everyWord(v) : uiText('rec.never', 'never')))}</select></label>
-        <label>${esc(uiText('rec.keepNewest', 'Keep the newest'))} <select name="keep" aria-label="${esc(uiText('rec.keepNewest.aria', 'How many copies are kept'))}">${opts(RECOVERY_KEEP, s0.keep, (v) => String(v))}</select></label>
-      </div>
-      <div class="tdd-btns"><span class="sp"></span><button type="button" class="primary rec-done">${esc(caption(captions["ui.done"]))}</button></div></div>`;
+    const opts = (vals: number[], word: (v: number) => string) => vals.map((v) => ({ value: String(v), label: word(v) }));
     document.body.appendChild(root);
-    const list = root.querySelector('.rec-list')!, sub = root.querySelector('.bin-sub')!;
     let copies: RecoveryCopy[] = [];
     const draw = () => {
       const e: any = docEntry(id!), s = recoverySettings();
       copies = recovery.list(id!);
       const total = copies.reduce((n, c) => n + JSON.stringify(c.doc).length, 0);
       const nm = leafOf(e.name);
-      sub.textContent = !s.every ? uiText('rec.sub.off', 'Copies of "{name}" are no longer kept. Those below stay until the file is deleted for good.', { name: nm })
+      const sub = !s.every ? uiText('rec.sub.off', 'Copies of "{name}" are no longer kept. Those below stay until the file is deleted for good.', { name: nm })
         : (s.every > RECOVERY_QUICK ? uiText('rec.sub.everyQuick', 'Earlier states of "{name}", kept on their own while you edit: one {every} at most, the newest {keep}, and one more in between, {quick}.', { name: nm, every: everyWord(s.every), keep: s.keep, quick: everyWord(RECOVERY_QUICK) })
           : uiText('rec.sub.every', 'Earlier states of "{name}", kept on their own while you edit: one {every} at most, the newest {keep}.', { name: nm, every: everyWord(s.every), keep: s.keep })) +
           (copies.length ? ' ' + uiText('rec.sub.size', 'They take {size} in this browser.', { size: sizeOf(total) }) : '');
-      list.innerHTML = copies.length ? copies.map((c, i) => `<li data-i="${i}"><span class="bin-ic">${HIST_IC}</span><span class="bin-nm"><b>${esc(whenOf(c.at))}</b><small>${esc(sinceOf(c.at))} · ${esc(contentsOf(c.doc))} · ${sizeOf(JSON.stringify(c.doc).length)}</small></span>
-        <button type="button" class="bin-restore" title="${esc(uiText('rec.restore.title', 'Put this copy in place of the file. Its state now is kept as a copy.'))}">${esc(uiText('bin.restore', 'Restore'))}</button><button type="button" class="icon flat rec-open" title="${esc(uiText('rec.openNew', 'Open as a new file'))}" aria-label="${esc(uiText('rec.openNew.aria', 'Open the copy from {when} as a new file', { when: whenOf(c.at) }))}"><svg viewBox="0 0 20 20">${IC.dup}</svg></button></li>`).join('')
-        : `<li class="bin-none">${esc(s.every ? uiText('rec.none.on', 'No copies yet. The first is kept when the file is next changed.') : uiText('rec.none.off', 'No copies yet. The first is kept when the file is next changed, once copies are turned on.'))}</li>`;
+      renderSvelteView(root, RecoveryDialog, { title: uiText('rec.title', 'Recovery Copies'), sub, doneLabel: caption(captions["ui.done"]),
+        every: { label: uiText('rec.keepCopy', 'Keep a copy'), aria: uiText('rec.keepCopy.aria', 'How often a copy is kept'), value: s.every, options: opts(RECOVERY_EVERY, (v) => v ? everyWord(v) : uiText('rec.never', 'never')) },
+        keep: { label: uiText('rec.keepNewest', 'Keep the newest'), aria: uiText('rec.keepNewest.aria', 'How many copies are kept'), value: s.keep, options: opts(RECOVERY_KEEP, (v) => String(v)) },
+        list: {
+        empty: s.every ? uiText('rec.none.on', 'No copies yet. The first is kept when the file is next changed.') : uiText('rec.none.off', 'No copies yet. The first is kept when the file is next changed, once copies are turned on.'),
+        rows: copies.map((c, i) => ({ key: String(c.at) + ':' + i, attrs: { 'data-i': String(i) }, svg: HIST_IC, name: whenOf(c.at),
+          detail: `${sinceOf(c.at)} · ${contentsOf(c.doc)} · ${sizeOf(JSON.stringify(c.doc).length)}`,
+          restore: { label: uiText('bin.restore', 'Restore'), title: uiText('rec.restore.title', 'Put this copy in place of the file. Its state now is kept as a copy.') },
+          act: { class: 'rec-open', icon: 'duplicate' as const, title: uiText('rec.openNew', 'Open as a new file'), label: uiText('rec.openNew.aria', 'Open the copy from {when} as a new file', { when: whenOf(c.at) }) } })) } } satisfies RecoveryDialogModel);
     };
-    const close = () => { root.remove(); if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); };
+    // the focus goes back at once; the dialog fades out, then goes
+    const close = () => { root.id = ''; if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); fadeOutDialog(root, () => { destroyView(root); root.remove(); }); };
     draw();
     root.addEventListener('change', (ev) => {
       const t = ev.target as HTMLSelectElement, s = recoverySettings();
@@ -834,23 +848,65 @@ import { runtime as TD } from '../runtime';
     }
     const count = (n: any) => n.files.length + [...n.dirs.values()].reduce((a, c) => a + count(c), 0);
     const holds = (n: any) => n.files.some((d: any) => d.id === state.docId) || [...n.dirs.values()].some(holds);
-    const out: any[] = [], { by, dir } = fileSort, k = dir === 'desc' && by !== 'custom' ? -1 : 1;
+    const out: FileRow[] = [], { by, dir } = fileSort, k = dir === 'desc' && by !== 'custom' ? -1 : 1;
     const newest = (n: any): number => Math.max(0, ...n.files.map((d: any) => (by === 'created' ? createdOf(d) : d.updated || 0)), ...[...n.dirs.values()].map(newest));
     const dirCmp = (a: any, b: any) => (by === 'created' || by === 'modified' ? k * (newest(a[1]) - newest(b[1])) || byName(a[0], b[0]) : k * byName(a[0], b[0]));
     $('#docList').classList.toggle('sorted', by !== 'custom');
+    const delFile = caption(captions["ui.delete"]);
     const walk = (node: any, path: any, depth: any) => {
       for (const [name, sub] of [...node.dirs].sort(dirCmp)) {
         const fp = joinPath(path, name), shut = folded.has(foldKey(fp));
-        out.push(`<li class="folder${shut ? ' shut' : ''}${shut && holds(sub) ? ' has-active' : ''}" data-folder="${esc(fp)}" style="--depth:${depth}" draggable="true" aria-expanded="${!shut}" title="${esc(count(sub) === 1 ? uiText('files.folder.title.one', '{path} (1 file)', { path: fp }) : uiText('files.folder.title.many', '{path} ({n} files)', { path: fp, n: count(sub) }))}">${CHEV_IC}${FOLDER_IC}<span class="nm">${esc(name)}</span><button class="del" data-delfolder="${esc(fp)}" title="${esc(uiText('files.deleteFolder', 'Delete folder'))}" aria-label="${esc(uiText('files.deleteFolder.aria', 'Delete folder {name}', { name }))}">×</button></li>`);
+        out.push({ key: 'f:' + fp, folder: fp, name, depth, shut, hasActive: shut && holds(sub), svg: CHEV_IC + FOLDER_IC,
+          title: count(sub) === 1 ? uiText('files.folder.title.one', '{path} (1 file)', { path: fp }) : uiText('files.folder.title.many', '{path} ({n} files)', { path: fp, n: count(sub) }),
+          del: { title: uiText('files.deleteFolder', 'Delete folder'), label: uiText('files.deleteFolder.aria', 'Delete folder {name}', { name }) } });
         if (!shut) walk(sub, fp, depth + 1);
       }
       for (const d of sortDocs(node.files)) {
-        out.push(`<li data-doc="${d.id}" class="${d.id === state.docId ? 'active' : ''}" style="--depth:${depth}" draggable="true">
-      ${KIND_IC[kind] || KIND_IC.classic}<span class="nm">${esc(leafOf(d.name))}</span><button class="del" data-del="${d.id}" title="${esc(caption(captions["ui.delete"]))}">×</button></li>`);
+        out.push({ key: 'd:' + d.id, doc: d.id, name: leafOf(d.name), depth, active: d.id === state.docId, svg: KIND_IC[kind] || KIND_IC.classic,
+          del: { title: delFile, label: delFile } });
       }
     };
     walk(root, '', 0);
-    ul.innerHTML = out.join('');
+    renderSvelteView(ul, FileList, { rows: out, renaming: fileRenaming, nameLabel: { file: uiText('files.fileName', 'File name'), folder: uiText('files.folderName', 'Folder name') },
+      click: fileClick, remove: (row: FileRow) => (row.folder !== undefined ? deleteFolder(row.folder) : deleteDoc(row.doc)),
+      rename: fileRename, renameEnd: () => { fileRenaming = null; renderDocList(); } } satisfies FileListModel);
+  }
+  // A click opens a file or folds a folder; a second click on the same row within 400ms (or a double-click) renames
+  // it in place instead, a folder going back to the fold it had before the first click.
+  let fileRenaming: string | null = null; // the key of the row being renamed (FileList)
+  let lastDocClick: { t: number; folder?: string; doc?: string; shut?: boolean } = { t: 0 };
+  function fileClick(row: FileRow, e: MouseEvent | KeyboardEvent) {
+    const now = Date.now(), mouse = e instanceof MouseEvent;
+    if (row.folder !== undefined) {
+      const path = row.folder;
+      if (mouse && !(e.target as Element)?.closest?.('.chev') && (e.detail >= 2 || (lastDocClick.folder === path && now - lastDocClick.t < 400))) {
+        const shut = lastDocClick.folder === path ? lastDocClick.shut! : !!row.shut;
+        lastDocClick = { t: 0 };
+        setFolded(path, shut);
+        renameFolderInList(path);
+        return;
+      }
+      lastDocClick = mouse ? { t: now, folder: path, shut: !!row.shut } : { t: 0 };
+      setFolded(path, !row.shut);
+      return;
+    }
+    const id = row.doc!;
+    if (mouse && (e.detail >= 2 || (lastDocClick.doc === id && now - lastDocClick.t < 400))) {
+      lastDocClick = { t: 0 };
+      renameInList(id);
+      return;
+    }
+    lastDocClick = mouse ? { t: now, doc: id } : { t: 0 };
+    if (id !== state.docId) openDoc(id);
+  }
+  function fileRename(row: FileRow, v: string) {
+    if (row.folder !== undefined) {
+      const parent = pathOf(row.folder).slice(0, -1).join('/');
+      if (v && v !== leafOf(row.folder)) renameFolder(row.folder, joinPath(parent, v));
+      return;
+    }
+    const full = docEntry(row.doc)?.name || row.name;
+    if (v && v !== leafOf(full)) renameDoc(row.doc, joinPath(folderOf(full), v)); // a "/" typed here makes a folder inside this one
   }
   // Move a file into a folder ('' is the top level), keeping its own name; a name taken there gets "copy".
   function moveToFolder(id: any, folder: any) {
@@ -879,27 +935,9 @@ import { runtime as TD } from '../runtime';
     renderDocList();
   }
   function renameFolderInList(path: any) {
-    const li = $(`#docList li[data-folder="${CSS.escape(path)}"]`), nm = li && li.querySelector('.nm');
-    if (!nm) return;
-    const parent = pathOf(path).slice(0, -1).join('/'), old = leafOf(path);
-    const inp = document.createElement('input');
-    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', uiText('files.folderName', 'Folder name')); inp.spellcheck = false;
-    nm.replaceWith(inp);
-    li.classList.add('renaming');
-    let done = false;
-    const finish = (keep: any) => {
-      if (done) return; done = true;
-      const v = inp.value.trim();
-      if (keep && v && v !== old) renameFolder(path, joinPath(parent, v)); else renderDocList();
-    };
-    inp.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-    });
-    inp.addEventListener('blur', () => finish(true));
-    inp.addEventListener('click', (e) => e.stopPropagation());
-    inp.focus(); inp.select();
+    if (!$(`#docList li[data-folder="${CSS.escape(path)}"]`)) return;
+    fileRenaming = 'f:' + path;
+    renderDocList();
   }
   async function newFolder(parent: any) {
     const name = await TD.prompt(uiText('dlg.newFolder.title', 'New Folder'), '', { ok: caption(captions["ui.create"]), placeholder: uiText('files.folderName', 'Folder name') });
@@ -1796,9 +1834,9 @@ import { runtime as TD } from '../runtime';
   }
 
   // ---------------- tools ----------------
-  // the toolbar shows the tool in use: Hand while Space is held on a page or whiteboard (Space-drag pans there)
+  // the toolbar shows the tool in use: Hand while Space is held (Space-drag pans)
   function markTools() {
-    const t = spaceDown && hasHand(state.mode) ? 'hand' : state.tool;
+    const t = spaceDown ? 'hand' : state.tool;
     document.querySelectorAll('#tools button[data-tool]').forEach((b) => b.classList.toggle('active', (b as HTMLElement).dataset.tool === t));
     document.querySelectorAll('#tools button[data-fly]').forEach((b) => b.classList.toggle('active', flyOf(t) === (b as HTMLElement).dataset.fly));
   }
@@ -1842,8 +1880,6 @@ import { runtime as TD } from '../runtime';
     renderOverlay();
   }
 
-  TD.blocks.renderMenu(document.querySelector<HTMLElement>('#fly-blocks .pop-grid')!);
-
   // ---------------- tool flyouts (lines / shapes / misc / arrows / plots) ----------------
   // in PowerPoint's order: straight lines, connectors, curves, then the freeform ones
   const LINE_TOOLS: any[][] = [
@@ -1868,12 +1904,12 @@ import { runtime as TD } from '../runtime';
   const PLAIN_SHAPES: any[][] = [
     ['rect', message('tool.rect', 'Rectangle (R) — plain TikZ rectangle'), '<rect x="6" y="5" width="22" height="14"/>'], ['ellipse', message('tool.ellipse', 'Ellipse (E) — plain TikZ ellipse'), '<ellipse cx="17" cy="12" rx="11" ry="7"/>'],
   ];
-  const btn = (tool: any, title: any, icon: any) => `<button data-pick="${tool}" title="${esc(caption(title))}">${icon}</button>`;
-  const symBtns = (cat: any) => TD.SYM_CATS[cat].map((k: any) => btn('sym:' + k, TD.SYMS[k].name, TD.symIcon(k))).join('');
-  const sec = (title: any, inner: any) => (title ? `<div class="pop-title">${esc(title)}</div>` : '') + `<div class="sym-grid">${inner}</div>`;
-  const lineBtns = (L: any) => L.map(([t, n, d]: any) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join('');
+  // the flyouts' contents as data (src/ui/ToolPanel.svelte): symbol buttons and picture tiles under small titles
+  const sym = (tool: string, title: any, svg: string): ToolSymbol => ({ pick: tool, title: caption(title), svg });
+  const symBtns = (cat: any) => TD.SYM_CATS[cat].map((k: any) => sym('sym:' + k, TD.SYMS[k].name, TD.symIcon(k)));
+  const lineBtns = (L: any[][]) => L.map(([t, n, d]) => sym(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`));
   // the Rectangle and Ellipse buttons show the way they draw now; a mark in the corner says they have a menu
-  const modeBtn = (t: any, n: any) => `<button data-pick="${t}" data-modes="${t}" title="${esc(caption(n))}"><svg viewBox="-4.2 0 28.4 20">${modeRow(t)[3]}</svg><i class="more"></i></button>`;
+  const modeBtn = (t: any, n: any): ToolSymbol => ({ ...sym(t, n, `<svg viewBox="-4.2 0 28.4 20">${modeRow(t)[3]}</svg>`), modes: true });
   // Physics: computed figures (the physics block, one entry per domain), then the drawn symbols
   const PHYS_DOMAINS: any[][] = [
     ['mechanics', message('phys.mechanics', 'Forces on blocks and inclines, pulleys, springs, pendulums, projectiles and linkages'), '<path d="M3 20h25V6z"/><path d="M11 15.5l5.2-2.9-2-3.5L9 12z" class="a1"/>'],
@@ -1883,10 +1919,17 @@ import { runtime as TD } from '../runtime';
     ['spacetime', message('phys.spacetime', 'Minkowski diagrams: moving frames, events, world lines, light cones and intervals'), '<path d="M6 21V3M6 21h22"/><path d="M6 21L24 3" stroke-dasharray="2 2"/><path d="M6 21l6-15M6 21l15-6" class="c1"/>'],
     ['levels', message('phys.levels', 'Energy levels: atomic levels, transitions and line spectra'), '<path d="M5 20h22M5 11h22M5 7.5h22M5 5.5h22"/><path d="M15 7.5V19M13 17l2 2 2-2" class="c1"/>'],
   ];
-  const physDomains = () => `<div class="pop-grid phy-domains">${PHYS_DOMAINS.map(([k, title, d]) => {
+  const physDomains = (): ToolTileSpec[] => PHYS_DOMAINS.map(([k, title, d]) => {
     const D = TD.physics && TD.physics.domains[k];
-    return `<button data-insert="physics:${k}" title="${esc(uiText('phys.computed', '{title}: computed, with an editor', { title: caption(title) }))}"><svg viewBox="0 0 32 24">${d}</svg>${esc(D ? D.label : k)}</button>`;
-  }).join('')}</div>`;
+    return { insert: 'physics:' + k, title: uiText('phys.computed', '{title}: computed, with an editor', { title: caption(title) }), svg: `<svg viewBox="0 0 32 24">${d}</svg>`, label: D ? D.label : k };
+  });
+  // the blocks, then the ones still to come
+  const blockTiles = (): ToolTileSpec[] => [
+    ...TD.blocks.menuEntries().map((b: any) => ({ insert: b.type, title: b.title, svg: b.icon, label: b.label })),
+    { soon: true, title: uiText('ui.tensor.network.coming.soon', 'Tensor network — coming soon'), label: uiText('ui.tensor', 'Tensor'), svg: '<svg viewBox="0 0 32 24"><path d="M2 12h4M12 12h8M26 12h4M9 6V2M23 6V2M9 18v4M23 18v4"/><rect x="5" y="7" width="8" height="10" rx="2"/><rect x="19" y="7" width="8" height="10" rx="2"/></svg>' },
+    { soon: true, title: uiText('ui.string.diagram.coming.soon', 'String diagram — coming soon'), label: uiText('ui.string', 'String'), svg: '<svg viewBox="0 0 32 24"><path d="M9 2v6M23 2v6M16 16v6M9 16c0 3 7 0 7 0"/><rect x="5" y="8" width="22" height="8" rx="1"/></svg>' },
+    { soon: true, title: uiText('ui.braid.and.knot.coming.soon', 'Braid and knot — coming soon'), label: uiText('ui.braid', 'Braid'), svg: '<svg viewBox="0 0 32 24"><path d="M6 2c0 6 10 6 10 10s-10 4-10 10"/><path d="M16 2c0 4-3 5-4.5 6.5M8.5 15.5C7 17 6 18 6 22"/><path d="M26 2v10c0 4-10 4-10 10M19.5 17.5c2-1.5 6.5-2 6.5-5.5"/></svg>' },
+  ];
 
   // the same drawing tools, for block editors that hold plain shapes too (the Physics editor): every tool but
   // images, plots, 3D and blocks. Items are [tool, title, icon svg]; TD.toolType gives the shape type of a tool.
@@ -1904,20 +1947,31 @@ import { runtime as TD } from '../runtime';
     [uiText('fly.blockArrows', 'Block arrows'), symItems('arrow')], [uiText('fly.mechSymbols', 'Mechanics symbols'), symItems('mech')], [uiText('fly.opticsSymbols', 'Optics symbols'), symItems('optics')],
     [uiText('fly.elecSymbols', 'Electrical symbols'), symItems('elec')], [uiText('fly.waveforms', 'Waveforms'), symItems('wave')],
   ];
-  // The flyouts are built once and rebuilt in place when the language changes (open and pinned states live
-  // on the containers and in openFly / flyPinned, which a rebuild leaves alone).
+  // The flyouts' panels, drawn into their homes (#fly-*) and redrawn in place when the language or a draw mode
+  // changes (an open flyout keeps its panel, and the kit's Flyout keeps whether it is open and pinned).
+  function renderFlyPanels() {
+    const panel = (id: string, sections: ToolSection[]) => renderSvelteView($('#' + id), ToolPanel, { sections } satisfies ToolPanelModel);
+    const czLabel = uiText('fly.cz.label', 'Advanced Circuit Block ({code})', { code: '\u0000' }).split('\u0000');
+    panel('fly-lines', [{ title: uiText('fly.lines', 'Lines'), symbols: lineBtns(LINE_TOOLS) }, { title: uiText('fly.freeform', 'Freeform'), symbols: lineBtns(FREE_TOOLS) }]);
+    panel('fly-shapes', [{ title: uiText('fly.rectangles', 'Rectangles'), symbols: symBtns('rect') },
+      { title: uiText('fly.basicShapes', 'Basic shapes'), symbols: [...PLAIN_SHAPES.map(([t, n]) => modeBtn(t, n)), ...symBtns('basic')] },
+      { title: uiText('fly.flowchart', 'Flowchart'), symbols: symBtns('flow') }]);
+    panel('fly-misc', [{ title: uiText('fly.misc', 'Misc'), symbols: [...symBtns('misc'), ...lineBtns(MISC_EXTRA)] }]);
+    panel('fly-arrows', [{ symbols: symBtns('arrow') }]);
+    panel('fly-phys', [{ title: uiText('fly.physTitle', 'Physics figures (experimental)'), warn: uiText('fly.physWarn', 'Results and drawings might not be correct.'), tiles: physDomains(), columns: 3 },
+      { title: uiText('fly.mechSymbols', 'Mechanics symbols'), symbols: symBtns('mech') }, { title: uiText('fly.opticsSymbols', 'Optics symbols'), symbols: symBtns('optics') }]);
+    // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
+    panel('fly-elec', [{ title: uiText('fly.symbols', 'Symbols'), symbols: symBtns('elec') }, { title: uiText('fly.waveforms', 'Waveforms'), symbols: symBtns('wave') },
+      { entry: { insert: 'cz', title: uiText('fly.cz.title', 'A circuit drawn with circuitikz parts: 415 components, wires that snap to pins'), label: [czLabel[0], 'circuitikz', czLabel[1] ?? ''],
+        svg: '<svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>',
+        help: uiText('fly.cz.help', 'Every circuitikz part, wired on a grid and exported as circuitikz.') } }]);
+    panel('fly-blocks', [{ title: uiText('ui.blocks.experimental', 'Blocks (experimental)'), warn: uiText('ui.some.inputs.might.not.be.rendered.correctly', 'Some inputs might not be rendered correctly.'), tiles: blockTiles() }]);
+  }
   let flyBuilt = false;
   onLocale(() => {
     if (flyBuilt) hideModes();
     flyBuilt = true;
-    $('#fly-lines').innerHTML = sec(uiText('fly.lines', 'Lines'), lineBtns(LINE_TOOLS)) + sec(uiText('fly.freeform', 'Freeform'), lineBtns(FREE_TOOLS));
-    $('#fly-shapes').innerHTML = sec(uiText('fly.rectangles', 'Rectangles'), symBtns('rect')) + sec(uiText('fly.basicShapes', 'Basic shapes'), PLAIN_SHAPES.map(([t, n]) => modeBtn(t, n)).join('') + symBtns('basic')) + sec(uiText('fly.flowchart', 'Flowchart'), symBtns('flow'));
-    $('#fly-misc').innerHTML = sec(uiText('fly.misc', 'Misc'), symBtns('misc') + MISC_EXTRA.map(([t, n, d]) => btn(t, n, `<svg viewBox="0 0 34 24">${d}</svg>`)).join(''));
-    $('#fly-arrows').innerHTML = sec('', symBtns('arrow'));
-    $('#fly-phys').innerHTML = `<div class="pop-title">${esc(uiText('fly.physTitle', 'Physics figures (experimental)'))}<span class="pop-warn">${esc(uiText('fly.physWarn', 'Results and drawings might not be correct.'))}</span></div>` + physDomains() + sec(uiText('fly.mechSymbols', 'Mechanics symbols'), symBtns('mech')) + sec(uiText('fly.opticsSymbols', 'Optics symbols'), symBtns('optics'));
-    // electrical: the common symbols and waveforms here, the full circuitikz library in the Circuit block
-    $('#fly-elec').innerHTML = sec(uiText('fly.symbols', 'Symbols'), symBtns('elec')) + sec(uiText('fly.waveforms', 'Waveforms'), symBtns('wave'))
-      + `<div class="pop-grid cz-entry"><button data-insert="cz" title="${esc(uiText('fly.cz.title', 'A circuit drawn with circuitikz parts: 415 components, wires that snap to pins'))}"><svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg><span>${esc(uiText('fly.cz.label', 'Advanced Circuit Block ({code})', { code: '\u0000' })).replace('\u0000', '<code>circuitikz</code>')}</span></button><div class="help">${esc(uiText('fly.cz.help', 'Every circuitikz part, wired on a grid and exported as circuitikz.'))}</div></div>`;
+    renderFlyPanels();
   });
   function flyOf(t: any) {
     if (/^(solid|prim3d|revolve)\b/.test(t)) return 'figures3d';
@@ -1931,93 +1985,52 @@ import { runtime as TD } from '../runtime';
     if (t.startsWith('sym:')) { const c = (TD.SYMS[t.slice(4)] || {}).cat; return c === 'elec' || c === 'wave' ? 'elec' : c === 'misc' ? 'misc' : c === 'arrow' ? 'arrows' : c === 'mech' || c === 'optics' ? 'phys' : 'shapes'; }
     return null;
   }
-  const flyEl = (name: any) => $(name === 'insertPop' ? '#insertPop' : '#fly-' + name);
-  let openFly: any = null;
-  function showFly(name: any) {
-    if (openFly && openFly !== name) flyEl(openFly).hidden = true;
-    openFly = name; closeCtx();
-    const el = flyEl(name), b = $(`#tools [data-fly="${name}"]`).getBoundingClientRect();
-    el.hidden = false;
-    el.style.left = b.right + 6 + 'px';
-    el.style.top = Math.max(8, Math.min(b.top - 6, innerHeight - el.offsetHeight - 10)) + 'px';
-    document.querySelectorAll('#tools [data-fly]').forEach((x) => x.classList.toggle('open', (x as HTMLElement).dataset.fly === name));
-  }
-  function hideFly() {
-    clearTimeout(flyTimer); flyPinned = false;
-    hideModes();
-    if (!openFly) return;
-    flyEl(openFly).hidden = true; openFly = null;
-    document.querySelectorAll('#tools [data-fly]').forEach((x) => x.classList.remove('open'));
-  }
-  // A mouse resting on a tool group opens its menu (after a moment, so sweeping down the rail doesn't flash
-  // every one); it closes once the mouse has been off both the button and the menu for a moment, which
-  // leaves time to cross the gap. A click opens it and keeps it open (pinned) until a choice, a click
-  // elsewhere, Escape or a second click; touch and pen open it by tapping, as before.
+  // The tool groups are the kit's Flyouts (src/ui/AppShell.svelte): hover, pin, Esc and a press outside are theirs.
+  // Their panels (#fly-*, #insertPop) are built here and kept in a hidden home while closed. Closing one closes the
+  // draw-mode menu with it.
+  const hideFly = () => { closeFlyouts(); hideModes(); };
+  onFlyoutClose(() => hideModes());
+  // the hover timings the menus that open on hover share (the draw-mode menu, the file sort menu)
   const HOVER_OPEN = 120, HOVER_CLOSE = 280;
-  let flyTimer = 0, flyPinned = false;
-  const flyHover = (fn?: any, ms?: any) => { clearTimeout(flyTimer); flyTimer = fn ? setTimeout(fn, ms) : 0; };
-  document.querySelectorAll('#tools [data-fly]').forEach((b) => {
-    const name = (b as HTMLElement).dataset.fly;
-    (b as HTMLElement).onclick = (e: any) => {
-      e.stopPropagation(); flyHover();
-      if (openFly === name && flyPinned) { hideFly(); return; }
-      showFly(name); flyPinned = true;
-    };
-    (b as HTMLElement).onpointerenter = (e: any) => {
-      if (e.pointerType !== 'mouse') { if (openFly && openFly !== name) showFly(name); return; }
-      if (openFly === name) { flyHover(); return; }
-      // moving from one open menu's button to the next switches at once
-      flyHover(() => { TD.tooltip && TD.tooltip.hide(); showFly(name); flyPinned = false; }, openFly ? 0 : HOVER_OPEN);
-    };
-    (b as HTMLElement).onpointerleave = (e: any) => {
-      if (e.pointerType !== 'mouse') return;
-      if (openFly !== name) { flyHover(); return; }
-      if (!flyPinned) flyHover(hideFly, HOVER_CLOSE);
-    };
-  });
-  document.querySelectorAll('#tools ~ .flyout').forEach((f) => {
-    f.addEventListener('pointerenter', (e) => { if ((e as any).pointerType === 'mouse') flyHover(); });
-    f.addEventListener('pointerleave', (e) => { if ((e as any).pointerType === 'mouse' && openFly && !flyPinned) flyHover(hideFly, HOVER_CLOSE); });
-  });
   document.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('.flyout [data-pick], .flyout [data-insert]');
+    const b = (e.target! as Element).closest('.fly-panel [data-pick], .fly-panel [data-insert]');
     if (!b) return;
     hideFly();
     if (state.mode === 'document') setMode('diagram');
     setTool((b as HTMLElement).dataset.pick || (b as HTMLElement).dataset.insert);
   });
-  document.addEventListener('pointerdown', (e) => {
-    if (openFly && !(e.target! as Element).closest('.flyout, #modeMenu') && !(e.target! as Element).closest('#tools [data-fly]')) hideFly();
-  });
 
   // The draw-mode menu of the Rectangle and Ellipse buttons: it opens beside the button on hover (or on a
   // right-click), lists the modes with the current one ticked, and a choice sets the mode and takes the tool.
   // It belongs to the open flyout: being over either keeps both open.
-  const modeMenu = document.createElement('div');
-  modeMenu.id = 'modeMenu'; modeMenu.className = 'ctx mode-menu'; modeMenu.hidden = true;
-  modeMenu.setAttribute('role', 'menu');
-  document.body.appendChild(modeMenu);
-  const TICK = '<svg class="ck" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>';
   let modeTimer = 0, modeFor = '';
-  function hideModes() { clearTimeout(modeTimer); modeMenu.hidden = true; modeFor = ''; document.querySelectorAll('[data-modes].open').forEach((x) => x.classList.remove('open')); }
-  function showModes(b: HTMLElement) {
+  function hideModes() { clearTimeout(modeTimer); if (modeFor) closeContextMenu(); }
+  function showModes(b: HTMLElement, focus = false) {
     const tool = b.dataset.modes!, cur = drawMode(tool);
+    const menu = openContextMenu(DRAW_MODES[tool].map(([m, label, hint, icon]) => ({ act: `${tool}:${m}`, label: caption(label), title: caption(hint), svg: icon, checked: m === cur })), 0, 0, (act) => {
+      const [t, m] = act.split(':');
+      setDrawMode(t, m);
+      hideFly();
+      if (state.mode === 'document') setMode('diagram');
+      setTool(t);
+    }, { id: 'modeMenu', class: 'mode-menu', below: b.getBoundingClientRect(), owner: b, focus, minWidth: 0, label: uiText('mode.menu.aria', '{name} drawing', { name: typeName(tool) }),
+      onclose: () => { clearTimeout(modeTimer); modeFor = ''; b.classList.remove('open'); } });
     modeFor = tool;
-    modeMenu.setAttribute('aria-label', uiText('mode.menu.aria', '{name} drawing', { name: typeName(tool) }));
-    modeMenu.innerHTML = DRAW_MODES[tool].map(([m, label, hint, icon]) =>
-      `<button class="ctx-item" role="menuitemradio" aria-checked="${m === cur}" data-mode="${tool}:${m}" title="${esc(caption(hint))}"><svg viewBox="0 0 20 20">${icon}</svg><span class="lb">${esc(caption(label))}</span>${m === cur ? TICK : '<span class="ck"></span>'}</button>`).join('');
-    modeMenu.hidden = false;
-    // below the button, its left edge on the button's; kept on screen
-    const r = b.getBoundingClientRect(), w = modeMenu.offsetWidth, h = modeMenu.offsetHeight;
-    modeMenu.style.left = Math.max(8, Math.min(r.left - 5, innerWidth - w - 8)) + 'px';
-    modeMenu.style.top = (r.bottom + 4 + h > innerHeight - 8 ? r.top - 4 - h : r.bottom + 4) + 'px';
-    document.querySelectorAll('[data-modes]').forEach((x) => x.classList.toggle('open', x === b));
+    b.classList.add('open');
+    // it belongs to the open flyout: being over either keeps both open
+    menu?.addEventListener('pointerenter', () => { clearTimeout(modeTimer); holdFlyout(); });
+    menu?.addEventListener('pointerleave', (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return;
+      const to = e.relatedTarget as Element | null;
+      if (to?.closest?.('#fly-shapes')) { if (!to.closest('[data-modes]')) modeTimer = setTimeout(hideModes, HOVER_CLOSE) as any; return; }
+      modeTimer = setTimeout(hideModes, HOVER_CLOSE) as any;
+      releaseFlyout();
+    });
   }
   function setDrawMode(tool: string, m: string) {
     drawModes[tool] = m;
     try { localStorage.setItem(MODES_KEY, JSON.stringify(drawModes)); } catch (e: any) { /* storage blocked */ }
-    const b = $(`#fly-shapes [data-modes="${tool}"] svg`);
-    if (b) b.innerHTML = modeRow(tool)[3];
+    renderFlyPanels(); // the button shows the new way
   }
   $('#fly-shapes').addEventListener('pointerover', (e: any) => {
     if (e.pointerType !== 'mouse') return;
@@ -2028,26 +2041,8 @@ import { runtime as TD } from '../runtime';
   });
   $('#fly-shapes').addEventListener('contextmenu', (e: any) => {
     const b = e.target.closest('[data-modes]');
-    if (b) { e.preventDefault(); showModes(b); }
+    if (b) { e.preventDefault(); showModes(b, true); }
   });
-  modeMenu.addEventListener('pointerenter', () => { clearTimeout(modeTimer); flyHover(); });
-  modeMenu.addEventListener('pointerleave', (e: any) => {
-    if (e.pointerType !== 'mouse') return;
-    const to = e.relatedTarget as Element | null;
-    if (to && to.closest && to.closest('#fly-shapes')) { if (!to.closest('[data-modes]')) modeTimer = setTimeout(hideModes, HOVER_CLOSE) as any; return; }
-    modeTimer = setTimeout(hideModes, HOVER_CLOSE) as any;
-    if (openFly && !flyPinned) flyHover(hideFly, HOVER_CLOSE);
-  });
-  modeMenu.addEventListener('click', (e: any) => {
-    const b = e.target.closest('[data-mode]');
-    if (!b) return;
-    const [tool, m] = b.dataset.mode.split(':');
-    setDrawMode(tool, m);
-    hideFly();
-    if (state.mode === 'document') setMode('diagram');
-    setTool(tool);
-  });
-  document.addEventListener('pointerdown', (e) => { if (!modeMenu.hidden && !(e.target as Element).closest('#modeMenu, .flyout')) hideModes(); });
 
   // ---------------- image insert ----------------
   // A picture goes in at most 8 cm wide, centred on `at` (the middle of the view when not given), under a file
@@ -2849,9 +2844,9 @@ import { runtime as TD } from '../runtime';
   { let raf = 0; new ResizeObserver(() => { cancelAnimationFrame(raf); if (!inTool() && state.mode !== 'document') raf = requestAnimationFrame(render); }).observe(svg); }
 
   // ---------------- inline text editor ----------------
-  const ed = $('#inlineEditor'), mlBox = $('#mlEditor');
-  let ml: any = null; // the MathLive editor while editing in MathLive mode (TD.input), else the textarea is used
-  const edBox = () => (editing && editing.ml ? mlBox : ed);
+  // The kit's TextPopup (src/ui/kit/TextPopup.svelte) in its roomy form, in #stage under what is edited: a LaTeX
+  // field or MathLive, as the Text input setting says (quantikz code is always LaTeX).
+  let textPop: TextPopupHandle | null = null;
   function editAnchor() {
     const s = byId(editing.id);
     if (!s) return null;
@@ -2860,27 +2855,23 @@ import { runtime as TD } from '../runtime';
     const L = TYPES[s.type].labelAt(s);
     return { x: L.P.x, y: L.P.y + 12 };
   }
-  function positionEditor() {
-    const a = editAnchor();
-    if (!a) return;
-    const sp = toScreen(a), r = stageSize(), box = edBox();
-    // keep the whole box on the stage (it is centred on the anchor by translateX(-50%))
-    const w = box.offsetWidth, h = box.offsetHeight;
-    box.style.left = Math.max(w / 2 + 8, Math.min(sp.x, r.w - w / 2 - 8)) + 'px';
-    box.style.top = Math.max(8, Math.min(sp.y + 10, r.h - h - 8)) + 'px';
+  // the box's top centre on the stage, 10px under what is edited (TextPopup keeps the whole box on the stage)
+  function editAt(): [number, number] {
+    const a = editing && editAnchor();
+    if (!a) return [0, 0];
+    const sp = toScreen(a);
+    return [sp.x, sp.y + 10];
   }
-  // Roomy by default: about 40 characters wide (or the paragraph frame's width, if wider), and
+  const positionEditor = () => textPop?.place();
+  // Roomy by default: about 40 characters wide (or the paragraph frame's width at this zoom, if wider), and
   // growing with the text up to ~12 lines before it scrolls.
-  function sizeEditor() {
+  function editWidth() {
     const s = editing && byId(editing.id);
-    if (!s) return;
     let w = 360;
+    if (!s) return w;
     if (editing.field === 'text' && TD.isParaText(s)) w = Math.max(w, Math.min(640, s.tw * state.view.zoom));
     if (editing.field === 'src') w = 520;
-    if (editing.ml) { mlBox.style.width = w + 'px'; return; }
-    ed.style.width = w + 'px';
-    ed.style.height = 'auto';
-    ed.style.height = Math.min(Math.max(ed.scrollHeight + 2, ed.classList.contains('para') ? 120 : 76), 260) + 'px';
+    return w;
   }
   // All editor entry points share the same transaction and block-owned placement rules.
   function openBlock(id: any) {
@@ -2898,59 +2889,34 @@ import { runtime as TD } from '../runtime';
   function startEdit(id: any, field: any, init?: any) {
     const s = byId(id);
     if (!s) return;
-    if (TD.input && TD.input.mode === 'mathlive' && field !== 'src') { startEditML(s, field, init); return; }
+    if (editing) finishEdit();
     begin();
-    editing = { id, field };
-    if (init != null && !s[field]) { s[field] = ''; ed.value = init; }
-    else ed.value = s[field] || '';
-    ed.style.display = 'block';
+    const me = (editing = { id, field });
+    let text = s[field] || '';
+    if (init != null && !s[field]) { s[field] = ''; text = init; } // a new maths text opens as $|$; the shape stays empty until typed in
     const code = field === 'src', para = code || (field === 'text' && TD.isParaText(s));
-    ed.classList.toggle('para', para);
-    ed.classList.toggle('code', code);
-    ed.placeholder = field === 'label' ? uiText('ed.label', 'Label, e.g. $r$ — Enter to finish')
-      : code ? uiText('ed.code', 'quantikz code — Enter for a new line, {mod}Enter or Esc to finish', { mod: isMac ? '⌘' : 'Ctrl+' })
-      : para ? uiText('ed.para', 'Paragraph, $math$ — Enter for a new line, {mod}Enter or Esc to finish', { mod: isMac ? '⌘' : 'Ctrl+' }) : caption(captions["ui.text.math.enter.to.finish.shift.enter.newline"]);
-    sizeEditor();
-    positionEditor();
-    // select the existing text for replacement, unless typing already started before this frame
-    const v0 = ed.value;
-    requestAnimationFrame(() => { ed.focus(); if (ed.value !== v0) return; if (code) { ed.setSelectionRange(ed.value.length, ed.value.length); ed.scrollTop = ed.scrollHeight; } else if (init != null && ed.value === init) ed.setSelectionRange(1, 1); else ed.select(); });
-  }
-  // MathLive mode: the same box, with one interactive maths field per line (see src/ui/services/mathinput.ts)
-  async function startEditML(s: any, field: any, init: any) {
-    begin();
-    const me = (editing = { id: s.id, field, ml: true });
-    if (init != null && !s[field]) s[field] = '';
-    const para = field === 'text' && TD.isParaText(s);
-    mlBox.classList.toggle('para', para);
-    mlBox.innerHTML = `<div class="ml-load">${esc(uiText('ed.loadingMathLive', 'Loading MathLive…'))}</div>`;
-    mlBox.style.display = 'block';
-    sizeEditor(); positionEditor();
-    try { await TD.input.load(); }
-    catch (err: any) { // offline before it was ever cached, say: fall back to the LaTeX field for this edit
-      if (editing !== me) return;
-      editing = null; mlBox.style.display = 'none';
-      showHint(uiText('hint.mathliveFailed', "MathLive couldn't load, so this edit uses LaTeX"), 2500);
-      TD.input.set('latex'); startEdit(s.id, field, init);
-      return;
-    }
-    if (editing !== me) return; // finished while loading
-    const text = s[field] || '';
-    ml = TD.input.mount(mlBox, {
-      text, para, prose: field === 'text' && init == null,
-      start: text ? 'end' : init != null || field === 'label' ? 'math' : 'text',
-      onInput: editInput, onDone: finishEdit,
+    const mod = isMac ? '⌘' : 'Ctrl+';
+    textPop = openTextPopup($('#stage'), {
+      text, kind: code ? 'code' : para ? 'para' : 'line', roomy: true,
+      placeholder: field === 'label' ? uiText('ed.label', 'Label, e.g. $r$ — Enter to finish')
+        : code ? uiText('ed.code', 'quantikz code — Enter for a new line, {mod}Enter or Esc to finish', { mod })
+        : para ? uiText('ed.para', 'Paragraph, $math$ — Enter for a new line, {mod}Enter or Esc to finish', { mod }) : caption(captions["ui.text.math.enter.to.finish.shift.enter.newline"]),
+      caret: init != null && text === init ? 1 : undefined,
+      // MathLive: a text box's new lines are prose; a label, or the maths tool's text, starts in maths
+      prose: field === 'text' && init == null, start: init != null || field === 'label' ? 'math' : 'text',
+      width: editWidth, at: editAt,
+      onInput: editInput,
+      onDone: () => { if (editing === me) finishEdit(); },
+      onFallback: () => showHint(uiText('hint.mathliveFailed', "MathLive couldn't load, so this edit uses LaTeX"), 2500),
     });
-    sizeEditor(); positionEditor();
   }
   function finishEdit() {
     if (!editing) return;
     const { id } = editing;
     editing = null;
-    if (ml) { const m = ml; ml = null; m.destroy(); }
-    mlBox.style.display = 'none';
-    ed.blur();
-    ed.style.display = 'none';
+    const pop = textPop;
+    textPop = null;
+    pop?.close(); // fades out; its onDone finds nothing left to finish
     const s = byId(id);
     if (s && s.type === 'text' && !s.text.trim()) removeShape(id);
     commit();
@@ -2961,18 +2927,10 @@ import { runtime as TD } from '../runtime';
     const s = byId(editing.id);
     if (!s) return;
     TD.textHold(s, () => { s[editing.field] = v; });
-    render(); sizeEditor(); positionEditor();
+    render(); positionEditor();
     const ta = document.querySelector(`#props [data-key="${editing.field}"], #props [data-panel] [data-p="${editing.field}"]`);
     if (ta) (ta as HTMLInputElement).value = v;
   }
-  ed.addEventListener('input', () => editInput(ed.value));
-  ed.addEventListener('keydown', (e: any) => {
-    e.stopPropagation();
-    const para = ed.classList.contains('para');
-    const done = e.key === 'Escape' || (e.key === 'Enter' && (para ? e.metaKey || e.ctrlKey : !e.shiftKey));
-    if (done) { e.preventDefault(); finishEdit(); }
-  });
-  ed.addEventListener('blur', () => setTimeout(() => { if (editing && document.activeElement !== ed) finishEdit(); }, 0));
 
   // ---------------- polyline points ----------------
   // Insert a point in the middle of segment i (i → i+1).
@@ -3042,7 +3000,7 @@ import { runtime as TD } from '../runtime';
     { key: 'fill', label: message('prop.fill', 'Fill'), type: 'color', nullable: true, fills: true },
     { key: 'width', label: message('prop.width', 'Line width'), type: 'width', min: 0.25, step: 0.25, unit: 'px' },
     { key: 'dash', label: message('prop.dash', 'Dash'), type: 'dash' },
-    { key: 'route', label: message('prop.route', 'Route'), type: 'icons', icons: [['straight', message('prop.route.straight', 'Straight'), 'M3 16L17 4'], ['elbow', message('prop.route.elbow', 'Elbow: right angles'), 'M3 15h7V5h7'], ['curved', message('prop.route.curved', 'Curved'), 'M3 15C11 15 9 5 17 5']] },
+    { key: 'route', label: message('prop.route', 'Route'), type: 'icons', icons: [['straight', message('prop.route.straight', 'Straight'), 'routeStraight'], ['elbow', message('prop.route.elbow', 'Elbow: right angles'), 'routeElbow'], ['curved', message('prop.route.curved', 'Curved'), 'routeCurved']] },
     { key: 'dir', label: message('prop.dir', 'Direction'), type: 'icons' },
     { key: 'startTip', label: message('prop.startTip', 'Start tip'), type: 'tip' },
     { key: 'endTip', label: message('prop.endTip', 'End tip'), type: 'tip' },
@@ -3106,13 +3064,13 @@ import { runtime as TD } from '../runtime';
   function propsEl0() { return $('#props'); }
   const fromUnit = (v: any, k: any) => (k === 'deg' ? v : k === 'y' ? -v * PX : v * PX);
 
-  // Four bars, alternating long/short, drawn heavy so they read like the usual paragraph-align icons.
-  const ALIGNS: any[][] = [['left', message('align.left', 'Align Left'), 'M3 4h14M3 8h9M3 12h14M3 16h9'], ['center', message('align.center', 'Align Centre'), 'M3 4h14M5.5 8h9M3 12h14M5.5 16h9'],
-    ['right', message('align.right', 'Align Right'), 'M3 4h14M8 8h9M3 12h14M8 16h9'], ['justify', message('align.justify', 'Justify'), 'M3 4h14M3 8h14M3 12h14M3 16h14']];
+  // Four bars, alternating long/short, drawn heavy so they read like the usual paragraph-align icons (kit icons).
+  const ALIGNS: any[][] = [['left', message('align.left', 'Align Left'), 'alignLeft'], ['center', message('align.center', 'Align Centre'), 'alignCentre'],
+    ['right', message('align.right', 'Align Right'), 'alignRight'], ['justify', message('align.justify', 'Justify'), 'alignJustify']];
   // A rule for the edge the text holds to, with an arrow towards it (both arrows for middle)
-  const VALIGNS: any[][] = [['top', message('valign.top', 'Align Top: new lines grow the box downward'), 'M3 3h14M10 17V7M6.5 10.5 10 7l3.5 3.5'],
-    ['middle', message('valign.middle', 'Align Middle: new lines grow the box both ways'), 'M3 10h14M10 2v5M7.5 4.5 10 7l2.5-2.5M10 18v-5M7.5 15.5 10 13l2.5 2.5'],
-    ['bottom', message('valign.bottom', 'Align Bottom: new lines grow the box upward'), 'M3 17h14M10 3v10M6.5 9.5 10 13l3.5-3.5']];
+  const VALIGNS: any[][] = [['top', message('valign.top', 'Align Top: new lines grow the box downward'), 'valignTop'],
+    ['middle', message('valign.middle', 'Align Middle: new lines grow the box both ways'), 'valignMiddle'],
+    ['bottom', message('valign.bottom', 'Align Bottom: new lines grow the box upward'), 'valignBottom']];
   function fieldModel(p: any, v: any, labelOverride?: any): StyleModel {
     const model = {
       sliderDefault: p.type === 'range' ? (p.key === 'labelPos' ? 0.5 : p.key === 'opacity' ? 1 : symParams(selected()[0] || {})?.[p.key] ?? ({ phase: 0, duty: 50, fire: 60 } as Record<string, number>)[p.key]) : undefined,
@@ -3122,24 +3080,25 @@ import { runtime as TD } from '../runtime';
       options: p.type === 'size' ? [...sizeOpts, ['custom', uiText('prop.size.custom', 'Custom px…')]] : (p.options || []).map((o: any) => [o[0], caption(o[1])]),
       checked: !!v, italic: !!p.italic, px: p.type === 'size' ? Math.round(TD.sizePx(v ?? 'normalsize') * 10) / 10 : 0,
       range: r2(v), radioLabel: p.type === 'align' ? caption(captions["ui.align"]) : p.type === 'valign' ? uiText('prop.valign.radio', 'Vertical alignment') : caption(p.label),
-      radios: (p.type === 'align' ? ALIGNS : p.type === 'valign' ? VALIGNS : (p.icons || []) as any[][]).map(([key, label, path]) => ({ key, path, on: key === v,
+      radios: (p.type === 'align' ? ALIGNS : p.type === 'valign' ? VALIGNS : (p.icons || []) as any[][]).map(([key, label, icon]) => ({ key, icon, on: key === v,
         disabled: p.type === 'align' && key === 'justify' && !p.wraps,
         label: p.type === 'align' && key === 'justify' && !p.wraps ? uiText('align.justify.boxOnly', 'Justify (paragraph boxes only: drag with the text tool)') : caption(label) })),
       colour: { none: !v, nullable: !!p.nullable, fills: !!p.fills, label: p.type === 'color' ? TD.fillLabel(v) : '', css: p.type === 'color' ? TD.fillCss(v) : '' },
-      preview: p.type === 'dash' ? dashPreview(v, 1.2) : p.type === 'tip' ? tipPreview(v || 'none') : p.type === 'shaft' ? shaftPreview(v || 'single') : '',
-      previewName: p.type === 'dash' ? dashName(v) : p.type === 'tip' ? tipName(v) : p.type === 'shaft' ? (TD.SHAFTS.find((x: any) => x[0] === v) || TD.SHAFTS[0])[1] : '',
+      drawn: drawnPicker(p.type, p.key, v),
     };
+    if (p.type === 'tip') model.value = v || 'none';
+    else if (p.type === 'shaft') model.value = v || 'single';
+    else if (p.type === 'dash') model.value = v || 'solid';
     return model;
   }
 
   const DIR_NAMES: Record<string, any> = { hh: message('dir.hh', 'Sideways at both ends'), vv: message('dir.vv', 'Up or down at both ends'), hv: message('dir.hv', 'Sideways, then up or down'), vh: message('dir.vh', 'Up or down, then sideways') };
-  const DIR_ELBOW = [['hh', DIR_NAMES.hh, 'M2 15h8V5h8'], ['vv', DIR_NAMES.vv, 'M4 2v8h12v8'], ['hv', DIR_NAMES.hv, 'M2 4h14v14'], ['vh', DIR_NAMES.vh, 'M4 2v14h14']];
-  const DIR_CURVED = [['hh', DIR_NAMES.hh, 'M2 15C11 15 9 5 18 5'], ['vv', DIR_NAMES.vv, 'M4 2C4 11 16 9 16 18'], ['hv', DIR_NAMES.hv, 'M2 4C12 4 16 8 16 18'], ['vh', DIR_NAMES.vh, 'M4 2C4 12 8 16 18 16']];
+  const DIR_ELBOW = [['hh', DIR_NAMES.hh, 'dirElbowHH'], ['vv', DIR_NAMES.vv, 'dirElbowVV'], ['hv', DIR_NAMES.hv, 'dirElbowHV'], ['vh', DIR_NAMES.vh, 'dirElbowVH']];
+  const DIR_CURVED = [['hh', DIR_NAMES.hh, 'dirCurvedHH'], ['vv', DIR_NAMES.vv, 'dirCurvedVV'], ['hv', DIR_NAMES.hv, 'dirCurvedHV'], ['vh', DIR_NAMES.vh, 'dirCurvedVH']];
   const TIP_KEYS = ['startTip', 'endTip', 'midTip', 'bpTip'];
-  const tipName = (v: any) => (TD.TIPS.find((t: any) => t[0] === v) || TD.TIPS[0])[1];
   function tipPreview(v: any) {
     const t = TD.tip(v, { x: 40, y: 6 }, { x: 1, y: 0 }, 1.2, 'currentColor');
-    return `<svg class="dprev tprev" viewBox="0 0 48 12"><path d="M4 6H${r2(40 - t.back)}" stroke="currentColor" stroke-width="1.2" fill="none"/>${t.svg}</svg>`;
+    return `<svg class="dprev tprev" viewBox="0 0 48 12"><path d="M4 6H${r2(40 - t.back)}" stroke="currentColor" stroke-width="1.2" fill="none"/>${t.svg.replaceAll('fill="#fff"', 'fill="none"')}</svg>`; // open tips: hollow on a dark menu too
   }
   function shaftPreview(v: any) {
     const s = { type: 'line', x1: 3, y1: 7, x2: 57, y2: 7, stroke: '#000000', width: 1, dash: 'solid', startTip: 'none', endTip: 'none', midTip: 'none', shaft: v, cross: 'none', opacity: 1 };
@@ -3153,57 +3112,41 @@ import { runtime as TD } from '../runtime';
     (s.type === 'sym' && (SYM_XF.has(k) || !!(symParams(s) && k in symParams(s)))) || (TD.LINEISH.has(s.type) && k in TICK_KEYS && keyVal(s, 'shaft') === 'ticks'));
   // text with no alignment set: centred lines, or left in a wrapping box
   const keyVal = (s: any, k: any) => (s.type === 'line' && k === 'route' ? TD.routeOf(s) : s.type === 'line' && k === 'dir' ? TD.routeDir(s) : undefined) ?? s[k] ?? (k === 'hatchWidth' && symParams(s)?.hatchWidth != null ? s.width ?? 1 : undefined) ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
-  const dashName = (v: any) => (TD.DASHES.find((d: any) => d[0] === v) || [0, TD.dashPat(v) ? 'Custom' : 'Solid'])[1];
   function dashPreview(v: any, w: any) {
     const da = TD.dashArray(v, w);
     return `<svg class="dprev" viewBox="0 0 48 8" preserveAspectRatio="none"><path d="M1 4H47" stroke="currentColor" stroke-width="${w}"${da ? ` stroke-dasharray="${da}"` : ''}/></svg>`;
   }
-  // width / dash dropdowns
-  const ddPop = document.createElement('div');
-  ddPop.className = 'popover ddpop'; ddPop.hidden = true;
-  document.body.appendChild(ddPop);
-  let ddAnchor: any = null;
-  function closeDd() { ddPop.hidden = true; ddAnchor = null; }
-  function openDd(btn: any) {
-    if (ddAnchor === btn) { closeDd(); return; }
-    ddAnchor = btn;
-    const kind = btn.dataset.dd, target = $('#props .sec[data-target]')?.dataset.target;
-    const curS = selected().find((s: any) => hasKey(s, kind));
-    const cur = target === 'defaults' ? state.defaults[kind] : curS && keyVal(curS, kind);
-    if (TIP_KEYS.includes(kind)) {
-      ddPop.innerHTML = `<div class="tipgrid">${TD.TIPS.map(([k, n]: any) => `<button type="button" data-ddv="${k}" class="${k === (cur || 'none') ? 'on' : ''}" title="${n}">${k === 'none' ? `<span class="none">${esc(caption(captions["ui.none"]))}</span>` : tipPreview(k)}</button>`).join('')}</div>`;
-    } else if (kind === 'shaft') {
-      ddPop.innerHTML = TD.SHAFTS.map(([k, n]: any) => `<button type="button" data-ddv="${k}" class="${k === (cur || 'single') ? 'on' : ''}">${shaftPreview(k)}<span>${n}</span></button>`).join('');
-    } else if (kind === 'width' || kind === 'hatchWidth') {
-      ddPop.innerHTML = TD.WIDTHS.map((w: any) => `<button type="button" data-ddv="${w}" class="${w === cur ? 'on' : ''}"><svg viewBox="0 0 60 10"><path d="M2 5H58" stroke="currentColor" stroke-width="${w}"/></svg><span>${w} px</span><i>${r2(w * TD.PT_PER_PX)}pt</i></button>`).join('');
-    } else {
-      const custom = TD.dashPat(cur) && !TD.DASHES.some((d: any) => d[0] === cur);
-      ddPop.innerHTML = TD.DASHES.map(([k, n]: any) => `<button type="button" data-ddv="${k}" class="${k === cur ? 'on' : ''}">${dashPreview(k, 1.5)}<span>${n}</span></button>`).join('') +
-        `<div class="dd-custom${custom ? ' on' : ''}"><label>${esc(uiText('dd.custom', 'Custom…'))}</label><input data-ddcustom placeholder="on off … (pt)" value="${custom ? esc(cur.slice(2)) : ''}" title="${esc(uiText('dd.dash.title', 'Dash lengths in pt, e.g. 4 2 or 6 2 1 2'))}"></div>`;
-    }
-    ddPop.hidden = false;
-    const r = btn.getBoundingClientRect(), w = ddPop.offsetWidth, h = ddPop.offsetHeight;
-    ddPop.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
-    ddPop.style.top = (r.bottom + 4 + h > innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4) + 'px';
-  }
-  function pickDd(kind: any, v: any) {
-    applyProp(kind, v, true);
-    closeDd();
+  // The drawn pickers in the properties panel (dash, shaft, arrow tips, width presets): the kit's Select, its options
+  // drawn; a pick comes back as the select's change (readField), a typed dash through `custom`.
+  // renderProps builds the panel anew; a pick from a drawn picker re-renders it (the closed box shows the new drawing),
+  // so focus goes to the new select for the same key, opened-by-pointer (no focus ring) if the old one was
+  function renderPropsKeepPicker(old: HTMLElement | null) {
+    const key = old?.dataset.key, attached = !!old?.classList.contains('attached'), had = !!old && document.activeElement === old;
+    const byPointer = !!old && 'byPointer' in old.dataset; // read first: removing the old select (focusout) clears it
     renderProps();
+    if (!key) return;
+    const next = $('#props').querySelector(`select[data-key="${CSS.escape(key)}"]${attached ? '.attached' : ':not(.attached)'}`) as HTMLElement | null;
+    const at = document.activeElement;
+    if (!next || !(had || !at || at === document.body || at.closest('.selmenu'))) return; // not if the person has moved on
+    if (byPointer) next.dataset.byPointer = '';
+    next.focus({ preventScroll: true });
   }
-  ddPop.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-ddv]');
-    if (!b || !ddAnchor) return;
-    const kind = ddAnchor.dataset.dd;
-    pickDd(kind, (kind === 'width' || kind === 'hatchWidth') ? parseFloat((b as HTMLElement).dataset.ddv!) : (b as HTMLElement).dataset.ddv);
-  });
-  ddPop.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeDd(); return; }
-    if (e.key !== 'Enter' || !(e.target! as Element).hasAttribute('data-ddcustom')) return;
-    const nums = (e.target! as HTMLInputElement).value.trim().split(/[\s,]+/).map(Number).filter((n: any) => isFinite(n) && n >= 0);
-    if (nums.length && nums.some((n: any) => n > 0)) pickDd('dash', 'p:' + nums.join(' '));
-  });
-  document.addEventListener('pointerdown', (e) => { if (!ddPop.hidden && !ddPop.contains((e.target as Node)) && !(e.target! as Element).closest('[data-dd]')) closeDd(); }, true);
+  function drawnPicker(type: string, key: string, v: any): StyleModel['drawn'] {
+    if (type === 'tip') return { title: uiText('dd.tip.title', 'Arrow tip'), columns: 3,
+      options: TD.TIPS.map(([k, n]: any) => ({ value: k, label: n, svg: k === 'none' ? `<span class="none">${esc(caption(captions['ui.none']))}</span>` : tipPreview(k) })) };
+    if (type === 'shaft') return { title: uiText('style.shaft', 'Shaft'), options: TD.SHAFTS.map(([k, n]: any) => ({ value: k, label: n, svg: shaftPreview(k) })) };
+    if (type === 'width') return { title: uiText('ui.line.width.presets', 'Line width presets'),
+      options: TD.WIDTHS.map((w: any) => ({ value: String(w), label: `${w} px`, note: `${r2(w * TD.PT_PER_PX)}pt`, svg: `<svg viewBox="0 0 60 10"><path d="M2 5H58" stroke="currentColor" stroke-width="${w}"/></svg>` })) };
+    if (type !== 'dash') return undefined;
+    const pat = TD.dashPat(v);
+    return { title: uiText('style.dashPattern', 'Dash pattern'),
+      options: TD.DASHES.map(([k, n]: any) => ({ value: k, label: n, svg: dashPreview(k, 1.5) })),
+      custom: { label: uiText('dd.custom', 'Custom…'), shown: 'Custom', svg: dashPreview(v, 1.2), value: pat ? v.slice(2) : '', placeholder: 'on off … (pt)', title: uiText('dd.dash.title', 'Dash lengths in pt, e.g. 4 2 or 6 2 1 2'),
+        apply: (text: string) => {
+          const nums = text.trim().split(/[\s,]+/).map(Number).filter((n: any) => isFinite(n) && n >= 0);
+          if (nums.length && nums.some((n: any) => n > 0)) { applyProp(key, 'p:' + nums.join(' '), true); renderPropsKeepPicker($('#props').querySelector(`select[data-key="${CSS.escape(key)}"]:not(.attached)`)); }
+        } } };
+  }
   let panelView: any = null, panelType = '', propertiesView: any = null;
   let propertyAfter: FormSection[] = [];
   function renderProps(): void {
@@ -3212,7 +3155,6 @@ import { runtime as TD } from '../runtime';
     if (panelView) { panelView.destroy(); panelView = null; }
     if (propertiesView) { void unmount(propertiesView); propertiesView = null; }
     if (TD.closeColorPicker) TD.closeColorPicker();
-    const dp = document.querySelector('.ddpop'); if (dp) (dp as HTMLElement).hidden = true;
     const el = $('#props');
     destroyView(el); el.replaceChildren();
     if (inTable()) { if (TD.tableWs) TD.tableWs.renderProps(); return; }
@@ -3509,7 +3451,9 @@ import { runtime as TD } from '../runtime';
     const r = readField(t);
     if (r) {
       applyProp(r.key, r.v, true);
-      if (['label', 'closed', 'boxed'].includes(r.key)) renderProps();
+      // a drawn picker (dash, shaft, tips, width presets) shows its new drawing; a width preset fills the number field
+      if (t.tagName === 'SELECT' && ['dash', 'shaft', 'tip', 'width'].includes(PROPS.find((q) => q.key === r.key)?.type as string)) renderPropsKeepPicker(t);
+      else if (['label', 'closed', 'boxed'].includes(r.key)) renderProps();
       if (r.key === 'size') { const px = t.closest('.ctl').querySelector('[data-sizepx]'), sl = t.closest('.ctl').querySelector('select'); if (px) px.value = r2(TD.sizePx(r.v)); if (sl) sl.value = typeof r.v === 'number' ? 'custom' : r.v; }
     }
   });
@@ -3565,8 +3509,6 @@ import { runtime as TD } from '../runtime';
       }
       return;
     }
-    const dd = e.target.closest('[data-dd]');
-    if (dd) { openDd(dd); return; }
     const al = e.target.closest('[data-alignv]');
     if (al) { applyProp('align', al.dataset.alignv, true); renderProps(); return; }
     const va = e.target.closest('[data-valign]');
@@ -4088,7 +4030,6 @@ import { runtime as TD } from '../runtime';
   // selected. Names: `name` on a shape, `gname` on every member of a group.
   const layersEl = $('#layers'), layersWin = $('#layersWin');
   const openGroups = new Set();
-  let layerEls = new Map<string, { html: string; el: Element }>();
   let layersKey = '', layersRaf = 0, layerHover: any = null, layerAnchor: any = null, layerDrag: any = null, layerPressKey: any = null;
   const pickable = (s: any) => s && !s.hidden && !s.locked;
   function pruneSel() { for (const id of [...state.sel]) if (!pickable(byId(id))) state.sel.delete(id); }
@@ -4118,7 +4059,6 @@ import { runtime as TD } from '../runtime';
     return html;
   }
   const LIC = {
-    chev: '<path d="M8 6l4 4-4 4"/>',
     folder: '<path d="M2.5 5.5v10h15v-8H9.5L8 5.5z"/>',
     text: '<path d="M5 5h10M10 5v11"/>',
   };
@@ -4137,22 +4077,18 @@ import { runtime as TD } from '../runtime';
     }
     return rows;
   }
-  let rowCaptions: any = null; // the button captions, looked up once per rebuild rather than once per row
-  function rowHtml(r: any) {
+  let rowCaptions: { eyeT: string; eyeF: string; lockT: string; lockF: string } | null = null; // looked up once per rebuild rather than once per row
+  function layerRow(r: any): LayerRow {
     const flags = (list: any) => ({ on: list.every((q: any) => state.sel.has(q.id)), hid: list.every((q: any) => q.hidden), lk: list.every((q: any) => q.locked) });
-    const cls = (f: any) => `${f.on ? ' on' : ''}${f.hid ? ' hid' : ''}${f.lk ? ' lk' : ''}`;
-    const { eyeT, eyeF, lockT, lockF } = rowCaptions || { eyeT: esc(caption(captions["ui.show"])), eyeF: esc(caption(captions["ui.hide"])), lockT: esc(caption(captions["ui.unlock"])), lockF: esc(caption(captions["ui.lock"])) };
-    const eye = (f: any) => `<button class="ly-eye" data-la="eye" title="${f.hid ? eyeT : eyeF}" aria-label="${f.hid ? eyeT : eyeF}">${lsvg(IC[f.hid ? 'eyeoff' : 'eye'])}</button>`;
-    const lock = (f: any) => `<button class="ly-lock" data-la="lock" title="${f.lk ? lockT : lockF}" aria-label="${f.lk ? lockT : lockF}">${lsvg(IC[f.lk ? 'lock' : 'unlock'])}</button>`;
+    const { eyeT, eyeF, lockT, lockF } = rowCaptions || { eyeT: caption(captions["ui.show"]), eyeF: caption(captions["ui.hide"]), lockT: caption(captions["ui.unlock"]), lockF: caption(captions["ui.lock"]) };
+    const buttons = (f: any) => ({ eye: { icon: (f.hid ? 'hide' : 'show') as IconName, title: f.hid ? eyeT : eyeF }, lock: { icon: (f.lk ? 'lock' : 'unlock') as IconName, title: f.lk ? lockT : lockF } });
     if (r.g) {
       const f = flags(r.m), open = openGroups.has(r.g);
-      return `<div class="ly-row ly-grp${cls(f)}" data-g="${r.g}" role="option" aria-selected="${f.on}" aria-expanded="${open}">${eye(f)}` +
-        `<button class="ly-chev${open ? ' open' : ''}" data-la="fold" title="${esc(open ? uiText('layers.fold', 'Fold') : uiText('layers.unfold', 'Unfold'))}" aria-label="${esc(open ? uiText('layers.foldGroup', 'Fold group') : uiText('layers.unfoldGroup', 'Unfold group'))}">${lsvg(LIC.chev)}</button>` +
-        `<span class="ly-th ly-ic">${lsvg(LIC.folder)}</span><span class="ly-nm">${esc(groupName(r.g))}</span><small>${r.m.length}</small>${lock(f)}</div>`;
+      return { key: 'g:' + r.g, g: r.g, name: groupName(r.g), ...f, ...buttons(f), open, count: r.m.length, thumb: lsvg(LIC.folder), icon: true,
+        fold: { icon: 'disclosure' as IconName, title: open ? uiText('layers.fold', 'Fold') : uiText('layers.unfold', 'Unfold'), label: open ? uiText('layers.foldGroup', 'Fold group') : uiText('layers.unfoldGroup', 'Unfold group') } };
     }
     const s = r.s, f = flags([s]);
-    return `<div class="ly-row${r.in ? ' ly-in' : ''}${cls(f)}" data-id="${s.id}" role="option" aria-selected="${f.on}">${eye(f)}<span class="ly-pad"></span>` +
-      `<span class="ly-th${s.type === 'text' ? ' ly-ic' : ''}">${s.type === 'text' ? lsvg(LIC.text) : thumb(s)}</span><span class="ly-nm">${esc(layerName(s))}</span>${lock(f)}</div>`;
+    return { key: s.id, id: s.id, name: layerName(s), ...f, ...buttons(f), inGroup: !!r.in, thumb: s.type === 'text' ? lsvg(LIC.text) : thumb(s), icon: s.type === 'text' };
   }
   function scheduleLayers() {
     if (layersRaf) return;
@@ -4164,36 +4100,20 @@ import { runtime as TD } from '../runtime';
     const n = state.mode === 'document' ? 0 : shapes().length;
     $('#layersCount').textContent = n ? String(n) : '';
     if (state.mode === 'document' || layersWin.classList.contains('collapsed')) { layersKey = ''; return; }
-    if (drag || layerDrag || layersEl.querySelector('.ly-ed')) return; // the call after the drag or rename catches up
-    const forced = !layersKey;
+    if (drag || layerDrag || layerRenameHeld) return; // the call after the drag or rename catches up
     const key = [state.docId, state.mode, [...openGroups].join(), [...state.sel].join(), ...shapes().map((s: any) => JSON.stringify(s))].join('\u0001');
     if (key === layersKey) return;
     layersKey = key;
     const sc = layersEl.scrollTop;
-    if (!n) { layersEl.innerHTML = `<div class="ly-empty">${esc(uiText('layers.empty', 'Shapes you draw are listed here, the top one first.'))}</div>`; layerEls.clear(); }
-    else {
-      // only rows whose markup changed are parsed again; the rest keep their elements (parsing every row
-      // and its picture took ~30 ms per edit at 1000 shapes). A forced rebuild starts afresh.
-      groupIndex = groupsOf();
-      rowCaptions = { eyeT: esc(caption(captions["ui.show"])), eyeF: esc(caption(captions["ui.hide"])), lockT: esc(caption(captions["ui.unlock"])), lockF: esc(caption(captions["ui.lock"])) };
-      try {
-        const next = new Map(), els: any[] = [], fresh: any[] = [];
-        for (const row of layerRows()) {
-          const k = row.g ? 'g:' + row.g : row.s.id, html = rowHtml(row), old = !forced && layerEls.get(k);
-          if (old && old.html === html && !next.has(k)) { next.set(k, old); els.push(old.el); } else { fresh.push([k, html, els.length]); els.push(null); }
-        }
-        if (fresh.length) {
-          const tpl = document.createElement('template'); tpl.innerHTML = fresh.map((f) => f[1]).join('');
-          const made = [...tpl.content.children];
-          fresh.forEach(([k, html, i], j) => { els[i] = made[j]; next.set(k, { html, el: made[j] }); });
-        }
-        // the same rows in the same order: swap just the changed ones in place, so the panel isn't laid out afresh
-        const cur = [...layersEl.children], freshAt = new Set(fresh.map((f) => f[2]));
-        if (cur.length === els.length && els.every((el, i) => freshAt.has(i) || cur[i] === el)) { for (const i of freshAt) cur[i].replaceWith(els[i]); }
-        else layersEl.replaceChildren(...els);
-        layerEls = next;
-      } finally { groupIndex = null; rowCaptions = null; }
-    }
+    // keyed rows: a row whose shape didn't change keeps its element and picture (an edit on a large drawing doesn't
+    // lay out every row again)
+    groupIndex = n ? groupsOf() : null;
+    rowCaptions = { eyeT: caption(captions["ui.show"]), eyeF: caption(captions["ui.hide"]), lockT: caption(captions["ui.unlock"]), lockF: caption(captions["ui.lock"]) };
+    try {
+      renderSvelteView(layersEl, LayerList, { rows: n ? layerRows().map(layerRow) : [], empty: uiText('layers.empty', 'Shapes you draw are listed here, the top one first.'),
+        renaming: layerRenaming, nameLabel: uiText('layers.name', 'Layer name'), rename: layerRename,
+        renameEnd: () => { layerRenameHeld = false; layerRenaming = null; layersKey = ''; render(); renderProps(); } } satisfies LayerListModel);
+    } finally { groupIndex = null; rowCaptions = null; }
     layersEl.scrollTop = sc;
     const sel = state.sel.size;
     $('#layersFoot [data-la="newgroup"]').disabled = !canGroup();
@@ -4240,30 +4160,21 @@ import { runtime as TD } from '../runtime';
     if (a === 'lock' || a === 'unlock') setLayerFlag(ids, 'locked', a === 'lock');
     if (a === 'del' && ls.length) deleteIds(ids);
   }
+  // rename in place: the row's own field (LayerList); kept or not, the panel is drawn again after
+  let layerRenaming: string | null = null, layerRenameHeld = false;
   function renameRow(row: any) {
-    const nm = row.querySelector('.ly-nm');
-    if (!nm) return;
-    const g = row.dataset.g, s = g ? null : byId(row.dataset.id), cur = g ? groupName(g) : layerName(s);
-    const inp = document.createElement('input');
-    inp.className = 'ly-ed'; inp.value = cur; inp.spellcheck = false; inp.setAttribute('aria-label', uiText('layers.name', 'Layer name'));
-    nm.replaceWith(inp); inp.focus(); inp.select();
-    let done = false;
-    const end = (ok: any) => {
-      if (done) return;
-      done = true;
-      const v = inp.value.trim();
-      inp.replaceWith(nm);
-      if (ok && v !== cur) {
-        begin();
-        if (g) { for (const q of shapes()) if (q.g === g) { if (v && v !== 'Group') q.gname = v; else delete q.gname; } }
-        else if (s) { if (v && v !== autoName(s)) s.name = v; else delete s.name; }
-        commit();
-      }
-      layersKey = ''; render(); renderProps();
-    };
-    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); end(true); } if (e.key === 'Escape') { e.preventDefault(); end(false); } });
-    inp.addEventListener('blur', () => end(true));
-    inp.addEventListener('pointerdown', (e) => e.stopPropagation());
+    layerRenaming = rowKey(row);
+    layersKey = '';
+    renderLayers();
+    layerRenameHeld = true; // drawn with its field, then held until the rename ends
+  }
+  function layerRename(r: LayerRow, v: string) {
+    const g = r.g, s = g ? null : byId(r.id), cur = g ? groupName(g) : layerName(s);
+    if (v === cur) return;
+    begin();
+    if (g) { for (const q of shapes()) if (q.g === g) { if (v && v !== 'Group') q.gname = v; else delete q.gname; } }
+    else if (s) { if (v && v !== autoName(s)) s.name = v; else delete s.name; }
+    commit();
   }
   // drop the dragged shapes above or below a row; a member row of an open group (or the lower half of an open
   // group's own row) takes them into that group, anywhere else takes them out. A dragged group stays whole.
@@ -4529,14 +4440,16 @@ import { runtime as TD } from '../runtime';
     const busy = !!TD.math.pending;
     // runs on every maths progress round: searched within each container, not across a page that may hold a large table
     for (const [id, sel] of OUTPUT_BUTTONS) (id === 'tableview' ? document.querySelector('#tableview .tb-outbar') : document.getElementById(id))?.querySelectorAll<HTMLButtonElement>(sel).forEach(b => { if (b.disabled !== busy) b.disabled = busy; });
-    if (busy) expPop.hidden = true;
-    if (!ctx.hidden) {
-      const objectButtons = ctx.querySelectorAll<HTMLButtonElement>('[data-ctx^="img:"], [data-ctx="copytikz"]');
+    if (busy) closeExport();
+    const ctx = ctxShown && document.getElementById(CTX_ID);
+    if (ctx) {
+      // the kit's rows (data-act), set in place: the menu's items don't change while it is open
+      const objectButtons = ctx.querySelectorAll<HTMLButtonElement>('[data-act^="img:"], [data-act="copytikz"]');
       if (objectButtons.length) {
         const ready = outputReady(selected());
         objectButtons.forEach(b => { if (b.disabled === ready) b.disabled = !ready; });
       }
-      ctx.querySelectorAll<HTMLButtonElement>('[data-ctx="doc:print"], [data-ctx="doc:html"], [data-ctx="doc:latex"], [data-ctx="doc:tikz"], [data-ctx="doc:image"]').forEach(b => { if (b.disabled !== busy) b.disabled = busy; });
+      ctx.querySelectorAll<HTMLButtonElement>('[data-act="doc:print"], [data-act="doc:html"], [data-act="doc:latex"], [data-act="doc:tikz"], [data-act="doc:image"]').forEach(b => { if (b.disabled !== busy) b.disabled = busy; });
     }
   }
   async function copyTikz() {
@@ -4583,22 +4496,18 @@ import { runtime as TD } from '../runtime';
   }
 
   // ---------- context menu ----------
-  const ctx = document.createElement('div');
-  ctx.id = 'ctxMenu'; ctx.className = 'ctx'; ctx.hidden = true;
-  document.body.appendChild(ctx);
+  // The right-click menus of the canvas, the Layers rows, the guides and the file list, and the menus other parts of
+  // the app ask for (openMenu): the kit's menu (src/ui/kit/context-menu.ts), open as #ctxMenu. A row's act says what
+  // it does; ctxFor holds what it acts on (the file, folder, Layers row or guide it was opened on).
+  const CTX_ID = 'ctxMenu';
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-  // macOS shows shortcuts as glyphs in the standard order ⌃⌥⇧⌘ (HIG keyboards); elsewhere as Ctrl+Shift+K
-  const kb = (k: any) => {
-    if (!isMac) return k;
-    const parts = k.split('+'), mods = new Set();
-    while (parts.length > 1 && ['Ctrl', 'Shift', 'Alt'].includes(parts[0])) mods.add(parts.shift());
-    const key = parts.join('+');
-    const glyph = ({ Del: '⌫', Enter: '↩', Esc: '⎋', Shift: '⇧', Alt: '⌥' } as Record<string, any>)[key] || key;
-    return (mods.has('Alt') ? '⌥' : '') + (mods.has('Shift') ? '⇧' : '') + (mods.has('Ctrl') ? '⌘' : '') + glyph;
-  };
-  const ctxOpen = () => !ctx.hidden;
-  function closeCtx() { ctx.hidden = true; ctx.style.display = ''; }
-  const IC: Record<string, any> = {
+  // shortcuts are written the Windows way and shown as glyphs on a Mac (src/ui/kit/keys.ts)
+  const kb = (k: string) => keyLabel(k);
+  let ctxFor: { doc?: string; folder?: string; layer?: string; guideId?: string; pick?: (act: string) => void } = {};
+  let ctxShown = false;
+  const ctxOpen = () => ctxShown;
+  function closeCtx() { if (ctxShown) closeContextMenu(); }
+  const IC: Record<string, string> = {
     copy: '<path d="M7 7h9v10H7z"/><path d="M4 13V3h9"/>',
     cut: '<circle cx="5.5" cy="15" r="2.5"/><circle cx="14.5" cy="15" r="2.5"/><path d="M7 13.2L15 3M13 13.2L5 3"/>',
     paste: '<path d="M6 4H4v14h12V4h-2"/><path d="M7 2.5h6v3H7z"/>',
@@ -4631,64 +4540,65 @@ import { runtime as TD } from '../runtime';
     lock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 016 0V9"/>',
     unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 015.8-1.1"/>',
   };
-  const icon = (n: any) => (n ? `<svg viewBox="0 0 20 20">${IC[n]}</svg>` : '<span class="ic"></span>');
-  function item(label: any, act: any, { ic, key, dis, sub, danger }: Record<string, any> = {}) {
-    label = caption(label);
-    if (sub) return `<div class="ctx-item has-sub${dis ? ' dis' : ''}">${icon(ic)}<span class="lb">${label}</span><span class="arr">›</span><div class="ctx sub">${sub}</div></div>`;
-    return `<button class="ctx-item${danger ? ' danger' : ''}" data-ctx="${act}"${dis ? ' disabled' : ''}>${icon(ic)}<span class="lb">${label}</span>${key ? `<kbd>${kb(key)}</kbd>` : ''}</button>`;
+  type CtxRow = MenuEntry | '' | false | null | undefined;
+  function item(label: any, act: string, { ic, key, dis, sub, danger }: { ic?: string; key?: string; dis?: boolean; sub?: CtxRow[]; danger?: boolean } = {}): MenuItemSpec {
+    // deleting turns the red pen when highlighted, as everywhere
+    return { act, label: caption(label), svg: ic ? IC[ic] : undefined, key: key || undefined, disabled: !!dis, danger: danger ?? /del(ete)?$/.test(act), sub: sub ? tidyMenu(sub) : undefined };
   }
-  const hr = '<hr>';
+  const hr = '-' as const;
+  function placeCtx(rows: CtxRow[], x: number, y: number, on: typeof ctxFor = {}) {
+    ctxFor = on;
+    openContextMenu(tidyMenu(rows), x, y, ctxAct, { id: CTX_ID, onclose: () => { ctxShown = false; } });
+    ctxShown = true;
+    updateOutputAvailability();
+  }
   // layer: { key, ids } when opened on a row of the Layers window; its Rename / Hide / Lock come first, and a
   // hidden or locked row (which can't be selected) gets only those and Delete
   function openCtx(x: any, y: any, layer?: any) {
     const sel = selected(), n = sel.length, nu = n ? units().length : 0;
-    let h = '';
+    const h: CtxRow[] = [];
+    const on = { layer: layer ? layer.key : '' };
     if (layer) {
       const ls = layer.ids.map(byId).filter(Boolean), hid = ls.every((q: any) => q.hidden), lk = ls.every((q: any) => q.locked);
-      h += item(captions["ui.rename"], 'layer:rename', { ic: 'rename' }) +
-        item(hid ? captions["ui.show"] : captions["ui.hide"], 'layer:' + (hid ? 'show' : 'hide'), { ic: hid ? 'eye' : 'eyeoff' }) +
-        item(lk ? captions["ui.unlock"] : captions["ui.lock"], 'layer:' + (lk ? 'unlock' : 'lock'), { ic: lk ? 'unlock' : 'lock' }) + hr;
-      if (ls.some((q: any) => q.hidden || q.locked)) {
-        ctx.innerHTML = h + item(captions["ui.delete"], 'layer:del', { ic: 'del', key: 'Del' });
-        ctx.dataset.doc = ''; ctx.dataset.layer = layer.key;
-        placeCtx(x, y); return;
-      }
+      h.push(item(captions["ui.rename"], 'layer:rename', { ic: 'rename' }),
+        item(hid ? captions["ui.show"] : captions["ui.hide"], 'layer:' + (hid ? 'show' : 'hide'), { ic: hid ? 'eye' : 'eyeoff' }),
+        item(lk ? captions["ui.unlock"] : captions["ui.lock"], 'layer:' + (lk ? 'unlock' : 'lock'), { ic: lk ? 'unlock' : 'lock' }), hr);
+      if (ls.some((q: any) => q.hidden || q.locked)) { placeCtx([...h, item(captions["ui.delete"], 'layer:del', { ic: 'del', key: 'Del' })], x, y, on); return; }
     }
     if (n) {
       const one = n === 1 ? sel[0] : null;
-      if (one && (one.type === 'text' || one.label !== undefined)) h += item(one.type === 'text' ? uiText('ctx.editText', 'Edit Text') : uiText('ctx.editLabel', 'Edit Label'), 'edit', { ic: 'edit', key: 'Enter' }) + hr;
-      h += item(captions["ui.copy"], 'copy', { ic: 'copy', key: 'Ctrl+C' }) +
-        item(captions["ui.copy.tikz.code"], 'copytikz', { ic: 'tikz' }) +
-        item(uiText('ctx.copyImage', 'Copy as Image'), '', { ic: 'image', sub: item(uiText('ctx.pngBg', 'PNG (Background)'), 'img:copy-png') + item(uiText('ctx.pngClear', 'PNG (Transparent)'), 'img:copy-png-t') + item('SVG', 'img:copy-svg') }) +
-        item(uiText('ctx.saveImage', 'Save as Image'), '', { ic: 'save', sub: item(uiText('ctx.pngBg', 'PNG (Background)'), 'img:save-png') + item(uiText('ctx.pngClear', 'PNG (Transparent)'), 'img:save-png-t') + item('SVG', 'img:save-svg') }) +
-        (sel.some((s: any) => (s.text || s.label || '').trim()) ? item(uiText('ctx.copyText', 'Copy Text'), 'copytext', { ic: 'copy' }) : '') +
-        item(captions["ui.cut"], 'cut', { ic: 'cut', key: 'Ctrl+X' }) +
-        item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
-        item(captions["ui.duplicate"], 'dup', { ic: 'dup', key: 'Ctrl+D' }) +
-        item(captions["ui.delete"], 'del', { ic: 'del', key: 'Del' }) + hr;
-      if (canGroup()) h += item(captions["ui.group"], 'group', { ic: 'group', key: 'Ctrl+G' });
-      if (canUngroup()) h += item(captions["ui.ungroup"], 'ungroup', { ic: 'ungroup', key: 'Ctrl+Shift+G' });
-      if (n > 1) h += item(uiText('comp.make', 'Make Component'), 'comp:make', { ic: 'group' });
-      if (n > 1) h += item(uiText('combine.title', 'Combine'), '', { ic: 'group', dis: !combinable(), sub: COMBINE.map(([k]) => item(combineName(k), 'cb:' + k)).join('') });
-      h += item(uiText('ctx.arrange', 'Arrange'), '', { ic: 'arrange', sub:
-          item(uiText('ctx.front', 'Bring to Front'), 'a:front', { key: 'Ctrl+Shift+]' }) + item(uiText('ctx.forward', 'Bring Forward'), 'a:forward', { key: 'Ctrl+]' }) +
-          item(uiText('ctx.backward', 'Send Backward'), 'a:backward', { key: 'Ctrl+[' }) + item(uiText('ctx.back', 'Send to Back'), 'a:back', { key: 'Ctrl+Shift+[' }) }) +
-        (rotatable() ? item(uiText('ctx.rotate', 'Rotate'), '', { ic: 'rotate', sub:
-          item(uiText('ctx.cw', 'Rotate 90° Clockwise'), 'r:cw', { key: 'Ctrl+R', dis: !turnable() }) + item(uiText('ctx.ccw', 'Rotate 90° Counterclockwise'), 'r:ccw', { key: 'Ctrl+Shift+R', dis: !turnable() }) + hr +
-          item(uiText('ctx.flipH', 'Flip Horizontal'), 'r:fliph') + item(uiText('ctx.flipV', 'Flip Vertical'), 'r:flipv') }) : '') +
-        item(captions["ui.align"], '', { ic: 'align', dis: nu < 2, sub:
-          item(captions["ui.left"], 'l:left') + item(captions["ui.center"], 'l:center') + item(captions["ui.right"], 'l:right') + hr +
-          item(captions["ui.top"], 'l:top') + item(uiText('ctx.middle', 'Middle'), 'l:middle') + item(captions["ui.bottom"], 'l:bottom') }) +
-        item(uiText('ctx.distribute', 'Distribute'), '', { ic: 'dist', dis: nu < 3, sub: item(uiText('ctx.horizontally', 'Horizontally'), 'd:h') + item(uiText('ctx.vertically', 'Vertically'), 'd:v') });
+      const image = (verb: string) => [item(uiText('ctx.pngBg', 'PNG (Background)'), `img:${verb}-png`), item(uiText('ctx.pngClear', 'PNG (Transparent)'), `img:${verb}-png-t`), item('SVG', `img:${verb}-svg`)];
+      if (one && (one.type === 'text' || one.label !== undefined)) h.push(item(one.type === 'text' ? uiText('ctx.editText', 'Edit Text') : uiText('ctx.editLabel', 'Edit Label'), 'edit', { ic: 'edit', key: 'Enter' }), hr);
+      h.push(item(captions["ui.copy"], 'copy', { ic: 'copy', key: 'Ctrl+C' }),
+        item(captions["ui.copy.tikz.code"], 'copytikz', { ic: 'tikz' }),
+        item(uiText('ctx.copyImage', 'Copy as Image'), '', { ic: 'image', sub: image('copy') }),
+        item(uiText('ctx.saveImage', 'Save as Image'), '', { ic: 'save', sub: image('save') }),
+        sel.some((s: any) => (s.text || s.label || '').trim()) && item(uiText('ctx.copyText', 'Copy Text'), 'copytext', { ic: 'copy' }),
+        item(captions["ui.cut"], 'cut', { ic: 'cut', key: 'Ctrl+X' }),
+        item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }),
+        item(captions["ui.duplicate"], 'dup', { ic: 'dup', key: 'Ctrl+D' }),
+        item(captions["ui.delete"], 'del', { ic: 'del', key: 'Del' }), hr,
+        canGroup() && item(captions["ui.group"], 'group', { ic: 'group', key: 'Ctrl+G' }),
+        canUngroup() && item(captions["ui.ungroup"], 'ungroup', { ic: 'ungroup', key: 'Ctrl+Shift+G' }),
+        n > 1 && item(uiText('comp.make', 'Make Component'), 'comp:make', { ic: 'group' }),
+        n > 1 && item(uiText('combine.title', 'Combine'), '', { ic: 'group', dis: !combinable(), sub: COMBINE.map(([k]) => item(combineName(k), 'cb:' + k)) }),
+        item(uiText('ctx.arrange', 'Arrange'), '', { ic: 'arrange', sub: [
+          item(uiText('ctx.front', 'Bring to Front'), 'a:front', { key: 'Ctrl+Shift+]' }), item(uiText('ctx.forward', 'Bring Forward'), 'a:forward', { key: 'Ctrl+]' }),
+          item(uiText('ctx.backward', 'Send Backward'), 'a:backward', { key: 'Ctrl+[' }), item(uiText('ctx.back', 'Send to Back'), 'a:back', { key: 'Ctrl+Shift+[' })] }),
+        rotatable() && item(uiText('ctx.rotate', 'Rotate'), '', { ic: 'rotate', sub: [
+          item(uiText('ctx.cw', 'Rotate 90° Clockwise'), 'r:cw', { key: 'Ctrl+R', dis: !turnable() }), item(uiText('ctx.ccw', 'Rotate 90° Counterclockwise'), 'r:ccw', { key: 'Ctrl+Shift+R', dis: !turnable() }), hr,
+          item(uiText('ctx.flipH', 'Flip Horizontal'), 'r:fliph'), item(uiText('ctx.flipV', 'Flip Vertical'), 'r:flipv')] }),
+        item(captions["ui.align"], '', { ic: 'align', dis: nu < 2, sub: [
+          item(captions["ui.left"], 'l:left'), item(captions["ui.center"], 'l:center'), item(captions["ui.right"], 'l:right'), hr,
+          item(captions["ui.top"], 'l:top'), item(uiText('ctx.middle', 'Middle'), 'l:middle'), item(captions["ui.bottom"], 'l:bottom')] }),
+        item(uiText('ctx.distribute', 'Distribute'), '', { ic: 'dist', dis: nu < 3, sub: [item(uiText('ctx.horizontally', 'Horizontally'), 'd:h'), item(uiText('ctx.vertically', 'Vertically'), 'd:v')] }));
     } else {
-      h += item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }) +
-        item(uiText('ctx.selectAll', 'Select All'), 'all', { ic: 'all', key: 'Ctrl+A', dis: !shapes().length }) + hr +
-        item(uiText('ctx.fit', 'Zoom to Fit'), 'fit', { ic: 'fit' }) + item(uiText('ctx.fitWidth', 'Zoom to Fit Width'), 'fitw') +
-        item(state.grid ? uiText('ctx.hideGrid', 'Hide Grid') : uiText('ctx.showGrid', 'Show Grid'), 'grid', { key: 'G' });
+      h.push(item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }),
+        item(uiText('ctx.selectAll', 'Select All'), 'all', { ic: 'all', key: 'Ctrl+A', dis: !shapes().length }), hr,
+        item(uiText('ctx.fit', 'Zoom to Fit'), 'fit', { ic: 'fit' }), item(uiText('ctx.fitWidth', 'Zoom to Fit Width'), 'fitw'),
+        item(state.grid ? uiText('ctx.hideGrid', 'Hide Grid') : uiText('ctx.showGrid', 'Show Grid'), 'grid', { key: 'G' }));
     }
-    ctx.innerHTML = h;
-    ctx.dataset.doc = ''; ctx.dataset.layer = layer ? layer.key : '';
-    placeCtx(x, y); // also opens submenus to the left when there is no room on the right
+    placeCtx(h, x, y, on);
   }
   // ---------- document list: right-click menu ----------
   // Rename, Duplicate, Save As, Copy, Paste and Delete work on the row's file without switching to it;
@@ -4870,67 +4780,52 @@ import { runtime as TD } from '../runtime';
     } catch (err: any) { showHint(uiText('hint.couldNotPaste', 'Could not paste: {error}', { error: err.message }), 2000); return; }
     showHint(uiText('hint.nothingToPaste', 'Nothing to paste: copy a file first'), 1600);
   }
-  function placeCtx(x: any, y: any) {
-    ctx.hidden = false;
-    updateOutputAvailability();
-    ctx.querySelectorAll<HTMLElement>('.sub').forEach(sub=>sub.style.display='none');
-    ctx.scrollTop=0; positionMenu(ctx,x,y);
-  }
   // A menu of a few actions for another part of the app (Quick's sidebar list), drawn and placed like this one.
-  let menuPick: ((act: string) => void) | null = null;
   function openMenu(entries: { label: string; act: string; ic?: string; danger?: boolean; dis?: boolean; sep?: boolean }[], x: number, y: number, pick: (act: string) => void) {
-    menuPick = pick;
-    ctx.innerHTML = entries.map(e => (e.sep ? hr : '') + item(esc(e.label), 'menu:' + e.act, { ic: e.ic, danger: e.danger, dis: e.dis })).join('');
-    ctx.dataset.doc = ''; ctx.dataset.layer = '';
-    placeCtx(x, y);
+    placeCtx(entries.flatMap((e) => [e.sep && hr, item(e.label, 'menu:' + e.act, { ic: e.ic, danger: e.danger, dis: e.dis })]), x, y, { pick });
   }
   function openDocCtx(id: any, x: any, y: any) {
     const it = id && docEntry(id), page = state.doc.kind === 'page', d = (k: any) => 'doc:' + k, lf = id && TD.files.fileOf(id);
-    let h;
+    let h: CtxRow[];
     if (it) {
-      h = (id !== state.docId ? item(captions["ui.open"], d('open'), { ic: 'open' }) + hr : '') +
-        item(uiText('ctx.renameDots', 'Rename…'), d('rename'), { ic: 'rename' }) +
-        item(uiText('ctx.moveToFolder', 'Move to Folder…'), d('move'), { ic: 'folder' }) +
-        item(captions["ui.duplicate"], d('dup'), { ic: 'dup' }) +
-        item(uiText('ctx.saveCopy', 'Save a Copy…'), d('saveas'), { ic: 'dup' }) +
-        item(uiText('ctx.recovery', 'Recovery Copies…'), d('recovery'), { ic: 'history' }) + hr +
-        item(captions["ui.copy"], d('copy'), { ic: 'copy' }) +
-        item(captions["ui.paste"], d('paste'), { ic: 'paste' }) +
-        item(uiText('ctx.copyShare', 'Copy Share Link'), d('share'), { ic: 'link' }) + hr +
-        (!TD.files.can ? item(uiText('ctx.download', 'Download (.diagramtex)'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })
-          : (lf ? item(uiText('ctx.saveTo', 'Save to {file}', { file: esc(lf.name) }), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+S' : '' })
-            : item(uiText('ctx.saveToFile', 'Save to File…'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })) +
-            item(lf ? uiText('ctx.saveToAnother', 'Save to Another File…') : uiText('ctx.saveToNew', 'Save to New File…'), d('savenew'), { ic: 'saveas' }) +
-            (lf ? item(uiText('ctx.unlink', 'Unlink {file}', { file: esc(lf.name) }), d('unlink'), { ic: 'unlink' }) : '')) +
-        item(captions["ui.export"], '', { ic: 'exp', sub:
-          item(uiText('ctx.latexDoc', 'LaTeX Document (.tex)'), d('latex'), { key: id === state.docId ? 'Ctrl+Shift+E' : '' }) +
-          (page ? '' : item(uiText('ctx.tikzCode', 'TikZ Code…'), d('tikz'), { key: id === state.docId ? 'Ctrl+E' : '' })) +
-          item(uiText('ctx.webPage', 'Web Page (.html)'), d('html')) +
-          item(uiText('ctx.image', 'Image (PNG, SVG, PDF)…'), d('image')) + hr +
-          item(uiText('ctx.print', 'Print or Save as PDF…'), d('print'), { key: id === state.docId ? 'Ctrl+P' : '' }) }) + hr +
-        item(uiText('ctx.moveToBin', 'Move to Recycle Bin'), d('del'), { ic: 'del' });
+      h = [id !== state.docId && item(captions["ui.open"], d('open'), { ic: 'open' }), hr,
+        item(uiText('ctx.renameDots', 'Rename…'), d('rename'), { ic: 'rename' }),
+        item(uiText('ctx.moveToFolder', 'Move to Folder…'), d('move'), { ic: 'folder' }),
+        item(captions["ui.duplicate"], d('dup'), { ic: 'dup' }),
+        item(uiText('ctx.saveCopy', 'Save a Copy…'), d('saveas'), { ic: 'dup' }),
+        item(uiText('ctx.recovery', 'Recovery Copies…'), d('recovery'), { ic: 'history' }), hr,
+        item(captions["ui.copy"], d('copy'), { ic: 'copy' }),
+        item(captions["ui.paste"], d('paste'), { ic: 'paste' }),
+        item(uiText('ctx.copyShare', 'Copy Share Link'), d('share'), { ic: 'link' }), hr,
+        ...(!TD.files.can ? [item(uiText('ctx.download', 'Download (.diagramtex)'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })]
+          : [lf ? item(uiText('ctx.saveTo', 'Save to {file}', { file: lf.name }), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+S' : '' })
+            : item(uiText('ctx.saveToFile', 'Save to File…'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' }),
+            item(lf ? uiText('ctx.saveToAnother', 'Save to Another File…') : uiText('ctx.saveToNew', 'Save to New File…'), d('savenew'), { ic: 'saveas' }),
+            lf && item(uiText('ctx.unlink', 'Unlink {file}', { file: lf.name }), d('unlink'), { ic: 'unlink' })]),
+        item(captions["ui.export"], '', { ic: 'exp', sub: [
+          item(uiText('ctx.latexDoc', 'LaTeX Document (.tex)'), d('latex'), { key: id === state.docId ? 'Ctrl+Shift+E' : '' }),
+          !page && item(uiText('ctx.tikzCode', 'TikZ Code…'), d('tikz'), { key: id === state.docId ? 'Ctrl+E' : '' }),
+          item(uiText('ctx.webPage', 'Web Page (.html)'), d('html')),
+          item(uiText('ctx.image', 'Image (PNG, SVG, PDF)…'), d('image')), hr,
+          item(uiText('ctx.print', 'Print or Save as PDF…'), d('print'), { key: id === state.docId ? 'Ctrl+P' : '' })] }), hr,
+        item(uiText('ctx.moveToBin', 'Move to Recycle Bin'), d('del'), { ic: 'del' })];
     } else {
-      h = item(page ? uiText('ctx.newPage', 'New Page') : uiText('ctx.newDocument', 'New Document'), d('new'), { ic: 'newdoc' }) +
-        item(uiText('ctx.newFolder', 'New Folder…'), d('newfolder'), { ic: 'folder' }) +
-        item(uiText('ctx.openFile', 'Open File…'), d('openfile'), { ic: 'open', key: 'Ctrl+O' }) + hr +
-        item(captions["ui.paste"], d('paste'), { ic: 'paste' }) + hr +
-        item(uiText('ctx.exportAll', 'Export All Files…'), d('exportall'), { ic: 'save' }) +
-        item(uiText('ctx.bin', 'Recycle Bin…'), d('bin'), { ic: 'del' });
+      h = [item(page ? uiText('ctx.newPage', 'New Page') : uiText('ctx.newDocument', 'New Document'), d('new'), { ic: 'newdoc' }),
+        item(uiText('ctx.newFolder', 'New Folder…'), d('newfolder'), { ic: 'folder' }),
+        item(uiText('ctx.openFile', 'Open File…'), d('openfile'), { ic: 'open', key: 'Ctrl+O' }), hr,
+        item(captions["ui.paste"], d('paste'), { ic: 'paste' }), hr,
+        item(uiText('ctx.exportAll', 'Export All Files…'), d('exportall'), { ic: 'save' }),
+        item(uiText('ctx.bin', 'Recycle Bin…'), d('bin'), { ic: 'del' })];
     }
-    ctx.innerHTML = h;
-    ctx.dataset.doc = id || '';
-    placeCtx(x, y);
+    placeCtx(h, x, y, { doc: id || '' });
   }
   function openFolderCtx(path: any, x: any, y: any) {
     const d = (k: any) => 'doc:' + k, shut = folded.has(foldKey(path));
-    ctx.innerHTML = item(state.doc.kind === 'page' ? uiText('ctx.newPageHere', 'New Page Here') : state.doc.kind === 'board' ? uiText('ctx.newBoardHere', 'New Whiteboard Here') : uiText('ctx.newDocHere', 'New Document Here'), d('newin'), { ic: 'newdoc' }) +
-      item(uiText('ctx.newFolderInside', 'New Folder Inside…'), d('newfolderin'), { ic: 'folder' }) + hr +
-      item(uiText('ctx.renameFolder', 'Rename Folder…'), d('renamefolder'), { ic: 'rename' }) +
-      item(shut ? uiText('layers.unfold', 'Unfold') : uiText('layers.fold', 'Fold'), d('fold'), { ic: 'fold' }) + hr +
-      item(uiText('ctx.deleteFolder', 'Delete Folder…'), d('delfolder'), { ic: 'del', danger: true });
-    ctx.dataset.doc = '';
-    ctx.dataset.folder = path;
-    placeCtx(x, y);
+    placeCtx([item(state.doc.kind === 'page' ? uiText('ctx.newPageHere', 'New Page Here') : state.doc.kind === 'board' ? uiText('ctx.newBoardHere', 'New Whiteboard Here') : uiText('ctx.newDocHere', 'New Document Here'), d('newin'), { ic: 'newdoc' }),
+      item(uiText('ctx.newFolderInside', 'New Folder Inside…'), d('newfolderin'), { ic: 'folder' }), hr,
+      item(uiText('ctx.renameFolder', 'Rename Folder…'), d('renamefolder'), { ic: 'rename' }),
+      item(shut ? uiText('layers.unfold', 'Unfold') : uiText('layers.fold', 'Fold'), d('fold'), { ic: 'fold' }), hr,
+      item(uiText('ctx.deleteFolder', 'Delete Folder…'), d('delfolder'), { ic: 'del', danger: true })], x, y, { folder: path });
   }
   // Rename in place: the row's name becomes a field. Enter or leaving keeps it, Esc cancels; the file stays closed.
   function renameDoc(id: any, name: any) {
@@ -4941,31 +4836,13 @@ import { runtime as TD } from '../runtime';
     if (it) { it.name = name; store.set(LS_INDEX, idx); }
   }
   function renameInList(id: any) {
-    const li = id && $(`#docList li[data-doc="${id}"]`), nm = li && li.querySelector('.nm');
-    if (!nm || document.body.classList.contains('no-files')) { // sidebar hidden: rename the open file in the top bar
+    const li = id && $(`#docList li[data-doc="${id}"]`);
+    if (!li || document.body.classList.contains('no-files')) { // sidebar hidden: rename the open file in the top bar
       if (id !== state.docId) openDoc(id);
       const n = $('#docName'); n.focus(); n.select(); return;
     }
-    const full = docEntry(id)?.name || nm.textContent, old = leafOf(full);
-    const inp = document.createElement('input');
-    inp.className = 'nm-ed'; inp.value = old; inp.setAttribute('aria-label', uiText('files.fileName', 'File name')); inp.spellcheck = false;
-    nm.replaceWith(inp);
-    li.classList.add('renaming');
-    let done = false;
-    const finish = (keep: any) => {
-      if (done) return; done = true;
-      const v = inp.value.trim();
-      if (keep && v && v !== old) renameDoc(id, joinPath(folderOf(full), v)); // a "/" typed here makes a folder inside this one
-      renderDocList();
-    };
-    inp.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
-      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-    });
-    inp.addEventListener('blur', () => finish(true));
-    inp.addEventListener('click', (e) => e.stopPropagation());
-    inp.focus(); inp.select();
+    fileRenaming = 'd:' + id;
+    renderDocList();
   }
   function docAction(a: any, id: any) {
     const it = id && docEntry(id);
@@ -4974,13 +4851,13 @@ import { runtime as TD } from '../runtime';
       case 'open': openFirst(); break;
       case 'new': newDoc(null, null, null, null, null, state.doc.kind); break;
       case 'newfolder': newFolder(''); break;
-      case 'newin': newDoc(joinPath(ctx.dataset.folder, NEW_NAME[state.doc.kind]), null, null, null, null, state.doc.kind); break;
-      case 'newfolderin': newFolder(ctx.dataset.folder); break;
-      case 'renamefolder': renameFolderInList(ctx.dataset.folder); break;
-      case 'delfolder': deleteFolder(ctx.dataset.folder); break;
+      case 'newin': newDoc(joinPath(ctxFor.folder, NEW_NAME[state.doc.kind]), null, null, null, null, state.doc.kind); break;
+      case 'newfolderin': newFolder(ctxFor.folder!); break;
+      case 'renamefolder': renameFolderInList(ctxFor.folder!); break;
+      case 'delfolder': deleteFolder(ctxFor.folder!); break;
       case 'bin': openBin(); break;
       case 'recovery': openRecovery(id); break;
-      case 'fold': setFolded(ctx.dataset.folder, !folded.has(foldKey(ctx.dataset.folder))); break;
+      case 'fold': setFolded(ctxFor.folder!, !folded.has(foldKey(ctxFor.folder!))); break;
       case 'move': {
         if (!it) break;
         TD.prompt(uiText('dlg.moveToFolder.title', 'Move to Folder'), folderOf(it.name), { ok: uiText('dlg.moveToFolder.ok', 'Move'), placeholder: uiText('dlg.moveToFolder.placeholder', 'Folder, e.g. Physics/Labs (empty: top level)') }).then((f: any) => { if (f != null) moveToFolder(id, f); });
@@ -5044,9 +4921,9 @@ import { runtime as TD } from '../runtime';
     const guideHit = e.target.closest?.('[data-guide-id]');
     if (guideHit && guideMode === 'show') {
       selectedGuide = guideHit.dataset.guideId; state.sel.clear(); renderOverlay(); renderProps();
-      ctx.dataset.guideId = selectedGuide!;
-      ctx.innerHTML = item(uiText('assist.editGuide','Edit position'),'guide:edit',{ic:'edit'}) + item(uiText('assist.deleteGuide','Delete guide'),'guide:delete',{ic:'del',key:'Del'}) + hr + item(uiText('assist.deleteAllGuides','Delete all guides'),'guide:deleteAll',{ic:'del',danger:true});
-      placeCtx(e.clientX,e.clientY); return;
+      placeCtx([item(uiText('assist.editGuide', 'Edit position'), 'guide:edit', { ic: 'edit' }), item(uiText('assist.deleteGuide', 'Delete guide'), 'guide:delete', { ic: 'del', key: 'Del' }), hr,
+        item(uiText('assist.deleteAllGuides', 'Delete all guides'), 'guide:deleteAll', { ic: 'del', danger: true })], e.clientX, e.clientY, { guideId: selectedGuide! });
+      return;
     }
     selectedGuide = null;
 
@@ -5060,14 +4937,12 @@ import { runtime as TD } from '../runtime';
     pop.hidden = true;
     openCtx(e.clientX, e.clientY);
   });
-  ctx.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-ctx]');
-    if (!b || (b as HTMLButtonElement).disabled) return;
-    closeCtx();
-    const [a, arg] = (b as HTMLElement).dataset.ctx!.split(':');
-    if (a === 'guide') { if (arg === 'edit') void editGuide(ctx.dataset.guideId!); else removeGuide(ctx.dataset.guideId!,arg === 'deleteAll'); return; }
-    if (a === 'doc') { docAction(arg, ctx.dataset.doc); return; }
-    if (a === 'menu') { const pick = menuPick; menuPick = null; pick?.(arg); return; }
+  // what a row of the menu does (also TD.app.cmd.ctxAct, for the tests)
+  function ctxAct(act: string) {
+    const [a, arg] = act.split(':');
+    if (a === 'guide') { if (arg === 'edit') void editGuide(ctxFor.guideId!); else removeGuide(ctxFor.guideId!, arg === 'deleteAll'); return; }
+    if (a === 'doc') { docAction(arg, ctxFor.doc); return; }
+    if (a === 'menu') { const pick = ctxFor.pick; ctxFor = {}; pick?.(arg); return; }
     if (a === 'edit') { const s = selected()[0]; if (!openBlock(s.id)) startEdit(s.id, s.type === 'text' ? 'text' : 'label'); }
     if (a === 'copy') copySel();
     if (a === 'copytikz') copyTikz();
@@ -5089,23 +4964,11 @@ import { runtime as TD } from '../runtime';
     if (a === 'l') alignSel(arg);
     if (a === 'd') distributeSel(arg);
     if (a === 'all') { state.sel = new Set(shapes().map((s: any) => s.id)); renderOverlay(); renderProps(); }
-    if (a === 'layer') layerAction(arg, ctx.dataset.layer || '');
+    if (a === 'layer') layerAction(arg, ctxFor.layer || '');
     if (a === 'fit') zoomFit();
     if (a === 'fitw') zoomFitWidth();
     if (a === 'grid') toggleGrid();
-  });
-  ctx.addEventListener('pointerover', (e: PointerEvent) => {
-    const row=(e.target as Element).closest<HTMLElement>('.ctx-item');
-    if (!row || (e.relatedTarget instanceof Node && row.contains(e.relatedTarget))) return;
-    ctx.querySelectorAll<HTMLElement>('.sub').forEach(sub=>{ if (!sub.contains(row) && sub.parentElement !== row) sub.style.display='none'; });
-    const sub=row.querySelector<HTMLElement>(':scope > .sub');
-    if (sub && !row.classList.contains('dis')) { const r=row.getBoundingClientRect(); positionMenu(sub,r.right,r.top-5,r); }
-  });
-  ctx.addEventListener('scroll',()=>ctx.querySelectorAll<HTMLElement>('.sub').forEach(sub=>sub.style.display='none'));
-  ctx.addEventListener('contextmenu', (e) => e.preventDefault());
-  document.addEventListener('pointerdown', (e) => { if (ctxOpen() && !(e.target! as Element).closest('#ctxMenu')) closeCtx(); }, true);
-  window.addEventListener('blur', closeCtx);
-  window.addEventListener('resize', closeCtx);
+  }
 
   function nudge(dx: any, dy: any) {
     if (!state.sel.size) return;
@@ -5159,7 +5022,7 @@ import { runtime as TD } from '../runtime';
     }
     if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; }
     if (!imp.hidden) { if (e.key === 'Escape') closeImport(); return; }
-    if (e.key === 'Escape' && (openFly || ctxOpen())) { hideFly(); closeCtx(); return; }
+    if (e.key === 'Escape' && (flyoutOpen() || ctxOpen())) { hideFly(); closeCtx(); return; }
     if (mod && !e.altKey) {
       const k0 = e.key.toLowerCase();
       if (k0 === 'e') { e.preventDefault(); runCmd(e.shiftKey ? 'latex' : 'tikz'); return; }
@@ -5229,7 +5092,7 @@ import { runtime as TD } from '../runtime';
     if (e.key === 'ArrowUp') { e.preventDefault(); nudge(0, -step); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); nudge(0, step); return; }
     if (k === 'g') { toggleGrid(); return; }
-    if (TOOL_KEYS[k] && (k !== 'h' || hasHand(state.mode))) setTool(TOOL_KEYS[k]);
+    if (TOOL_KEYS[k]) setTool(TOOL_KEYS[k]);
   });
   const spaceUp = () => { if (spaceDown) { spaceDown = false; markTools(); } svg.classList.remove('pan-ready'); };
   document.addEventListener('keyup', (e) => { if (e.key === ' ') spaceUp(); });
@@ -5258,7 +5121,8 @@ import { runtime as TD } from '../runtime';
   // ---------------- top bar ----------------
   // Toggle state for assistive tech: a button's .on / .active class is mirrored to aria-pressed.
   {
-    const sync = (b: any) => b.setAttribute('aria-pressed', b.classList.contains('on') || b.classList.contains('active'));
+    // a segment of a one-of switch (the kit's Segmented: role=radio) says aria-checked instead
+    const sync = (b: any) => b.setAttribute(b.getAttribute('role') === 'radio' ? 'aria-checked' : 'aria-pressed', b.classList.contains('on') || b.classList.contains('active'));
     const sel = 'button.toggle, button[data-tool], button[data-fly]';
     const mo = new MutationObserver((ms) => ms.forEach((m) => (m.target as Element).matches(sel) && sync(m.target)));
     ['#topbar', '#tools'].forEach((root) => {
@@ -5358,49 +5222,6 @@ import { runtime as TD } from '../runtime';
   $('#docName').addEventListener('keydown', (e: any) => { if (e.key === 'Enter') e.target.blur(); });
   $('#btnNewDoc').onclick = () => newDoc(null, null, null, null, null, state.doc.kind);
   $('#binRow').onclick = openBin;
-  let lastDocClick: { t: number; folder?: string; doc?: string; shut?: boolean } = { t: 0 };
-  $('#docList').addEventListener('click', (e: any) => {
-    if (e.target.closest('input')) return;
-    const del = e.target.closest('[data-del]');
-    if (del) { e.stopPropagation(); deleteDoc(del.dataset.del); return; }
-    const delF = e.target.closest('[data-delfolder]');
-    if (delF) { e.stopPropagation(); deleteFolder(delF.dataset.delfolder); return; }
-    const fo = e.target.closest('[data-folder]');
-    if (fo) {
-      if (fo.classList.contains('renaming')) return;
-      const path = fo.dataset.folder, now = Date.now();
-      if (!e.target.closest('.chev') && (e.detail >= 2 || (lastDocClick.folder === path && now - lastDocClick.t < 400))) {
-        const shut = lastDocClick.folder === path ? lastDocClick.shut! : fo.classList.contains('shut');
-        lastDocClick = { t: 0 };
-        setFolded(path, shut);
-        renameFolderInList(path);
-        return;
-      }
-      const wasShut = fo.classList.contains('shut');
-      lastDocClick = { t: now, folder: path, shut: wasShut };
-      setFolded(path, !wasShut);
-      return;
-    }
-    const li = e.target.closest('[data-doc]');
-    if (li) {
-      if (li.classList.contains('renaming')) return;
-      const id = li.dataset.doc, now = Date.now();
-      if (e.detail >= 2 || (lastDocClick.doc === id && now - lastDocClick.t < 400)) {
-        lastDocClick = { t: 0 };
-        renameInList(id);
-        return;
-      }
-      lastDocClick = { t: now, doc: id };
-      if (id !== state.docId) openDoc(id);
-    }
-  });
-  $('#docList').addEventListener('dblclick', (e: any) => {
-    if (e.target.closest('button, input, .chev')) return;
-    const fo = e.target.closest('[data-folder]');
-    if (fo) { if (!fo.classList.contains('renaming')) renameFolderInList(fo.dataset.folder); return; }
-    const li = e.target.closest('[data-doc]');
-    if (li && !li.classList.contains('renaming')) renameInList(li.dataset.doc);
-  });
   // Drag a file onto a folder to move it there, or onto the list's empty part to take it out of its folder.
   {
     const ul = $('#docList');
@@ -5490,11 +5311,7 @@ import { runtime as TD } from '../runtime';
   // The sort menu on the file list's header: opens on hover or a click; a choice closes it. A click on the button
   // keeps a hover-opened menu open (it no longer closes when the pointer leaves); a second click closes it.
   {
-    const btn = $('#btnSortDocs'), menu = document.createElement('div');
-    menu.id = 'sortMenu'; menu.className = 'ctx sort-menu'; menu.hidden = true;
-    menu.setAttribute('role', 'menu');
-    document.body.appendChild(menu);
-    const TICK = '<svg class="ck" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg>';
+    const btn = $('#btnSortDocs');
     const BY: [SortBy, any, any, string][] = [
       ['custom', captions["ui.custom.order"], captions["ui.your.own.order.drag.files.to.rearrange.them"], '<path d="M4 6h12M4 10h12M4 14h12"/>'],
       ['created', captions["ui.date.created"], captions["ui.when.each.file.was.made"], '<path d="M3.5 5.5h13v11h-13zM3.5 8.5h13M7 3.5v3M13 3.5v3"/>'],
@@ -5505,49 +5322,38 @@ import { runtime as TD } from '../runtime';
       : by === 'custom' ? (d === 'asc' ? captions["ui.ascending"] : captions["ui.descending"]) : (d === 'asc' ? captions["ui.oldest.first"] : captions["ui.newest.first"]));
     const sortTitle = () => fileSort.by === 'custom' ? uiText('files.sortTitle.custom', 'Sort: custom order (drag to rearrange)')
       : uiText('files.sortTitle', 'Sort: {by}, {dir}', { by: caption(BY.find((b) => b[0] === fileSort.by)![1]).toLowerCase(), dir: dirLabel(fileSort.by, fileSort.dir).toLowerCase() });
-    const row = (attr: string, on: boolean, label: any, icon: string, hint: any, dis = false) =>
-      `<button class="ctx-item" role="menuitemradio" aria-checked="${on}" ${attr}${dis ? ' disabled' : ''} title="${esc(caption(hint))}"><svg viewBox="0 0 20 20">${icon}</svg><span class="lb">${esc(caption(label))}</span>${on && !dis ? TICK : '<span class="ck"></span>'}</button>`;
-    const fill = (rows = !menu.hidden) => {
-      const { by, dir } = fileSort, custom = by === 'custom';
-      btn.title = sortTitle();
-      btn.classList.toggle('on', !custom);
-      if (!rows) return; // a closed menu holds no rows (they would answer other menus' queries)
-      menu.innerHTML = BY.map(([b, label, hint, icon]) => row(`data-sort="${b}"`, b === by, label, icon, hint)).join('') + '<hr>'
-        + row('data-dir="asc"', dir === 'asc', dirLabel(by, 'asc'), '<path d="M10 15.5v-11M6 8.5l4-4 4 4"/>', custom ? captions["ui.custom.order.has.no.direction"] : captions["ui.ascending"], custom)
-        + row('data-dir="desc"', dir === 'desc', dirLabel(by, 'desc'), '<path d="M10 4.5v11M6 11.5l4 4 4-4"/>', custom ? captions["ui.custom.order.has.no.direction"] : captions["ui.descending"], custom);
-    };
-    onLocale(() => { menu.setAttribute('aria-label', caption(captions["ui.sort.files"])); fill(); });
-    let timer = 0, pinned = false;
-    const hide = () => { clearTimeout(timer); pinned = false; menu.hidden = true; menu.innerHTML = ''; btn.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); };
-    const show = () => {
-      clearTimeout(timer);
-      if (!menu.hidden) return;
-      TD.tooltip && TD.tooltip.hide();
-      fill(true); menu.hidden = false;
-      // under the button, its right edge on the button's (over the sidebar); kept on screen
-      const r = btn.getBoundingClientRect(), w = menu.offsetWidth;
-      menu.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
-      menu.style.top = (r.bottom + 4) + 'px';
-      btn.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
-    };
+    const fill = () => { btn.title = sortTitle(); btn.classList.toggle('on', fileSort.by !== 'custom'); };
+    let timer = 0, pinned = false, open = false;
+    function hide() { clearTimeout(timer); if (open) closeContextMenu(); }
     const later = () => { clearTimeout(timer); if (!pinned) timer = setTimeout(hide, HOVER_CLOSE) as any; };
-    btn.addEventListener('pointerenter', (e: any) => { if (e.pointerType !== 'mouse') return; clearTimeout(timer); if (menu.hidden) timer = setTimeout(show, HOVER_OPEN) as any; });
-    btn.addEventListener('pointerleave', (e: any) => { if (e.pointerType === 'mouse' && !menu.contains(e.relatedTarget)) later(); });
-    btn.addEventListener('click', () => { if (menu.hidden || !pinned) { show(); pinned = true; } else hide(); });
-    menu.addEventListener('pointerenter', () => clearTimeout(timer));
-    menu.addEventListener('pointerleave', (e: any) => { if (e.pointerType === 'mouse' && !btn.contains(e.relatedTarget)) later(); });
-    menu.addEventListener('click', (e: any) => {
-      const b = e.target.closest('[data-sort],[data-dir]');
-      if (!b || b.disabled) return;
-      if (b.dataset.sort) fileSort = { ...fileSort, by: b.dataset.sort };
-      else fileSort = { ...fileSort, dir: b.dataset.dir };
-      store.set(LS_SORT, fileSort);
-      hide();
-      renderDocList();
-    });
-    document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target as Element).closest('#sortMenu, #btnSortDocs')) hide(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { e.stopPropagation(); hide(); btn.focus(); } }, true);
-    fill();
+    function show(focus = false) {
+      clearTimeout(timer);
+      if (open) return;
+      TD.tooltip && TD.tooltip.hide();
+      const { by, dir } = fileSort, custom = by === 'custom';
+      const way = (d: 'asc' | 'desc', svg: string): MenuItemSpec => ({ act: 'dir:' + d, label: dirLabel(by, d), svg, checked: !custom && dir === d, disabled: custom,
+        title: caption(custom ? captions["ui.custom.order.has.no.direction"] : d === 'asc' ? captions["ui.ascending"] : captions["ui.descending"]) });
+      const menu = openContextMenu([
+        ...BY.map(([b, label, hint, icon]): MenuItemSpec => ({ act: 'sort:' + b, label: caption(label), title: caption(hint), svg: icon, checked: b === by })), '-',
+        way('asc', '<path d="M10 15.5v-11M6 8.5l4-4 4 4"/>'), way('desc', '<path d="M10 4.5v11M6 11.5l4 4 4-4"/>'),
+      ], 0, 0, (act) => {
+        const [k, v] = act.split(':');
+        fileSort = k === 'sort' ? { ...fileSort, by: v as SortBy } : { ...fileSort, dir: v as 'asc' | 'desc' };
+        store.set(LS_SORT, fileSort);
+        fill();
+        renderDocList();
+      }, { id: 'sortMenu', class: 'sort-menu', below: btn.getBoundingClientRect(), align: 'end', owner: btn, focus, minWidth: 200, label: caption(captions["ui.sort.files"]),
+        onclose: () => { clearTimeout(timer); open = false; pinned = false; btn.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); } });
+      open = true;
+      btn.classList.add('open'); btn.setAttribute('aria-expanded', 'true');
+      menu?.addEventListener('pointerenter', () => clearTimeout(timer));
+      menu?.addEventListener('pointerleave', (e: PointerEvent) => { if (e.pointerType === 'mouse' && !btn.contains(e.relatedTarget as Node)) later(); });
+    }
+    btn.addEventListener('pointerenter', (e: any) => { if (e.pointerType !== 'mouse') return; clearTimeout(timer); if (!open) timer = setTimeout(show, HOVER_OPEN) as any; });
+    btn.addEventListener('pointerleave', (e: any) => { if (e.pointerType === 'mouse' && !document.getElementById('sortMenu')?.contains(e.relatedTarget)) later(); });
+    // a click keeps a hover-opened menu open (it no longer closes when the pointer leaves); a second click closes it
+    btn.addEventListener('click', () => { if (!open || !pinned) { show(true); pinned = true; } else hide(); });
+    onLocale(() => { hide(); fill(); }); // runs now, too
   }
 
   const slug = () => (leafOf(state.doc.name) || 'diagram').replace(/[^\w\-]+/g, '_');
@@ -5707,7 +5513,7 @@ import { runtime as TD } from '../runtime';
   const inTable = () => document.body.classList.contains('mode-table');
   /** Quick or Table: a tool on its own, the file's canvas and document hidden */
   const inTool = () => inQuick() || inTable();
-  function leaveFile() { magnifier.hide(); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); hideFly(); closeCtx(); expPop.hidden = true; }
+  function leaveFile() { magnifier.hide(); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); hideFly(); closeCtx(); closeExport(); }
   function setTable(on: any) {
     if (on === inTable()) return;
     if (on) { setQuick(false); leaveFile(); }
@@ -5733,7 +5539,7 @@ import { runtime as TD } from '../runtime';
     document.body.classList.toggle('mode-quick', on);
     try { on ? localStorage.setItem(QUICK_KEY, '1') : localStorage.removeItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
     if (on) {
-      hideFly(); closeCtx(); expPop.hidden = true;
+      hideFly(); closeCtx(); closeExport();
       document.querySelectorAll('#kindSeg [data-mode], #kindSeg [data-kind]').forEach((b) => b.classList.remove('on'));
       $('#kindSeg [data-quick]').classList.add('on');
       TD.quick.show();
@@ -5773,17 +5579,18 @@ import { runtime as TD } from '../runtime';
     gallery.className = 'diagram-gallery';
     gallery.setAttribute('aria-labelledby', 'diagramGalleryTitle');
     const diagrams = state.doc.blocks.map((b: any, i: number) => ({ b, i })).filter(({ b }: any) => b.type === 'diagram');
-    gallery.innerHTML = `<div class="modal-head"><h2 id="diagramGalleryTitle">${esc(uiText('gallery.title', 'Choose a Diagram'))}</h2><button class="icon flat" data-close aria-label="${esc(uiText('ui.close', 'Close'))}">×</button></div><div class="diagram-gallery-grid">${diagrams.map(({ b, i }: any, n: number) => {
-      const name = typeof b.name === 'string' && b.name.trim() ? b.name : uiText('top.blockSel', 'Diagram {n} of {total}', { n: n + 1, total: diagrams.length });
-      return `<button class="diagram-gallery-card${i === state.doc.active ? ' on' : ''}" data-block="${i}" aria-current="${i === state.doc.active ? 'true' : 'false'}"><span class="diagram-gallery-preview" aria-hidden="true">${shapesSvg(b.shapes || [], 12, false, true) || `<span>${esc(uiText('pages.empty', 'empty'))}</span>`}</span><span class="diagram-gallery-label"><span>${esc(name)}</span>${i === state.doc.active ? '<span aria-hidden="true">✓</span>' : ''}</span></button>`;
-    }).join('')}</div>`;
+    const leave = () => closeDialogElement(gallery); // fades out, then closes
     document.body.appendChild(gallery);
-    gallery.addEventListener('close', () => { gallery.remove(); $('#blockSel').focus({ preventScroll: true }); }, { once: true });
-    gallery.addEventListener('click', (e) => {
-      const target = (e.target as Element).closest<HTMLElement>('[data-block], [data-close]');
-      if (target?.dataset.block != null) { const index = Number(target.dataset.block); gallery.close(); setActiveBlock(index); }
-      else if (target?.hasAttribute('data-close') || e.target === gallery) gallery.close();
-    });
+    renderSvelteView(gallery, DiagramGallery, {
+      title: uiText('gallery.title', 'Choose a Diagram'), closeLabel: uiText('ui.close', 'Close'), empty: uiText('pages.empty', 'empty'),
+      cards: diagrams.map(({ b, i }: any, n: number) => ({ index: i, on: i === state.doc.active, svg: shapesSvg(b.shapes || [], 12, false, true),
+        name: typeof b.name === 'string' && b.name.trim() ? b.name : uiText('top.blockSel', 'Diagram {n} of {total}', { n: n + 1, total: diagrams.length }) })),
+      pick: (index) => { leave(); setActiveBlock(index); },
+      close: leave,
+    } satisfies DiagramGalleryModel);
+    gallery.addEventListener('close', () => { destroyView(gallery); gallery.remove(); $('#blockSel').focus({ preventScroll: true }); }, { once: true });
+    gallery.addEventListener('click', (e) => { if (e.target === gallery) leave(); }); // the backdrop
+    gallery.addEventListener('cancel', (e) => { e.preventDefault(); leave(); }); // Esc
     gallery.addEventListener('keydown', (e) => e.stopPropagation());
     gallery.showModal();
     const selected = gallery.querySelector<HTMLElement>('[aria-current="true"]');
@@ -5932,73 +5739,69 @@ import { runtime as TD } from '../runtime';
       }
     } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
   }
-  const expPop = document.createElement('div');
-  expPop.className = 'popover exp-pop'; expPop.hidden = true;
-  expPop.setAttribute('role', 'dialog');
-  document.body.appendChild(expPop);
+  // the Export panel: the kit's popover under the Export button, its body built here
+  let expPop: PopoverHandle | null = null;
+  const expOpen = () => !!expPop && !expPop.closed;
+  const closeExport = () => expPop?.close();
   const DPIS = [72, 96, 150, 300, 600];
   // Formats: pictures of the diagram or pages, plus the whole file as one web page (the only one in Document view).
   const expFmts = () => (state.mode === 'document' ? [['html', uiText('exp.webPage', 'Web page')]] : [['png', 'PNG'], ['svg', 'SVG'], ['pdf', 'PDF'], ['html', uiText('exp.webPage', 'Web page')]]);
   const expFmt = () => (expFmts().some(([k]) => k === expOpts.fmt) ? expOpts.fmt : expFmts()[0][0]);
   function renderExpPop() {
-    if (TD.math.pending) { expPop.hidden = true; return; }
+    if (!expOpen()) return;
+    if (TD.math.pending) { closeExport(); return; }
     const o = expOpts, fmt = expFmt();
-    expPop.setAttribute('aria-label', caption(captions["ui.export"]));
+    expPop!.el.setAttribute('aria-label', caption(captions["ui.export"]));
+    const setFmt = (v: string) => { expOpts.fmt = v; saveExpOpts(); renderExpPop(); };
+    const go = (label: string): ExportAction => ({ label, primary: true, attrs: { 'data-ego': '' }, onclick: () => { closeExport(); if (expFmt() === 'html') exportHtml(); else runExport(); } });
+    const formats = expFmts().map(([value, label]) => ({ value, label }));
+    let model: ExportPanelModel;
     if (fmt === 'html') {
-      expPop.innerHTML = `<div class="exp-h">${esc(state.doc.kind === 'classic' ? uiText('exp.h.document', 'Export document') : uiText('exp.h.file', 'Export file'))}</div>
-        <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${fmt === k}" data-efmt="${k}" class="${fmt === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
-        <div class="exp-note">${esc(uiText('exp.htmlNote', 'The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.'))}</div>
-        ${dirRow()}<button type="button" class="primary exp-go" data-ego>${esc(TD.files.dirOf(state.docId) ? uiText('exp.saveWeb', 'Save web page') : uiText('exp.downloadWeb', 'Download web page'))}</button>`;
-      return;
+      model = { head: state.doc.kind === 'classic' ? uiText('exp.h.document', 'Export document') : uiText('exp.h.file', 'Export file'), formats, format: fmt, onformat: setFmt,
+        rows: [{ kind: 'note', text: uiText('exp.htmlNote', 'The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.') }, ...dirRow()],
+        actions: [go(TD.files.dirOf(state.docId) ? uiText('exp.saveWeb', 'Save web page') : uiText('exp.downloadWeb', 'Download web page'))] };
+    } else {
+      const flat = o.fmt === 'pdf' && o.flat, dpi = flat ? o.flatDpi : o.dpi;
+      const srcs = exportSources(), sc = expScale(dpi);
+      const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : uiText('exp.empty', 'empty');
+      const cm = srcs.length ? `${r2(srcs[0].vb[2] / PX)} × ${r2(srcs[0].vb[3] / PX)} cm` : '';
+      const raster = o.fmt === 'png' || flat;
+      const head = state.mode === 'page' ? (srcs.length > 1 ? uiText('exp.h.pages', 'Export pages') : uiText('exp.h.page', 'Export page')) : state.mode === 'board' ? uiText('exp.h.board', 'Export whiteboard') : uiText('exp.h.diagram', 'Export diagram');
+      const B = '\u0000';
+      const rows: ExportRow[] = [];
+      if (o.fmt === 'pdf') rows.push({ kind: 'switch', id: 'expFlat', label: uiText('exp.flatten', 'Flatten'), title: uiText('exp.flatten.title', 'Pages as images at a set DPI, instead of vector with selectable text'), checked: flat,
+        onchange: (on) => { expOpts.flat = on; saveExpOpts(); setTimeout(renderExpPop, 220); } }); // after the knob slides
+      if (raster) rows.push({ kind: 'dpi', label: uiText('exp.resolution', 'Resolution'), value: dpi, presets: DPIS, onchange: (v) => { expOpts[expOpts.fmt === 'pdf' ? 'flatDpi' : 'dpi'] = v; saveExpOpts(); renderExpPop(); } },
+        { kind: 'meta', text: dim + (srcs.length > 1 ? ' ' + (o.fmt === 'pdf' ? uiText('exp.perPage.pages', 'per page · {n} pages', { n: srcs.length }) : uiText('exp.perPage.files', 'per page · {n} files', { n: srcs.length })) : ''), aside: cm });
+      else rows.push({ kind: 'meta', text: uiText('exp.vector', 'Vector, scales to any size'), aside: cm });
+      if (o.fmt === 'png' && state.mode !== 'page') rows.push({ kind: 'check', id: 'expTr', label: uiText('exp.transparent', 'Transparent background'), checked: o.transparent, onchange: (on) => { expOpts.transparent = on; saveExpOpts(); } });
+      if (flat) rows.push({ kind: 'note', text: srcs.length > 1 ? uiText('exp.flatNote.page', "Each page becomes one image; text can't be selected.") : uiText('exp.flatNote.sheet', "Each sheet becomes one image; text can't be selected.") });
+      if (o.fmt === 'pdf' && !flat) rows.push({ kind: 'note', bold: uiText('exp.saveAsPdf', 'Save as PDF'),
+        text: srcs.length > 1 ? uiText('exp.pdfNote.pages', 'Vector PDF with selectable text, {n} pages. In the print window, choose {b} as the destination.', { n: srcs.length, b: B }) : uiText('exp.pdfNote', 'Vector PDF with selectable text. In the print window, choose {b} as the destination.', { b: B }) });
+      else rows.push(...dirRow());
+      model = { head, formats, format: o.fmt, onformat: setFmt, rows,
+        actions: [go(o.fmt === 'pdf' && !flat ? uiText('exp.savePdf', 'Save PDF…') : TD.files.dirOf(state.docId) ? uiText('exp.save', 'Save {fmt}', { fmt: o.fmt.toUpperCase() }) : uiText('exp.download', 'Download {fmt}', { fmt: o.fmt.toUpperCase() }))] };
     }
-    const flat = o.fmt === 'pdf' && o.flat, dpi = flat ? o.flatDpi : o.dpi;
-    const srcs = exportSources(), sc = expScale(dpi);
-    const dim = srcs.length ? `${Math.round(srcs[0].vb[2] * sc)} × ${Math.round(srcs[0].vb[3] * sc)} px` : uiText('exp.empty', 'empty');
-    const cm = srcs.length ? `${r2(srcs[0].vb[2] / PX)} × ${r2(srcs[0].vb[3] / PX)} cm` : '';
-    const raster = o.fmt === 'png' || flat;
-    const head = state.mode === 'page' ? (srcs.length > 1 ? uiText('exp.h.pages', 'Export pages') : uiText('exp.h.page', 'Export page')) : state.mode === 'board' ? uiText('exp.h.board', 'Export whiteboard') : uiText('exp.h.diagram', 'Export diagram');
-    const B = '\u0000', bold = (s: string) => esc(s).replace(B, `<b>${esc(uiText('exp.saveAsPdf', 'Save as PDF'))}</b>`);
-    expPop.innerHTML = `<div class="exp-h">${esc(head)}</div>
-      <div class="seg exp-fmt" role="radiogroup">${expFmts().map(([k, l]) => `<button type="button" role="radio" aria-checked="${o.fmt === k}" data-efmt="${k}" class="${o.fmt === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
-      ${o.fmt === 'pdf' ? `<label class="exp-row exp-sw"><span>${esc(uiText('exp.flatten', 'Flatten'))}</span><input type="checkbox" role="switch" id="expFlat"${flat ? ' checked' : ''} title="${esc(uiText('exp.flatten.title', 'Pages as images at a set DPI, instead of vector with selectable text'))}"></label>` : ''}
-      ${raster ? `<div class="exp-row"><label for="expDpi">${esc(uiText('exp.resolution', 'Resolution'))}</label><span class="exp-dpi"><select id="expDpiSel">${DPIS.map((d) => `<option value="${d}"${d === dpi ? ' selected' : ''}>${d} DPI</option>`).join('')}${DPIS.includes(dpi) ? '' : `<option value="${dpi}" selected>${dpi} DPI</option>`}</select><input id="expDpi" type="number" min="24" max="2400" step="1" value="${dpi}" aria-label="DPI"></span></div>
-      <div class="exp-meta">${dim}${srcs.length > 1 ? ' ' + esc(o.fmt === 'pdf' ? uiText('exp.perPage.pages', 'per page · {n} pages', { n: srcs.length }) : uiText('exp.perPage.files', 'per page · {n} files', { n: srcs.length })) : ''}<span>${cm}</span></div>` : `<div class="exp-meta">${esc(uiText('exp.vector', 'Vector, scales to any size'))}<span>${cm}</span></div>`}
-      ${o.fmt === 'png' && state.mode !== 'page' ? `<label class="exp-chk"><input type="checkbox" id="expTr"${o.transparent ? ' checked' : ''}> ${esc(uiText('exp.transparent', 'Transparent background'))}</label>` : ''}
-      ${flat ? `<div class="exp-note">${esc(srcs.length > 1 ? uiText('exp.flatNote.page', "Each page becomes one image; text can't be selected.") : uiText('exp.flatNote.sheet', "Each sheet becomes one image; text can't be selected."))}</div>` : ''}
-      ${o.fmt === 'pdf' && !flat ? `<div class="exp-note">${bold(srcs.length > 1 ? uiText('exp.pdfNote.pages', 'Vector PDF with selectable text, {n} pages. In the print window, choose {b} as the destination.', { n: srcs.length, b: B }) : uiText('exp.pdfNote', 'Vector PDF with selectable text. In the print window, choose {b} as the destination.', { b: B }))}</div>` : ''}
-      ${o.fmt === 'pdf' && !flat ? '' : dirRow()}<button type="button" class="primary exp-go" data-ego>${esc(o.fmt === 'pdf' && !flat ? uiText('exp.savePdf', 'Save PDF…') : TD.files.dirOf(state.docId) ? uiText('exp.save', 'Save {fmt}', { fmt: o.fmt.toUpperCase() }) : uiText('exp.download', 'Download {fmt}', { fmt: o.fmt.toUpperCase() }))}</button>`;
+    renderSvelteView(expPop!.body, ExportPanel, model);
   }
   // Where exports go: Downloads, or a folder picked once for this file (where the browser allows it).
-  function dirRow() {
-    if (!TD.files.can) return '';
+  function dirRow(): ExportRow[] {
+    if (!TD.files.can) return [];
     const f = TD.files.dirOf(state.docId);
-    const clearT = esc(uiText('exp.dirClear', 'Download exports instead'));
-    return `<div class="exp-row exp-dir"><label>${esc(uiText('exp.saveTo', 'Save to'))}</label><span class="exp-dirv">
-      <button type="button" class="exp-dirb" data-edir title="${esc(f ? uiText('exp.dir.title', 'Exports of this file go to the folder {folder}, replacing files of the same name. Click to pick another folder.', { folder: f.name }) : uiText('exp.dir.none', 'Exports are downloaded. Click to pick a folder for this file’s exports instead.'))}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 5.5v10h15v-8H9L7.5 5.5z"/></svg><span>${f ? esc(f.name) : esc(uiText('exp.downloads', 'Downloads'))}</span></button>${f ? `<button type="button" class="icon flat exp-dirx" data-edirx title="${clearT}" aria-label="${clearT}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>` : ''}</span></div>`;
+    return [{ kind: 'dir', label: uiText('exp.saveTo', 'Save to'), folder: f ? f.name : uiText('exp.downloads', 'Downloads'),
+      title: f ? uiText('exp.dir.title', 'Exports of this file go to the folder {folder}, replacing files of the same name. Click to pick another folder.', { folder: f.name }) : uiText('exp.dir.none', 'Exports are downloaded. Click to pick a folder for this file’s exports instead.'),
+      onpick: () => { TD.files.pickDir(state.docId).then(renderExpPop, (err: any) => showHint(uiText('hint.folderFailed', "Couldn't use that folder ({error})", { error: err.message }), 2500)); },
+      clear: f ? { title: uiText('exp.dirClear', 'Download exports instead'), onclick: () => { TD.files.clearDir(state.docId).then(renderExpPop); } } : undefined }];
   }
   function openExport(btn: any) {
     if (!outputAllowed()) return;
-    if (!expPop.hidden) { expPop.hidden = true; return; }
+    if (expOpen()) { closeExport(); return; }
+    // Esc and a press outside are the popover's own
+    // the panel goes once the popover has faded out
+    const pop = openPopover(btn, { width: 264, class: 'exp-pop', label: caption(captions["ui.export"]), onclose: () => { const body = pop.body; setTimeout(() => destroyView(body), 400); } });
+    expPop = pop;
     renderExpPop();
-    expPop.hidden = false;
-    const r = btn.getBoundingClientRect(), z = parseFloat(getComputedStyle(document.body).zoom) || 1;
-    expPop.style.top = r.bottom / z + 6 + 'px';
-    expPop.style.left = Math.max(8, Math.min(r.right / z - expPop.offsetWidth, innerWidth / z - expPop.offsetWidth - 8)) + 'px';
   }
-  expPop.addEventListener('click', (e) => {
-    const f = (e.target! as Element).closest('[data-efmt]');
-    if (f) { expOpts.fmt = (f as HTMLElement).dataset.efmt; saveExpOpts(); renderExpPop(); return; }
-    if ((e.target! as Element).closest('[data-edir]')) { TD.files.pickDir(state.docId).then(() => { if (!expPop.hidden) renderExpPop(); }, (err: any) => showHint(uiText('hint.folderFailed', "Couldn't use that folder ({error})", { error: err.message }), 2500)); return; }
-    if ((e.target! as Element).closest('[data-edirx]')) { TD.files.clearDir(state.docId).then(() => { if (!expPop.hidden) renderExpPop(); }); return; }
-    if ((e.target! as Element).closest('[data-ego]')) { expPop.hidden = true; if (expFmt() === 'html') exportHtml(); else runExport(); }
-  });
-  expPop.addEventListener('change', (e) => {
-    if ((e.target! as HTMLElement).id === 'expDpiSel' || (e.target! as HTMLElement).id === 'expDpi') { const v = Math.round(+(e.target! as HTMLInputElement).value); if (v >= 24 && v <= 2400) expOpts[expOpts.fmt === 'pdf' ? 'flatDpi' : 'dpi'] = v; saveExpOpts(); renderExpPop(); }
-    if ((e.target! as HTMLElement).id === 'expFlat') { expOpts.flat = (e.target! as HTMLInputElement).checked; saveExpOpts(); setTimeout(renderExpPop, 220); } // after the knob slides
-    if ((e.target! as HTMLElement).id === 'expTr') { expOpts.transparent = (e.target! as HTMLInputElement).checked; saveExpOpts(); }
-  });
-  expPop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { expPop.hidden = true; $('#btnExport')?.focus(); } if (e.key === 'Enter' && (e.target! as HTMLElement).id === 'expDpi') (e.target! as HTMLElement).blur(); });
-  document.addEventListener('pointerdown', (e) => { if (!expPop.hidden && !expPop.contains((e.target as Node)) && !(e.target! as Element).closest('#btnExport')) expPop.hidden = true; });
   // Print one sheet per export source, each sized exactly to it: the browser's PDF output is vector,
   // with the fonts embedded, so "Save as PDF" here is the vector PDF export.
   function printVector(srcs: any, name = slug()) {
@@ -6048,41 +5851,44 @@ import { runtime as TD } from '../runtime';
   function openImport(text: any) {
     finishEdit(); finishPoly(); commit();
     $('#impText').value = text || '';
-    $('#impMsg').textContent = '';
+    impSay('');
     $('#impDefs').value = '';
-    imp.hidden = false;
+    showModalEl(imp);
     importReport();
     $('#impText').focus();
   }
-  function closeImport() { imp.hidden = true; }
+  function closeImport() { hideModalEl(imp); }
+  // the report under the field (src/ui/ImportReport.svelte): one line, or what becomes shapes and what stays code
+  const impSay = (text: string) => { $('#impMsg').classList.remove('report'); renderSvelteView($('#impMsg'), ImportReport, { text } satisfies ImportReportModel); };
   // what statements that can't be read exactly become: TikZ code as written (grouped), or editable shapes
   let impHow: any = (store.get('diagramtex.importHow', 'code') as any) === 'shapes' ? 'shapes' : 'code';
-  const markHow = () => document.querySelectorAll('#impHow [data-how]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.how === impHow));
+  const markHow = () => document.querySelectorAll('#impHow [data-how]').forEach((b) => { const on = (b as HTMLElement).dataset.how === impHow; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
   markHow();
   document.querySelectorAll('#impHow [data-how]').forEach((b) => ((b as HTMLElement).onclick = () => { impHow = (b as HTMLElement).dataset.how; store.set('diagramtex.importHow', impHow); markHow(); importReport(); }));
   const importAs = (src: any) => TD.importLatex(src, { editable: impHow === 'shapes', definitions: $('#impDefs').value });
   // as the code is typed or pasted: what will become shapes and what stays TikZ code, and why (with its line)
   function importReport() {
     const msg = $('#impMsg'), src = $('#impText').value;
-    msg.classList.remove('report'); msg.textContent = '';
-    if (!src.trim()) return;
+    if (!src.trim()) { impSay(''); return; }
     let res, conv = [];
-    try { res = TD.importLatex(src, { definitions: $('#impDefs').value }); if (impHow === 'shapes') { conv = (res.kept || []).filter((k: any) => k.preview); res = importAs(src); } } catch (err: any) { msg.textContent = uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message }); return; }
+    try { res = TD.importLatex(src, { definitions: $('#impDefs').value }); if (impHow === 'shapes') { conv = (res.kept || []).filter((k: any) => k.preview); res = importAs(src); } } catch (err: any) { impSay(uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message })); return; }
     const shapes = res.blocks.flatMap((b: any) => b.shapes || []);
     const n = shapes.filter((x: any) => x.type !== 'tikz').length, kept = [...conv.map((k: any) => ({ ...k, conv: true })), ...(res.kept || [])].sort((a, b) => (a.line || 0) - (b.line || 0));
     const nConv = conv.length, nCode = kept.length - nConv;
     const unresolved = (res.analysis || []).filter((a: any) => a.status === 'unresolved').length;
     const lintSource = ($('#impDefs').value ? $('#impDefs').value + '\n' : '') + src;
     const first = (c: any) => { const l = String(c).split('\n').find((x) => x.trim() && !/^\s*%/.test(x)) || ''; return l.trim().length > 60 ? l.trim().slice(0, 59) + '…' : l.trim(); };
-    const rows = kept.slice(0, 40).map((k) => `<li><span class="ln">${k.line ? esc(uiText('imp.line', 'line {n}', { n: k.line })) : ''}</span><code>${esc(first(k.code))}</code><span class="why">${esc(k.issues.join('; '))}</span></li>`);
     msg.classList.add('report');
-    const lint = TD.lint ? TD.lint(lintSource) : [];
-    if (lint.length) msg.classList.add('report');
-    msg.innerHTML = (unresolved ? '<div class="warn">' + esc((unresolved === 1 ? uiText('imp.unresolved.one', '1 section has unresolved layout or no preview. Its source is preserved; it is not converted to shapes.') : uiText('imp.unresolved.many', '{n} sections have unresolved layout or no preview. Their source is preserved; they are not converted to shapes.', { n: unresolved }))) + '</div>' : '') + (lint.length ? TD.lint.html(lint, 8) : '') + '<div>' + esc(n === 1 ? uiText('imp.shapes.one', '1 shape') : uiText('imp.shapes.many', '{n} shapes', { n }))
-      + (nConv ? ' · ' + esc(nConv === 1 ? uiText('imp.conv.one', "1 statement converted to shapes as drawn: what isn't read below is left out") : uiText('imp.conv.many', "{n} statements converted to shapes as drawn: what isn't read below is left out", { n: nConv })) : '')
-      + (nCode ? ' · ' + esc(nCode === 1 ? uiText('imp.preserved.one', '1 statement preserved as TikZ code') : uiText('imp.preserved.many', '{n} statements preserved as TikZ code', { n: nCode })) : '') + '</div>'
-      + (rows.length ? `<ul>${rows.join('')}${kept.length > 40 ? `<li>${esc(uiText('imp.more', '… {n} more', { n: kept.length - 40 }))}</li>` : ''}</ul>` : '')
-      + res.warnings.map((w: any) => `<div class="warn">${esc(w)}</div>`).join('');
+    renderSvelteView(msg, ImportReport, {
+      unresolved: unresolved ? (unresolved === 1 ? uiText('imp.unresolved.one', '1 section has unresolved layout or no preview. Its source is preserved; it is not converted to shapes.') : uiText('imp.unresolved.many', '{n} sections have unresolved layout or no preview. Their source is preserved; they are not converted to shapes.', { n: unresolved })) : undefined,
+      lint: TD.lint ? TD.lint(lintSource) : [],
+      summary: [n === 1 ? uiText('imp.shapes.one', '1 shape') : uiText('imp.shapes.many', '{n} shapes', { n }),
+        nConv ? (nConv === 1 ? uiText('imp.conv.one', "1 statement converted to shapes as drawn: what isn't read below is left out") : uiText('imp.conv.many', "{n} statements converted to shapes as drawn: what isn't read below is left out", { n: nConv })) : '',
+        nCode ? (nCode === 1 ? uiText('imp.preserved.one', '1 statement preserved as TikZ code') : uiText('imp.preserved.many', '{n} statements preserved as TikZ code', { n: nCode })) : ''].filter(Boolean).join(' · '),
+      rows: kept.slice(0, 40).map((k) => ({ line: k.line ? uiText('imp.line', 'line {n}', { n: k.line }) : '', code: first(k.code), why: k.issues.join('; ') })),
+      more: kept.length > 40 ? uiText('imp.more', '… {n} more', { n: kept.length - 40 }) : undefined,
+      warnings: res.warnings,
+    } satisfies ImportReportModel);
   }
   let impTimer = 0;
   for (const id of ['#impText', '#impDefs']) $(id).addEventListener('input', () => { clearTimeout(impTimer); impTimer = setTimeout(importReport, 300); });
@@ -6109,10 +5915,10 @@ import { runtime as TD } from '../runtime';
   function runImport(asNew: any) {
     const src = $('#impText').value;
     let res;
-    try { res = importAs(src); } catch (err: any) { $('#impMsg').textContent = uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message }); return; }
+    try { res = importAs(src); } catch (err: any) { impSay(uiText('imp.parseFailed', 'Could not parse: {error}', { error: err.message })); return; }
     groupPictures(res);
     const nShapes = res.blocks.reduce((a: any, b: any) => a + (b.shapes ? b.shapes.length : 0), 0);
-    if (!nShapes && !res.blocks.some((b: any) => b.type === 'text')) { $('#impMsg').textContent = uiText('imp.nothing', 'Nothing recognised in this code.') + (res.warnings.length ? ' ' + res.warnings.join(' ') : ''); return; }
+    if (!nShapes && !res.blocks.some((b: any) => b.type === 'text')) { impSay(uiText('imp.nothing', 'Nothing recognised in this code.') + (res.warnings.length ? ' ' + res.warnings.join(' ') : '')); return; }
     if (asNew && state.doc.kind === 'board') { newDoc(res.title || 'Imported', null, null, res.blocks, res.page, 'board'); zoomFit(); }
     else if (asNew) {
       newDoc(res.title || 'Imported', null, null, res.blocks, res.page);
@@ -6214,7 +6020,7 @@ import { runtime as TD } from '../runtime';
     const L = TD.lint ? TD.lint(tikzText, { preview: false }).filter((d: any) => d.sev !== 'info') : [];
     tikzErr = new Map();
     for (const d of L) tikzErr.set(d.line, [...(tikzErr.get(d.line) || []), d.msg]);
-    $('#tikzLint').innerHTML = `<div class="lint warn">${esc(noRestore())}</div>` + (L.length ? TD.lint.html(L) : '');
+    renderSvelteView($('#tikzLint'), LintList, { note: noRestore(), items: L } satisfies LintListModel);
     paintTikz();
   }
   // a click on a line selects what it draws (⇧ adds); dragging across lines selects text as usual
@@ -6259,11 +6065,11 @@ import { runtime as TD } from '../runtime';
     const ttl = $('#modal .modal-head strong'); if (ttl) ttl.textContent = caption(state.mode === 'page' ? captions["ui.latex.for.this.page"] : captions["ui.latex.code.variant1"]);
     $('#tikzSelOnly').checked = false;
     genTikz();
-    $('#modal').hidden = false;
+    showModalEl($('#modal'));
     view.focus({ preventScroll: true }); view.scrollTop = 0;
     markSel(true);
   }
-  function closeModal() { closeZipMenu(); $('#modal').hidden = true; }
+  function closeModal() { closeZipMenu(); hideModalEl($('#modal')); }
   $('#modalClose').onclick = closeModal;
   $('#modal').addEventListener('pointerdown', (e: any) => { if (e.target.id === 'modal') closeModal(); });
   $('#tikzScope').onchange = genTikz;
@@ -6276,45 +6082,24 @@ import { runtime as TD } from '../runtime';
   };
   $('#tikzDownload').onclick = () => { out(slug() + '.tex', tikzText, 'text/x-tex'); taken(); };
   $('#tikzZip').onclick = async () => { closeZipMenu(); await downloadLatex(tikzText, tikzFiles, true); taken(); };
-  // the split button's menu: the two .zip downloads, the first the same as the button
-  let zipMenu: HTMLElement | null = null;
+  // the split button's menu (the kit's): the two .zip downloads, the first the same as the button
+  let zipMenuOpen = false;
   function closeZipMenu() {
-    if (!zipMenu) return;
-    zipMenu.remove(); zipMenu = null;
+    if (!zipMenuOpen) return;
+    zipMenuOpen = false;
     $('#tikzZipMore').setAttribute('aria-expanded', 'false');
-    document.removeEventListener('pointerdown', zipAway, true); document.removeEventListener('keydown', zipKeys, true);
-  }
-  const zipAway = (e: Event) => { if (zipMenu && !zipMenu.contains(e.target as Node) && !(e.target as Element).closest?.('#tikzZipMore')) closeZipMenu(); };
-  function zipKeys(e: KeyboardEvent) {
-    if (!zipMenu) return;
-    const items = [...zipMenu.querySelectorAll<HTMLElement>('.ctx-item')], i = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeZipMenu(); $('#tikzZipMore').focus(); }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
-    else if (e.key === 'Tab') closeZipMenu();
+    if (contextMenuOpen()) closeContextMenu();
   }
   $('#tikzZipMore').onclick = () => {
-    if (zipMenu) { closeZipMenu(); return; }
-    const m = document.createElement('div');
-    m.className = 'ctx zip-menu'; m.setAttribute('role', 'menu');
-    const row = (act: string, label: string, title: string) => `<button class="ctx-item" role="menuitem" data-zip="${act}" title="${esc(title)}"><span class="lb">${esc(label)}</span></button>`;
-    m.innerHTML = row('ink', uiText('tikz.zip.ink', 'Download .zip: SVG through Inkscape'), uiText('tikz.zip.ink.title', 'The SVGs as they are: the svg package has Inkscape convert them when the LaTeX compiles. Needs shell escape and Inkscape; Overleaf has both.'))
-      + row('pdf', uiText('tikz.zip.pdf', 'Download .zip: SVG as PDF, no Inkscape'), uiText('tikz.zip.pdf.title', 'Each SVG also comes as a vector PDF made here, and the LaTeX tells the svg package to use it instead of calling Inkscape. Compiles with plain pdflatex.'));
-    m.addEventListener('click', async (e) => {
-      const b = (e.target as Element).closest<HTMLElement>('[data-zip]');
-      if (!b) return;
-      closeZipMenu();
-      await downloadLatex(tikzText, tikzFiles, true, b.dataset.zip === 'pdf'); taken();
-    });
-    document.body.appendChild(m);
-    // under the split button, right edges together, growing left (it sits at the dialog's right)
-    // (offset sizes: the opening animation scales the box, so its bounding rect is smaller at first)
-    const r = $('#tikzZipWrap').getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
-    m.style.left = Math.max(6, r.right - mw) + 'px'; m.style.top = Math.min(r.bottom + 4, innerHeight - mh - 6) + 'px';
-    m.style.transformOrigin = 'top right';
-    zipMenu = m;
-    $('#tikzZipMore').setAttribute('aria-expanded', 'true');
-    document.addEventListener('pointerdown', zipAway, true); document.addEventListener('keydown', zipKeys, true);
-    m.querySelector<HTMLElement>('.ctx-item')!.focus({ preventScroll: true });
+    if (zipMenuOpen && contextMenuOpen()) { closeZipMenu(); return; }
+    const more = $('#tikzZipMore');
+    zipMenuOpen = true;
+    more.setAttribute('aria-expanded', 'true');
+    openContextMenu([
+      { act: 'ink', label: uiText('tikz.zip.ink', 'Download .zip: SVG through Inkscape'), title: uiText('tikz.zip.ink.title', 'The SVGs as they are: the svg package has Inkscape convert them when the LaTeX compiles. Needs shell escape and Inkscape; Overleaf has both.') },
+      { act: 'pdf', label: uiText('tikz.zip.pdf', 'Download .zip: SVG as PDF, no Inkscape'), title: uiText('tikz.zip.pdf.title', 'Each SVG also comes as a vector PDF made here, and the LaTeX tells the svg package to use it instead of calling Inkscape. Compiles with plain pdflatex.') },
+    ], 0, 0, async (act) => { await downloadLatex(tikzText, tikzFiles, true, act === 'pdf'); taken(); },
+    { below: $('#tikzZipWrap').getBoundingClientRect(), owner: more, class: 'zip-menu', onclose: () => { zipMenuOpen = false; more.setAttribute('aria-expanded', 'false'); } });
   };
 
   // ---------------- sample document ----------------
@@ -6568,26 +6353,9 @@ import { runtime as TD } from '../runtime';
       applyView();
       renderPageLayer(); // the dimming outside the paper covers the view, which grows each frame
     };
-    // A top bar too narrow for its controls scrolls sideways; a plain mouse wheel scrolls it too, and the
-    // side with more to see fades (more-l / more-r).
-    {
-      const bar = $('#topbarTools') || $('#topbar');
-      const edges = () => {
-        const max = bar.scrollWidth - bar.clientWidth;
-        bar.classList.toggle('more-l', bar.scrollLeft > 1);
-        bar.classList.toggle('more-r', max - bar.scrollLeft > 1);
-      };
-      bar.addEventListener('scroll', edges, { passive: true });
-      const ro = new ResizeObserver(edges);
-      ro.observe(bar);
-      for (const c of bar.children) ro.observe(c); // hidden groups change the content's width
-      bar.addEventListener('wheel', (e: any) => {
-        if (bar.scrollWidth <= bar.clientWidth || Math.abs(e.deltaX) >= Math.abs(e.deltaY) || e.ctrlKey) return;
-        bar.scrollLeft += e.deltaY;
-        e.preventDefault();
-      }, { passive: false });
-      edges();
-    }
+    // A top bar too narrow for its controls scrolls sideways; a plain mouse wheel scrolls it too, and the side with
+    // more to see fades (the kit's fitToolbar; the bar sheds its labels by its own rules, so not `lean`).
+    fitToolbar($('#topbarTools') || $('#topbar'), { lean: false });
     $('#propsHead').onclick = () => { setPropsOpen($('#propsWin').classList.contains('collapsed'), true); savePrefs(); };
     $('#btnSidebar').onclick = () => {
       const b = document.body, done = () => { if (inTool()) return; if (state.mode !== 'document') render(); else TD.docview.render(); };
@@ -6763,9 +6531,9 @@ import { runtime as TD } from '../runtime';
     },
     downloadBlob: (name: any, blob: any) => downloadBlob(name, blob),
     svgWithFonts, // a standalone SVG with the maths fonts embedded (Table's SVG download)
-    // for the command search (src/ui/services/palette.ts)
+    // for the command search (src/ui/services/palette.svelte.ts)
     cmd: {
-      runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
+      runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, ctxAct, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
       toggleSnap: cycleSnapMode,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
@@ -6792,7 +6560,7 @@ import { runtime as TD } from '../runtime';
           if (b) b.title = b.getAttribute('aria-expanded') === 'false' ? uiText('panel.expand', 'Expand panel') : caption(captions["ui.collapse.panel"]);
         }
         layersKey = ''; renderLayers(); renderProps();
-        if (!expPop.hidden) renderExpPop();
+        renderExpPop();
       });
     });
   });

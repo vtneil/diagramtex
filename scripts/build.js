@@ -7,6 +7,9 @@ const crypto = require('crypto');
 const esbuild = require('esbuild');
 const { compileApp, renderIndex } = require('./compile');
 
+// the interface kit catalog, served by the dev server only
+const DEV_ONLY = 'kit.html';
+
 async function main() {
   const application = await compileApp({ minify: true, write: false });
 
@@ -48,7 +51,7 @@ async function main() {
     for (const ent of fs.readdirSync(path.join(SRC, rel), { withFileTypes: true })) {
       const r = rel ? `${rel}/${ent.name}` : ent.name;
       if (ent.isDirectory()) { if (r !== 'vendor') pages(r); continue; }
-      if (!ent.name.endsWith('.html') || r === 'index.html') continue;
+      if (!ent.name.endsWith('.html') || r === 'index.html' || r === DEV_ONLY) continue;
       for (const m of read(r).matchAll(/(?:href|src)="([^"#?]+\.(?:css|js))"/g)) linked.add(path.posix.normalize(path.posix.join(rel, m[1])));
     }
   })('');
@@ -59,6 +62,7 @@ async function main() {
       if (ent.name === '.DS_Store') continue;
       const r = path.join(rel, ent.name).split(path.sep).join('/');
       if (ent.isDirectory()) { walk(r); continue; }
+      if (r === DEV_ONLY) continue;
       if ((joined.has(r) && !linked.has(r)) || r.startsWith('js/') || r === 'index.html' || r === 'sw.js') continue; // written below
       const ext = path.extname(ent.name);
       if ((ext === '.js' || ext === '.css') && !ent.name.includes('.min.')) {

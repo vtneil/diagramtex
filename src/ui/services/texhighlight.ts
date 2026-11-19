@@ -6,7 +6,7 @@ import { runtime as TD } from '../../runtime';
 (function () {
   // the block editors and panels: their label popups and any field tagged data-tx="math" or data-tx="text"
   const SUB = '.td-pop-ta, [data-tx], .cz-props input[data-f="l"], .cz-props input[data-f="ann"], .cz-props input[data-f="v"], .cz-props input[data-f="i"], .cz-props input[data-f="text"]';
-  const FIELDS = '#inlineEditor, #props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], #qcModal .cz-code textarea, ' + SUB; // other panels' source: $…$ as in text
+  const FIELDS = '#props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], #qcModal .cz-code textarea, ' + SUB; // other panels' source: $…$ as in text
 
   // Maths spans of one line as [start, end) offsets, delimiters included. Same rules as the renderer
   // (TD.textSegments), except an unclosed $ runs to the end of the line, so maths lights up as it is typed.
@@ -56,7 +56,7 @@ import { runtime as TD } from '../../runtime';
   // gate's text, \push, the meter and phase labels and bare text in a cell are maths; stick, slice and
   // group labels are text, where only $…$ is maths.
   const QC_FIELDS = '#props [data-panel="qc"] textarea[data-p="src"], #qcModal .cz-code textarea';
-  const isQc = (el: any) => el.matches(QC_FIELDS) || (el.id === 'inlineEditor' && el.classList.contains('code'));
+  const isQc = (el: any) => el.matches(QC_FIELDS) || el.matches('.td-pop-ta.code');
   const QC_MATH = new Set(['gate', 'phase', 'push', 'meter', 'metercw', 'meterD', 'inputD', 'measure', 'measuretab', 'qwbundle', 'phantomgate', 'hphantomgate', 'ghost']);
   const QC_TEXT = new Set(['lstick', 'rstick', 'midstick', 'slice', 'gategroup', 'ground', 'trash', 'makeebit', 'gateinput', 'gateoutput']);
   // index just past the group opened at t[i] ({ or [), or the end of the text when it isn't closed
@@ -140,6 +140,8 @@ import { runtime as TD } from '../../runtime';
     ov.className = 'tx-hl';
     ov.setAttribute('aria-hidden', 'true');
     el.after(ov);
+    // a field in the top layer (the text popup) has its copy there too, over it
+    if (el.matches(':popover-open')) { ov.setAttribute('popover', 'manual'); ov.showPopover(); }
     // the copy and the caret take the field's own text colour (read before it goes transparent): a field on
     // the paper (a Table cell, a label) keeps black text in dark mode, where the interface ink is light
     const ink = getComputedStyle(el).color;

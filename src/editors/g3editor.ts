@@ -1,5 +1,5 @@
 import { wheelZoomFactor } from '../ui/wheel-zoom';
-import { onLocale, t } from '../i18n';
+import { onLocale, t, message } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { row, section } from '../ui/forms';
@@ -9,6 +9,9 @@ import G3editorFrame from '../ui/editors/G3editorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // 3D geometry editor: the overlay that opens on a 3D geometry block. A palette of things to add (frames,
 // points, vectors, lines, planes, angles, circles, spheres, labels); the picture drawn in 3D, where dragging
 // empty space turns the view, dragging a point moves it (level, or up and down with ⇧), and clicking a line,
@@ -293,13 +296,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, G3editorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, G3editorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.g3-svg', root), stage = $('.cz-stage', root), list = $('.g3-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.g3-svg', root), stage = $('.cz-stage', root), palette = editorPalette(root, { placeholder: message('editor.commonA.search', 'Search'), searchLabel: message('editor.commonA.searchPalette', 'Search the palette'), label: message('editor.commonA.elements', 'Elements'), listClass: 'g3-list', onpick: (k) => { if (E) add(k); } }), list = palette.list, search = palette.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { src, sel: statement index | null, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
@@ -393,7 +393,7 @@ import { patchSvg } from '../ui/svg-patch';
     // an item's code: text to add, or { edits made first, code, atEnd: added at the end of the picture }
     const r = forced || it.code(nm, key === 'vector' && !FLAT ? selName : E.sel, Lx);
     if (r && r.pick) { E.pick = { key, pic: r.pic }; svg.style.cursor = 'crosshair'; setTip(t('editor.g3.tip.pick', '{name}: click inside a corner where two lines meet  ·  Esc cancels', { name: say(it.name) })); return; }
-    if (r == null) { const msg = it.need ? t('editor.g3.needPair', 'Select a segment or vector between two named points first') : t('editor.g3.needSel', 'Select what this applies to first'); setTip(msg); setTimeout(() => { if (E && tip.textContent === msg) setTip(''); }, 2400); return; }
+    if (r == null) { const msg = it.need ? t('editor.g3.needPair', 'Select a segment or vector between two named points first') : t('editor.g3.needSel', 'Select what this applies to first'); stageNote.flash(msg, 2400); return; }
     const code = typeof r === 'string' ? r : r.code, pre = typeof r === 'string' ? [] : r.edits || [];
     const pos = insertAt(Lx, typeof r === 'object' && r.atEnd), ind = pos.ind ?? (pos.lead.replace('\n', '') || '  ');
     const lines = code.split('\n').map((l: any) => ind + l).join('\n');
@@ -405,8 +405,7 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = i >= 0 ? i : null;
     draw(); renderProps();
     const added = t('editor.g3.added', '{name} added', { name: say(it.name) });
-    setTip(added);
-    setTimeout(() => { if (E && tip.textContent === added) setTip(''); }, 1200);
+    stageNote.flash(added, 1200);
   }
   // a statement's span with the line it sits on, so deleting leaves no blank line
   function lineSpan(st: any) {
@@ -527,33 +526,17 @@ import { patchSvg } from '../ui/svg-patch';
   }
 
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(1.4, 60 / vw, 38 / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [title, items] of pal()) {
-      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k} ${title} ${say(name)} ${catName(title as string)}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(catName(title as string))}</div><div class="qe-grid">${hits.map(([k, name, , m, key]: any) =>
-        `<button class="qe-item" data-item="${esc(k)}" title="${esc(say(name))}${key ? ` (${key})` : ''}"><span class="qe-fig">${miniSvg(m)}</span><span>${esc(say(name))}</span></button>`).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list);
+    palette.render(pal().map(([title, items]: any) => ({
+      id: title, title: catName(title),
+      // the shown name, the English one and the category's both find it
+      items: items.map(([k, name, , m, key]: any) => ({ id: k, label: say(name), key, alt: name, keywords: `${title} ${catName(title)}`, svg: fitMini(miniSvg(m), 60, 38, 1.4) })),
+    })));
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) add(b.dataset.item); search.blur(); }
-  });
   list.addEventListener('click', (e: any) => { const b = e.target.closest('.qe-item'); if (b && E) add(b.dataset.item); });
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
   // a tip that clears itself
-  function flashTip(t: any) { setTip(t); setTimeout(() => { if (tip.textContent === t) setTip(''); }, 1400); }
+  function flashTip(t: any) { stageNote.flash(t, 1400); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -980,33 +963,23 @@ import { patchSvg } from '../ui/svg-patch';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
 
   // right-click: the command's actions
-  const MI: Record<string, any> = {
-    label: '<path d="M4 15l2-5 6-6 3 3-6 6zM11 5l3 3"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    dup: '<rect x="7" y="7" width="9" height="9" rx="1.5"/><path d="M4 12V5.5A1.5 1.5 0 015.5 4H12"/>',
-    fwd: '<path d="M10 16V4M5 9l5-5 5 5"/>',
-    back: '<path d="M10 4v12M5 11l5 5 5-5"/>',
-  };
-  const mItem = (act: any, label: any, icon: any, key: any) => `<button class="ctx-item${act === 'del' ? ' danger' : ''}" data-gm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { label: 'edit', del: 'delete', dup: 'duplicate', fwd: 'moveUp', back: 'moveDown' };
+  const mItem = (act: string, label: string, icon: string, key: string) => menuRow(act, label, MI[icon], key, { danger: act === 'del' });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const h = handleAt(e), si = h ? h.si : itemAt(e);
     if (si == null) { closeMenu(); return; }
     E.sel = si; E.many = null;
     const st = selSt();
-    menu.innerHTML = (labelOf(si) ? mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩') : '') + mItem('dup', t('ui.duplicate', 'Duplicate'), 'dup', isMac ? '⌘D' : 'Ctrl+D') + '<hr>'
-      + mItem('fwd', t('editor.commonA.drawLater', 'Draw Later'), 'fwd', ']') + mItem('back', t('editor.commonA.drawEarlier', 'Draw Earlier'), 'back', '[') + '<hr>' + mItem('del', st && (st.k === 'coordinate' || st.k === 'setcoord') ? t('editor.g3.deletePoint', 'Delete Point') : t('ui.delete', 'Delete'), 'del', '⌫');
+    menuRows = [...(labelOf(si) ? [mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩')] : []), mItem('dup', t('ui.duplicate', 'Duplicate'), 'dup', isMac ? '⌘D' : 'Ctrl+D'), '-', mItem('fwd', t('editor.commonA.drawLater', 'Draw Later'), 'fwd', ']'), mItem('back', t('editor.commonA.drawEarlier', 'Draw Earlier'), 'back', '['), '-', mItem('del', st && (st.k === 'coordinate' || st.k === 'setcoord') ? t('editor.g3.deletePoint', 'Delete Point') : t('ui.delete', 'Delete'), 'del', '⌫')];
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => { const b = (e.target! as Element).closest('[data-gm]'); if (!b) return; closeMenu(); act((b as HTMLElement).dataset.gm); });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) { act(a); }
 
   // ---------------------------------------------------------------- labels
   // a command's label: the text of its (last) node, or of the arc / node statement itself
@@ -1176,7 +1149,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (out == null) return;
     E.src = out; clampSel(); draw();
     if (t.tagName === 'SELECT') { commit(); E.base = E.src; begin(); renderProps(); }
-  });
+ });
   function applyField(src: any, f: any, v: any) {
     const Lx = G.layout(src, FLAT), st = E.sel != null ? Lx.S[E.sel] : null;
     const val = v.trim();
@@ -1299,7 +1272,7 @@ import { patchSvg } from '../ui/svg-patch';
     updateTools();
     if (document.activeElement === codeTa) return;
     if (E.src !== E.codeAt) { E.codeAt = E.src; codeTa.value = E.src; }
-    codeMsg.innerHTML = Lx.warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, Lx.warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -1308,12 +1281,13 @@ import { patchSvg } from '../ui/svg-patch';
     E.src = codeTa.value; E.codeAt = codeTa.value;
     commit();
     clampSel(); draw(); renderProps();
-    codeMsg.innerHTML = L().warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, L().warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -1326,7 +1300,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.pick) { endPick(); return; }
       if (E.sel != null || E.many) { E.sel = null; E.many = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -1377,8 +1351,7 @@ import { patchSvg } from '../ui/svg-patch';
     commit();
     if (E.src !== E.start) { E.start = E.src; E.done({ src: E.src }); }
     const saved = t('editor.commonA.saved', 'Saved to the page');
-    setTip(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
@@ -1419,7 +1392,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { src: String(block.src || ''), sel: null, many: null, view: { ox: 0, oy: 0, k: 120 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null, base: null };
     E.start = E.src;
     dock.show(host);
-    search.value = '';
+    palette.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, properties, hints and title follow the interface language while the editor is open
     let first = true;

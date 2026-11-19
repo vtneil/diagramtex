@@ -65,18 +65,19 @@
   });
   T.test('chemistry panel: right-click a bond to hide it, and again to show it', async () => {
     await run('\\chemfig{A-B-C}', async () => {
-      const menu = () => [...document.querySelectorAll('[data-cm]')].filter((x) => x.offsetParent);
+      // the kit's menu (a closing one fades out for a moment, so it is left out)
+      const menu = () => [...document.querySelectorAll('.qe-ctx:not(.leaving) [data-act]')];
       const rclick = () => { const b = TD.chem.build(code()).bonds[0], p = screen((b.X0 + b.X1) / 2, (b.Y0 + b.Y1) / 2);
         q('.cf-svg').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: p[0], clientY: p[1], button: 2 })); };
       rclick(); await tick(0);
-      const hide = menu().find((x) => x.dataset.cm === 'bhide');
-      T.ok(hide && !menu().some((x) => x.dataset.cm === 'bshow'), 'a drawn bond offers Hide Bond');
-      T.ok(menu().some((x) => x.dataset.cm === 'bdel'), 'and still Delete Bond');
+      const hide = menu().find((x) => x.dataset.act === 'bhide');
+      T.ok(hide && !menu().some((x) => x.dataset.act === 'bshow'), 'a drawn bond offers Hide Bond');
+      T.ok(menu().some((x) => x.dataset.act === 'bdel'), 'and still Delete Bond');
       hide.click(); await tick(0);
       T.eq(code(), '\\chemfig{A-[,,,,draw=none]B-C}', 'hidden with draw=none');
       rclick(); await tick(0);
-      const show = menu().find((x) => x.dataset.cm === 'bshow');
-      T.ok(show && !menu().some((x) => x.dataset.cm === 'bhide'), 'a hidden bond offers Show Bond');
+      const show = menu().find((x) => x.dataset.act === 'bshow');
+      T.ok(show && !menu().some((x) => x.dataset.act === 'bhide'), 'a hidden bond offers Show Bond');
       show.click(); await tick(0);
       T.eq(code(), '\\chemfig{A-B-C}', 'drawn again, the option gone');
     });
@@ -87,9 +88,9 @@
       const b = TD.chem.build(code()).bonds[1], p = screen((b.X0 + b.X1) / 2, (b.Y0 + b.Y1) / 2);
       q('.cf-svg').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: p[0], clientY: p[1], button: 2 }));
       await tick(0);
-      const acts = [...document.querySelectorAll('[data-cm]')].filter((x) => x.offsetParent).map((x) => x.dataset.cm);
+      const acts = [...document.querySelectorAll('.qe-ctx:not(.leaving) [data-act]')].map((x) => x.dataset.act);
       T.ok(acts.includes('bshow') && !acts.includes('bdel') && acts.includes('rdel'), 'Show Bond and Delete Ring: ' + acts);
-      document.querySelector('[data-cm="bshow"]').click(); await tick(0);
+      document.querySelector('.qe-ctx:not(.leaving) [data-act="bshow"]').click(); await tick(0);
       T.eq(code(), '\\chemfig{*6(------)}', 'the side is drawn again');
     });
   });

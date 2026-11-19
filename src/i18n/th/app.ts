@@ -612,4 +612,5 @@ export const thai: Record<string, string> = {
   "hint.isOpen": "\"{name}\" เปิดอยู่",
   "dd.custom": "กำหนดเอง…",
   "dd.dash.title": "ความยาวเส้นประเป็น pt เช่น 4 2 หรือ 6 2 1 2",
+  "dd.tip.title": "หัวลูกศร",
 };

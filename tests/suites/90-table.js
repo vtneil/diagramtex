@@ -655,7 +655,7 @@ T.test('table workspace: open, import, type, keys, undo, paste, leave', async ()
   shortcut('z', { metaKey: true });
   const borders = document.querySelector('[data-t="borders"]');
   borders.focus(); borders.click();
-  const topBorder = document.querySelector('[data-m="b:top"]');
+  const topBorder = document.querySelector('[data-act="b:top"]');
   const beforeBorder = JSON.stringify(W().model);
   topBorder.focus(); topBorder.click();
   T.ok(document.activeElement === grid, 'border choice returns focus to the grid');
@@ -696,7 +696,7 @@ T.test('table workspace: open, import, type, keys, undo, paste, leave', async ()
   T.eq([TD.table.nRows(W().model), TD.table.nCols(W().model)], [3, 4], 'undo the strips');
   // the border menu ticks the rule weight in use
   document.querySelector('[data-t="borders"]').click();
-  const ticked = [...document.querySelectorAll('.ctx-item[aria-checked="true"]')].map((b) => b.textContent.trim());
+  const ticked = [...document.querySelectorAll('.ctx:not(.leaving) .ctx-item[aria-checked="true"]')].map((b) => b.textContent.trim());
   T.eq(ticked, ['Thin Rules'], 'thin is ticked');
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   // ticking a box in the panel keeps its scroll
@@ -914,13 +914,13 @@ T.test('table workspace: the number format menu sets grouping and the marker', a
     bar.querySelector('[data-t="num"]').click(); await wait(30);
     T.eq(W().model.cols[1].num, { group: 'comma' }, 'typed commas: the column groups with commas');
     more.click(); await wait(30);
-    const menu = document.querySelector('.tb-ctx');
-    T.ok(menu && menu.querySelector('[data-m="ng:comma"][aria-checked="true"]'), 'the menu ticks Comma');
-    menu.querySelector('[data-m="ng:none"]').click(); await wait(30);
+    const menu = document.querySelector('.tb-ctx:not(.leaving)');
+    T.ok(menu && menu.querySelector('[data-act="ng:comma"][aria-checked="true"]'), 'the menu ticks Comma');
+    menu.querySelector('[data-act="ng:none"]').click(); await wait(30);
     T.eq(W().model.cols[1].num.group, 'none', 'None turns grouping off');
     T.ok(!/group-separator/.test(TD.table.toLatex(W().model).code), 'and the LaTeX says so');
     more.click(); await wait(30);
-    document.querySelector('.tb-ctx [data-m="nd:,"]').click(); await wait(30);
+    document.querySelector('.tb-ctx:not(.leaving) [data-act="nd:,"]').click(); await wait(30);
     T.eq(W().model.cols[1].num.dec, ',', 'a decimal comma');
     T.ok(/output-decimal-marker=\{,\}/.test(TD.table.toLatex(W().model).code), 'written for siunitx');
     // the panel has the rest
@@ -942,11 +942,11 @@ T.test('table workspace: the colour buttons apply the last colour picked; their 
     const sw0 = fill.querySelector('.sw').style.stroke;
     fill.click(); await wait(30);
     T.ok(W().model.cells[1][0].bg, 'the button fills the cell at once');
-    T.ok(!document.querySelector('.cp') || getComputedStyle(document.querySelector('.cp')).display === 'none', 'without opening the picker');
+    T.ok(!TD.colorPickerOpen(), 'without opening the picker');
     W().select([0, 1]); await wait(30);
     T.eq(fill.isConnected ? fill.querySelector('.sw').style.stroke : host.querySelector('[data-t="bg"] .sw').style.stroke, sw0, 'its bar shows the last colour, not the selected cell\'s');
     host.querySelector('[data-t="bgmore"]').click(); await wait(30);
-    T.eq(getComputedStyle(document.querySelector('.cp')).display, 'block', 'the arrow opens the colour picker');
+    T.ok(TD.colorPickerOpen() && document.querySelector('.cp:not(.leaving)'), 'the arrow opens the colour picker');
     TD.closeColorPicker(); await wait(30);
   } finally { C.setTable(false); await wait(60); }
 });

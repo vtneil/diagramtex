@@ -3,13 +3,13 @@ import { updateSvg } from '../platform/update-svg';
 import { SvgLabelResources } from '../platform/svg-label-resources';
 import { wheelZoomFactor } from '../ui/wheel-zoom';
 import DocumentSettings from '../ui/DocumentSettings.svelte';
-import { renderView } from '../ui/render-view.svelte';
+import { renderView, destroyView } from '../ui/render-view.svelte';
+import DocumentView, { type DocumentViewModel } from '../ui/DocumentView.svelte';
+import DocBlockChrome, { type DocBlockChromeModel } from '../ui/DocBlockChrome.svelte';
 import { runtime as TD } from '../runtime';
 import { t, onLocale } from '../i18n';
 import { downloadImage } from '../platform/download';
 import { readPicture } from '../platform/images';
-import { alignSwitch } from '../ui/align-switch';
-import { colourSplit, showSwatch } from '../ui/colour-split';
 import * as IE from './doc-inline';
 import { createDocHistory } from './doc-history';
 // Document view: a page of text blocks (LaTeX-flavoured, $math$) with embedded diagrams,
@@ -419,70 +419,58 @@ import { createDocHistory } from './doc-history';
   const doc = () => app.state.doc;
   const diagramCount = () => doc().blocks.filter((b: any) => b.type === 'diagram').length;
   const SIZE_EM: Record<string, any> = { tiny: 0.5, scriptsize: 0.7, footnotesize: 0.8, small: 0.9, normalsize: 1, large: 1.2, Large: 1.44, LARGE: 1.728, huge: 2.074, Huge: 2.488 };
-  const ic = (d: any, extra = '') => `<svg viewBox="0 0 20 20"${extra}><path d="${d}"/></svg>`;
-  const TRASH = 'M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12'; // the app's one trash icon
-  const I: Record<string, any> = {
-    left: 'M3 5h14M3 8.5h9M3 12h14M3 15.5h9', center: 'M3 5h14M5.5 8.5h9M3 12h14M5.5 15.5h9', right: 'M3 5h14M8 8.5h9M3 12h14M8 15.5h9', justify: 'M3 5h14M3 8.5h14M3 12h14M3 15.5h14',
-    ul: 'M8 5.5h9M8 10h9M8 14.5h9M4 5.5h.01M4 10h.01M4 14.5h.01', ol: 'M8 5.5h9M8 10h9M8 14.5h9M3.5 4l1-.5v4M3.2 12.2c.4-.6 1.8-.6 1.8.3 0 .7-1.8 1.4-1.8 2.2H5',
-    chk: 'M3 4h4v4H3zM3.8 13.5l1.2 1.2 2.2-2.6M10 6h7M10 14h7', link: 'M8.5 11.5l3-3M7 9.5L5.2 11.3a2.5 2.5 0 003.5 3.5L10.5 13M13 10.5l1.8-1.8a2.5 2.5 0 00-3.5-3.5L9.5 7',
-  };
-  function insertBar(i: any) {
-    return `<div class="ins" data-at="${i}"><button data-add="text">${esc(t('doc.add.text', '+ Text'))}</button><button data-add="diagram">${esc(t('doc.add.diagram', '+ Diagram'))}</button><button data-add="table">${esc(t('doc.add.table', '+ Table'))}</button><button data-add="image">${esc(t('doc.add.image', '+ Image'))}</button></div>`;
-  }
+  // the page's controls are containers left empty here and filled by ui/DocBlockChrome.svelte (mountChrome)
+  const insertBar = (i: any) => `<div class="ins" data-at="${i}"></div>`;
   // The text source stays LaTeX-flavoured text; the toolbar wraps the selection in commands.
   // LaTeX's size commands, named for the menu (the command itself is in the menu's tip)
   const SIZE_NAME = (): Record<string, string> => ({ tiny: t('table.size.tiny', 'Tiny'), scriptsize: t('table.size.script', 'Script'), footnotesize: t('table.size.footnote', 'Footnote'), small: t('table.size.small', 'Small'), normalsize: t('ui.normal', 'Normal'), large: t('table.size.large', 'Large'), Large: t('table.size.larger', 'Larger'), LARGE: t('doc.size.largest', 'Largest'), huge: t('quick.size.huge', 'Huge'), Huge: t('doc.size.huger', 'Huger') });
-  // The text toolbar: built like the Table toolbar (.tb-bar groups), pinned to the top of the view rather than
-  // following the block, and shown only while a text block is being edited. Its room is always kept.
-  const AL_KEY: Record<string, string> = { justify: 'j', left: 'l', center: 'c', right: 'r' };
+  // The text toolbar (ui/DocumentView.svelte): built like the Table toolbar, pinned to the top of the view rather
+  // than following the block, and shown only while a text block is being edited. Its room is always kept.
   const AL_NAME: Record<string, string> = { j: 'justify', l: 'left', c: 'center', r: 'right' };
   const TB_I = {
     b: '<b class="tb-glyph">B</b>', i: '<i class="tb-glyph" style="font-family:Georgia,serif">I</i>',
     u: '<span class="tb-glyph" style="text-decoration:underline">U</span>', s: '<span class="tb-glyph" style="text-decoration:line-through">S</span>',
     math: '<i class="tb-glyph tb-math">x</i>',
   };
-  function textBar() {
-    const b = doc().blocks[editingIdx], on = !!b && b.type === 'text';
-    const al = (on && b.align) || 'justify', sz = (on && b.size) || 'normalsize';
-    const names = SIZE_NAME();
-    const btn = (f: string, tip: string, body: string) => `<button type="button" class="icon" data-fmt="${f}" title="${esc(tip)}">${body}</button>`;
-    return `<div class="doc-fmt${on ? '' : ' off'}"${on ? '' : ' aria-hidden="true"'}><div class="tb-bar" role="toolbar" aria-label="${esc(t('doc.fmt.aria', 'Text formatting'))}">
-      <div class="tb-grp"><select data-fmt="head" class="doc-fmt-head" title="${esc(t('doc.fmt.style', 'Paragraph style'))}"${on ? '' : ' tabindex="-1"'}><option value="">${esc(t('doc.fmt.paragraph', 'Paragraph'))}</option><option value="#">${esc(t('doc.fmt.section', 'Section'))}</option><option value="##">${esc(t('doc.fmt.subsection', 'Subsection'))}</option><option value="###">${esc(t('doc.fmt.subsubsection', 'Subsubsection'))}</option></select><select data-fmt="size" class="doc-fmt-size" title="${esc(t('doc.fmt.size', 'Font size of this block ({cmd})', { cmd: '\\' + sz }))}"${on ? '' : ' tabindex="-1"'}>${TD.SIZES.map(([k]: any) => `<option value="${k}"${k === sz ? ' selected' : ''}>${esc(names[k] || k)}</option>`).join('')}</select></div>
-      <div class="tb-grp">${btn('b', t('doc.fmt.bold', 'Bold (⌘B) — \\textbf'), TB_I.b)}${btn('i', t('doc.fmt.italic', 'Italic (⌘I) — \\textit'), TB_I.i)}${btn('u', t('doc.fmt.underline', 'Underline (⌘U) — \\underline'), TB_I.u)}${btn('s', t('doc.fmt.strike', 'Strikethrough — \\sout'), TB_I.s)}</div>
-      <div class="tb-grp">${colourSplit({ icon: 'fg', name: t('doc.fmt.colour', 'Text colour — \\textcolor'), main: ' data-fapply="color"', more: ' data-fpick="color"' })}${colourSplit({ icon: 'bg', name: t('doc.fmt.highlight', 'Highlight — \\colorbox'), main: ' data-fapply="hl"', more: ' data-fpick="hl"' })}</div>
-      <div class="tb-grp">${btn('link', t('doc.fmt.link', 'Link — \\href'), ic(I.link))}${btn('math', t('doc.fmt.math', 'Inline maths $…$'), TB_I.math)}</div>
-      <div class="tb-grp">${btn('ul', t('doc.fmt.ul', 'Bulleted list (- item)'), ic(I.ul))}${btn('ol', t('doc.fmt.ol', 'Numbered list (1. item)'), ic(I.ol))}${btn('chk', t('doc.fmt.chk', 'Checklist (- [ ] item)'), ic(I.chk))}</div>
-      ${alignSwitch({ cls: 'tb-grp tb-seg', btn: ' data-fal', cur: AL_KEY[al], tips: { j: t('doc.fmt.justify', 'Justified (LaTeX default)'), l: t('doc.fmt.left', 'Align left'), c: t('doc.fmt.center', 'Align center'), r: t('doc.fmt.right', 'Align right') } })}
-      <div class="tb-grp"><button type="button" class="icon${srcMode ? ' on' : ''}" data-fmt="src" aria-pressed="${srcMode}" title="${esc(t('doc.fmt.source', 'Edit the LaTeX source'))}">${ic('M7 5.5L2.5 10 7 14.5M13 5.5l4.5 4.5-4.5 4.5M11 4l-2 12')}</button></div>
-    </div></div>`;
+  // what the caret is in (ieState), shown by the bar; cleared when the page is drawn again
+  const NO_FORMATS = { b: false, i: false, u: false, s: false, ul: false, ol: false, chk: false };
+  let caretIn = { head: '', active: { ...NO_FORMATS } };
+  let shellUp = false, pageInfo = '';
+  function shellModel(): DocumentViewModel {
+    const b = doc().blocks[editingIdx], on = !!b && b.type === 'text', names = SIZE_NAME();
+    return {
+      bar: {
+        on, head: caretIn.head, size: (on && b.size) || 'normalsize', align: (on && b.align) || 'justify', source: srcMode,
+        sizes: TD.SIZES.map(([k]: any) => ({ value: k, label: names[k] || k })), active: caretIn.active,
+        glyphs: TB_I, colour: TD.texColor.swatch(fmtColor), highlight: TD.texColor.swatch(fmtHl),
+      },
+      zoom: String(zoomMode), info: pageInfo,
+    };
   }
-  // the colour buttons show the colour they will apply
-  function paintSwatches() {
-    showSwatch(root!.querySelector('.doc-fmt [data-fapply="color"]'), TD.texColor.swatch(fmtColor));
-    showSwatch(root!.querySelector('.doc-fmt [data-fapply="hl"]'), TD.texColor.swatch(fmtHl));
+  /** the frame round the page (the text bar, the zoom bar), drawn in place */
+  function renderShell() { if (shellUp) renderView(root!, DocumentView, shellModel()); }
+  // The page's controls: its markup leaves their containers empty (.ins, .blk-tools, .fmt-bar[data-bar]), and these
+  // views fill them each time it is drawn, after the views of the last drawing are taken down.
+  let chrome: HTMLElement[] = [];
+  function unmountChrome() { for (const el of chrome) destroyView(el); chrome = []; }
+  function barModel(b: any, i: number): DocBlockChromeModel {
+    if (b.type === 'image') return { kind: 'image', width: b.width || 0.6, caption: b.caption || '', name: imageName(b, i) };
+    const R = b.rows || [[]];
+    return { kind: 'table', rows: R.length, cols: Math.max(1, ...R.map((r: any) => r.length)), header: b.header !== false, align: b.colAlign || 'c', borders: b.borders || 'all' };
   }
-  function tableBar(b: any) {
-    const R = b.rows || [[]], nr = R.length, nc = Math.max(1, ...R.map((r: any) => r.length)), al = b.colAlign || 'c', hdr = b.header !== false;
-    // c: the captions — the group's name, the − and + buttons' tips and names
-    const step = (k: any, n: any, c: { name: string; less: string; fewer: string; add: string; more: string }) => `<span class="fmt-lbl">${esc(c.name)}</span><span class="fmt-step" role="group" aria-label="${esc(c.name)}">
-        <button data-tb="${k}-" title="${esc(c.less)}" aria-label="${esc(c.fewer)}"${n < 2 ? ' disabled' : ''}>${ic('M5 10h10')}</button><output>${n}</output><button data-tb="${k}+" title="${esc(c.add)}" aria-label="${esc(c.more)}">${ic('M10 5v10M5 10h10')}</button></span>`;
-    return `<div class="fmt-bar" role="toolbar" aria-label="${esc(t('ui.table', 'Table'))}">
-      ${step('row', nr, { name: t('doc.tb.rows', 'Rows'), less: t('doc.tb.rowLess', 'Remove the last row'), fewer: t('doc.tb.rowFewer', 'Fewer rows'), add: t('doc.tb.rowAdd', 'Add a row'), more: t('doc.tb.rowMore', 'More rows') })}${step('col', nc, { name: t('doc.tb.cols', 'Columns'), less: t('doc.tb.colLess', 'Remove the last column'), fewer: t('doc.tb.colFewer', 'Fewer columns'), add: t('doc.tb.colAdd', 'Add a column'), more: t('doc.tb.colMore', 'More columns') })}
-      <span class="sep"></span>
-      <button data-tb="hdr" class="txt${hdr ? ' on' : ''}" aria-pressed="${hdr}" title="${esc(t('doc.tb.headerTip', 'Set the first row as a header (bold, with a rule under it)'))}">${esc(t('doc.tb.header', 'Header row'))}</button>
-      <span class="sep"></span>
-      ${[['l', 'left'], ['c', 'center'], ['r', 'right']].map(([k, n]) => `<button data-tb="al:${k}" class="${k === al ? 'on' : ''}" aria-pressed="${k === al}" title="${esc(({ left: t('doc.tb.alLeft', 'Align columns left'), center: t('doc.tb.alCenter', 'Align columns center'), right: t('doc.tb.alRight', 'Align columns right') } as Record<string, string>)[n])}">${ic(I[n])}</button>`).join('')}
-      <select data-tb="borders" title="${esc(t('table.rules', 'Rules'))}"><option value="all"${b.borders === 'all' ? ' selected' : ''}>${esc(t('table.border.all', 'All borders'))}</option><option value="header"${b.borders === 'header' ? ' selected' : ''}>${esc(t('doc.tb.headerRules', 'Top, header, bottom'))}</option><option value="none"${b.borders === 'none' ? ' selected' : ''}>${esc(t('table.border.none', 'No borders'))}</option></select>
-    </div>`;
+  function mountChrome() {
+    const d = doc(), page = root!.querySelector('.doc-page');
+    if (!page) return;
+    const put = (el: HTMLElement, m: DocBlockChromeModel) => { renderView(el, DocBlockChrome, m); chrome.push(el); };
+    for (const el of page.querySelectorAll<HTMLElement>('.ins[data-at]')) put(el, { kind: 'insert' });
+    for (const el of page.querySelectorAll<HTMLElement>('.blk-tools')) {
+      const i = +el.closest<HTMLElement>('.blk')!.dataset.i!, b = d.blocks[i];
+      put(el, { kind: 'tools', first: i === 0, last: i === d.blocks.length - 1, diagram: b.type === 'diagram', canDelete: !(b.type === 'diagram' && diagramCount() < 2) });
+    }
+    for (const el of page.querySelectorAll<HTMLElement>('.fmt-bar[data-bar]')) { const i = +el.closest<HTMLElement>('.blk')!.dataset.i!; put(el, barModel(d.blocks[i], i)); }
   }
-  function imageBar(b: any) {
-    return `<div class="fmt-bar" role="toolbar" aria-label="${esc(t('doc.img.aria', 'Image'))}">
-      <label class="rng" title="${esc(t('doc.img.widthTip', 'Width as a share of the text width'))}">${esc(t('ui.width', 'Width'))} <input type="range" data-slider-default="0.6" data-im="width" min="0.1" max="1" step="0.05" value="${b.width || 0.6}"><output class="slider-value">${Math.round((b.width || 0.6) * 100)}%</output></label>
-      <span class="sep"></span>
-      <input type="text" data-im="caption" placeholder="${esc(t('doc.img.caption', 'Caption (optional)'))}" value="${esc(b.caption || '')}">
-      <button data-im="replace" class="txt">${esc(t('ui.replace', 'Replace…'))}</button><button data-im="download" class="txt" title="${esc(t('doc.img.saveTip', 'Save the picture next to your .tex, under this name'))}">${esc(t('doc.img.save', 'Save {name}', { name: imageName(b, doc().blocks.indexOf(b)) }))}</button>
-    </div>`;
-  }
+  const tableBar = () => `<div class="fmt-bar" data-bar role="toolbar" aria-label="${esc(t('ui.table', 'Table'))}"></div>`;
+  const imageBar = () => `<div class="fmt-bar" data-bar role="toolbar" aria-label="${esc(t('doc.img.aria', 'Image'))}"></div>`;
   const tableHtml = (b: any, editing: any) => {
     const rows = b.rows || [[]], nc = Math.max(1, ...rows.map((r: any) => r.length));
     const al = ({ l: 'left', c: 'center', r: 'right' } as Record<string, any>)[b.colAlign || 'c'];
@@ -537,11 +525,7 @@ import { createDocHistory } from './doc-history';
     d.blocks.forEach((b: any, i: any) => {
       if (!forPrint) h += insertBar(i);
       const ed = i === editingIdx && !forPrint;
-      const tools = forPrint ? '' : `<div class="blk-tools">
-        <button data-mv="-1" title="${esc(t('doc.blk.up', 'Move up'))}" aria-label="${esc(t('doc.blk.up', 'Move up'))}"${i === 0 ? ' disabled' : ''}>${ic('M5.5 12.5L10 8l4.5 4.5')}</button>
-        <button data-mv="1" title="${esc(t('doc.blk.down', 'Move down'))}" aria-label="${esc(t('doc.blk.down', 'Move down'))}"${i === d.blocks.length - 1 ? ' disabled' : ''}>${ic('M5.5 8l4.5 4.5L14.5 8')}</button>
-        ${b.type === 'diagram' ? `<button data-edit title="${esc(t('doc.blk.editTip', 'Edit on canvas'))}">${esc(t('ui.edit', 'Edit'))}</button>` : ''}
-        <button data-rm title="${esc(t('doc.blk.delete', 'Delete block'))}" aria-label="${esc(t('doc.blk.delete', 'Delete block'))}"${b.type === 'diagram' && diagramCount() < 2 ? ' disabled' : ''}>${ic(TRASH)}</button></div>`;
+      const tools = forPrint ? '' : '<div class="blk-tools"></div>';
       const edc = ed ? ' editing' : '';
       if (b.type === 'text') {
         const st = `text-align:${b.align || 'justify'}${b.size && b.size !== 'normalsize' ? `;font-size:${SIZE_EM[b.size]}em` : ''}`;
@@ -552,10 +536,10 @@ import { createDocHistory } from './doc-history';
           : `<div class="blk-body blk-ie${b.text ? '' : ' empty'}" contenteditable="true" spellcheck="true" lang="en" role="textbox" aria-multiline="true" aria-label="${esc(t('doc.text.aria', 'Text'))}" data-ph="${esc(t('doc.text.phInline', 'Write text. Type $x^2$ for maths, # for a section, - for a list.'))}" style="${st}">${ieHtml(b, tctx)}</div>`}</div>`;
         if (ed && srcMode) textToHtml(b.text || '', tctx); // keep section numbers counting
       } else if (b.type === 'table') {
-        h += `<div class="blk blk-table${edc}" data-i="${i}">${tools}${ed ? tableBar(b) : ''}<div class="blk-body" lang="en">${tableHtml(b, ed)}</div></div>`;
+        h += `<div class="blk blk-table${edc}" data-i="${i}">${tools}${ed ? tableBar() : ''}<div class="blk-body" lang="en">${tableHtml(b, ed)}</div></div>`;
       } else if (b.type === 'image') {
         const cap = b.caption && b.caption.trim() ? `<figcaption>Figure ${++fig}: ${inl(b.caption)}</figcaption>` : '';
-        h += `<div class="blk blk-image${edc}" data-i="${i}">${tools}${ed ? imageBar(b) : ''}<figure class="blk-body" lang="en">${b.src ? `<img src="${esc(b.src)}" alt="${esc(b.caption || b.name || '')}" style="width:${(b.width || 0.6) * 100}%">` : `<div class="ph">${forPrint ? 'No picture' : esc(t('doc.img.none', 'No picture'))}</div>`}${cap}</figure></div>`;
+        h += `<div class="blk blk-image${edc}" data-i="${i}">${tools}${ed ? imageBar() : ''}<figure class="blk-body" lang="en">${b.src ? `<img src="${esc(b.src)}" alt="${esc(b.caption || b.name || '')}" style="width:${(b.width || 0.6) * 100}%">` : `<div class="ph">${forPrint ? 'No picture' : esc(t('doc.img.none', 'No picture'))}</div>`}${cap}</figure></div>`;
       } else {
         const svg = b.shapes.length ? app.shapesSvg(b.shapes, 6, false, !forPrint) : '';
         h += `<div class="blk blk-diag${i === d.active && !forPrint ? ' active' : ''}" data-i="${i}">${tools}<div class="blk-body" lang="en">${svg || (forPrint ? '' : `<div class="ph">${esc(t('doc.diag.empty', 'Empty diagram — double-click to draw'))}</div>`)}</div></div>`;
@@ -669,17 +653,24 @@ import { createDocHistory } from './doc-history';
     const live = !forPrint && editor(), caret = live && live.contains(document.activeElement) && ieFor === editingIdx ? IE.caretOffset(live) : null;
     if (!forPrint) H.sync(doc()); // what changed elsewhere (a diagram on the canvas) is the new starting point
     const { h: page, P } = pageHtml(forPrint);
-    let h = forPrint ? page : `${textBar()}<div class="doc-sheet">${page}</div>`;
-    if (!forPrint) h += `<div class="doc-hud"><span class="pg-info"></span><button data-zoom="out" title="${esc(t('doc.zoom.outTip', 'Zoom out (Ctrl/⌘ −)'))}" aria-label="${esc(t('doc.zoom.out', 'Zoom out'))}">−</button><button data-zoom="in" title="${esc(t('doc.zoom.inTip', 'Zoom in (Ctrl/⌘ +)'))}" aria-label="${esc(t('doc.zoom.in', 'Zoom in'))}">+</button><button data-zoom="fit"${zoomMode === 'fit' ? ' class="on"' : ''} title="${esc(t('doc.zoom.fitTip', "Fit the page's width to the view"))}">${esc(t('ui.fit.width', 'Fit Width'))}</button><button data-zoom="1"${(zoomMode as any) === 1 ? ' class="on"' : ''} title="${esc(t('doc.zoom.actualTip', 'Actual size (Ctrl/⌘ 0)'))}">100%</button></div>`;
     sheetObserver.disconnect();
-    root!.innerHTML = h;
+    unmountChrome();
+    if (forPrint) { destroyView(root!); shellUp = false; root!.innerHTML = page; }
+    else {
+      // the frame (ui/DocumentView.svelte) stays; the page is drawn into its sheet
+      if (!shellUp) root!.replaceChildren();
+      shellUp = true;
+      caretIn = { head: '', active: { ...NO_FORMATS } };
+      renderShell();
+      root!.querySelector('.doc-sheet')!.innerHTML = page;
+      mountChrome();
+    }
     if (forPrint) labelResources.clear(root!); else labelResources.update(root!);
     sizeDiagrams(root);
     printStyle(P);
     layoutPage(P, forPrint);
     if (!forPrint) sheetObserver.observe(root!.querySelector('.doc-page')!);
     if (!forPrint) requestAnimationFrame(() => layoutPage(P)); // after the side panel has laid out
-    if (!forPrint) paintSwatches();
     const ta = root!.querySelector('.blk-ed');
     if (ta) { autosize(ta); (ta as HTMLElement).focus({ preventScroll: true }); }
     if (!forPrint) ieMount(caret);
@@ -764,8 +755,8 @@ import { createDocHistory } from './doc-history';
     // paper would invalidate styles throughout every formula on each zoom event.
     for (const tools of page.querySelectorAll<HTMLElement>('.blk-tools')) tools.style.setProperty('--unzoom', String(1 / z));
     const n = size.pages;
-    const info = root!.querySelector('.pg-info');
-    if (info) info.textContent = t('doc.pageInfo', '{paper} · {pages} (approx.) · {zoom}%', { paper: TD.PAPERS[P.paper]?.name || t('ui.custom', 'Custom'), pages: n > 1 ? t('doc.pages', '{n} pages', { n }) : t('doc.page1', '{n} page', { n }), zoom: Math.round((z as any) * 100) });
+    pageInfo = t('doc.pageInfo', '{paper} · {pages} (approx.) · {zoom}%', { paper: TD.PAPERS[P.paper]?.name || t('ui.custom', 'Custom'), pages: n > 1 ? t('doc.pages', '{n} pages', { n }) : t('doc.page1', '{n} page', { n }), zoom: Math.round((z as any) * 100) });
+    renderShell();
   }
   window.addEventListener('resize', () => { if (app.state.mode === 'document' && zoomMode === 'fit') layoutPage(TD.pageSize(doc().page)); });
   root!.addEventListener('load', () => { if (app.state.mode === 'document') layoutPage(TD.pageSize(doc().page)); }, true);
@@ -780,7 +771,6 @@ import { createDocHistory } from './doc-history';
     const py = (view.top + cy - before.top) / curZoom; // the point in unscaled paper pixels
     zoomMode = Math.abs(z - 1) < 1e-3 ? 1 : z;
     scalePage(TD.pageSize(doc().page), Number(zoomMode));
-    root!.querySelectorAll('.doc-hud [data-zoom]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.zoom === String(zoomMode)));
     const after = page.getBoundingClientRect();
     root!.scrollLeft += after.left - view.left + px * curZoom - cx;
     root!.scrollTop += after.top - view.top + py * curZoom - cy;
@@ -951,8 +941,7 @@ import { createDocHistory } from './doc-history';
     else if (f === 'head') prefixLines(ta, val);
     else if (f.startsWith('al:')) {
       b.align = f.slice(3) === 'justify' ? undefined : f.slice(3);
-      root!.querySelectorAll<HTMLElement>('.doc-fmt [data-fal]').forEach((x) => x.classList.toggle('on', AL_NAME[x.dataset.v!] === f.slice(3)));
-      changed(); ta.focus();
+      renderShell(); changed(); ta.focus();
     } else if (f === 'size') { b.size = val === 'normalsize' ? undefined : val; changed(); ta.focus(); }
   }
 
@@ -969,13 +958,13 @@ import { createDocHistory } from './doc-history';
     if (fa) { const f = fa.dataset.fapply!; act(f, f === 'color' ? fmtColor : fmtHl); return; }
     const fp = el.closest<HTMLElement>('button[data-fpick]');
     if (fp) {
-      const f = fp.dataset.fpick!, main = fp.parentElement!.querySelector('[data-fapply]');
+      const f = fp.dataset.fpick!, main = fp.parentElement!.querySelector<HTMLElement>('[data-fapply]');
       let picked: any = null;
-      const show = (v: any) => showSwatch(main, TD.texColor.swatch(v));
+      const show = (v: any) => main?.style.setProperty('--sw', TD.texColor.swatch(v)); // the bar under the icon (SplitButton's swatch)
       TD.openColorPicker(fp.parentElement, { value: TD.tikzColor(f === 'color' ? fmtColor : fmtHl),
         onInput: (v: any) => { const x = TD.texColor.spec(TD.parseColor(v).hex); if (x) show(x); },
         onChange: (v: any) => { picked = TD.texColor.spec(TD.parseColor(v).hex); if (picked) show(picked); },
-        onClose: () => { if (picked) act(f, picked); else { show(f === 'color' ? fmtColor : fmtHl); if (ed) ieRestore(); } } });
+        onClose: () => { if (picked) act(f, picked); else { show(f === 'color' ? fmtColor : fmtHl); if (ed) ieRestore(); } renderShell(); } });
       return;
     }
     const fb = el.closest<HTMLElement>('button[data-fmt]');
@@ -1064,11 +1053,11 @@ import { createDocHistory } from './doc-history';
       const ed = editor(), sel = getSelection();
       if (!ed || !sel || !sel.rangeCount || !ed.contains(sel.getRangeAt(0).startContainer)) return;
       const r = sel.getRangeAt(0), on = IE.activeFormats(ed, r.startContainer), kind = IE.blockKind(IE.blockOf(r.startContainer, ed));
-      const set = (f: string, v: boolean) => { const x = root!.querySelector(`.doc-fmt [data-fmt="${f}"]`); if (x) { x.classList.toggle('on', v); x.setAttribute('aria-pressed', String(v)); } };
-      set('b', on.has('textbf')); set('i', on.has('textit') || on.has('emph')); set('u', on.has('underline') || on.has('uline')); set('s', on.has('sout'));
-      set('ul', kind === 'ul'); set('ol', kind === 'ol'); set('chk', kind === 'chk');
-      const head = root!.querySelector<HTMLSelectElement>('.doc-fmt [data-fmt="head"]');
-      if (head) head.value = /^#+$/.test(kind) ? kind : '';
+      caretIn = {
+        head: /^#+$/.test(kind) ? kind : '',
+        active: { b: on.has('textbf'), i: on.has('textit') || on.has('emph'), u: on.has('underline') || on.has('uline'), s: on.has('sout'), ul: kind === 'ul', ol: kind === 'ol', chk: kind === 'chk' },
+      };
+      renderShell();
     });
   }
   document.addEventListener('selectionchange', () => {
@@ -1275,10 +1264,9 @@ import { createDocHistory } from './doc-history';
     if (f.startsWith('al:')) {
       b.align = f.slice(3) === 'justify' ? undefined : f.slice(3);
       ed.style.textAlign = f.slice(3);
-      root!.querySelectorAll<HTMLElement>('.doc-fmt [data-fal]').forEach((x) => x.classList.toggle('on', AL_NAME[x.dataset.v!] === f.slice(3)));
-      changed([editingIdx]); ieRestore(); return;
+      renderShell(); changed([editingIdx]); ieRestore(); return;
     }
-    if (f === 'size') { b.size = val === 'normalsize' ? undefined : val; ed.style.fontSize = val === 'normalsize' ? '' : SIZE_EM[val] + 'em'; changed([editingIdx]); relayout(); ieRestore(); return; }
+    if (f === 'size') { b.size = val === 'normalsize' ? undefined : val; renderShell(); ed.style.fontSize = val === 'normalsize' ? '' : SIZE_EM[val] + 'em'; changed([editingIdx]); relayout(); ieRestore(); return; }
     if (f === 'src') { setSrcMode(true); return; }
     const r = ieRestore();
     if (!r) return;
@@ -1484,7 +1472,8 @@ import { createDocHistory } from './doc-history';
       b.width = +(t! as HTMLInputElement).value;
       const img = ((t! as Element).closest('.blk'))!.querySelector('img');
       if (img) img.style.width = b.width * 100 + '%';
-      (t! as HTMLElement).nextElementSibling!.textContent = Math.round(b.width * 100) + '%';
+      const bar = (t! as Element).closest<HTMLElement>('.fmt-bar[data-bar]');
+      if (bar) renderView(bar, DocBlockChrome, barModel(b, editingIdx)); // its readout
       changed([editingIdx], { index: editingIdx, typing: true }); relayout();
     }
   });
@@ -1506,9 +1495,12 @@ import { createDocHistory } from './doc-history';
   });
   document.addEventListener('pointerdown', (e) => {
     if (editingIdx < 0 || app.state.mode !== 'document') return;
-    if ((e.target! as Element).closest('.blk.editing, .doc-fmt') || (e.target! as Element).closest('.tc-pop, .texcomplete, .ddpop, .td-dialog, #docPop, .cp, .selmenu')) return;
+    if ((e.target! as Element).closest('.blk.editing, .doc-fmt') || (e.target! as Element).closest('.tc-pop, .texcomplete, .td-dialog, #docPop, .cp, .selmenu')) return;
     if (!root!.contains((e.target as Node)) && !(e.target! as Element).closest('#docview')) return;
-    setTimeout(() => leaveIfOutside((e.target! as HTMLElement).isConnected ? e.target : null), 0);
+    // a quick click (a trackpad tap) can be over before this runs: its click has already opened the block it was
+    // on, and drawn the page again, so the element pressed is gone. Leave that edit be.
+    const was = editingIdx;
+    setTimeout(() => { if (editingIdx === was) leaveIfOutside((e.target! as HTMLElement).isConnected ? e.target : null); }, 0);
   }, true);
   root!.addEventListener('keydown', (e) => {
     const t = e.target;

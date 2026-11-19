@@ -32,10 +32,11 @@
     })();
   </script>
   <style>
-    @font-face { font-family: 'Inter Display'; font-weight: 400 500; font-display: swap; src: url('../fonts/InterDisplay-Medium.woff2') format('woff2'); }
-    @font-face { font-family: 'Inter Display'; font-weight: 600; font-display: swap; src: url('../fonts/InterDisplay-SemiBold.woff2') format('woff2'); }
-    @font-face { font-family: 'Inter Display'; font-weight: 700; font-display: swap; src: url('../fonts/InterDisplay-Bold.woff2') format('woff2'); }
-    @font-face { font-family: 'Inter Display'; font-style: italic; font-weight: 400; font-display: swap; src: url('../fonts/InterDisplay-Italic.woff2') format('woff2'); }
+    /* the app's fonts (css/style.css): Atkinson Hyperlegible Next, Medium as the normal weight, and Atkinson Hyperlegible Mono */
+    @font-face { font-family: 'Atkinson Hyperlegible Next'; font-style: normal; font-weight: 500 800; size-adjust: 106%; font-display: swap; src: url('../fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Atkinson Hyperlegible Next'; font-style: italic; font-weight: 500 800; size-adjust: 106%; font-display: swap; src: url('../fonts/atkinson-hyperlegible-next-latin-wght-italic.woff2') format('woff2'); }
+    @font-face { font-family: 'Atkinson Hyperlegible Mono'; font-style: normal; font-weight: 200 800; size-adjust: 106%; font-display: swap; src: url('../fonts/atkinson-hyperlegible-mono-latin-wght-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Atkinson Hyperlegible Mono'; font-style: italic; font-weight: 200 800; size-adjust: 106%; font-display: swap; src: url('../fonts/atkinson-hyperlegible-mono-latin-wght-italic.woff2') format('woff2'); }
 
     /* the app's tokens (css/style.css), so the guide reads as part of it */
     :root {
@@ -47,8 +48,8 @@
       --redpen: #c8361d; --bluepen: #2459a6; --mathpen: #1f7a3a; --marker-wash: rgba(232, 180, 20, .10);
       --logo-k: #23205A;
       --r-sm: 4px; --r: 6px; --r-lg: 10px; --r-xl: 12px; --ctl: 28px;
-      --font-ui: "Inter Display", system-ui, -apple-system, "Segoe UI", sans-serif;
-      --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --font-ui: "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
       --ease: cubic-bezier(0.23, 1, 0.32, 1);
     }
     :root[data-theme=dark] {
@@ -153,7 +154,7 @@
     details.block > div { padding: 0 0 12px 14px; font-size: 14.5px; }
     @media (prefers-reduced-motion: reduce) { details.block > summary::before { transition: none; } }
 
-    html:lang(th) { --font-ui: "Inter Display", "Leelawadee UI", "Thonburi", "Noto Sans Thai", system-ui, sans-serif; }
+    html:lang(th) { --font-ui: "Atkinson Hyperlegible Next", "Leelawadee UI", "Thonburi", "Noto Sans Thai", system-ui, sans-serif; }
     html:lang(th) h1, html:lang(th) h2, html:lang(th) h3 { line-height: 1.5; letter-spacing: normal; }
     footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--pencil); }
 
@@ -321,7 +322,7 @@
         <ul>
           <li><b>สีและสีเติม:</b> สีสำเร็จรูป ความโปร่งใส ไม่มีสี การไล่สีแนวเส้นหรือรัศมีพร้อมจุดสีที่ลากได้ และลวดลายเส้น กริด อิฐ จุด ส่งออกการไล่สีเป็น pgf shading และลวดลายด้วย <code>patterns.meta</code></li>
           <li><b>เส้น:</b> ความหนา รูปแบบเส้นประหรือกำหนด <code>on off</code> เอง หัวลูกศร 27 แบบ เส้นคู่ เส้นคลื่น เส้นมีขีด และความทึบ</li>
-          <li><b>ข้อความ:</b> แบบอักษร ตัวหนา ตัวเอียง ขนาดตั้งแต่ <code>\tiny</code> ถึง <code>\Huge</code> หรือกำหนดเอง ความกว้างตัดบรรทัด และจัดชิดซ้าย กลาง ขวา หรือเต็มบรรทัด</li>
+          <li><b>ข้อความ:</b> แบบอักษร (รวมแบบอักษรไทย ครุฑ กินรี และลักษมัณ ซึ่งใช้แสดงในแอปเท่านั้น LaTeX จะใช้แบบอักษรของเอกสาร) ตัวหนา ตัวเอียง ขนาดตั้งแต่ <code>\tiny</code> ถึง <code>\Huge</code> หรือกำหนดเอง ความกว้างตัดบรรทัด และจัดชิดซ้าย กลาง ขวา หรือเต็มบรรทัด</li>
           <li>เมื่อไม่เลือกวัตถุ การตั้งค่าในแผงจะเป็นรูปแบบเริ่มต้นสำหรับรูปร่างใหม่</li>
         </ul>
       </section>
@@ -409,7 +410,7 @@
           <p>อ่านและวาดลูป <code>\foreach</code> ค่าจาก <code>\def</code> และ scope การย้ายจุดที่นิยามด้วยค่าจาก <code>\def</code> จะเขียนค่ากลับที่นิยามนั้น</p>
         </div></details>
         <details class="block"><summary>แผนภาพเวลา <code>tikz-timing</code></summary><div>
-          <p>เลือก High, Low, High-Z, Unknown, Data, Clock, Toggle, Metastable, Glitch, Gap หรือ Hatched แล้วลากตามแถวเพื่อระบายสัญญาณ ลากขอบเพื่อเลื่อนจุดเปลี่ยน กด Shift เพื่อเลื่อนส่วนที่เหลือของแถวด้วย ช่อง Data ใส่สีหรือลายได้</p>
+          <p>เลือก High, Low, High-Z, Unknown, Data, Clock, Toggle, Metastable, Glitch, Gap หรือ Hatched แล้วลากตามแถวเพื่อระบายสัญญาณ หรือคลิกจุดเริ่ม ชี้ไปยังจุดสิ้นสุด แล้วคลิกอีกครั้ง แถวจะแสดงผลขณะชี้ คลิกสองครั้งบนช่วงสัญญาณเพื่อระบายเฉพาะช่วงนั้น และกด <kbd>Esc</kbd> เพื่อยกเลิกการระบายที่ยังไม่วาง ลากรายการจากแผงทางซ้ายมาวางบนภาพได้เช่นกัน: ค่าลงบนช่วงสัญญาณ แถวลงระหว่างแถว ลูกศรลงบนขอบ โดยเห็นตำแหน่งขณะลาก ลากบนพื้นที่ว่างเพื่อเลือกหลายช่วงสัญญาณ หรือคลิกช่วงหนึ่งแล้วกด Shift คลิกอีกช่วง จากนั้นเลือกค่าเพื่อระบายทั้งหมด กด <kbd>Delete</kbd> เพื่อลบ หรือตั้งค่าและความกว้างพร้อมกันในแผงคุณสมบัติ ลากขอบเพื่อเลื่อนจุดเปลี่ยน กด Shift เพื่อเลื่อนส่วนที่เหลือของแถวด้วย ช่อง Data ใส่สีหรือลายได้</p>
           <p>Interval และ Delay วาดลูกศรมีป้ายระหว่างขอบสัญญาณ เช่น setup, hold และ clock-to-output ส่วน Break (<kbd>B</kbd>) เพิ่ม <code>//</code> ทุกแถว ข้อความทั่วไปจะถูก escape ให้ ใช้ <code>$x_1$</code> เมื่อต้องการตัวห้อย</p>
         </div></details>
         <details class="block"><summary>เครื่องสถานะ TikZ <code>automata</code></summary><div>
@@ -550,7 +551,7 @@
           <tr><td><kbd>V</kbd> <kbd>L</kbd> <kbd>A</kbd> <kbd>C</kbd> <kbd>P</kbd></td><td>เลือก เส้น ลูกศร เส้นโค้ง เส้นหลายท่อน</td></tr>
           <tr><td><kbd>O</kbd> <kbd>S</kbd> <kbd>R</kbd> <kbd>E</kbd></td><td>ส่วนโค้ง สปริง สี่เหลี่ยม วงรี</td></tr>
           <tr><td><kbd>B</kbd> <kbd>D</kbd> <kbd>T</kbd> <kbd>M</kbd></td><td>ลูกบอล จุด ข้อความ สูตร</td></tr>
-          <tr><td><kbd>I</kbd> <kbd>N</kbd> <kbd>H</kbd></td><td>รูปภาพ ดินสอ มือ (ไวท์บอร์ดและหน้ากระดาษ)</td></tr>
+          <tr><td><kbd>I</kbd> <kbd>N</kbd> <kbd>H</kbd></td><td>รูปภาพ ดินสอ มือ</td></tr>
           <tr><td><kbd>/</kbd></td><td>ค้นหาเครื่องมือ รูปร่าง คำสั่ง โหมด และไฟล์</td></tr>
           <tr><td><kbd class="shift">Shift</kbd></td><td>จำกัดมุมทีละ 15° สี่เหลี่ยมจัตุรัส และวงกลม</td></tr>
           <tr><td><kbd class="alt">Alt</kbd></td><td>ลากโดยไม่จัดแนว</td></tr>

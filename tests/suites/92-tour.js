@@ -20,7 +20,7 @@ T.test('tour: steps, buttons and keys; the card never moves', async () => {
       T.eq(place(), at, `card ${k + 1} keeps the size and the buttons' places`);
     }
     T.eq(marks, ['', 'on', 'on', 'on', 'on'], 'each later card marks its part of the window');
-    T.ok(/browser/i.test(root.querySelector('.tour-body').textContent) && /\.diagramtex/.test(root.querySelector('.tour-body').textContent), 'the last card warns and points to .diagramtex');
+    T.ok(/browser/i.test(root.querySelector('.tour-body > .on').textContent) && /\.diagramtex/.test(root.querySelector('.tour-body > .on').textContent), 'the last card warns and points to .diagramtex');
     T.eq(btn('next').textContent, 'Got It');
     T.eq(btn('skip').style.visibility, 'hidden', 'nothing to skip on the last card');
     root.dispatchEvent(tourKey('ArrowLeft'));

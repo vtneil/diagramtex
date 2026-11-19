@@ -1,8 +1,6 @@
 /** Thai for editors-a (stable ids → Thai). Merged in ../th.ts. */
 export const thai: Record<string, string> = {
   // shared by the block editors G3, BF, QC, UML, CF, CD, KM
-  "editor.commonA.undo": "เลิกทำ ({keys})",
-  "editor.commonA.redo": "ทำซ้ำ ({keys})",
   "editor.commonA.search": "ค้นหา",
   "editor.commonA.searchPalette": "ค้นหาในจานเครื่องมือ",
   "editor.commonA.elements": "องค์ประกอบ",
@@ -15,7 +13,6 @@ export const thai: Record<string, string> = {
   "editor.commonA.discard": "ทิ้งการแก้ไข",
   "editor.commonA.discardBody": "การแก้ไขทั้งหมดตั้งแต่เปิดตัวแก้ไขจะหายไป",
   "editor.commonA.saved": "บันทึกลงในหน้าแล้ว",
-  "editor.commonA.noMatch": "ไม่พบรายการที่ตรงกับ “{query}”",
   "editor.commonA.help.edits": " เพื่อแก้ไข, ",
   "editor.commonA.help.clears": " เพื่อล้าง",
   "editor.commonA.menu.rowAbove": "แทรกแถวด้านบน",
@@ -679,6 +676,7 @@ export const thai: Record<string, string> = {
   "editor.qc.stepToStep": "Step ถึง step",
   "editor.qc.steps": "Step",
   "editor.qc.tip.arm": "{name}: คลิกเซลล์เพื่อวาง กด Esc เมื่อเสร็จ",
+  "editor.qc.tip.covered": "ตรงนั้นมีเกตที่คร่อมหลายเส้นอยู่: วางบนเส้นที่ว่าง หรือลบเกตนั้นก่อน",
   "editor.qc.tip.armGroup": "{name}: ลากผ่านเซลล์ที่ต้องการครอบ กด Esc เมื่อเสร็จ",
   "editor.qc.tip.rawCell": "เซลล์นั้นเขียนเป็นโค้ดดิบ: เริ่มกลุ่มที่นั่นไม่ได้",
   "editor.qc.tip.size": "ความกว้างขั้นต่ำ {w} · ความสูงขั้นต่ำ {h}",

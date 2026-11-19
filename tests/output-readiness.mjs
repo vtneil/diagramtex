@@ -40,7 +40,8 @@ try {
         await b.page.waitForFunction(()=>TD.math.pending>0 && document.querySelector('#btnExport').disabled);
         assert(await b.page.locator('#topbar [data-cmd="print"]').isDisabled());
         assert(await b.page.locator('#btnTikz').isDisabled());
-        assert(await b.page.locator('.exp-pop').isHidden(),'An open export menu closes when rendering begins');
+        // it fades out (120ms), then goes
+        await b.page.locator('.exp-pop').waitFor({state:'hidden',timeout:1000}).catch(()=>assert.fail('An open export menu closes when rendering begins'));
         const before=downloads.length;
         await b.page.evaluate(()=>{
           for(const command of ['print','export','svg','html','latex','tikz'])TD.app.cmd.runCmd(command);
@@ -70,22 +71,22 @@ try {
           await b.page.locator(`#content > [data-id="${id}"]`).dispatchEvent('contextmenu',{clientX:300,clientY:300,bubbles:true});
         };
         await openMenu('still-loading');
-        assert(await b.page.locator('#ctxMenu [data-ctx="img:save-svg"]').isDisabled());
+        assert(await b.page.locator('#ctxMenu [data-act="img:save-svg"]').isDisabled());
         await openMenu('nested-loading');
-        assert(await b.page.locator('#ctxMenu [data-ctx="img:save-png"]').isDisabled(),'Nested unfinished labels block the containing object');
+        assert(await b.page.locator('#ctxMenu [data-act="img:save-png"]').isDisabled(),'Nested unfinished labels block the containing object');
         await openMenu('ready-rect');
-        assert(!await b.page.locator('#ctxMenu [data-ctx="img:save-svg"]').isDisabled(),'Ready geometry exports while other objects load');
+        assert(!await b.page.locator('#ctxMenu [data-act="img:save-svg"]').isDisabled(),'Ready geometry exports while other objects load');
         const elementDownload=b.page.waitForEvent('download');
-        await b.page.locator('#ctxMenu [data-ctx="img:save-svg"]').evaluate(e=>e.click());
+        await b.page.locator('#ctxMenu [data-act="img:save-svg"]').evaluate(e=>e.click());
         await elementDownload;
         assert(await b.page.evaluate(()=>TD.math.pending>0));
         assert.equal(downloads.length,before+1,'Ready element SVG downloads without waiting for the rest');
 
         await openMenu('ready-soon');
-        assert(await b.page.locator('#ctxMenu [data-ctx="img:save-svg"]').isDisabled());
+        assert(await b.page.locator('#ctxMenu [data-act="img:save-svg"]').isDisabled());
         await b.page.waitForFunction(()=>window.__held.some(x=>window.__jobs[x.id]?.tex.includes('431')));
         await b.page.evaluate(()=>{const i=window.__held.findIndex(x=>window.__jobs[x.id]?.tex.includes('431'));window.__held.splice(i,1)[0].deliver();});
-        await b.page.waitForFunction(()=>!document.querySelector('#ctxMenu [data-ctx="img:save-svg"]').disabled);
+        await b.page.waitForFunction(()=>!document.querySelector('#ctxMenu [data-act="img:save-svg"]').disabled);
         assert(await b.page.evaluate(()=>TD.math.pending>0),'Unrelated elements are still loading');
         const objectPng=await b.page.evaluate(async()=>{
           const shape=TD.state.doc.sheet.shapes.find(s=>s.id==='ready-soon');

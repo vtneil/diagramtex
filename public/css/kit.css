@@ -1,0 +1,493 @@
+/* The interface kit's controls (src/ui/kit): one section per control family, shared by the Svelte components and
+   by code that still builds the same markup as HTML strings. Loaded after css/tokens.css and before css/style.css,
+   whose area rules (the top bar, panels, editors) refine these. Notes: .interface-design/system.md */
+
+/* ---------- button (Button.svelte, IconButton.svelte, button.ts) ---------- */
+button {
+  font: inherit; color: inherit; background: var(--sheet-raised); border: 1px solid var(--rule-strong);
+  padding: 0 12px; height: var(--ctl); border-radius: var(--r); cursor: pointer; white-space: nowrap;
+  transition: background-color .12s var(--ease), border-color .12s var(--ease), color .12s var(--ease), scale .36s var(--ease-spring);
+}
+button:hover { background: var(--well); border-color: var(--rule-strong); }
+button:active:not(:disabled) { background: var(--wash-strong); }
+button.primary { background: var(--ink); border-color: var(--ink); color: var(--sheet); font-weight: 500; }
+button.primary:hover { background: var(--ink-hover); border-color: var(--ink-hover); }
+button.icon { width: var(--ctl); padding: 0; font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+button.flat, button.icon.flat { border-color: transparent; background: transparent; }
+button.flat:hover { background: var(--wash); }
+button:disabled { color: var(--faint); cursor: default; }
+button:disabled:hover { background: transparent; }
+button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+button svg .f { fill: currentColor; }
+/* anything destructive turns the red pen on hover, wherever it sits */
+button:is(.flat, .icon).danger:hover:not(:disabled) { color: var(--redpen); }
+/* the one main action can't be taken yet: a quiet fill, not ink, and hovering it changes nothing */
+button.primary:disabled, button.primary:disabled:hover { background: var(--wash-strong); border-color: transparent; color: var(--faint); }
+/* an icon leading a label (Button with icon): the top bar's spacing, 16px icon */
+button.with-icon { display: inline-flex; align-items: center; gap: 6px; padding-left: 10px; }
+button.with-icon > svg { width: 16px; height: 16px; }
+/* press: everything clicked shrinks while held and springs back on release (the base transition above, and the one
+   below for what isn't a button): every button, the kit's and hand-written ones alike (the tool rail, the top bar,
+   swatches, switch segments), list rows, the Quick list's rows, disclosure heads and links. A panel head that folds
+   its panel presses its fold button. Not a "coming soon" control, a menu row that holds its submenu (the submenu
+   would move with it), nor a row while a button or a field inside it is what is held. Menu rows: .ctx-item below. */
+:is(.list-row, [role=button], summary, a[href]) { transition: scale .36s var(--ease-spring); }
+button:active:not(:disabled, .soon, .has-sub, [aria-disabled=true]),
+:is(.list-row, [role=button], summary, a[href]):active:not(.dis, [aria-disabled=true], :has(button:active, input, textarea, select)),
+#propsHead:active:not(:has(button:active)) #propsToggle, #layersHead:active:not(:has(button:active)) #layersToggle { scale: .95; transition: scale .08s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  button:active, :is(.list-row, [role=button], summary, a[href]):active, :is(#propsHead, #layersHead):active button { scale: none; }
+}
+/* Fields that are clicked, not typed in, press too: a select (with its drawing, .sel-prev, as one), a checkbox, an
+   on/off switch and a slider (the whole control: a native thumb can't be drawn larger on its own; not the colour picker's hue and
+   alpha, whose gradient would move under the pointer). Small ones press
+   further, so the press shows: a 14px checkbox to 85%, a switch to 90%. */
+select, input[type=checkbox], input[type=range], .sel-prev { transition: scale .36s var(--ease-spring); }
+/* a slider shrinks about its thumb (--thumb-at, sliders.ts; a thumb about 16px wide), so pressing it leaves it put */
+input[type=range] { transform-origin: calc(8px + var(--thumb-at, .5) * (100% - 16px)) 50%; }
+select:active:not(:disabled), .sel-prev:has(> select:active:not(:disabled)), input[type=range]:active:not(:disabled, .cp input) { scale: .95; transition: scale .08s ease-out; }
+.sel-prev > select:active { scale: none; }
+input[type=checkbox]:active:not(:disabled) { scale: .85; transition: scale .08s ease-out; }
+input[type=checkbox][role=switch]:active:not(:disabled) { scale: .9; }
+/* a checkbox's words press its box (the box is :active only when pressed itself) */
+label.chk:active:not(:has(input:disabled)) > input[type=checkbox]:not([role=switch]) { scale: .85; transition: scale .08s ease-out; }
+label.chk:active:not(:has(input:disabled)) > input[type=checkbox][role=switch] { scale: .9; transition: scale .08s ease-out; }
+/* Checkbox with its label (Checkbox.svelte): the box beside the words, the whole line clicks */
+label.chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) {
+  select:active:not(:disabled), .sel-prev:has(> select:active:not(:disabled)), input[type=range]:active:not(:disabled, .cp input),
+  input[type=checkbox]:active:not(:disabled), label.chk:active > input[type=checkbox] { scale: none; }
+}
+button.sm { height: var(--ctl-sm); padding: 0 10px; font-size: 12px; }
+button.icon.sm { width: var(--ctl-sm); padding: 0; }
+
+/* ---------- key (Kbd.svelte, keys.ts) ---------- */
+kbd { font: 11px var(--font-mono); background: var(--well); border: 1px solid var(--rule); border-radius: var(--r-sm); padding: 0 4px; color: var(--graphite); }
+
+/* ---------- layout (Spacer.svelte, Separator.svelte) ---------- */
+.spacer { flex: 1; }
+.cz-sep { width: 1px; height: 20px; background: var(--rule); margin: 0 2px; flex: none; }
+
+/* ---------- switch (Segmented.svelte) ---------- */
+/* Segmented controls (Page | Classic, Diagram | Document, export format, engine, orientation, gradient kind,
+   fill tabs): a recessed track with a raised selected segment, 28px tall overall. */
+.seg, #props .seg-ctl, .cz-props .seg-ctl, #engineBox .eng-seg, #inputBox .eng-seg, .fp-seg, .cp-tabs {
+  display: flex; gap: 3px; padding: 3px; height: var(--ctl); background: var(--wash-strong); border-radius: var(--r);
+}
+.seg button, #props .seg-ctl button, .cz-props .seg-ctl button, #engineBox .eng-seg button, #inputBox .eng-seg button, .fp-seg button, .cp-tabs button {
+  flex: 1 1 auto; height: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px;
+  border: 0; border-radius: calc(var(--r) - 3px); background: transparent; color: var(--graphite); font-size: 12px; font-weight: 500; margin: 0;
+}
+.seg button:hover, #props .seg-ctl button:hover, .cz-props .seg-ctl button:hover, #engineBox .eng-seg button:hover, #inputBox .eng-seg button:hover, .fp-seg button:hover, .cp-tabs button:hover { background: var(--wash); color: var(--ink); }
+.seg button.on, #props .seg-ctl button.on, .cz-props .seg-ctl button.on, #engineBox .eng-seg button.on, #inputBox .eng-seg button.on, .fp-seg button.on, .cp-tabs button.on {
+  background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow-knob);
+}
+/* With src/ui/services/segthumb.ts one knob per switch slides to the chosen segment; the segments then draw none. */
+.has-thumb { position: relative; }
+.has-thumb > button { position: relative; z-index: 1; transition: color .18s ease, scale .36s var(--ease-spring); }
+.has-thumb > button.on, .has-thumb > button.on:hover { background: transparent !important; box-shadow: none !important; }
+/* a toggle (.ze-flags) fading between off and on (segthumb.ts) drops the button's own colour transition meanwhile */
+.ze-flags > button.seg-fading { transition: scale .36s var(--ease-spring); }
+
+/* ---------- on/off switch (Switch.svelte): a checkbox with role="switch", ink when on ---------- */
+input[type=checkbox][role=switch] { appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 28px; height: 16px; margin: 0; padding: 0; border: 0; border-radius: 8px; background: var(--rule-strong); cursor: pointer; transition: background-color 200ms ease, scale .36s var(--ease-spring); }
+input[type=checkbox][role=switch]::before { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--sheet-raised); box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform 300ms var(--ease-spring); }
+input[type=checkbox][role=switch]:checked { background: var(--ink); }
+input[type=checkbox][role=switch]:checked::before { transform: translateX(12px); }
+input[type=checkbox][role=switch]:focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
+
+/* ---------- select (Select.svelte, src/ui/services/selectmenu.svelte.ts) ---------- */
+/* opened and picked with the pointer: no focus ring, the browser's included, until a key is pressed on it. (A select
+   takes typing, so browsers count it as keyboard focus even after a click.) */
+select[data-by-pointer]:focus { outline: none; }
+/* Menu for every <select> (src/ui/SelectMenu.svelte, opened by src/ui/services/selectmenu.svelte.ts): same rows as the dash/width menus, so no dropdown
+   falls back to the system menu. Highlight follows pointer and arrow keys; the current value is marked. */
+.selmenu {
+  position: fixed; z-index: 2100; padding: 4px; overflow-y: auto; /* over dialogs too */ max-width: min(360px, calc(100vw - 16px));
+  background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop); animation: pop-in .14s var(--ease); font-size: 12px;
+}
+.selmenu[hidden] { display: none; }
+/* closed (hidden, so everything that asks sees it closed) but still drawn while it fades out */
+.selmenu.leaving[hidden] { display: block; pointer-events: none; animation: pop-out .12s var(--ease) forwards; }
+.selmenu.pics.leaving[hidden], .selmenu.tiles.leaving[hidden] { display: grid; }
+@keyframes pop-out { to { opacity: 0; transform: scale(.97); } }
+/* rows sit as far apart as the menu's own padding (4px), so the highlighted row and the current one never touch */
+.selmenu-item + .selmenu-item { margin-top: 4px; }
+.selmenu-item {
+  display: flex; align-items: center; height: var(--ctl); padding: 0 8px; border-radius: var(--r);
+  white-space: nowrap; color: var(--ink); cursor: default; user-select: none;
+}
+/* Pointer/keyboard highlight in the well tone, the current value in the stronger wash. */
+.selmenu-item.hi { background: var(--well); }
+.selmenu-item.on { background: var(--wash-strong); }
+.selmenu-item.dis { color: var(--faint); }
+/* a colour option's swatch (data-swatch), and the same swatch inside its closed select (.swsel) */
+.selmenu-sw, .swsel .sw { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 35%, transparent); vertical-align: -2px; }
+.selmenu-sw { margin-right: 8px; }
+.swsel { position: relative; }
+.swsel .sw { position: absolute; left: 9px; top: 50%; margin-top: -7px; pointer-events: none; z-index: 1; }
+#props .swsel select, .cz-props .swsel select { padding-left: 30px; }
+.selmenu-group { padding: 8px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pencil); }
+@media (prefers-reduced-motion: reduce) { .selmenu, .selmenu.leaving[hidden] { animation: none; } }
+/* a picture menu (select[data-pics]): tiles like the Blocks menu's, four across, with the same highlight states */
+.selmenu.pics:not([hidden]) { display: grid; } /* not over [hidden]: the grid must still close */
+.selmenu.pics { grid-template-columns: repeat(4, 76px); gap: 4px; max-width: none; }
+.selmenu.pics .selmenu-item { margin: 0; height: auto; min-height: 64px; flex-direction: column; justify-content: flex-start; gap: 4px; padding: 8px 2px 6px;
+  border: 1px solid var(--rule); background: var(--sheet); color: var(--graphite); font-size: 11px; line-height: 1.2; white-space: normal; text-align: center; }
+.selmenu.pics .selmenu-item.hi { background: var(--well); border-color: var(--rule-strong); color: var(--ink); }
+.selmenu.pics .selmenu-item.on { background: var(--wash-strong); border-color: var(--ink); color: var(--ink); }
+.selmenu.pics svg { width: 40px; height: 30px; flex: none; fill: none; stroke: var(--graphite); stroke-width: 1.2; stroke-linejoin: round; }
+.selmenu.pics svg .a1 { fill: #d6e2f2; stroke: var(--bluepen); }
+.selmenu.pics svg .d { stroke-dasharray: 1.6 1.4; }
+.selmenu.pics svg .h { fill: var(--sheet); }
+/* drawn rows (Select options with svg / note): a 60×10 drawing before the name, a quiet mono note after it */
+.selmenu-item > svg { width: 60px; height: 10px; flex: none; margin-right: 8px; color: var(--ink); fill: none; stroke: currentColor; }
+.selmenu-item > svg.sprev { height: 14px; } /* a shaft drawing: two or three strokes */
+.selmenu-item > i { margin-left: auto; padding-left: 16px; font: 11px var(--font-mono); font-style: normal; color: var(--pencil); }
+/* a grid of drawings without names (Select columns: arrow tips), tiles 2px apart */
+.selmenu.tiles:not([hidden]) { display: grid; grid-template-columns: repeat(var(--cols, 3), 1fr); gap: 2px; }
+.selmenu.tiles .selmenu-item { margin: 0; justify-content: center; padding: 0 4px; }
+.selmenu.tiles .selmenu-item > svg { width: 52px; height: 13px; margin: 0; overflow: visible; }
+.selmenu.tiles .none { font-size: 11px; color: var(--pencil); }
+/* the custom line at the foot (Select custom): a typed value the options don't hold */
+.selmenu-custom { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin: 4px -4px 0; padding: 6px 12px 2px; border-top: 1px solid var(--rule-soft); font-size: 12px; color: var(--graphite); }
+.selmenu-custom input { flex: 1; min-width: 0; height: var(--ctl-sm); padding: 0 6px; font: 11px var(--font-mono); border: 1px solid var(--rule); border-radius: var(--r); background: var(--sheet-raised); color: var(--ink); }
+.selmenu-custom.on input { border-color: var(--ink); }
+.selmenu-custom input:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); }
+/* rows press like menu rows */
+.selmenu-item { transition: scale .36s var(--ease-spring); }
+.selmenu-item:active:not(.dis) { scale: .95; transition: scale .08s ease-out; }
+@media (prefers-reduced-motion: reduce) { .selmenu-item:active:not(.dis) { scale: none; } }
+/* the closed control showing the current drawing (Select with drawn options): the drawing sits over the select's
+   padding, as a colour swatch does (.swsel) */
+.sel-prev { position: relative; display: flex; flex: 1; min-width: 0; }
+.sel-prev > svg { position: absolute; left: 9px; top: 50%; width: 40px; height: 8px; margin-top: -4px; pointer-events: none; z-index: 1; color: var(--ink); fill: none; stroke: currentColor; }
+.sel-prev > svg:is(.tprev, .sprev) { overflow: visible; } /* an arrow tip or shaft drawn to the box's edge */
+.sel-prev > select { flex: 1; min-width: 0; width: 100%; padding-left: 58px !important; } /* over area rules such as #props select */
+/* attached: only the chevron, joined to the field before it (presets for a number) */
+select.attached { flex: none; width: 24px !important; min-width: 24px !important; padding: 0 !important; color: transparent; background-position: center; margin-left: -9px; border-radius: 0 var(--r) var(--r) 0; }
+:is(input, .sel-prev):has(+ select.attached) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+
+/* ---------- colour (ColourButton.svelte) ---------- */
+#props .cbtn, .cbtn { width: 44px; height: var(--ctl); padding: 3px; flex: none; border-color: var(--rule-strong);
+  background: repeating-conic-gradient(#e2dfd7 0 25%, #fff 0 50%) 0 0/8px 8px; }
+.cbtn span { display: block; width: 100%; height: 100%; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); }
+.cbtn.none span { background: linear-gradient(to top right, transparent calc(50% - 1px), var(--redpen) 50%, transparent calc(50% + 1px)) !important; }
+
+/* ---------- slider (Slider.svelte, src/ui/services/sliders.ts) ---------- */
+/* Precision entry shared by numeric slider readouts. */
+.slider-value { flex: none; min-width: 48px; text-align: left; white-space: nowrap; font: 11px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--pencil); cursor: text; }
+/* a slider rings only for the keyboard; a click or a drag leaves it as it was */
+input[type=range]:focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; }
+.slider-value:focus-visible { outline: 2px solid var(--bluepen); outline-offset: 2px; border-radius: var(--r-sm); }
+.slider-value[aria-disabled="true"] { opacity: .4; cursor: default; }
+
+/* ---------- menu (Menu.svelte, MenuItem.svelte, ContextMenu.svelte; the app's .ctx menus) ---------- */
+.ctx { position: fixed; z-index: 40; min-width: 240px; padding: 4px; font-size: 13px; }
+.ctx hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 8px; }
+.ctx-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: var(--r); background: none; text-align: left; cursor: default; position: relative; color: var(--ink); transition: scale .36s var(--ease-spring); }
+/* press: a row shrinks while held and springs back on release, as buttons do; its highlight stays instant. Not a
+   row that opens a submenu: it holds the submenu, which would move with it (and :active reaches it from the
+   submenu's rows) */
+.ctx-item:not(.has-sub):active:not([disabled]):not(.dis) { scale: .95; transition: scale .08s ease-out; }
+@media (prefers-reduced-motion: reduce) { .ctx-item:not(.has-sub):active:not([disabled]):not(.dis) { scale: none; } }
+/* Same highlight as the dropdown menus (.selmenu rows): the well tone, text and icons unchanged.
+   A row whose submenu is open stays highlighted. Destructive rows keep the tone and turn the red pen. */
+.ctx-item:hover:not([disabled]):not(.dis), .ctx-item:focus-visible { background: var(--well); color: var(--ink); outline: none; }
+/* destructive rows and buttons in the block editors (delete, clear) turn the red pen too, as Delete does in the app's menus */
+.ctx-item.danger:hover:not([disabled]), .ctx-item.danger:hover:not([disabled]) svg, .ctx-item.danger:focus-visible, .ctx-item.danger:focus-visible svg { color: var(--redpen); }
+.ctx-item[disabled], .ctx-item.dis { color: var(--faint); }
+.ctx-rows.bare .ctx-item > .ic { display: none; }
+.ctx-item svg, .ctx-item .ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ctx-item:not([disabled]):not(.dis) svg { color: var(--graphite); }
+.ctx-item svg .f { fill: currentColor; }
+.ctx-item .lb { flex: 1; }
+.ctx-item .ck { width: 16px; height: 16px; flex: none; margin-left: 8px; }
+.ctx-item:not([disabled]):not(.dis) svg.ck { color: var(--ink); } /* the picked one of a radio group (role menuitemradio) */
+.ctx-item kbd { background: none; border: 0; color: var(--pencil); padding: 0 0 0 16px; font: 12px var(--font-ui); letter-spacing: .04em; }
+.ctx-item .arr { color: var(--pencil); font-size: 16px; line-height: 1; }
+/* Submenu: clear of the parent menu (its 4px padding + 1px border + 4px gap), first row level with the
+   row that opened it (sub padding 4 + border 1). An invisible bridge spans the gap so the pointer can cross. */
+.ctx .sub { display: none; position: absolute; left: calc(100% + 9px); top: -5px; min-width: 180px; animation: none; color: var(--ink); }
+.ctx .sub::before { content: ''; position: absolute; top: 0; bottom: 0; left: -10px; width: 10px; }
+.ctx.flip .sub { left: auto; right: calc(100% + 9px); }
+.ctx.flip .sub::before { left: auto; right: -10px; }
+/* submenu rows carry no icons, so drop the empty icon column */
+.ctx .sub .ctx-item > .ic { display: none; }
+.ctx-item.has-sub:hover:not(.dis) > .sub { display: block; }
+/* a heading over a group of rows (11px, the section-title style), and a submenu opened from the keyboard */
+.ctx-head { padding: 6px 8px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--pencil); }
+.ctx-item.has-sub.open:not(.dis) { background: var(--well); }
+/* a grid of icon tiles (the Table's borders): 4px inside the menu's 4px padding, so their corners are --r-lg - 8px */
+.ctx:has(> .ctx-rows > .ctx-tiles) { min-width: 0 !important; width: 232px; box-sizing: border-box; }
+.ctx-tiles { display: grid; grid-template-columns: repeat(var(--tiles, 5), minmax(0, 1fr)); gap: 4px; padding: 4px; }
+.ctx-tiles > .ctx-tile { justify-content: center; height: 40px; padding: 0; border-radius: max(0px, calc(var(--r-lg) - 8px)); }
+.ctx-tiles > .ctx-tile svg { width: 22px; height: 22px; }
+.ctx-tiles > .ctx-tile:not([disabled]) svg { color: var(--ink); }
+.ctx-item.has-sub.open:not(.dis) > .sub { display: block; }
+.ctx-rows:focus { outline: none; }
+/* a closing kit menu fades out (ContextMenu.leave) and takes no more clicks meanwhile */
+.ctx.kit-menu.leaving { pointer-events: none; }
+/* the kit's floating menu scrolls inside when taller than the window; its submenus are fixed, so they escape that
+   clip, and are placed by positionMenu as their row is entered */
+.ctx.kit-menu, .ctx.kit-menu .sub { width: max-content; max-width: min(420px, calc(100vw - 12px)); overflow: auto; overscroll-behavior: contain; }
+.ctx.kit-menu .sub { position: fixed; right: auto; animation: none; }
+.ctx.kit-menu .sub::before { display: none; }
+.ctx.kit-menu .ctx-item .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Text popup (TextPopup.svelte: the canvas's text editor, the block editors' labels through TD.input.popup) ---------- */
+.td-pop-ta {
+  position: absolute; display: block; min-width: 280px; max-width: calc(100% - 16px); width: 300px; min-height: 40px; padding: 8px 10px; resize: none; border-radius: var(--r);
+  font: 14px/1.5 var(--font-mono); border: 1px solid var(--bluepen); color: var(--ink);
+  box-shadow: var(--shadow-pop); background: var(--sheet-raised); z-index: 20; transform: translateX(-50%);
+}
+.td-pop-ta.para { min-height: 120px; }
+/* quantikz code of a quantum circuit */
+.td-pop-ta.code { min-height: 150px; font-size: 13px; tab-size: 2; }
+/* in the top layer (popover): placed in the window's coordinates by place(), never centred by the browser; never
+   larger than the window less 8px each side, however far its corner is dragged */
+.text-pop:popover-open { position: fixed; inset: auto; margin: 0; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+.td-pop-ml:popover-open { overflow: visible; }
+/* MathLive mode: the same floating box, one math-field per line, a key hint underneath */
+.td-pop-ml {
+  position: absolute; display: block; min-width: 280px; max-width: calc(100% - 16px); width: 320px; padding: 6px 8px 6px; border-radius: var(--r);
+  border: 1px solid var(--bluepen); color: var(--ink); box-shadow: var(--shadow-pop); background: var(--sheet-raised); z-index: 20; transform: translateX(-50%);
+}
+.td-pop-ml.para .ml-lines { min-height: 96px; }
+.td-pop-ml .ml-lines { display: flex; flex-direction: column; gap: 4px; }
+/* every MathLive field (here and Quick's): the blue pen for the caret and selection, prose marked faintly; no
+   on-screen keyboard button (the keyboard is never offered). Its menu and menu button: mathlive-theme.ts */
+math-field {
+  --caret-color: var(--bluepen); --selection-background-color: color-mix(in srgb, var(--bluepen) 22%, transparent); --primary: var(--bluepen);
+  --contains-highlight-background-color: var(--well); --placeholder-color: var(--pencil);
+  --text-highlight-background-color: color-mix(in srgb, var(--bluepen) 9%, transparent); /* marks prose (text mode) faintly */
+}
+math-field::part(virtual-keyboard-toggle) { display: none; }
+/* a line of the popup: white like every field (the caret shows which line is being typed) */
+.td-pop-ml math-field { display: block; width: 100%; font-size: 20px; padding: 4px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink); outline: none; }
+.td-pop-ml .ml-hint { margin-top: 4px; padding: 0 6px; font-size: 11px; color: var(--pencil); }
+.td-pop-ml .ml-load { padding: 10px 6px; font-size: 12px; color: var(--pencil); }
+/* MathLive's command suggestions (\fr… → \frac), a box in the page, as the LaTeX autocomplete (#texComplete): a
+   white card of 28px rows, the chosen one washed; no pointer tip. In the top layer while it shows (mathlive-theme.ts),
+   so the UA's popover box is undone. Its menu is styled inside each field (mathlive-theme.ts). */
+html body #mathlive-suggestion-popover {
+  inset: auto; margin: 0; padding: 0; overflow: hidden; min-width: 220px; max-width: 320px; text-align: left;
+  background: var(--sheet-raised); color: var(--ink); border: 1px solid var(--rule-strong); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop); font: 12px var(--font-ui);
+}
+html body #mathlive-suggestion-popover::after { display: none; }
+html body #mathlive-suggestion-popover ul { padding: 4px; max-height: 264px; align-items: stretch; }
+html body #mathlive-suggestion-popover li {
+  box-sizing: border-box; width: auto; min-height: 28px; margin: 0; padding: 4px 8px; column-gap: 12px; align-items: center;
+  border-radius: var(--r); background: none; color: var(--ink);
+}
+html body #mathlive-suggestion-popover li:hover { background: var(--well); }
+html body #mathlive-suggestion-popover li.ML__popover__current { background: var(--wash-strong); color: var(--ink); }
+html body #mathlive-suggestion-popover .ML__popover__latex { font: 12px var(--font-mono); color: var(--ink); }
+html body #mathlive-suggestion-popover .ML__popover__command { font-size: 16px; color: var(--ink); }
+html body #mathlive-suggestion-popover .ML__popover__keybinding { font: 11px var(--font-ui); color: var(--pencil); opacity: 1; }
+/* the canvas's text editor (roomy): a taller line, resizable by its corner, under the app's menus and popovers */
+.text-pop.roomy { z-index: 5; }
+.td-pop-ta.roomy { resize: both; }
+.td-pop-ta.roomy:not(.para, .code) { min-height: 76px; }
+.text-pop.leaving { pointer-events: none; }
+
+/* ---------- Tooltip (Tooltip.svelte, tip-layer.svelte.ts, src/ui/services/tooltip.ts): the app's own, in place of the browser's ---------- */
+.td-tip {
+  position: fixed; z-index: 3000; max-width: 280px; padding: 4px 8px; border-radius: var(--r-sm); pointer-events: none;
+  background: var(--ink); color: var(--sheet); font: 500 12px/1.35 var(--font-ui); box-shadow: var(--shadow-pop);
+  opacity: 0; transition: opacity .08s ease;
+}
+.td-tip.on { opacity: 1; }
+/* a name shown in full: wider, and broken anywhere rather than run out of the window */
+.td-tip.name { max-width: min(480px, calc(100vw - 16px)); overflow-wrap: anywhere; }
+.td-tip-sub { margin-top: 1px; font-weight: 400; opacity: .72; }
+.td-tip kbd { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; opacity: .62; font: 12px var(--font-ui); letter-spacing: .04em; }
+@media (prefers-reduced-motion: reduce) { .td-tip { transition: none; } }
+.td-tip.static { position: relative; z-index: auto; display: inline-block; vertical-align: top; opacity: 1; transition: none; }
+
+/* ---------- Popover (Popover.svelte, popover.ts) and Flyout (Flyout.svelte); the app's .popover panels are copies ---------- */
+.popover, .ctx {
+  background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop);
+  animation: pop-in .14s var(--ease);
+  transform-origin: top left;
+}
+@keyframes pop-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .popover, .ctx { animation: none; } }
+.popover { position: fixed; z-index: 25; width: 324px; padding: 4px 12px 12px; }
+.popover[hidden], .ctx[hidden] { display: none; }
+.pop-title { font-family: var(--font-ui); font-size: 11px; font-weight: 600; color: var(--pencil); margin: 8px 0; }
+/* Flyouts: 8px of padding on every side, and the shell's corner is concentric with the 6px buttons inside it
+   (6 + 8 = 14). Section titles are inset 4px so their text lines up with the drawings in the buttons. */
+.popover.flyout { width: auto; max-width: 420px; padding: 8px; border-radius: calc(var(--r) + 8px); }
+/* a long menu scrolls inside the window; the track stops short of the rounded corners */
+.popover.flyout { max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.popover.flyout::-webkit-scrollbar { width: 10px; }
+.popover.flyout::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+.popover.flyout::-webkit-scrollbar-thumb { background: var(--rule-strong); border: 3px solid transparent; border-radius: 6px; background-clip: padding-box; }
+.popover.flyout::-webkit-scrollbar-thumb:hover { background-color: var(--pencil); }
+@supports not selector(::-webkit-scrollbar) { .popover.flyout { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; } }
+.flyout .pop-title { margin: 12px 4px 6px; line-height: 16px; }
+.pop-title .pop-warn { display: block; font-weight: 500; color: var(--redpen); }
+.flyout .pop-title:first-child { margin-top: 2px; }
+/* ---------- Swatches (Swatches.svelte): colour chips to pick from, `--sw-cols` across ---------- */
+.swatches { display: grid; grid-template-columns: repeat(var(--sw-cols, 8), 1fr); gap: 4px; }
+.swatches > button { height: 20px; min-width: 0; padding: 0; border: 1px solid var(--rule); border-radius: var(--r-sm); }
+.swatches.editing > button { outline: 2px dashed var(--bluepen); outline-offset: 1px; }
+/* the kit's popover: padding `inset` all round, corner concentric with the 8px controls inside (8 + inset); it fades
+   in and out by Svelte transitions, so no pop-in animation, and its transform-origin is the corner it grows from */
+.popover.kit-pop { width: auto; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--pop-inset); border-radius: calc(var(--r) + var(--pop-inset)); animation: none; outline: none; }
+.popover.kit-pop.leaving { pointer-events: none; }
+/* what openPopover's caller fills: its children are the popover's */
+.pop-body { display: contents; }
+/* a tool group's button: a corner mark says it opens choices; open, it keeps the pressed fill */
+.flyout-btn { position: relative; }
+.flyout-btn .more { position: absolute; right: 3px; bottom: 3px; width: 0; height: 0; border-left: 4px solid transparent; border-bottom: 4px solid currentColor; opacity: .55; }
+.flyout-btn.open { background: var(--wash-strong); color: var(--ink); }
+
+/* ---------- Soon (the `soon` option of Button, IconButton): a feature not built yet is shown, never hidden ---------- */
+.soon, .soon:hover { opacity: .45; cursor: default; }
+/* :is() lifts it over the flat and icon looks, whose borders are transparent */
+button:is(.soon, .icon.flat.soon), button:is(.soon, .icon.flat.soon):hover { border-style: dashed; border-color: var(--rule-strong); background: transparent; }
+button.soon:active { scale: none; }
+
+/* ---------- Badge (Badge.svelte): a count beside a title ---------- */
+.badge { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--pencil); font-variant-numeric: tabular-nums; }
+.badge.faint { color: var(--faint); }
+/* in a title row that spaces its children itself (a palette category, the code pane's head) */
+:is(.cz-cat-t, .cz-code-head) > .badge { margin-left: 0; }
+
+/* ---------- EmptyState (EmptyState.svelte): nothing here yet ---------- */
+.empty-state { padding: 16px 8px; text-align: center; font-size: 12px; line-height: 1.45; color: var(--pencil); text-wrap: pretty; }
+.empty-title { margin-bottom: 4px; font-size: 13px; font-weight: 600; color: var(--ink); }
+
+/* ---------- SearchField (SearchField.svelte): the block editors' part search ---------- */
+input.search-field { width: 100%; min-width: 0; height: var(--ctl); padding: 0 8px; border: 1px solid var(--rule-strong); border-radius: var(--r); background: var(--well); color: var(--ink); font: inherit; }
+input.search-field:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); background: var(--sheet-raised); }
+
+/* ---------- SplitButton (SplitButton.svelte; colour-split.ts and the Table toolbar build the same) ---------- */
+.split-btn { display: inline-flex; flex: none; }
+.split-btn[hidden] { display: none; }
+/* a colour button's bar (textColour, fillColour) shows the colour it applies: SplitButton's `swatch` */
+.split-btn .sw { stroke: var(--sw, currentColor); }
+.split-btn > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.split-btn > button + button { width: 24px; padding: 0; margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; display: inline-flex; align-items: center; justify-content: center; }
+.split-btn > button:hover, .split-btn > button:focus-visible { position: relative; z-index: 1; }
+.split-btn > button + button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.split-btn.one > button:first-child { border-radius: var(--r); }
+.split-btn.one > button + button { display: none; }
+.tb-split > button.icon { border-color: transparent; }
+.tb-split > .tb-more { width: 18px; border-color: transparent; background: transparent; color: var(--graphite); }
+.tb-split > .tb-more:hover { background: var(--wash); color: var(--ink); }
+.tb-split > .tb-more svg { width: 12px; height: 12px; }
+/* on (.00 for an aligned column): the button and its menu arrow are one filled control, not a fill cut off square */
+.tb-split { border-radius: var(--r); }
+.tb-split:has(> button.icon.on) { background: var(--wash-strong); }
+.tb-split > button.icon.on { background: transparent; }
+.tb-split:has(> button.icon.on) > .tb-more { color: var(--ink); }
+.tb-split:has(> button.icon.on) > button:hover { background: var(--wash-strong); }
+
+/* read by screen readers, out of sight (a live note whose shown copy changes by visibility: the sidebar settings, the tour) */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- Toolbar, ToolbarGroup (Toolbar.svelte, ToolbarGroup.svelte; the Table's and Document's .tb-bar.toolbar; fitToolbar in toolbar.ts) ---------- */
+/* one line; narrower, labelled controls drop their icons (.lean), then it scrolls with no bar and fades at the edge
+   with more to see. 4px of room for focus rings inside the scrolling box, taken back by the margin */
+.toolbar { display: flex; align-items: center; gap: 4px; height: var(--ctl); box-sizing: content-box; padding: 4px; margin: -4px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+.toolbar::-webkit-scrollbar { display: none; }
+.toolbar > * { flex-shrink: 0; }
+.toolbar.lean button.with-icon > svg, .toolbar.lean .seg:not(.seg-align) button svg { display: none; }
+.toolbar.lean button.with-icon { padding-left: 10px; padding-right: 10px; }
+:is(.toolbar, .topbar-row.tools-row).more-l { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px); mask-image: linear-gradient(to right, transparent, #000 32px); }
+:is(.toolbar, .topbar-row.tools-row).more-r { -webkit-mask-image: linear-gradient(to left, transparent, #000 32px); mask-image: linear-gradient(to left, transparent, #000 32px); }
+:is(.toolbar, .topbar-row.tools-row).more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+.tb-grp { display: flex; align-items: center; gap: 2px; flex: none; }
+.tb-grp + .tb-grp { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--rule); }
+.tb-grp.tb-seg + .tb-grp { border-left: 0; padding-left: 4px; }
+.tb-grp + .tb-grp.tb-seg { border-left: 0; padding-left: 3px; }
+/* the alignment switch is the app's own (.seg.seg-align), as in the panel; only the group's gap differs */
+.tb-grp.seg-align { gap: 3px; align-items: stretch; }
+:is(.toolbar, .tb-bar) button.icon { border-color: transparent; background: transparent; color: var(--graphite); }
+:is(.toolbar, .tb-bar) button.icon:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
+:is(.toolbar, .tb-bar) button.icon.on { background: var(--wash-strong); color: var(--ink); }
+:is(.toolbar, .tb-bar) button.icon:disabled { color: var(--faint); }
+
+/* ---------- Tile, TileGrid (Tile.svelte, TileGrid.svelte: the flyouts' picture tiles) ---------- */
+.tile-grid { display: grid; grid-template-columns: repeat(var(--tile-cols, 4), 1fr); gap: 4px; }
+button.tile { height: auto; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px; font-size: 11px; line-height: 1.25;
+  border-color: var(--rule); background: var(--sheet); color: var(--graphite); }
+button.tile:hover { border-color: var(--rule-strong); color: var(--ink); background: var(--wash); }
+button.tile.on { border-color: var(--ink); background: var(--wash-strong); color: var(--ink); }
+button.tile > svg { width: 40px; height: 30px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
+/* a long name (Thai runs longer) wraps to a second line, then is cut */
+button.tile > span { max-width: 100%; overflow: hidden; white-space: normal; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+button.tile.soon, button.tile.soon:hover { border-style: dashed; border-color: var(--rule-strong); background: transparent; color: var(--graphite); }
+
+/* ---------- ListRow (ListRow.svelte; the file list, layers and Recycle Bin rows are copies) ---------- */
+.list-row { display: flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 4px 0 calc(8px + var(--depth, 0) * 16px); border-radius: var(--r);
+  color: var(--graphite); cursor: pointer; flex: none; list-style: none; }
+.list-row:hover { background: var(--wash); color: var(--ink); }
+.list-row.on { background: var(--wash-strong); color: var(--ink); font-weight: 600; }
+.list-row:focus-visible { outline-offset: -2px; } /* the app's ring, inside, so neighbours don't cover it */
+.list-row > svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.list-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-row .acts { display: flex; gap: 2px; visibility: hidden; }
+.list-row:hover .acts, .list-row:focus-within .acts { visibility: visible; }
+.list-row .acts button { width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--pencil); }
+.list-row .acts button:hover { color: var(--ink); background: var(--wash); }
+.list-row .acts button.danger:hover { color: var(--redpen); background: none; }
+.list-row .acts button svg { width: 14px; height: 14px; }
+.list-row-ed { flex: 1; min-width: 0; height: 22px; margin-left: -4px; padding: 0 4px; border: 0; border-radius: var(--r-sm); font: inherit; color: var(--ink);
+  background: var(--sheet-raised); box-shadow: inset 0 0 0 1px var(--bluepen); outline: none; }
+
+/* ---------- Dialog (Dialog.svelte, src/ui/services/dialog.ts: TD.confirm / TD.prompt / TD.alert): a small sheet over the
+   scrim, title + message, buttons right-aligned with the default action last; destructive actions use the red pen ---------- */
+.td-dialog, .td-dialog-leaving { position: fixed; inset: 0; z-index: 2000; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 16px; animation: tdd-fade .14s var(--ease); }
+.tdd-box { --tdd-inset: 14px; /* buttons sit this far from the right and bottom edges; the corner is concentric with theirs */
+  width: min(400px, 100%); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: calc(var(--r) + var(--tdd-inset)); box-shadow: var(--shadow-modal); padding: 20px 20px var(--tdd-inset); animation: pop-in .16s var(--ease); }
+.tdd-box h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.tdd-box p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: var(--graphite); }
+.tdd-in { display: block; width: 100%; margin-top: 12px; height: var(--ctl); padding: 0 8px; background: var(--sheet-raised); border: 1px solid var(--rule-strong); }
+textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); resize: vertical; }
+.tdd-in:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
+.tdd-pv { margin-top: 8px; padding: 10px 12px; min-height: 44px; background: var(--well); border-radius: var(--r); color: var(--ink); font: 18px/1.35 var(--font-tex); text-align: center; text-wrap: balance; overflow-wrap: anywhere; } /* read-only: how the typed title reads on the page */
+.tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; margin-right: calc(var(--tdd-inset) - 20px); }
+.tdd-btns button { min-width: 80px; }
+.tdd-btns button.danger { background: var(--redpen); border-color: var(--redpen); color: #fff; font-weight: 500; }
+.tdd-btns button.danger:hover { filter: brightness(1.08); }
+@keyframes tdd-fade { from { opacity: 0; } }
+/* closing plays the opening backwards: the scrim fades (140ms) as the sheet fades and settles back to 97% (160ms) */
+.td-dialog-leaving { pointer-events: none; animation: tdd-fade-out .14s var(--ease) forwards; }
+.td-dialog-leaving .tdd-box { animation: tdd-out .16s var(--ease) forwards; }
+@keyframes tdd-fade-out { to { opacity: 0; } }
+@keyframes tdd-out { to { opacity: 0; transform: scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .td-dialog, .tdd-box, .td-dialog-leaving, .td-dialog-leaving .tdd-box { animation: none; } }
+
+/* ---------- Palette and CodePane (Palette.svelte, CodePane.svelte): the block editors' columns. Their look is the
+   editors' own (.cz-pal, .cz-search, .cz-cat, .cz-part, .qe-grid, .qe-item, .cz-code, .cz-msg in style.css); in a
+   palette the empty result is the kit's EmptyState ---------- */
+.cz-list .empty-state { padding: 16px 4px; }
+/* a tile's drawing that brings no size of its own (the editors' minis do) */
+.qe-item .qe-fig > svg:not([width]) { width: 44px; height: 26px; flex: none; }
+
+/* ---------- EditorFrame (EditorFrame.svelte): every block editor's window. They all open at one size, which the
+   app set for each editor's #…Modal (and four inline); here it belongs to the box ---------- */
+.modal-box.cz-box { width: min(1600px, 97vw); height: min(900px, 93vh); }
+
+
+/* ---------- a modal window that fades (modal.ts: the LaTeX and Import dialogs, the diagram gallery) ----------
+   it opens as the kit Dialog does: the scrim fades in (140ms), the box pops in from 97% (160ms); closing plays it
+   backwards. A closed one is [hidden] at once; .modal-leaving keeps it drawn, not clickable, while it fades. */
+.fades:not([hidden]) { animation: tdd-fade .14s var(--ease); }
+.fades:not([hidden]) > .modal-box { animation: pop-in .16s var(--ease); }
+:is(#modal, .modal).fades.modal-leaving[hidden] { display: flex; pointer-events: none; animation: tdd-fade-out .14s var(--ease) forwards; }
+.fades.modal-leaving[hidden] > .modal-box { animation: tdd-out .16s var(--ease) forwards; }
+.diagram-gallery[open] { animation: pop-in .16s var(--ease); }
+.diagram-gallery[open]::backdrop { animation: tdd-fade .14s var(--ease); }
+.diagram-gallery.leaving { pointer-events: none; animation: tdd-out .16s var(--ease) forwards; }
+.diagram-gallery.leaving::backdrop { animation: tdd-fade-out .14s var(--ease) forwards; }
+@media (prefers-reduced-motion: reduce) { .fades, .fades > .modal-box, .diagram-gallery, .diagram-gallery::backdrop { animation: none !important; } }

@@ -19,16 +19,14 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
   padding: 8px calc(var(--props-w) + 24px) 8px 16px;
 }
 /* ---- toolbar: one line at a 1400px window ---- */
-/* one line at a 1400px window; narrower, it scrolls sideways with no bar, like the top bar */
-.tb-bar, .tb-outbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
-.tb-bar::-webkit-scrollbar, .tb-outbar::-webkit-scrollbar { display: none; }
+/* one line at a 1400px window; narrower, it scrolls sideways with no bar (the bar itself is the kit's .toolbar) */
+.tb-outbar { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+.tb-outbar::-webkit-scrollbar { display: none; }
 .tb-outbar > * { flex-shrink: 0; }
 .tb-outbar > .spacer, .tb-outbar > .tb-pk { flex-shrink: 1; }
-.tb-bar { flex: none; display: flex; align-items: center; gap: 4px; height: var(--ctl); }
-/* room for focus rings inside the clipping (overflow) box, taken back by the margin so nothing moves */
-.tb-bar { box-sizing: content-box; padding: 4px; margin: -4px; }
+.tb-bar { flex: none; }
 /* the toolbar's drop-downs focus like every other field: a blue-pen border and a soft ring, no outline */
-.tb-bar select:focus, .tb-outbar select:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); }
+.tb-bar select:focus-visible:where(:not([data-by-pointer])), .tb-outbar select:focus-visible:where(:not([data-by-pointer])) { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 25%, transparent); }
 /* editing a Table block from the diagram: who the table belongs to, and the way back (Cancel, Done) */
 .tb-session { flex: none; display: flex; align-items: center; gap: 8px; min-height: calc(var(--ctl) + 8px); padding: 4px 4px 4px 12px; border-radius: var(--r-lg);
   background: var(--wash); color: var(--graphite); font-size: 12px; }
@@ -36,16 +34,8 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-session > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb-session > .spacer { flex: 1; }
 .tb-session > button { flex: none; border-radius: var(--r); }
-.tb-grp { display: flex; align-items: center; gap: 2px; flex: none; }
-.tb-grp + .tb-grp { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--rule); }
-.tb-grp.tb-seg + .tb-grp { border-left: 0; padding-left: 4px; }
-.tb-grp + .tb-grp.tb-seg { border-left: 0; padding-left: 3px; }
-/* the alignment switch is the app's own (.seg.seg-align), as in the panel; only the group's gap differs */
-.tb-grp.seg-align { gap: 3px; align-items: stretch; }
-.tb-bar button.icon { border-color: transparent; background: transparent; color: var(--graphite); }
-.tb-bar button.icon:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
-.tb-bar button.icon.on { background: var(--wash-strong); color: var(--ink); }
-.tb-bar button.icon:disabled { color: var(--faint); }
+/* groups (.tb-grp): kit.css, ToolbarGroup */
+/* flat icon buttons in the bar: kit.css, Toolbar */
 .tb-imp { display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 10px; }
 .tb-imp svg { width: 16px; height: 16px; }
 .tb-glyph { display: inline-block; width: 16px; font: 600 15px/1 var(--font-ui); text-align: center; }
@@ -55,17 +45,8 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 /* .00 is wider than an icon: the button fits it, with the same room on both sides before the menu arrow */
 .tb-bar button.icon[data-t="num"] { width: auto; padding: 0 6px; }
 .tb-bar button.icon[data-t="num"] .tb-glyph { width: auto; }
-.tb-preset { width: 112px; }
-.tb-split > button.icon { border-color: transparent; }
-.tb-split > .tb-more { width: 18px; border-color: transparent; background: transparent; color: var(--graphite); }
-.tb-split > .tb-more:hover { background: var(--wash); color: var(--ink); }
-.tb-split > .tb-more svg { width: 12px; height: 12px; }
-/* on (.00 for an aligned column): the button and its menu arrow are one filled control, not a fill cut off square */
-.tb-split { border-radius: var(--r); }
-.tb-split:has(> button.icon.on) { background: var(--wash-strong); }
-.tb-split > button.icon.on { background: transparent; }
-.tb-split:has(> button.icon.on) > .tb-more { color: var(--ink); }
-.tb-split:has(> button.icon.on) > button:hover { background: var(--wash-strong); }
+.tb-preset { width: 104px; } /* its longest style name is about 61px of the 72px inside; the toolbar is full at 1400px */
+/* the toolbar's split buttons (.tb-split): kit.css, SplitButton */
 .tb-col .sw { stroke-linecap: butt; }
 
 /* ---- the cell's text ---- */
@@ -115,7 +96,7 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-selbox.multi { background: rgba(200, 54, 29, .06); }
 .tb-selbox[hidden] { display: none; }
 .tb-gridwrap:not(:focus-within) .tb-selbox { border-color: color-mix(in srgb, var(--redpen) 55%, transparent); }
-/* editing in place: the canvas text editor's card (#inlineEditor), in the interface's own appearance, over the cell;
+/* editing in place: the canvas text editor's card (the kit's TextPopup), in the interface's own appearance, over the cell;
    the app-wide focus ring (:focus-visible) gives it the same blue double edge */
 .tb-edit { position: absolute; z-index: 4; box-sizing: border-box; padding: 6px 10px; margin: 0; resize: none; overflow: hidden;
   border: 1px solid var(--bluepen); border-radius: var(--r); background: var(--sheet-raised); color: var(--ink);
@@ -151,7 +132,7 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
   animation: tb-in .22s cubic-bezier(.3, .7, .2, 1); }
 .tb-start[hidden] { display: none; }
 @keyframes tb-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .tb-start, .tb-ctx { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tb-start { animation: none; } }
 .tb-drop { width: min(640px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 24px; border: 1px dashed var(--rule-strong); border-radius: var(--r-xl); background: var(--sheet); }
 .tb-drop-t { font-size: 17px; font-weight: 600; color: var(--ink); }
 .tb-drop p { margin: 0; color: var(--graphite); font-size: 13px; line-height: 1.5; text-wrap: pretty; }
@@ -164,34 +145,21 @@ body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 .tb-drop .tb-drop-foot { font-size: 12px; color: var(--pencil); }
 #tableview.drop .tb-gridwrap, #tableview.drop .tb-drop { border-color: var(--bluepen); border-style: dashed; box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
 
-/* ---- menus ---- */
+/* ---- menus: the kit menu (.ctx.tb-ctx; its icon tiles, .ctx-tiles, in kit.css) ---- */
 .tb-ctx { min-width: 220px; }
-/* a heading over a group of choices in a toolbar menu (Number format: Group Thousands, Decimal Marker) */
-.tb-ctx .ctx-head { padding: 6px 8px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--pencil); }
-.tb-ctx:has(.tb-bgrid) { min-width: 0; width: 232px; box-sizing: border-box; }
-.tb-bgrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 4px; }
-/* The grid sits 8px inside the menu: 4px menu padding + 4px grid padding. */
-.tb-bgrid button { width: 100%; height: 40px; padding: 0; border-radius: max(0px, calc(var(--r-lg) - 8px)); color: var(--ink); }
-.tb-bgrid button:hover, .tb-bgrid button:focus-visible { background: var(--well); color: var(--ink); }
-.tb-bgrid svg { width: 22px; height: 22px; }
 
 /* ---- the right panel in Table ---- */
-body.mode-table #props .tb-chk { display: inline-flex; align-items: center; gap: 6px; width: auto; color: var(--graphite); font-size: 12px; white-space: nowrap; }
+body.mode-table #props label.chk { width: auto; color: var(--graphite); font-size: 12px; white-space: nowrap; }
 body.mode-table #props .tb-unit { flex: none; color: var(--pencil); font-size: 12px; }
 body.mode-table #props .ctl > input[type=number] { width: 64px; flex: none; }
 body.mode-table #props .ctl > input.tb-n { width: 52px; }
 body.mode-table #props .ctl > select { flex: 1; min-width: 0; }
 body.mode-table #props .tb-sub { margin: 4px 0 8px; padding-left: 8px; border-left: 2px solid var(--rule); }
-body.mode-table #props .tb-sub .row > label { width: 76px; }
-body.mode-table #props .seg-ctl[data-seg=colAl] button { width: 30px; }
+body.mode-table #props .tb-sub .row > :is(label, .field-label) { width: 76px; }
 body.mode-table #props .seg-ctl[data-seg=unc] button, body.mode-table #props .seg-ctl[data-seg=booktabs] button, body.mode-table #props .seg-ctl[data-seg=capTop] button { width: auto; padding: 0 8px; font-size: 11px; }
 body.mode-table #props .seg-ctl[data-seg=booktabs] button:first-child { font-family: var(--font-mono); }
-.tb-swatch { display: inline-flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 10px 0 6px; flex: 1; min-width: 0; font: 12px var(--font-mono); color: var(--graphite); }
-/* beside a checkbox (Stripes): the chip alone, square, its value in the tooltip */
-.tb-swatch.bare { flex: none; width: var(--ctl); padding: 0; justify-content: center; margin-left: auto; }
-.tb-swatch.bare span { display: none; }
-.tb-swatch i { width: 16px; height: 16px; flex: none; border-radius: var(--r-sm); border: 1px solid var(--rule-strong); }
-.tb-swatch i.none { background: linear-gradient(to top right, transparent calc(50% - .75px), var(--redpen) calc(50% - .75px), var(--redpen) calc(50% + .75px), transparent calc(50% + .75px)) !important; }
+/* beside a checkbox (Stripes) or a value (Rule width): the swatch alone, at the row's end, its value in the tooltip */
+body.mode-table #props .cbtn.tb-bare { margin-left: auto; }
 .tb-more-sec { margin-top: 8px; }
 .tb-more-sec > summary { cursor: pointer; font-size: 12px; color: var(--graphite); padding: 4px 0; list-style: none; display: flex; align-items: center; gap: 4px; }
 .tb-more-sec > summary::-webkit-details-marker { display: none; }
@@ -204,4 +172,3 @@ body.mode-table #props .seg-ctl[data-seg=booktabs] button:first-child { font-fam
 @media (prefers-reduced-motion: reduce) { .tb-more-sec > summary::before { transition: none; } }
 body.mode-table #props .tb-keys .hint-line { font-size: 12px; line-height: 1.7; color: var(--pencil); }
 body.mode-table #props .tb-keys kbd { font-size: 10px; }
-body.mode-table #props .tb-floatctl { display: contents; }

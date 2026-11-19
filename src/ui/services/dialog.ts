@@ -1,7 +1,8 @@
 import { message as msg } from '../../i18n';
-import Dialog from '../Dialog.svelte';
+import Dialog from '../kit/Dialog.svelte';
 import { mountFrame } from '../mount-frame';
 import { unmount } from 'svelte';
+import { fadeOutDialog } from '../kit/modal';
 import { runtime as TD } from '../../runtime';
 // In-app dialogs replacing the browser's alert / confirm / prompt, styled like the rest of the app.
 // Each returns a Promise:  TD.confirm(...) → true/false,  TD.prompt(...) → string or null,  TD.alert(...) → undefined.
@@ -30,11 +31,14 @@ import { runtime as TD } from '../../runtime';
     const okBtn = root.querySelector('[data-r="1"]'), cancelBtn = root.querySelector('[data-r="0"]');
 
     return new Promise<boolean | string | null | undefined>((resolve) => {
+      let closed = false;
       function finish(yes: any) {
-        if (!root.isConnected) return;
-        void unmount(component); root.remove(); open = null;
+        if (closed || !root.isConnected) return;
+        closed = true; open = null;
         resolve(input == null ? (cancel ? yes : undefined) : yes ? (inp! as HTMLInputElement).value : null);
         if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true });
+        // the answer is in and the focus back at once; the dialog fades out (kit.css, .td-dialog-leaving), then goes
+        fadeOutDialog(root, () => { if (root.isConnected) { void unmount(component); root.remove(); } });
       }
       open = { finish };
       root.addEventListener('click', (e) => {
@@ -46,6 +50,7 @@ import { runtime as TD } from '../../runtime';
       for (const t of ['pointerdown', 'mousedown']) root.addEventListener(t, (e) => { e.stopPropagation(); if (e.target === root) e.preventDefault(); });
       root.addEventListener('keydown', (e) => {
         e.stopPropagation();
+        if (closed) { e.preventDefault(); return; }
         if (e.key === 'Escape') { e.preventDefault(); finish(!cancel); return; }
         if (e.key === 'Enter' && !(multiline && e.target === inp && !(e.metaKey || e.ctrlKey))) {
           e.preventDefault();

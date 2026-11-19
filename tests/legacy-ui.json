@@ -1,0 +1,53 @@
+{
+  "inline-svg-icon": {
+    "src/application/app.ts": 3,
+    "src/editors/bfeditor.ts": 1,
+    "src/editors/cdeditor.ts": 1,
+    "src/editors/czeditor.ts": 1,
+    "src/editors/fteditor.ts": 1,
+    "src/editors/g3editor.ts": 1,
+    "src/editors/kmeditor.ts": 3,
+    "src/editors/qceditor.ts": 1,
+    "src/ui/services/quick.ts": 1,
+    "src/ui/services/table.ts": 2
+  },
+  "style-assignment": {
+    "src/application/app.ts": 11,
+    "src/application/docview.ts": 14,
+    "src/domain/label-image.ts": 3,
+    "src/domain/shapes.ts": 3,
+    "src/domain/vector-label.ts": 1,
+    "src/editors/bfeditor.ts": 1,
+    "src/editors/cdeditor.ts": 5,
+    "src/editors/cfeditor.ts": 1,
+    "src/editors/fsmeditor.ts": 1,
+    "src/editors/fyeditor.ts": 1,
+    "src/editors/g3editor.ts": 15,
+    "src/editors/grapheditor.ts": 1,
+    "src/editors/kmeditor.ts": 1,
+    "src/editors/phyeditor.ts": 1,
+    "src/editors/qceditor.ts": 2,
+    "src/editors/tmeditor.ts": 1,
+    "src/editors/umleditor.ts": 1,
+    "src/editors/umlsdeditor.ts": 1,
+    "src/editors/zxeditor.ts": 4,
+    "src/platform/svgpdf.ts": 1,
+    "src/ui/canvas-magnifier.ts": 4,
+    "src/ui/menu-position.ts": 2,
+    "src/ui/services/colorpicker.svelte.ts": 1,
+    "src/ui/services/quick.ts": 5,
+    "src/ui/services/segthumb.ts": 1,
+    "src/ui/services/sliders.ts": 3,
+    "src/ui/services/table.ts": 18,
+    "src/ui/services/texhighlight.ts": 1
+  },
+  "switch-markup": {
+    "src/ui/services/segthumb.ts": 2
+  },
+  "range-input": {
+    "src/ui/services/sliders.ts": 1
+  },
+  "select-element": {
+    "src/ui/solid-icons.ts": 1
+  }
+}

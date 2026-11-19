@@ -173,7 +173,7 @@ T.test('umlsd editor: double-click a label to edit it in place; a block goes rou
     T.eq(E.sel.join(), '3', 'the call');
     await sleep(400);
     ev('pointerdown', x, y); ev('pointerup', x, y); ev('pointerdown', x, y); ev('pointerup', x, y);
-    const ta = document.querySelector('.td-pop-ta, .td-pop-ml, .td-pop input, .td-pop textarea');
+    const ta = document.querySelector('.td-pop-ta:not(.leaving), .td-pop-ml:not(.leaving), .td-pop input, .td-pop textarea');
     T.ok(ta, 'a box to type in');
     ta.value = 'ok'; ta.dispatchEvent(new Event('input', { bubbles: true }));
     ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

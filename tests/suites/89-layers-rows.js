@@ -1,5 +1,5 @@
-// The Layers panel rebuilds only the rows whose markup changed: the others keep their elements, so an
-// edit on a large drawing doesn't parse and lay out every row again. Selection, order and groups still show.
+// The Layers panel's rows are keyed: an edit updates only its own row and the others keep their elements, so an
+// edit on a large drawing doesn't lay out every row again. Selection, order and groups still show.
 T.test('layers: an edit replaces only its own row; selection, order and group names still show', async () => {
   const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const rect = (i, extra = {}) => ({ ...TD.TYPES.rect.create({ x: 20 + i * 30, y: 20 }, {}), id: 'ly' + i, w: 20, h: 20, ...extra });
@@ -13,10 +13,10 @@ T.test('layers: an edit replaces only its own row; selection, order and group na
     const row = (id) => document.querySelector(`#layers .ly-row[data-id="${id}"]`);
     const keep = { a: row('ly0'), b: row('ly1'), g: document.querySelector('#layers .ly-row[data-g="lg"]') };
     T.ok(keep.a && keep.b && keep.g, 'rows for shapes and the group');
-    T.eq(keep.g.querySelector('.ly-nm').textContent, 'Pair', 'the group row shows its name');
-    const before = row('ly2');
+    T.eq(keep.g.querySelector('.nm').textContent, 'Pair', 'the group row shows its name');
+    const before = row('ly2').querySelector('.ly-th').innerHTML;
     live('ly2').stroke = '#ff0000'; TD.app.render(); await frame();
-    T.ok(row('ly2') !== before, 'the edited row is rebuilt');
+    T.ok(row('ly2').querySelector('.ly-th').innerHTML !== before, 'the edited row shows the change');
     T.ok(row('ly0') === keep.a && row('ly1') === keep.b && document.querySelector('#layers .ly-row[data-g="lg"]') === keep.g, 'the other rows keep their elements');
     TD.state.sel = new Set(['ly1']); TD.app.render(); await frame();
     T.ok(row('ly1').classList.contains('on') && !row('ly0').classList.contains('on'), 'selection shows on its row');

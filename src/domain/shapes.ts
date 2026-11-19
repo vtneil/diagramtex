@@ -5,7 +5,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.54.3'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.55.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -25,7 +25,14 @@ import { runtime as TD } from '../runtime';
     ['times', 'Times New Roman', '"Times New Roman", Times, serif', '\\fontfamily{ptm}\\selectfont'],
     ['arial', 'Arial / Helvetica', 'Arial, Helvetica, sans-serif', '\\fontfamily{phv}\\selectfont'],
     ['courier', 'Courier New', '"Courier New", Courier, monospace', '\\fontfamily{pcr}\\selectfont'],
+    // Thai fonts served with the app (fonts/tlwg-*.woff2, TLWG): for viewing only, so nothing is written to LaTeX
+    // (the text exports in the document's font); named with their Thai names, shown in their own face
+    ['garuda', 'Garuda (ครุฑ)', 'Garuda, sans-serif', ''],
+    ['kinnari', 'Kinnari (กินรี)', 'Kinnari, serif', ''],
+    ['laksaman', 'Laksaman (ลักษมัณ)', 'Laksaman, sans-serif', ''],
   ];
+  // the fonts above that load from the web: text measured before one arrived is measured again once it has
+  const WEB_FONTS = new Set(['Garuda', 'Kinnari', 'Laksaman']);
   const fontOf = (k: any) => TD.FONTS.find((f: any) => f[0] === k) || TD.FONTS[0];
 
   // Colors: '#rrggbb' or '#rrggbbaa' (alpha). null = none.
@@ -374,6 +381,13 @@ import { runtime as TD } from '../runtime';
   TD.onTextMetricsChange = (listener: () => void) => { metricsListeners.push(listener); };
   const metricsChanged = () => { for (const listener of metricsListeners) listener(); };
   TD.clearTextCache = () => { htmlCache.clear(); sizeCache.clear(); metricsChanged(); };
+  if (typeof document !== 'undefined' && document.fonts) {
+    document.fonts.addEventListener('loadingdone', (e: any) => {
+      if (!(e.fontfaces || []).some((f: FontFace) => WEB_FONTS.has(f.family.replace(/["']/g, '')))) return;
+      TD.clearTextCache();
+      if (TD.app?.state?.mode === 'document') TD.docview?.render?.(); else TD.app?.render?.();
+    });
+  }
   TD.clearPendingTextCache = (ids?: number[]) => {
     let changed = false;
     for (const [key, value] of sizeCache) if (value.pending && (!ids || TD.math.pendingIds(value.html).some((id: number) => ids.includes(id)))) { sizeCache.delete(key); changed = true; }

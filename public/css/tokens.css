@@ -1,0 +1,120 @@
+/* DiagramTeX design tokens: colours, pens, shadows, sizes, radii, type and motion, for the light and dark
+   appearances and Increase Contrast. Everything else styles itself with var(--…), never with literals.
+   Loaded first; css/kit.css (the kit's controls) and css/style.css build on it. Notes: .interface-design/system.md */
+:root {
+  /* surfaces: one warm hue, lightness steps only */
+  --paper: #f4f2ec;          /* app base, canvas surround */
+  --sheet: #fffdf8;          /* panels, drawing sheet */
+  --sheet-raised: #ffffff;   /* popovers, menus, modals */
+  --well: #f3f0e8;           /* inputs: inset, a shade darker than the sheet */
+  --gutter: #e9e6de;         /* empty space between status-bar groups */
+  /* ink & pencil text */
+  --ink: #1c1b19;
+  --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%231c1b19' stroke-width='1.3'/%3E%3C/svg%3E"); /* a <select>'s chevron, in --ink */
+  --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%236f6c64' stroke-width='1.3'/%3E%3C/svg%3E"); /* the same in --pencil, when disabled */
+  --ink-hover: #3a3833;
+  --graphite: #5d5b55;
+  --pencil: #6f6c64;         /* 4.7:1 on paper, 5.2:1 on the sheet: secondary text that still passes AA */
+  --faint: #bab7ae;
+  /* rules */
+  --rule: rgba(28, 27, 25, .12);
+  --rule-soft: rgba(28, 27, 25, .07);
+  --rule-strong: rgba(28, 27, 25, .24);
+  --wash: rgba(28, 27, 25, .045);
+  --wash-strong: rgba(28, 27, 25, .085);
+  --wash-strong-solid: color-mix(in srgb, rgb(28, 27, 25) 8.5%, var(--sheet-raised)); /* --wash-strong over a raised sheet, opaque */
+  /* engineering paper */
+  --grid-minor: #e6ece2;
+  --grid-major: #cad8c5;
+  --grid-dot: #bab7ae;       /* whiteboard's light canvas in both appearances, independent of UI chrome */
+  --origin: #93ae8f;
+  /* pens: red = selection / danger, blue = construction (control points, guides) */
+  --redpen: #c8361d;
+  --redpen-wash: rgba(200, 54, 29, .07);
+  --bluepen: #2459a6;
+  --marker: #d29a0c;
+  --marker-wash: rgba(232, 180, 20, .10);
+  --mathpen: #1f7a3a;        /* maths in LaTeX source fields: 5.4:1 on white */
+  --canvas: #fffdf8;         /* the drawing sheet: content, stays light in both appearances */
+  --handle: #ffffff;
+  --scrim: rgba(28, 27, 25, .32);
+  --shadow-pop: 0 0 0 .5px rgba(28,27,25,.06), 0 8px 24px rgba(28,27,25,.13), 0 2px 6px rgba(28,27,25,.07);
+  --shadow-modal: 0 0 0 .5px rgba(28,27,25,.08), 0 20px 50px rgba(28,27,25,.22);
+  --shadow-knob: 0 .5px 1px rgba(28,27,25,.18), 0 1px 3px rgba(28,27,25,.10);
+  /* geometry: 4px grid, one control height. Rounded corners nest concentrically: a shape inset by N px
+     inside another uses the outer radius minus N (segment 5 in an 8 track with 3px padding, menu row 8
+     in a 12 menu with 4px padding), so inner and outer corners share their diagonal. */
+  --ctl: 28px;               /* HIG macOS default control size */
+  --ctl-sm: 24px;            /* dense secondary controls; HIG minimum is 20 */
+  --r-sm: 4px;               /* swatches, kbd, segments inside a track */
+  --r: 8px;                  /* buttons, inputs, dropdowns, segmented tracks, menu rows */
+  --r-lg: 12px;              /* popovers, menus, cards: a menu row (--r) sits 4px in, so 8 + 4 */
+  --r-xl: 20px;              /* modals: the head's buttons (--r) sit 12px in, so 8 + 12 */
+  --files-w: 200px;
+  --props-w: 280px;
+  --font-ui: "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-tex: KaTeX_Main, "Latin Modern Roman", "Times New Roman", serif; /* drawing & page content only, never UI chrome */
+  --font-mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoots a little: a pressed control springing back */
+  --ruler: 18px;
+  --status: 24px;
+  color-scheme: light;
+}
+/* Dark appearance. <html data-theme> is always resolved to light or dark by the inline script in index.html
+   (System follows prefers-color-scheme; Light / Dark are the user's override, set in the sidebar).
+   The drawing sheet stays a softened white so user content keeps its colours. */
+:root[data-theme=dark] {
+    color-scheme: dark;
+    --paper: #1c1b19;
+    --sheet: #242320;
+    --sheet-raised: #2e2d2a;
+    --well: #1a1917;
+    --gutter: #171614;
+    --ink: #ecebe6;
+    --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%23ecebe6' stroke-width='1.3'/%3E%3C/svg%3E");
+    --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%2395928a' stroke-width='1.3'/%3E%3C/svg%3E");
+    --ink-hover: #d4d2cb;
+    --graphite: #b4b1a9;
+    --pencil: #95928a;
+    --faint: #5c5a55;
+    --rule: rgba(236, 235, 230, .13);
+    --rule-soft: rgba(236, 235, 230, .07);
+    --rule-strong: rgba(236, 235, 230, .24);
+    --wash: rgba(236, 235, 230, .06);
+    --wash-strong: rgba(236, 235, 230, .11);
+    --wash-strong-solid: color-mix(in srgb, rgb(236, 235, 230) 11%, var(--sheet-raised));
+    --redpen: #e8674c;
+    --redpen-wash: rgba(232, 103, 76, .12);
+    --bluepen: #6c9de3;
+    --marker: #f0c53c;
+    --marker-wash: rgba(240, 197, 60, .10);
+    --mathpen: #7cc58f;
+    --canvas: #ebe9e2;
+    /* Keep the engineering grid's contrast against the softened drawing sheet. */
+    --grid-minor: #d3d8cf;
+    --grid-major: #b8c8b3;
+    --scrim: rgba(0, 0, 0, .5);
+    --shadow-pop: 0 0 0 .5px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.3);
+    --shadow-modal: 0 0 0 .5px rgba(0,0,0,.6), 0 20px 50px rgba(0,0,0,.55);
+    --shadow-knob: 0 .5px 1px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.35);
+}
+/* the typeset page is a light surface: everything drawn on it uses the light tokens */
+[data-theme=dark] .doc-page {
+    color-scheme: light;
+    --sheet: #fffdf8; --sheet-raised: #ffffff; --well: #f3f0e8;
+    --ink: #1c1b19; --ink-hover: #3a3833; --graphite: #5d5b55; --pencil: #6f6c64; --faint: #bab7ae;
+    --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%231c1b19' stroke-width='1.3'/%3E%3C/svg%3E"); --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%236f6c64' stroke-width='1.3'/%3E%3C/svg%3E");
+    --rule: rgba(28, 27, 25, .12); --rule-soft: rgba(28, 27, 25, .07); --rule-strong: rgba(28, 27, 25, .24);
+    --wash: rgba(28, 27, 25, .045); --wash-strong: rgba(28, 27, 25, .085); --wash-strong-solid: color-mix(in srgb, rgb(28, 27, 25) 8.5%, var(--sheet-raised));
+    --redpen: #c8361d; --redpen-wash: rgba(200, 54, 29, .07); --bluepen: #2459a6;
+    --marker: #d29a0c; --marker-wash: rgba(232, 180, 20, .10);
+    --shadow-knob: 0 .5px 1px rgba(28,27,25,.18), 0 1px 3px rgba(28,27,25,.10);
+}
+/* Increase Contrast */
+@media (prefers-contrast: more) {
+  :root { --pencil: var(--graphite); --rule: rgba(28, 27, 25, .3); --rule-soft: rgba(28, 27, 25, .2); --rule-strong: rgba(28, 27, 25, .5); }
+}
+@media (prefers-contrast: more) {
+  :root[data-theme=dark] { --rule: rgba(236, 235, 230, .3); --rule-soft: rgba(236, 235, 230, .2); --rule-strong: rgba(236, 235, 230, .5); }
+}

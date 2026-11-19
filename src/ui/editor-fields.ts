@@ -1,7 +1,7 @@
 import { runtime } from '../runtime';
 import { message as msg, type Message } from '../i18n';
-import { row, txAttrs } from './forms';
-import type { Attributes, Control, FormRow, Inline } from './forms';
+import { row, switchRow, txAttrs } from './forms';
+import type { Attributes, Control, FormRow, Inline, SwitchOption } from './forms';
 
 export const field = (label: string | Message, key: string, value: string | number | null | undefined, attrs: Attributes = {}): FormRow =>
   row(label, { kind: 'input' as const, value: value ?? '', attrs: txAttrs({ type: 'text', 'data-f': key, spellcheck: 'false', ...attrs }) });
@@ -11,9 +11,8 @@ export const numField = (label: string | Message, key: string, value: string | n
 });
 export const segments = (label: string | Message, key: string, value: unknown, options: (string | number)[][], disabled = false): FormRow => ({
   // an option is [value, text, title?, name?]: a name for a button whose text is a symbol
-  ...row(label, ...options.map(([keyValue, text, title, name]): Control => ({ kind: 'button' as const, text: String(text),
-    attrs: { 'data-fs': key, 'data-v': String(keyValue), class: !disabled && String(value) === String(keyValue) ? 'on' : '', title, ...(name ? { 'aria-label': String(name) } : {}), ...(disabled ? { disabled: true } : {}) } }))),
-  controlClass: 'ctl seg-ctl',
+  ...switchRow(label, options.map(([keyValue, text, title, name]): SwitchOption => ({ text: String(text), title: title == null ? undefined : String(title),
+    name: name ? String(name) : undefined, on: !disabled && String(value) === String(keyValue), disabled, attrs: { 'data-fs': key, 'data-v': String(keyValue) } }))),
 });
 export const codeRow = (code: string) => row(msg('ui.code', 'Code'), { kind: 'code' as const, text: code, class: 'km-cmd' });
 export const note = (...text: Inline[]): FormRow => ({ kind: 'help' as const, text });

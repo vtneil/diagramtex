@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const esbuild = require('esbuild');
-const { options, workerOptions } = require('./compile');
+const { options, workerOptions, catalogOptions } = require('./compile');
 (async () => {
   // version.json is written by the release build (dist/); the dev server serves public/, so write the
   // current release there too (gitignored), or the app's update check 404s on every load.
@@ -12,6 +12,9 @@ const { options, workerOptions } = require('./compile');
   const worker = await esbuild.context(workerOptions());
   await worker.rebuild();
   await worker.watch();
+  // the interface kit catalog at /kit.html: development only
+  const catalog = await esbuild.context(catalogOptions());
+  await catalog.watch();
   await ctx.watch();
   const server = await ctx.serve({ servedir: 'public', host: '127.0.0.1', port: Number(process.env.PORT || 5173) });
   console.log(`DiagramTeX: http://${(server.hosts && server.hosts[0]) || server.host || '127.0.0.1'}:${server.port}`);

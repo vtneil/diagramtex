@@ -78,5 +78,11 @@ async function compileApp(settings) {
   if (application.outputFiles) application.outputFiles.push(...worker.outputFiles);
   return application;
 }
-module.exports = { compileApp, options, workerOptions, renderIndex };
+// The interface kit catalog (public/kit.html): the app's compile settings with its own entry, no prerender.
+function catalogOptions() {
+  const base = options();
+  return { ...base, entryPoints: [path.resolve(__dirname, '../src/ui/kit/catalog/main.ts')],
+    outfile: path.resolve(__dirname, '../public/js/kit.bundle.js'), plugins: base.plugins.filter(p => p.name !== 'prerender') };
+}
+module.exports = { compileApp, options, workerOptions, catalogOptions, renderIndex };
 if (require.main === module) compileApp().catch(() => { process.exitCode = 1; });

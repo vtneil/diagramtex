@@ -330,12 +330,12 @@ T.test('uml editor: a double-click on a line edits its label in place', async ()
   const code = () => document.querySelector('#umlModal .cz-code textarea').value;
   // a point on a line's i-th segment, a fraction u along it, in the svg's px
   const on = (kind, u) => { const ln = ED._lay().lines.find((l) => l.ref.kind === kind), d = ln.d, s = ED._scr({ x: d[0][0], y: d[0][1], w: d[1][0] - d[0][0], h: d[0][1] - d[1][1] }); return [s.l + (s.r - s.l) * u, s.t + (s.b - s.t) * u]; };
-  const dbl = async (x, y) => { E.drag = null; ev('pointerdown', x, y); ev('pointerup', x, y); ev('pointerdown', x, y); ev('pointerup', x, y); await sleep(20); return document.querySelector('.td-pop-ta'); };
+  const dbl = async (x, y) => { E.drag = null; ev('pointerdown', x, y); ev('pointerup', x, y); ev('pointerdown', x, y); ev('pointerup', x, y); await sleep(20); return document.querySelector('.td-pop-ta:not(.leaving)'); };
   const type = (pop, t) => { pop.value = t; pop.dispatchEvent(new Event('input', { bubbles: true })); pop.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); };
   try {
     // the association, near B: B's role
     let pop = await dbl(...on('rel', 0.8));
-    T.ok(pop && pop.offsetParent !== null, 'the label editor opens on the association');
+    T.ok(pop && pop.checkVisibility(), 'the label editor opens on the association');
     T.eq(pop.value, '', 'B has no role yet');
     type(pop, 'owner'); await sleep(20);
     T.ok(code().includes('\\association{A}{}{}{B}{owner}{}'), 'the role at B:\n' + code());
@@ -382,7 +382,7 @@ T.test('uml editor: members edit in place; a line label drags along and beside i
   const code = () => document.querySelector('#umlModal .cz-code textarea').value;
   const box = (name) => ED._lay().boxes.find((b) => b.name === name);
   const P = (x, y) => { const q = ED._scr({ x, y, w: 0, h: 0 }); return [q.l, q.t]; };
-  const dbl = async (x, y) => { E.drag = null; ev('pointerdown', x, y); ev('pointerup', x, y); ev('pointerdown', x, y); ev('pointerup', x, y); await sleep(20); return document.querySelector('.td-pop-ta'); };
+  const dbl = async (x, y) => { E.drag = null; ev('pointerdown', x, y); ev('pointerup', x, y); ev('pointerdown', x, y); ev('pointerup', x, y); await sleep(20); return document.querySelector('.td-pop-ta:not(.leaving)'); };
   const type = (pop, t) => { pop.value = t; pop.dispatchEvent(new Event('input', { bubbles: true })); pop.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); };
   try {
     // select A, then double-click its second attribute
@@ -390,7 +390,7 @@ T.test('uml editor: members edit in place; a line label drags along and beside i
     const cx = A.x + A.w / 2, at = (r) => P(cx, (r.top + r.bot) / 2);
     ev('pointerdown', ...at(row(1, 1))); ev('pointerup', ...at(row(1, 1))); await sleep(400);
     let pop = await dbl(...at(row(1, 1)));
-    T.ok(pop && pop.offsetParent !== null, 'an attribute opens in place');
+    T.ok(pop && pop.checkVisibility(), 'an attribute opens in place');
     T.eq(pop.value, '- age : int', 'the one under the pointer');
     type(pop, '- age : long'); await sleep(20);
     T.ok(code().includes('\\attribute{- age : long}') && code().includes('\\attribute{- name : String}'), 'that attribute changed:\n' + code());

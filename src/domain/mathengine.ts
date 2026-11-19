@@ -1,7 +1,7 @@
 import { MathRenderQueue } from '../platform/math-render-queue';
 import { mathmlSvg } from './mathml-svg';
 import { runtime as TD } from '../runtime';
-import { t, onLocale } from '../i18n';
+import { t } from '../i18n';
 // Maths parsing: KaTeX HTML or Temml MathML with deterministic SVG layout.
 // Scene labels isolate the resulting layout before applying SVG scene transforms.
 // Everything that draws maths calls TD.math.render(); the choice is a per-browser preference.
@@ -176,28 +176,10 @@ import { t, onLocale } from '../i18n';
   }
   document.documentElement.dataset.engine = engine;
 
-  // Picker in the left sidebar, under the file list: one segmented switch, the active engine's note below.
-  function updateNote() {
-    for (const fn of readiness) fn();
-    const box = document.getElementById('engineBox'), note = box?.querySelector('.eng-note');
-    if (!box || !note) return;
-    box.setAttribute('aria-busy', String(queue.pending > 0 || viewWork.size > 0));
-    const text = (queue.pending || viewWork.size)
-      ? t('engine.loading', 'Rendering {name}… You can keep editing.', { name: ENGINES[engine].name })
-      : t('engine.note', '{note}. Exported LaTeX is the same for both engines.', { note: ENGINES[engine].note() });
-    if (note.textContent !== text) note.textContent = text;
-  }
-  function mount() {
-    const box = document.getElementById('engineBox');
-    if (!box) return;
-    box.innerHTML = `<div class="eng-head">${esc(t('ui.latex.engine', 'LaTeX engine'))}</div>
-      <div class="eng-seg" role="radiogroup">${Object.entries<any>(ENGINES).map(([k, v]) =>
-        `<button type="button" role="radio" data-engine="${k}" aria-checked="${k === engine}" class="${k === engine ? 'on' : ''}"${lib(k) ? '' : ' disabled'} title="${esc(v.note())}">${v.name}</button>`).join('')}</div>
-      <div class="eng-note" role="status">${esc(t('engine.note', '{note}. Exported LaTeX is the same for both engines.', { note: ENGINES[engine].note() }))}</div>`;
-  }
+  // the engine's readiness changed (rendering started or finished): the sidebar's picker
+  // (ui/services/sidebar-settings.ts) and the views that wait on it hear of it
+  function updateNote() { for (const fn of readiness) fn(); }
   document.addEventListener('click', (e) => { const b = (e.target! as Element).closest && (e.target! as Element).closest('#engineBox [data-engine]'); if (b) set((b as HTMLElement).dataset.engine); });
-  listeners.push(() => { mount(); updateNote(); });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => onLocale(() => { mount(); updateNote(); })); else onLocale(() => { mount(); updateNote(); });
 
   TD.xcolorExpr = xcolorExpr;
   TD.math = {
@@ -219,6 +201,10 @@ import { t, onLocale } from '../i18n';
     // a command the engine in use lacks but draws with a stand-in (STAND_INS)
     drawsAs: (name: any) => !!macros(engine)['\\' + name],
     get engine() { return engine; },
+    /** formulae are being drawn (the engine's library loading, or a view's labels) */
+    get busy() { return queue.pending > 0 || viewWork.size > 0; },
+    /** the engine's library is here (an engine without it can't be chosen) */
+    available: (e: string) => !!lib(e),
     onBeforeChange(fn: () => void) { beforeChange.push(fn); },
     onChange(fn: any) { listeners.push(fn); },
   };

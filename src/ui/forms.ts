@@ -13,6 +13,9 @@ export type Control = { caption?: Message; captionAttrs?: Record<string, Message
   | { kind: 'spacer' }
   | { kind: 'texColour'; attrs: Attributes; value: string; label: string; css: string; nullable: boolean; none: boolean; title: string | Message; defaultLabel?: string; defaultSwatch?: string }
   | { kind: 'text'; text: string | Message; class?: string });
+/** One choice of a switch row (the kit's Segmented): its text, or a drawing or a colour chip; its tooltip; a name when
+ *  the text is a symbol; whether it is chosen (or, in a row of toggles, on); and the data hooks the editor reads. */
+export interface SwitchOption { text?: string | Message; title?: string | Message; name?: string | Message; on?: boolean; disabled?: boolean; class?: string; svg?: string; swatch?: { css: string; none: boolean }; attrs?: Attributes }
 export type FormRow =
   | { kind: 'group'; class?: string; style?: string; rows: FormRow[] }
   | { kind: 'row'; label: Inline[]; labelClass?: string; labelTitle?: string | Message; labelFor?: string; controlClass?: string; controls: Control[] }
@@ -22,6 +25,7 @@ export type FormRow =
   | { kind: 'error'; text: string | Message }
   | { kind: 'actions'; class: string; buttons: { text: string | Message; attrs: Attributes }[] }
   | { kind: 'controls'; class: string; controls: Control[] }
+  | { kind: 'switch'; label?: Inline[]; labelTitle?: string | Message; many?: boolean; class?: string; options: SwitchOption[] }
   | { kind: 'codeButtons'; class: string; items: { attrs: Attributes; label: string | Message; code: string }[] }
   | { kind: 'status'; class: string; icon: string; text: string | Message }
   | { kind: 'kmapGroups'; groups: { index: number; title: string; bw: boolean; css: string; valid: boolean; math: string; text: string; icon: string }[] }
@@ -52,6 +56,10 @@ const TX_CAPTIONS: Record<string, Message> = {
   'Maths, without $': TX_TITLE.math, 'Text, $math$': msg('form.tx.text', 'Text, $math$'),
   'none \u00b7 maths': msg('form.tx.noneMath', 'none \u00b7 maths'), 'none \u00b7 $math$': msg('form.tx.noneText', 'none \u00b7 $math$'),
 };
+/** The placeholder of a TeX field as a caption, for fields drawn by the kit's TextField. */
+export const txPlaceholderCaption = (tx: string, none = false): Message => TX_CAPTIONS[txPlaceholder(tx, none)];
+/** The captions of a control's attributes: its own, over the TeX placeholders (for translatedAttrs). */
+export const controlCaptions = (c: Control): Record<string, Message> | undefined => 'attrs' in c ? { ...txCaptions(c.attrs), ...c.captionAttrs } : c.captionAttrs;
 /** Captions for a field's placeholder when it is one of the TeX placeholders (for Control's translatedAttrs). */
 export const txCaptions = (attrs: Attributes): Record<string, Message> => {
   const m = typeof attrs.placeholder === 'string' ? TX_CAPTIONS[attrs.placeholder] : undefined;
@@ -70,6 +78,10 @@ export const row = (label: string | Message | Inline[], ...controls: Control[]):
   const labelTitle = TX_TITLE[tx];
   return { kind: 'row' as const, label: Array.isArray(label) ? label : [label], ...(labelTitle ? { labelTitle } : {}), controls };
 };
+/** A switch in a panel row: one of `options` (a sliding knob), or with `many` a track of toggles that can each be on
+ *  (no knob). `class` adds to the panel's track; a null label draws the switch alone. */
+export const switchRow = (label: string | Message | Inline[] | null, options: SwitchOption[], { many = false, class: cls, labelTitle }: { many?: boolean; class?: string; labelTitle?: string | Message } = {}): Extract<FormRow, { kind: 'switch' }> =>
+  ({ kind: 'switch' as const, ...(label == null ? {} : { label: Array.isArray(label) ? label : [label] }), ...(labelTitle ? { labelTitle } : {}), many, ...(cls ? { class: cls } : {}), options });
 export const input = (key: string, value: string | number | null | undefined, attrs: Attributes = {}): Control => ({
   kind: 'input' as const, value: value ?? '', attrs: txAttrs({ type: 'text', 'data-p': key, spellcheck: 'false', ...attrs }),
 });

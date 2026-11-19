@@ -1,4 +1,3 @@
-import { onLocale } from '../i18n';
 import { blockCaption } from '../i18n/shapes';
 // Typed extension registry. Domain modules register behavior; the app owns transactions.
 import type { Shape } from './contracts';
@@ -46,19 +45,11 @@ export function createBlocks(types: Record<string, unknown>, alias: (name: strin
     nodeImports: () => [...definitions].filter(([, b]) => b.nodeImport)
       .map(([type, b]) => ({ type, ...b.nodeImport! })).sort((a, b) => a.order - b.order),
     bindOpen(fn: (id: string) => unknown) { openById = fn; },
-    renderMenu(container: HTMLElement) {
-      // a block with its own toolbar menu (menu.flyout) is listed there instead
-      const buttons = [...definitions].filter(([, b]) => !b.menu.flyout).sort((a, b) => a[1].menu.order - b[1].menu.order).map(([type, { menu }]) => {
-        const button = document.createElement('button');
-        button.dataset.insert = type;
-        button.innerHTML = menu.icon;
-        const text = document.createTextNode('');
-        button.appendChild(text);
-        // captions follow the interface language (src/i18n/shapes.ts); English is the definition's own
-        onLocale(() => { button.title = blockCaption(type, 'title', menu.title); text.data = blockCaption(type, 'label', menu.label); });
-        return button;
-      });
-      container.prepend(...buttons); // keep the purposeful coming-soon entries after active blocks
+    // The Blocks flyout's tiles, in menu order, captioned in the interface language (src/i18n/shapes.ts; English is the
+    // definition's own). A block with its own toolbar menu (menu.flyout) is listed there instead.
+    menuEntries(): { type: string; icon: string; title: string; label: string }[] {
+      return [...definitions].filter(([, b]) => !b.menu.flyout).sort((a, b) => a[1].menu.order - b[1].menu.order)
+        .map(([type, { menu }]) => ({ type, icon: menu.icon, title: blockCaption(type, 'title', menu.title), label: blockCaption(type, 'label', menu.label) }));
     },
     // The callback receives an operation, not a detached shape: the app re-resolves the live id
     // before applying it, so deleting an object while an editor is open cannot resurrect it.

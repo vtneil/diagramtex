@@ -9,6 +9,9 @@ import FsmeditorFrame from '../ui/editors/FsmeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { patchSvg } from '../ui/svg-patch';
 import { runtime as TD } from '../runtime';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // State machine editor: the overlay that opens on a State machine block. A palette of states, transitions
 // and loops; the machine drawn by the canvas renderer on a centimetre grid, where states are placed and
 // moved (their transitions follow) and transitions are dragged from state to state; Auto layout places
@@ -19,7 +22,6 @@ import { runtime as TD } from '../runtime';
   const F = TD.fsm;
   const { esc, r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const PAPER = '#fffdf8', INK = '#1c1b19';
   const PX = TD.PX_PER_CM, GRID = 0.25;
   const kv = F.kv;
@@ -131,14 +133,10 @@ import { runtime as TD } from '../runtime';
   root.id = 'fsmModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, FsmeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<circle cx="4.5" cy="10" r="2.2"/><circle cx="15.5" cy="5" r="2.2"/><circle cx="15.5" cy="15" r="2.2"/><path d="M6.6 9l6.8-3.2M6.6 11l6.8 3.2"/>'), p6: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p7: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, FsmeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.fsm-svg', root), stage = $('.cz-stage', root), list = $('.fsm-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.fsm-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search', 'Search'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'fsm-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: { s: name } | { e: index } | null, arm, kind, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
@@ -257,38 +255,21 @@ import { runtime as TD } from '../runtime';
     edit(() => F.autoLayout(E.M, mode, step));
     fit();
     const placed = mode === 'circle' ? uiText('editor.fsm.placedCircle', 'States placed on a circle') : uiText('editor.fsm.placedLayers', 'States placed in layers from the initial state');
-    setTip(placed);
-    setTimeout(() => { if (E && tip.textContent === placed) setTip(''); }, 1800);
+    stageNote.flash(placed, 1800);
   }
 
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [cat, items] of PAL) {
-      // search the shown name and the English one
-      const title = caption(cat);
-      const hits = (items as any).filter(([k, label]: any) => !q || `${caption(label)} ${label.fallback} ${k.slice(2)} ${title} ${cat.fallback}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => {
-        const on = E && (E.arm === k || k === `e:${E.kind}`), name = caption(label);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.fsmMini(ITEM[k].mini, 1e3)}</span><span>${esc(ITEM[k].short ? caption(ITEM[k].short) : name)}</span></button>`;
-      }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list, 64, 40, 1.6);
+    pal.render(PAL.map(([cat, items]: any) => ({
+      id: cat.fallback, title: caption(cat),
+      items: items.map(([k, label, , key]: any) => ({
+        id: k, label: ITEM[k].short ? caption(ITEM[k].short) : caption(label), title: caption(label), key,
+        // the shown name, the English one and the category's both find it
+        alt: label.fallback, keywords: `${k.slice(2)} ${caption(cat)} ${cat.fallback}`,
+        svg: fitMini(TD.fsmMini(ITEM[k].mini, 1e3), 64, 40, 1.6), on: !!E && E.kind != null && k === `e:${E.kind}`,
+      })),
+    })), { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   // click: a state kind restyles the selected state or is armed for placing; a transition kind restyles the
   // selected transition and is the kind new ones get; a loop goes on the selected state, or is armed.
   // Drag a state kind onto the canvas.
@@ -333,7 +314,7 @@ import { runtime as TD } from '../runtime';
     buildPalette(); draw();
     setTip(E.arm ? (k[0] === 'l' ? uiText('editor.fsm.armLoopTip', '{name}: click a state to give it a loop. Esc when done.', { name: caption(ITEM[k].name) }) : uiText('editor.fsm.armTip', '{name}: click the grid to place it. Esc when done.', { name: caption(ITEM[k].name) })) : '');
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -566,52 +547,30 @@ import { runtime as TD } from '../runtime';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt)) { E.hover = null; E.knobAt = null; draw(); } });
 
   // right-click: the state's or transition's actions
-  const MI: Record<string, any> = {
-    label: '<path d="M4 15l2-5 6-6 3 3-6 6zM11 5l3 3"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    rev: '<path d="M3 7h12l-3-3M17 13H5l3 3"/>',
-    left: '<path d="M3 15C5 6 15 6 17 15"/>',
-    right: '<path d="M3 5c2 9 12 9 14 0"/>',
-    straight: '<path d="M3 10h14"/>',
-    initial: '<circle cx="13" cy="10" r="4.5"/><path d="M2 10h5.5M5.5 7.5L8 10l-2.5 2.5"/>',
-    accepting: '<circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="4"/>',
-    loop: '<circle cx="10" cy="13" r="4"/><path d="M8 9.3C5 3 15 3 12 9.3M12.6 6.6l-.6 2.7-2.5-1"/>',
-    swap: '<path d="M4 10h12"/><path d="M8 6.5h4M8 13.5h4" stroke-dasharray="1.5 1.5"/>',
-  };
-  const mItem = (act: any, label: any, icon: any, key?: any, on?: any) => `<button class="ctx-item${/^(sdel|edel)$/.test(act) ? ' danger' : ''}${on ? ' on' : ''}" data-fm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { label: 'edit', del: 'delete', straight: 'straight', rev: 'reverse', left: 'bendLeft', right: 'bendRight', initial: 'stateInitial', accepting: 'stateAccepting', loop: 'loop', swap: 'swapLabel' };
+  const mItem = (act: string, label: string, icon: string, key?: string) => menuRow(act, label, MI[icon], key, { danger: /^(sdel|edel)$/.test(act) });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const sn = stateAt(e), ei = sn == null ? edgeAt(e) : null;
     if (sn != null && sOf(sn)) {
       E.sel = { s: sn };
       const f = flags(sOf(sn));
-      menu.innerHTML = mItem('label', uiText('editor.fsm.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' +
-        mItem('init', f.initial ? uiText('editor.fsm.notInitial', 'Not Initial') : uiText('editor.fsm.makeInitial', 'Make Initial'), 'initial', 'I') + mItem('acc', f.accepting ? uiText('editor.fsm.notAccepting', 'Not Accepting') : uiText('editor.fsm.makeAccepting', 'Make Accepting'), 'accepting', 'A') +
-        mItem('addloop', uiText('editor.fsm.addLoop', 'Add Loop'), 'loop', 'L') + '<hr>' + mItem('sdel', uiText('editor.fsm.deleteState', 'Delete State'), 'del', '⌫');
+      menuRows = [mItem('label', uiText('editor.fsm.editLabel', 'Edit Label'), 'label', '↩'), '-', mItem('init', f.initial ? uiText('editor.fsm.notInitial', 'Not Initial') : uiText('editor.fsm.makeInitial', 'Make Initial'), 'initial', 'I'), mItem('acc', f.accepting ? uiText('editor.fsm.notAccepting', 'Not Accepting') : uiText('editor.fsm.makeAccepting', 'Make Accepting'), 'accepting', 'A'), mItem('addloop', uiText('editor.fsm.addLoop', 'Add Loop'), 'loop', 'L'), '-', mItem('sdel', uiText('editor.fsm.deleteState', 'Delete State'), 'del', '⌫')];
     } else if (ei != null) {
       E.sel = { e: ei };
       const ed = E.M.edges[ei];
-      menu.innerHTML = mItem('label', uiText('editor.fsm.editLabel', 'Edit Label'), 'label', '↩') + (ed.t ? mItem('swap', uiText('editor.fsm.labelOtherSide', 'Label on the Other Side'), 'swap') : '') + (ed.loop ? '' : mItem('rev', uiText('editor.fsm.reverse', 'Reverse Direction'), 'rev')) + '<hr>' +
-        (ed.loop ? mItem('la', uiText('editor.fsm.menuLoopAbove', 'Loop Above'), 'loop') + mItem('lb', uiText('editor.fsm.menuLoopBelow', 'Loop Below'), 'loop') + mItem('ll', uiText('editor.fsm.menuLoopLeft', 'Loop Left'), 'loop') + mItem('lr', uiText('editor.fsm.menuLoopRight', 'Loop Right'), 'loop')
-          : mItem('bleft', uiText('editor.fsm.bendLeft', 'Bend Left'), 'left') + mItem('bright', uiText('editor.fsm.bendRight', 'Bend Right'), 'right') + mItem('bnone', uiText('editor.fsm.straight', 'Straight'), 'straight')) +
-        '<hr>' + mItem('edel', ed.loop ? uiText('editor.fsm.deleteLoop', 'Delete Loop') : uiText('editor.fsm.deleteTransition', 'Delete Transition'), 'del', '⌫');
+      menuRows = [mItem('label', uiText('editor.fsm.editLabel', 'Edit Label'), 'label', '↩'), ...(ed.t ? [mItem('swap', uiText('editor.fsm.labelOtherSide', 'Label on the Other Side'), 'swap')] : []), ...(ed.loop ? [] : [mItem('rev', uiText('editor.fsm.reverse', 'Reverse Direction'), 'rev')]), '-', ...(ed.loop ? [mItem('la', uiText('editor.fsm.menuLoopAbove', 'Loop Above'), 'loop'), mItem('lb', uiText('editor.fsm.menuLoopBelow', 'Loop Below'), 'loop'), mItem('ll', uiText('editor.fsm.menuLoopLeft', 'Loop Left'), 'loop'), mItem('lr', uiText('editor.fsm.menuLoopRight', 'Loop Right'), 'loop')] : [mItem('bleft', uiText('editor.fsm.bendLeft', 'Bend Left'), 'left'), mItem('bright', uiText('editor.fsm.bendRight', 'Bend Right'), 'right'), mItem('bnone', uiText('editor.fsm.straight', 'Straight'), 'straight')]), '-', mItem('edel', ed.loop ? uiText('editor.fsm.deleteLoop', 'Delete Loop') : uiText('editor.fsm.deleteTransition', 'Delete Transition'), 'del', '⌫')];
     } else { closeMenu(); return; }
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-fm]');
-    if (!b) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.fm);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- label editor
   // A floating box under the state or transition (TD.input.popup); the whole edit is one undo step.
@@ -785,7 +744,7 @@ import { runtime as TD } from '../runtime';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = F.layout({ src: c }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: c }).warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -794,12 +753,13 @@ import { runtime as TD } from '../runtime';
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps(); updateTools();
-    codeMsg.innerHTML = F.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -812,7 +772,7 @@ import { runtime as TD } from '../runtime';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -856,8 +816,7 @@ import { runtime as TD } from '../runtime';
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    setTip(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
@@ -885,7 +844,7 @@ import { runtime as TD } from '../runtime';
     E = { M, sel: null, arm: null, kind: 'straight' as const, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();

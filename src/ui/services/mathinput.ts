@@ -1,5 +1,7 @@
 import { runtime as TD } from '../../runtime';
-import { t, message as msg, caption, onLocale } from '../../i18n';
+import { t, message as msg } from '../../i18n';
+import { openTextPopup } from '../kit/text-popup.svelte';
+import { themeField, liftSuggestions } from './mathlive-theme';
 // Text input mode for the on-canvas editor: "LaTeX" (a plain text field, maths typed as $…$) or
 // "MathLive" (an interactive maths editor: fractions, roots, matrices are edited as they look).
 // Both edit the same stored text, so switching modes never changes a document.
@@ -32,6 +34,7 @@ import { t, message as msg, caption, onLocale } from '../../i18n';
         if (!M) { reject(new Error('MathLive did not load')); return; }
         M.fontsDirectory = new URL('vendor/katex/fonts', document.baseURI).href;
         M.soundsDirectory = null;
+        liftSuggestions();
         resolve();
       };
       s.onerror = () => { loading = null; reject(new Error('MathLive did not load')); };
@@ -111,6 +114,7 @@ import { t, message as msg, caption, onLocale } from '../../i18n';
 
     function field(i: any, tex: any) {
       const mf = new window.MathfieldElement();
+      themeField(mf); // the app's menu and menu button (mathlive-theme.ts)
       mf.mathVirtualKeyboardPolicy = 'manual';
       mf.smartFence = true;
       mf.value = tex;
@@ -190,56 +194,14 @@ import { t, message as msg, caption, onLocale } from '../../i18n';
     return { destroy() { done = true; off.abort(); host.innerHTML = ''; } };
   }
 
-  // ---------- label popup (the circuit and quantum editors) ----------
-  // A floating box in `host` (a positioned element), like the canvas's inline editor: a LaTeX text field
-  // or MathLive, whichever the Text input setting picks. Enter, Esc or clicking away finishes.
+  // ---------- label popup (the block editors' labels, Document maths, Table cells in MathLive) ----------
+  // The kit's TextPopup (src/ui/kit/TextPopup.svelte), floating in `host` (a positioned element): a LaTeX field or
+  // MathLive, whichever the Text input setting picks. Enter, Esc or clicking away finishes; it fades out.
   // opts: { text, math: the content is maths without $ (a quantikz gate), bare: a lone command such as
   //   \ket{0} is maths, at(): [x, y] in host pixels for the box's top centre, onInput(text), onDone() }
   // Returns { place() } to follow the anchor (after a pan or zoom) and close().
-  function popup(host: any, opts: any) {
-    const v0 = String(opts.text || '');
-    let box: any = null, ml: any = null, closed = false;
-    const place = () => {
-      if (closed || !box) return;
-      const [X, Y] = opts.at(), w = box.offsetWidth, h = box.offsetHeight, W = host.clientWidth, H = host.clientHeight;
-      box.style.left = Math.max(w / 2 + 8, Math.min(X, W - w / 2 - 8)) + 'px';
-      box.style.top = Math.max(8, Math.min(Y, H - h - 8)) + 'px';
-    };
-    const close = () => { if (closed) return; closed = true; if (ml) ml.destroy(); if (box) box.remove(); opts.onDone(); };
-    function plain() {
-      const ta = (box = document.createElement('textarea'));
-      ta.className = 'td-pop-ta'; ta.spellcheck = false; ta.rows = 1; ta.value = v0;
-      if (opts.math) ta.dataset.tx = 'math'; // highlighted all through as maths (texhighlight.ts)
-      ta.placeholder = opts.math ? t('input.ph.math', 'Maths, without $ — Enter to finish') : t('input.ph.text', 'Text, $math$ — Enter to finish');
-      const size = () => { ta.style.height = 'auto'; ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 40), 160) + 'px'; };
-      ta.addEventListener('input', () => { opts.onInput(ta.value); size(); place(); });
-      ta.addEventListener('keydown', (e) => {
-        e.stopPropagation();
-        if (e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); close(); }
-      });
-      ta.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== ta) close(); }, 0));
-      host.appendChild(ta); size(); place();
-      requestAnimationFrame(() => { if (!closed) { ta.focus(); ta.select(); } });
-    }
-    if (mode !== 'mathlive') plain();
-    else {
-      box = document.createElement('div');
-      box.className = 'td-pop-ml';
-      box.innerHTML = '<div class="ml-load">Loading MathLive…</div>';
-      host.appendChild(box); place();
-      load().then(() => {
-        if (closed) return;
-        const wrap = opts.math ? !!v0 : !!opts.bare && /^\s*\\[A-Za-z]/.test(v0) && !v0.includes('$');
-        ml = mount(box, {
-          text: wrap ? `$${v0}$` : v0, prose: !opts.math, start: v0 ? 'end' : opts.math ? 'math' : 'text',
-          // a line that is all maths goes back without its $ where the content is maths already
-          onInput: (v: any) => { const u = /^\$([^$]*)\$$/.exec(v); opts.onInput(wrap && u ? u[1] : v); place(); },
-          onDone: close,
-        });
-        place();
-      }, () => { if (closed) return; box.remove(); set('latex'); plain(); }); // offline before it was cached
-    }
-    return { place, close };
+  function popup(host: HTMLElement, opts: any) {
+    return openTextPopup(host, { text: String(opts.text || ''), math: !!opts.math, bare: !!opts.bare, at: opts.at, onInput: opts.onInput, onDone: opts.onDone });
   }
 
   // ---------- setting (left sidebar, above the LaTeX engine) ----------
@@ -251,19 +213,8 @@ import { t, message as msg, caption, onLocale } from '../../i18n';
     for (const fn of listeners) fn(m);
     if (m === 'mathlive') load().catch(() => {});
   }
-  function render() {
-    const box = document.getElementById('inputBox');
-    if (!box) return;
-    const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-    box.innerHTML = `<div class="eng-head">${esc(t('ui.text.input', 'Text input'))}</div>
-      <div class="eng-seg" role="radiogroup" aria-label="${esc(t('ui.text.input', 'Text input'))}">${Object.entries<any>(MODES).map(([k, v]) =>
-        `<button type="button" role="radio" data-input="${k}" aria-checked="${k === mode}" class="${k === mode ? 'on' : ''}" title="${esc(t('input.modeTip', '{name} mode: {note}', { name: v.name, note: caption(v.note) }))}">${v.name}</button>`).join('')}</div>
-      <div class="eng-note">${esc(caption(MODES[mode].note))}</div>`;
-  }
   document.addEventListener('click', (e) => { const b = (e.target! as Element).closest && (e.target! as Element).closest('#inputBox [data-input]'); if (b) set((b as HTMLElement).dataset.input); });
-  listeners.push(render);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
-  onLocale(() => render()); // the box stays: its captions follow the interface language
+  // the setting itself is drawn by ui/services/sidebar-settings.ts
   // warm the library up after start when it will be needed
   if (mode === 'mathlive') window.addEventListener('load', () => setTimeout(() => load().catch(() => {}), 300));
 

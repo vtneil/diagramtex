@@ -1,15 +1,18 @@
 import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
-import { t as uiText, onLocale } from '../i18n';
+import { t as uiText, message, onLocale } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { row, section, txPlaceholder } from '../ui/forms';
+import { row, switchRow, section, txPlaceholder } from '../ui/forms';
 import type { FormRow, FormSection, Control } from '../ui/forms';
 import { note } from '../ui/editor-fields';
 import PhyeditorFrame from '../ui/editors/PhyeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Physics editor: the overlay that opens on a Physics block. A palette of the domain's objects, grouped;
 // the figure solved and drawn on a centimetre grid, where objects are selected, moved and reshaped by their
 // handles (lens focus, ray angle, slope angle, …); the selected object's settings, generated from its
@@ -29,14 +32,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.id = 'phyModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, PhyeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: CMD, p2: ic('<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M13 7V4.5A1.5 1.5 0 0011.5 3h-7A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13H7"/>'), p3: CMD, p4: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: CMD });
+  mountFrame(root, PhyeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.phy-svg', root), stage = $('.cz-stage', root), list = $('.phy-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.phy-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search', 'Search'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'phy-list', layout: 'rows', onpick: (k) => (k[0] === 'c' ? pick(k.slice(2)) : k[0] === 't' ? armTool(k.slice(2)) : loadExample(k.slice(2))) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
   const title = $('#phyTitle', root);
 
   // ---------------------------------------------------------------- state
@@ -59,12 +58,13 @@ import { patchSvg } from '../ui/svg-patch';
   const snapper = (free: any) => ({ angle: (a: any) => (free ? Math.round(a * 10) / 10 : Math.round(a / 5) * 5), len: (v: any) => (free ? Math.round(v * 1000) / 1000 : Math.round(v / GRID) * GRID) });
 
   // ---------------------------------------------------------------- palette
+  // the domain's objects (data-cmd: placed), the main editor's drawing tools (data-tool) and the domain's examples
+  // (data-ex: replace the figure)
   function palette() {
-    const d = D(), q = search.value.trim().toLowerCase();
+    const d = D();
     if (!d) return [];
     const cats = new Map();
     for (const [k, c] of Object.entries<any>(d.commands)) {
-      if (q && !`${c.label} ${k} ${c.cat || ''}`.toLowerCase().includes(q)) continue;
       const cat = c.cat || 'Objects';
       if (!cats.has(cat)) cats.set(cat, []);
       cats.get(cat).push([k, c]);
@@ -73,38 +73,22 @@ import { patchSvg } from '../ui/svg-patch';
   }
   function buildPalette() {
     const d = D();
-    let html = '';
-    if (!d) html = `<div class="cz-empty">${esc(uiText('editor.phy.noDomain1', 'This figure names no domain: start the source with '))}<code>\\physics{optics}</code>${esc(uiText('editor.phy.noDomain2', ' (or mechanics, fields, waves, spacetime, levels).'))}</div>`;
-    else {
-      for (const [cat, items] of palette()) {
-        // object names and categories come from the physics domains (English); only the fallback group is ours
-        html += `<div class="cz-cat"><div class="cz-cat-t">${esc(cat === 'Objects' ? uiText('editor.phy.objects', 'Objects') : cat)}</div>${items.map(([k, c]: any) =>
-          `<button class="cz-part phy-part${E.arm === k ? ' on' : ''}" data-cmd="${esc(k)}" title="${esc(c.label)}${c.argHelp ? ` ${c.argHelp}` : ''}"><code>\\${esc(k)}</code><span>${esc(c.label)}</span></button>`).join('')}</div>`;
-      }
-      const q = search.value.trim().toLowerCase();
-      html += drawPalette(q);
-      const ex = Object.keys(d.examples || {}).filter((t) => !q || t.toLowerCase().includes(q));
-      if (ex.length) html += `<div class="cz-cat"><div class="cz-cat-t">${esc(uiText('editor.phy.examples', 'Examples'))} <small>${esc(uiText('editor.phy.examplesNote', 'replace the figure'))}</small></div>${ex.map((t) => `<button class="cz-part phy-part" data-ex="${esc(t)}"><span>${esc(t)}</span></button>`).join('')}</div>`;
-      if (!html) html = `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    }
-    list.innerHTML = html;
+    if (!d) { pal.render([], { notice: `${esc(uiText('editor.phy.noDomain1', 'This figure names no domain: start the source with '))}<code>\\physics{optics}</code>${esc(uiText('editor.phy.noDomain2', ' (or mechanics, fields, waves, spacetime, levels).'))}` }); return; }
+    const ex = Object.keys(d.examples || {});
+    pal.render([
+      // object names and categories come from the physics domains (English); only the fallback group is ours
+      ...palette().map(([cat, items]: any) => ({
+        id: `c:${cat}`, title: cat === 'Objects' ? uiText('editor.phy.objects', 'Objects') : cat,
+        items: items.map(([k, c]: any) => ({ id: `c:${k}`, class: 'phy-part', label: c.label, title: `${c.label}${c.argHelp ? ` ${c.argHelp}` : ''}`, keywords: `${k} \\${k} ${c.cat || ''}`, svg: `<code>\\${esc(k)}</code>`, attrs: { 'data-cmd': k } })),
+      })),
+      // the main editor's drawing tools (TD.drawTools, from src/application/app.ts): shapes, lines, text and symbols beside the physics
+      ...(TD.drawTools ? TD.drawTools() : []).map(([cat, items]: any) => ({
+        id: `t:${cat}`, title: cat, layout: 'icons' as const, class: 'phy-tools',
+        items: items.map(([t, n, icon]: any) => ({ id: `t:${t}`, label: n, keywords: `${t} ${cat}`, svg: icon, on: E.tool === t, attrs: { 'data-tool': t } })),
+      })),
+      ...(ex.length ? [{ id: 'examples', title: uiText('editor.phy.examples', 'Examples'), note: uiText('editor.phy.examplesNote', 'replace the figure'), items: ex.map((t) => ({ id: `x:${t}`, class: 'phy-part', label: t, svg: '', attrs: { 'data-ex': t } })) }] : []),
+    ], { armed: E.arm ? `c:${E.arm}` : null });
   }
-  // the main editor's drawing tools (TD.drawTools, from src/application/app.ts): shapes, lines, text and symbols beside the physics
-  function drawPalette(q: any) {
-    if (!TD.drawTools) return '';
-    let html = '';
-    for (const [cat, items] of TD.drawTools()) {
-      const hit = items.filter(([t, n]: any) => !q || `${n} ${t} ${cat}`.toLowerCase().includes(q));
-      if (hit.length) html += `<div class="cz-cat"><div class="cz-cat-t">${esc(cat)}</div><div class="sym-grid phy-tools">${hit.map(([t, n, icon]: any) =>
-        `<button data-tool="${esc(t)}" class="${E.tool === t ? 'on' : ''}" title="${esc(n)}" aria-label="${esc(n)}">${icon}</button>`).join('')}</div></div>`;
-    }
-    return html;
-  }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('[data-cmd]', list); if (b) pick(b.dataset.cmd); search.blur(); }
-  });
   // click: arm the object for placing (or add it, when it has no position); drag it onto the grid
   let palDrag: any = null;
   // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
@@ -175,7 +159,7 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = null; E.arm = null; buildPalette(); renderProps(); fit();
     setTip(uiText('editor.phy.loadedExample', 'Loaded “{name}”. {key} brings your figure back.', { name: t, key: `${CMD}Z` }));
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- shapes (the main editor's objects)
   // A \shape line holds one of the main editor's objects in px of the figure's frame (1cm = PX px, y down), so its
@@ -600,16 +584,13 @@ import { patchSvg } from '../ui/svg-patch';
   svg.addEventListener('dblclick', (e: any) => e.preventDefault());
 
   // right-click: the object's actions
-  const MI: Record<string, any> = {
-    dup: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M13 7V4.5A1.5 1.5 0 0011.5 3h-7A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13H7"/>',
-    up: '<path d="M10 16V4M5 9l5-5 5 5"/>',
-    down: '<path d="M10 4v12M5 11l5 5 5-5"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-  };
-  const mItem = (a: any, label: any, icon: any, key: any, off?: any) => `<button class="ctx-item${a === 'delete' ? ' danger' : ''}" data-pm="${a}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { dup: 'duplicate', up: 'moveUp', down: 'moveDown', del: 'delete' };
+  const mItem = (a: string, label: string, icon: string, key: string, off?: boolean) => menuRow(a, label, MI[icon], key, { disabled: !!off, danger: a === 'delete' });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const i = objAt(e);
     if (i == null) { closeMenu(); return; }
@@ -617,16 +598,10 @@ import { patchSvg } from '../ui/svg-patch';
     if (!many) E.sel = i;
     draw(); renderProps();
     const n = E.M.lines.length;
-    menu.innerHTML = mItem('dup', uiText('editor.phy.duplicate', 'Duplicate'), 'dup', `${CMD}D`) + '<hr>' +
-      mItem('up', uiText('editor.phy.drawEarlier', 'Draw Earlier'), 'up', '', many || i <= firstObj()) + mItem('down', uiText('editor.phy.drawLater', 'Draw Later'), 'down', '', many || i >= n - 1) + '<hr>' + mItem('delete', uiText('editor.phy.delete', 'Delete'), 'del', '⌫');
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    menuRows = [mItem('dup', uiText('editor.phy.duplicate', 'Duplicate'), 'dup', `${CMD}D`), '-', mItem('up', uiText('editor.phy.drawEarlier', 'Draw Earlier'), 'up', '', many || i <= firstObj()), mItem('down', uiText('editor.phy.drawLater', 'Draw Later'), 'down', '', many || i >= n - 1), '-', mItem('delete', uiText('editor.phy.delete', 'Delete'), 'del', '⌫')];
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => { const b = (e.target! as Element).closest('[data-pm]'); if (!b || (b as HTMLButtonElement).disabled) return; closeMenu(); act((b as HTMLElement).dataset.pm); });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) { act(a); }
   const firstObj = () => E.M.lines.findIndex((L: any) => L.kind === 'header') + 1;
 
   // ---------------------------------------------------------------- object actions
@@ -681,7 +656,8 @@ import { patchSvg } from '../ui/svg-patch';
     const base = (controls: Control[], controlClass = 'ctl'): FormRow => ({ kind: 'row', label: [p.label], labelTitle: p.help || (p.math ? uiText('editor.phy.useMaths', 'Use $…$ for maths') : undefined), controlClass, controls });
     if (p.kind === 'bool') {
       const on = raw == null ? !!def && def !== 'false' : !/^(false|no|0|off)$/i.test(raw);
-      return base([[1, uiText('editor.phy.on', 'On')], [0, uiText('editor.phy.off', 'Off')]].map(([v, n]) => ({ kind: 'button', text: String(n), attrs: { 'data-pb': p.k, 'data-v': v, class: +on === v ? 'on' : '' } })), 'ctl seg-ctl');
+      return switchRow([p.label], [[1, uiText('editor.phy.on', 'On')], [0, uiText('editor.phy.off', 'Off')]].map(([v, n]) => ({ text: String(n), on: +on === v, attrs: { 'data-pb': p.k, 'data-v': v } })),
+        { labelTitle: p.help || (p.math ? uiText('editor.phy.useMaths', 'Use $…$ for maths') : undefined) });
     }
     if (p.kind === 'enum') return base([{ kind: 'select', value: raw != null ? raw : def, attrs: { 'data-pf': p.k }, options: p.opts.map(([v, n]: string[]) => [v, n || v]) }]);
     const ph = def == null || def === '' ? (p.kind === 'num' ? 'auto' : 'none') : p.kind === 'num' ? P.writeQ(def, { ...p, unit: p.dim ? p.unit : undefined }).replace(p.unit || '\u0000', '') : String(def);
@@ -728,7 +704,7 @@ import { patchSvg } from '../ui/svg-patch';
     } else return;
     flush(); draw();
     if (t.tagName === 'SELECT') { commit(); renderProps(); begin(); } else renderProps();
-  });
+ });
   props.addEventListener('keydown', (e: any) => { if (e.key === 'Enter' && e.target.matches('input')) e.target.blur(); });
   props.addEventListener('click', (ev: any) => {
     const b = ev.target.closest('[data-pb]'), L = lineAt(E && E.sel);
@@ -800,7 +776,9 @@ import { patchSvg } from '../ui/svg-patch';
     const r = R(), n = E.M.lines.filter((x: any) => x.kind === 'cmd' || x.kind === 'tikz' || x.kind === 'shape').length;
     const nr = r.results.length;
     count.textContent = `${n === 1 ? uiText('editor.phy.oneObject', '1 object') : uiText('editor.phy.nObjects', '{n} objects', { n })} · ${nr === 1 ? uiText('editor.phy.oneResult', '1 result') : uiText('editor.phy.nResults', '{n} results', { n: nr })}`;
-    codeMsg.innerHTML = r.warnings.length ? r.warnings.slice(0, 4).map((w: any) => `<div>${w.obj >= 0 ? esc(uiText('editor.phy.warnLine', 'Line {n}: ', { n: w.obj + 1 })) : ''}${esc(w.msg)}</div>`).join('') + (r.warnings.length > 4 ? `<div>${esc(uiText('editor.phy.andMore', 'and {n} more', { n: r.warnings.length - 4 }))}</div>` : '') : '';
+    // the first four warnings, each with its line, then how many more
+    showCodeNotes(codeMsg, [...r.warnings.slice(0, 4).map((w: any) => (w.obj >= 0 ? uiText('editor.phy.warnLine', 'Line {n}: ', { n: w.obj + 1 }) : '') + w.msg),
+      ...(r.warnings.length > 4 ? [uiText('editor.phy.andMore', 'and {n} more', { n: r.warnings.length - 4 })] : [])]);
     updateTools();
     if (document.activeElement === codeTa) return;
     if (E.src !== E.codeAt) { E.codeAt = E.src; codeTa.value = E.src; }
@@ -817,6 +795,7 @@ import { patchSvg } from '../ui/svg-patch';
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || session.elsewhere(e)) return;
@@ -828,7 +807,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.poly != null) { endPoly(); return; }
       if (E.tool) { E.tool = null; buildPalette(); setTip(''); draw(); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
@@ -882,7 +861,7 @@ import { patchSvg } from '../ui/svg-patch';
     setSrc(String(block.src || ''));
     E.start = E.src;
     session.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();

@@ -2,13 +2,17 @@ import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
 import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { section, row } from '../ui/forms';
+import { section, row, switchRow } from '../ui/forms';
 import { field, numField, segments, note } from '../ui/editor-fields';
 import FormPanel from '../ui/FormPanel.svelte';
 import FteditorFrame from '../ui/editors/FteditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
+import { TREE_CHILD, TREE_SIBLING } from '../ui/kit/icons';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Tree editor: the overlay that opens on a Tree block. A palette of subtrees, templates and node and edge
 // styles; the tree drawn by the canvas renderer, where nodes are selected, added, relabelled and dragged
 // onto other nodes; the selection's properties; and beside them the forest code, live both ways.
@@ -94,11 +98,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.id = 'ftModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const FI: Record<string, any> = {
-    child: '<rect class="qo" x="6.5" y="1.5" width="7" height="5"/><path class="qo" d="M10 6.5v6"/><rect class="qf" x="6" y="12.5" width="8" height="6"/>',
+    child: TREE_CHILD, // src/ui/kit/icons.ts: the head's Add Child button draws the same
     // the filled box is the new node: after puts it right of the selected (outlined) one, before puts it left
-    sib: '<path class="qo" d="M10 1.5v3M5.5 4.5h9M5.5 4.5v3M14.5 4.5v3"/><rect class="qo" x="2" y="7.5" width="7" height="5"/><rect class="qf" x="10.5" y="7" width="8" height="6"/>',
+    sib: TREE_SIBLING,
     sibBefore: '<path class="qo" d="M10 1.5v3M5.5 4.5h9M5.5 4.5v3M14.5 4.5v3"/><rect class="qf" x="1.5" y="7" width="8" height="6"/><rect class="qo" x="11" y="7.5" width="7" height="5"/>',
     // the crossed-out node goes; its children stay, joined to its parent
     unwrap: '<rect class="qo" x="6.5" y="1.5" width="7" height="5"/><path class="qo" d="M6.5 1.5l7 5M13.5 1.5l-7 5M10 6.5v3M3.5 9.5h13M3.5 9.5v2M10 9.5v2M16.5 9.5v2"/><rect class="qf" x="1.5" y="11.5" width="4" height="5"/><rect class="qf" x="8" y="11.5" width="4" height="5"/><rect class="qf" x="14.5" y="11.5" width="4" height="5"/>',
@@ -115,19 +118,18 @@ import { patchSvg } from '../ui/svg-patch';
   };
   // tree icons are drawn growing down with siblings left to right; TURNS says which follow the tree's direction
   const TURNS = new Set(['child', 'sib', 'sibBefore', 'parent', 'earlier', 'later', 'lift', 'unwrap']);
-  const fic = (k: any, L?: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${TURNS.has(k) ? `<g class="fe-turn" transform="${turnXf(L)}">${FI[k]}</g>` : FI[k]}</svg>`;
+  // the drawing inside the icon (a menu row draws it in its own svg), turned to follow the tree where it points
+  const ficIn = (k: any, L?: any) => (TURNS.has(k) ? `<g class="fe-turn" transform="${turnXf(L)}">${FI[k]}</g>` : FI[k]);
+  const fic = (k: any, L?: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${ficIn(k, L)}</svg>`;
   // the 20×20 icon's x axis along the siblings (U) and y axis along the growth (G), about its centre
   function turnXf(L: any) {
     const U = (L && L.U) || [1, 0], G = (L && L.G) || [0, 1], r = (v: any) => Math.round(v * 1000) / 1000;
     return `matrix(${r(U[0])} ${r(U[1])} ${r(G[0])} ${r(G[1])} ${r(10 - 10 * (U[0] + G[0]))} ${r(10 - 10 * (U[1] + G[1]))})`;
   }
-  mountFrame(root, FteditorFrame, { p0: fic('child'), p1: fic('sib'), p2: ic(FI.del), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, FteditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.fe-svg', root), stage = $('.cz-stage', root), list = $('.fe-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.fe-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search', 'Search'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'fe-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { T, sel: [nodes], view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, drop, ghost, st, codeAt, codeTimer, clip, L }
@@ -252,7 +254,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (kind === 'phantom') { // a node at a time: a whole tree of phantoms draws nothing
       if (nodes.length) { setPhantom(true, nodes); return; }
       const m = uiText('editor.ft.phantomPick', 'Select a node first, or drag Phantom onto one');
-      setTip(m); setTimeout(() => { if (E && tip.textContent === m) setTip(''); }, 2400);
+      stageNote.flash(m, 2400);
       return;
     }
     const opts = kind === 'shape' ? SHAPES[v] : kind === 'edge' ? EDGES[v] : v === 'none' ? [] : [`fill=${v}`];
@@ -296,20 +298,11 @@ import { patchSvg } from '../ui/svg-patch';
 
   // ---------------------------------------------------------------- palette
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [cat, items] of PAL) {
-      // search the shown name and the English one
-      const title = caption(cat);
-      const hits = (items as any).filter((it: any) => !q || `${caption(it[1])} ${it[1].fallback} ${title} ${cat.fallback}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, name]: any) => `<button class="qe-item" data-item="${k}" title="${esc(tipOf(ITEM[k]))}"><span class="qe-fig">${TD.ftMini(ITEM[k].mini, 1e3)}</span><span>${esc(caption(name))}</span></button>`).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    for (const m of list.querySelectorAll('.qcmini')) {
-      const [, , w, h] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(1.2, 64 / w, 44 / h);
-      m.style.width = `${r2(w * k)}px`; m.style.height = `${r2(h * k)}px`;
-    }
+    pal.render(PAL.map(([cat, items]: any) => ({
+      id: cat.fallback, title: caption(cat),
+      // the shown name, the English one and the category's both find it
+      items: items.map(([k, name]: any) => ({ id: k, label: caption(name), title: tipOf(ITEM[k]), alt: name.fallback, keywords: `${caption(cat)} ${cat.fallback}`, svg: fitMini(TD.ftMini(ITEM[k].mini, 1e3), 64, 44, 1.2) })),
+    })));
   }
   function tipOf(it: any) {
     const name = caption(it.name);
@@ -318,11 +311,6 @@ import { patchSvg } from '../ui/svg-patch';
     if (it.kind === 'template') return uiText('editor.ft.tipTemplate', '{name}: replaces the tree (undo brings it back)', { name });
     return uiText('editor.ft.tipStyle', '{name}: for the selected nodes, or for every node when none is selected', { name });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   let palDrag: any = null;
   // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
   list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
@@ -364,7 +352,7 @@ import { patchSvg } from '../ui/svg-patch';
     }
     applyStyle(it.kind, it.payload);
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -524,35 +512,23 @@ import { patchSvg } from '../ui/svg-patch';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover >= 0) { E.hover = -1; draw(); } });
 
   // right-click: around the node under the pointer
-  const mItem = (act: any, label: any, icon: any, key: any, off?: any) => `<button class="ctx-item${act === 'delete' || act === 'lift' ? ' danger' : ''}" data-fm="${act}"${off ? ' disabled' : ''}>${fic(icon, E.L)}<span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  const mItem = (act: string, label: string, icon: string, key: string, off?: boolean) => menuRow(act, label, null, key, { svg: ficIn(icon, E.L), disabled: !!off, danger: act === 'delete' || act === 'lift' });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const i = nodeAt(e);
     if (i < 0) { closeMenu(); return; }
     const n = order(E.T)[i];
     if (!E.sel.includes(n)) select([n]);
     const isRoot = n === E.T.root, p: any = parentOf(E.T, n), at = p ? p.k.indexOf(n) : 0, many = E.sel.length > 1, alt = isMac ? '⌥' : 'Alt+';
-    menu.innerHTML = mItem('child', uiText('editor.ft.addChild', 'Add Child'), 'child', 'Tab', many) + mItem('before', uiText('editor.ft.addSiblingBefore', 'Add Sibling Before'), 'sibBefore', '⇧↵', many || isRoot) + mItem('after', uiText('editor.ft.addSiblingAfter', 'Add Sibling After'), 'sib', '↵', many || isRoot) + mItem('parent', uiText('editor.ft.addParent', 'Add Parent'), 'parent', '', many) + '<hr>' +
-      mItem('earlier', uiText('editor.ft.moveEarlier', 'Move Earlier'), 'earlier', alt + '←', many || !p || at === 0) + mItem('later', uiText('editor.ft.moveLater', 'Move Later'), 'later', alt + '→', many || !p || at === p.k.length - 1) +
-      mItem('outdent', uiText('editor.ft.moveUpLevel', 'Move Up a Level'), 'lift', '⇧Tab', many || !p || isRoot || !parentOf(E.T, p)) + '<hr>' +
-      (allPhantom() ? mItem('visible', uiText('editor.ft.makeVisible', 'Make Visible'), 'visible', '') : mItem('phantom', uiText('editor.ft.makePhantom', 'Make Phantom'), 'phantom', '')) + '<hr>' +
-      mItem('copy', uiText('ui.copy', 'Copy'), 'copy', isMac ? '⌘C' : 'Ctrl+C') + mItem('paste', uiText('editor.ft.pasteAsChild', 'Paste as Child'), 'paste', isMac ? '⌘V' : 'Ctrl+V', many || !E.clip) + '<hr>' +
-      mItem('lift', uiText('editor.ft.deleteKeepChildren', 'Delete, Keep Children'), 'unwrap', '', !n.k.length) + mItem('delete', many ? uiText('editor.ft.deleteNodes', 'Delete {n} Nodes', { n: E.sel.length }) : uiText('ui.delete', 'Delete'), 'del', '⌫');
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    menuRows = [mItem('child', uiText('editor.ft.addChild', 'Add Child'), 'child', 'Tab', many), mItem('before', uiText('editor.ft.addSiblingBefore', 'Add Sibling Before'), 'sibBefore', '⇧↵', many || isRoot), mItem('after', uiText('editor.ft.addSiblingAfter', 'Add Sibling After'), 'sib', '↵', many || isRoot), mItem('parent', uiText('editor.ft.addParent', 'Add Parent'), 'parent', '', many), '-', mItem('earlier', uiText('editor.ft.moveEarlier', 'Move Earlier'), 'earlier', alt + '←', many || !p || at === 0), mItem('later', uiText('editor.ft.moveLater', 'Move Later'), 'later', alt + '→', many || !p || at === p.k.length - 1), mItem('outdent', uiText('editor.ft.moveUpLevel', 'Move Up a Level'), 'lift', '⇧Tab', many || !p || isRoot || !parentOf(E.T, p)), '-', ...(allPhantom() ? [mItem('visible', uiText('editor.ft.makeVisible', 'Make Visible'), 'visible', '')] : [mItem('phantom', uiText('editor.ft.makePhantom', 'Make Phantom'), 'phantom', '')]), '-', mItem('copy', uiText('ui.copy', 'Copy'), 'copy', isMac ? '⌘C' : 'Ctrl+C'), mItem('paste', uiText('editor.ft.pasteAsChild', 'Paste as Child'), 'paste', isMac ? '⌘V' : 'Ctrl+V', many || !E.clip), '-', mItem('lift', uiText('editor.ft.deleteKeepChildren', 'Delete, Keep Children'), 'unwrap', '', !n.k.length), mItem('delete', many ? uiText('editor.ft.deleteNodes', 'Delete {n} Nodes', { n: E.sel.length }) : uiText('ui.delete', 'Delete'), 'del', '⌫')];
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-fm]');
-    if (!b || (b as HTMLButtonElement).disabled) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.fm, b);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- label editor
   // A floating box under the node (TD.input.popup); the whole edit is one undo step.
@@ -571,7 +547,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (typed != null) {
       n.c = typed; draw();
       // a key typed on the tree starts the label: the caret goes after it, not over it
-      requestAnimationFrame(() => requestAnimationFrame(() => { const ta = $('.td-pop-ta', stage); if (ta) ta.setSelectionRange(ta.value.length, ta.value.length); }));
+      requestAnimationFrame(() => requestAnimationFrame(() => { const ta = $('.td-pop-ta:not(.leaving)', stage); if (ta) ta.setSelectionRange(ta.value.length, ta.value.length); }));
     }
   }
   function labelAt(n: any) {
@@ -592,7 +568,7 @@ import { patchSvg } from '../ui/svg-patch';
     const L = E.L || (E.L = TD.ft.layout(blockOf()));
     props.hidden = false;
     const edgeField = (value: any, forked: any) => segments(uiText('editor.ft.edge', 'Edge'), 'edge', value, forked ? EDGE_SEG().filter(([v]) => v !== 'roof' && v !== 'none') : EDGE_SEG());
-    const fills = (value: any) => ({ ...row(captions["ui.fill"], ...FILLS.map(([v, n]) => ({ kind: 'button' as const, text: '', attrs: { 'data-fs': 'fill', 'data-v': v, class: value === v ? 'on' : '', title: caption(n) }, swatch: { css: v === 'none' ? 'transparent' : TD.css(TD.tikzColor(v) || '#ffffff'), none: v === 'none' } }))), controlClass: 'ctl seg-ctl fe-sw' });
+    const fills = (value: any) => switchRow(captions["ui.fill"], FILLS.map(([v, n]) => ({ title: caption(n), on: value === v, attrs: { 'data-fs': 'fill', 'data-v': v }, swatch: { css: v === 'none' ? 'transparent' : TD.css(TD.tikzColor(v) || '#ffffff'), none: v === 'none' } })), { class: 'fe-sw' });
     if (!E.sel.length) {
       const dir = L.empty ? 'down' : L.grow === 0 && L.rev ? 'right' : L.grow === 90 ? 'up' : L.grow === 180 ? 'left' : 'down';
       const ft = forTree(E.T), get = (k: any) => { const o = ft.map(F.opt).find((x: any) => x.k === k); return o && o.v != null ? F.len(o.v, 10) : NaN; };
@@ -711,7 +687,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snap();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = TD.ft.layout(blockOf()).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, TD.ft.layout(blockOf()).warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -721,7 +697,7 @@ import { patchSvg } from '../ui/svg-patch';
     E.T = load(codeTa.value); E.codeAt = codeTa.value;
     const o = order(E.T); E.sel = idx.map((i: any) => o[i]).filter(Boolean);
     draw(); keepInView(); renderProps();
-    codeMsg.innerHTML = TD.ft.layout({ type: 'forest', src: codeTa.value, size: E.st.size, font: E.st.font }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, TD.ft.layout({ type: 'forest', src: codeTa.value, size: E.st.size, font: E.st.font }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
@@ -742,6 +718,7 @@ import { patchSvg } from '../ui/svg-patch';
     return best;
   }
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -754,7 +731,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.sel.length) { select([]); return; }
       finish(false); return;
     }
@@ -803,8 +780,7 @@ import { patchSvg } from '../ui/svg-patch';
     const src = snap();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    setTip(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
@@ -834,7 +810,7 @@ import { patchSvg } from '../ui/svg-patch';
     // an untouched tree hands its own text back
     E.start = codeOf(T);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();

@@ -5,7 +5,8 @@ T.test('File list: sorts by custom order, date created, date modified and name',
   const t0 = Date.now();
   const ids = ['Bravo 10', 'alpha', 'Bravo 9'].map((n) => TD.app.newDoc(n, null, null, null, null, 'board'));
   const btn = document.querySelector('#btnSortDocs'), menu = () => document.querySelector('#sortMenu');
-  const pick = (attr) => { if (menu().hidden) btn.click(); menu().querySelector(`[${attr}]`).click(); T.ok(menu().hidden, 'a choice closes the menu'); };
+  // the open menu: a closed one is gone
+  const pick = (act) => { if (!menu()) btn.click(); menu().querySelector(`[data-act="${act}"]`).click(); T.ok(!menu(), 'a choice closes the menu'); };
   const order = () => [...document.querySelectorAll('#docList li[data-doc]')].map((li) => li.dataset.doc).filter((id) => ids.includes(id)).map((id) => ids.indexOf(id)).join('');
   try {
     T.ok(btn, 'a Sort button in the header');
@@ -18,17 +19,17 @@ T.test('File list: sorts by custom order, date created, date modified and name',
       inDb ? TD.docStore.set('diagramtex.index', JSON.stringify(all)) : localStorage.setItem('diagramtex.index', JSON.stringify(all));
     };
     set([{ created: 1000, updated: 5000 }, { created: 2000, updated: 6000 }, { created: 3000, updated: 4000 }]);
-    pick('data-sort="custom"');
+    pick('sort:custom');
     T.eq(order(), '012', 'custom: list order');
-    btn.click(); T.ok(menu().querySelector('[data-dir="asc"]').disabled, 'no direction for custom order'); btn.click(); T.ok(menu().hidden, 'a second click closes it');
-    pick('data-sort="created"'); pick('data-dir="asc"');
+    btn.click(); T.ok(menu().querySelector('[data-act="dir:asc"]').disabled, 'no direction for custom order'); btn.click(); T.ok(!menu(), 'a second click closes it');
+    pick('sort:created'); pick('dir:asc');
     T.eq(order(), '012', 'created, oldest first');
-    btn.click(); T.eq(menu().querySelector('[data-dir="desc"]').textContent, 'Newest first');
-    pick('data-dir="desc"');
+    btn.click(); T.eq(menu().querySelector('[data-act="dir:desc"]').textContent, 'Newest first');
+    pick('dir:desc');
     T.eq(order(), '210', 'created, newest first');
-    pick('data-sort="modified"');
+    pick('sort:modified');
     T.eq(order(), '102', 'modified, newest first');
-    pick('data-sort="name"'); pick('data-dir="asc"');
+    pick('sort:name'); pick('dir:asc');
     T.eq(order(), '120', 'name A to Z, numbers in number order');
     T.eq(JSON.parse(localStorage.getItem('diagramtex.fileSort')).by, 'name', 'remembered');
     // dragging a file onto another doesn't rearrange while sorted
@@ -38,7 +39,7 @@ T.test('File list: sorts by custom order, date created, date modified and name',
     li(0).dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt, clientY: r.top + 2 }));
     T.ok(!document.querySelector('#docList .drop-before, #docList .drop-after'), 'no drop place while sorted');
     li(1).dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
-    pick('data-sort="custom"');
+    pick('sort:custom');
     T.eq(order(), '012', 'back to custom order');
     const r2 = li(0).getBoundingClientRect();
     li(1).dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
@@ -47,19 +48,19 @@ T.test('File list: sorts by custom order, date created, date modified and name',
     li(1).dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
     btn.click();
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    T.ok(menu().hidden, 'a click elsewhere closes the menu');
+    T.ok(!menu(), 'a click elsewhere closes the menu');
     // double-clicking a file name or folder name renames it in place
     const fId = TD.app.newDoc('FolderA/DocA', null, null, null, null, 'board');
     document.querySelector(`#docList li[data-doc="${fId}"] .nm`).click();
     document.querySelector(`#docList li[data-doc="${fId}"] .nm`).click();
-    let ed = document.querySelector('#docList input.nm-ed');
+    let ed = document.querySelector('#docList input.list-row-ed');
     T.ok(ed && ed.value === 'DocA', 'double-clicking a file name opens in-place rename');
     ed.value = 'DocB';
     ed.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     T.eq(TD.app.cmd.files().find((d) => d.id === fId).name, 'FolderA/DocB', 'file renamed in place');
     document.querySelector('#docList li[data-folder="FolderA"] .nm').click();
     document.querySelector('#docList li[data-folder="FolderA"] .nm').click();
-    ed = document.querySelector('#docList input.nm-ed');
+    ed = document.querySelector('#docList input.list-row-ed');
     T.ok(ed && ed.value === 'FolderA', 'double-clicking a folder name opens in-place rename');
     ed.value = 'FolderB';
     ed.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -114,7 +115,7 @@ T.test('Classic title: follows file renames from the top bar and sidebar', () =>
   TD.app.saveNow();
   const row = document.querySelector(`#docList li[data-doc="${id}"] .nm`);
   row.click(); row.click();
-  const edit = document.querySelector('#docList input.nm-ed');
+  const edit = document.querySelector('#docList input.list-row-ed');
   T.ok(edit, 'sidebar rename opens');
   edit.value = 'Sidebar title';
   edit.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));

@@ -46,7 +46,7 @@ T.test('Localization: language switching, fallback and document preservation', a
     T.eq(document.querySelector('#tikzScope option[value="doc"]').textContent, 'ทั้งเอกสาร', 'option caption translated');
     T.eq(document.querySelector('#btnTikz').textContent.trim(), 'LaTeX', 'missing translation falls back to English');
     document.querySelector('#btnSortDocs').click();
-    T.eq(document.querySelector('#sortMenu [data-sort="custom"] .lb').textContent, 'ลำดับที่กำหนดเอง', 'dynamic menu translated');
+    T.eq(document.querySelector('#sortMenu [data-act="sort:custom"] .lb').textContent, 'ลำดับที่กำหนดเอง', 'dynamic menu translated');
     document.querySelector('#btnSortDocs').click();
     const prompt = TD.prompt({ id: 'ui.rename', fallback: 'Rename' }, 'Copy');
     await tick();

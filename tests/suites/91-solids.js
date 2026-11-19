@@ -24,7 +24,7 @@ T.test('3D solids: shapes with a derived size', () => {
   T.ok(ext('torus', { a: '1', r2: '3' }).length > 0, 'a tube thicker than the ring is limited');
 });
 
-T.test('3D solids: the Shape menu is a grid of pictures, without 3D axes', () => {
+T.test('3D solids: the Shape menu is a grid of pictures, without 3D axes', async () => {
   TD.app.newDoc('Solid menu', null, null, null, null, 'board');
   const s = make('cone'); s.id = 'solidMenu'; TD.state.doc.shapes.push(s); TD.state.sel = new Set([s.id]); TD.app.render(); TD.app.renderProps();
   const sel = document.querySelector('#props select[data-p="kind"]');
@@ -45,7 +45,9 @@ T.test('3D solids: the Shape menu is a grid of pictures, without 3D axes', () =>
     key('ArrowRight'); T.eq(hi(), at + 1, '→ next tile');
     key('ArrowDown'); T.eq(hi(), at + 1 + across, '↓ the row below');
     key('Enter');
-    T.eq(getComputedStyle(menu).display, 'none', 'picking closes the grid on screen, not just in its flag');
+    T.ok(menu.hidden, 'picking closes it');
+    await new Promise((r) => setTimeout(r, 200)); // it fades out
+    T.eq(getComputedStyle(menu).display, 'none', 'and the grid goes from the screen, not just its flag');
     T.eq(TD.state.doc.shapes.find((x) => x.id === s.id).kind, sel.options[at + 1 + across]?.value || 'tube', 'Enter picks it');
   } finally { if (!menu.hidden) key('Escape'); }
   // a solid saved as 3D axes still shows its kind

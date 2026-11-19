@@ -3,13 +3,16 @@ import { captions } from '../i18n/messages';
 import { t as uiText, message, caption, onLocale } from '../i18n';
 import type { FormSection } from '../ui/forms';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { section, row } from '../ui/forms';
+import { section, row, switchRow } from '../ui/forms';
 import { field, numField, segments, note, actionRow } from '../ui/editor-fields';
 import FormPanel from '../ui/FormPanel.svelte';
 import ZxeditorFrame from '../ui/editors/ZxeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // ZX editor: the overlay that opens on a ZX block. A palette of spiders, boxes and points; the diagram
 // drawn by the canvas renderer over its grid of cells, where nodes are dropped and moved and wires are
 // dragged from node to node; the selected node's or wire's properties; and beside them the zx-calculus
@@ -152,30 +155,11 @@ import { patchSvg } from '../ui/svg-patch';
   root.id = 'zxModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   // three-bar icons: outlined bars stay, the filled one is inserted (offset to where it goes) or deleted (with a ×)
-  function blocks(at: any, del: any, cols: any) {
-    const P = (x: any, y: any) => { const r = (v: any) => +v.toFixed(2); return cols ? `${r(y)},${r(x)}` : `${r(x)},${r(y)}`; };
-    const box = (x: any, y: any, w: any, h: any) => `M${P(x, y)}L${P(x + w, y)}L${P(x + w, y + h)}L${P(x, y + h)}Z`;
-    const out = (x: any, y: any, w: any, h: any) => `<path class="qo" d="${box(x + 0.5, y + 0.5, w - 1, h - 1)}"/>`;
-    const solid = (d: any) => `<path class="qf" fill-rule="evenodd" d="${d}"/>`;
-    if (del) {
-      const a = 2.6, t = 0.75, k = Math.SQRT1_2, cx = 12, cy = 10;
-      const arm = [[t, a], [t, t], [a, t], [a, -t], [t, -t], [t, -a], [-t, -a], [-t, -t], [-a, -t], [-a, t], [-t, t], [-t, a]]
-        .map(([x, y], i) => `${i ? 'L' : 'M'}${P(cx + (x - y) * k, cy + (x + y) * k)}`).join('') + 'Z';
-      return out(1.5, 1, 12, 4) + out(1.5, 15, 12, 4) + solid(box(5.5, 6.5, 13, 7) + arm);
-    }
-    return [1.5, 8, 14.5].map((y, i) => (i === at ? solid(box(6.5, y, 12, 4)) : out(1.5, y, 12, 4))).join('');
-  }
-  const QI: Record<string, any> = { above: blocks(0, false, false), below: blocks(2, false, false), rowdel: blocks(0, true, false), before: blocks(0, false, true), after: blocks(2, false, true), coldel: blocks(0, true, true) };
-  const qic = (k: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${QI[k]}</svg>`;
-  mountFrame(root, ZxeditorFrame, { p0: qic('below'), p1: qic('after'), p2: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, ZxeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.ze-svg', root), stage = $('.cz-stage', root), list = $('.ze-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.ze-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('editor.qc.searchElements', 'Search elements'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'ze-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   for (const [action, axis] of [['addrow', 'row'], ['addcol', 'col']]) {
     const button = $('[data-ze="' + action + '"]', root);
@@ -315,6 +299,7 @@ import { patchSvg } from '../ui/svg-patch';
   function deleteSel() { if (E.wire) deleteWire(E.wire); else { const b = selBox(); if (b) clearCells(b); } }
 
   // ---------------------------------------------------------------- palette
+  // the drawings in the properties panel, at one scale
   function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
     for (const m of el.querySelectorAll('.zxmini')) {
       const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
@@ -322,24 +307,13 @@ import { patchSvg } from '../ui/svg-patch';
     }
   }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [cat, items] of PAL) {
-      // search the shown name and the English one
-      const title = caption(cat);
-      const hits = (items as any).filter((it: any) => !q || `${caption(it[1])} ${it[1].fallback} ${it[2]} ${title} ${cat.fallback}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => { const name = caption(label); return `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" aria-pressed="${!!E && E.arm === k}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.zxMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`; }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    // one scale for every drawing, so nodes keep the same size; wide ones shrink to fit
-    sizeMinis(list, 64, 40, 2.4);
+    pal.render(PAL.map(([cat, items]: any) => ({
+      id: cat.fallback, title: caption(cat),
+      // the shown name, the English one and the category's find it; one scale for every drawing, so nodes keep the
+      // same size, and wide ones shrink to fit
+      items: items.map(([k, label, kw, key]: any) => ({ id: k, label: caption(label), key, alt: label.fallback, keywords: `${kw} ${caption(cat)} ${cat.fallback}`, svg: fitMini(TD.zxMini(ITEM[k].mini, 1e3), 64, 40, 2.4) })),
+    })), { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   // click: into the selected cell (then step right), or arm it for clicking cells; drag: drop on a cell
   let palDrag: any = null;
   // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
@@ -373,7 +347,7 @@ import { patchSvg } from '../ui/svg-patch';
     buildPalette(); draw();
     setTip(E.arm ? uiText('editor.zx.armTip', '{name}: click a cell to place it. Esc when done.', { name: caption(ITEM[k].name) }) : '');
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   // The diagram in the renderer's px (points and empty cells spread to 2mm so they can be picked), cell
@@ -614,16 +588,18 @@ import { patchSvg } from '../ui/svg-patch';
   }
 
   // right-click: rows and columns around the cell (or range) under the pointer; on a wire, the wire
-  const MI: Record<string, any> = { ...QI, edit: '<path class="qo" d="M12 4l4 4M4 12l9-9 4 4-9 9-5 1z"/>', duplicate: '<path class="qo" d="M7 7h10v10H7zM3 13V3h10"/>', clear: '<path d="M4 4l12 12M16 4L4 16"/>', del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>', loop: '<path class="qo" d="M8 14a4 4 0 1 1 4 0"/><circle class="qf" cx="10" cy="15" r="2.5"/>' };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|wiredel)$/.test(act) ? ' danger' : ''}" data-zm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { above: 'rowAbove', below: 'rowBelow', before: 'colBefore', after: 'colAfter', rowdel: 'rowDelete', coldel: 'colDelete', edit: 'edit', duplicate: 'duplicate', clear: 'clear', del: 'delete', loop: 'loop' };
+  const mItem = (act: string, label: string, icon: string, key?: string) => menuRow(act, label, MI[icon], key, { danger: /^(rowdel|coldel|delete|wiredel)$/.test(act) });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const n = nodeAt(e), w = !n && wireAt(e);
     if (w) {
       selectWire(w); draw(); renderProps();
-      menu.innerHTML = mItem('wiredel', uiText('editor.zx.deleteWire', 'Delete Wire'), 'del', '⌫');
+      menuRows = [mItem('wiredel', uiText('editor.zx.deleteWire', 'Delete Wire'), 'del', '⌫')];
     } else {
       const h = cellAt(e);
       if (!h || h.r >= nR(E.M) || h.c >= nC(E.M)) { closeMenu(); return; }
@@ -631,25 +607,13 @@ import { patchSvg } from '../ui/svg-patch';
       if (!b || h.r < b.r1 || h.r > b.r2 || h.c < b.c1 || h.c > b.c2) selectCell(h.r, h.c);
       draw(); renderProps();
       const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
-      menu.innerHTML = (single() && at(s.r1, s.c1).node ? mItem('editphase', uiText('editor.zx.editNode', 'Edit Node'), 'edit', 'Enter') + mItem('duplicate', uiText('ui.duplicate', 'Duplicate'), 'duplicate', isMac ? '⌘D' : 'Ctrl+D') + '<hr>' : '') + mItem('rowabove', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above') + mItem('rowbelow', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below') + '<hr>' +
-        mItem('colbefore', uiText('editor.commonB.insertColumnBefore', 'Insert Column Before'), 'before') + mItem('colafter', uiText('editor.commonB.insertColumnAfter', 'Insert Column After'), 'after') + '<hr>' +
-        (single() && at(s.r1, s.c1).node ? mItem('loop', uiText('editor.zx.addLoop', 'Add Loop'), 'loop', 'L') + '<hr>' : '') +
-        mItem('rowdel', nr > 1 ? uiText('editor.commonB.deleteRows', 'Delete {n} Rows', { n: nr }) : uiText('editor.commonB.deleteRow', 'Delete Row'), 'rowdel') + mItem('coldel', nc > 1 ? uiText('editor.commonB.deleteColumns', 'Delete {n} Columns', { n: nc }) : uiText('editor.commonB.deleteColumn', 'Delete Column'), 'coldel') + '<hr>' +
-        mItem('delete', nr * nc > 1 ? uiText('editor.commonB.clearCells', 'Clear Cells') : uiText('editor.commonB.clearCell', 'Clear Cell'), 'clear', '⌫');
+      menuRows = [...(single() && at(s.r1, s.c1).node ? [mItem('editphase', uiText('editor.zx.editNode', 'Edit Node'), 'edit', 'Enter'), mItem('duplicate', uiText('ui.duplicate', 'Duplicate'), 'duplicate', isMac ? '⌘D' : 'Ctrl+D'), '-' as const] : []), mItem('rowabove', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above'), mItem('rowbelow', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below'), '-', mItem('colbefore', uiText('editor.commonB.insertColumnBefore', 'Insert Column Before'), 'before'), mItem('colafter', uiText('editor.commonB.insertColumnAfter', 'Insert Column After'), 'after'), '-', ...(single() && at(s.r1, s.c1).node ? [mItem('loop', uiText('editor.zx.addLoop', 'Add Loop'), 'loop', 'L'), '-' as const] : []), mItem('rowdel', nr > 1 ? uiText('editor.commonB.deleteRows', 'Delete {n} Rows', { n: nr }) : uiText('editor.commonB.deleteRow', 'Delete Row'), 'rowdel'), mItem('coldel', nc > 1 ? uiText('editor.commonB.deleteColumns', 'Delete {n} Columns', { n: nc }) : uiText('editor.commonB.deleteColumn', 'Delete Column'), 'coldel'), '-', mItem('delete', nr * nc > 1 ? uiText('editor.commonB.clearCells', 'Clear Cells') : uiText('editor.commonB.clearCell', 'Clear Cell'), 'clear', '⌫')];
     }
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-zm]');
-    if (!b) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.zm);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- phase editor
   // A floating box under the node (TD.input.popup); the whole edit is one undo step.
@@ -736,7 +700,7 @@ import { patchSvg } from '../ui/svg-patch';
     const show = (title: any, summary: any, rows: any) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), summary }] });
     const zs = (label: any, key: any, value: any, options: any) => {
       const result: any = segments(label, key, value, options);
-      for (const control of result.controls) { control.attrs['data-zs'] = control.attrs['data-fs']; delete control.attrs['data-fs']; }
+      for (const o of result.options) { o.attrs['data-zs'] = o.attrs['data-fs']; delete o.attrs['data-fs']; }
       return result;
     };
     const selectField = (label: any, key: any, value: any, options: any) => row(label, { kind: 'select' as const, value, options, attrs: { 'data-f': key } });
@@ -748,10 +712,10 @@ import { patchSvg } from '../ui/svg-patch';
       }
       const [dr, dc] = delta(e.dirs), shape = shapeOfWire(e), mark = markOf(e).trim(), more = TD.ZX_WIRES.filter((name: any) => !SHAPES.some(([v]) => v === name));
       const pics = SHAPES.map(([value, label]) => ({ kind: 'button' as const, text: '', svg: shapeMini(dr, dc, value), attrs: { class: 'ze-shape' + (shape === value ? ' on' : ''), 'data-zs': 'shape', 'data-v': value, title: caption(label) + (value ? ` (${value})` : '') } }));
-      const flags = [['cl', has(e, /^(cl|classical)$/), uiText('editor.zx.classical', 'Classical'), uiText('editor.zx.classicalTitle', 'Doubled line (cl)')], ['B', has(e, /^(B|bold)$/), uiText('editor.zx.bold', 'Bold'), uiText('editor.zx.boldTitle', 'Thick line (B)')], ['dash', has(e, /^dashed$/), uiText('editor.zx.dashed', 'Dashed'), 'dashed']].map(([key, on, text, title]) => ({ kind: 'button' as const, text, attrs: { 'data-zs': key, 'data-v': on ? '0' : '1', class: on ? 'on' : '', title } }));
+      const flags = [['cl', has(e, /^(cl|classical)$/), uiText('editor.zx.classical', 'Classical'), uiText('editor.zx.classicalTitle', 'Doubled line (cl)')], ['B', has(e, /^(B|bold)$/), uiText('editor.zx.bold', 'Bold'), uiText('editor.zx.boldTitle', 'Thick line (B)')], ['dash', has(e, /^dashed$/), uiText('editor.zx.dashed', 'Dashed'), 'dashed']].map(([key, on, text, title]) => ({ text, title, on: !!on, attrs: { 'data-zs': key, 'data-v': on ? '0' : '1' } }));
       show(uiText('editor.zx.wire', 'Wire'), uiText('editor.zx.wireSummary', 'row {r1}, col {c1} → row {r2}, col {c2}', { r1: E.wire[0] + 1, c1: E.wire[1] + 1, r2: E.wire[0] + dr + 1, c2: E.wire[1] + dc + 1 }), [
         { kind: 'controls' as const, class: 'ze-shapes', controls: pics }, selectField(uiText('editor.zx.moreShapes', 'More shapes'), 'shape', shape && more.includes(shape) ? shape : '', [['', '—'], ...more.map((name: any) => [name, name])]), zs(uiText('editor.zx.marker', 'Marker'), 'mark', mark, [['', uiText('editor.zx.markerNone', 'None')], ['H', uiText('editor.zx.hBox', 'H box')], ['Z', 'Z'], ['X', 'X']]),
-        { ...row(captions["ui.line"], ...flags), controlClass: 'ctl seg-ctl ze-flags' }, field(uiText('editor.commonB.options', 'Options'), 'wstyles', e.styles.join(', '), { class: 'mono' }), actionRow('ze', 'wiredel', uiText('editor.zx.deleteWire', 'Delete Wire')),
+        switchRow(captions["ui.line"], flags, { many: true }), field(uiText('editor.commonB.options', 'Options'), 'wstyles', e.styles.join(', '), { class: 'mono' }), actionRow('ze', 'wiredel', uiText('editor.zx.deleteWire', 'Delete Wire')),
       ]); sizeMinis(props, 48, 30, 2); return;
     }
     const b = selBox();
@@ -902,7 +866,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snap();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = Z.layout({ src: c }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, Z.layout({ src: c }).warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -910,12 +874,13 @@ import { patchSvg } from '../ui/svg-patch';
     begin();
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     clampSel(); draw(); keepInView(); renderProps();
-    codeMsg.innerHTML = Z.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, Z.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -928,7 +893,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.wireStart || E.drag) { E.wireStart = null; E.drag = null; setTip(''); draw(); return; }
       if (E.tool === 'wire') { act('select'); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
@@ -990,8 +955,7 @@ import { patchSvg } from '../ui/svg-patch';
     const src = snap();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    setTip(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
@@ -1020,7 +984,7 @@ import { patchSvg } from '../ui/svg-patch';
     // an untouched diagram hands its own text back
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();

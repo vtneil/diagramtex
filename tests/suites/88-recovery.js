@@ -262,7 +262,7 @@
       // the folder menu passes its path the way the sidebar does
       const row = document.querySelector('#docList [data-folder="Fold"]');
       row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 50, clientY: 50 }));
-      document.querySelector('[data-ctx="doc:delfolder"]').click();
+      document.querySelector('[data-act="doc:delfolder"]').click();
       await new Promise(r => setTimeout(r, 20));
     } finally { TD.confirm = confirm; }
     T.ok(inBin(a) && inBin(b), 'both in the bin'); T.ok(TD.state.docId !== b);

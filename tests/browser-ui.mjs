@@ -104,7 +104,7 @@ export async function runBrowserUI(page, filter = '') {
     await editor.evaluate(ed => { ed.focus(); const t = ed.querySelector('p b').nextSibling; const r = document.createRange(); r.setStart(t, 1); r.setEnd(t, 5); getSelection().removeAllRanges(); getSelection().addRange(r); });
     await bar.locator('[data-fapply="color"]').click();
     assert((await text()).includes('\\textcolor{'), 'the colour button applies the last colour at once');
-    assert.equal(await page.evaluate(() => { const c = document.querySelector('.cp'); return !!c && getComputedStyle(c).display !== 'none'; }), false, 'without the picker');
+    assert.equal(await page.evaluate(() => TD.colorPickerOpen()), false, 'without the picker');
     await bar.locator('[data-fpick="color"]').click();
     await page.locator('.cp .cp-edit').waitFor();
     assert(await page.locator('.cp .cp-edit').isVisible(), "the arrow opens the app's own palette, with its editable presets");
@@ -146,7 +146,7 @@ export async function runBrowserUI(page, filter = '') {
     await editor.locator('.cbx').click();
     assert((await text()).includes('- [x] task'), 'a checkbox ticks in place');
     await editor.locator('.ie-m').first().click();
-    const box = page.locator('#docPop .td-pop-ta');
+    const box = page.locator('#docPop .td-pop-ta:not(.leaving)');
     await box.waitFor();
     await box.fill('a+b');
     await box.press('Enter');
@@ -195,6 +195,28 @@ export async function runBrowserUI(page, filter = '') {
     assert.notEqual(await page.evaluate(() => TD.state.doc.page.mt), mt);
     await away(); await key();
     assert.equal(await page.evaluate(() => TD.state.doc.page.mt), mt, 'page setup is undone too');
+  });
+  await test('Document: a quick click on another block opens it, even when the press and release come together', async () => {
+    await page.evaluate(() => {
+      TD.app.newDoc('Document quick click', null, null, [{ type: 'text', text: 'Some text.' }, { type: 'table', rows: [['a', 'b'], ['1', '2']], header: true, borders: 'all', colAlign: 'c' }, { type: 'diagram', shapes: [] }], null, 'classic');
+      TD.app.cmd.setMode('document');
+    });
+    const open = () => page.evaluate(() => document.querySelector('#docview .blk.editing')?.dataset.i ?? 'none');
+    // a trackpad tap: press and release before the page has had a turn
+    const tap = (sel) => page.evaluate((sel) => {
+      const el = document.querySelector(sel), r = el.getBoundingClientRect(), o = { bubbles: true, cancelable: true, clientX: r.left + 12, clientY: r.top + 12, button: 0 };
+      for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) el.dispatchEvent(new (t.startsWith('pointer') ? PointerEvent : MouseEvent)(t, o));
+    }, sel);
+    await tap('#docview .blk-table .blk-body');
+    await page.waitForTimeout(100);
+    assert.equal(await open(), '1', 'the table opens');
+    await tap('#docview .blk-text .blk-body');
+    await page.waitForTimeout(100);
+    assert.equal(await open(), '0', 'the text opens straight from the table');
+    await tap('#docview .blk-table .blk-body');
+    await page.waitForTimeout(100);
+    assert.equal(await open(), '1', 'and the table again from the text');
+    await page.keyboard.press('Escape');
   });
   await test('PWA Install follows browser eligibility, language and installation', async () => {
     const button = page.locator('#btnInstall');

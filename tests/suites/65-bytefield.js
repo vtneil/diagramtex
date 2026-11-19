@@ -224,7 +224,7 @@ T.test('bytefield editor: ⌘A selects every row with fields; dragging from a fi
     const [xd, yd2] = mid('D');
     svg.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: R.left + xd, clientY: R.top + yd2 }));
     T.eq(ED._rows(), [1, 4], 'the range stays');
-    T.ok(/Delete 4 Rows/.test(document.querySelector('#bfModal .ctx').textContent), 'the menu deletes the rows');
+    T.ok(/Delete 4 Rows/.test(document.querySelector('.qe-ctx:not(.leaving)').textContent), 'the menu deletes the rows');
     T.ok(/Delete 4 Rows/.test(document.querySelector('#bfModal .cz-props').textContent), 'so does the panel');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     T.eq(ED._rows(), [1, 4], 'Esc closes the menu, the range stays');
@@ -243,8 +243,8 @@ T.test('bytefield editor: ⌘A selects every row with fields; dragging from a fi
     [x, y] = mid('D');
     E.lastPress = null;
     ev('pointerdown', x, y); ev('pointerup', x, y); ev('pointerdown', x, y); ev('pointerup', x, y);
-    const pop = document.querySelector('.td-pop-ta');
-    T.ok(pop && pop.offsetParent !== null, 'the label editor opens');
+    const pop = document.querySelector('.td-pop-ta:not(.leaving)');
+    T.ok(pop && pop.checkVisibility(), 'the label editor opens');
     T.eq(pop.value, 'D', 'holding the label');
     pop.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   } finally {

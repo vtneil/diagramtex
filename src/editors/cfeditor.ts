@@ -1,7 +1,7 @@
 import { GRID_STYLES } from '../ui/canvas-grid';
 import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { onLocale, t } from '../i18n';
+import { onLocale, t, message } from '../i18n';
 import { section, row } from '../ui/forms';
 import { field, numField, segments, note, actionRow } from '../ui/editor-fields';
 import FormPanel from '../ui/FormPanel.svelte';
@@ -9,6 +9,9 @@ import CfeditorFrame from '../ui/editors/CfeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Chemistry editor: the overlay that opens on a Chemistry block. A palette of atoms, bonds, rings,
 // functional groups, charges and reaction arrows; the molecules and schemes drawn by the canvas renderer,
 // where atoms are picked, relabelled and grown by dragging their blue handle; the selected atom's, bond's
@@ -20,7 +23,6 @@ import { patchSvg } from '../ui/svg-patch';
   const C = TD.chem;
   const { esc, r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const PAPER = '#fffdf8', INK = '#1c1b19';
   const SEP = C.DEF.sep;
 
@@ -673,14 +675,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.id = 'cfModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, CfeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, CfeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.cf-svg', root), stage = $('.cz-stage', root), list = $('.cf-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.cf-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('editor.commonA.search', 'Search'), searchLabel: message('editor.commonA.searchPalette', 'Search the palette'), label: message('editor.commonA.elements', 'Elements'), listClass: 'cf-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: { v: key } | { b: bond item } | { a: arrow seg } | null, arm, bond (kind new bonds get), view: { k, ox, oy }, undo, redo, pending, start, done, drag, hover }
@@ -702,31 +700,13 @@ import { patchSvg } from '../ui/svg-patch';
   function clampSel() { if (E.sel && !selV() && !selB() && !selA() && !selM()) E.sel = null; }
 
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter(([k, name]: any) => !q || `${name} ${k.slice(2)} ${title} ${say(name)} ${catName(title as string)}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(catName(title as string))}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => {
-        const on = E && (E.arm === k || k === `b:${E.bond}`);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(say(name))}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.chemMini(ITEM[k].mini)}</span><span>${esc(say(name))}</span></button>`;
-      }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list, 60, 36, 1.4);
+    pal.render(PAL.map(([title, items]: any) => ({
+      id: title, title: catName(title),
+      // the shown name, the English one and the category's find it
+      items: items.map(([k, name, , key]: any) => ({ id: k, label: say(name), key, alt: name, keywords: `${k.slice(2)} ${title} ${catName(title)}`, svg: fitMini(TD.chemMini(ITEM[k].mini), 60, 36, 1.4), on: !!E && k === `b:${E.bond}` })),
+    })), { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   // a click picks the item (see pick); dragging it drops it onto the atom or bond under the pointer
   let palDrag: any = null;
   // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
@@ -871,7 +851,7 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = nv ? { v: vkey(nv) } : { b: nb };
     draw(); renderProps(); keepInView();
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -1192,59 +1172,36 @@ import { patchSvg } from '../ui/svg-patch';
   function cycleBond(b: any) { const next = ({ '-': '=', '=': '~', '~': '-' } as Record<string, any>)[b.item.sym] || '-'; edit(() => { if (hidden(b.item)) setHidden(b.item, false); else b.item.sym = next; b.item.dirty = true; touch(b.mol); }); }
 
   // right-click: the atom's, bond's or arrow's actions
-  const MI: Record<string, any> = {
-    label: '<path d="M4 15l2-5 6-6 3 3-6 6zM11 5l3 3"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    one: '<path d="M3 10h14"/>',
-    two: '<path d="M3 8h14M3 12h14"/>',
-    three: '<path d="M3 6.5h14M3 10h14M3 13.5h14"/>',
-    wedge: '<path d="M3 10l14-3.5v7z" class="f"/>',
-    hash: '<path d="M5 9.5v1M8 8.8v2.4M11 8v4M14 7.3v5.4M17 6.5v7"/>',
-    flip: '<path d="M3 7h12l-3-3M17 13H5l3 3"/>',
-    mol: '<path d="M10 3l6 3.5v7L10 17l-6-3.5v-7z"/>',
-    arrow: '<path d="M3 10h13M12 6l4 4-4 4"/>',
-    show: '<path d="M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/>',
-    hide: '<path d="M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5S2 10 2 10zM3.5 16.5l13-13"/>',
-  };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/del/.test(act) ? ' danger' : ''}" data-cm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { label: 'edit', del: 'delete', one: 'straight', two: 'bondDouble', three: 'bondTriple', wedge: 'bondWedge', hash: 'bondHash', flip: 'reverse', show: 'show', hide: 'hide' };
+  const mItem = (act: string, label: string, icon: string, key?: string) => menuRow(act, label, MI[icon], key, { danger: /del/.test(act) });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const v = vertexAt(e), mv = v ? null : moveAt(e, 5), b = v || mv ? null : bondAt(e), a = v || b || mv ? null : arrowAt(e);
     const sch = inScheme();
     if (mv) {
       E.sel = { m: { seg: mv.seg, k: mv.k } };
-      menu.innerHTML = mItem('mvdel', t('editor.cf.deleteCurved', 'Delete Curved Arrow'), 'del', '⌫');
+      menuRows = [mItem('mvdel', t('editor.cf.deleteCurved', 'Delete Curved Arrow'), 'del', '⌫')];
     } else if (v) {
       E.sel = { v: vkey(v) };
-      menu.innerHTML = mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' + mItem('vdel', delVertex(v), 'del', '⌫') + (v.inRing ? mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del') : '') + (sch && v.inBond ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
+      menuRows = [mItem('label', t('ctx.editLabel', 'Edit Label'), 'label', '↩'), '-', mItem('vdel', delVertex(v), 'del', '⌫'), ...(v.inRing ? [mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del')] : []), ...(sch && v.inBond ? [mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del')] : [])];
     } else if (b) {
       E.sel = { b: b.item };
       const bn = bondNames();
-      menu.innerHTML = mItem('b:-', bn['-'], 'one', '1') + mItem('b:=', bn['='], 'two', '2') + mItem('b:~', bn['~'], 'three', '3') + mItem('b:>', bn['>'], 'wedge') + mItem('b:>:', bn['>:'], 'hash') +
-        (/^[<>]/.test(b.item.sym) ? mItem('bflip', t('editor.cf.reverseWedge', 'Reverse Wedge'), 'flip') : '') + '<hr>' +
-        // hidden: kept in the code with draw=none, so the drawing keeps its shape (a ring closure has no options of its own)
-        (b.hook ? '' : hidden(b.item) ? mItem('bshow', t('editor.cf.showBond', 'Show Bond'), 'show') : mItem('bhide', t('editor.cf.hideBond', 'Hide Bond'), 'hide')) +
-        (hidden(b.item) && b.ring ? '' : mItem('bdel', t('editor.cf.deleteBond', 'Delete Bond'), 'del', '⌫')) + (b.ring ? mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del') : '') + (sch ? mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del') : '');
+      menuRows = [mItem('b:-', bn['-'], 'one', '1'), mItem('b:=', bn['='], 'two', '2'), mItem('b:~', bn['~'], 'three', '3'), mItem('b:>', bn['>'], 'wedge'), mItem('b:>:', bn['>:'], 'hash'), ...(/^[<>]/.test(b.item.sym) ? [mItem('bflip', t('editor.cf.reverseWedge', 'Reverse Wedge'), 'flip')] : []), '-', ...(b.hook ? [] : [...(hidden(b.item) ? [mItem('bshow', t('editor.cf.showBond', 'Show Bond'), 'show')] : [mItem('bhide', t('editor.cf.hideBond', 'Hide Bond'), 'hide')])]), ...(hidden(b.item) && b.ring ? [] : [mItem('bdel', t('editor.cf.deleteBond', 'Delete Bond'), 'del', '⌫')]), ...(b.ring ? [mItem('rdel', t('editor.cf.deleteRing', 'Delete Ring'), 'del')] : []), ...(sch ? [mItem('mdel', t('editor.cf.deleteMolecule', 'Delete Molecule'), 'del')] : [])];
     } else if (a) {
       E.sel = { a: a.seg };
-      menu.innerHTML = mItem('alabel', t('editor.cf.editConditions', 'Edit Conditions'), 'label', '↩') + '<hr>' + mItem('adel', a.seg.t === 'merge' ? t('editor.cf.deleteMerge', 'Delete Merge') : t('editor.cf.deleteArrow', 'Delete Arrow'), 'del', '⌫');
+      menuRows = [mItem('alabel', t('editor.cf.editConditions', 'Edit Conditions'), 'label', '↩'), '-', mItem('adel', a.seg.t === 'merge' ? t('editor.cf.deleteMerge', 'Delete Merge') : t('editor.cf.deleteArrow', 'Delete Arrow'), 'del', '⌫')];
     } else { closeMenu(); return; }
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-cm]');
-    if (!b) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.cm);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- label editors
   // A floating box under the atom (or arrow); the whole edit is one undo step.
@@ -1320,7 +1277,7 @@ import { patchSvg } from '../ui/svg-patch';
       const n = dirsAt(v).length, atoms = atomsOf(v), main = atoms && atoms[Math.min(v.k, atoms.length - 1)], pairs = pairsOn(main).map((c: any) => Math.round(c.angle)), singles = chargesOf(main).filter((c: any) => kindOf(c) === '\\.').map((c: any) => Math.round(c.angle)), sign = signOf(main), lbl = v.g ? v.g.raw.trim() : '';
       const sides = () => [[90, '↑', t('editor.commonA.side.above', 'Above')], [0, '→', t('editor.commonA.side.right', 'Right')], [270, '↓', t('editor.commonA.side.below', 'Below')], [180, '←', t('editor.commonA.side.left', 'Left')]];
       // independent toggles: one on each side, so several can be on (no sliding knob)
-      const flags = (row: any, on: any) => { row.controlClass = 'ctl seg-ctl ze-flags'; for (const control of row.controls) { const x = !!main && on.includes(+control.attrs['data-v']); control.attrs.class = x ? 'on' : ''; control.attrs['aria-pressed'] = String(x); } return row; };
+      const flags = (row: any, on: any) => ({ ...row, many: true, options: row.options.map((o: any) => ({ ...o, on: !!main && on.includes(+o.attrs['data-v']) })) });
       const pairRow: any = flags(segments(t('editor.cf.lonePairs', 'Lone pairs'), 'pair', '', sides(), !main), pairs);
       const styleRow: any = segments(t('editor.cf.pairStyle', 'Pairs as'), 'pstyle', main ? styleOf(main) : pairStyle, [['\\:', t('editor.cf.dots', 'Dots'), t('editor.cf.pairDots', 'Two dots (\\:)')], ['\\|', t('editor.cf.bar', 'Bar'), t('editor.cf.pairBar', 'A bar (\\|)')]], !main);
       const singleRow: any = flags(segments(t('editor.cf.radicals', 'Radicals'), 'single', '', sides(), !main), singles);
@@ -1513,7 +1470,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = C.layout({ src: c }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, C.layout({ src: c }).warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -1522,12 +1479,13 @@ import { patchSvg } from '../ui/svg-patch';
     E.M = load(codeTa.value); E.codeAt = codeTa.value; L = null;
     commit();
     clampSel(); draw(); renderProps();
-    codeMsg.innerHTML = C.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, C.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -1540,7 +1498,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.arm) { E.arm = null; E.mvFrom = null; E.ptr = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -1573,8 +1531,7 @@ import { patchSvg } from '../ui/svg-patch';
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     const saved = t('editor.commonA.saved', 'Saved to the page');
-    setTip(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
@@ -1615,7 +1572,7 @@ import { patchSvg } from '../ui/svg-patch';
     updateGridTools();
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, properties and drawing's hints follow the interface language while the editor is open
     let first = true;

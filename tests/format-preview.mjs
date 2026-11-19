@@ -88,7 +88,7 @@ try {
    await p.keyboard.press('Escape');await p.locator('#btnUndo').click();await settle();await unchanged();
    // Opening another control cancels the hover before starting its edit.
    await select.click();await p.locator(`.selmenu-item[data-i="${index}"]`).hover();await settle();
-   await p.locator('#blockRename').click();await p.locator('.tdd-in').fill('Circuit <A> & B');await p.locator('.tdd-btns [data-r="1"]').click();
+   await p.locator('#blockRename').click();await p.locator('.td-dialog .tdd-in').fill('Circuit <A> & B');await p.locator('.td-dialog .tdd-btns [data-r="1"]').click();
    await p.waitForFunction(()=>TD.state.doc.blocks[0].name==='Circuit <A> & B');
    assert.equal(await p.locator('#blockSel').textContent(),'Circuit <A> & B');
    assert(await p.evaluate(()=>TD.app.parseProject(TD.app.projectJson(TD.state.doc)).blocks[0].name==='Circuit <A> & B'));
@@ -98,13 +98,13 @@ try {
    await p.locator('#btnRedo').click();await p.waitForFunction(()=>TD.state.doc.blocks[0].name==='Circuit <A> & B');
    await reloadApp(p);
    assert.equal(await p.locator('#blockSel').textContent(),'Circuit <A> & B','name survives autosave/reload');
-   await p.locator('#blockRename').click();await p.locator('.tdd-in').fill('Cancelled');await p.keyboard.press('Escape');
+   await p.locator('#blockRename').click();await p.locator('.td-dialog .tdd-in').fill('Cancelled');await p.keyboard.press('Escape');
    assert.equal(await p.locator('#blockSel').textContent(),'Circuit <A> & B');
-   await p.locator('#blockRename').click();await p.locator('.tdd-in').fill('   ');await p.locator('.tdd-btns [data-r="1"]').click();
+   await p.locator('#blockRename').click();await p.locator('.td-dialog .tdd-in').fill('   ');await p.locator('.td-dialog .tdd-btns [data-r="1"]').click();
    await p.waitForFunction(()=>!TD.state.doc.blocks[0].name);
    assert.match(await p.locator('#blockSel').textContent(),/Diagram 1 of 1/);
    await p.evaluate(()=>{TD.state.doc.blocks.push({type:'diagram',shapes:[]});TD.app.setActiveBlock(1);});
-   await p.locator('#blockRename').click();await p.locator('.tdd-in').fill('Second diagram');await p.locator('.tdd-btns [data-r="1"]').click();
+   await p.locator('#blockRename').click();await p.locator('.td-dialog .tdd-in').fill('Second diagram');await p.locator('.td-dialog .tdd-btns [data-r="1"]').click();
    await p.waitForFunction(()=>TD.state.doc.blocks[1].name==='Second diagram');
    await p.evaluate(()=>TD.app.setActiveBlock(0));await p.locator('#btnUndo').click();
    assert(await p.evaluate(()=>TD.state.doc.blocks[0].name==='Circuit <A> & B' && TD.state.doc.blocks[1].name==='Second diagram'),'rename history belongs to its diagram');

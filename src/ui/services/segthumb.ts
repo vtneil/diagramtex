@@ -1,10 +1,13 @@
-import { runtime as TD } from '../../runtime';
 // Switches (segmented controls): the raised knob under the chosen segment is one element per switch that
 // slides to the new choice, instead of each segment drawing its own and the knob jumping. It works for
 // every switch in the app, including those built later or rebuilt as HTML on each change (the properties
 // panel, the export menu): a switch rebuilt right after a click in a switch like it starts its knob where
 // the old one was, so the choice still slides. Without the script the segments draw their own knob.
-(function () {
+let installed = false;
+/** Start the knobs (once): the app at boot, and every Segmented as it mounts, so a switch slides wherever it is shown. */
+export function installSegThumb() {
+  if (installed || typeof document === 'undefined') return;
+  installed = true;
   const SEL = '.seg, #props .seg-ctl, .cz-props .seg-ctl, #engineBox .eng-seg, #inputBox .eng-seg, .fp-seg, .cp-tabs';
   const MOVE_MS = 600; // a switch rebuilt within this long of a click slides from the clicked one's knob
   const SLIDE_MS = 240; // a slide's length (the CSS transition), plus a little
@@ -107,9 +110,37 @@ import { runtime as TD } from '../../runtime';
     }
   }).observe(document.body, { subtree: true, childList: true });
 
+  // A row of toggles (.ze-flags) has no knob: the toggled button fades between its off and on look instead. The
+  // switch may be updated in place or rebuilt (a re-rendered panel), so the look before the click is kept and the
+  // fade runs on whichever button shows that toggle once its state has changed, like the knob's slide.
+  const FADE_MS = 200;
+  const LOOK = ['backgroundColor', 'boxShadow', 'color'] as const;
+  const look = (b: HTMLElement) => { const cs = getComputedStyle(b); return Object.fromEntries(LOOK.map((k) => [k, cs[k]])); };
+  function fadeToggle(c: Element, b: HTMLElement) {
+    const k = key(c), i = [...buttons(c)].indexOf(b), was = b.classList.contains('on'), from = look(b), t0 = performance.now();
+    const find = () => {
+      for (const t of document.querySelectorAll(SEL)) if (t.classList.contains('ze-flags') && key(t) === k) return buttons(t)[i] as HTMLElement | undefined;
+      return undefined;
+    };
+    const step = () => {
+      const now = find();
+      if (now && now.classList.contains('on') !== was) {
+        // the end look without the base button's own colour transition, which would hold the fade back
+        now.classList.add('seg-fading');
+        const to = look(now);
+        const ease = getComputedStyle(document.documentElement).getPropertyValue('--ease').trim() || 'ease-out';
+        now.animate([from, to], { duration: FADE_MS, easing: ease }).finished.catch(() => {}).then(() => now.classList.remove('seg-fading'));
+        return;
+      }
+      if (performance.now() - t0 < MOVE_MS) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
   document.addEventListener('click', (e) => {
     const b = (e.target! as Element).closest && (e.target! as Element).closest('button');
     const c = b && b.parentElement;
+    if (b && c && c.matches(SEL) && c.classList.contains('ze-flags') && !(b as HTMLButtonElement).disabled) fadeToggle(c, b as HTMLElement);
     const s = c && live.get(c);
     if (s && s.shown) {
       // where the knob is now, mid-slide included
@@ -120,4 +151,6 @@ import { runtime as TD } from '../../runtime';
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule); else schedule();
   if (document.fonts) document.fonts.ready.then(schedule);
-})();
+}
+// starts on import, as the app has always loaded it (src/main.ts keeps the order); kit components call it again, harmlessly
+installSegThumb();

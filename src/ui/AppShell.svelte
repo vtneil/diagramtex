@@ -1,5 +1,16 @@
 <script lang="ts">
   import GridStyleButtons from './GridStyleButtons.svelte';
+  import Flyout from './kit/Flyout.svelte';
+  import SplitButton from './kit/SplitButton.svelte';
+  import Tile from './kit/Tile.svelte';
+  import TileGrid from './kit/TileGrid.svelte';
+  import Button from './kit/Button.svelte';
+  import IconButton from './kit/IconButton.svelte';
+  import Select from './kit/Select.svelte';
+  import Checkbox from './kit/Checkbox.svelte';
+  import Segmented from './kit/Segmented.svelte';
+  import Spacer from './kit/Spacer.svelte';
+  import Icon from './kit/Icon.svelte';
   import { onMount } from 'svelte';
   import { t, caption, message, locale, setLocale, rich, type Message } from '../i18n';
 
@@ -138,10 +149,7 @@
       </div>
       <div class="spacer"></div>
       {#if installPrompt && !installed}
-        <button type="button" id="btnInstall" class="pwa-install" onclick={installApp} title={t('pwa.install.tip', 'Install DiagramTeX as an app', {}, $locale)}>
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5v9m-3-3 3 3 3-3M3.5 12v4.5h13V12"/></svg>
-          <span>{t('pwa.install', 'Install', {}, $locale)}</span>
-        </button>
+        <Button id="btnInstall" onclick={installApp} title={t('pwa.install.tip', 'Install DiagramTeX as an app', {}, $locale)} class="pwa-install" icon="download"><span>{t('pwa.install', 'Install', {}, $locale)}</span></Button>
       {/if}
       <details class="language-picker" id="languagePicker">
         <summary id="languageTrigger" aria-label={t("ui.interface.language", 'Interface language', {}, $locale)} aria-haspopup="menu" aria-expanded="false" title={`${t("ui.language", 'Language', {}, $locale)}: ${$locale === 'th' ? 'ไทย' : 'English'}`}>
@@ -153,55 +161,54 @@
           <button type="button" class="language-option" role="menuitemradio" aria-checked={$locale === 'th'} data-language="th" lang="th" onclick={() => setLocale('th')}><span class="language-flag" aria-hidden="true">🇹🇭</span><span>ไทย</span>{#if $locale === 'th'}<span class="language-check" aria-hidden="true">✓</span>{/if}</button>
         </div>
       </details>
-      <div class="seg theme-seg" id="themeBox" role="radiogroup" aria-label={t("ui.appearance", "Appearance", {}, $locale)}>
-        <!-- svelte-ignore a11y_role_has_required_aria_props (Preserve the existing shell semantics during migration.) --><button type="button" role="radio" data-theme-pick="system" title={t("ui.appearance.follow.the.system", "Appearance: follow the system", {}, $locale)} aria-label={t("ui.system.appearance", "System appearance", {}, $locale)}><svg viewBox="0 0 20 20"><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 16.5h6M10 13.5v3"/></svg></button>
-        <!-- svelte-ignore a11y_role_has_required_aria_props (Preserve the existing shell semantics during migration.) --><button type="button" role="radio" data-theme-pick="light" title={t("ui.appearance.always.light", "Appearance: always light", {}, $locale)} aria-label={t("ui.light.appearance", "Light appearance", {}, $locale)}><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="3.2"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/></svg></button>
-        <!-- svelte-ignore a11y_role_has_required_aria_props (Preserve the existing shell semantics during migration.) --><button type="button" role="radio" data-theme-pick="dark" title={t("ui.appearance.always.dark", "Appearance: always dark", {}, $locale)} aria-label={t("ui.dark.appearance", "Dark appearance", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M15.5 12.6A6.5 6.5 0 017.4 4.5a6.5 6.5 0 108.1 8.1z"/></svg></button>
-      </div>
+      <Segmented class="theme-seg" id="themeBox" label={t("ui.appearance", "Appearance", {}, $locale)} options={[
+        { icon: 'themeSystem', title: t("ui.appearance.follow.the.system", "Appearance: follow the system", {}, $locale), name: t("ui.system.appearance", "System appearance", {}, $locale), attrs: { 'data-theme-pick': 'system' } },
+        { icon: 'themeLight', title: t("ui.appearance.always.light", "Appearance: always light", {}, $locale), name: t("ui.light.appearance", "Light appearance", {}, $locale), attrs: { 'data-theme-pick': 'light' } },
+        { icon: 'themeDark', title: t("ui.appearance.always.dark", "Appearance: always dark", {}, $locale), name: t("ui.dark.appearance", "Dark appearance", {}, $locale), attrs: { 'data-theme-pick': 'dark' } },
+      ]} />
     </div>
     <div class="topbar-row tools-row" id="topbarTools">
-    <button id="btnSidebar" class="icon flat" title={t("ui.show.hide.document.list", "Show / hide document list", {}, $locale)} aria-label={t("ui.toggle.document.list", "Toggle document list", {}, $locale)}><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12"/><path d="M8 4v12"/></svg></button>
+    <IconButton id="btnSidebar" title={t("ui.show.hide.document.list", "Show / hide document list", {}, $locale)} aria-label={t("ui.toggle.document.list", "Toggle document list", {}, $locale)} icon="sidebar" />
     <div class="group files-grp">
-      <button data-cmd="new" class="icon" title={t("ui.new.document", "New document", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5 2.5h7l3 3v12H5z"/><path d="M10 9v6M7 12h6"/></svg></button>
-      <button data-cmd="open" class="icon" title={t("ui.open.a.diagramtex.file.page.classic.or.whiteboard.older.json.files.too.or.a.tex.", "Open a .diagramtex file (Page, Classic or Whiteboard; older .json files too) or a .tex file (Ctrl+O)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/></svg></button>
-      <button data-cmd="save" class="icon" title={t("ui.save.to.a.diagramtex.file.that.you.can.open.again.ctrl.shift.s", "Save to a .diagramtex file that you can open again (Ctrl+Shift+S)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3.5 3.5h10l3 3v10h-13z"/><path d="M6.5 3.5v4h6v-4M6 16.5v-5h8v5"/></svg></button>
-      <button data-cmd="import" class="icon" title={t("ui.import.latex.tikz.code", "Import LaTeX / TikZ code", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M7.5 5.5v-3h6l3 3v12h-9v-3M13.5 2.5v3h3"/><path d="M2.5 10h9M8 6.5l3.5 3.5L8 13.5"/></svg></button>
+      <IconButton data-cmd="new" title={t("ui.new.document", "New document", {}, $locale)} icon="newFile" variant="default" />
+      <IconButton data-cmd="open" title={t("ui.open.a.diagramtex.file.page.classic.or.whiteboard.older.json.files.too.or.a.tex.", "Open a .diagramtex file (Page, Classic or Whiteboard; older .json files too) or a .tex file (Ctrl+O)", {}, $locale)} icon="open" variant="default" />
+      <IconButton data-cmd="save" title={t("ui.save.to.a.diagramtex.file.that.you.can.open.again.ctrl.shift.s", "Save to a .diagramtex file that you can open again (Ctrl+Shift+S)", {}, $locale)} icon="save" variant="default" />
+      <IconButton data-cmd="import" title={t("ui.import.latex.tikz.code", "Import LaTeX / TikZ code", {}, $locale)} icon="importFile" variant="default" />
     </div>
     <div class="mode-selectors" role="group" class:expanded={modeSelectorsExpanded} onpointerleave={() => modeSelectorsExpanded = false}>
-      <div class="seg" id="kindSeg" onpointerenter={(event) => { if (event.pointerType === 'mouse') modeSelectorsExpanded = true; }} role="group" aria-label={t("ui.file.type", "File type", {}, $locale)}>
-        <button data-kind="classic" class="toggle" title={t("ui.classic.file.diagrams.and.a.document.that.arranges.them.with.text", "Classic file — diagrams, and a document that arranges them with text", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3.5 7.5h10V11a5 5 0 01-10 0zM13.5 8h1.75a2.25 2.25 0 010 4.5H13M2.5 17h13M6 5V3M10 5V3"/></svg><span class="lbl">{t("ui.classic", "Classic", {}, $locale)}</span></button>
-        <button data-mode="page" class="toggle" title={t("ui.page.file.free.form.page.place.text.maths.shapes.and.plots.anywhere.on.the.paper", "Page file — free-form page: place text, maths, shapes and plots anywhere on the paper", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6h3M7.5 8.5h5"/><path d="M8 15l2-3.5 2 2 1-1.5" /></svg><span class="lbl">{t("ui.page", "Page", {}, $locale)}</span></button>
-        <button data-mode="board" class="toggle" title={t("ui.whiteboard.an.endless.canvas.draw.anywhere.scroll.to.pan.pinch.or.ctrl.scroll.to", "Whiteboard — an endless canvas: draw anywhere, scroll to pan, pinch or Ctrl+scroll to zoom", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M2.5 4.5h15v10h-15z"/><path d="M5.5 11c1.6-3.4 3.2-3.4 4.5 0s2.9 3.4 4.5 0"/><path d="M7 17.5l3-3 3 3"/></svg><span class="lbl">{t("ui.whiteboard", "Whiteboard", {}, $locale)}</span></button>
-        <button data-table class="toggle" title={t("ui.table.import.a.table.excel.google.sheets.csv.latex.format.it.and.copy.it.as.late", "Table — import a table (Excel, Google Sheets, CSV, LaTeX…), format it, and copy it as LaTeX or a picture", {}, $locale)}><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="1"/><path d="M2.5 8h15M2.5 12h15M8 4v12"/></svg><span class="lbl">{t("ui.table", "Table", {}, $locale)}</span></button>
-        <button data-quick class="toggle" title={t("ui.quick.type.one.formula.and.copy.it.as.a.picture.png.or.svg", "Quick — type one formula and copy it as a picture (PNG or SVG)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M2.5 11h2.5l2.5 5.5 4-13h6"/><path d="M12.5 9l4 5M16.5 9l-4 5"/></svg><span class="lbl">{t("ui.quick", "Quick", {}, $locale)}</span></button>
-      </div>
-      <div class="seg sub" id="classicSeg" role="group" aria-label={t("ui.view", "View", {}, $locale)}>
-        <button data-mode="document" class="toggle on" title={t("ui.classic.file.page.with.text.and.diagrams", "Classic file — page with text and diagrams", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5 2.5h10v15H5z"/><path d="M7.5 6.5h5M7.5 9.5h5M7.5 12.5h3"/></svg>{t("ui.document", "Document", {}, $locale)}</button>
-        <button data-mode="diagram" class="toggle" title={t("ui.classic.file.edit.a.diagram.on.the.canvas", "Classic file — edit a diagram on the canvas", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3 16L9 5l4 7 4-4"/><circle cx="9" cy="5" r="1.4" class="f"/></svg>{t("ui.diagram", "Diagram", {}, $locale)}</button>
-      </div>
+      <Segmented id="kindSeg" onpointerenter={(event) => { if (event.pointerType === 'mouse') modeSelectorsExpanded = true; }} label={t("ui.file.type", "File type", {}, $locale)} options={[
+        { icon: 'fileClassic', label: t("ui.classic", "Classic", {}, $locale), labelClass: 'lbl', class: 'toggle', title: t("ui.classic.file.diagrams.and.a.document.that.arranges.them.with.text", "Classic file — diagrams, and a document that arranges them with text", {}, $locale), attrs: { 'data-kind': 'classic' } },
+        { icon: 'filePage', label: t("ui.page", "Page", {}, $locale), labelClass: 'lbl', class: 'toggle', title: t("ui.page.file.free.form.page.place.text.maths.shapes.and.plots.anywhere.on.the.paper", "Page file — free-form page: place text, maths, shapes and plots anywhere on the paper", {}, $locale), attrs: { 'data-mode': 'page' } },
+        { icon: 'fileBoard', label: t("ui.whiteboard", "Whiteboard", {}, $locale), labelClass: 'lbl', class: 'toggle', title: t("ui.whiteboard.an.endless.canvas.draw.anywhere.scroll.to.pan.pinch.or.ctrl.scroll.to", "Whiteboard — an endless canvas: draw anywhere, scroll to pan, pinch or Ctrl+scroll to zoom", {}, $locale), attrs: { 'data-mode': 'board' } },
+        { icon: 'fileTable', label: t("ui.table", "Table", {}, $locale), labelClass: 'lbl', class: 'toggle', title: t("ui.table.import.a.table.excel.google.sheets.csv.latex.format.it.and.copy.it.as.late", "Table — import a table (Excel, Google Sheets, CSV, LaTeX…), format it, and copy it as LaTeX or a picture", {}, $locale), attrs: { 'data-table': '' } },
+        { icon: 'fileQuick', label: t("ui.quick", "Quick", {}, $locale), labelClass: 'lbl', class: 'toggle', title: t("ui.quick.type.one.formula.and.copy.it.as.a.picture.png.or.svg", "Quick — type one formula and copy it as a picture (PNG or SVG)", {}, $locale), attrs: { 'data-quick': '' } },
+      ]} />
+      <Segmented class="sub" id="classicSeg" label={t("ui.view", "View", {}, $locale)} options={[
+        { icon: 'viewDocument', label: t("ui.document", "Document", {}, $locale), class: 'toggle', title: t("ui.classic.file.page.with.text.and.diagrams", "Classic file — page with text and diagrams", {}, $locale), on: true, attrs: { 'data-mode': 'document' } },
+        { icon: 'viewDiagram', label: t("ui.diagram", "Diagram", {}, $locale), class: 'toggle', title: t("ui.classic.file.edit.a.diagram.on.the.canvas", "Classic file — edit a diagram on the canvas", {}, $locale), attrs: { 'data-mode': 'diagram' } },
+      ]} />
     </div>
     <div class="spacer"></div>
     <div id="blockNav" class="diagram-nav" hidden>
-      <button id="blockPrev" class="icon" title={t('ui.previousDiagram', 'Previous diagram', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M12 4l-6 6 6 6"/></svg></button>
-      <button id="blockSel" aria-haspopup="dialog" title={t("ui.diagram.in.this.document", "Diagram in this document", {}, $locale)} hidden></button>
-      <button id="blockRename" class="icon" title={t('ui.renameDiagram', 'Rename diagram', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M12 4l4 4M4 12l9-9 4 4-9 9-5 1z"/></svg></button>
-      <button id="blockNext" class="icon" title={t('ui.nextDiagram', 'Next diagram', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M8 4l6 6-6 6"/></svg></button>
+      <IconButton id="blockPrev" title={t('ui.previousDiagram', 'Previous diagram', {}, $locale)} icon="prev" variant="default" />
+      <Button id="blockSel" aria-haspopup="dialog" title={t("ui.diagram.in.this.document", "Diagram in this document", {}, $locale)} hidden />
+      <IconButton id="blockRename" title={t('ui.renameDiagram', 'Rename diagram', {}, $locale)} icon="renameItem" variant="default" />
+      <IconButton id="blockNext" title={t('ui.nextDiagram', 'Next diagram', {}, $locale)} icon="next" variant="default" />
     </div>
     <div class="group">
-      <button id="btnUndo" class="icon" title={t("ui.undo.ctrl.z", "Undo (Ctrl+Z)", {}, $locale)}><svg viewBox="0 0 20 20"><path transform="translate(0 -2)" d="M7 5L3 9l4 4M3 9h9a5 5 0 010 10h-2"/></svg></button>
-      <button id="btnRedo" class="icon" title={t("ui.redo.ctrl.shift.z", "Redo (Ctrl+Shift+Z)", {}, $locale)}><svg viewBox="0 0 20 20"><path transform="translate(0 -2)" d="M13 5l4 4-4 4M17 9H8a5 5 0 000 10h2"/></svg></button>
+      <IconButton id="btnUndo" title={t("ui.undo.ctrl.z", "Undo (Ctrl+Z)", {}, $locale)} icon="undo" variant="default" />
+      <IconButton id="btnRedo" title={t("ui.redo.ctrl.shift.z", "Redo (Ctrl+Shift+Z)", {}, $locale)} icon="redo" variant="default" />
     </div>
-    <div class="seg ze-flags flag-seg diag-only" id="gridFlags" role="group" aria-label={t("ui.grid", "Grid", {}, $locale)}>
-      <GridStyleButtons id="gridStyle" />
-      <button id="btnGuides" type="button" data-cmd="guides" title={t('assist.guides', 'Guides', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3 3h14v14H3zM7 3v4M11 3v3M15 3v4M3 7h4M3 11h3M3 15h4"/></svg></button>
-      <button id="btnSnap" type="button" class="on" aria-pressed="true" title={t("ui.snap.to.grid.points.hold.alt.to.bypass", "Snap to grid & points (hold Alt to bypass)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5 3v7a5 5 0 0010 0V3h-3.5v7a1.5 1.5 0 01-3 0V3z"/><path d="M5 6.5h3.5M11.5 6.5H15"/></svg></button>
+    <Segmented many class="flag-seg diag-only" id="gridFlags" label={t("ui.grid", "Grid", {}, $locale)} options={[
+        { icon: 'guides', title: t('assist.guides', 'Guides', {}, $locale), attrs: { id: 'btnGuides', 'data-cmd': 'guides' } },
+        { icon: 'snap', title: t("ui.snap.to.grid.points.hold.alt.to.bypass", "Snap to grid & points (hold Alt to bypass)", {}, $locale), on: true, attrs: { id: 'btnSnap' } },
+      ]}><GridStyleButtons id="gridStyle" /></Segmented>
+    <div class="group">
+      <IconButton data-cmd="print" title={t("ui.print.save.as.pdf.ctrl.p", "Print / save as PDF (Ctrl+P)", {}, $locale)} icon="print" variant="default" />
     </div>
     <div class="group">
-      <button data-cmd="print" class="icon" title={t("ui.print.save.as.pdf.ctrl.p", "Print / save as PDF (Ctrl+P)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5.5 7.5V3h9v4.5M5.5 14.5h-3v-7h15v7h-3"/><path d="M5.5 11.5h9v6h-9z"/></svg></button>
-    </div>
-    <div class="group">
-      <button data-cmd="export" id="btnExport" class="exp-btn" title={t("ui.export.as.png.choose.dpi.svg.pdf.or.a.web.page", "Export as PNG (choose DPI), SVG, PDF or a web page", {}, $locale)} aria-haspopup="dialog"><svg viewBox="0 0 20 20"><path d="M9 4H4v12h12v-5"/><path d="M10 10l6.5-6.5M11.5 3.5h5v5"/></svg>{t("ui.export", "Export", {}, $locale)}</button>
-      <button data-cmd="tikz" id="btnTikz" title={t("ui.latex.code.for.this.diagram.or.the.whole.document.to.copy.or.download.ctrl.e", "LaTeX code for this diagram or the whole document, to copy or download (Ctrl+E)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M7 6l-4 4 4 4M13 6l4 4-4 4M11 4.5l-2 11"/></svg>{t("ui.latex", "LaTeX", {}, $locale)}</button>
+      <Button data-cmd="export" id="btnExport" title={t("ui.export.as.png.choose.dpi.svg.pdf.or.a.web.page", "Export as PNG (choose DPI), SVG, PDF or a web page", {}, $locale)} aria-haspopup="dialog" class="exp-btn" icon="export">{t("ui.export", "Export", {}, $locale)}</Button>
+      <Button data-cmd="tikz" id="btnTikz" title={t("ui.latex.code.for.this.diagram.or.the.whole.document.to.copy.or.download.ctrl.e", "LaTeX code for this diagram or the whole document, to copy or download (Ctrl+E)", {}, $locale)} icon="code">{t("ui.latex", "LaTeX", {}, $locale)}</Button>
     </div>
     <input id="fileInput" type="file" accept=".diagramtex,.json,.tex,.tikz,.txt,application/json,text/x-tex" hidden>
     </div>
@@ -212,85 +219,81 @@
       <div class="panel-head">
         <span id="filesTitle">{t("ui.documents", "Documents", {}, $locale)}</span>
         <div class="head-acts">
-          <button id="btnSortDocs" class="icon" title={t("ui.sort", "Sort", {}, $locale)} aria-label={t("ui.sort.files", "Sort files", {}, $locale)} aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 20 20"><path d="M3.5 6h8M3.5 10h6M3.5 14h4M15 4.5v11M12.5 13l2.5 2.5 2.5-2.5"/></svg></button>
-          <button id="btnNewDoc" class="icon" title={t("ui.new.document", "New document", {}, $locale)} aria-label={t("ui.new.document", "New document", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg></button>
+          <IconButton id="btnSortDocs" title={t("ui.sort", "Sort", {}, $locale)} aria-label={t("ui.sort.files", "Sort files", {}, $locale)} aria-haspopup="menu" aria-expanded="false" icon="sort" variant="default" />
+          <IconButton id="btnNewDoc" title={t("ui.new.document", "New document", {}, $locale)} aria-label={t("ui.new.document", "New document", {}, $locale)} icon="add" variant="default" />
         </div>
       </div>
-      <ul id="docList"></ul>
+      <ul id="docList" role="listbox" aria-labelledby="filesTitle"></ul>
       <ul id="quickList" aria-label={t("quick.list", "Quick", {}, $locale)}></ul>
-      <button type="button" id="binRow" class="bin-row" title={t("ui.recycle.bin.deleted.files.and.folders.kept.for.30.days", "Recycle Bin: deleted files and folders, kept for 30 days", {}, $locale)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/></svg><span>{t("ui.recycle.bin", "Recycle Bin", {}, $locale)}</span><span class="bin-n"></span></button>
+      <Button id="binRow" title={t("ui.recycle.bin.deleted.files.and.folders.kept.for.30.days", "Recycle Bin: deleted files and folders, kept for 30 days", {}, $locale)} class="bin-row"><Icon name="delete" /><span>{t("ui.recycle.bin", "Recycle Bin", {}, $locale)}</span><span class="bin-n"></span></Button>
       <section id="inputBox" aria-label={t("ui.text.input", "Text input", {}, $locale)}></section>
       <section id="engineBox" aria-label={t("ui.latex.engine", "LaTeX engine", {}, $locale)}></section>
       <div class="files-foot"><a class="app-src" href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener" title={t("ui.diagramtex.on.gitlab", "DiagramTeX on GitLab", {}, $locale)} aria-label={t("ui.diagramtex.on.gitlab", "DiagramTeX on GitLab", {}, $locale)}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg></a><a class="app-src" href={$locale === 'th' ? 'guide/th.html' : 'guide/'} target="_blank" rel="noopener" title={t("ui.guide.how.to.use.diagramtex", "Guide: how to use DiagramTeX", {}, $locale)} aria-label={t("ui.guide.how.to.use.diagramtex", "Guide: how to use DiagramTeX", {}, $locale)}><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5C6.5 2.3 4.3 2 2 2.3v10.2c2.3-.3 4.5 0 6 1.2 1.5-1.2 3.7-1.5 6-1.2V2.3c-2.3-.3-4.5 0-6 1.2zM8 3.5v10.2"/></svg></a><!-- svelte-ignore a11y_consider_explicit_label (Preserve the existing shell semantics during migration.) --><a class="app-ver" id="appVer" target="_blank" rel="noopener"></a></div>
     </aside>
 
     <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role (Preserve the existing shell semantics during migration.) --><nav id="tools" role="toolbar" aria-orientation="vertical" aria-label={t("ui.drawing.tools", "Drawing tools", {}, $locale)}>
-      <button data-tool="select" title={t("ui.select.move.v", "Select / move (V)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5 3l10 7-5 1-2 5z" class="f"/></svg></button>
-      <button data-tool="hand" class="hand-only" title={t("ui.hand.h.drag.to.move.around.space.drag.works.with.any.tool", "Hand (H): drag to move around. Space-drag works with any tool", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M7 10.5V4.8a1.2 1.2 0 012.4 0V9.5M9.4 9V3.7a1.2 1.2 0 012.4 0V9.5M11.8 9.2V4.6a1.2 1.2 0 012.4 0v6.6c0 3.6-2.2 6.3-5.6 6.3-2.1 0-3.4-.9-4.6-2.6L3.6 12.1a1.2 1.2 0 012-1.4L7 12.4"/></svg></button>
+      <IconButton data-tool="select" title={t("ui.select.move.v", "Select / move (V)", {}, $locale)} icon="select" />
+      <IconButton data-tool="hand" title={t("ui.hand.h.drag.to.move.around.space.drag.works.with.any.tool", "Hand (H): drag to move around. Space-drag works with any tool", {}, $locale)} icon="hand" />
       <div class="sep"></div>
-      <button data-tool="magnify" title={t('assist.magnify', 'Magnifying glass (Z)', {}, $locale)}><svg viewBox="0 0 20 20"><circle cx="8" cy="8" r="5"/><path d="M12 12l5 5M5.5 8h5M8 5.5v5"/></svg></button>
-      <button data-tool="bucket" title={t('assist.bucket', 'Fill bucket (K)', {}, $locale)}><svg viewBox="0 0 20 20"><path d="M7 3l7 7-6 6-7-7zM5 1l5 5M16 11c0 0-2 3-2 4.5a2 2 0 004 0C18 14 16 11 16 11zM2 9h11"/></svg></button>
-      <button data-tool="math" title={t("ui.math.m.text.box.that.starts.in", "Math (M) — text box that starts in $…$", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M9.5 4.5c-1.6-.8-3 0-3.3 1.8L4.6 16.2c-.3 1.6-1.6 2.2-2.6 1.5M3.5 9h5M10.5 9.5l5 6M15.5 9.5l-5 6"/></svg></button>
-      <button data-tool="text" title={t("ui.text.t.click.for.a.line.drag.for.a.paragraph.box.use.for.math", "Text (T): click for a line, drag for a paragraph box. Use $...$ for math", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M4 5h12M10 5v11M7.5 16h5"/></svg></button>
+      <IconButton data-tool="magnify" title={t('assist.magnify', 'Magnifying glass (Z)', {}, $locale)} icon="magnify" />
+      <IconButton data-tool="bucket" title={t('assist.bucket', 'Fill bucket (K)', {}, $locale)} icon="bucket" />
+      <IconButton data-tool="math" title={t("ui.math.m.text.box.that.starts.in", "Math (M) — text box that starts in $…$", {}, $locale)} icon="toolMath" />
+      <IconButton data-tool="text" title={t("ui.text.t.click.for.a.line.drag.for.a.paragraph.box.use.for.math", "Text (T): click for a line, drag for a paragraph box. Use $...$ for math", {}, $locale)} icon="toolText" />
       <div class="sep"></div>
-      <button data-fly="lines" title={t("ui.lines.curves.polygons.arcs.springs", "Lines, curves, polygons, arcs, springs", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3 17L17 3"/></svg><i class="more"></i></button>
-      <button data-fly="shapes" title={t("ui.shapes.and.flowchart", "Shapes and flowchart", {}, $locale)}><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="9" height="9"/><circle cx="13" cy="11" r="4.5"/></svg><i class="more"></i></button>
-      <button data-fly="elec" title={t("ui.electrical.symbols.waveforms.and.circuits", "Electrical symbols, waveforms and circuits", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M1.5 10h3l1.5-4 3 8 3-8 3 8 1.5-4h2"/></svg><i class="more"></i></button>
-      <button data-fly="phys" title={t("ui.physics.experimental.results.and.drawings.might.not.be.correct.computed.figures.", "Physics (experimental; results and drawings might not be correct): computed figures (mechanics, optics, fields, waves, spacetime, energy levels) and mechanics and optics symbols", {}, $locale)}><svg viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="8" ry="3.2"/><ellipse cx="10" cy="10" rx="8" ry="3.2" transform="rotate(60 10 10)"/><ellipse cx="10" cy="10" rx="8" ry="3.2" transform="rotate(-60 10 10)"/><circle cx="10" cy="10" r="1.3" fill="currentColor" stroke="none"/></svg><i class="more"></i></button>
-      <button data-fly="misc" title={t("ui.axis.wave.brace.ruler.grid", "Axis, wave, brace, ruler, grid", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3 3v14h14M3 9h14M3 13h14M7 3v14M11 3v14M15 3v14" style="stroke-width:1.1"/></svg><i class="more"></i></button>
-      <button data-fly="arrows" title={t("ui.block.arrows", "Block arrows", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M2.5 7.5h8.5V4l6.5 6-6.5 6v-3.5H2.5z"/></svg><i class="more"></i></button>
-      <button data-fly="insertPop" id="btnInsert" title={t("ui.2d.plots.and.charts.function.line.scatter.area.bar.pie.contour.heatmap", "2D plots and charts: function, line, scatter, area, bar, pie, contour, heatmap", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3 3v14h14"/><path d="M5 14c3-1 4-8 6-8s3 5 6 4"/></svg><i class="more"></i></button>
-      <button data-fly="plots3d" id="btnPlots3d" title={t("ui.3d.plots.surfaces.parametric.surfaces.space.curves.scatter", "3D plots: surfaces, parametric surfaces, space curves, scatter", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M6.5 13.5V2.5M6.5 13.5H18M6.5 13.5l-4 4"/><path d="M9 7.5c2.2-2.4 4.2.6 8.5-2l-1.5 3.8c-4.3 2.6-6.3-.4-8.5 2z"/></svg><i class="more"></i></button>
-      <button data-fly="figures3d" id="btnFigures3d" title={t("ui.3d.figures.solid.regions.solids.of.revolution.basic.solids", "3D figures: solid regions, solids of revolution, basic solids", {}, $locale)}><svg viewBox="0 0 20 20"><text x="10" y="15" text-anchor="middle" font-size="14.5" font-weight="800" letter-spacing="-.6" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">3D</text></svg><i class="more"></i></button>
-      <button data-fly="blocks" id="btnBlocks" title={t("ui.blocks.experimental.some.inputs.might.not.be.rendered.correctly.commutative.diag", "Blocks (experimental; some inputs might not be rendered correctly): commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman, timing, state machine, Karnaugh map, bit field, chemistry, 2D and 3D geometry", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M10 2l4 2.3v4.6L10 11.2 6 8.9V4.3zM6 4.3l4 2.3 4-2.3M10 6.6v4.6M6 8.9l4 2.3v4.6L6 18.1 2 15.8v-4.6zM2 11.2l4 2.3 4-2.3M6 13.5v4.6M14 8.9l4 2.3v4.6L14 18.1 10 15.8v-4.6zM10 11.2l4 2.3 4-2.3M14 13.5v4.6"/></svg><i class="more"></i></button>
+      <Flyout icon="groupLines" data-fly="lines" panel="fly-lines" title={t("ui.lines.curves.polygons.arcs.springs", "Lines, curves, polygons, arcs, springs", {}, $locale)} />
+      <Flyout icon="groupShapes" data-fly="shapes" panel="fly-shapes" title={t("ui.shapes.and.flowchart", "Shapes and flowchart", {}, $locale)} />
+      <Flyout icon="groupElectrical" data-fly="elec" panel="fly-elec" title={t("ui.electrical.symbols.waveforms.and.circuits", "Electrical symbols, waveforms and circuits", {}, $locale)} />
+      <Flyout icon="groupPhysics" data-fly="phys" panel="fly-phys" title={t("ui.physics.experimental.results.and.drawings.might.not.be.correct.computed.figures.", "Physics (experimental; results and drawings might not be correct): computed figures (mechanics, optics, fields, waves, spacetime, energy levels) and mechanics and optics symbols", {}, $locale)} />
+      <Flyout icon="groupMisc" data-fly="misc" panel="fly-misc" title={t("ui.axis.wave.brace.ruler.grid", "Axis, wave, brace, ruler, grid", {}, $locale)} />
+      <Flyout icon="groupArrows" data-fly="arrows" panel="fly-arrows" title={t("ui.block.arrows", "Block arrows", {}, $locale)} />
+      <Flyout icon="groupPlots" data-fly="insertPop" width={324} id="btnInsert" panel="insertPop" title={t("ui.2d.plots.and.charts.function.line.scatter.area.bar.pie.contour.heatmap", "2D plots and charts: function, line, scatter, area, bar, pie, contour, heatmap", {}, $locale)} />
+      <Flyout icon="groupPlots3d" data-fly="plots3d" width={324} id="btnPlots3d" panel="fly-plots3d" title={t("ui.3d.plots.surfaces.parametric.surfaces.space.curves.scatter", "3D plots: surfaces, parametric surfaces, space curves, scatter", {}, $locale)} />
+      <Flyout icon="groupFigures3d" data-fly="figures3d" width={324} id="btnFigures3d" panel="fly-figures3d" title={t("ui.3d.figures.solid.regions.solids.of.revolution.basic.solids", "3D figures: solid regions, solids of revolution, basic solids", {}, $locale)} />
+      <Flyout icon="groupBlocks" data-fly="blocks" width={324} id="btnBlocks" panel="fly-blocks" title={t("ui.blocks.experimental.some.inputs.might.not.be.rendered.correctly.commutative.diag", "Blocks (experimental; some inputs might not be rendered correctly): commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman, timing, state machine, Karnaugh map, bit field, chemistry, 2D and 3D geometry", {}, $locale)} />
       <div class="sep"></div>
-      <button data-tool="image" title={t("ui.image.i.inserted.with.includegraphics", "Image (I) — inserted with \\includegraphics", {}, $locale)}><svg viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12"/><circle cx="7" cy="8" r="1.5"/><path d="M3 15l5-5 3.5 3.5 2-2L17 15"/></svg></button>
-      <button data-tool="pencil" title={t("ui.pencil.n.freehand.smoothed", "Pencil (N) — freehand, smoothed", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M4 16l1-4 8.5-8.5 3 3L8 15z M12 5l3 3"/></svg></button>
+      <IconButton data-tool="image" title={t("ui.image.i.inserted.with.includegraphics", "Image (I) — inserted with \\includegraphics", {}, $locale)} icon="toolImage" />
+      <IconButton data-tool="pencil" title={t("ui.pencil.n.freehand.smoothed", "Pencil (N) — freehand, smoothed", {}, $locale)} icon="pencil" />
     </nav>
-    <div id="fly-lines" class="popover flyout" hidden></div>
-    <div id="fly-shapes" class="popover flyout" hidden></div>
-    <div id="fly-misc" class="popover flyout" hidden></div>
-    <div id="fly-phys" class="popover flyout" hidden></div>
-    <div id="fly-arrows" class="popover flyout" hidden></div>
-    <div id="fly-elec" class="popover flyout" hidden></div>
     <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" hidden>
-    <div id="insertPop" class="popover flyout" hidden>
+    <!-- the tool groups' panels (filled by src/application/app.ts), each shown in its Flyout while open -->
+    <div class="fly-panels" hidden>
+    <div id="fly-lines" class="fly-panel"></div>
+    <div id="fly-shapes" class="fly-panel"></div>
+    <div id="fly-misc" class="fly-panel"></div>
+    <div id="fly-phys" class="fly-panel"></div>
+    <div id="fly-arrows" class="fly-panel"></div>
+    <div id="fly-elec" class="fly-panel"></div>
+    <div id="insertPop" class="fly-panel">
       <div class="pop-title">{t("ui.2d.plots", "2D plots", {}, $locale)}</div>
-      <div class="pop-grid">
-        <button data-insert="plot:function"><svg viewBox="0 0 32 24"><path d="M2 12h28M16 2v20"/><path d="M3 12c3-9 7-9 10 0s7 9 10 0 5-6 6-5" class="c1"/></svg>{t("ui.function", "Function", {}, $locale)}</button>
-        <button data-insert="plot:line"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><path d="M5 18l6-6 6 2 6-8 5 1" class="c1"/></svg>{t("ui.line", "Line", {}, $locale)}</button>
-        <button data-insert="plot:scatter"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><g class="dots"><circle cx="8" cy="16" r="1.6"/><circle cx="12" cy="13" r="1.6"/><circle cx="16" cy="14" r="1.6"/><circle cx="20" cy="9" r="1.6"/><circle cx="25" cy="6" r="1.6"/></g></svg>{t("ui.scatter", "Scatter", {}, $locale)}</button>
-        <button data-insert="plot:area"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><path d="M4 21c5 0 6-14 12-14s7 14 12 14z" class="a1"/></svg>{t("ui.area", "Area", {}, $locale)}</button>
-        <button data-insert="plot:bar"><svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><g class="bars"><rect x="6" y="13" width="4" height="8"/><rect x="12" y="7" width="4" height="14"/><rect x="18" y="15" width="4" height="6"/><rect x="24" y="9" width="4" height="12"/></g></svg>{t("ui.bar", "Bar", {}, $locale)}</button>
-        <button data-insert="pie"><svg viewBox="0 0 32 24"><circle cx="16" cy="12" r="9" class="a1"/><path d="M16 12V3M16 12l8 4M16 12l-6 7"/></svg>{t("ui.pie", "Pie", {}, $locale)}</button>
-        <button data-insert="plot:contour"><svg viewBox="0 0 32 24"><ellipse cx="16" cy="12" rx="12" ry="9" class="c1"/><ellipse cx="16" cy="12" rx="8" ry="6" class="c2"/><ellipse cx="16" cy="12" rx="3.5" ry="2.5" class="c3"/></svg>{t("ui.contour", "Contour", {}, $locale)}</button>
-        <button data-insert="plot:heatmap"><svg viewBox="0 0 32 24"><g class="heat"><rect x="4" y="3" width="8" height="6" fill="#f5c542"/><rect x="12" y="3" width="8" height="6" fill="#e2572b"/><rect x="20" y="3" width="8" height="6" fill="#f5c542"/><rect x="4" y="9" width="8" height="6" fill="#e2572b"/><rect x="12" y="9" width="8" height="6" fill="#b3122e"/><rect x="20" y="9" width="8" height="6" fill="#e2572b"/><rect x="4" y="15" width="8" height="6" fill="#f5c542"/><rect x="12" y="15" width="8" height="6" fill="#e2572b"/><rect x="20" y="15" width="8" height="6" fill="#f5c542"/></g></svg>{t("ui.heatmap", "Heatmap", {}, $locale)}</button>
-      </div>
+      <TileGrid>
+        <Tile data-insert="plot:function" svg={`<svg viewBox="0 0 32 24"><path d="M2 12h28M16 2v20"/><path d="M3 12c3-9 7-9 10 0s7 9 10 0 5-6 6-5" class="c1"/></svg>`} label={t("ui.function", "Function", {}, $locale)} />
+        <Tile data-insert="plot:line" svg={`<svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><path d="M5 18l6-6 6 2 6-8 5 1" class="c1"/></svg>`} label={t("ui.line", "Line", {}, $locale)} />
+        <Tile data-insert="plot:scatter" svg={`<svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><g class="dots"><circle cx="8" cy="16" r="1.6"/><circle cx="12" cy="13" r="1.6"/><circle cx="16" cy="14" r="1.6"/><circle cx="20" cy="9" r="1.6"/><circle cx="25" cy="6" r="1.6"/></g></svg>`} label={t("ui.scatter", "Scatter", {}, $locale)} />
+        <Tile data-insert="plot:area" svg={`<svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><path d="M4 21c5 0 6-14 12-14s7 14 12 14z" class="a1"/></svg>`} label={t("ui.area", "Area", {}, $locale)} />
+        <Tile data-insert="plot:bar" svg={`<svg viewBox="0 0 32 24"><path d="M3 21h27M3 21V2"/><g class="bars"><rect x="6" y="13" width="4" height="8"/><rect x="12" y="7" width="4" height="14"/><rect x="18" y="15" width="4" height="6"/><rect x="24" y="9" width="4" height="12"/></g></svg>`} label={t("ui.bar", "Bar", {}, $locale)} />
+        <Tile data-insert="pie" svg={`<svg viewBox="0 0 32 24"><circle cx="16" cy="12" r="9" class="a1"/><path d="M16 12V3M16 12l8 4M16 12l-6 7"/></svg>`} label={t("ui.pie", "Pie", {}, $locale)} />
+        <Tile data-insert="plot:contour" svg={`<svg viewBox="0 0 32 24"><ellipse cx="16" cy="12" rx="12" ry="9" class="c1"/><ellipse cx="16" cy="12" rx="8" ry="6" class="c2"/><ellipse cx="16" cy="12" rx="3.5" ry="2.5" class="c3"/></svg>`} label={t("ui.contour", "Contour", {}, $locale)} />
+        <Tile data-insert="plot:heatmap" svg={`<svg viewBox="0 0 32 24"><g class="heat"><rect x="4" y="3" width="8" height="6" fill="#f5c542"/><rect x="12" y="3" width="8" height="6" fill="#e2572b"/><rect x="20" y="3" width="8" height="6" fill="#f5c542"/><rect x="4" y="9" width="8" height="6" fill="#e2572b"/><rect x="12" y="9" width="8" height="6" fill="#b3122e"/><rect x="20" y="9" width="8" height="6" fill="#e2572b"/><rect x="4" y="15" width="8" height="6" fill="#f5c542"/><rect x="12" y="15" width="8" height="6" fill="#e2572b"/><rect x="20" y="15" width="8" height="6" fill="#f5c542"/></g></svg>`} label={t("ui.heatmap", "Heatmap", {}, $locale)} />
+      </TileGrid>
     </div>
-    <div id="fly-plots3d" class="popover flyout" hidden>
+    <div id="fly-plots3d" class="fly-panel">
       <div class="pop-title">{t("ui.3d.plots", "3D plots", {}, $locale)}</div>
-      <div class="pop-grid">
-        <button data-insert="plot:surface3d" title={t("ui.surface.z.f.x.y.shaded.or.as.a.mesh.type.in.pgfplots", "Surface z = f(x, y), shaded or as a mesh (Type), in pgfplots", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M3 15.5c4-.5 6.5-1.5 8.5-5S14.5 4 16 4s2.5 3 4.5 6.5 4.5 4.5 8.5 5L16 21z" class="a1"/><path d="M7.5 17.6c3-1.2 4.8-3.6 6-7M24.5 17.6c-3-1.2-4.8-3.6-6-7M9.5 15.4c2.2.9 4.4 1.3 6.5 1.3s4.3-.4 6.5-1.3"/></svg>{t("ui.surface", "Surface", {}, $locale)}</button>
-        <button data-insert="plot:param3d" title={t("ui.parametric.surface.x.u.v.y.u.v.z.u.v.in.pgfplots", "Parametric surface (x(u, v), y(u, v), z(u, v)), in pgfplots", {}, $locale)}><svg viewBox="0 0 32 24"><ellipse cx="16" cy="12" rx="12.5" ry="7.5" class="a1"/><path d="M10.5 10.5c3.5 2.2 7.5 2.2 11 0M12 11.4c2.6-1.3 5.4-1.3 8 0M3.6 12.6c1.2 3.2 6.3 5.4 12.4 5.4s11.2-2.2 12.4-5.4M16 14.2v5.3M9.2 13.4l-2 4.2M22.8 13.4l2 4.2"/></svg>{t("ui.parametric", "Parametric", {}, $locale)}</button>
-        <button data-insert="plot:curve3d" title={t("ui.space.curve.x.t.y.t.z.t.in.pgfplots", "Space curve (x(t), y(t), z(t)), in pgfplots", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><path d="M8 17c0-3 16-3 16 0s-16 3-16-3 16-6 16-3-16 2-16-3" class="c1"/></svg>{t("ui.space.curve", "Space curve", {}, $locale)}</button>
-        <button data-insert="plot:scatter3d" title={t("ui.points.x.y.z.from.data.in.pgfplots", "Points (x, y, z) from data, in pgfplots", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><g class="dots"><circle cx="9" cy="10" r="1.5"/><circle cx="14" cy="7" r="1.5"/><circle cx="20" cy="12" r="1.5"/><circle cx="24" cy="6" r="1.5"/><circle cx="12" cy="14" r="1.5"/></g></svg>{t("ui.scatter.3d", "Scatter 3D", {}, $locale)}</button>
-      </div>
+      <TileGrid>
+        <Tile data-insert="plot:surface3d" title={t("ui.surface.z.f.x.y.shaded.or.as.a.mesh.type.in.pgfplots", "Surface z = f(x, y), shaded or as a mesh (Type), in pgfplots", {}, $locale)} svg={`<svg viewBox="0 0 32 24"><path d="M3 15.5c4-.5 6.5-1.5 8.5-5S14.5 4 16 4s2.5 3 4.5 6.5 4.5 4.5 8.5 5L16 21z" class="a1"/><path d="M7.5 17.6c3-1.2 4.8-3.6 6-7M24.5 17.6c-3-1.2-4.8-3.6-6-7M9.5 15.4c2.2.9 4.4 1.3 6.5 1.3s4.3-.4 6.5-1.3"/></svg>`} label={t("ui.surface", "Surface", {}, $locale)} />
+        <Tile data-insert="plot:param3d" title={t("ui.parametric.surface.x.u.v.y.u.v.z.u.v.in.pgfplots", "Parametric surface (x(u, v), y(u, v), z(u, v)), in pgfplots", {}, $locale)} svg={`<svg viewBox="0 0 32 24"><ellipse cx="16" cy="12" rx="12.5" ry="7.5" class="a1"/><path d="M10.5 10.5c3.5 2.2 7.5 2.2 11 0M12 11.4c2.6-1.3 5.4-1.3 8 0M3.6 12.6c1.2 3.2 6.3 5.4 12.4 5.4s11.2-2.2 12.4-5.4M16 14.2v5.3M9.2 13.4l-2 4.2M22.8 13.4l2 4.2"/></svg>`} label={t("ui.parametric", "Parametric", {}, $locale)} />
+        <Tile data-insert="plot:curve3d" title={t("ui.space.curve.x.t.y.t.z.t.in.pgfplots", "Space curve (x(t), y(t), z(t)), in pgfplots", {}, $locale)} svg={`<svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><path d="M8 17c0-3 16-3 16 0s-16 3-16-3 16-6 16-3-16 2-16-3" class="c1"/></svg>`} label={t("ui.space.curve", "Space curve", {}, $locale)} />
+        <Tile data-insert="plot:scatter3d" title={t("ui.points.x.y.z.from.data.in.pgfplots", "Points (x, y, z) from data, in pgfplots", {}, $locale)} svg={`<svg viewBox="0 0 32 24"><path d="M4 16l12 5 12-5M16 21V4"/><g class="dots"><circle cx="9" cy="10" r="1.5"/><circle cx="14" cy="7" r="1.5"/><circle cx="20" cy="12" r="1.5"/><circle cx="24" cy="6" r="1.5"/><circle cx="12" cy="14" r="1.5"/></g></svg>`} label={t("ui.scatter.3d", "Scatter 3D", {}, $locale)} />
+      </TileGrid>
     </div>
-    <div id="fly-figures3d" class="popover flyout" hidden>
+    <div id="fly-figures3d" class="fly-panel">
       <div class="pop-title">{t("ui.3d.figures", "3D figures", {}, $locale)}</div>
-      <div class="pop-grid">
-        <button data-insert="solid" title={t("ui.solid.region.e.over.a.base.d.between.two.surfaces.a.disk.rectangle.polar.curve.o", "Solid region E over a base D between two surfaces: a disk, rectangle, polar curve or cylindrical wedge, and Riemann columns, in plain TikZ", {}, $locale)}><svg viewBox="0 0 32 24"><ellipse cx="16" cy="21" rx="9" ry="2.2" class="a1"/><path d="M8 5v9M24 5v9"/><ellipse cx="16" cy="5" rx="8" ry="2.4"/><path d="M8 14a8 2.4 0 0016 0"/><path d="M8 14a8 2.4 0 0116 0" stroke-dasharray="1.6 1.4"/></svg>{t("ui.solid.region", "Solid region", {}, $locale)}</button>
-        <button data-insert="revolve:disk" title={t("ui.solid.of.revolution.disks.and.washers.about.the.x.axis.shells.about.the.y.axis.c", "Solid of revolution: disks and washers about the x-axis, shells about the y-axis, cut open, with a slice, in plain TikZ", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M2 12h28"/><ellipse cx="7" cy="12" rx="2" ry="4"/><ellipse cx="25" cy="12" rx="3" ry="9" class="a1"/><path d="M7 8c6-1 12-4 18-5M7 16c6 1 12 4 18 5"/></svg>{t("ui.revolution", "Revolution", {}, $locale)}</button>
-        <button data-insert="prim3d:box" title={t("ui.basic.solid.box.cube.cylinder.cone.frustum.hollow.cylinder.sphere.hemisphere.sph", "Basic solid: box, cube, cylinder, cone, frustum, hollow cylinder, sphere, hemisphere, spherical cap, ellipsoid, torus, prism, hexagonal prism, pyramid, tetrahedron, octahedron or spherical wedge (Shape), shaded or as a line drawing, in plain TikZ", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M5 9l9-4 13 3v11l-9 4-13-3z" class="a1"/><path d="M5 9l13 3 9-4M18 12v11"/></svg>{t("ui.solid", "Solid", {}, $locale)}</button>
-      </div>
+      <TileGrid>
+        <Tile data-insert="solid" title={t("ui.solid.region.e.over.a.base.d.between.two.surfaces.a.disk.rectangle.polar.curve.o", "Solid region E over a base D between two surfaces: a disk, rectangle, polar curve or cylindrical wedge, and Riemann columns, in plain TikZ", {}, $locale)} svg={`<svg viewBox="0 0 32 24"><ellipse cx="16" cy="21" rx="9" ry="2.2" class="a1"/><path d="M8 5v9M24 5v9"/><ellipse cx="16" cy="5" rx="8" ry="2.4"/><path d="M8 14a8 2.4 0 0016 0"/><path d="M8 14a8 2.4 0 0116 0" stroke-dasharray="1.6 1.4"/></svg>`} label={t("ui.solid.region", "Solid region", {}, $locale)} />
+        <Tile data-insert="revolve:disk" title={t("ui.solid.of.revolution.disks.and.washers.about.the.x.axis.shells.about.the.y.axis.c", "Solid of revolution: disks and washers about the x-axis, shells about the y-axis, cut open, with a slice, in plain TikZ", {}, $locale)} svg={`<svg viewBox="0 0 32 24"><path d="M2 12h28"/><ellipse cx="7" cy="12" rx="2" ry="4"/><ellipse cx="25" cy="12" rx="3" ry="9" class="a1"/><path d="M7 8c6-1 12-4 18-5M7 16c6 1 12 4 18 5"/></svg>`} label={t("ui.revolution", "Revolution", {}, $locale)} />
+        <Tile data-insert="prim3d:box" title={t("ui.basic.solid.box.cube.cylinder.cone.frustum.hollow.cylinder.sphere.hemisphere.sph", "Basic solid: box, cube, cylinder, cone, frustum, hollow cylinder, sphere, hemisphere, spherical cap, ellipsoid, torus, prism, hexagonal prism, pyramid, tetrahedron, octahedron or spherical wedge (Shape), shaded or as a line drawing, in plain TikZ", {}, $locale)} svg={`<svg viewBox="0 0 32 24"><path d="M5 9l9-4 13 3v11l-9 4-13-3z" class="a1"/><path d="M5 9l13 3 9-4M18 12v11"/></svg>`} label={t("ui.solid", "Solid", {}, $locale)} />
+      </TileGrid>
     </div>
-    <div id="fly-blocks" class="popover flyout" hidden>
-      <div class="pop-title">{t("ui.blocks.experimental", "Blocks (experimental)", {}, $locale)}<span class="pop-warn">{t("ui.some.inputs.might.not.be.rendered.correctly", "Some inputs might not be rendered correctly.", {}, $locale)}</span></div>
-      <div class="pop-grid">
-        <button class="soon" aria-disabled="true" tabindex="-1" title={t("ui.tensor.network.coming.soon", "Tensor network — coming soon", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M2 12h4M12 12h8M26 12h4M9 6V2M23 6V2M9 18v4M23 18v4"/><rect x="5" y="7" width="8" height="10" rx="2"/><rect x="19" y="7" width="8" height="10" rx="2"/></svg>{t("ui.tensor", "Tensor", {}, $locale)}</button>
-        <button class="soon" aria-disabled="true" tabindex="-1" title={t("ui.string.diagram.coming.soon", "String diagram — coming soon", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M9 2v6M23 2v6M16 16v6M9 16c0 3 7 0 7 0"/><rect x="5" y="8" width="22" height="8" rx="1"/></svg>{t("ui.string", "String", {}, $locale)}</button>
-        <button class="soon" aria-disabled="true" tabindex="-1" title={t("ui.braid.and.knot.coming.soon", "Braid and knot — coming soon", {}, $locale)}><svg viewBox="0 0 32 24"><path d="M6 2c0 6 10 6 10 10s-10 4-10 10"/><path d="M16 2c0 4-3 5-4.5 6.5M8.5 15.5C7 17 6 18 6 22"/><path d="M26 2v10c0 4-10 4-10 10M19.5 17.5c2-1.5 6.5-2 6.5-5.5"/></svg>{t("ui.braid", "Braid", {}, $locale)}</button>
-      </div>
+    <div id="fly-blocks" class="fly-panel"></div>
     </div>
 
     <div id="stage">
@@ -316,8 +319,6 @@
         <g id="pageLabels"></g>
         <g id="overlay"></g>
       </svg>
-      <textarea id="inlineEditor" spellcheck="false" placeholder={t("ui.text.math.enter.to.finish.shift.enter.newline", "Text, $math$ — Enter to finish, Shift+Enter newline", {}, $locale)}></textarea>
-      <div id="mlEditor" role="group" aria-label={t("ui.text.and.maths.editor", "Text and maths editor", {}, $locale)}></div>
       <div class="ruler" id="rulerCorner" title={t("ui.tikz.centimetres", "TikZ centimetres", {}, $locale)}>{t("ui.cm", "cm", {}, $locale)}</div>
       <div class="ruler" id="rulerX"><svg></svg></div>
       <div class="ruler" id="rulerY"><svg></svg></div>
@@ -327,19 +328,19 @@
         <span id="gridInfo"><label for="gridVal">{t("ui.grid.variant1", "grid", {}, $locale)}</label><input id="gridVal" type="text" inputmode="decimal" value="0.25" title={t("ui.grid.spacing.in.cm.type.a.value.and.press.enter", "Grid spacing in cm: type a value and press Enter", {}, $locale)} aria-label={t("ui.grid.spacing.cm", "Grid spacing (cm)", {}, $locale)} autocomplete="off" spellcheck="false">{" "}{t("shell.gridUnit", "cm", {}, $locale)}{" · "}<span id="snapInfo">{t("ui.snap.on", "snap on", {}, $locale)}</span></span>
         <span class="grow"></span>
         <div class="zoom pagenav" id="pageNav" hidden>
-          <button id="pagePrev" title={t("ui.previous.page.pgup", "Previous page (PgUp)", {}, $locale)}>‹</button>
+          <Button id="pagePrev" title={t("ui.previous.page.pgup", "Previous page (PgUp)", {}, $locale)}>‹</Button>
           <span id="pageNavVal">{t("ui.page.1.1", "Page 1 / 1", {}, $locale)}</span>
-          <button id="pageNext" title={t("ui.next.page.pgdn", "Next page (PgDn)", {}, $locale)}>›</button>
-          <button id="pageAdd" title={t("ui.insert.a.blank.page.after.this.one", "Insert a blank page after this one", {}, $locale)}>{t("ui.page.variant1", "+ Page", {}, $locale)}</button>
+          <Button id="pageNext" title={t("ui.next.page.pgdn", "Next page (PgDn)", {}, $locale)}>›</Button>
+          <Button id="pageAdd" title={t("ui.insert.a.blank.page.after.this.one", "Insert a blank page after this one", {}, $locale)}>{t("ui.page.variant1", "+ Page", {}, $locale)}</Button>
         </div>
         <span class="gap" aria-hidden="true"></span>
         <div class="zoom">
-          <button id="zoomOut" title={t("ui.zoom.out.ctrl", "Zoom out (Ctrl+-)", {}, $locale)}>−</button>
+          <Button id="zoomOut" title={t("ui.zoom.out.ctrl", "Zoom out (Ctrl+-)", {}, $locale)}>−</Button>
           <input id="zoomVal" type="text" inputmode="decimal" value="100%" title={t("ui.zoom.type.a.percentage.and.press.enter", "Zoom: type a percentage and press Enter", {}, $locale)} aria-label={t("ui.zoom.percentage", "Zoom percentage", {}, $locale)} autocomplete="off" spellcheck="false">
-          <button id="zoomIn" title={t("ui.zoom.in.ctrl", "Zoom in (Ctrl+=)", {}, $locale)}>+</button>
-          <button id="zoomReset" title={t("ui.actual.size.100.ctrl.0", "Actual size, 100% (Ctrl+0)", {}, $locale)}>1:1</button>
-          <button id="zoomFit" title={t("ui.zoom.to.fit.the.whole.drawing", "Zoom to fit the whole drawing", {}, $locale)}>{t("ui.fit", "Fit", {}, $locale)}</button>
-          <button id="zoomFitW" title={t("ui.zoom.to.fit.the.width.from.the.top", "Zoom to fit the width, from the top", {}, $locale)}>{t("ui.fit.width", "Fit Width", {}, $locale)}</button>
+          <Button id="zoomIn" title={t("ui.zoom.in.ctrl", "Zoom in (Ctrl+=)", {}, $locale)}>+</Button>
+          <Button id="zoomReset" title={t("ui.actual.size.100.ctrl.0", "Actual size, 100% (Ctrl+0)", {}, $locale)}>1:1</Button>
+          <Button id="zoomFit" title={t("ui.zoom.to.fit.the.whole.drawing", "Zoom to fit the whole drawing", {}, $locale)}>{t("ui.fit", "Fit", {}, $locale)}</Button>
+          <Button id="zoomFitW" title={t("ui.zoom.to.fit.the.width.from.the.top", "Zoom to fit the width, from the top", {}, $locale)}>{t("ui.fit.width", "Fit Width", {}, $locale)}</Button>
         </div>
       </div>
       <div id="hint"></div>
@@ -365,16 +366,16 @@
 
     <div id="rightCol">
     <section id="propsWin" aria-label={t("ui.properties", "Properties", {}, $locale)}>
-      <div id="propsHead"><button id="propsToggle" class="icon flat" type="button" aria-controls="props" aria-expanded="true" title={t("ui.collapse.panel", "Collapse panel", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M6 12l4-4 4 4"/></svg></button></div>
+      <div id="propsHead"><IconButton id="propsToggle" aria-controls="props" aria-expanded="true" title={t("ui.collapse.panel", "Collapse panel", {}, $locale)} icon="chevronUp" /></div>
       <aside id="props"></aside>
     </section>
     <section id="layersWin" aria-label={t("ui.layers", "Layers", {}, $locale)}>
-      <div id="layersHead"><h3>{t("ui.layers.variant1", "Layers ", {}, $locale)}<small id="layersCount"></small></h3><button id="layersToggle" class="icon flat" type="button" aria-controls="layers" aria-expanded="true" title={t("ui.collapse.panel", "Collapse panel", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M6 8l4 4 4-4"/></svg></button></div>
-      <div id="layers" role="listbox" aria-label={t("ui.layers.top.first", "Layers, top first", {}, $locale)} aria-multiselectable="true"></div>
+      <div id="layersHead"><h3>{t("ui.layers.variant1", "Layers ", {}, $locale)}<small id="layersCount"></small></h3><IconButton id="layersToggle" aria-controls="layers" aria-expanded="true" title={t("ui.collapse.panel", "Collapse panel", {}, $locale)} icon="chevronDown" /></div>
+      <ul id="layers" role="listbox" aria-label={t("ui.layers.top.first", "Layers, top first", {}, $locale)} aria-multiselectable="true"></ul>
       <div id="layersFoot">
-        <button class="icon flat" data-la="newgroup" title={t("ui.group.the.selection.ctrl.g", "Group the selection (Ctrl+G)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M2.5 5.5v10h15v-8H9.5L8 5.5z"/><path d="M10 9.5v4M8 11.5h4"/></svg></button>
-        <button class="icon flat" data-la="ungroup" title={t("ui.ungroup.ctrl.shift.g", "Ungroup (Ctrl+Shift+G)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M3 3h7v6H3zM10 11h7v6h-7z"/></svg></button>
-        <button class="icon flat danger" data-la="del" title={t("ui.delete.the.selection.del", "Delete the selection (Del)", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/></svg></button>
+        <IconButton data-la="newgroup" title={t("ui.group.the.selection.ctrl.g", "Group the selection (Ctrl+G)", {}, $locale)} icon="newGroup" />
+        <IconButton data-la="ungroup" title={t("ui.ungroup.ctrl.shift.g", "Ungroup (Ctrl+Shift+G)", {}, $locale)} icon="ungroup" />
+        <IconButton data-la="del" title={t("ui.delete.the.selection.del", "Delete the selection (Del)", {}, $locale)} icon="delete" danger />
       </div>
     </section>
     </div>
@@ -383,36 +384,33 @@
     <section id="tableview" aria-label={t("ui.table", "Table", {}, $locale)} hidden></section>
   </div>
 
-  <div id="modal" hidden>
+  <div id="modal" class="fades" hidden>
     <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="tikzTitle">
       <div class="modal-head">
         <strong id="tikzTitle">{t("ui.tikz.code", "TikZ Code", {}, $locale)}</strong>
-        <select id="tikzScope" title={t("ui.what.the.code.holds", "What the code holds", {}, $locale)} aria-label={t("ui.code.for", "Code for", {}, $locale)}><option value="pic">{t("ui.tikz.picture", "TikZ picture", {}, $locale)}</option><option value="standalone">{t("ui.standalone.document", "Standalone document", {}, $locale)}</option><option value="doc">{t("ui.whole.document", "Whole document", {}, $locale)}</option></select>
-        <label id="tikzSelWrap"><input type="checkbox" id="tikzSelOnly">{t("ui.selection.only.variant1", " Selection only", {}, $locale)}</label>
-        <div class="spacer"></div>
-        <button id="tikzDownload" title={t("ui.the.latex.alone", "The LaTeX alone", {}, $locale)}>{t("ui.download.tex", "Download .tex", {}, $locale)}</button>
-        <span id="tikzZipWrap" class="split-btn" hidden><button id="tikzZip">{t("ui.download.zip", "Download .zip", {}, $locale)}</button><button id="tikzZipMore" title={t("ui.more.ways.to.download.the.zip", "More ways to download the .zip", {}, $locale)} aria-label={t("ui.more.ways.to.download.the.zip", "More ways to download the .zip", {}, $locale)} aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 20 20"><path d="M6 8l4 4 4-4"/></svg></button></span>
-        <button id="tikzCopy" class="primary">{t("ui.copy", "Copy", {}, $locale)}</button>
-        <button id="modalClose" class="icon flat" title={t("ui.close", "Close", {}, $locale)} aria-label={t("ui.close", "Close", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button>
+        <Select id="tikzScope" title={t("ui.what.the.code.holds", "What the code holds", {}, $locale)} aria-label={t("ui.code.for", "Code for", {}, $locale)} options={[{ value: 'pic', label: t("ui.tikz.picture", "TikZ picture", {}, $locale) }, { value: 'standalone', label: t("ui.standalone.document", "Standalone document", {}, $locale) }, { value: 'doc', label: t("ui.whole.document", "Whole document", {}, $locale) }]} />
+        <span id="tikzSelWrap"><Checkbox id="tikzSelOnly">{t("ui.selection.only.variant1", " Selection only", {}, $locale).trim()}</Checkbox></span>
+        <Spacer />
+        <Button id="tikzDownload" title={t("ui.the.latex.alone", "The LaTeX alone", {}, $locale)}>{t("ui.download.tex", "Download .tex", {}, $locale)}</Button>
+        <SplitButton id="tikzZipWrap" mainId="tikzZip" moreId="tikzZipMore" hidden label={t("ui.download.zip", "Download .zip", {}, $locale)} moreTitle={t("ui.more.ways.to.download.the.zip", "More ways to download the .zip", {}, $locale)} />
+        <Button id="tikzCopy" variant="primary">{t("ui.copy", "Copy", {}, $locale)}</Button>
+        <IconButton id="modalClose" icon="close" title={t("ui.close", "Close", {}, $locale)} />
       </div>
       <div id="tikzOut" class="codeview" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label={t("ui.latex.code", "LaTeX code", {}, $locale)}></div>
       <div id="tikzLint" class="modal-foot report"></div>
     </div>
   </div>
 
-  <div id="importModal" class="modal" hidden>
+  <div id="importModal" class="modal fades" hidden>
     <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="impTitle">
       <div class="modal-head">
         <strong id="impTitle">{t("ui.import.latex.or.tikz", "Import LaTeX or TikZ", {}, $locale)}</strong>
-        <div class="seg" id="impHow" role="group" aria-label={t("ui.what.tikz.that.can.t.be.read.exactly.becomes", "What TikZ that can't be read exactly becomes", {}, $locale)}>
-          <button data-how="code" class="toggle on" title={t("ui.keep.it.as.written.exported.exactly.as.it.is.drawn.as.an.approximation.and.group", "Keep it as written: exported exactly as it is, drawn as an approximation, and grouped so it moves as one", {}, $locale)}>{t("ui.as.written", "As Written", {}, $locale)}</button>
-          <button data-how="shapes" class="toggle" title={t("ui.turn.it.into.ordinary.shapes.you.can.edit.drawn.and.exported.from.the.shapes.so.", "Turn it into ordinary shapes you can edit: drawn and exported from the shapes, so some details may change", {}, $locale)}>{t("ui.editable.shapes", "Editable Shapes", {}, $locale)}</button>
-        </div>
-        <div class="spacer"></div>
-        <button id="impFile">{t("ui.choose.file", "Choose File…", {}, $locale)}</button>
-        <button id="impNew" title={t("ui.create.a.new.document.from.the.code", "Create a new document from the code", {}, $locale)}>{t("ui.import.as.new.document", "Import as New Document", {}, $locale)}</button>
-        <button id="impInsert" class="primary" title={t("ui.add.the.shapes.to.the.current.diagram.in.the.middle.of.the.view", "Add the shapes to the current diagram, in the middle of the view", {}, $locale)}>{t("ui.insert.into.diagram", "Insert into Diagram", {}, $locale)}</button>
-        <button id="impClose" class="icon flat" title={t("ui.close", "Close", {}, $locale)} aria-label={t("ui.close", "Close", {}, $locale)}><svg viewBox="0 0 20 20"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button>
+        <Segmented id="impHow" label={t("ui.what.tikz.that.can.t.be.read.exactly.becomes", "What TikZ that can't be read exactly becomes", {}, $locale)} options={[{ label: t("ui.as.written", "As Written", {}, $locale), title: t("ui.keep.it.as.written.exported.exactly.as.it.is.drawn.as.an.approximation.and.group", "Keep it as written: exported exactly as it is, drawn as an approximation, and grouped so it moves as one", {}, $locale), on: true, attrs: { 'data-how': 'code' } }, { label: t("ui.editable.shapes", "Editable Shapes", {}, $locale), title: t("ui.turn.it.into.ordinary.shapes.you.can.edit.drawn.and.exported.from.the.shapes.so.", "Turn it into ordinary shapes you can edit: drawn and exported from the shapes, so some details may change", {}, $locale), attrs: { 'data-how': 'shapes' } }]} />
+        <Spacer />
+        <Button id="impFile">{t("ui.choose.file", "Choose File…", {}, $locale)}</Button>
+        <Button id="impNew" title={t("ui.create.a.new.document.from.the.code", "Create a new document from the code", {}, $locale)}>{t("ui.import.as.new.document", "Import as New Document", {}, $locale)}</Button>
+        <Button id="impInsert" variant="primary" title={t("ui.add.the.shapes.to.the.current.diagram.in.the.middle.of.the.view", "Add the shapes to the current diagram, in the middle of the view", {}, $locale)}>{t("ui.insert.into.diagram", "Insert into Diagram", {}, $locale)}</Button>
+        <IconButton id="impClose" icon="close" title={t("ui.close", "Close", {}, $locale)} />
       </div>
       <div class="imp-note" role="note">{t("imp.support.note", "Supported sections become shapes. Other sections stay as code; unresolved sections have no preview. Editable Shapes may omit unsupported details.", {}, $locale)}</div>
       <textarea id="impText" spellcheck="false" placeholder={t("ui.paste.a.tikzpicture.a.bare.list.of.draw.node.commands.or.a.whole.latex.document.", "Paste a tikzpicture, a bare list of \\draw / \\node commands, or a whole LaTeX document.\nSupported: \\draw \\fill \\filldraw \\shade \\node \\coordinate \\definecolor, -- / .. controls .. / rectangle / circle / ellipse / arc / cycle, arrows, colours, line widths, dashes, opacity, zigzag springs.\nA full document is split into text and diagram blocks.", {}, $locale)}></textarea>

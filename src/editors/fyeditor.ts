@@ -8,6 +8,9 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { t as uiText, message, caption, onLocale } from '../i18n';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Feynman editor: the overlay that opens on a Feynman block. A palette of vertices and propagators; the
 // diagram drawn by the canvas renderer on a centimetre grid, where vertices are placed and moved and
 // propagators are dragged from vertex to vertex; the selected vertex's or line's properties; and beside
@@ -17,7 +20,6 @@ import { patchSvg } from '../ui/svg-patch';
   const F = TD.feyn;
   const { esc, r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const PAPER = '#fffdf8', INK = '#1c1b19';
   const PX = TD.PX_PER_CM, GRID = 0.25;
 
@@ -117,14 +119,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.id = 'fyModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, FyeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, FyeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.fy-svg', root), stage = $('.cz-stage', root), list = $('.fy-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.fy-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search', 'Search'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'fy-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: { v: name } | { e: index } | null, arm, prop, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
@@ -207,34 +205,16 @@ import { patchSvg } from '../ui/svg-patch';
   }
 
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [cat, items] of PAL) {
-      // search the shown name and the English one
-      const title = caption(cat);
-      const hits = (items as any).filter(([k, label]: any) => !q || `${caption(label)} ${label.fallback} ${k.slice(2)} ${title} ${cat.fallback}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => {
-        const name = caption(label);
-        const on = E && (E.arm === k || (k === `e:${E.prop}`));
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.feynMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`;
-      }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list, 64, 40, 1.6);
+    pal.render(PAL.map(([cat, items]: any) => ({
+      id: cat.fallback, title: caption(cat),
+      // the shown name, the English one and the category's both find it
+      items: items.map(([k, label, , key]: any) => ({
+        id: k, label: caption(label), key, alt: label.fallback, keywords: `${k.slice(2)} ${caption(cat)} ${cat.fallback}`,
+        svg: fitMini(TD.feynMini(ITEM[k].mini, 1e3), 64, 40, 1.6), on: !!E && k === `e:${E.prop}`,
+      })),
+    })), { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   // click: a vertex kind restyles the selected vertex or is armed for placing; a propagator kind
   // restyles the selected line and is the kind new lines get. Drag a vertex kind onto the canvas.
   let palDrag: any = null;
@@ -274,7 +254,7 @@ import { patchSvg } from '../ui/svg-patch';
     buildPalette(); draw();
     setTip(E.arm ? uiText('editor.fy.armTip', '{name}: click the grid to place it. Esc when done.', { name: caption(ITEM[k].name) }) : '');
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -490,40 +470,26 @@ import { patchSvg } from '../ui/svg-patch';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt)) { E.hover = null; E.knobAt = null; draw(); } });
 
   // right-click: the vertex's or line's actions
-  const MI: Record<string, any> = {
-    label: '<path d="M4 15l2-5 6-6 3 3-6 6zM11 5l3 3"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    rev: '<path d="M3 7h12l-3-3M17 13H5l3 3"/>',
-    left: '<path d="M3 15C5 6 15 6 17 15"/>',
-    right: '<path d="M3 5c2 9 12 9 14 0"/>',
-    straight: '<path d="M3 10h14"/>',
-  };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/^(vdel|edel)$/.test(act) ? ' danger' : ''}" data-fm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { label: 'edit', del: 'delete', rev: 'reverse', left: 'bendLeft', right: 'bendRight', straight: 'straight' };
+  const mItem = (act: string, label: string, icon: string, key?: string) => menuRow(act, label, MI[icon], key, { danger: /^(vdel|edel)$/.test(act) });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const vn = vertexAt(e), ei = vn == null ? edgeAt(e) : null;
-    if (vn != null) { E.sel = { v: vn }; menu.innerHTML = mItem('label', uiText('editor.fy.editLabel', 'Edit Label'), 'label', '↩') + '<hr>' + mItem('vdel', uiText('editor.fy.deleteVertex', 'Delete Vertex'), 'del', '⌫'); }
+    if (vn != null) { E.sel = { v: vn }; menuRows = [mItem('label', uiText('editor.fy.editLabel', 'Edit Label'), 'label', '↩'), '-', mItem('vdel', uiText('editor.fy.deleteVertex', 'Delete Vertex'), 'del', '⌫')]; }
     else if (ei != null) {
       E.sel = { e: ei };
-      menu.innerHTML = mItem('label', uiText('editor.fy.editLabel', 'Edit Label'), 'label', '↩') + mItem('rev', uiText('editor.fy.reverse', 'Reverse Direction'), 'rev') + '<hr>' +
-        mItem('bleft', uiText('editor.fy.bendLeft', 'Bend Left'), 'left') + mItem('bright', uiText('editor.fy.bendRight', 'Bend Right'), 'right') + mItem('bnone', uiText('editor.fy.straight', 'Straight'), 'straight') + '<hr>' + mItem('edel', uiText('editor.fy.deleteLine', 'Delete Line'), 'del', '⌫');
+      menuRows = [mItem('label', uiText('editor.fy.editLabel', 'Edit Label'), 'label', '↩'), mItem('rev', uiText('editor.fy.reverse', 'Reverse Direction'), 'rev'), '-', mItem('bleft', uiText('editor.fy.bendLeft', 'Bend Left'), 'left'), mItem('bright', uiText('editor.fy.bendRight', 'Bend Right'), 'right'), mItem('bnone', uiText('editor.fy.straight', 'Straight'), 'straight'), '-', mItem('edel', uiText('editor.fy.deleteLine', 'Delete Line'), 'del', '⌫')];
     } else { closeMenu(); return; }
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-fm]');
-    if (!b) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.fm);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- label editor
   // A floating box under the vertex or line (TD.input.popup); the whole edit is one undo step.
@@ -669,7 +635,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = F.layout({ src: c }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: c }).warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -678,12 +644,13 @@ import { patchSvg } from '../ui/svg-patch';
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps();
-    codeMsg.innerHTML = F.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -696,7 +663,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -734,8 +701,7 @@ import { patchSvg } from '../ui/svg-patch';
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    setTip(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
@@ -763,7 +729,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { M, sel: null, arm: null, prop: 'fermion', view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();

@@ -1,30 +1,24 @@
 import { runtime as TD } from '../../runtime';
+import { macKeys } from '../kit/keys';
+import { tipLayer } from '../kit/tip-layer.svelte';
 // The app's own tooltips, in place of the browser's.
 // Every title="…" in the page (static, added later, or changed by code) moves to data-tip, so the
 // system tooltip never shows; hovering (or keyboard focus) shows a small ink label instead.
-// A trailing "(shortcut)" in the text is set apart as a key hint: "Rotate 90° (R)".
+// The tip is the kit's Tooltip (src/ui/kit/Tooltip.svelte), which sets a trailing "(shortcut)" apart: "Rotate 90° (R)".
 // Icon-only controls get the text as their aria-label, so screen readers keep the name.
-(function () {
+// A name cut short by an ellipsis (a file, a layer, a palette item, a tab: anything with text-overflow: ellipsis, or
+// clamped to its lines) shows in full the same way when hovered, over the control's own tip if it has one.
+let installed = false;
+/** Start the app's tooltips (once): the app at boot, and the kit's buttons as they mount. */
+export function installTooltips() {
+  if (installed || typeof document === 'undefined') return;
+  installed = true;
   'use strict';
   const DELAY = 800, WARM = 400; // ms before the first tip; right after one hides, the next shows at once
 
-  let tip: any = null, cur: any = null, timer = 0, hidAt = 0, suppressed: any = null;
+  let cur: any = null, timer = 0, hidAt = 0, suppressed: any = null;
 
-  // ---------- shortcuts as the platform writes them ----------
-  // Titles say "Ctrl+Shift+Z"; on a Mac that is ⇧⌘Z (glyphs in the order ⌃⌥⇧⌘, Apple's keyboard
-  // guidelines), and "Ctrl+scroll" is ⌘-scroll. Shift on its own ("Shift+drag") stays in words.
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
-  const GLYPH: Record<string, any> = { Del: '⌫', Delete: '⌫', Backspace: '⌫', Enter: '↩', Return: '↩', Esc: '⎋', Tab: '⇥' };
-  const WORD = /^(scroll|wheel|drag|click)$/i;
-  function macKeys(text: any) {
-    if (!isMac || !text) return text;
-    return text.replace(/\b((?:(?:Ctrl|Cmd|Shift|Alt)\+)+)([^\s(),:;+]+)/g, (all: any, mods: any, key: any) => {
-      const m = mods.split('+');
-      if (!m.some((x: any) => x === 'Ctrl' || x === 'Cmd' || x === 'Alt')) return all;
-      const g = (m.includes('Alt') ? '⌥' : '') + (m.includes('Shift') ? '⇧' : '') + (m.includes('Ctrl') || m.includes('Cmd') ? '⌘' : '');
-      return WORD.test(key) ? `${g}-${key.toLowerCase() === 'wheel' ? 'scroll' : key}` : g + (GLYPH[key] || key);
-    });
-  }
+  // shortcuts as the platform writes them: "Ctrl+Shift+Z" is ⇧⌘Z on a Mac (src/ui/kit/keys.ts)
   TD.macKeys = macKeys;
 
   // ---------- title → data-tip ----------
@@ -41,57 +35,60 @@ import { runtime as TD } from '../../runtime';
     if (el === cur) show(el, true);
   }
 
-  // ---------- the tip ----------
-  function node() {
-    if (!tip) { tip = document.createElement('div'); tip.className = 'td-tip'; tip.setAttribute('role', 'tooltip'); tip.hidden = true; document.body.appendChild(tip); }
-    return tip;
-  }
-  const KEY = /\s\(((?:⌘|⇧|⌥|⌃|Ctrl\+|Shift\+|Alt\+|Cmd\+)*[^\s()]{1,6})\)$/; // "… (⌘Z)", "… (Ctrl+Shift+Z)", "… (R)"
-  function fill(t: any, text: any) {
-    const key = (s: any) => { const k = document.createElement('kbd'); k.textContent = s; return k; };
-    // "Wire (W): drag between points" → "Wire  W" over a muted second line
-    const lead = /^([^()]{1,40}?) \(((?:⌘|⇧|⌥|⌃|Ctrl\+|Shift\+|Alt\+|Cmd\+)*[^\s()]{1,6})\)\s*[:—–-]\s*(.+)$/.exec(text);
-    if (lead) {
-      t.textContent = lead[1]; t.appendChild(key(lead[2]));
-      const sub = document.createElement('div'); sub.className = 'td-tip-sub'; sub.textContent = lead[3]; t.appendChild(sub);
-      return;
+  // ---------- names cut short ----------
+  const clipped = (el: any) => {
+    if (!(el instanceof HTMLElement) || el.isContentEditable || el.matches(':focus, select, textarea')) return false;
+    const cs = getComputedStyle(el);
+    if (cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth) return true;
+    return cs.webkitLineClamp !== 'none' && !!cs.webkitLineClamp && el.scrollHeight > el.clientHeight + 1;
+  };
+  const fullText = (el: any) => (el instanceof HTMLInputElement ? el.value : el.textContent || '').replace(/\s+/g, ' ').trim();
+  // the name cut short under the pointer: the hovered element or one round it, or the one cut-short name in the row
+  // it is in (the pointer on a row's icon or padding): rows are looked at up to 3 levels out and no taller than 48px,
+  // and not past the control with a tip
+  const nearby = (el: Element) => [...el.children].flatMap((c) => [c, ...c.children]).slice(0, 40).filter(clipped);
+  function clippedAt(start: any, tipEl: any) {
+    for (let el = start, n = 0; el instanceof HTMLElement && el !== document.body && n < 6; el = el.parentElement, n++) {
+      if (clipped(el)) return el;
+      if (n < 3 && el.childElementCount <= 12 && el.getBoundingClientRect().height <= 48) {
+        const inside = nearby(el);
+        if (inside.length === 1) return inside[0];
+        if (inside.length > 1) return null; // several: which one is meant isn't known
+      }
+      if (el === tipEl) break;
     }
-    const m = KEY.exec(text);
-    t.textContent = m ? text.slice(0, m.index) : text;
-    if (m) t.appendChild(key(m[1]));
+    return null;
   }
-  function place(el: any) {
-    const t = node(), r = el.getBoundingClientRect(), W = innerWidth, H = innerHeight;
-    const w = t.offsetWidth, h = t.offsetHeight, gap = 6;
-    let y = r.bottom + gap;
-    if (y + h > H - 8) y = r.top - gap - h; // no room below: above
-    const x = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, W - w - 8));
-    t.style.left = Math.round(x) + 'px'; t.style.top = Math.round(Math.max(8, y)) + 'px';
+  // what the pointer is over: a name cut short, or a control with a tip
+  function pick(start: any) {
+    if (!start || !start.closest) return null;
+    const tipEl = start.closest('[data-tip]');
+    return clippedAt(start, tipEl) || tipEl;
   }
+
+  // ---------- the tip: the kit's Tooltip, one floating copy (src/ui/kit/tip-layer.svelte.ts) ----------
   function show(el: any, now?: any) {
     clearTimeout(timer);
-    const text = el.dataset.tip;
-    if (!text || !el.isConnected) { hide(); return; }
+    const tip = el.closest('[data-tip]')?.dataset.tip, full = clipped(el) ? fullText(el) : '';
+    // a cut-short name in full, its control's tip under it unless that already says it
+    const name = full && !(tip && tip.includes(full)) ? full : '';
+    if (!(name || tip) || !el.isConnected) { hide(); return; }
     const go = () => {
       if (cur !== el || !el.isConnected || el.matches('.open, [aria-expanded=true]')) return; // its menu is showing
-      const t = node();
-      fill(t, text);
-      t.hidden = false;
-      place(el);
-      t.classList.add('on');
+      tipLayer().show(name ? tip || '' : tip, el.getBoundingClientRect(), name || undefined);
     };
     if (now || Date.now() - hidAt < WARM) go(); else timer = setTimeout(go, DELAY);
   }
   function hide() {
     clearTimeout(timer);
-    if (tip && !tip.hidden) { tip.hidden = true; tip.classList.remove('on'); hidAt = Date.now(); }
+    if (tipLayer().hide()) hidAt = Date.now();
     cur = null;
   }
   const target = (e: any) => (e.target && e.target.closest ? e.target.closest('[data-tip]') : null);
 
   document.addEventListener('pointerover', (e) => {
     if (e.pointerType === 'touch') return;
-    const el = target(e);
+    const el = pick(e.target);
     if (el === cur) return;
     if (!el) { if (cur) hide(); return; }
     if (el === suppressed) return;
@@ -129,4 +126,7 @@ import { runtime as TD } from '../../runtime';
   sweep(document.documentElement);
 
   TD.tooltip = { hide };
-})();
+}
+// starts on import, as the app has always loaded it (src/main.ts keeps the order); kit components call it again,
+// harmlessly (and prerendering the shell, outside a browser, loads it without starting it)
+if (typeof document !== 'undefined') installTooltips();

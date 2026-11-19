@@ -72,7 +72,7 @@ watched development output. Wrangler watches `src/` and `public/`.
 
 ## UI preservation brief
 
-Retain the drafting-table workflow: paper/sheet/ink/graphite tokens, Inter Display,
+Retain the drafting-table workflow: paper/sheet/ink/graphite tokens, Atkinson Hyperlegible Next,
 existing density, 28px controls, 280px property window, icons, labels, order, focus,
 keyboard paths and animations. Components introduce no design CSS. Generated SVG/math
 is still rendered by the existing engines; ordinary form content uses component markup.

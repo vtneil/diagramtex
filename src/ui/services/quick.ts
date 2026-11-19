@@ -1,9 +1,16 @@
 import { previewFadeFinished } from '../../platform/preview-fade';
+import { themeField } from './mathlive-theme';
 import { runtime as TD } from '../../runtime';
 import { t, onLocale, locale } from '../../i18n';
 import { blockCaption } from '../../i18n/shapes';
 import { get } from 'svelte/store';
 import type { EditorMemo } from '../../core/editor-session';
+import { openPopover, type PopoverHandle } from '../kit/open-popover';
+import { renderView, destroyView } from '../render-view.svelte';
+import ExportPanel, { type ExportPanelModel } from '../ExportPanel.svelte';
+import QuickList, { type QuickListModel } from '../QuickList.svelte';
+import QuickFormula, { type QuickFormulaModel } from '../QuickFormula.svelte';
+import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
 // Quick: one formula, typed as LaTeX or edited in MathLive, copied or downloaded as a picture (PNG or SVG).
 // It is not a file: the formula and its options are kept in this browser, and the file that was open stays
 // open underneath. The picture is the app's own export of a text box holding the formula, so it looks
@@ -43,10 +50,6 @@ import type { EditorMemo } from '../../core/editor-session';
   const tex = () => opts.tex.replace(/\s*\n\s*/g, ' ').trim();
   const shape = () => ({ type: 'text', x: 0, y: 0, text: `$$${tex()}$$`, tw: 0, size: opts.size, font: 'default', bold: false, italic: false, color: '#000000', opacity: 1 });
 
-  const seg = (name: any, label: string, list: any, cur: any) => `<div class="seg qk-seg" role="radiogroup" aria-label="${esc(label)}">${list.map(([k, l]: any) =>
-    `<button type="button" role="radio" data-${name.toLowerCase()}="${k}" aria-checked="${k === cur}" class="${k === cur ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
-  const DL = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/></svg>';
-
   // ---- what Quick shows: the formula, or a block's drawing ----
   const BKEY = 'diagramtex.quick.blocks', HISTORY = 24;
   // name: the user's, or none (the list shows when it was last changed); memo: how its editor was left, without the
@@ -83,28 +86,29 @@ import type { EditorMemo } from '../../core/editor-session';
   }
   const blockName = (type: string) => blockCaption(type, 'label', TD.blocks.get(type)?.menu.label || type);
   const FORMULA_IC = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 11h2.5l2.5 5.5 4-13h6"/><path d="M12.5 9l4 5M16.5 9l-4 5"/></svg>';
-  const PLUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>';
-  const DEL = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 6l8 8M14 6l-8 8"/></svg>';
   // a draft's mark: outlined, filled for the one open
   const DOT = '<svg class="qk-dot" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/></svg>';
-  const EXPORT_IC = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M9 4H4v12h12v-5"/><path d="M10 10l6.5-6.5M11.5 3.5h5v5"/></svg>';
+
+  let renamingDraft: string | null = null; // the draft whose name is a field (QuickList)
   function renderList() {
     if (!list) return;
     const top = list.scrollTop;
-    let html = `<li class="qk-nav${store.view === 'formula' ? ' active' : ''}" data-view="formula" tabindex="0" role="button">${FORMULA_IC}<span class="nm">${esc(t('quick.formula', 'Formula'))}</span></li>`;
     const blocks = dockBlocks();
-    if (blocks.length) html += `<li class="qk-head" aria-hidden="true">${esc(t('quick.blocks', 'Blocks'))}</li>`;
-    // a block row is a folder of its drafts: the open block's row heads them, unfilled; the open draft is the filled row
-    for (const [type, def] of blocks) {
-      const on = store.view === type, name = blockCaption(type, 'label', def.menu.label), all = store.items[type] || [];
-      html += `<li class="qk-nav qk-block${on ? ' open' : ''}" data-view="${esc(type)}" tabindex="0" role="button"${on ? ' aria-expanded="true"' : ''} title="${esc(blockCaption(type, 'title', def.menu.title))}"><span class="qk-ic">${def.menu.icon}</span><span class="nm">${esc(name)}</span>${all.length ? `<span class="qk-n" aria-label="${esc(t('quick.draftCount', '{n} drafts', { n: all.length }))}">${all.length}</span>` : ''}</li>`;
-      if (!on) continue;
-      const cur = current(type)?.id;
-      html += `<li class="qk-hist qk-new" data-new="${esc(type)}" tabindex="0" role="button" title="${esc(t('quick.newTip', 'Start a new {block}; the one open now stays in the list', { block: name }))}">${PLUS}<span class="nm">${esc(t('quick.new', 'New'))}</span></li>`;
-      const nm = names(all);
-      all.forEach((d, i) => html += `<li class="qk-hist${d.id === cur ? ' active' : ''}" data-hist="${esc(d.id)}" tabindex="0" role="button"${d.id === cur ? ' aria-current="true"' : ''} title="${esc(t('quick.changed', 'Changed {time}', { time: when(d.t, true) }))}">${DOT}<span class="nm">${esc(nm[i])}</span><button type="button" class="del" data-del="${esc(d.id)}" title="${esc(t('quick.delete', 'Delete this drawing'))}" aria-label="${esc(t('quick.delete', 'Delete this drawing'))}">${DEL}</button></li>`);
-    }
-    list.innerHTML = html;
+    renderView(list, QuickList, {
+      formula: { label: t('quick.formula', 'Formula'), svg: FORMULA_IC, active: store.view === 'formula' },
+      head: blocks.length ? t('quick.blocks', 'Blocks') : null,
+      // a block row is a folder of its drafts: the open block's row heads them, unfilled; the open draft is the filled row
+      blocks: blocks.map(([type, def]) => {
+        const on = store.view === type, name = blockCaption(type, 'label', def.menu.label), all = store.items[type] || [], cur = on ? current(type)?.id : undefined, nm = on ? names(all) : [];
+        return { type, name, title: blockCaption(type, 'title', def.menu.title), svg: def.menu.icon, open: on, count: all.length, countLabel: t('quick.draftCount', '{n} drafts', { n: all.length }),
+          drafts: on ? { newTitle: t('quick.newTip', 'Start a new {block}; the one open now stays in the list', { block: name }), newLabel: t('quick.new', 'New'),
+            rows: all.map((d, i) => ({ id: d.id, name: nm[i], value: d.name || '', active: d.id === cur, title: t('quick.changed', 'Changed {time}', { time: when(d.t, true) }) })) } : undefined };
+      }),
+      icons: { dot: DOT }, deleteLabel: t('quick.delete', 'Delete this drawing'), nameLabel: t('quick.draftName', 'Draft name'),
+      renaming: renamingDraft,
+      rename: (id, v) => { const d = (store.items[store.view] || []).find((x) => x.id === id); if (d) { if (v) d.name = v; else delete d.name; saveStore(); } },
+      renameEnd: (id) => { renamingDraft = null; renderList(); list?.querySelector<HTMLElement>(`li[data-hist="${CSS.escape(id)}"]`)?.focus({ preventScroll: true }); },
+    } satisfies QuickListModel);
     list.scrollTop = top;
   }
   // the block view: the embedded editor, then the output bar
@@ -117,16 +121,28 @@ import type { EditorMemo } from '../../core/editor-session';
     host!.querySelectorAll('.qk-dock .qk-bar, .qk-dock .qk-push').forEach((x) => x.remove());
     if (docked) { const type = docked; docked = null; TD.blocks.undock(type); }
   }
+  // the block view (src/ui/QuickBlock.svelte): the open draft's editor docked, or a way to start one
+  let blockState: Pick<QuickBlockModel, 'none' | 'unavailable'> = {};
+  function blockModel(): QuickBlockModel {
+    const [place, placeTip] = placeCaption();
+    return { ...blockState, copied, copiedLabel: t('ui.copied', 'Copied'),
+      bar: { place, placeTip, exportLabel: t('ui.export', 'Export'), exportTip: t('quick.exportTip', 'Copy or download the drawing as a picture (PNG or SVG)'),
+        copyTikz: t('quick.copyTikz', 'Copy TikZ'), copyTikzTip: t('quick.copyTikzTip', 'Copy the drawing as TikZ code') } };
+  }
+  const renderBlock = () => renderView(host, QuickBlock, blockModel());
   function buildBlock() {
     const type = store.view, d = current(type);
     host!.classList.add('qk-blocks');
+    destroyView(host); // the bar may have moved into the editor that was docked: start afresh
     if (!d) { // no drafts: nothing is made until asked for
       const name = blockName(type);
-      host!.innerHTML = `<div class="qk-blk qk-none"><span class="qk-none-ic" aria-hidden="true">${TD.blocks.get(type)?.menu.icon || ''}</span><p>${esc(t('quick.noDrafts', 'No {block} drafts yet', { block: name }))}</p><button type="button" class="primary" data-new-draft>${esc(t('quick.ctxNew', 'New {block}', { block: name }))}</button></div>`;
+      blockState = { none: { icon: TD.blocks.get(type)?.menu.icon || '', text: t('quick.noDrafts', 'No {block} drafts yet', { block: name }), newLabel: t('quick.ctxNew', 'New {block}', { block: name }) } };
+      renderBlock();
       saveStore();
       return;
     }
-    host!.innerHTML = `<div class="qk-blk"><div class="qk-dock"></div>${blockBar()}</div>`;
+    blockState = {};
+    renderBlock();
     const dock = host!.querySelector('.qk-dock') as HTMLElement;
     docked = type;
     // the full memo while the page is open; after a reload, the stored one (no undo history)
@@ -136,7 +152,7 @@ import type { EditorMemo } from '../../core/editor-session';
     // on the right of the editor's own tools: one bar, not two. A stretching gap before it pushes it right while it
     // fits; when it wraps, the gap stays behind on the first line and the bar starts at the left
     if (head && bar) head.append(Object.assign(document.createElement('span'), { className: 'qk-push' }), bar);
-    if (!ok) { docked = null; dock.innerHTML = `<div class="qk-loading">${esc(t('quick.blockUnavailable', 'This block can’t be edited here right now'))}</div>`; }
+    if (!ok) { docked = null; blockState = { unavailable: t('quick.blockUnavailable', 'This block can’t be edited here right now') }; renderBlock(); }
     saveStore();
   }
   // Add to …: named after the view the open file was left in
@@ -148,68 +164,52 @@ import type { EditorMemo } from '../../core/editor-session';
     if (m === 'board') return [t('quick.addToBoard', 'Add to Whiteboard'), tip];
     return [t('quick.addToDiagram', 'Add to Diagram'), tip];
   }
-  // one bar: a status line, then Add to …, Export (a menu: copy or download a picture) and Copy TikZ, the main action
-  function blockBar() {
-    const [place, placeTip] = placeCaption();
-    return `<div class="qk-bar" data-outside>
-        <span class="qk-msg" role="status"></span>
-        <div class="qk-acts">
-          <button type="button" data-place title="${esc(placeTip)}">${esc(place)}</button>
-          <button type="button" class="qk-exp" data-qexp aria-haspopup="dialog" aria-expanded="false" title="${esc(t('quick.exportTip', 'Copy or download the drawing as a picture (PNG or SVG)'))}">${EXPORT_IC}${esc(t('ui.export', 'Export'))}</button>
-          <button type="button" class="primary" data-q="tikz" title="${esc(t('quick.copyTikzTip', 'Copy the drawing as TikZ code'))}">${esc(t('quick.copyTikz', 'Copy TikZ'))}</button>
-        </div>
-      </div>`;
-  }
   // ---- the block view's Export menu: the app's export popover, for one drawing ----
-  const expPop = document.createElement('div');
-  expPop.className = 'popover exp-pop qk-exp-pop'; expPop.hidden = true;
-  expPop.setAttribute('role', 'dialog');
-  document.body.appendChild(expPop);
+  let expPop: PopoverHandle | null = null;
   let expBtn: HTMLElement | null = null;
   const expFmt = () => (opts.fmt === 'svg' ? 'svg' : 'png');
   function renderExport() {
-    const fmt = expFmt(), F = fmt.toUpperCase();
-    expPop.setAttribute('aria-label', t('quick.exportDrawing', 'Export drawing'));
-    expPop.innerHTML = `<div class="exp-h">${esc(t('quick.exportDrawing', 'Export drawing'))}</div>
-      <div class="seg exp-fmt" role="radiogroup" aria-label="${esc(t('quick.format', 'Format'))}">${[['png', 'PNG'], ['svg', 'SVG']].map(([k, l]) => `<button type="button" role="radio" aria-checked="${fmt === k}" data-efmt="${k}" class="${fmt === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-      ${fmt === 'png' ? `<div class="exp-row"><label for="qkScale">${esc(t('quick.sharpness', 'Sharpness'))}</label><select id="qkScale" class="qk-dpi" title="${esc(t('quick.sharpBlockTip', 'PNG sharpness: pixels per pixel of the drawing'))}">${SCALES.map((x) => `<option value="${x}"${x === +opts.scale ? ' selected' : ''}>${x}×</option>`).join('')}</select></div>
-      <label class="exp-chk"><input type="checkbox" data-clear${opts.transparent ? ' checked' : ''}> ${esc(t('exp.transparent', 'Transparent background'))}</label>`
-        : `<div class="exp-meta">${esc(t('exp.vector', 'Vector, scales to any size'))}</div>`}
-      <div class="qk-exp-go">${canCopy ? `<button type="button" class="primary" data-q="${fmt}" title="${esc(fmt === 'png' ? t('quick.copyBlockPngTip', 'Copy the drawing as a PNG picture') : t('quick.copyBlockSvgTip', 'Copy the drawing as SVG'))}">${esc(t('quick.copyFmt', 'Copy {fmt}', { fmt: F }))}</button>` : ''}<button type="button" class="qk-dl" data-q="dl-${fmt}" title="${esc(fmt === 'png' ? t('quick.dlPng', 'Download as PNG') : t('quick.dlSvg', 'Download as SVG'))}">${DL}${esc(t('quick.download', 'Download'))}</button></div>`;
+    if (!expPop || expPop.closed) return;
+    const fmt = expFmt(), F = fmt.toUpperCase(), btn = expBtn;
+    // the copy runs within the click (Safari allows it only then); the menu closes and its button says Copied
+    const run = (q: string) => () => { closeExport(true); act(q, q.startsWith('dl') ? null : btn); };
+    renderView(expPop.body, ExportPanel, {
+      head: t('quick.exportDrawing', 'Export drawing'), formatLabel: t('quick.format', 'Format'),
+      formats: [{ value: 'png', label: 'PNG' }, { value: 'svg', label: 'SVG' }], format: fmt,
+      onformat: (v) => { opts.fmt = v; save(); renderExport(); },
+      rows: fmt === 'png' ? [
+        { kind: 'select', id: 'qkScale', label: t('quick.sharpness', 'Sharpness'), title: t('quick.sharpBlockTip', 'PNG sharpness: pixels per pixel of the drawing'),
+          value: String(opts.scale), options: SCALES.map((x) => ({ value: String(x), label: x + '×' })), onchange: (v) => { opts.scale = +v; save(); } },
+        { kind: 'check', label: t('exp.transparent', 'Transparent background'), checked: !!opts.transparent, onchange: (on) => { opts.transparent = on; save(); } },
+      ] : [{ kind: 'meta', text: t('exp.vector', 'Vector, scales to any size') }],
+      actions: [
+        ...(canCopy ? [{ label: t('quick.copyFmt', 'Copy {fmt}', { fmt: F }), primary: true, attrs: { 'data-q': fmt }, onclick: run(fmt),
+          title: fmt === 'png' ? t('quick.copyBlockPngTip', 'Copy the drawing as a PNG picture') : t('quick.copyBlockSvgTip', 'Copy the drawing as SVG') }] : []),
+        { label: t('quick.download', 'Download'), icon: 'download', attrs: { 'data-q': 'dl-' + fmt }, onclick: run('dl-' + fmt),
+          title: fmt === 'png' ? t('quick.dlPng', 'Download as PNG') : t('quick.dlSvg', 'Download as SVG') },
+      ],
+    } satisfies ExportPanelModel);
   }
-  // below the button, right edges lined up, growing left (it sits on the right of the window)
+  // the kit's popover below the button (on the right of the window, so right edges lined up, growing left)
   function openExport(btn: HTMLElement) {
-    if (!expPop.hidden) { closeExport(); return; }
+    if (expPop && !expPop.closed) { closeExport(); return; }
     if (!TD.app.outputAllowed()) return;
     expBtn = btn;
+    const h = openPopover(btn, {
+      width: 240, class: 'exp-pop qk-exp-pop', label: t('quick.exportDrawing', 'Export drawing'),
+      // the panel goes once the popover has faded out
+      onclose: () => { btn.setAttribute('aria-expanded', 'false'); setTimeout(() => destroyView(h.body), 400); },
+    });
+    expPop = h;
     renderExport();
-    expPop.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
-    const r = btn.getBoundingClientRect(), z = parseFloat(getComputedStyle(document.body).zoom) || 1;
-    expPop.style.top = r.bottom / z + 6 + 'px';
-    expPop.style.left = Math.max(8, Math.min(r.right / z - expPop.offsetWidth, innerWidth / z - expPop.offsetWidth - 8)) + 'px';
-    expPop.querySelector<HTMLElement>('[data-q]')?.focus({ preventScroll: true });
+    h.body.querySelector<HTMLElement>('[data-q]')?.focus({ preventScroll: true });
   }
   function closeExport(focus = false) {
-    if (expPop.hidden) return;
-    expPop.hidden = true;
-    expBtn?.setAttribute('aria-expanded', 'false');
+    if (!expPop || expPop.closed) return;
+    expPop.close();
     if (focus) expBtn?.focus({ preventScroll: true });
   }
-  expPop.addEventListener('click', (e) => {
-    const b = (e.target as Element).closest<HTMLElement>('button');
-    if (!b) return;
-    if (b.dataset.efmt) { opts.fmt = b.dataset.efmt; save(); renderExport(); return; }
-    // the copy runs within the click (Safari allows it only then); the menu closes and its button says Copied
-    if (b.dataset.q) { const btn = expBtn; closeExport(true); act(b.dataset.q, b.dataset.q.startsWith('dl') ? null : btn); }
-  });
-  expPop.addEventListener('change', (e) => {
-    const el = e.target as HTMLInputElement;
-    if (el.matches('.qk-dpi')) { opts.scale = +el.value; save(); }
-    if (el.matches('[data-clear]')) { opts.transparent = el.checked; save(); }
-  });
-  expPop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeExport(true); } });
-  document.addEventListener('pointerdown', (e) => { if (!expPop.hidden && !expPop.contains(e.target as Node) && !(e.target as Element).closest?.('[data-qexp]')) closeExport(); });
   function show(view: string) {
     undock();
     store.view = view === 'formula' || TD.blocks.dockable(view) ? view : 'formula';
@@ -218,30 +218,28 @@ import type { EditorMemo } from '../../core/editor-session';
     if (isBlockView()) buildBlock(); else { host!.classList.remove('qk-blocks'); build(); }
   }
 
+  // the formula view (src/ui/QuickFormula.svelte); build() also makes the field and draws the preview
+  function formulaModel(): QuickFormulaModel {
+    return {
+      phone: onPhone(),
+      formulaLabel: t('quick.formula', 'Formula'), inputLabel: t('quick.input', 'Input'), input: TD.input ? TD.input.mode : 'latex',
+      inputs: Object.entries<any>(TD.input ? TD.input.MODES : { latex: { name: 'LaTeX' } }).map(([value, v]) => ({ value, label: v.name })),
+      sizeLabel: t('ui.size', 'Size'), sizes: SIZES().map(([value, label]) => ({ value, label })), size: opts.size,
+      sharpLabel: t('quick.sharp', 'PNG sharpness'), sharpTip: t('quick.sharpTip', 'PNG sharpness: pixels per pixel of the formula'), scales: SCALES, scale: +opts.scale,
+      transparentLabel: t('quick.transparent', 'Transparent'), transparent: !!opts.transparent,
+      canCopy, copied, copiedLabel: t('ui.copied', 'Copied'),
+      labels: {
+        copyPng: t('table.copyPng', 'Copy PNG'), copyPngTip: t('quick.copyPngTip', 'Copy the formula as a PNG picture ({key})', { key: (mac ? '⌘' : 'Ctrl+') + 'Enter' }),
+        copySvg: t('quick.copySvg', 'Copy SVG'), copySvgTip: t('quick.copySvgTip', 'Copy the formula as SVG'),
+        dlPngTip: t('quick.dlPng', 'Download as PNG'), dlSvgTip: t('quick.dlSvg', 'Download as SVG'),
+        foot: t('quick.foot', 'Paste the PNG into slides, documents or chats. The SVG keeps the maths as text, with its fonts loaded from the web.'), copyLatex: t('table.copyLatex', 'Copy LaTeX'),
+      },
+    };
+  }
+  const renderFormula = () => renderView(host, QuickFormula, formulaModel());
   function build() {
-    const input = TD.input ? TD.input.mode : 'latex', phone = onPhone();
-    host!.innerHTML = `<div class="qk">
-      <div class="qk-field">
-        <div class="qk-row"${phone ? ' hidden' : ''}><label class="qk-label" for="quickTex">${esc(t('quick.formula', 'Formula'))}</label>${seg('Input', t('quick.input', 'Input'), Object.entries<any>(TD.input ? TD.input.MODES : { latex: { name: 'LaTeX' } }).map(([k, v]) => [k, v.name]), input)}</div>
-        <div class="qk-edit"></div>
-      </div>
-      <div class="qk-stage${opts.transparent ? ' clear' : ''}"><div class="qk-prev" aria-live="polite"></div></div>
-      <div class="qk-msg" role="status"></div>
-      <div class="qk-bar">
-        <div class="qk-opts">
-          ${seg('Size', t('ui.size', 'Size'), SIZES(), opts.size)}
-          <select class="qk-dpi" aria-label="${esc(t('quick.sharp', 'PNG sharpness'))}" title="${esc(t('quick.sharpTip', 'PNG sharpness: pixels per pixel of the formula'))}">${SCALES.map((d) => `<option value="${d}"${d === +opts.scale ? ' selected' : ''}>${d}× PNG</option>`).join('')}</select>
-          <label class="qk-chk"><input type="checkbox" data-clear${opts.transparent ? ' checked' : ''}> ${esc(t('quick.transparent', 'Transparent'))}</label>
-        </div>
-        <div class="qk-acts">
-          ${canCopy ? `<button type="button" class="primary" data-q="png" title="${esc(t('quick.copyPngTip', 'Copy the formula as a PNG picture ({key})', { key: (mac ? '⌘' : 'Ctrl+') + 'Enter' }))}">${esc(t('table.copyPng', 'Copy PNG'))}</button>
-          <button type="button" data-q="svg" title="${esc(t('quick.copySvgTip', 'Copy the formula as SVG'))}">${esc(t('quick.copySvg', 'Copy SVG'))}</button>` : ''}
-          <button type="button" class="qk-dl" data-q="dl-png" title="${esc(t('quick.dlPng', 'Download as PNG'))}">${DL}PNG</button>
-          <button type="button" class="qk-dl" data-q="dl-svg" title="${esc(t('quick.dlSvg', 'Download as SVG'))}">${DL}SVG</button>
-        </div>
-      </div>
-      <p class="qk-foot">${esc(t('quick.foot', 'Paste the PNG into slides, documents or chats. The SVG keeps the maths as text, with its fonts loaded from the web.'))}<button type="button" class="qk-src" data-q="tex">${esc(t('table.copyLatex', 'Copy LaTeX'))}</button></p>
-    </div>`;
+    destroyView(host); // a new field (the input mode may have changed)
+    renderFormula();
     editor();
     preview();
   }
@@ -254,6 +252,7 @@ import type { EditorMemo } from '../../core/editor-session';
       TD.input.load().then(() => {
         if (!box!.isConnected) return;
         const mf = new window.MathfieldElement();
+        themeField(mf); // the app's menu and menu button
         mf.id = 'quickTex';
         mf.mathVirtualKeyboardPolicy = 'manual';
         mf.smartFence = true;
@@ -306,14 +305,16 @@ import type { EditorMemo } from '../../core/editor-session';
   const svg = () => TD.app.svgOf([blockShape() || shape()]);
   // a block's file is named after it, as the toolbar names it in English (circuit.png, k-map.svg)
   const fileName = () => (isBlockView() ? String(TD.blocks.get(store.view)?.menu.label || store.view).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || store.view : 'formula');
-  function flash(btn: any, text: any) {
+  // a button says Copied for a moment, holding its width so the shorter word doesn't pull the bar along
+  let copied: string | null = null, copiedTimer = 0;
+  const redraw = () => { if (isBlockView()) { if (host.querySelector('.qk-blk')) renderBlock(); } else if (host.querySelector('.qk')) renderFormula(); };
+  function flash(btn: HTMLElement | null) {
     if (!btn) return;
-    const old = btn.dataset.label || btn.innerHTML;
-    if (!btn.dataset.label) btn.style.minWidth = btn.offsetWidth + 'px'; // the shorter word doesn't pull the bar along
-    btn.dataset.label = old;
-    btn.textContent = text;
-    clearTimeout(btn._t);
-    btn._t = setTimeout(() => { btn.innerHTML = old; btn.style.minWidth = ''; delete btn.dataset.label; }, 1200);
+    if (!copied) btn.style.minWidth = btn.offsetWidth + 'px';
+    copied = btn.dataset.q ?? 'qexp';
+    redraw();
+    clearTimeout(copiedTimer);
+    copiedTimer = window.setTimeout(() => { copied = null; btn.style.minWidth = ''; redraw(); }, 1200);
   }
   async function act(what: any, btn: any) {
     if (!TD.app.outputAllowed()) return;
@@ -324,18 +325,18 @@ import type { EditorMemo } from '../../core/editor-session';
       if (what === 'png') {
         // the item is made at once, with the picture still to come: Safari allows a copy only during the click
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': png() })]);
-        flash(btn, t('ui.copied', 'Copied'));
+        flash(btn);
       } else if (what === 'svg') {
         const s = svg(), item: Record<string, any> = { 'text/plain': new Blob([s], { type: 'text/plain' }) };
         if (ClipboardItem.supports && ClipboardItem.supports('image/svg+xml')) item['image/svg+xml'] = new Blob([s], { type: 'image/svg+xml' });
         await navigator.clipboard.write([new ClipboardItem(item)]);
-        flash(btn, t('ui.copied', 'Copied'));
+        flash(btn);
       } else if (what === 'tex') {
         await navigator.clipboard.writeText(tex());
-        flash(btn, t('ui.copied', 'Copied'));
+        flash(btn);
       } else if (what === 'tikz') {
         await navigator.clipboard.writeText(TD.toTikz([blockShape()]));
-        flash(btn, t('ui.copied', 'Copied'));
+        flash(btn);
       } else if (what === 'dl-png') TD.app.downloadBlob(fileName() + '.png', await png());
       else if (what === 'dl-svg') TD.app.downloadBlob(fileName() + '.svg', new Blob([svg()], { type: 'image/svg+xml' }));
     } catch (e: any) { const why = String(e.message || e).replace('lower the DPI', 'choose a lower sharpness');
@@ -347,7 +348,7 @@ import type { EditorMemo } from '../../core/editor-session';
     const b = (e.target! as Element).closest('button');
     if (!b) return;
     if (b.dataset.input) { TD.input.set(b.dataset.input); return; } // rebuilt by the listener below
-    if (b.dataset.size) { opts.size = b.dataset.size; save(); host.querySelectorAll('[data-size]').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', String(on)); }); preview(); return; }
+    if (b.dataset.size) { opts.size = b.dataset.size; save(); renderFormula(); preview(); return; }
     if (b.dataset.qexp !== undefined) { openExport(b); return; }
     if (b.dataset.newDraft !== undefined && isBlockView()) { addDrawing(store.view); return; }
     if (b.dataset.q) act(b.dataset.q, b);
@@ -380,26 +381,9 @@ import type { EditorMemo } from '../../core/editor-session';
   function openDrawing(type: string, id: string) { if (id !== store.cur[type]) { undock(); store.cur[type] = id; show(type); } }
   // rename in place, in the row: Enter or leaving the field keeps it, Esc puts it back; empty goes back to the time
   function renameDrawing(type: string, id: string) {
-    const d = (store.items[type] || []).find((x) => x.id === id), row = list?.querySelector<HTMLElement>(`li[data-hist="${CSS.escape(id)}"]`), nm = row?.querySelector('.nm');
-    if (!d || !row || !nm) return;
-    const inp = document.createElement('input');
-    inp.className = 'ly-ed qk-rn'; inp.value = d.name || ''; inp.spellcheck = false; inp.maxLength = 120;
-    inp.placeholder = nm.textContent || '';
-    inp.setAttribute('aria-label', t('quick.draftName', 'Draft name'));
-    nm.replaceWith(inp); inp.focus(); inp.select();
-    let done = false;
-    const end = (ok: boolean) => {
-      if (done) return;
-      done = true;
-      const v = inp.value.trim();
-      if (ok && v !== (d.name || '')) { if (v) d.name = v; else delete d.name; saveStore(); }
-      renderList();
-      list?.querySelector<HTMLElement>(`li[data-hist="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
-    };
-    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); end(true); } if (e.key === 'Escape') { e.preventDefault(); end(false); } });
-    inp.addEventListener('blur', () => end(true));
-    inp.addEventListener('click', (e) => e.stopPropagation());
-    inp.addEventListener('dblclick', (e) => e.stopPropagation());
+    if (!(store.items[type] || []).some((x) => x.id === id) || !list?.querySelector(`li[data-hist="${CSS.escape(id)}"]`)) return;
+    renamingDraft = id;
+    renderList();
   }
   function placeDrawing(type: string, id: string) {
     if (id === store.cur[type]) host!.querySelector<HTMLElement>('.qk-dock textarea:focus')?.blur(); // code being typed is read first
@@ -408,7 +392,7 @@ import type { EditorMemo } from '../../core/editor-session';
   }
   async function onList(e: Event) {
     const el = e.target as Element;
-    if (el.closest('.qk-rn')) return;
+    if (el.closest('.list-row-ed')) return; // a click in a draft's name field stays there
     const del = el.closest<HTMLElement>('[data-del]');
     if (del) { e.stopPropagation(); await deleteDrawing(store.view, del.dataset.del!); return; }
     const row = el.closest<HTMLElement>('li');
@@ -463,11 +447,11 @@ import type { EditorMemo } from '../../core/editor-session';
   // double-click a draft to rename it (the first click has opened it, and the list was drawn again under the pointer)
   list?.addEventListener('dblclick', (e) => {
     const row = (document.elementFromPoint(e.clientX, e.clientY) || (e.target as Element))?.closest<HTMLElement>('li[data-hist]');
-    if (row && !(e.target as Element).closest('[data-del], .qk-rn')) renameDrawing(store.view, row.dataset.hist!);
+    if (row && !(e.target as Element).closest('[data-del], .list-row-ed')) renameDrawing(store.view, row.dataset.hist!);
   });
   for (const h of hosts) h.addEventListener('change', (e) => {
     if ((e.target! as Element).matches('.qk-dpi')) { opts.scale = +(e.target! as HTMLInputElement).value; save(); }
-    if ((e.target! as Element).matches('[data-clear]')) { opts.transparent = (e.target! as HTMLInputElement).checked; save(); host.querySelector('.qk-stage')?.classList.toggle('clear', opts.transparent); }
+    if ((e.target! as Element).matches('[data-clear]')) { opts.transparent = (e.target! as HTMLInputElement).checked; save(); renderFormula(); }
   });
   for (const h of hosts) h.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); act(canCopy ? 'png' : 'dl-png', canCopy ? host.querySelector(isBlockView() ? '[data-qexp]' : '[data-q="png"]') : null); }
@@ -477,20 +461,20 @@ import type { EditorMemo } from '../../core/editor-session';
   if (TD.input) TD.input.onChange(() => { if (shown && !onPhone() && !isBlockView()) build(); });
   let firstLocale = true;
   // a block's editor follows the language itself: only its output bar and the list are rebuilt
-  onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (onPhone()) { build(); return; } if (!shown) return; closeExport(); renderList(); if (isBlockView()) { if (docked) host.querySelector('.qk-bar')?.replaceWith(Object.assign(document.createElement('div'), { innerHTML: blockBar() }).firstElementChild!); else buildBlock(); } else build(); });
+  onLocale(() => { if (firstLocale) { firstLocale = false; return; } if (onPhone()) { build(); return; } if (!shown) return; closeExport(); renderList(); if (isBlockView()) { if (docked) renderBlock(); else buildBlock(); } else build(); });
   const formulaShown = () => onPhone() || (shown && !isBlockView());
   TD.math.onChange(() => { if (formulaShown()) preview(); });
   TD.math.onProgress(() => { if (formulaShown()) preview(); });
 
   TD.quick = {
     show() { shown = true; appHost.hidden = false; if (!onPhone()) show(store.view); },
-    hide() { shown = false; closeExport(); if (!onPhone()) { undock(); appHost.innerHTML = ''; appHost.classList.remove('qk-blocks'); } appHost.hidden = true; if (list) list.innerHTML = ''; },
+    hide() { shown = false; closeExport(); if (!onPhone()) { undock(); destroyView(appHost); appHost.classList.remove('qk-blocks'); } appHost.hidden = true; if (list) destroyView(list); },
   };
   // follow the phone page as it comes and goes (turning the phone, resizing a window)
   function placeHost() {
     const want: HTMLElement = phoneHost && smallScreen() ? phoneHost : appHost!;
     if (want === host) return;
-    if (host === appHost) { undock(); appHost.innerHTML = ''; appHost.classList.remove('qk-blocks'); } else host.innerHTML = '';
+    if (host === appHost) { undock(); destroyView(appHost); appHost.classList.remove('qk-blocks'); } else destroyView(host);
     host = want;
     if (onPhone()) build(); else if (shown) show(store.view);
   }

@@ -95,14 +95,14 @@ try {
    await p.mouse.move(ruler.x+350,ruler.y+ruler.height/2);await p.mouse.down();await p.mouse.move(target.x,target.y);await p.keyboard.press('Escape');await p.mouse.up();await frame();
    assert.deepEqual(await p.evaluate(()=>({json:JSON.stringify(TD.state.doc.blocks[0].guides),undo:TD.state.undo.length})),guideState,'Escape cancels guide creation without an undo entry');
    // Right-click edit/delete and keyboard delete act on guides, leaving artwork intact.
-   await p.mouse.click(target.x,target.y,{button:'right'});await p.locator('#ctxMenu [data-ctx="guide:edit"]').click();await p.locator('.td-dialog input').fill('-6');await p.locator('.td-dialog [data-r="1"]').click();await frame();
+   await p.mouse.click(target.x,target.y,{button:'right'});await p.locator('#ctxMenu [data-act="guide:edit"]').click();await p.locator('.td-dialog input').fill('-6');await p.locator('.td-dialog [data-r="1"]').click();await frame();
    const horizontalPoint=await at(400,240);await p.mouse.click(horizontalPoint.x,horizontalPoint.y);await p.keyboard.press('Delete');
    assert.equal(await p.evaluate(()=>TD.state.doc.blocks[0].guides.length),1);
    await p.locator('#btnUndo').click();await frame();
-   await p.mouse.click(horizontalPoint.x,horizontalPoint.y,{button:'right'});await p.locator('#ctxMenu [data-ctx="guide:delete"]').click();assert.equal(await p.evaluate(()=>TD.state.doc.blocks[0].guides.length),1);
+   await p.mouse.click(horizontalPoint.x,horizontalPoint.y,{button:'right'});await p.locator('#ctxMenu [data-act="guide:delete"]').click();assert.equal(await p.evaluate(()=>TD.state.doc.blocks[0].guides.length),1);
    await p.locator('#btnUndo').click();await frame();
    const beforeClear=await p.evaluate(()=>({guides:JSON.stringify(TD.state.doc.blocks[0].guides),shapes:JSON.stringify(TD.state.doc.shapes),undo:TD.state.undo.length}));
-   await p.mouse.click(horizontalPoint.x,horizontalPoint.y,{button:'right'});await p.locator('#ctxMenu [data-ctx="guide:deleteAll"]').click();
+   await p.mouse.click(horizontalPoint.x,horizontalPoint.y,{button:'right'});await p.locator('#ctxMenu [data-act="guide:deleteAll"]').click();
    assert.equal(await p.evaluate(()=>TD.state.doc.blocks[0].guides.length),0,'Delete all guides clears the active diagram');
    assert.equal(await p.evaluate(()=>TD.state.undo.length),beforeClear.undo+1,'clearing guides is one undo action');
    assert.equal(await p.evaluate(()=>JSON.stringify(TD.state.doc.shapes)),beforeClear.shapes,'clearing guides leaves artwork unchanged');

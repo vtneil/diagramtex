@@ -9,6 +9,9 @@ import UmlsdeditorFrame from '../ui/editors/UmlsdeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Sequence diagram editor: the overlay that opens on a pgf-umlsd block. A palette of instances and threads,
 // the kinds of message (call, self call, message, call without return) and blocks; the diagram drawn as the
 // package draws it, where a message is dragged from one lifeline to another (on the same one: a self call) and
@@ -89,14 +92,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.id = 'umlsdModal';
   root.className = 'modal';
   root.hidden = true;
-  const svgI = (d: string) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, UmlsdeditorFrame, { p0: svgI('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: svgI('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: svgI('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: svgI('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, UmlsdeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.sd-svg', root), stage = $('.cz-stage', root), list = $('.sd-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.sd-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search', 'Search'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'sd-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: path | null, kind (of new messages), view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
@@ -256,25 +255,15 @@ import { patchSvg } from '../ui/svg-patch';
 
   // ---------------------------------------------------------------- palette
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [cat, its] of PAL) {
-      // search the shown names and the English ones
-      const title = caption(cat);
-      const hits = its.filter(([k, name, , short]: any) => !q || `${caption(name)} ${name.fallback} ${caption(short)} ${short.fallback} ${k} ${title} ${cat.fallback}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, key, short]: any) => {
-        const on = E && KIND_NAMES[k] && E.kind === k, name = caption(label);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${MINI[k]}</span><span>${esc(caption(short) || name)}</span></button>`;
-      }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
+    pal.render(PAL.map(([cat, its]: any) => ({
+      id: cat.fallback, title: caption(cat),
+      // the shown names, the English ones and the category's find it
+      items: its.map(([k, label, key, short]: any) => ({
+        id: k, label: caption(short) || caption(label), title: caption(label), key, alt: `${label.fallback} ${short.fallback}`, keywords: `${caption(label)} ${k} ${caption(cat)} ${cat.fallback}`,
+        svg: MINI[k], on: !!E && !!KIND_NAMES[k] && E.kind === k,
+      })),
+    })));
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   list.addEventListener('click', (e: any) => { const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
   // an instance or thread is added; a kind of message changes the selected one and is the kind new ones get;
   // a block goes round the selection
@@ -293,7 +282,7 @@ import { patchSvg } from '../ui/svg-patch';
     buildPalette();
     setTip(isArrow(s) ? '' : k === 'callself' ? uiText('editor.umlsd.armTipSelf', '{name}: drag from one lifeline to another (or down along one)', { name: caption(ITEM[k].name) }) : uiText('editor.umlsd.armTip', '{name}: drag from one lifeline to another', { name: caption(ITEM[k].name) }));
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -518,41 +507,26 @@ import { patchSvg } from '../ui/svg-patch';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
 
   // right-click: the element's actions
-  const MI: Record<string, string> = {
-    rename: '<path d="M4 15l2-5 6-6 3 3-6 6zM11 5l3 3"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    up: '<path d="M10 16V4M5 9l5-5 5 5"/>',
-    down: '<path d="M10 4v12M5 11l5 5 5-5"/>',
-    block: '<rect x="3" y="4" width="14" height="12"/><path d="M3 8h5l1.5-1.5V4"/>',
-  };
-  const mItem = (act: string, label: string, icon: string, key?: string) => `<button class="ctx-item${act === 'del' ? ' danger' : ''}" data-us="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { rename: 'edit', up: 'moveUp', down: 'moveDown', block: 'block', del: 'delete' };
+  const mItem = (act: string, label: string, icon: string, key?: string) => menuRow(act, label, MI[icon], key, { danger: act === 'del' });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const hit = labelAt(e) || instAt(e) || lineAt(e) || barAt(e) || frameAt(e);
     if (!hit) { closeMenu(); return; }
     E.sel = hit.ref;
     const it = selIt(), alt = isMac ? '⌥' : 'Alt+';
     const del = it.k === 'inst' ? (it.thread ? uiText('editor.umlsd.deleteThread', 'Delete Thread') : uiText('editor.umlsd.deleteInstance', 'Delete Instance')) : it.k === 'block' ? uiText('editor.umlsd.deleteBlock', 'Delete Block') : uiText('editor.umlsd.deleteKind', 'Delete {kind}', { kind: KIND_TITLE(kindOf(it)) });
-    menu.innerHTML = mItem('text', uiText('editor.umlsd.editText', 'Edit Text'), 'rename', '↩')
-      + (it.k === 'inst' ? mItem('up', uiText('editor.umlsd.moveLeft', 'Move Left'), 'up', `${alt}←`) + mItem('down', uiText('editor.umlsd.moveRight', 'Move Right'), 'down', `${alt}→`) : mItem('up', uiText('editor.umlsd.moveUp', 'Move Up'), 'up', `${alt}↑`) + mItem('down', uiText('editor.umlsd.moveDown', 'Move Down'), 'down', `${alt}↓`))
-      + (it.k !== 'inst' ? mItem('wrap', uiText('editor.umlsd.putInBlock', 'Put in a Block'), 'block') : '')
-      + '<hr>' + mItem('del', del, 'del', '⌫');
+    menuRows = [mItem('text', uiText('editor.umlsd.editText', 'Edit Text'), 'rename', '↩'), ...(it.k === 'inst' ? [mItem('up', uiText('editor.umlsd.moveLeft', 'Move Left'), 'up', `${alt}←`), mItem('down', uiText('editor.umlsd.moveRight', 'Move Right'), 'down', `${alt}→`)] : [mItem('up', uiText('editor.umlsd.moveUp', 'Move Up'), 'up', `${alt}↑`), mItem('down', uiText('editor.umlsd.moveDown', 'Move Down'), 'down', `${alt}↓`)]), ...(it.k !== 'inst' ? [mItem('wrap', uiText('editor.umlsd.putInBlock', 'Put in a Block'), 'block')] : []), '-', mItem('del', del, 'del', '⌫')];
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-us]');
-    if (!b) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.us!);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- text in place
   // A floating box under the text (TD.input.popup); the whole edit is one undo step. key: 't' the text, 'r' a
@@ -721,7 +695,7 @@ import { patchSvg } from '../ui/svg-patch';
   }
   root.addEventListener('click', (e) => {
     const b = (e.target! as Element).closest('[data-ue]');
-    if (!b || !E || menu.contains(b)) return;
+    if (!b || !E) return;
     act((b as HTMLElement).dataset.ue!, b);
   });
   function act(a: string, b?: any) {
@@ -746,7 +720,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = L.warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, L.warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -755,12 +729,13 @@ import { patchSvg } from '../ui/svg-patch';
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps(); updateTools();
-    codeMsg.innerHTML = U.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, U.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
@@ -772,7 +747,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
     }
@@ -808,8 +783,7 @@ import { patchSvg } from '../ui/svg-patch';
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    setTip(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
   const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode() });
@@ -836,7 +810,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { M, sel: null, kind: 'call', view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null, lastPick: null };
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();

@@ -1,11 +1,13 @@
 <script lang="ts">
   import { t, caption, locale } from '../i18n';
-  import { liveValue } from './live-value';
+  import { Button, FormRow, Help, PanelSection, TextArea } from './kit';
   import type { SourcePanelModel } from './contracts';
   let { model }: { model: SourcePanelModel } = $props();
+  // an action's class names its look: "primary" is the main action, the rest ("wide") stay classes
+  const actionLook = (cls?: string) => { const parts = (cls ?? '').split(/\s+/).filter(Boolean); return { variant: parts.includes('primary') ? 'primary' as const : undefined, class: parts.filter((c) => c !== 'primary').join(' ') || undefined }; };
 </script>
-<div class="sec"><div class="sec-title">{caption(model.title, $locale)} <small>{caption(model.summary, $locale)}</small></div>
-  <div class="row col"><textarea class="code" data-p="src" aria-label={t("ui.latex.source", "LaTeX source", {}, $locale)} spellcheck="false" rows={model.rows} {@attach liveValue(model.src)}></textarea></div>
-  {#each model.warnings as warning}<div class="err">{caption(warning, $locale)}</div>{/each}
-  <div class="help">{caption(model.helpBefore, $locale)}{#if model.package}<code>{model.package}</code>{/if}{caption(model.helpAfter, $locale)}</div></div>
-<div class="sec">{#each model.actions as action}<button class={action.class} data-act={action.action}>{caption(action.label, $locale)}</button>{/each}</div>
+<PanelSection title={caption(model.title, $locale)} summary={caption(model.summary, $locale)}>
+  <FormRow column><TextArea code data-p="src" aria-label={t("ui.latex.source", "LaTeX source", {}, $locale)} rows={model.rows} value={model.src} /></FormRow>
+  {#each model.warnings as warning}<Help kind="error">{caption(warning, $locale)}</Help>{/each}
+  <Help>{caption(model.helpBefore, $locale)}{#if model.package}<code>{model.package}</code>{/if}{caption(model.helpAfter, $locale)}</Help></PanelSection>
+<PanelSection>{#each model.actions as action}{@const look = actionLook(action.class)}<Button variant={look.variant} class={look.class} data-act={action.action}>{caption(action.label, $locale)}</Button>{/each}</PanelSection>

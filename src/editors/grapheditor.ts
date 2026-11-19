@@ -8,6 +8,9 @@ import GrapheditorFrame from '../ui/editors/GrapheditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Graph editor: the overlay that opens on a Graph block. A palette of node kinds, edge kinds and whole
 // graphs; the graph drawn on a centimetre grid, where nodes are placed, dragged (alone or several at once)
 // and joined by dragging a node's blue handle to another; a selected edge's middle handle bends it; Auto
@@ -322,21 +325,17 @@ import { patchSvg } from '../ui/svg-patch';
     const said: Record<string, string> = { spring: uiText('editor.graph.placedSpring', 'Nodes spread out by their edges'), circle: uiText('editor.graph.placedCircle', 'Nodes placed on a circle'), layers: uiText('editor.graph.placedLayers', 'Nodes placed in layers from the sources'), grid: uiText('editor.graph.placedGrid', 'Nodes placed on a grid') };
     flash(said[mode]);
   }
-  function flash(t: string, ms = 1800) { setTip(t); setTimeout(() => { if (E && tip.textContent === t) setTip(''); }, ms); }
+  function flash(t: string, ms = 1800) { stageNote.flash(t, ms); }
 
   // ---------------------------------------------------------------- DOM
   const root = document.createElement('div');
   root.id = 'graphModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, GrapheditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<circle cx="4.5" cy="10" r="2.2"/><circle cx="15.5" cy="5" r="2.2"/><circle cx="15.5" cy="15" r="2.2"/><path d="M6.6 9l6.8-3.2M6.6 11l6.8 3.2M15.5 7.2v5.6"/>'), p6: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p7: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, GrapheditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.graph-svg', root), stage = $('.cz-stage', root), list = $('.graph-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.graph-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search', 'Search'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'graph-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: { n: [name] } | { e: index } | null, arm, kind, bent, dashed, view: { k (px per cm), ox, oy }, undo, redo,
@@ -368,34 +367,20 @@ import { patchSvg } from '../ui/svg-patch';
   const isSel = (name: string) => !!(E.sel && E.sel.n && E.sel.n.includes(name));
 
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [cat, items] of PAL) {
-      const title = caption(cat);
-      const hits = items.filter(([k, label]: any) => !q || `${caption(label)} ${label.fallback} ${k.slice(2)} ${title} ${cat.fallback}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => {
-        const on = E && (E.arm === k || k === `e:${E.kind}` || (k === 'e:bent' && E.bent) || (k === 'e:dashed' && E.dashed)), name = caption(label);
-        return `<button class="qe-item${on ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.graphMini(ITEM[k].mini, 1e3)}</span><span>${esc(ITEM[k].short ? caption(ITEM[k].short) : name)}</span></button>`;
-      }).join('')}</div></div>`;
-    }
-    if (!q || `${uiText('editor.graph.importText', 'From text…')} import adjacency matrix list dot mermaid json`.toLowerCase().includes(q))
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(uiText('editor.graph.cat.import', 'Import'))}</div><button class="qe-item ge-import" data-item="i:text" title="${esc(uiText('editor.graph.importTitle', 'Read a graph from text: an adjacency matrix or list, an edge list, DOT, Mermaid or JSON'))}"><span class="qe-fig"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h9l4 4v12H6z"/><path d="M15 4v4h4M9 12h7M9 15h7M9 18h4"/></svg></span><span>${esc(uiText('editor.graph.importText', 'From text…'))}</span></button></div>`;
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list, 64, 40, 1.6);
+    const on = (k: string) => !!E && (k === `e:${E.kind}` || (k === 'e:bent' && !!E.bent) || (k === 'e:dashed' && !!E.dashed));
+    pal.render([
+      ...PAL.map(([cat, items]: any) => ({
+        id: cat.fallback, title: caption(cat),
+        // the shown name, the English one and the category's find it
+        items: items.map(([k, label, , key]: any) => ({ id: k, label: ITEM[k].short ? caption(ITEM[k].short) : caption(label), title: caption(label), key, alt: label.fallback, keywords: `${k.slice(2)} ${caption(cat)} ${cat.fallback}`, svg: fitMini(TD.graphMini(ITEM[k].mini, 1e3), 64, 40, 1.6), on: on(k) })),
+      })),
+      { id: 'import', title: uiText('editor.graph.cat.import', 'Import'), items: [{
+        id: 'i:text', class: 'ge-import', label: uiText('editor.graph.importText', 'From text…'), title: uiText('editor.graph.importTitle', 'Read a graph from text: an adjacency matrix or list, an edge list, DOT, Mermaid or JSON'),
+        keywords: 'import adjacency matrix list dot mermaid json', svg: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h9l4 4v12H6z"/><path d="M15 4v4h4M9 12h7M9 15h7M9 18h4"/></svg>',
+      }] },
+    ], { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
-  });
   // click: a node kind restyles the selected nodes or is armed for placing; an edge kind restyles the
   // selected edge and is the kind new ones get; a whole graph goes beside the drawing. Drag nodes and
   // graphs onto the canvas.
@@ -442,7 +427,7 @@ import { patchSvg } from '../ui/svg-patch';
     buildPalette(); draw();
     setTip(E.arm ? uiText('editor.graph.armTip', '{name}: click the grid to place it. Esc when done.', { name: caption(ITEM[k].name) }) : '');
   }
-  function setTip(t: string) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: string) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- reading text
   const FORMATS = (): Record<string, string> => ({ tikz: uiText('editor.graph.fmtTikz', 'TikZ graph'), matrix: uiText('editor.graph.fmtMatrix', 'adjacency matrix'), adjlist: uiText('editor.graph.fmtAdjList', 'adjacency list'), edges: uiText('editor.graph.fmtEdges', 'edge list'), dot: 'DOT', mermaid: 'Mermaid', json: 'JSON', template: '' });
@@ -770,72 +755,35 @@ import { patchSvg } from '../ui/svg-patch';
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt)) { E.hover = null; E.knobAt = null; draw(); } });
 
   // right-click: the node's, edge's or canvas's actions
-  const MI: Record<string, string> = {
-    label: '<path d="M4 15l2-5 6-6 3 3-6 6zM11 5l3 3"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    rev: '<path d="M3 7h12l-3-3M17 13H5l3 3"/>',
-    left: '<path d="M3 15C5 6 15 6 17 15"/>',
-    right: '<path d="M3 5c2 9 12 9 14 0"/>',
-    straight: '<path d="M3 10h14"/>',
-    loop: '<circle cx="10" cy="13" r="4"/><path d="M8 9.3C5 3 15 3 12 9.3M12.6 6.6l-.6 2.7-2.5-1"/>',
-    swap: '<path d="M4 10h12"/><path d="M8 6.5h4M8 13.5h4" stroke-dasharray="1.5 1.5"/>',
-    circle: '<circle cx="10" cy="10" r="6"/>',
-    box: '<rect x="4" y="5.5" width="12" height="9"/>',
-    rounded: '<rect x="4" y="5.5" width="12" height="9" rx="3"/>',
-    ellipse: '<ellipse cx="10" cy="10" rx="7" ry="4.5"/>',
-    text: '<path d="M5 5h10M10 5v11"/>',
-    note: '<circle cx="8" cy="13" r="4"/><path d="M12 6h5M12 3.5h5"/>',
-    line: '<path d="M3 10h14"/>',
-    arrow: '<path d="M3 10h13M12.5 6.5L16 10l-3.5 3.5"/>',
-    both: '<path d="M4 10h12M7.5 6.5L4 10l3.5 3.5M12.5 6.5L16 10l-3.5 3.5"/>',
-    add: '<circle cx="10" cy="10" r="6"/><path d="M10 7.5v5M7.5 10h5"/>',
-    dup: '<rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/><path d="M7.5 16.5h7.5a1.5 1.5 0 001.5-1.5V7.5"/>',
-    paste: '<path d="M7 4H5v13h10V4h-2M7.5 2.5h5v3h-5z"/>',
-    all: '<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>',
-    import: '<path d="M5 3h7l3 3v11H5z"/><path d="M8 10h5M8 13h5"/>',
-  };
-  const mItem = (act: string, label: string, icon: string, key?: string, on?: boolean) => `<button class="ctx-item${/^(ndel|edel)$/.test(act) ? ' danger' : ''}${on ? ' on' : ''}" data-gm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { label: 'edit', note: 'note', loop: 'loop', circle: 'nodeCircle', box: 'nodeBox', rounded: 'nodeRounded', ellipse: 'nodeEllipse', text: 'nodeText', copy: 'copy', dup: 'duplicate', del: 'delete', swap: 'swapLabel', rev: 'reverse', line: 'straight', arrow: 'arrow', both: 'arrowBoth', left: 'bendLeft', right: 'bendRight', straight: 'straight', add: 'addNode', paste: 'paste', all: 'selectAll', import: 'importText' };
+  // `on`: the current choice of a pick-one group, ticked
+  const mItem = (act: string, label: string, icon: string, key?: string, on?: boolean) => menuRow(act, label, MI[icon], key, { danger: /^(ndel|edel)$/.test(act), checked: on });
   const cmd = isMac ? '⌘' : 'Ctrl+';
-  function closeMenu() { menu.hidden = true; }
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const vn = nodeAt(e), ei = vn == null ? edgeAt(e) : null;
     if (vn != null && nOf(vn)) {
       if (!isSel(vn)) E.sel = { n: [vn] };
       const ns = selNs(), many = ns.length > 1, k = many ? '' : kindOf(ns[0]);
-      menu.innerHTML = (many ? '' : mItem('label', uiText('editor.graph.editLabel', 'Edit Label'), 'label', '↩') + mItem('note', ns[0].lab ? uiText('editor.graph.editNote', 'Edit Note') : uiText('editor.graph.addNote', 'Add Note'), 'note') + mItem('addloop', uiText('editor.graph.addLoop', 'Add Loop'), 'loop') + '<hr>') +
-        mItem('k:circle', uiText('editor.graph.circle', 'Circle'), 'circle', 'C', k === 'circle') + mItem('k:box', uiText('editor.graph.box', 'Box'), 'box', 'B', k === 'box') + mItem('k:rounded', uiText('editor.graph.rounded', 'Rounded'), 'rounded', 'R', k === 'rounded') +
-        mItem('k:ellipse', uiText('editor.graph.ellipse', 'Ellipse'), 'ellipse', 'E', k === 'ellipse') + mItem('k:text', uiText('editor.graph.text', 'Text'), 'text', 'T', k === 'text') + '<hr>' +
-        mItem('copy', uiText('editor.graph.copy', 'Copy'), 'dup', cmd + 'C') + mItem('dup', uiText('editor.graph.duplicate', 'Duplicate'), 'dup', cmd + 'D') + '<hr>' +
-        mItem('ndel', many ? uiText('editor.graph.deleteNodes', 'Delete {n} Nodes', { n: ns.length }) : uiText('editor.graph.deleteNode', 'Delete Node'), 'del', '⌫');
+      menuRows = [...(many ? [] : [mItem('label', uiText('editor.graph.editLabel', 'Edit Label'), 'label', '↩'), mItem('note', ns[0].lab ? uiText('editor.graph.editNote', 'Edit Note') : uiText('editor.graph.addNote', 'Add Note'), 'note'), mItem('addloop', uiText('editor.graph.addLoop', 'Add Loop'), 'loop'), '-' as const]), mItem('k:circle', uiText('editor.graph.circle', 'Circle'), 'circle', 'C', k === 'circle'), mItem('k:box', uiText('editor.graph.box', 'Box'), 'box', 'B', k === 'box'), mItem('k:rounded', uiText('editor.graph.rounded', 'Rounded'), 'rounded', 'R', k === 'rounded'), mItem('k:ellipse', uiText('editor.graph.ellipse', 'Ellipse'), 'ellipse', 'E', k === 'ellipse'), mItem('k:text', uiText('editor.graph.text', 'Text'), 'text', 'T', k === 'text'), '-', mItem('copy', uiText('editor.graph.copy', 'Copy'), 'copy', cmd + 'C'), mItem('dup', uiText('editor.graph.duplicate', 'Duplicate'), 'dup', cmd + 'D'), '-', mItem('ndel', many ? uiText('editor.graph.deleteNodes', 'Delete {n} Nodes', { n: ns.length }) : uiText('editor.graph.deleteNode', 'Delete Node'), 'del', '⌫')];
     } else if (ei != null) {
       E.sel = { e: ei };
       const ed = E.M.edges[ei], loop = ed.a === ed.b, kk = kindOfOp(ed.op);
-      menu.innerHTML = mItem('label', uiText('editor.graph.editLabel', 'Edit Label'), 'label', '↩') + (ed.t != null ? mItem('swap', uiText('editor.graph.labelOtherSide', 'Label on the Other Side'), 'swap') : '') + (loop ? '' : mItem('rev', uiText('editor.graph.reverse', 'Reverse Direction'), 'rev')) + '<hr>' +
-        mItem('op:line', uiText('editor.graph.line', 'Line'), 'line', '', kk === 'line') + mItem('op:arrow', uiText('editor.graph.arrow', 'Arrow'), 'arrow', '', kk === 'arrow') + mItem('op:both', uiText('editor.graph.both', 'Both ways'), 'both', '', kk === 'both') + '<hr>' +
-        (loop ? mItem('la', uiText('editor.graph.loopAbove', 'Loop Above'), 'loop') + mItem('lb', uiText('editor.graph.loopBelow', 'Loop Below'), 'loop') + mItem('ll', uiText('editor.graph.loopLeft', 'Loop Left'), 'loop') + mItem('lr', uiText('editor.graph.loopRight', 'Loop Right'), 'loop')
-          : mItem('bleft', uiText('editor.graph.bendLeft', 'Bend Left'), 'left') + mItem('bright', uiText('editor.graph.bendRight', 'Bend Right'), 'right') + mItem('bnone', uiText('editor.graph.straight', 'Straight'), 'straight')) +
-        '<hr>' + mItem('edel', uiText('editor.graph.deleteEdge', 'Delete Edge'), 'del', '⌫');
+      menuRows = [mItem('label', uiText('editor.graph.editLabel', 'Edit Label'), 'label', '↩'), ...(ed.t != null ? [mItem('swap', uiText('editor.graph.labelOtherSide', 'Label on the Other Side'), 'swap')] : []), ...(loop ? [] : [mItem('rev', uiText('editor.graph.reverse', 'Reverse Direction'), 'rev')]), '-', mItem('op:line', uiText('editor.graph.line', 'Line'), 'line', '', kk === 'line'), mItem('op:arrow', uiText('editor.graph.arrow', 'Arrow'), 'arrow', '', kk === 'arrow'), mItem('op:both', uiText('editor.graph.both', 'Both ways'), 'both', '', kk === 'both'), '-', ...(loop ? [mItem('la', uiText('editor.graph.loopAbove', 'Loop Above'), 'loop'), mItem('lb', uiText('editor.graph.loopBelow', 'Loop Below'), 'loop'), mItem('ll', uiText('editor.graph.loopLeft', 'Loop Left'), 'loop'), mItem('lr', uiText('editor.graph.loopRight', 'Loop Right'), 'loop')] : [mItem('bleft', uiText('editor.graph.bendLeft', 'Bend Left'), 'left'), mItem('bright', uiText('editor.graph.bendRight', 'Bend Right'), 'right'), mItem('bnone', uiText('editor.graph.straight', 'Straight'), 'straight')]), '-', mItem('edel', uiText('editor.graph.deleteEdge', 'Delete Edge'), 'del', '⌫')];
     } else {
       E.ctxAt = toCm(e);
-      menu.innerHTML = mItem('addhere', uiText('editor.graph.addNodeHere', 'Add Node Here'), 'add') + mItem('paste', uiText('editor.graph.paste', 'Paste'), 'paste', cmd + 'V') + mItem('all', uiText('editor.graph.selectAll', 'Select All'), 'all', cmd + 'A') + '<hr>' +
-        mItem('import', uiText('editor.graph.importText', 'From text…'), 'import');
+      menuRows = [mItem('addhere', uiText('editor.graph.addNodeHere', 'Add Node Here'), 'add'), mItem('paste', uiText('editor.graph.paste', 'Paste'), 'paste', cmd + 'V'), mItem('all', uiText('editor.graph.selectAll', 'Select All'), 'all', cmd + 'A'), '-', mItem('import', uiText('editor.graph.importText', 'From text…'), 'import')];
     }
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target as Element).closest('[data-gm]');
-    if (!b) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.gm as string);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- label editor
   // A floating box under the node or edge (TD.input.popup); the whole edit is one undo step. A label that
@@ -1085,7 +1033,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = F.layout({ src: c }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: c }).warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -1094,12 +1042,13 @@ import { patchSvg } from '../ui/svg-patch';
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit();
     clampSel(); draw(); renderProps(); updateTools();
-    codeMsg.innerHTML = F.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
@@ -1113,7 +1062,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -1189,7 +1138,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { M, sel: null, arm: null, kind: directed ? 'arrow' : 'line', bent: false, dashed: false, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     stopLocale?.();
     let first = true;

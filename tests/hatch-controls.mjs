@@ -28,11 +28,10 @@ try {
     TD.app.newDoc('Hatch test',[shape],null,null,null,'board');
     TD.state.sel=new Set(['hatch']);TD.app.renderProps();
     const input=document.querySelector('[data-key="hatchWidth"]');check(input,'width input');
-    check(document.querySelector('[data-dd="hatchWidth"]'),'width presets');
+    const widths=document.querySelector('select.attached[data-key="hatchWidth"]');check(widths,'width presets');
     input.value='1.25';input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));
     check(TD.state.doc.shapes[0].hatchWidth===1.25 && TD.state.doc.shapes[0].width===2,'width independent of outline');
-    document.querySelector('[data-dd="hatchWidth"]').click();
-    const preset=document.querySelector('.ddpop [data-ddv="0.5"]');check(preset,'shared width menu');preset.click();
+    check([...widths.options].some(o=>o.value==='0.5'),'shared width menu');widths.value='0.5';widths.dispatchEvent(new Event('change',{bubbles:true}));
     check(TD.state.doc.shapes[0].hatchWidth===0.5 && TD.state.doc.shapes[0].width===2,'width menu updates hatch only');
     const top=document.querySelector('[data-key="hatchTop"]');top.click();
     const right=document.querySelector('[data-key="hatchRight"]');right.click();

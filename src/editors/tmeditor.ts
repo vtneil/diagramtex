@@ -9,6 +9,9 @@ import TmeditorFrame from '../ui/editors/TmeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Timing editor: the overlay that opens on a timing block. A palette of signal values, rows and
 // annotations; the table drawn by the canvas renderer on a grid of periods, where transitions are dragged
 // along the time axis, values are painted onto rows and arrows are drawn between edges; the selected
@@ -21,7 +24,6 @@ import { patchSvg } from '../ui/svg-patch';
   const balanced = (v: any) => { let d = 0; for (let i = 0; i < v.length; i++) { if (v[i] === '\\') { i++; continue; } if (v[i] === '{') d++; else if (v[i] === '}' && --d < 0) return false; } return d === 0; };
   const { esc, r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const PAPER = '#fffdf8', INK = '#1c1b19';
   const U = T.U, STEP = 0.5;
 
@@ -162,14 +164,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.id = 'tmModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  mountFrame(root, TmeditorFrame, { p0: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p1: isMac ? '⌘' : 'Ctrl+', p2: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p3: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p4: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p5: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p6: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, TmeditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.tm-svg', root), stage = $('.cz-stage', root), list = $('.tm-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.tm-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search', 'Search'), searchLabel: message('ui.search.the.palette', 'Search the palette'), label: message('ui.elements', 'Elements'), listClass: 'tm-list', onpick: (k) => pick(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   // ---------------------------------------------------------------- state
   // { M, sel: { r, i } (a segment) | { row } | { x } (an annotation) | { x, j } (a marker) | null, arm, view: { k (px per period), ox, oy },
@@ -199,8 +197,8 @@ import { patchSvg } from '../ui/svg-patch';
     E.sel = { x: E.M.ext.length - 1 }; draw(); renderProps();
   }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
+  function undo() { dropPaint(); commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
+  function redo() { dropPaint(); commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() {
     const s = E.sel;
     if (!s) return;
@@ -210,6 +208,34 @@ import { patchSvg } from '../ui/svg-patch';
     else if (s.x != null && s.j != null && !(markVals(E.M.ext[s.x]).length > s.j)) E.sel = null;
   }
   const selSeg = () => (E.sel && E.sel.r != null ? E.M.rows[E.sel.r].segs[E.sel.i] : null);
+  // Several segments selected (shift-click, or a drag over empty space): E.many lists them, its anchor E.sel among
+  // them. It holds only while E.sel is that anchor, so selecting anything else (which sets a new E.sel) ends it.
+  const selSegs = (): { r: number; i: number }[] => {
+    if (!E.sel || E.sel.r == null) return [];
+    const list = E.many && E.many.anchor === E.sel ? E.many.list : [E.sel];
+    return list.filter((s: any) => E.M.rows[s.r] && E.M.rows[s.r].segs[s.i]);
+  };
+  function selectSegs(list: { r: number; i: number }[], anchor?: any) {
+    if (!list.length) { E.sel = null; E.many = null; return; }
+    const a = anchor && list.some((s) => s.r === anchor.r && s.i === anchor.i) ? anchor : list[0];
+    E.sel = a; E.many = list.length > 1 ? { anchor: a, list } : null;
+  }
+  // the segments of rows r0…r1 that overlap the times t1…t2
+  function segsIn(r0: number, r1: number, t1: number, t2: number) {
+    const out: { r: number; i: number }[] = [];
+    for (let r = r0; r <= r1; r++) spansOf(r).forEach((sp: any, i: number) => { if (sp.b - sp.a < 1e-6 ? sp.a >= t1 - 1e-6 && sp.a <= t2 + 1e-6 : sp.b > t1 + 1e-6 && sp.a < t2 - 1e-6) out.push({ r, i }); });
+    return out;
+  }
+  // a segment's box on the stage, as the selection draws it
+  function segBox(r: number, sp: any) { const base = baseOf(r), [x1, y1] = m(sp.a, base + 1.25), [x2, y2] = m(sp.b, base - 0.25); return { x1: x1 - (sp.b - sp.a < 1e-6 ? 3 : 0), y1, x2: Math.max(x2, x1 + 6), y2 }; }
+  // a value for several segments: each painted over its own time, as one edit, and the same times selected after
+  function setValues(list: { r: number; i: number }[], c: string) {
+    const at = list.map((s) => { const sp = spansOf(s.r)[s.i]; return { r: s.r, a: sp.a, b: sp.b }; });
+    edit(() => { for (const x of at) { const row = E.M.rows[x.r]; paintVal(row, x.a, x.b, c); touch(row); } });
+    const after: { r: number; i: number }[] = [];
+    for (const x of at) spansOf(x.r).forEach((sp: any, i: number) => { if (sp.b > x.a + 1e-6 && sp.a < x.b - 1e-6 && !after.some((q) => q.r === x.r && q.i === i)) after.push({ r: x.r, i }); });
+    selectSegs(after); draw(); renderProps();
+  }
   const selRow = () => (E.sel && E.sel.row != null ? E.M.rows[E.sel.row] : null);
   const selAnn = () => (E.sel && E.sel.x != null && E.sel.j == null && E.M.ext[E.sel.x] && E.M.ext[E.sel.x].k === 'annot' ? E.M.ext[E.sel.x] : null);
   const selBrk = () => (E.sel && E.sel.x != null && E.sel.j == null && E.M.ext[E.sel.x] && E.M.ext[E.sel.x].k === 'brk' ? E.M.ext[E.sel.x] : null);
@@ -261,14 +287,21 @@ import { patchSvg } from '../ui/svg-patch';
     const H = rect().height, [, y1] = m(0, baseOf(r) + 1.4), [, y2] = m(0, baseOf(r) - 1.6);
     if (y2 > H - 8) { E.view.oy -= y2 - (H - 8); draw(); } else if (y1 < 24) { E.view.oy += 24 - y1; draw(); }
   }
-  function deleteSeg(r: any, i: any) {
-    const row = E.M.rows[r];
+  // a segment goes, its time to the one before it (or after it); merged afterwards, so remove a row's from the last back
+  function removeSeg(row: any, i: any) {
+    const s = row.segs[i], prev = row.segs.slice(0, i).reverse().find((x: any) => x.c !== 'G'), next = row.segs.slice(i + 1).find((x: any) => x.c !== 'G');
+    row.segs.splice(i, 1);
+    if (prev) prev.w = round(prev.w + s.w); else if (next) next.w = round(next.w + s.w);
+    if (s.pre && s.pre.length) (row.segs[i] || prev || { pre: row.tail }).pre.push(...s.pre);
+  }
+  function deleteSeg(r: any, i: any) { deleteSegs([{ r, i }]); }
+  function deleteSegs(list: any[]) {
     edit(() => {
-      const s = row.segs[i], prev = row.segs.slice(0, i).reverse().find((x: any) => x.c !== 'G'), next = row.segs.slice(i + 1).find((x: any) => x.c !== 'G');
-      row.segs.splice(i, 1);
-      if (prev) prev.w = round(prev.w + s.w); else if (next) next.w = round(next.w + s.w);
-      if (s.pre && s.pre.length) (row.segs[i] || prev || { pre: row.tail }).pre.push(...s.pre);
-      norm(row); touch(row);
+      for (const r of new Set(list.map((s: any) => s.r))) {
+        const row = E.M.rows[r];
+        for (const i of list.filter((s: any) => s.r === r).map((s: any) => s.i).sort((a: any, b: any) => b - a)) removeSeg(row, i);
+        norm(row); touch(row);
+      }
     });
     E.sel = null; draw(); renderProps();
   }
@@ -316,7 +349,7 @@ import { patchSvg } from '../ui/svg-patch';
   function deleteSel() {
     const s = E.sel;
     if (!s) return;
-    if (s.r != null) deleteSeg(s.r, s.i);
+    if (s.r != null) deleteSegs(selSegs());
     else if (s.row != null) deleteRow(s.row);
     else if (s.j != null) deleteMark(s.x, s.j);
     else if (s.x != null) deleteAnn(s.x);
@@ -331,55 +364,117 @@ import { patchSvg } from '../ui/svg-patch';
     disarm();
     E.sel = { x: xi, j }; draw(); renderProps();
   }
-  function addAnn(kind: any, t1: any, t2: any, y: any) {
-    if (Math.abs(t2 - t1) < 1e-6) return;
+  // a new arrow between two times at height y, labelled t with the next number
+  function newAnn(kind: any, t1: any, t2: any, y: any) {
     const n = E.M.ext.filter((x: any) => x.k === 'annot').length + 1;
-    edit(() => E.M.ext.push({ k: 'annot', o: [kind], x1: t1, y1: y, x2: t2, y2: y, lo: ['above', 'font=\\footnotesize'], t: `$t_{${n}}$`, dirty: true }));
-    disarm();
-    E.sel = { x: E.M.ext.length - 1 }; draw(); renderProps();
-    editLabel(E.sel);
+    return { k: 'annot', o: [kind], x1: t1, y1: y, x2: t2, y2: y, lo: ['above', 'font=\\footnotesize'], t: `$t_{${n}}$`, dirty: true };
   }
 
+
   // ---------------------------------------------------------------- palette
-  function sizeMinis(el: any, maxW: any, maxH: any, top: any) {
-    for (const m of el.querySelectorAll('.zxmini')) {
-      const [, , vw, vh] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(top, maxW / vw, maxH / vh);
-      m.style.width = `${r2(vw * k)}px`; m.style.height = `${r2(vh * k)}px`;
-    }
-  }
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [cat, items] of PAL) {
-      // search the shown name and the English one
-      const title = caption(cat);
-      const hits = (items as any).filter(([k, name]: any) => !q || `${caption(name)} ${name.fallback} ${k.slice(2)} ${title} ${cat.fallback}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(title)}</div><div class="qe-grid">${hits.map(([k, label, , key]: any) => { const name = caption(label); return (
-        `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${esc(k)}" title="${esc(name)}${key ? ` (${key})` : ''}"><span class="qe-fig">${TD.timingMini(ITEM[k].mini, 1e3)}</span><span>${esc(name)}</span></button>`); }).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(uiText('editor.commonB.nothingMatches', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    sizeMinis(list, 64, 34, 3);
+    pal.render(PAL.map(([cat, items]: any) => ({
+      id: cat.fallback, title: caption(cat),
+      // the shown name, the English one and the category's both find it
+      items: items.map(([k, label, , key]: any) => ({ id: k, label: caption(label), key, alt: label.fallback, keywords: `${k.slice(2)} ${caption(cat)} ${cat.fallback}`, svg: fitMini(TD.timingMini(ITEM[k].mini, 1e3), 64, 34, 3) })),
+    })), { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) pick(b.dataset.item); search.blur(); }
+  // the keyboard's click (Enter or Space on a focused item) picks it; a press is a click or a drag (below)
+  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
+  // Drag an item onto the drawing: a value onto a segment (or past a row's end), shown painted as it hovers; a row
+  // kind between rows, where a line shows it goes; an interval or delay arrow from an edge to the next, drawn as it
+  // hovers; a marker or break at a time. Letting go over the drawing places it as one undo step; anywhere else, or
+  // Esc, drops it. A press without a drag picks the item, as a click.
+  let palDrag: any = null;
+  const overStage = (e: any) => { const r = rect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+  list.addEventListener('pointerdown', (e: any) => {
+    const b = e.target.closest('.qe-item');
+    if (!b || e.button !== 0 || !E) return;
+    palDrag = { k: b.dataset.item, x: e.clientX, y: e.clientY, moved: false };
+    try { b.setPointerCapture(e.pointerId); } catch { /* a pointer the browser doesn't know */ }
   });
-  list.addEventListener('click', (e: any) => { const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
+  list.addEventListener('pointermove', (e: any) => {
+    const d = palDrag;
+    if (!d) return;
+    if (!d.moved) { if (Math.hypot(e.clientX - d.x, e.clientY - d.y) <= 4) return; d.moved = true; dropPaint(); disarm(); begin(); }
+    dndShow(d, overStage(e) ? e : null);
+    draw();
+  });
+  list.addEventListener('pointerup', (e: any) => {
+    const d = palDrag;
+    if (!d) return;
+    palDrag = null;
+    if (!d.moved) { pick(d.k); return; }
+    if (overStage(e)) { dndShow(d, e); dndPlace(d); } else dndDrop(d);
+  });
+  list.addEventListener('pointercancel', () => { if (palDrag) { const d = palDrag; palDrag = null; if (d.moved) dndDrop(d); } });
+  // what a dragged item shows where it is (or nothing, off the drawing): the model changes live for a value or an
+  // arrow, from how it was when the drag began; a row, marker or break is a guide line
+  function dndShow(d: any, e: any) {
+    if (d.r != null) { const row = E.M.rows[d.r]; row.segs = JSON.parse(d.segs0); touch(row); d.r = null; d.segs0 = null; }
+    if (d.x != null) { E.M.ext.splice(d.x, 1); d.x = null; }
+    d.range = null; d.line = null; d.at = null;
+    if (e) {
+      const [t, y] = toT(e), kind = d.k[0], key = d.k.slice(2);
+      if (kind === 'v') {
+        const r = rowAt(y);
+        if (r >= 0) {
+          const spans = spansOf(r), end = rowEnd(r), sp = spans.find((q: any) => t >= q.a && t < q.b && q.b - q.a > 1e-6);
+          const g = Math.max(0, paintT(t, e.altKey));
+          d.range = key === 'G' ? [g, g] : sp ? [sp.a, sp.b] : t >= end ? [end, Math.max(end + 1, Math.ceil(t))] : null;
+          if (d.range) {
+            const row = E.M.rows[r];
+            d.r = r; d.segs0 = JSON.stringify(row.segs);
+            if (d.range[1] - d.range[0] > 1e-6) paintVal(row, d.range[0], d.range[1], key);
+            touch(row);
+          }
+        }
+      } else if (kind === 'r') {
+        const n = E.M.rows.length, rd = cfg().rowdist;
+        d.ins = Math.max(0, Math.min(n, Math.ceil((0.5 - y) / rd)));
+        d.line = baseOf(d.ins) + 0.5 + rd / 2;
+      } else if (d.k === 'a:mark') d.at = snapEdge(t, e.altKey);
+      else if (d.k === 'a:brk') d.at = Math.max(0.2, snapT(t, !e.altKey));
+      else {
+        const t1 = Math.max(0, snapEdge(t, e.altKey)), t2 = edgeTimes().filter((q) => q > t1 + 1e-6).sort((a, b) => a - b)[0] ?? t1 + 1;
+        E.M.ext.push(newAnn(key, t1, t2, Math.round(y * 4) / 4)); d.x = E.M.ext.length - 1; E.M.dirty = true;
+      }
+    }
+    syncBreaks(); E.dnd = d;
+  }
+  function dndPlace(d: any) {
+    E.dnd = null;
+    if (d.k[0] === 'v') {
+      if (!d.range) { dndDrop(d); return; }
+      const r = d.r, row = E.M.rows[r];
+      row.segs = JSON.parse(d.segs0); touch(row);
+      placePaint({ arm: d.k, r, range: d.range, segs0: null });
+    } else if (d.k[0] === 'r') { commit(); addRow(d.k.slice(2), d.ins); }
+    else if (d.k === 'a:mark') { commit(); addMark(d.at); }
+    else if (d.k === 'a:brk') { commit(); addBreak(d.at); }
+    else {
+      const x = d.x;
+      E.M.dirty = true; commit();
+      E.sel = { x }; draw(); renderProps(); editLabel({ x });
+    }
+  }
+  function dndDrop(d: any) { dndShow(d, null); E.dnd = null; commit(); draw(); }
+  function cancelDnd() { if (!palDrag) return false; const d = palDrag; palDrag = null; if (d.moved) dndDrop(d); return true; }
   // a value sets the selected segment, or is armed for painting; a row kind adds a row; an annotation is armed
   function pick(k: any) {
+    dropPaint();
     if (k[0] === 'r') { addRow(k.slice(2)); return; }
+    if (k[0] === 'v' && !E.arm && selSegs().length > 1) { setValues(selSegs(), k.slice(2)); return; }
     if (k[0] === 'v' && !E.arm && E.sel && E.sel.r != null) { setValue(E.sel.r, E.sel.i, k.slice(2)); return; }
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
     const name = caption(ITEM[k].name);
     setHint(!E.arm ? '' : k[0] === 'v' ? armHint() : k === 'a:mark' ? uiText('editor.tm.armMark', 'Marker line: click a time, or Esc.') : k === 'a:brk' ? uiText('editor.tm.armBreak', 'Break: click a time to break every row there, or Esc.') : uiText('editor.tm.armAnnot', '{name}: drag from one edge to another, or Esc.', { name }));
   }
-  function setHint(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setHint(t: any) { stageNote.set(t); }
   function disarm() { if (!E.arm) return; E.arm = null; buildPalette(); setHint(''); }
   // a value stays picked for painting until Esc; its hint stays up meanwhile
-  const armHint = () => (E.arm && E.arm[0] === 'v' ? uiText('editor.tm.armValue', '{name}: drag along a row to paint it, or click a segment. Esc when done.', { name: caption(ITEM[E.arm].name) }) : '');
+  const armHint = () => (E.arm && E.arm[0] === 'v' ? uiText('editor.tm.armValue', '{name}: drag along a row to paint it, or click, point and click again. Esc when done.', { name: caption(ITEM[E.arm].name) }) : '');
 
   // ---------------------------------------------------------------- geometry
   const rect = () => svg.getBoundingClientRect();
@@ -482,9 +577,9 @@ import { patchSvg } from '../ui/svg-patch';
     const L = lay(), kk = k / U;
     // under the drawing: the selected segment or row, a paint stroke
     const sel = E.sel;
-    if (sel && sel.r != null) {
-      const sp = spansOf(sel.r)[sel.i], base = baseOf(sel.r);
-      if (sp) { const [x1, y1] = m(sp.a, base + 1.25), [x2, y2] = m(sp.b, base - 0.25); out += `<rect class="tm-ssel" x="${r2(x1 - (sp.b - sp.a < 1e-6 ? 3 : 0))}" y="${r2(y1)}" width="${r2(Math.max(6, x2 - x1))}" height="${r2(y2 - y1)}" rx="3"/>`; }
+    for (const q of selSegs()) {
+      const sp = spansOf(q.r)[q.i];
+      if (sp) { const b = segBox(q.r, sp); out += `<rect class="tm-ssel" x="${r2(b.x1)}" y="${r2(b.y1)}" width="${r2(b.x2 - b.x1)}" height="${r2(b.y2 - b.y1)}" rx="3"/>`; }
     }
     if (sel && sel.row != null && L.rows[sel.row]) {
       const base = baseOf(sel.row), lbl = L.texts.find((t: any) => t.row === sel.row), lx = lbl ? (lbl.x - lbl.b.w / 2) / U : -cfg().coldist - 2;
@@ -524,16 +619,63 @@ import { patchSvg } from '../ui/svg-patch';
     // the ends of the selected annotation
     const sa = selAnn();
     if (sa) for (const end of [1, 2]) { const [X, Y] = m(sa['x' + end], sa['y' + end]); out += `<circle class="cz-h tm-aend" cx="${r2(X)}" cy="${r2(Y)}" r="4.5"/>`; }
-    // an arrow being drawn
+    // an arrow being drawn: the arrow itself once it has a length (made live), and where its end snaps
     if (d && d.mode === 'annot') {
       const [x1, y1] = m(d.t1, d.y), [x2] = m(d.t2, d.y);
-      out += `<path class="ze-draft" d="M${r2(x1)},${r2(y1)}H${r2(x2)}"/><circle class="cz-snap on" cx="${r2(x2)}" cy="${r2(y1)}" r="5"/>`;
+      if (d.x == null) out += `<path class="ze-draft" d="M${r2(x1)},${r2(y1)}H${r2(x2)}"/>`;
+      out += `<circle class="cz-snap on" cx="${r2(x2)}" cy="${r2(y1)}" r="5"/>`;
     }
+    // a selection being dragged out over empty space
+    if (d && d.mode === 'marquee' && d.moved) out += `<rect class="marquee" x="${r2(Math.min(d.sx, d.x))}" y="${r2(Math.min(d.sy, d.y))}" width="${r2(Math.abs(d.x - d.sx))}" height="${r2(Math.abs(d.y - d.sy))}"/>`;
+    // an item dragged from the palette: where a row goes, or where a marker or break lands
+    if (E.dnd && E.dnd.line != null) { const [, Y] = m(0, E.dnd.line); out += `<path class="ze-draft" d="M0,${r2(Y)}H${W}"/>`; }
+    if (E.dnd && E.dnd.at != null) { const [X] = m(E.dnd.at, 0); out += `<path class="ze-draft" d="M${r2(X)},0V${H}"/>`; }
     // placing a marker: where it lands
     if ((E.arm === 'a:mark' || E.arm === 'a:brk') && E.hover && E.hover.at != null) { const [X] = m(E.hover.at, 0); out += `<path class="ze-draft" d="M${r2(X)},0V${H}"/>`; }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     patchSvg(svg, out);
     svg.classList.toggle('placing', !!E.arm);
+  }
+
+  // ---------------------------------------------------------------- painting a value
+  // A drag paints from where it began to the pointer. A click starts the same thing without the button held: the
+  // pointer then shows what a second click places, the clicked segment while it stays in it (or a period past the
+  // end), a range from the click once it leaves. Either way the row is painted as the pointer moves, from how it was
+  // when it began, and placing it is one undo step.
+  function paintPreview(d: any, t: number, alt: boolean) {
+    const row = E.M.rows[d.r];
+    if (d.segs0 == null) { begin(); d.segs0 = JSON.stringify(row.segs); }
+    row.segs = JSON.parse(d.segs0); touch(row);
+    if (!d.click) d.range = [Math.min(d.a, d.b), Math.max(d.a, d.b)];
+    else {
+      const spans = spansOf(d.r), at = (x: number) => spans.find((sp: any) => x >= sp.a && x < sp.b && sp.b - sp.a > 1e-6);
+      const end = rowEnd(d.r), sp = at(d.t0), here = at(t);
+      if (sp && here === sp) d.range = [sp.a, sp.b];
+      else if (!sp && d.t0 >= end && t >= end && !here) d.range = [end, Math.max(end + 1, Math.ceil(Math.max(d.t0, t)))];
+      else { const b = Math.max(0, paintT(t, alt)); d.range = [Math.min(d.a, b), Math.max(d.a, b)]; }
+    }
+    const [a, b] = d.range;
+    if (b - a > 1e-6) paintVal(row, a, b, d.arm.slice(2));
+    touch(row); syncBreaks();
+  }
+  function placePaint(d: any) {
+    setHint(armHint());
+    const v = d.arm.slice(2), c = v === 'UH' ? 'U' : v, row = E.M.rows[d.r], [a, b] = d.range;
+    if (d.segs0 != null) row.segs = JSON.parse(d.segs0); // shown while it was made: painted again here, as one edit
+    if (b - a < 1e-6 && c !== 'G') { touch(row); commit(); draw(); return; }
+    edit(() => { paintVal(row, a, b, v); touch(row); });
+    const k = spansOf(d.r).findIndex((sp: any) => sp.a >= a - 1e-6 && (sp.b > sp.a || c === 'G'));
+    E.sel = k >= 0 ? { r: d.r, i: k } : null; draw(); renderProps();
+    if (c === 'D' && E.sel) editLabel(E.sel);
+  }
+  // a click's paint not yet placed: Esc, another value, undo, the code or a press outside the drawing drop it
+  function dropPaint() {
+    const d = E && E.drag;
+    if (!d || !d.click) return false;
+    E.drag = null;
+    if (d.segs0 != null) { const row = E.M.rows[d.r]; row.segs = JSON.parse(d.segs0); touch(row); syncBreaks(); }
+    commit(); setHint(armHint()); draw();
+    return true;
   }
 
   // ---------------------------------------------------------------- pointer
@@ -544,6 +686,7 @@ import { patchSvg } from '../ui/svg-patch';
     const now = Date.now(), dbl = e.button === 0 && now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const [sx, sy] = pos(e), [t, y] = toT(e);
+    if (E.drag && E.drag.click) { const d = E.drag; E.drag = null; if (e.button === 0) { paintPreview(d, t, e.altKey); placePaint(d); } else dropPaint(); return; }
     svg.setPointerCapture(e.pointerId);
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     {
@@ -555,11 +698,11 @@ import { patchSvg } from '../ui/svg-patch';
     if (E.arm) {
       if (E.arm === 'a:mark') { addMark(snapEdge(t, e.altKey)); return; }
       if (E.arm === 'a:brk') { addBreak(Math.max(0.2, snapT(t, !e.altKey))); return; }
-      if (E.arm[0] === 'a') { const t1 = snapEdge(t, e.altKey); E.drag = { mode: 'annot', kind: E.arm.slice(2), t1, t2: t1, y: Math.round(y * 4) / 4 }; draw(); return; }
+      if (E.arm[0] === 'a') { const t1 = snapEdge(t, e.altKey); E.drag = { mode: 'annot', kind: E.arm.slice(2), t1, t2: t1, y: Math.round(y * 4) / 4, x: null }; draw(); return; }
       const r = rowAt(y);
       if (r < 0) return;
       const a = paintT(t, e.altKey);
-      E.drag = { mode: 'paint', r, a: Math.max(0, a), b: Math.max(0, a), t0: t, sx, moved: false }; draw(); return;
+      E.drag = { mode: 'paint', r, a: Math.max(0, a), b: Math.max(0, a), t0: t, sx, moved: false, arm: E.arm, segs0: null }; draw(); return;
     }
     const h = hitAt(e);
     if (h && h.aend) { begin(); E.drag = { mode: 'aend', x: h.x, end: h.aend }; return; }
@@ -589,6 +732,12 @@ import { patchSvg } from '../ui/svg-patch';
       E.drag = { mode: 'edge', r: h.r, i, n, sx, t0, w0: row.segs[i].w, wn: n >= 0 ? row.segs[n].w : 0, start: sp[i].a, nextEnd: n >= 0 ? sp[n].b : Infinity, follow, moved: false };
       E.sel = { r: h.r, i }; draw(); renderProps(); return;
     }
+    if (h && h.i != null && e.shiftKey && E.sel && E.sel.r != null) {
+      // from the anchor to this one: the segments of the rows between, over the time between
+      const A = spansOf(E.sel.r)[E.sel.i], B = spansOf(h.r!)[h.i];
+      if (A && B) selectSegs(segsIn(Math.min(E.sel.r, h.r!), Math.max(E.sel.r, h.r!), Math.min(A.a, B.a), Math.max(A.b, B.b)), E.sel);
+      E.drag = null; draw(); renderProps(); return;
+    }
     if (h && h.i != null) {
       if (dbl && E.sel && E.sel.r === h.r && E.sel.i === h.i) { const s = selSeg(); if (s.c === 'D') editLabel({ r: h.r, i: h.i }); return; }
       E.sel = { r: h.r, i: h.i };
@@ -597,7 +746,11 @@ import { patchSvg } from '../ui/svg-patch';
       else E.drag = null;
       draw(); renderProps(); return;
     }
-    E.sel = null; E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy, idle: true }; draw(); renderProps();
+    // empty space: drag out a selection of segments (⇧ adds to it); a click there selects nothing. Pan with the
+    // wheel, the middle button or Space
+    const base = e.shiftKey ? selSegs() : [], anchor = e.shiftKey ? E.sel : null;
+    if (!e.shiftKey) { E.sel = null; E.many = null; }
+    E.drag = { mode: 'marquee', sx, sy, x: sx, y: sy, base, anchor, moved: false }; draw(); renderProps();
   });
   svg.addEventListener('pointermove', (e: any) => {
     if (!E) return;
@@ -610,17 +763,43 @@ import { patchSvg } from '../ui/svg-patch';
       if (ch) draw();
       return;
     }
+    if (d.mode === 'marquee') {
+      d.x = sx; d.y = sy;
+      if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
+      d.moved = true;
+      const x1 = Math.min(d.sx, sx), x2 = Math.max(d.sx, sx), y1 = Math.min(d.sy, sy), y2 = Math.max(d.sy, sy), list = d.base.slice();
+      E.M.rows.forEach((_: any, r: number) => spansOf(r).forEach((sp: any, i: number) => {
+        const b = segBox(r, sp);
+        if (b.x1 <= x2 && b.x2 >= x1 && b.y1 <= y2 && b.y2 >= y1 && !list.some((q: any) => q.r === r && q.i === i)) list.push({ r, i });
+      }));
+      selectSegs(list, d.anchor);
+      draw(); return;
+    }
     if (d.mode === 'pan') {
       if (d.idle && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
       d.idle = false; E.view.ox = d.ox + sx - d.sx; E.view.oy = d.oy + sy - d.sy; draw(); if (Lb) Lb.pop.place(); return;
     }
     if (d.mode === 'paint') {
-      if (!d.moved && Math.abs(sx - d.sx) < 4) return;
-      d.moved = true; d.b = Math.max(0, paintT(t, e.altKey));
-      setHint(uiText('editor.tm.paintRange', '{name} from {a} to {b}', { name: caption(ITEM[E.arm].name), a: T.num(Math.min(d.a, d.b)), b: T.num(Math.max(d.a, d.b)) }));
+      if (!d.click) {
+        if (!d.moved && Math.abs(sx - d.sx) < 4) return;
+        d.moved = true; d.b = Math.max(0, paintT(t, e.altKey));
+      }
+      paintPreview(d, t, e.altKey);
+      const [a, b] = d.range;
+      setHint(d.click ? uiText('editor.tm.paintClick', '{name} from {a} to {b}: click to place it, or Esc', { name: caption(ITEM[d.arm].name), a: T.num(a), b: T.num(b) })
+        : uiText('editor.tm.paintRange', '{name} from {a} to {b}', { name: caption(ITEM[d.arm].name), a: T.num(a), b: T.num(b) }));
       draw(); return;
     }
-    if (d.mode === 'annot') { d.t2 = snapEdge(t, e.altKey); setHint(uiText('editor.tm.annotRange', 'From {a} to {b}: {n} periods', { a: T.num(d.t1), b: T.num(d.t2), n: T.num(Math.abs(d.t2 - d.t1)) })); draw(); return; }
+    if (d.mode === 'annot') {
+      d.t2 = snapEdge(t, e.altKey);
+      setHint(uiText('editor.tm.annotRange', 'From {a} to {b}: {n} periods', { a: T.num(d.t1), b: T.num(d.t2), n: T.num(Math.abs(d.t2 - d.t1)) }));
+      // the arrow itself, label and all, from the first move on; none while it has no length
+      const long = Math.abs(d.t2 - d.t1) >= 1e-6;
+      if (long && d.x == null) { begin(); d.x = E.M.ext.length; E.M.ext.push(newAnn(d.kind, d.t1, d.t2, d.y)); }
+      else if (!long && d.x != null) { E.M.ext.splice(d.x, 1); d.x = null; E.M.dirty = true; }
+      if (d.x != null) { E.M.ext[d.x].x2 = d.t2; xdirty(E.M.ext[d.x]); }
+      draw(); return;
+    }
     if (d.mode === 'edge') {
       if (!d.moved && Math.abs(sx - d.sx) < 3) return;
       if (!d.moved) { begin(); d.moved = true; }
@@ -675,79 +854,67 @@ import { patchSvg } from '../ui/svg-patch';
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'paint') {
-      setHint(armHint());
-      const v = E.arm.slice(2), c = v === 'UH' ? 'U' : v, row = E.M.rows[d.r];
-      let a = Math.min(d.a, d.b), b = Math.max(d.a, d.b);
-      if (!d.moved) {
-        // a click: the segment under it, or a period past the end
-        const [t] = toT(e), sp = spansOf(d.r).find((s: any) => t >= s.a && t < s.b && s.b - s.a > 1e-6);
-        if (c === 'G') { a = b = snapT(t, !e.altKey); }
-        else if (sp) { a = sp.a; b = sp.b; }
-        else { const end = rowEnd(d.r); a = end; b = Math.max(end + 1, Math.ceil(t)); }
+      const c = d.arm.slice(2) === 'UH' ? 'U' : d.arm.slice(2);
+      if (!d.moved && c !== 'G') {
+        // a click: hovering now shows what a second click will place (the segment clicked, or a range from it)
+        d.click = true; E.drag = d;
+        paintPreview(d, toT(e)[0], e.altKey);
+        setHint(uiText('editor.tm.paintClick', '{name} from {a} to {b}: click to place it, or Esc', { name: caption(ITEM[d.arm].name), a: T.num(d.range[0]), b: T.num(d.range[1]) }));
+        draw(); return;
       }
-      if (b - a < 1e-6 && c !== 'G') { draw(); return; }
-      edit(() => { paintVal(row, a, b, v); touch(row); });
-      const k = spansOf(d.r).findIndex((s: any) => s.a >= a - 1e-6 && (s.b > s.a || c === 'G'));
-      E.sel = k >= 0 ? { r: d.r, i: k } : null; draw(); renderProps();
-      if ((c === 'D') && E.sel) editLabel(E.sel);
+      if (!d.moved) { const g = snapT(toT(e)[0], !e.altKey); d.range = [g, g]; } // a glitch is placed where it is clicked
+      placePaint(d);
       return;
     }
-    if (d.mode === 'annot') { setHint(''); addAnn(d.kind, d.t1, d.t2, d.y); draw(); return; }
+    if (d.mode === 'marquee') { renderProps(); draw(); return; }
+    if (d.mode === 'annot') {
+      setHint('');
+      if (d.x == null) { draw(); return; }
+      // drawn live while dragging: kept as one edit, selected, its label ready to type
+      E.M.dirty = true; commit(); disarm();
+      E.sel = { x: d.x }; draw(); renderProps();
+      editLabel(E.sel);
+      return;
+    }
     if ((d.mode === 'edge' || d.mode === 'move' || d.mode === 'mmove' || d.mode === 'bmove') && d.moved) { setHint(''); commit(); renderProps(); draw(); return; }
     if ((d.mode === 'amove' && d.moved) || d.mode === 'aend') { setHint(''); commit(); renderProps(); draw(); return; }
     draw();
   });
+  document.addEventListener('pointerdown', (e) => { if (E && E.drag && E.drag.click && !svg.contains(e.target as Node)) dropPaint(); }, true);
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
 
   // right-click: the segment's, row's, annotation's or marker's actions
-  const MI: Record<string, any> = {
-    label: '<path d="M4 15l2-5 6-6 3 3-6 6zM11 5l3 3"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    split: '<path d="M10 3v14M3 10h4M13 10h4M5 8l-2 2 2 2M15 8l2 2-2 2"/>',
-    up: '<path d="M10 16V4M5 9l5-5 5 5"/>',
-    down: '<path d="M10 4v12M5 11l5 5 5-5"/>',
-    dup: '<rect x="7" y="7" width="9" height="9" rx="1.5"/><path d="M4 13V5a1 1 0 011-1h8"/>',
-    above: '<path d="M4 14h12M10 11V4M7 7l3-3 3 3"/>',
-    below: '<path d="M4 6h12M10 9v7M7 13l3 3 3-3"/>',
-    add: '<path d="M10 4v12M4 10h12"/>',
-    rev: '<path d="M3 7h12l-3-3M17 13H5l3 3"/>',
-  };
-  const mItem = (act: any, label: any, icon: any, key?: any) => `<button class="ctx-item${/del$/.test(act) ? ' danger' : ''}" data-tm="${act}"><svg viewBox="0 0 20 20" class="qe-ic">${MI[icon]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { label: 'edit', above: 'insertAbove', below: 'insertBelow', rev: 'reverse', del: 'delete', up: 'moveUp', down: 'moveDown', dup: 'duplicate', split: 'split', add: 'add' };
+  const mItem = (act: string, label: string, icon: string, key?: string) => menuRow(act, label, MI[icon], key, { danger: /del$/.test(act) });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const h = hitAt(e);
     E.menuAt = toT(e)[0];
-    if (h && h.brk) { E.sel = { x: h.x }; menu.innerHTML = mItem('bdel', uiText('editor.tm.deleteBreak', 'Delete Break'), 'del', '⌫'); }
-    else if (h && h.x != null && h.j == null) { E.sel = { x: h.x }; menu.innerHTML = mItem('label', uiText('editor.tm.editLabel', 'Edit Label'), 'label', '↩') + mItem('side', uiText('editor.tm.labelOtherSide', 'Label Other Side'), 'above') + mItem('flip', uiText('editor.tm.reverseArrow', 'Reverse Arrow'), 'rev') + '<hr>' + mItem('adel', uiText('editor.tm.deleteArrow', 'Delete Arrow'), 'del', '⌫'); }
-    else if (h && h.j != null) { E.sel = { x: h.x, j: h.j }; menu.innerHTML = mItem('mdel', uiText('editor.tm.deleteMarker', 'Delete Marker'), 'del', '⌫'); }
+    if (h && h.brk) { E.sel = { x: h.x }; menuRows = [mItem('bdel', uiText('editor.tm.deleteBreak', 'Delete Break'), 'del', '⌫')]; }
+    else if (h && h.x != null && h.j == null) { E.sel = { x: h.x }; menuRows = [mItem('label', uiText('editor.tm.editLabel', 'Edit Label'), 'label', '↩'), mItem('side', uiText('editor.tm.labelOtherSide', 'Label Other Side'), 'above'), mItem('flip', uiText('editor.tm.reverseArrow', 'Reverse Arrow'), 'rev'), '-', mItem('adel', uiText('editor.tm.deleteArrow', 'Delete Arrow'), 'del', '⌫')]; }
+    else if (h && h.j != null) { E.sel = { x: h.x, j: h.j }; menuRows = [mItem('mdel', uiText('editor.tm.deleteMarker', 'Delete Marker'), 'del', '⌫')]; }
     else if (h && h.row != null) {
       E.sel = { row: h.row };
-      menu.innerHTML = mItem('label', uiText('editor.tm.editName', 'Edit Name'), 'label', '↩') + mItem('insa', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above') + mItem('insb', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below') + '<hr>' + mItem('up', uiText('editor.tm.moveUp', 'Move Up'), 'up') + mItem('down', uiText('editor.tm.moveDown', 'Move Down'), 'down') + mItem('dup', uiText('editor.tm.duplicateRow', 'Duplicate Row'), 'dup') + '<hr>' + mItem('rdel', uiText('editor.commonB.deleteRow', 'Delete Row'), 'del');
+      menuRows = [mItem('label', uiText('editor.tm.editName', 'Edit Name'), 'label', '↩'), mItem('insa', uiText('editor.commonB.insertRowAbove', 'Insert Row Above'), 'above'), mItem('insb', uiText('editor.commonB.insertRowBelow', 'Insert Row Below'), 'below'), '-', mItem('up', uiText('editor.tm.moveUp', 'Move Up'), 'up'), mItem('down', uiText('editor.tm.moveDown', 'Move Down'), 'down'), mItem('dup', uiText('editor.tm.duplicateRow', 'Duplicate Row'), 'dup'), '-', mItem('rdel', uiText('editor.commonB.deleteRow', 'Delete Row'), 'del')];
     } else if (h && (h.i != null || h.edge != null)) {
       const i = h.i != null ? h.i : h.edge;
       E.sel = { r: h.r, i };
       const s = selSeg();
-      menu.innerHTML = (s.c === 'D' ? mItem('label', uiText('editor.tm.editText', 'Edit Text'), 'label', '↩') : '') + (s.c !== 'G' ? mItem('split', uiText('editor.tm.splitHere', 'Split Here'), 'split') : '') + mItem('rowsel', uiText('editor.tm.selectRow', 'Select Row'), 'above') + '<hr>' + mItem('sdel', uiText('editor.tm.deleteSegment', 'Delete Segment'), 'del', '⌫');
+      menuRows = [...(s.c === 'D' ? [mItem('label', uiText('editor.tm.editText', 'Edit Text'), 'label', '↩')] : []), ...(s.c !== 'G' ? [mItem('split', uiText('editor.tm.splitHere', 'Split Here'), 'split')] : []), mItem('rowsel', uiText('editor.tm.selectRow', 'Select Row'), 'above'), '-', mItem('sdel', uiText('editor.tm.deleteSegment', 'Delete Segment'), 'del', '⌫')];
     } else if (!h || h.past || h.add) {
       E.sel = null;
-      menu.innerHTML = mItem('add:signal', uiText('editor.tm.addSignalRow', 'Add Signal Row'), 'add') + mItem('add:clock', uiText('editor.tm.addClockRow', 'Add Clock Row'), 'add') + mItem('add:bus', uiText('editor.tm.addBusRow', 'Add Bus Row'), 'add') + mItem('add:blank', uiText('editor.tm.addBlankRow', 'Add Blank Row'), 'add');
+      menuRows = [mItem('add:signal', uiText('editor.tm.addSignalRow', 'Add Signal Row'), 'add'), mItem('add:clock', uiText('editor.tm.addClockRow', 'Add Clock Row'), 'add'), mItem('add:bus', uiText('editor.tm.addBusRow', 'Add Bus Row'), 'add'), mItem('add:blank', uiText('editor.tm.addBlankRow', 'Add Blank Row'), 'add')];
     } else { closeMenu(); return; }
     draw(); renderProps();
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-tm]');
-    if (!b) return;
-    closeMenu();
-    act((b as HTMLElement).dataset.tm);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  function pickMenu(a: string) {
+    act(a);
+  }
 
   // ---------------------------------------------------------------- label editor
   // A floating box under the row name, data value or arrow (TD.input.popup); the whole edit is one undo step.
@@ -798,6 +965,18 @@ import { patchSvg } from '../ui/svg-patch';
     const show = (title: any, summary: any, rows: any) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), summary }] });
     const numeric = (label: any, key: any, value: any, unit: any, step = 0.5, attrs = {}) => numField(label, key, value == null ? '' : T.num(value), unit, { step: String(step), ...attrs });
     const selectField = (label: any, key: any, value: any, options: any) => row(label, { kind: 'select' as const, value, options, attrs: { 'data-f': key } });
+    const many = selSegs();
+    if (many.length > 1) {
+      // several segments: their value and width, set on all of them (blank where they differ)
+      const segs = many.map((q) => M.rows[q.r].segs[q.i]), same = (k: string) => (segs.every((q: any) => q[k] === segs[0][k]) ? segs[0][k] : null);
+      const rows = new Set(many.map((q) => q.r)).size, c = same('c'), w = segs.filter((q: any) => q.c !== 'G'), wv = w.length && w.every((q: any) => Math.abs(q.w - w[0].w) < 1e-6) ? w[0].w : null;
+      show(uiText('editor.tm.nSel', '{n} segments', { n: many.length }), rows === 1 ? uiText('editor.tm.nSelOneRow', 'in 1 row') : uiText('editor.tm.nSelRows', 'in {n} rows', { n: rows }), [
+        selectField(uiText('editor.tm.value', 'Value'), 'value', c ?? '', [...(c == null ? [['', uiText('editor.tm.mixed', 'Mixed')]] : []), ...T.VALUES.map((v: any) => [v, `${T.VALUE_NAMES[v]} (${v})`])]),
+        numeric(uiText('editor.tm.width', 'Width'), 'w', wv, uiText('editor.tm.unitPeriods', 'periods'), 0.5, { min: '0.05', ...(wv == null ? { placeholder: uiText('editor.tm.mixed', 'Mixed') } : {}) }),
+        note(uiText('editor.tm.manyNote1', 'Pick a value on the left to paint them all; Delete removes them. '), { kbd: '⇧' }, uiText('editor.tm.manyNote2', '-click a segment, or hold it while dragging over empty space, to add more.')),
+      ]);
+      return;
+    }
     if (sg) {
       const sp = spansOf(E.sel.r)[E.sel.i], rname = M.rows[E.sel.r].name, band = sg.c === 'D' || sg.c === 'U', clock = sg.c === 'C' || sg.c === 'T';
       const run = clock ? runOf(E.sel.r, E.sel.i) : null, ws = run ? M.rows[E.sel.r].segs.slice(run.a, run.b + 1).map((q: any) => q.w) : [], clockW = ws.every((w: any) => Math.abs(w - ws[0]) < 1e-6) ? ws[0] : null;
@@ -831,15 +1010,22 @@ import { patchSvg } from '../ui/svg-patch';
     const c = cfg(), grid = M.ext.find((x: any) => x.k === 'grid' || x.k === 'fullgrid'), sl = toptOf('timing/slope'), maxW = M.rows.reduce((a: any, _: any, r: any) => Math.max(a, rowEnd(r)), 0);
     const nsig = M.rows.length, len = T.num(maxW);
     show(uiText('editor.tm.table', 'Table'), nsig === 1 ? uiText('editor.tm.oneSignalPeriods', '1 signal · {len} periods', { len }) : uiText('editor.tm.nSignalsPeriods', '{n} signals · {len} periods', { n: nsig, len }), [numeric(uiText('editor.tm.rowDistance', 'Row distance'), 'rowdist', c.rowdist, uiText('editor.tm.unitHeights', 'heights'), 0.5, { min: '1' }), numeric(uiText('editor.tm.slope', 'Slope'), 'slope', sl != null ? parseFloat(sl) : c.lslope, uiText('editor.tm.unitPeriods', 'periods'), 0.05, { min: '0', max: '1' }), segments(uiText('editor.tm.grid', 'Grid'), 'grid', grid ? grid.k : 'none', [['none', uiText('editor.tm.gridNone', 'None')], ['grid', uiText('editor.tm.gridRows', 'Rows'), '\\tablegrid'], ['fullgrid', uiText('editor.tm.gridFull', 'Full'), '\\fulltablegrid']]),
-      note(uiText('editor.tm.tableNote', 'Add a row with the buttons under the last row, from Rows on the left, or by right-clicking a row name. Click a value to paint with it: drag along a row, or click a segment. Drag edges to move transitions. Draw arrows between edges for setup, hold and delay times. Double-click a name or data value to type it.'))]);
+      note(uiText('editor.tm.tableNote', 'Add a row with the buttons under the last row, from Rows on the left, or by right-clicking a row name. Click a value to paint with it: drag along a row, or click where it starts, point to where it ends (it shows as you go) and click again; click twice on a segment to paint just that one. Or drag any item from the left onto the drawing. Drag over empty space to select segments; ⇧-click one to select up to it. Drag edges to move transitions. Draw arrows between edges for setup, hold and delay times. Double-click a name or data value to type it.'))]);
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { begin(); E.cwSpan = null; E.rdFrom = null; } });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); renderProps(); } });
   props.addEventListener('input', (ev: any) => {
     const t = ev.target, f = t.dataset.f;
     if (!f) return;
-    const sg = selSeg(), row = selRow(), an = selAnn(), mk = selMark(), n = parseFloat(t.value);
-    if (sg) {
+    const sg = selSeg(), row = selRow(), an = selAnn(), mk = selMark(), n = parseFloat(t.value), many = selSegs();
+    if (many.length > 1) {
+      for (const q of many) {
+        const r = E.M.rows[q.r], s = r.segs[q.i];
+        if (f === 'value' && t.value) { s.c = t.value; if (s.c === 'D' && s.t == null) s.t = ''; if (s.c === 'G') s.w = 0; else if (s.w <= 0) s.w = 1; if (s.c !== 'D') { s.t = null; s.topt = ''; } if (s.c !== 'D' && s.c !== 'U') s.bg = null; }
+        else if (f === 'w' && n > 0 && s.c !== 'G') s.w = round(n);
+        touch(r);
+      }
+    } else if (sg) {
       const r = E.M.rows[E.sel.r];
       if (f === 'value') { sg.c = t.value; if (sg.c === 'D' && sg.t == null) sg.t = ''; if (sg.c === 'G') sg.w = 0; else if (sg.w <= 0) sg.w = 1; if (sg.c !== 'D') { sg.t = null; sg.topt = ''; } if (sg.c !== 'D' && sg.c !== 'U') sg.bg = null; }
       else if (f === 'w') { if (!(n > 0)) return; sg.w = round(n); }
@@ -956,16 +1142,17 @@ import { patchSvg } from '../ui/svg-patch';
     if (document.activeElement === codeTa) return;
     const c = snapCode();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
-    codeMsg.innerHTML = T.layout({ src: c }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, T.layout({ src: c }).warnings);
   }
   function readCode() {
+    dropPaint();
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps();
-    codeMsg.innerHTML = T.layout({ src: codeTa.value }).warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, T.layout({ src: codeTa.value }).warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
@@ -985,6 +1172,7 @@ import { patchSvg } from '../ui/svg-patch';
     draw(); renderProps();
   }
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
     if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
@@ -997,7 +1185,8 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
+      if (cancelDnd() || dropPaint()) return;
       if (E.arm) { E.arm = null; buildPalette(); setHint(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -1029,8 +1218,7 @@ import { patchSvg } from '../ui/svg-patch';
     const src = snapCode();
     if (src !== E.start) { E.start = src; E.done({ src }); }
     const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    setHint(saved);
-    setTimeout(() => { if (E && tip.textContent === saved) setHint(''); }, 1500);
+    stageNote.flash(saved, 1500);
   }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
@@ -1058,7 +1246,7 @@ import { patchSvg } from '../ui/svg-patch';
     E = { M, sel: null, arm: null, view: { ox: 0, oy: 0, k: 30 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null };
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setHint('');
     // the palette, panel and drawing's captions follow the interface language while open
     stopLocale?.();

@@ -1,16 +1,18 @@
 import { isSwapGate, boundedSpan } from './qc-span';
 import { wheelZoomFactor } from '../ui/wheel-zoom';
-import { onLocale, t } from '../i18n';
+import { onLocale, t, message } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
-import { row, section } from '../ui/forms';
+import { row, switchRow, section } from '../ui/forms';
 import type { FormRow, FormSection, Attributes } from '../ui/forms';
 import { field, numField, note, texColour } from '../ui/editor-fields';
 import QceditorFrame from '../ui/editors/QceditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
-import { GRID_ICON_PATHS } from '../ui/grid-icons';
 import { patchSvg } from '../ui/svg-patch';
+import { editorPalette, fitMini } from './editor-palette.svelte';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { showCodeNotes, stageTip } from '../ui/editor-notes';
 // Quantum circuit editor: the overlay that opens on a Quantum block. A palette of quantikz elements,
 // the circuit drawn by the canvas renderer over a grid of cells (wires × steps) where elements are
 // dropped, moved and linked, the selected cell's properties, and beside them the quantikz code, live
@@ -20,7 +22,6 @@ import { patchSvg } from '../ui/svg-patch';
   const Q = TD.qc;
   const { esc, r2 } = TD.util;
   const $ = (s: any, r: any = document) => r.querySelector(s);
-  const isMac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
   const PAPER = '#fffdf8', INK = '#1c1b19';
 
   // Delete gutters, shared by the grid editors (Quantum, ZX, CD): a strip left of the rows and one above the
@@ -268,15 +269,10 @@ import { patchSvg } from '../ui/svg-patch';
   root.className = 'modal';
   root.hidden = true;
   const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
-  const QI = GRID_ICON_PATHS; // src/ui/grid-icons.ts, shared with the Table
-  const qic = (k: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${QI[k]}</svg>`;
-  mountFrame(root, QceditorFrame, { p0: qic('below'), p1: qic('after'), p2: ic('<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>'), p3: isMac ? '⌘' : 'Ctrl+', p4: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>'), p5: isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z', p6: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>'), p7: ic('<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>'), p8: isMac ? '⌘' : 'Ctrl+' });
+  mountFrame(root, QceditorFrame);
   document.body.appendChild(root);
-  const menu = document.createElement('div');
-  menu.className = 'ctx qe-ctx'; menu.hidden = true;
-  root.appendChild(menu);
-  const svg = $('.qe-svg', root), stage = $('.cz-stage', root), list = $('.qe-list', root), search = $('.cz-search input', root);
-  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root);
+  const svg = $('.qe-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('editor.qc.searchElements', 'Search elements'), label: message('editor.commonA.elements', 'Elements'), listClass: 'qe-list', onpick: (k) => choose(k) }), list = pal.list, search = pal.search;
+  const props = $('.cz-props', root), count = $('.cz-count', root), codeTa = $('.cz-code textarea', root), codeMsg = $('.cz-msg', root), tip = $('.cz-tip', root), stageNote = stageTip(tip);
 
   for (const [action, axis] of [['addrow', 'row'], ['addcol', 'col']]) {
     const button = $('[data-qe="' + action + '"]', root);
@@ -319,8 +315,19 @@ import { patchSvg } from '../ui/svg-patch';
   }
   const selBox = () => { const s = E.sel; return s && { r1: Math.min(s.r1, s.r2), r2: Math.max(s.r1, s.r2), c1: Math.min(s.c1, s.c2), c2: Math.max(s.c1, s.c2) }; };
   const single = () => { const b = selBox(); return b && b.r1 === b.r2 && b.c1 === b.c2 ? b : null; };
-  // a gate over several wires: its own cell owns the cells under it, so a click there picks the gate
-  const spanAt = (r: any, c: any) => { const x = at(r, c), m = x && !x.opaque && mainOf(x); return m && SPANS.has(m.name) ? spanOf(m) : 1; };
+  // a gate over several wires (a gate[n], a swap gate, a permutation over as many wires as its order lists): its own
+  // cell owns the cells under it, so a click there picks the gate
+  const spanAt = (r: any, c: any) => {
+    const x = at(r, c), m = x && !x.opaque && mainOf(x);
+    if (!m) return 1;
+    if (m.name === 'permute') return Math.max(1, String(m.a[0] || '').split(',').filter((v) => parseInt(v, 10) > 0).length);
+    return SPANS.has(m.name) ? spanOf(m) : 1;
+  };
+  // the tall gate over row r of column c (its top cell), if any
+  function tallOver(r: any, c: any) {
+    for (let rr = r; rr >= 0; rr--) { const n = spanAt(rr, c); if (n > 1 && rr + n - 1 >= r) return { r: rr, c }; }
+    return null;
+  }
   function owner(r: any, c: any) {
     for (let rr = r - 1; rr >= 0; rr--) if (rr + spanAt(rr, c) - 1 >= r) return { r: rr, c };
     return { r, c };
@@ -340,6 +347,15 @@ import { patchSvg } from '../ui/svg-patch';
   }
 
   // ---------------------------------------------------------------- placing
+  // the wires a palette element takes, from its top one
+  const itemRows = (key: any) => Math.max(...ITEM[key].cells.map((x: any) => x[0])) + 1;
+  // a palette element can't go over any part of a tall gate: not an element of its own (a gate, a control, a label),
+  // nor a wire a tall element covers. Each wire of a CNOT or a SWAP keeps its own element, which one placed on it
+  // replaces; only what decorates a wire (Classical from here, Wire down) goes on a tall gate's cell
+  function blocked(key: any, r: any, c: any) {
+    return ITEM[key].cells.some(([dr, code]: any) => (!code || Q.cell(code, () => {}).some((x: any) => MAIN.has(x.name))) && tallOver(r + dr, c));
+  }
+  const coveredTip = () => setTip(t('editor.qc.tip.covered', 'A gate over several wires is there: place it on a free wire, or delete that gate first.'));
   // put a palette element with its top cell at (r, c); returns false when nothing changed
   function place(key: any, r: any, c: any) {
     const it = ITEM[key], M = E.M;
@@ -447,25 +463,13 @@ import { patchSvg } from '../ui/svg-patch';
 
   // ---------------------------------------------------------------- palette
   function buildPalette() {
-    const q = search.value.trim().toLowerCase();
-    let html = '';
-    for (const [title, items] of PAL) {
-      const hits = (items as any).filter((it: any) => !q || `${it[1]} ${it[2].map((c: any) => c[1]).join(' ')} ${title} ${say(it[1])} ${catName(title as string)}`.toLowerCase().includes(q));
-      if (!hits.length) continue;
-      html += `<div class="cz-cat"><div class="cz-cat-t">${esc(catName(title as string))}</div><div class="qe-grid">${hits.map(([k, name, , key]: any) => `<button class="qe-item${E && E.arm === k ? ' on' : ''}" data-item="${k}" title="${esc(say(name))}${key ? ` (${key})` : ''}" ><span class="qe-fig">${TD.qcMini(miniSrc(ITEM[k]), 1e3, 'var(--qe-paper)')}</span><span>${esc(say(name))}</span></button>`).join('')}</div></div>`;
-    }
-    list.innerHTML = html || `<div class="cz-empty">${esc(t('editor.commonA.noMatch', 'Nothing matches “{query}”', { query: search.value }))}</div>`;
-    // one scale for every drawing, so wires and gates keep the same weight; wide ones shrink to fit
-    for (const m of list.querySelectorAll('.qcmini')) {
-      const [, , w, h] = m.getAttribute('viewBox').split(' ').map(Number), k = Math.min(1.5, 64 / w, 44 / h);
-      m.style.width = `${r2(w * k)}px`; m.style.height = `${r2(h * k)}px`;
-    }
+    pal.render(PAL.map(([title, items]: any) => ({
+      id: title, title: catName(title),
+      // the shown name, the English one, its cells' names and the category's find it; one scale for every drawing,
+      // so wires and gates keep the same weight, and wide ones shrink to fit
+      items: items.map(([k, name, cells, key]: any) => ({ id: k, label: say(name), key, alt: name, keywords: `${cells.map((c: any) => c[1]).join(' ')} ${title} ${catName(title)}`, svg: fitMini(TD.qcMini(miniSrc(ITEM[k]), 1e3, 'var(--qe-paper)'), 64, 44, 1.5) })),
+    })), { armed: E?.arm });
   }
-  search.addEventListener('input', buildPalette);
-  search.addEventListener('keydown', (e: any) => {
-    if (e.key === 'Escape') { if (search.value) { search.value = ''; buildPalette(); } else search.blur(); e.stopPropagation(); }
-    if (e.key === 'Enter') { const b = $('.qe-item', list); if (b) choose(b.dataset.item); search.blur(); }
-  });
   // click: into the selected cell (then step right), or arm it for clicking cells; drag: drop on a cell
   let palDrag: any = null;
   list.addEventListener('pointerdown', (e: any) => {
@@ -484,7 +488,8 @@ import { patchSvg } from '../ui/svg-patch';
     const d = palDrag; palDrag = null; E.ghost = null;
     if (!d.moved) { choose(d.k); return; }
     const h = overStage(e) && cellAt(e);
-    if (h) { edit(() => place(d.k, h.r, h.c)); E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c }; renderProps(); }
+    if (h && blocked(d.k, h.r, h.c)) coveredTip();
+    else if (h) { edit(() => place(d.k, h.r, h.c)); E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c }; renderProps(); }
     E.hover = null; draw();
   });
   const GROUPING = new Set(['group', 'glabel']);
@@ -499,12 +504,13 @@ import { patchSvg } from '../ui/svg-patch';
     setTip(E.arm ? (GROUPING.has(k) ? t('editor.qc.tip.armGroup', '{name}: drag across the cells it should cover. Esc when done.', { name: say(ITEM[k].name) }) : t('editor.qc.tip.arm', '{name}: click a cell to place it. Esc when done.', { name: say(ITEM[k].name) })) : '');
   }
   function put(k: any, r: any, c: any, step: any) {
+    if (blocked(k, r, c)) { coveredTip(); return; }
     edit(() => place(k, r, c));
     if (step) { ensure(E.M, r + 1, c + 2); E.sel = { r1: r, c1: c + 1, r2: r, c2: c + 1 }; }
     else E.sel = { r1: r, c1: c, r2: r, c2: c };
     draw(); renderProps();
   }
-  function setTip(t: any) { tip.textContent = t; tip.hidden = !t; }
+  function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
   // The circuit in the renderer's px, cell edges halfway between columns / rows; one more step
@@ -621,8 +627,13 @@ import { patchSvg } from '../ui/svg-patch';
     const h = E.hover;
     if (h) {
       // the growing row / column light up whole: a drop there adds a wire / a step
-      const hb = G.empty ? [0, 0, 0, 0] : h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, h.r + spanAt(h.r, h.c) - 1, h.c];
-      if (G.empty || R && C || h.r < R || h.c < C) {
+      // placing a palette element: the wires it will take (a two-wire gate lights up two), nothing where it can't go
+      const key = !G.empty && (E.ghost ? E.ghost.k : E.arm && !GROUPING.has(E.arm) ? E.arm : null);
+      const no = key && h.r <= R && h.c < C && blocked(key, h.r, h.c);
+      const tall = key && h.r < R && h.c < C ? Math.min(R - 1, h.r + itemRows(key) - 1) : h.r + spanAt(h.r, h.c) - 1;
+      const hb = G.empty ? [0, 0, 0, 0] : h.r === R ? [R, 0, R, C - 1] : h.c === C ? [0, C, R - 1, C] : [h.r, h.c, Math.max(h.r, tall), h.c];
+      if (no) { /* over a tall gate: nothing lights up */ }
+      else if (G.empty || R && C || h.r < R || h.c < C) {
         if (E.arm || E.ghost || (E.drag && E.drag.mode === 'move' && E.drag.moved)) out += box(...(hb as [any, any, any, any]), 'qe-target');
         else if (!E.drag) out += box(...(hb as [any, any, any, any]), 'qe-hover');
       }
@@ -740,7 +751,7 @@ import { patchSvg } from '../ui/svg-patch';
     const d = E.drag, [sx, sy] = pos(e);
     if (!d) {
       const dz = TD.gridDel.at(E.gut, sx, sy), h = dz ? null : E.arm ? cellAt(e) : pick(e);
-      svg.style.cursor = dz ? 'pointer' : h && !E.arm && h.r < nR(E.M) && h.c < nC(E.M) && onElement(e, h) ? 'move' : '';
+      svg.style.cursor = dz ? 'pointer' : h && E.arm && !GROUPING.has(E.arm) && h.r < nR(E.M) && h.c < nC(E.M) && blocked(E.arm, h.r, h.c) ? 'not-allowed' : h && !E.arm && h.r < nR(E.M) && h.c < nC(E.M) && onElement(e, h) ? 'move' : '';
       const nr = dz ? null : TD.gridDel.near(E.gut, sx, sy);
       if (JSON.stringify(h) !== JSON.stringify(E.hover) || JSON.stringify(dz) !== JSON.stringify(E.del) || JSON.stringify(nr) !== JSON.stringify(E.near)) { E.hover = h; E.del = dz; E.near = nr; draw(); }
       return;
@@ -838,14 +849,8 @@ import { patchSvg } from '../ui/svg-patch';
     draw();
   });
   // right-click: wires and steps, around the cell (or range) under the pointer
-  const MI: Record<string, any> = {
-    ...QI, clear: '<path d="M4 4l12 12M16 4L4 16"/>',
-    left: '<path d="M16 10H4M8.5 5.5L4 10l4.5 4.5"/>', right: '<path d="M4 10h12M11.5 5.5L16 10l-4.5 4.5"/>',
-    group: '<rect x="3" y="5" width="14" height="12" rx="2" stroke-dasharray="2.5 2"/><path d="M6 2.5h8"/>',
-    glabel: '<path d="M3 16h14"/><text x="10" y="11" text-anchor="middle" fill="currentColor" stroke="none" font-size="11">A</text>',
-    glabelbelow: '<path d="M3 4h14"/><text x="10" y="17" text-anchor="middle" fill="currentColor" stroke="none" font-size="11">A</text>',
-    gdel: '<rect x="3" y="5" width="14" height="12" rx="2" stroke-dasharray="2.5 2"/><path d="M7.5 8.5l5 5M12.5 8.5l-5 5"/>',
-  };
+  // the menu rows' icons (src/ui/kit/icons.ts)
+  const MI: Record<string, IconName> = { above: 'rowAbove', below: 'rowBelow', before: 'colBefore', after: 'colAfter', rowdel: 'rowDelete', coldel: 'colDelete', clear: 'clear', left: 'moveLeft', right: 'moveRight', group: 'group', glabel: 'labelAbove', glabelbelow: 'labelBelow', gdel: 'groupDelete' };
   // the groups whose box covers a cell: [{ r, c, i, it }]
   function groupsAt(r: any, c: any) {
     const out: any[] = [];
@@ -897,10 +902,11 @@ import { patchSvg } from '../ui/svg-patch';
     const f = $(`[data-f="Gx${s.r1}_${s.c1}_${cell.items.indexOf(it)}"]`, props);
     if (f) { f.scrollIntoView({ block: 'nearest' }); f.focus({ preventScroll: true }); f.select(); }
   }
-  const mItem = (act: any, label: any, ic: any, key?: any, off?: any) => `<button class="ctx-item${/^(rowdel|coldel|delete|gdel)/.test(act) ? ' danger' : ''}" data-qm="${act}"${off ? ' disabled' : ''}><svg viewBox="0 0 20 20"${QI[ic] ? ' class="qe-ic"' : ''}>${MI[ic]}</svg><span class="lb">${esc(label)}</span>${key ? `<kbd>${key}</kbd>` : ''}</button>`;
-  function closeMenu() { menu.hidden = true; }
+  const mItem = (act: string, label: string, ic: string, key?: string, off?: boolean) => menuRow(act, label, MI[ic], key, { disabled: !!off, danger: /^(rowdel|coldel|delete|gdel)/.test(act) });
+  const closeMenu = closeEditorMenu;
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    let menuRows: MenuEntry[] = [];
     if (!E) return;
     const h = pick(e);
     if (!h || h.r >= nR(E.M) || h.c >= nC(E.M)) { closeMenu(); return; }
@@ -908,42 +914,29 @@ import { patchSvg } from '../ui/svg-patch';
     if (!b || h.r < b.r1 || h.r > b.r2 || h.c < b.c1 || h.c > b.c2) E.sel = { r1: h.r, c1: h.c, r2: h.r, c2: h.c };
     draw(); renderProps();
     const s = selBox(), nr = s.r2 - s.r1 + 1, nc = s.c2 - s.c1 + 1;
-    menu.innerHTML = mItem('rowabove', t('editor.qc.menu.wireAbove', 'Insert Wire Above'), 'above') + mItem('rowbelow', t('editor.qc.menu.wireBelow', 'Insert Wire Below'), 'below') + '<hr>' +
-      mItem('colbefore', t('editor.qc.menu.stepBefore', 'Insert Step Before'), 'before') + mItem('colafter', t('editor.qc.menu.stepAfter', 'Insert Step After'), 'after') + '<hr>' +
-      mItem('colleft', nc > 1 ? t('editor.qc.menu.moveLeftN', 'Move {n} Steps Left', { n: nc }) : t('editor.qc.menu.moveLeft', 'Move Step Left'), 'left', '', s.c1 === 0) +
-      mItem('colright', nc > 1 ? t('editor.qc.menu.moveRightN', 'Move {n} Steps Right', { n: nc }) : t('editor.qc.menu.moveRight', 'Move Step Right'), 'right', '', s.c2 >= nC(E.M) - 1) + '<hr>' +
-      mItem('rowdel', nr > 1 ? t('editor.qc.menu.deleteWiresN', 'Delete {n} Wires', { n: nr }) : t('editor.qc.menu.deleteWire', 'Delete Wire'), 'rowdel') + mItem('coldel', nc > 1 ? t('editor.qc.menu.deleteStepsN', 'Delete {n} Steps', { n: nc }) : t('editor.qc.menu.deleteStep', 'Delete Step'), 'coldel') + '<hr>' +
-      mItem('delete', nr * nc > 1 ? t('editor.qc.menu.clearCells', 'Clear Cells') : t('editor.qc.menu.clearCell', 'Clear Cell'), 'clear', 'Del');
+    menuRows = [mItem('rowabove', t('editor.qc.menu.wireAbove', 'Insert Wire Above'), 'above'), mItem('rowbelow', t('editor.qc.menu.wireBelow', 'Insert Wire Below'), 'below'), '-', mItem('colbefore', t('editor.qc.menu.stepBefore', 'Insert Step Before'), 'before'), mItem('colafter', t('editor.qc.menu.stepAfter', 'Insert Step After'), 'after'), '-', mItem('colleft', nc > 1 ? t('editor.qc.menu.moveLeftN', 'Move {n} Steps Left', { n: nc }) : t('editor.qc.menu.moveLeft', 'Move Step Left'), 'left', '', s.c1 === 0), mItem('colright', nc > 1 ? t('editor.qc.menu.moveRightN', 'Move {n} Steps Right', { n: nc }) : t('editor.qc.menu.moveRight', 'Move Step Right'), 'right', '', s.c2 >= nC(E.M) - 1), '-', mItem('rowdel', nr > 1 ? t('editor.qc.menu.deleteWiresN', 'Delete {n} Wires', { n: nr }) : t('editor.qc.menu.deleteWire', 'Delete Wire'), 'rowdel'), mItem('coldel', nc > 1 ? t('editor.qc.menu.deleteStepsN', 'Delete {n} Steps', { n: nc }) : t('editor.qc.menu.deleteStep', 'Delete Step'), 'coldel'), '-', mItem('delete', nr * nc > 1 ? t('editor.qc.menu.clearCells', 'Clear Cells') : t('editor.qc.menu.clearCell', 'Clear Cell'), 'clear', 'Del')];
     // groups: frame or label the selection; delete any group whose box covers the clicked cell
     const gb = shownBox(s), anchor = at(s.r1, s.c1), here = groupsAt(h.r, h.c), many = (gb.r2 - gb.r1 + 1) * nc > 1;
     const side = labelSide(gb);
-    let gh = mItem('gadd', many ? t('editor.qc.menu.groupSel', 'Group Selection') : t('editor.qc.menu.groupCell', 'Group Cell'), 'group', '', !anchor || anchor.opaque) +
-      mItem(side === 'bottom' ? 'glabelbelow' : 'glabel', side === 'bottom' ? (many ? t('editor.qc.menu.labelBelowSel', 'Label Below Selection') : t('editor.qc.menu.labelBelow', 'Label Below')) : (many ? t('editor.qc.menu.labelAboveSel', 'Label Above Selection') : t('editor.qc.menu.labelAbove', 'Label Above')), side === 'bottom' ? 'glabelbelow' : 'glabel', '', !anchor || anchor.opaque);
+    const gh: MenuEntry[] = [mItem('gadd', many ? t('editor.qc.menu.groupSel', 'Group Selection') : t('editor.qc.menu.groupCell', 'Group Cell'), 'group', '', !anchor || anchor.opaque),
+      mItem(side === 'bottom' ? 'glabelbelow' : 'glabel', side === 'bottom' ? (many ? t('editor.qc.menu.labelBelowSel', 'Label Below Selection') : t('editor.qc.menu.labelBelow', 'Label Below')) : (many ? t('editor.qc.menu.labelAboveSel', 'Label Above Selection') : t('editor.qc.menu.labelAbove', 'Label Above')), side === 'bottom' ? 'glabelbelow' : 'glabel', '', !anchor || anchor.opaque)];
     here.forEach((g) => {
       const lb = (g.it.a[0] || '').trim(), name = lb ? `“${lb.length > 24 ? lb.slice(0, 23) + '…' : lb}”` : '';
-      gh += mItem(`gdel:${g.r},${g.c},${g.i}`, here.length > 1 || name ? t('editor.qc.menu.deleteGroupNamed', 'Delete Group {name}', { name }).trim() : t('editor.qc.menu.deleteGroup', 'Delete Group'), 'gdel');
+      gh.push(mItem(`gdel:${g.r},${g.c},${g.i}`, here.length > 1 || name ? t('editor.qc.menu.deleteGroupNamed', 'Delete Group {name}', { name }).trim() : t('editor.qc.menu.deleteGroup', 'Delete Group'), 'gdel'));
     });
-    menu.innerHTML = menu.innerHTML.replace(/<hr>(?=<button[^>]*data-qm="delete")/, '<hr>' + gh + '<hr>');
-    menu.hidden = false;
-    const r = menu.getBoundingClientRect();
-    menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
-    menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+    // the group rows go in their own section, before Clear Cell
+    menuRows.splice(menuRows.lastIndexOf('-'), 0, '-', ...gh);
+    openEditorMenu(e, menuRows, pickMenu);
   });
-  menu.addEventListener('click', (e) => {
-    const b = (e.target! as Element).closest('[data-qm]');
-    if (!b) return;
-    closeMenu();
-    const q = (b as HTMLElement).dataset.qm;
+  function pickMenu(q: string) {
     if (q === 'gadd' || q === 'glabel' || q === 'glabelbelow') { addGroup(selBox(), q !== 'gadd', q === 'glabelbelow' ? 'bottom' : 'top'); return; }
-    if (q!.startsWith('gdel:')) {
-      const [r, c, i] = q!.slice(5).split(',').map(Number), cell = at(r, c);
+    if (q.startsWith('gdel:')) {
+      const [r, c, i] = q.slice(5).split(',').map(Number), cell = at(r, c);
       if (cell) edit(() => setItems(cell, cell.items.filter((_: any, k: any) => k !== i)));
       return;
     }
     act(q);
-  });
-  root.addEventListener('pointerdown', (e) => { if (!menu.hidden && !(e.target! as Element).closest('.qe-ctx')) closeMenu(); }, true);
-  svg.addEventListener('wheel', closeMenu, { passive: true });
+  }
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.del || E.near)) { E.hover = null; E.del = null; E.near = null; draw(); } });
   // a click on a delete gutter: that wire or step goes, as one undo step
   function delLine(dz: any) {
@@ -1180,7 +1173,7 @@ import { patchSvg } from '../ui/svg-patch';
     const one = (axis: string, label: string, pitch: string): FormRow[] => {
       const v = sepOf(axis);
       return [numField(label, `E${axis}`, v.cm ?? '', 'cm', { min: '0', step: '0.05', placeholder: v.cm == null && v.raw ? v.raw : v.between ? '' : '0.5' }),
-        { ...row(t('editor.qc.measured', 'Measured'), ...[['gap', t('editor.qc.gap', 'Gap')], ['pitch', pitch]].map(([k, n]) => ({ kind: 'button' as const, text: n, attrs: { 'data-qe': 'sepmode', 'data-axis': axis, 'data-v': k, class: (k === 'pitch') === v.between ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' }];
+        switchRow(t('editor.qc.measured', 'Measured'), [['gap', t('editor.qc.gap', 'Gap')], ['pitch', pitch]].map(([k, n]) => ({ text: n, on: (k === 'pitch') === v.between, attrs: { 'data-qe': 'sepmode', 'data-axis': axis, 'data-v': k } })))];
     };
     return section(t('ui.circuit', 'Circuit'), [...one('row', t('editor.qc.wireSpacing', 'Wire spacing'), t('editor.qc.wireToWire', 'Wire to wire')), ...one('col', t('editor.qc.stepSpacing', 'Step spacing'), t('editor.qc.stepToStep', 'Step to step')), note(t('editor.qc.help.spacing', 'Gap: the space between rows, which grow with what they hold. Wire to wire: every wire the same distance from the next.'))], 'sec');
   }
@@ -1190,7 +1183,7 @@ import { patchSvg } from '../ui/svg-patch';
     const show = (sections: FormSection[]) => { props.hidden = false; renderView(props, FormPanel, { sections }); };
     const num = (label: string, key: string, value: number, max?: number) => numField(label, key, value, '', { min: '1', step: '1', ...(max ? { max: String(max) } : {}) });
     const dec = (label: string, key: string, value: number) => numField(label, key, value || '', 'cm', { min: '0', step: '0.1', placeholder: t('editor.qc.auto', 'auto') });
-    const sg = (label: string, action: string, attrs: Attributes, current: string, options: string[][]): FormRow => ({ ...row(label, ...options.map(([value, text]) => ({ kind: 'button' as const, text, attrs: { 'data-qe': action, ...attrs, 'data-v': value, class: current === value ? 'on' : '' } }))), controlClass: 'ctl seg-ctl' });
+    const sg = (label: string, action: string, attrs: Attributes, current: string, options: string[][]): FormRow => switchRow(label, options.map(([value, text]) => ({ text, on: current === value, attrs: { 'data-qe': action, ...attrs, 'data-v': value } })));
     const hidden = (visible: boolean, rows: FormRow[]): FormRow => ({ kind: 'group', style: visible ? undefined : 'display:none', rows });
     const remove = (action: string, attrs: Attributes) => ({ text: '×', attrs: { class: 'flat qe-x', 'data-qe': action, ...attrs, title: t('editor.qc.remove', 'Remove') } });
     if (!b) { show([circuitProps()]); return; }
@@ -1222,7 +1215,7 @@ import { patchSvg } from '../ui/svg-patch';
         sections.push({ ...section(t('editor.qc.n.slice', 'Slice'), rows, 'sec'), titleAction: remove('drop', { 'data-i': i }) });
       } else if (it.name === 'setwiretype') {
         const wt = (it.a[0] || 'q').trim();
-        sections.push({ ...section(t('editor.qc.wireFromHere', 'Wire from here'), [{ kind: 'group', class: 'row', rows: [{ kind: 'controls', class: 'ctl seg-ctl', controls: [['q', t('editor.qc.quantum', 'Quantum')], ['c', t('editor.qc.classical', 'Classical')], ['n', t('ui.none', 'None')]].map(([value, text]) => ({ kind: 'button', text, attrs: { 'data-qe': 'wt', 'data-i': i, 'data-v': value, class: wt === value ? 'on' : '' } })) }] }], 'sec'), titleAction: remove('drop', { 'data-i': i }) });
+        sections.push({ ...section(t('editor.qc.wireFromHere', 'Wire from here'), [{ kind: 'group', class: 'row', rows: [switchRow(null, [['q', t('editor.qc.quantum', 'Quantum')], ['c', t('editor.qc.classical', 'Classical')], ['n', t('ui.none', 'None')]].map(([value, text]) => ({ text, on: wt === value, attrs: { 'data-qe': 'wt', 'data-i': i, 'data-v': value } })))] }], 'sec'), titleAction: remove('drop', { 'data-i': i }) });
       }
     });
     for (const g of groupsAt(b.r1, b.c1)) {
@@ -1346,7 +1339,7 @@ import { patchSvg } from '../ui/svg-patch';
     const c = snap();
     if (c !== E.codeAt) { E.codeAt = c; codeTa.value = c; }
     const L = Q.layout({ src: c, size: E.st.size, font: E.st.font });
-    codeMsg.innerHTML = L.warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, L.warnings);
   }
   function readCode() {
     clearTimeout(E.codeTimer); E.codeTimer = null;
@@ -1355,12 +1348,13 @@ import { patchSvg } from '../ui/svg-patch';
     E.M = load(codeTa.value); E.codeAt = codeTa.value;
     clampSel(); draw(); keepInView(); renderProps();
     const L = Q.layout({ src: codeTa.value, size: E.st.size, font: E.st.font });
-    codeMsg.innerHTML = L.warnings.map((w: any) => `<div>${esc(w)}</div>`).join('');
+    showCodeNotes(codeMsg, L.warnings);
   }
   codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
   codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
 
   window.addEventListener('keydown', (e) => {
+    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; } // never the browser's Save Page
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return; // a label popup handles its own keys
@@ -1374,7 +1368,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (e.key === 'Escape') {
       e.preventDefault();
       if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (!menu.hidden) { closeMenu(); return; }
+      if (editorMenuOpen()) { closeMenu(); return; }
       if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
       if (E.sel) { E.sel = null; draw(); renderProps(); return; }
       finish(false); return;
@@ -1432,8 +1426,7 @@ import { patchSvg } from '../ui/svg-patch';
     if (src !== E.start) { E.start = src; E.done({ src }); }
     flashSaved();
   }
-  let savedT = 0;
-  function flashSaved() { const saved = t('editor.commonA.saved', 'Saved to the page'); setTip(saved); clearTimeout(savedT); savedT = setTimeout(() => { if (E && tip.textContent === saved) setTip(''); }, 1500); }
+  function flashSaved() { stageNote.flash(t('editor.commonA.saved', 'Saved to the page'), 1500); }
   // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
   // embedded in a pane (Quick): src/core/editor-session.ts dockable
   const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap() });
@@ -1463,7 +1456,7 @@ import { patchSvg } from '../ui/svg-patch';
     // an untouched circuit hands its own text back
     E.start = codeOf(M);
     dock.show(host);
-    search.value = '';
+    pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
     // the palette, properties and drawing's hints follow the interface language while the editor is open
     let first = true;
