@@ -28,10 +28,9 @@ const slides = [
 ];
 const FONT = '../../../../public/fonts';
 const css = `
-@font-face{font-family:Inter;src:url(${FONT}/InterDisplay-SemiBold.woff2);font-weight:600}
-@font-face{font-family:Inter;src:url(${FONT}/InterDisplay-Bold.woff2);font-weight:700}
+@font-face{font-family:Atkinson;src:url(${FONT}/atkinson-hyperlegible-next-latin-wght-normal.woff2);font-weight:200 800}
 *{box-sizing:border-box}html,body{margin:0;width:1920px;height:1080px;overflow:hidden}
-body{position:relative;font-family:Inter,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;color:#f3efe8;
+body{position:relative;font-family:Atkinson,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;color:#f3efe8;
   background:radial-gradient(1100px 700px at 50% 60%,#2a2620 0%,transparent 70%),#141311}
 body.light{color:#1f1d1a;background:radial-gradient(1100px 700px at 50% 60%,#fffaf0 0%,transparent 70%),#ece7de}
 .brand{position:absolute;right:64px;top:58px;display:flex;align-items:center;font-size:20px;font-weight:600;letter-spacing:-.2px;opacity:.85}

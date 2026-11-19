@@ -5744,8 +5744,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const expOpen = () => !!expPop && !expPop.closed;
   const closeExport = () => expPop?.close();
   const DPIS = [72, 96, 150, 300, 600];
-  // Formats: pictures of the diagram or pages, plus the whole file as one web page (the only one in Document view).
-  const expFmts = () => (state.mode === 'document' ? [['html', uiText('exp.webPage', 'Web page')]] : [['png', 'PNG'], ['svg', 'SVG'], ['pdf', 'PDF'], ['html', uiText('exp.webPage', 'Web page')]]);
+  // Formats: pictures of the diagram or pages, plus the whole file as one web page. Document view has a PDF of the
+  // document (printed, so vector with selectable text) and the web page.
+  const expFmts = () => (state.mode === 'document' ? [['pdf', 'PDF'], ['html', uiText('exp.webPage', 'Web page')]] : [['png', 'PNG'], ['svg', 'SVG'], ['pdf', 'PDF'], ['html', uiText('exp.webPage', 'Web page')]]);
   const expFmt = () => (expFmts().some(([k]) => k === expOpts.fmt) ? expOpts.fmt : expFmts()[0][0]);
   function renderExpPop() {
     if (!expOpen()) return;
@@ -5753,13 +5754,18 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const o = expOpts, fmt = expFmt();
     expPop!.el.setAttribute('aria-label', caption(captions["ui.export"]));
     const setFmt = (v: string) => { expOpts.fmt = v; saveExpOpts(); renderExpPop(); };
-    const go = (label: string): ExportAction => ({ label, primary: true, attrs: { 'data-ego': '' }, onclick: () => { closeExport(); if (expFmt() === 'html') exportHtml(); else runExport(); } });
+    const go = (label: string): ExportAction => ({ label, primary: true, attrs: { 'data-ego': '' }, onclick: () => { closeExport(); if (expFmt() === 'html') exportHtml(); else if (state.mode === 'document') printDoc(); else runExport(); } });
     const formats = expFmts().map(([value, label]) => ({ value, label }));
     let model: ExportPanelModel;
     if (fmt === 'html') {
       model = { head: state.doc.kind === 'classic' ? uiText('exp.h.document', 'Export document') : uiText('exp.h.file', 'Export file'), formats, format: fmt, onformat: setFmt,
         rows: [{ kind: 'note', text: uiText('exp.htmlNote', 'The whole file as one self-contained page (.html), with fonts and pictures embedded. Opens in any browser, even offline.') }, ...dirRow()],
         actions: [go(TD.files.dirOf(state.docId) ? uiText('exp.saveWeb', 'Save web page') : uiText('exp.downloadWeb', 'Download web page'))] };
+    } else if (state.mode === 'document') {
+      // the document's PDF is the print of its pages: vector, selectable text, no flattening
+      model = { head: uiText('exp.h.document', 'Export document'), formats, format: fmt, onformat: setFmt,
+        rows: [{ kind: 'note', bold: uiText('exp.saveAsPdf', 'Save as PDF'), text: uiText('exp.pdfNote', 'Vector PDF with selectable text. In the print window, choose {b} as the destination.', { b: '\u0000' }) }],
+        actions: [go(uiText('exp.savePdf', 'Save PDF…'))] };
     } else {
       const flat = o.fmt === 'pdf' && o.flat, dpi = flat ? o.flatDpi : o.dpi;
       const srcs = exportSources(), sc = expScale(dpi);
@@ -5833,7 +5839,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (state.mode === 'page') { printPage(); return; }
     if (TD.docview) TD.docview.render(true);
     document.body.classList.add('printing');
-    setTimeout(() => { if (outputAllowed()) window.print(); document.body.classList.remove('printing'); if (state.mode === 'document' && TD.docview) TD.docview.render(); }, 300);
+    const title = document.title;
+    document.title = slug(); // the default file name in "Save as PDF"
+    setTimeout(() => { if (outputAllowed()) window.print(); document.body.classList.remove('printing'); document.title = title; if (state.mode === 'document' && TD.docview) TD.docview.render(); }, 300);
   }
 
   // Browser-menu printing bypasses our keyboard handler. beforeprint cannot
