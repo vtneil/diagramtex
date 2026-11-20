@@ -40,7 +40,7 @@ try {
   `, 30000);
   const entries = await browser.ev(`const keys = await caches.keys();
     return (await Promise.all(keys.map(async k => (await (await caches.open(k)).keys()).map(r => new URL(r.url).pathname)))).flat();`);
-  assert.ok(entries.some(p => p.endsWith(dist ? '/js/bundle.js' : '/js/app.bundle.js')), 'application bundle is precached');
+  assert.ok(entries.some(p => (dist ? /\/js\/bundle\.[0-9a-f]{10}\.js$/ : /\/js\/app\.bundle\.js$/).test(p)), 'application bundle is precached');
   assert.ok(entries.some(p => p.endsWith('/vendor/mathlive/mathlive.min.js')), 'local maths editor is precached');
   assert.ok(entries.some(p => p.endsWith('.woff2')), 'fonts are precached');
   assert.ok(entries.some(p => p.endsWith('/math-render-worker.js')), 'the maths worker is precached');

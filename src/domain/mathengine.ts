@@ -127,7 +127,7 @@ import { t } from '../i18n';
       const previousEngine = engine === 'temml' ? 'katex' : 'temml';
       const previous = queue.cached(resultKey(previousEngine, source, display));
       return (previous ? markup(previousEngine, previous, prepared, display)
-        : `<span class="td-math-placeholder" style="display:inline-block;width:${Math.min(24, Math.max(2, source.length * .35))}em;height:1em" aria-label="${esc(source)}"></span>`) + `<!--td-math-pending:${id}-->`;
+        : `<span class="td-math-placeholder" style="display:inline-block;width:${Math.min(24, Math.max(2, source.length * .35))}em;height:1em" role="img" aria-label="${esc(source)}"></span>`) + `<!--td-math-pending:${id}-->`;
     }
     if (!result) {
       const start = previewDepth ? performance.now() : 0;

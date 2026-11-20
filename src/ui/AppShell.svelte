@@ -101,7 +101,9 @@
         </div>
       </section>
       <figure class="pw-shot">
-        <img src="guide/img/phone-canvas.webp" width="1000" height="530" loading="lazy" decoding="async" alt={t("phone.shot.alt", "A DiagramTeX canvas with formulae, a flowchart, an RC circuit, a plot, a quantum circuit and a commutative diagram", {}, $locale)}>
+        <!-- the phone page's largest picture, so it loads at once (not lazily); a desktop, which never shows this page
+             (src/platform/preflight.ts), gets an empty pixel in its place and doesn't download it -->
+        <picture><source media="(min-width: 600px) and (min-height: 500px) and (pointer: fine)" srcset="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"><img src="guide/img/phone-canvas.webp" width="1000" height="530" fetchpriority="high" decoding="async" alt={t("phone.shot.alt", "A DiagramTeX canvas with formulae, a flowchart, an RC circuit, a plot, a quantum circuit and a commutative diagram", {}, $locale)}></picture>
         <figcaption>{t("phone.shot.caption", "One canvas: formulae, shapes, a circuit, a plot, a quantum circuit and a commutative diagram, all exported as TikZ.", {}, $locale)}</figcaption>
       </figure>
       <!-- Quick's formula, usable right here (src/ui/services/quick.ts draws it into #pwQuick) -->
@@ -139,7 +141,7 @@
     </article>
   </div>
   <div id="splash" role="status" aria-label={t("ui.loading.diagramtex", "Loading DiagramTeX", {}, $locale)}><svg viewBox="0 0 256 256" aria-hidden="true"><path class="edge" d="M76 76L182 182"/><circle cx="76" cy="76" r="46" fill="#FF5A3C"/><rect x="138" y="138" width="88" height="88" rx="14" fill="#2F7BFF"/></svg></div>
-  <header id="topbar" role="toolbar" aria-label={t("ui.document", "Document", {}, $locale)}>
+  <header id="topbar">
     <div class="topbar-row doc-row">
       <div class="brand" role="img" aria-label={t("ui.diagramtex", "DiagramTeX", {}, $locale)} title={t("ui.diagramtex", "DiagramTeX", {}, $locale)}><svg class="brand-mark" viewBox="30 30 196 196" aria-hidden="true"><path class="brand-ink" d="M85.19 66.81L191.19 172.81L172.81 191.19L66.81 85.19Z"/><circle cx="76" cy="76" r="46" fill="#FF5A3C"/><rect x="138" y="138" width="88" height="88" rx="14" fill="#2F7BFF"/></svg><svg class="brand-word" viewBox="286 30 734 196" aria-hidden="true"><path class="brand-ink" d="M327.06 176C356.51 176 374.49 157.5 374.49 127.92C374.49 98.46 356.32 79.96 327.44 79.96H293.15V176ZM313.01 159.31V96.66H326.22C345.3 96.66 354.51 107.74 354.51 127.92C354.51 148.16 345.43 159.31 326.03 159.31ZM382.68 176H401.69V107.94H382.68ZM392.15 99.37C398.41 99.37 402.98 95.05 402.98 89.25C402.98 83.45 398.41 79.13 392.15 79.13C385.9 79.13 381.33 83.45 381.33 89.25C381.33 95.05 385.9 99.37 392.15 99.37ZM433.34 177.16C443.78 177.16 449.65 173.04 453.26 166.4H453.51V176H472.08V129.85C472.08 115.29 461.38 106.52 442.75 106.52C424.06 106.52 412.97 115.41 412.13 129.46H429.99C430.44 124.24 435.08 120.63 442.17 120.63C449.13 120.63 453.32 124.12 453.32 129.14V129.59C453.32 133.98 448.94 134.56 436.5 135.78C422.32 137.07 409.94 141.45 409.94 156.79C409.94 170.39 419.74 177.16 433.34 177.16ZM438.62 163.95C432.24 163.95 428.12 161.11 428.12 156.28C428.12 150.86 433.28 148.35 439.79 147.38C445.91 146.42 451.26 145.51 453.45 144.29V151.12C453.45 158.47 447.78 163.95 438.62 163.95ZM515.07 203.84C534.79 203.84 548.32 194.95 548.32 173.36V107.94H529.57V117.8H529.5C525.19 110.26 518.1 106.52 509.27 106.52C491.86 106.52 479.94 121.02 479.94 141.45C479.94 161.76 491.61 176.06 509.39 176.06C518.29 176.06 525.44 172.46 529.5 164.46H529.57V174.9C529.57 184.7 524.35 189.86 515.07 189.86C507.98 189.86 502.95 186.96 501.6 181.8H483.29C485.22 195.01 495.73 203.84 515.07 203.84ZM514.29 160.85C505.08 160.85 499.08 153.7 499.08 141.2C499.08 128.69 505.08 121.6 514.29 121.6C523.9 121.6 530.28 129.34 530.28 141.2C530.28 153.12 523.9 160.85 514.29 160.85ZM559.22 176H578.23V139.13C578.23 128.88 583.97 123.47 591.77 123.47C594.99 123.47 598.53 123.73 599.95 123.79V107.62C598.4 107.55 596.54 107.49 594.34 107.49C585.38 107.49 580.23 111.35 577.71 119.54H577.52V107.94H559.22ZM626.7 177.16C637.14 177.16 643.01 173.04 646.62 166.4H646.87V176H665.44V129.85C665.44 115.29 654.74 106.52 636.11 106.52C617.42 106.52 606.33 115.41 605.49 129.46H623.35C623.8 124.24 628.44 120.63 635.53 120.63C642.49 120.63 646.68 124.12 646.68 129.14V129.59C646.68 133.98 642.3 134.56 629.86 135.78C615.68 137.07 603.3 141.45 603.3 156.79C603.3 170.39 613.1 177.16 626.7 177.16ZM631.98 163.95C625.6 163.95 621.48 161.11 621.48 156.28C621.48 150.86 626.63 148.35 633.14 147.38C639.27 146.42 644.62 145.51 646.81 144.29V151.12C646.81 158.47 641.14 163.95 631.98 163.95ZM676.26 176H695.28V135.85C695.28 127.08 700.69 122.18 707.46 122.18C714.1 122.18 718.74 126.76 718.74 133.85V176H737.04V135.01C737.04 127.4 741.62 122.18 748.97 122.18C755.48 122.18 760.5 126.18 760.5 134.36V176H779.45V130.88C779.45 115.29 769.72 106.52 756.64 106.52C746.78 106.52 738.4 111.48 734.85 119.8C732.02 111.48 724.35 106.52 715.19 106.52C706.56 106.52 698.63 110.97 694.57 120.18V107.94H676.26ZM786.54 96.98H815.68V176H835.53V96.98H864.6V79.96H786.54ZM894.95 177.55C911.45 177.55 924.6 168.14 927.12 154.6H909.78C908.04 159.89 902.95 163.3 895.53 163.3C885.54 163.3 879.74 156.79 879.42 146.74H927.82V141.65C927.82 120.89 914.35 106.39 894.31 106.39C874.78 106.39 860.92 121.28 860.92 142.03C860.92 162.72 874.33 177.55 894.95 177.55ZM879.55 134.62C880.58 126.11 886.19 120.83 894.7 120.83C903.27 120.83 908.94 126.11 909.91 134.62ZM929.5 176H951.87L965.72 155.7C968.82 151.19 971.78 146.67 974.75 142.1C977.65 146.67 980.55 151.19 983.58 155.7L997.05 176H1019.99L986.09 126.31L1017.22 79.96H995.24L984.41 96.27C981.13 101.23 978.03 106.2 974.94 111.16C971.91 106.2 968.82 101.23 965.66 96.27L955.02 79.96H932.53L963.98 126.89Z"/></svg></div>
       <span id="autosaveNote" class="autosave-note" title={t("ui.every.change.is.saved.in.this.browser.as.you.work", "Every change is saved in this browser as you work", {}, $locale)}>{t("save.autosaveBrowser", "Autosave is enabled (browser)", {}, $locale)}</span>
@@ -152,7 +154,7 @@
         <Button id="btnInstall" onclick={installApp} title={t('pwa.install.tip', 'Install DiagramTeX as an app', {}, $locale)} class="pwa-install" icon="download"><span>{t('pwa.install', 'Install', {}, $locale)}</span></Button>
       {/if}
       <details class="language-picker" id="languagePicker">
-        <summary id="languageTrigger" aria-label={t("ui.interface.language", 'Interface language', {}, $locale)} aria-haspopup="menu" aria-expanded="false" title={`${t("ui.language", 'Language', {}, $locale)}: ${$locale === 'th' ? 'ไทย' : 'English'}`}>
+        <summary id="languageTrigger" aria-label={`${t("ui.interface.language", 'Interface language', {}, $locale)}: ${$locale === 'th' ? 'TH' : 'EN'}`} aria-haspopup="menu" aria-expanded="false" title={`${t("ui.language", 'Language', {}, $locale)}: ${$locale === 'th' ? 'ไทย' : 'English'}`}>
           <span class="language-flag" aria-hidden="true">{$locale === 'th' ? '🇹🇭' : '🇬🇧'}</span><span>{$locale === 'th' ? 'TH' : 'EN'}</span>
           <svg class="language-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3"/></svg>
         </summary>
@@ -214,7 +216,7 @@
     </div>
   </header>
 
-  <div id="main">
+  <div id="main" role="main">
     <aside id="files">
       <div class="panel-head">
         <span id="filesTitle">{t("ui.documents", "Documents", {}, $locale)}</span>
@@ -224,14 +226,14 @@
         </div>
       </div>
       <ul id="docList" role="listbox" aria-labelledby="filesTitle"></ul>
-      <ul id="quickList" aria-label={t("quick.list", "Quick", {}, $locale)}></ul>
+      <ul id="quickList" role="listbox" aria-label={t("quick.list", "Quick", {}, $locale)}></ul>
       <Button id="binRow" title={t("ui.recycle.bin.deleted.files.and.folders.kept.for.30.days", "Recycle Bin: deleted files and folders, kept for 30 days", {}, $locale)} class="bin-row"><Icon name="delete" /><span>{t("ui.recycle.bin", "Recycle Bin", {}, $locale)}</span><span class="bin-n"></span></Button>
       <section id="inputBox" aria-label={t("ui.text.input", "Text input", {}, $locale)}></section>
       <section id="engineBox" aria-label={t("ui.latex.engine", "LaTeX engine", {}, $locale)}></section>
       <div class="files-foot"><a class="app-src" href="https://gitlab.com/igniting-space/diagramtex" target="_blank" rel="noopener" title={t("ui.diagramtex.on.gitlab", "DiagramTeX on GitLab", {}, $locale)} aria-label={t("ui.diagramtex.on.gitlab", "DiagramTeX on GitLab", {}, $locale)}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="m23.6004 9.5927-.0337-.0862L20.3.9814a.851.851 0 0 0-.3362-.405.8748.8748 0 0 0-.9997.0539.8748.8748 0 0 0-.29.4399l-2.2055 6.748H7.5375l-2.2057-6.748a.8573.8573 0 0 0-.29-.4412.8748.8748 0 0 0-.9997-.0537.8585.8585 0 0 0-.3362.4049L.4332 9.5015l-.0325.0862a6.0657 6.0657 0 0 0 2.0119 7.0105l.0113.0087.03.0213 4.976 3.7264 2.462 1.8633 1.4995 1.1321a1.0085 1.0085 0 0 0 1.2197 0l1.4995-1.1321 2.4619-1.8633 5.006-3.7489.0125-.01a6.0682 6.0682 0 0 0 2.0094-7.003z"/></svg></a><a class="app-src" href={$locale === 'th' ? 'guide/th.html' : 'guide/'} target="_blank" rel="noopener" title={t("ui.guide.how.to.use.diagramtex", "Guide: how to use DiagramTeX", {}, $locale)} aria-label={t("ui.guide.how.to.use.diagramtex", "Guide: how to use DiagramTeX", {}, $locale)}><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5C6.5 2.3 4.3 2 2 2.3v10.2c2.3-.3 4.5 0 6 1.2 1.5-1.2 3.7-1.5 6-1.2V2.3c-2.3-.3-4.5 0-6 1.2zM8 3.5v10.2"/></svg></a><!-- svelte-ignore a11y_consider_explicit_label (Preserve the existing shell semantics during migration.) --><a class="app-ver" id="appVer" target="_blank" rel="noopener"></a></div>
     </aside>
 
-    <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role (Preserve the existing shell semantics during migration.) --><nav id="tools" role="toolbar" aria-orientation="vertical" aria-label={t("ui.drawing.tools", "Drawing tools", {}, $locale)}>
+    <div id="tools" role="toolbar" aria-orientation="vertical" aria-label={t("ui.drawing.tools", "Drawing tools", {}, $locale)}>
       <IconButton data-tool="select" title={t("ui.select.move.v", "Select / move (V)", {}, $locale)} icon="select" />
       <IconButton data-tool="hand" title={t("ui.hand.h.drag.to.move.around.space.drag.works.with.any.tool", "Hand (H): drag to move around. Space-drag works with any tool", {}, $locale)} icon="hand" />
       <div class="sep"></div>
@@ -253,7 +255,7 @@
       <div class="sep"></div>
       <IconButton data-tool="image" title={t("ui.image.i.inserted.with.includegraphics", "Image (I) — inserted with \\includegraphics", {}, $locale)} icon="toolImage" />
       <IconButton data-tool="pencil" title={t("ui.pencil.n.freehand.smoothed", "Pencil (N) — freehand, smoothed", {}, $locale)} icon="pencil" />
-    </nav>
+    </div>
     <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" hidden>
     <!-- the tool groups' panels (filled by src/application/app.ts), each shown in its Flyout while open -->
     <div class="fly-panels" hidden>

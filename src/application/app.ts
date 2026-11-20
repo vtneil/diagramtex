@@ -5095,6 +5095,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const activeDiagram = diagrams.find(([b, i]: any) => i === state.doc.active);
     const activeIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
     bs.textContent = activeDiagram?.[0].name?.trim() || uiText('top.blockSel', 'Diagram {n} of {total}', { n: activeIndex + 1, total: diagrams.length });
+    // its name is now the diagram's (what it shows); the tip, which named it while it was empty, describes it
+    if (bs.dataset.tipLabel) { bs.removeAttribute('aria-label'); delete bs.dataset.tipLabel; bs.setAttribute('aria-description', bs.dataset.tip); }
     const diagramIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
     $('#blockPrev').disabled = diagramIndex <= 0;
     $('#blockNext').disabled = diagramIndex < 0 || diagramIndex >= diagrams.length - 1;

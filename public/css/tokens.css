@@ -73,10 +73,10 @@
     --gutter: #171614;
     --ink: #ecebe6;
     --select-chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%23ecebe6' stroke-width='1.3'/%3E%3C/svg%3E");
-    --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%2395928a' stroke-width='1.3'/%3E%3C/svg%3E");
+    --select-chev-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' fill='none' stroke='%239a978f' stroke-width='1.3'/%3E%3C/svg%3E");
     --ink-hover: #d4d2cb;
     --graphite: #b4b1a9;
-    --pencil: #95928a;
+    --pencil: #9a978f;          /* 5.9:1 on paper, 4.7:1 on raised surfaces (menus, dialogs): AA everywhere */
     --faint: #5c5a55;
     --rule: rgba(236, 235, 230, .13);
     --rule-soft: rgba(236, 235, 230, .07);

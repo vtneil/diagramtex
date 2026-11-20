@@ -61,7 +61,8 @@ available at their original startup points. The client hydrates the same shell.
 `public/index.html` is generated from these sources; edit the sources instead.
 
 Compilation produces one classic `public/js/app.bundle.js` and a development source map.
-Production compilation writes only to `dist/`, with one application script, joined CSS,
+Production compilation writes only to `dist/`, with one application script and joined CSS (each named after a hash
+of its contents, with `dist/_headers` giving them a year-long immutable lifetime),
 local fonts and maths libraries, license notices and a derived offline precache. CSS
 minification removes whitespace while retaining original values and selectors, avoiding
 colour-rounding changes to antialiased borders. The

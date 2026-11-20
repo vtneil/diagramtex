@@ -32,4 +32,24 @@
       T.ok(!tip(), 'a name that fits shows nothing');
     } finally { TD.tooltip.hide(); host.remove(); }
   });
+
+  T.test('tooltips: a title names what may be named and has no words of its own; anything else it describes', async () => {
+    const host = document.createElement('div');
+    host.innerHTML = '<button type="button" class="t-icon" title="3D figures"><svg aria-hidden="false"><text>3D</text></svg></button>'
+      + '<button type="button" class="t-text" title="Open the file">Open</button><span class="t-span" title="Drag to set a width"></span>'
+      + '<span class="t-sep" role="separator" title="Drag to set a width"></span>';
+    document.body.appendChild(host);
+    try {
+      await wait();
+      const $ = (c) => host.querySelector(c);
+      T.eq($('.t-icon').getAttribute('aria-label'), '3D figures', 'an icon\'s own letters are not a name: the tip names it');
+      T.eq([$('.t-text').getAttribute('aria-label'), $('.t-text').getAttribute('aria-description')], [null, 'Open the file'], 'a button with words is described');
+      T.eq([$('.t-span').getAttribute('aria-label'), $('.t-span').getAttribute('aria-description')], [null, 'Drag to set a width'], 'a plain span may not be named');
+      T.eq($('.t-sep').getAttribute('aria-label'), 'Drag to set a width', 'a span with a role is named');
+      // the app's own: every tool group in the rail has a name, and the top bar is a banner, not a toolbar
+      for (const b of document.querySelectorAll('#tools [data-fly]')) T.ok(b.getAttribute('aria-label') || b.textContent.trim(), 'named: ' + b.id);
+      T.eq(document.getElementById('topbar').getAttribute('role'), null, 'the top bar keeps its banner role');
+      T.eq(document.querySelectorAll('[role="main"], main').length, 1, 'one main landmark');
+    } finally { host.remove(); }
+  });
 }

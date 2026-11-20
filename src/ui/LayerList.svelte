@@ -41,5 +41,5 @@
     {#snippet trail()}{#if r.count !== undefined}<small>{r.count}</small>{/if}<IconButton class="ly-lock" icon={r.lock.icon} data-la="lock" title={r.lock.title} aria-label={r.lock.title} />{/snippet}
   </ListRow>
 {:else}
-  <li class="ly-empty" role="presentation"><EmptyState>{model.empty}</EmptyState></li>
+  <li class="ly-empty" role="option" aria-selected="false" aria-disabled="true"><EmptyState>{model.empty}</EmptyState></li>
 {/each}

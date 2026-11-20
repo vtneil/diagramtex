@@ -5,7 +5,7 @@
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate. (This literal is for the
 // dev server only: scripts/build.js names dist/sw.js's cache after a hash of everything it precaches.)
-const CACHE = 'diagramtex-v123';
+const CACHE = 'diagramtex-v124';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
@@ -87,7 +87,8 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  // asked of the server, not taken from the browser's HTTP cache, which may keep a file for a long while (dist/_headers)
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE.map((url) => new Request(url, { cache: 'no-cache' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -103,7 +104,9 @@ self.addEventListener('fetch', (e) => {
     const cache = await caches.open(CACHE);
     const fromCache = async () => (await cache.match(req, { ignoreSearch: true }))
       || (req.mode === 'navigate' ? cache.match('./') : undefined);
-    const net = fetch(req).then((res) => {
+    // checked with the server (a 304 when unchanged), except files named after their contents, which never change
+    const named = /\.[0-9a-f]{10}\.(?:js|css)$/.test(new URL(req.url).pathname);
+    const net = fetch(req.mode === 'navigate' || named ? req : new Request(req, { cache: 'no-cache' })).then((res) => {
       if (res.ok && res.type === 'basic') cache.put(req, res.clone());
       return res;
     });

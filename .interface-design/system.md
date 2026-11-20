@@ -21,7 +21,7 @@
 | `--well` | #f3f0e8 | read-only or disabled fields, hover on buttons and menu rows. Editable fields are white (`--sheet-raised`) like buttons: a tinted box means the value can't be changed. The exception is a search field, tinted until it is focused |
 | `--ink` | #1c1b19 | text, primary buttons, active states |
 | `--graphite` | #5d5b55 | secondary text, icons |
-| `--pencil` | #6f6c64 | metadata, ruler labels (4.7:1 on paper; the old #8f8c84 was 3.0:1 and failed AA) |
+| `--pencil` | #6f6c64 (dark: #9a978f) | metadata, ruler labels (4.7:1 on paper; the old #8f8c84 was 3.0:1 and failed AA; dark #95928a was 4.4:1 on menus and dialogs) |
 | `--faint` | #bab7ae | disabled, minor ticks |
 | `--rule` / `-soft` / `-strong` | ink at 12 / 7 / 24% | hairlines |
 | `--wash` / `-strong` | ink at 4.5 / 8.5% | hover / active fills |
@@ -293,7 +293,7 @@ Shows the cursor as `x · y cm`, the selection as N selected with its width × h
 
 ## Installable app (PWA)
 - `public/manifest.webmanifest` (standalone, cream background) and `public/sw.js` make the site installable: Chrome/Edge show an Install button in the address bar, Safari uses File › Add to Dock (iOS: Share › Add to Home Screen).
-- `sw.js` precaches every same-origin file, so the app works offline from the first visit. Fetches go network first, falling back to the cache when offline or after 4s, so a deploy shows on the next load. Cross-origin requests pass through. Bump `CACHE` in `sw.js` with each release. The deploy build (`scripts/build.js`) compiles `src/main.ts` into one minified `js/bundle.js`, joins the stylesheets into `css/app.css`, writes `dist/version.json`, and rewrites the precache list from `dist/`. The hand-kept list in `public/sw.js` only matters when testing offline locally (`npm run dev` serves `public/`).
+- `sw.js` precaches every same-origin file, so the app works offline from the first visit. Fetches go network first, falling back to the cache when offline or after 4s, so a deploy shows on the next load. Cross-origin requests pass through. Bump `CACHE` in `sw.js` with each release. The deploy build (`scripts/build.js`) compiles `src/main.ts` into one minified `js/bundle.<hash>.js`, joins the stylesheets into `css/app.<hash>.css` (both named after their contents), writes `dist/version.json` and `dist/_headers` (those two cached for a year as immutable, fonts and `vendor/` for a year, icons and guide pictures for a week, pages and `sw.js` revalidated every time; a changed font or vendored file needs a new name), and rewrites the precache list from `dist/`. The worker asks the server (`cache: 'no-cache'`, a 304 when unchanged) for everything but the content-named files, so those long lifetimes never keep an old file in it. Every script in `index.html` is `defer`red, so the page paints while they load. The hand-kept list in `public/sw.js` only matters when testing offline locally (`npm run dev` serves `public/`).
 - Icon (`public/icons/`): engineering-paper grid, a ball-shaded charge and an ink arrow. `icon.svg` is the rounded tile (favicon and "any"); `icon-maskable.svg` is full-bleed with the art in the safe zone. PNGs are rendered from these at 32, 180, 192 and 512.
 - `theme-color` follows the appearance (#fffdf8 light, #242320 dark), so the installed window's title bar matches the top bar.
 

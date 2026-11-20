@@ -22,14 +22,26 @@ export function installTooltips() {
   TD.macKeys = macKeys;
 
   // ---------- title → data-tip ----------
+  // elements ARIA lets a name be given to: controls, links, table cells and anything with a role of its own
+  const NAMEABLE = /^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY|TH|TD|IMG|DETAILS|FIELDSET|TABLE|DIALOG|SECTION|ASIDE|NAV|FORM|svg|image)$/;
+  const nameable = (el: Element) => NAMEABLE.test(el.tagName) || /^(?!none$|presentation$|generic$)\w/.test(el.getAttribute('role') || '');
+  // the text a screen reader reads out: a drawing's own text (an icon's letters) and hidden parts are left out
+  const readText = (el: Element) => {
+    let s = '';
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: (n) =>
+      n.nodeType === 1 && ((n as Element).tagName === 'svg' || (n as Element).getAttribute('aria-hidden') === 'true') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    while (walk.nextNode()) if (walk.currentNode.nodeType === 3) s += walk.currentNode.nodeValue;
+    return s.trim();
+  };
   function adopt(el: any) {
     const t = macKeys(el.getAttribute('title'));
     el.removeAttribute('title');
     if (!t) return;
     el.dataset.tip = t;
-    // keep an accessible name: icon-only controls and fields are named by the tip, others described by it
+    // keep an accessible name: icon-only controls and fields are named by the tip, others described by it. Only
+    // what may carry a name is named (a plain span or div may not), and a drawing's text doesn't count as a name.
     const named = el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby');
-    if (!named && (/^(SELECT|INPUT|TEXTAREA)$/.test(el.tagName) || !el.textContent.trim())) { el.setAttribute('aria-label', t); el.dataset.tipLabel = '1'; }
+    if (!named && nameable(el) && (/^(SELECT|INPUT|TEXTAREA)$/.test(el.tagName) || !readText(el))) { el.setAttribute('aria-label', t); el.dataset.tipLabel = '1'; }
     else if (el.dataset.tipLabel) el.setAttribute('aria-label', t); // a tip we named it by changed
     else if (!named) el.setAttribute('aria-description', t);
     if (el === cur) show(el, true);

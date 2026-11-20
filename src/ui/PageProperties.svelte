@@ -9,10 +9,15 @@
   let { model }: { model: Model } = $props();
   const icons: Record<string, IconName> = { up: 'moveUp', down: 'moveDown', dup: 'duplicate', ins: 'add', del: 'delete' };
   const round = (n: number) => +n.toFixed(2);
+  // each number field's name for screen readers (a row such as Top / bottom holds two)
+  const fieldName = (key: string, loc: Parameters<typeof t>[3]) => {
+    const side = { mt: ['ui.top', 'Top'], mb: ['ui.bottom', 'Bottom'], ml: ['ui.left', 'Left'], mr: ['ui.right', 'Right'] }[key];
+    return side ? `${t('ui.margins', 'Margins', {}, loc)}: ${t(side[0], side[1], {}, loc)}` : key === 'w' ? t('ui.width', 'Width', {}, loc) : t('ui.height', 'Height', {}, loc);
+  };
 </script>
-{#snippet number(key: string, value: number)}<NumberField data-pp={key} value={round(value)} step="0.25" min="0" />{/snippet}
+{#snippet number(key: string, value: number)}<NumberField data-pp={key} value={round(value)} step="0.25" min="0" aria-label={fieldName(key, $locale)} />{/snippet}
 <h3>{t("page.heading", "Page", {}, $locale)} <small>{t("page.sizeSummary", "{paper} · {w} × {h} cm", { paper: model.paperName, w: round(model.widthCm), h: round(model.heightCm) }, $locale)}</small></h3><PanelSection>
-  <FormRow label={t("ui.paper", "Paper", {}, $locale)}><Select data-pp="paper" value={model.paper} options={model.papers.map((paper) => ({ value: paper.key, label: caption(paper.name, $locale) }))} /></FormRow>
+  <FormRow label={t("ui.paper", "Paper", {}, $locale)}><Select data-pp="paper" aria-label={t("ui.paper", "Paper", {}, $locale)} value={model.paper} options={model.papers.map((paper) => ({ value: paper.key, label: caption(paper.name, $locale) }))} /></FormRow>
   {#if model.paper === 'custom'}<FormRow label={t("ui.size.cm", "Size (cm)", {}, $locale)}>{@render number('w', model.rawWidthCm)}<span class="x">×</span>{@render number('h', model.rawHeightCm)}</FormRow>{/if}
   <FormRow bare label={t("ui.orientation", "Orientation", {}, $locale)}><Segmented panel class="ctl" label={t("ui.orientation", "Orientation", {}, $locale)} options={[
     { icon: 'portrait', title: t("ui.portrait", "Portrait", {}, $locale), on: model.orient !== 'landscape', attrs: { 'data-ppo': 'portrait' } },

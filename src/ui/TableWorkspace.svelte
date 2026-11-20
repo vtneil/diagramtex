@@ -94,7 +94,8 @@
     <TextField class="tb-fxin" tx="text" value={m.fx} autocomplete="off" aria-label={t('table.cellTextAria', 'Cell text (LaTeX)', {}, $locale)} placeholder={t('table.cellTextPh', 'Cell text: plain words, $maths$, \\textbf{…}', {}, $locale)} />
   </div>
   <!-- the grid is drawn here by the controller (paint) -->
-  <div class="tb-gridwrap" tabindex="0" aria-label={t('table.cells', 'Table cells', {}, $locale)} role="grid"><div class="tb-grid"></div><div class="tb-selbox" aria-hidden="true"></div></div>
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex (the cells' region takes the keys: arrows move the selection, typing edits) -->
+  <div class="tb-gridwrap" tabindex="0" aria-label={t('table.cells', 'Table cells', {}, $locale)} role="region"><div class="tb-grid"></div><div class="tb-selbox" aria-hidden="true"></div></div>
   <div class="tb-out">
     <div class="tb-outbar">
       <Segmented class="tb-tabs" role="tablist"

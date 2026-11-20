@@ -1,6 +1,7 @@
 # Cloudflare Workers deployment for DiagramTeX: a static-assets-only Worker (no server code).
 # The build step compiles src/ (TypeScript + Svelte) into one minified bundle and copies ./public's assets
 # into ./dist with the CSS joined and the service worker's precache generated; ./dist is what gets served.
+# dist/_headers (written by the build) sets how long browsers keep each file.
 # Deploy:  npm run deploy (wrangler deploy)        Local preview:  npx wrangler dev
 # Preview: npx wrangler preview [--name <name>]   uploads a Preview (named after the git branch by default)
 #          at its own workers.dev URL; production on the custom domain is not touched.

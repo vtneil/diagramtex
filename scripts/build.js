@@ -39,11 +39,17 @@ async function main() {
     const files = [...runs[0].matchAll(new RegExp(re.source, 'g'))].map((m) => m[1]);
     return { block: runs[0], files };
   }
-  const scripts = takeRun(/<script src="(js\/[\w.-]+\.js)"><\/script>/, 'app <script>');
+  const scripts = takeRun(/<script src="(js\/[\w.-]+\.js)" defer><\/script>/, 'app <script>');
   const styles = takeRun(/<link rel="stylesheet" href="(css\/[\w-]+\.css)">/, 'app stylesheet');
   const indent = (block) => block.match(/^[ \t]*/)[0];
-  html = html.replace(scripts.block, `${indent(scripts.block)}<script src="js/bundle.js"></script>\n`);
-  html = html.replace(styles.block, `${indent(styles.block)}<link rel="stylesheet" href="css/app.css">\n`);
+  // the app's script and stylesheet are named after their contents (js/bundle.<hash>.js, css/app.<hash>.css), so they
+  // can be cached for good (dist/_headers): a deploy that changes them changes their names
+  const named = (dir, base, ext, text) => `${dir}/${base}.${crypto.createHash('sha256').update(text).digest('hex').slice(0, 10)}.${ext}`;
+  let scriptName = '', styleName = '';
+  const linkAssets = () => {
+    html = html.replace(scripts.block, `${indent(scripts.block)}<script src="${scriptName}" defer></script>\n`);
+    html = html.replace(styles.block, `${indent(styles.block)}<link rel="stylesheet" href="${styleName}">\n`);
+  };
   const joined = new Set([...scripts.files, ...styles.files]);
   // other pages (the guides) may link a file the app joins, like css/language-menu.css: those still ship on their own
   const linked = new Set();
@@ -83,20 +89,40 @@ async function main() {
   }
 
   // Styles retain their original cascade order.
-  function bundle(files, ext, name, sep) {
+  function bundle(files, ext, base, sep) {
     const code = files.map((f) => `/* ${f} */\n${read(f)}`).join(sep);
-    const out = minify(code, ext, name);
+    const out = minify(code, ext, `${base}.${ext}`);
+    const name = named(path.posix.dirname(base), path.posix.basename(base), ext, out);
     write(name, out);
     before += Buffer.byteLength(code); after += Buffer.byteLength(out); count += files.length;
+    return name;
   }
   const app = application.outputFiles.find(file => file.path.endsWith('app.bundle.js'));
   // A second pass removes the `if (!1) {...}` branches that esbuild's cross-module constant inlining leaves behind
   // (Svelte's dev-only error and warning texts, behind esm-env's DEV), which the bundling pass cannot drop.
   const appCode = esbuild.transformSync(app.text, { minify: true, target: 'es2020', legalComments: 'inline' }).code;
-  write('js/bundle.js', appCode);
+  scriptName = named('js', 'bundle', 'js', appCode);
+  write(scriptName, appCode);
   write('math-render-worker.js', application.outputFiles.find(file => file.path.endsWith('math-render-worker.js')).text);
-  bundle(styles.files, 'css', 'css/app.css', '\n');
+  styleName = bundle(styles.files, 'css', 'css/app', '\n');
+  linkAssets();
   write('index.html', html);
+
+  // ---- _headers: how long browsers may keep each file (Cloudflare reads this file and doesn't serve it). Pages,
+  // version.json and sw.js stay on the default (revalidated every time), so a deploy shows at once. The service
+  // worker revalidates whatever it fetches, so a long lifetime here only speeds up a first visit.
+  write('_headers', [
+    '# Written by scripts/build.js.',
+    '# Named after their contents: never change under the same name.',
+    `/${scriptName}`, '  Cache-Control: public, max-age=31536000, immutable',
+    `/${styleName}`, '  Cache-Control: public, max-age=31536000, immutable',
+    '# Fonts and vendored libraries keep their names; a changed one must be given a new name.',
+    '/fonts/*', '  Cache-Control: public, max-age=31536000',
+    '/vendor/*', '  Cache-Control: public, max-age=31536000',
+    '/icons/*', '  Cache-Control: public, max-age=604800',
+    '/guide/img/*', '  Cache-Control: public, max-age=604800',
+    '',
+  ].join('\n'));
 
   // ---- version.json: the release this build is, read by the app once on load to spot a newer deploy
   const VERSION = (/TD\.VERSION = '([^']+)'/.exec(fs.readFileSync(path.join(__dirname, '../src/domain/shapes.ts'), 'utf8')) || [])[1];
@@ -104,7 +130,7 @@ async function main() {
   write('version.json', JSON.stringify({ version: VERSION }) + '\n');
 
   // ---- sw.js: precache every file the app can load, as it is in dist/ (not version.json: it must come from the network)
-  const SKIP = /^(index\.html|sw\.js|version\.json|robots\.txt|sitemap\.xml|404\.html)$|LICENSE|\.txt$|^icons\/og-image\./;
+  const SKIP = /^(index\.html|sw\.js|version\.json|robots\.txt|sitemap\.xml|404\.html|_headers)$|LICENSE|\.txt$|^icons\/og-image\./;
   const files = [];
   (function list(rel) {
     for (const ent of fs.readdirSync(path.join(OUT, rel), { withFileTypes: true })) {
@@ -135,7 +161,7 @@ async function main() {
 
   const kb = (n) => (n / 1024).toFixed(0) + ' KB';
   console.log(`compiled application: ${kb(Buffer.byteLength(appCode))}; minified ${count} CSS/worker files: ${kb(before)} -> ${kb(after)} (dist/); `
-    + `${styles.files.length} stylesheets -> css/app.css, `
+    + `${styles.files.length} stylesheets -> ${styleName}, `
     + `${files.length + 1} files precached as ${cacheName}`);
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -70,8 +70,9 @@
     }
   </style>
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
-  <script src="vendor/katex/katex.min.js"></script>
-  <script src="vendor/temml/temml.min.js"></script>
+  <!-- every script is deferred, so the page paints while they load; deferred scripts still run in this order -->
+  <script src="vendor/katex/katex.min.js" defer></script>
+  <script src="vendor/temml/temml.min.js" defer></script>
   <link rel="preload" href="fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/atkinson-hyperlegible-mono-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/tokens.css">
@@ -84,7 +85,7 @@
 </head>
 <body>
   <!-- application-shell -->
-  <script src="js/app.bundle.js"></script>
+  <script src="js/app.bundle.js" defer></script>
   <script src="language-menu.js" defer></script>
 </body>
 </html>

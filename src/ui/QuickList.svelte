@@ -18,8 +18,8 @@
   }
 </script>
 <script lang="ts">
-  // Quick's list. The drafts are ListRows (a dot, the name, delete on hover, renamed in place); the other rows are
-  // buttons that switch the view. Clicks, keys, double-clicks and the right-click menu stay with quick.ts, which finds
+  // Quick's list, a list box like the file list: the open view is the selected row. The drafts are ListRows (a dot,
+  // the name, delete on hover, renamed in place); the other rows switch the view. Clicks, keys, double-clicks and the right-click menu stay with quick.ts, which finds
   // rows by data-view / data-new / data-hist.
   import ListRow from './kit/ListRow.svelte';
   import Icon from './kit/Icon.svelte';
@@ -27,17 +27,17 @@
   let { model }: { model: QuickListModel } = $props();
 </script>
 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role (a row that switches the view: quick.ts takes its Enter and Space) -->
-<li class={['qk-nav', model.formula.active && 'active']} data-view="formula" tabindex="0" role="button"><Icon name="fileQuick" /><span class="nm">{model.formula.label}</span></li>
-{#if model.head}<li class="qk-head" aria-hidden="true">{model.head}</li>{/if}
+<li class={['qk-nav', model.formula.active && 'active']} data-view="formula" tabindex="0" role="option" aria-selected={model.formula.active}><Icon name="fileQuick" /><span class="nm">{model.formula.label}</span></li>
+{#if model.head}<li class="qk-head" role="presentation" aria-hidden="true">{model.head}</li>{/if}
 {#each model.blocks as b (b.type)}
   <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role (a row that switches the view: quick.ts takes its Enter and Space) -->
-  <li class={['qk-nav qk-block', b.open && 'open']} data-view={b.type} tabindex="0" role="button" aria-expanded={b.open ? 'true' : undefined} title={b.title}><span class="qk-ic">{@html b.svg}</span><span class="nm">{b.name}</span>{#if b.count}<span class="qk-n" aria-label={b.countLabel}>{b.count}</span>{/if}</li>
+  <li class={['qk-nav qk-block', b.open && 'open']} data-view={b.type} tabindex="0" role="option" aria-selected={b.open && !b.drafts?.rows.some((d) => d.active)} title={b.title}><span class="qk-ic">{@html b.svg}</span><span class="nm">{b.name}</span>{#if b.count}<span class="qk-n"><span aria-hidden="true">{b.count}</span><span class="sr-only">{b.countLabel}</span></span>{/if}</li>
   {#if b.drafts}
     <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role (a row that switches the view: quick.ts takes its Enter and Space) -->
-    <li class="qk-hist qk-new" data-new={b.type} tabindex="0" role="button" title={b.drafts.newTitle}><Icon name="add" /><span class="nm">{b.drafts.newLabel}</span></li>
+    <li class="qk-hist qk-new" data-new={b.type} tabindex="0" role="option" aria-selected="false" title={b.drafts.newTitle}><Icon name="add" /><span class="nm">{b.drafts.newLabel}</span></li>
     {#each b.drafts.rows as d (d.id)}
       <ListRow name={d.name} svg={model.icons.dot} selected={d.active} class={['qk-hist', d.active && 'active'].filter(Boolean).join(' ')} title={d.title}
-        role="button" aria-selected={undefined} aria-current={d.active ? 'true' : undefined} data-hist={d.id}
+        data-hist={d.id}
         renameOnDblclick={false} renaming={model.renaming === d.id} renameLabel={model.nameLabel} renameValue={d.value} renamePlaceholder={d.name} renameMax={120}
         onrename={(name) => model.rename(d.id, name)} onrenameend={() => model.renameEnd(d.id)}>
         {#snippet actions()}<IconButton icon="close" danger class="del" data-del={d.id} title={model.deleteLabel} aria-label={model.deleteLabel} />{/snippet}
