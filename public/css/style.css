@@ -18,12 +18,21 @@
 @font-face { font-family: 'Laksaman'; font-style: italic; font-weight: 700; font-display: swap; src: url('../fonts/tlwg-laksaman-bolditalic.woff2') format('woff2'); }
 /* UI type: Atkinson Hyperlegible Next, and Atkinson Hyperlegible Mono for values and code, served with the app (fonts/,
    OFL: fonts/AtkinsonHyperlegibleNext-LICENSE.txt, fonts/AtkinsonHyperlegibleMono-LICENSE.txt) so they look the same
-   on every platform. Variable fonts, Latin and Latin Extended; Thai falls back (html:lang(th)). The UI's normal weight
+   on every platform. Variable fonts, Latin and Latin Extended; Thai falls through to Sarabun (below). The UI's normal weight
    is Medium: its faces declare 500-800, so text set at 400 (the `font:` shorthand's default) is drawn at 500, while
    SemiBold and Bold lead as before. It is drawn at 106% (size-adjust): its lowercase is 4% and its capitals 9% shorter
    than Inter Display's at the same font size, which the type scale was set with. The mono faces keep their full range,
    at the same 106%, so values and code stand as tall as the labels beside them (unscaled, the mono's capitals are 6%
    shorter than the UI font's; they match the old SF Mono's, but each character is about a third wider). */
+/* Thai in the UI, in either language: Sarabun (Cadson Demak, OFL: fonts/Sarabun-LICENSE.txt), served with the app so Thai
+   looks the same on every platform instead of Thonburi on a Mac and Leelawadee UI on Windows. It follows Atkinson in
+   --font-ui and --font-mono, and its files cover only Thai (unicode-range), so Latin stays Atkinson and the files load
+   only when Thai is on screen. Static weights, matched to Atkinson's: Medium also answers 400, as Atkinson's faces do.
+   Drawn at 105%: its x-height (0.500 em, which its Thai is drawn against) then meets Atkinson's at 106% (0.496 em). */
+@font-face { font-family: 'Sarabun'; font-style: normal; font-weight: 400 500; size-adjust: 105%; font-display: swap; src: url('../fonts/sarabun-thai-500-normal.woff2') format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
+@font-face { font-family: 'Sarabun'; font-style: normal; font-weight: 600; size-adjust: 105%; font-display: swap; src: url('../fonts/sarabun-thai-600-normal.woff2') format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
+@font-face { font-family: 'Sarabun'; font-style: normal; font-weight: 700; size-adjust: 105%; font-display: swap; src: url('../fonts/sarabun-thai-700-normal.woff2') format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
+@font-face { font-family: 'Sarabun'; font-style: normal; font-weight: 800; size-adjust: 105%; font-display: swap; src: url('../fonts/sarabun-thai-800-normal.woff2') format('woff2'); unicode-range: U+02D7,U+0303,U+0331,U+0E01-0E5B,U+200C-200D,U+25CC; }
 @font-face { font-family: 'Atkinson Hyperlegible Next'; font-style: normal; font-weight: 500 800; size-adjust: 106%; font-display: swap; src: url('../fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2') format('woff2-variations'), url('../fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
 @font-face { font-family: 'Atkinson Hyperlegible Next'; font-style: normal; font-weight: 500 800; size-adjust: 106%; font-display: swap; src: url('../fonts/atkinson-hyperlegible-next-latin-ext-wght-normal.woff2') format('woff2-variations'), url('../fonts/atkinson-hyperlegible-next-latin-ext-wght-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: 'Atkinson Hyperlegible Next'; font-style: italic; font-weight: 500 800; size-adjust: 106%; font-display: swap; src: url('../fonts/atkinson-hyperlegible-next-latin-wght-italic.woff2') format('woff2-variations'), url('../fonts/atkinson-hyperlegible-next-latin-wght-italic.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
@@ -659,7 +668,7 @@ body.mode-doc .diag-only { visibility: hidden; }
 .doc-sheet { position: relative; margin: 0 auto; overflow: clip; box-shadow: 0 0 0 1px rgba(28,27,25,.07), 0 1px 2px rgba(28,27,25,.06), 0 4px 14px rgba(28,27,25,.06); }
 .doc-sheet > .doc-page { position: absolute; left: 0; top: 0; margin: 0; transform-origin: top left; box-shadow: none; }
 .cm-probe { position: absolute; width: 1cm; height: 0; visibility: hidden; }
-.doc-title { text-align: center; font-weight: 400; font-size: 1.75em; margin: 0 0 1em; text-wrap: balance; overflow-wrap: anywhere; }
+.doc-title { text-align: center; font-weight: 400; font-size: 1.75em; margin: 0 0 1em; text-wrap: balance; overflow-wrap: break-word; }
 .doc-page h2 { font-size: 1.3em; margin: 1.1em 0 .35em; text-wrap: balance; }
 .doc-page h3 { font-size: 1.12em; margin: .9em 0 .3em; }
 .doc-page h4 { font-size: 1em; margin: .8em 0 .25em; }
@@ -1019,12 +1028,13 @@ summary.cz-cat-t { cursor: pointer; }
 summary.cz-cat-t::-webkit-details-marker { display: none; }
 summary.cz-cat-t::before { content: ''; width: 0; height: 0; border-left: 4px solid currentColor; border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent; transition: transform .12s var(--ease); }
 details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
-.cz-part { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 6px; border: 1px solid transparent; background: transparent; color: var(--ink); text-align: left; font-size: 12px; touch-action: none; }
+.cz-part { display: flex; align-items: center; gap: 8px; width: 100%; height: auto; min-height: 34px; padding: 2px 6px; border: 1px solid transparent; background: transparent; color: var(--ink); text-align: left; font-size: 12px; touch-action: none; }
 .cz-part:hover { background: var(--wash); border-color: transparent; }
 .cz-part.on { background: var(--marker-wash); border-color: var(--marker); }
 .cz-part svg { width: 44px; height: 26px; flex: none; color: var(--ink); --cz-paper: var(--sheet); stroke-width: initial; }
 .cz-part:hover svg, .cz-part.on svg { --cz-paper: var(--sheet-raised); }
-.cz-part span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cz-part span { min-width: 0; line-height: 1.4; text-wrap: balance; overflow-wrap: break-word;
+  display: block; } /* a long name wraps, never cut; past two lines the row grows */
 .cz-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--canvas); }
 .cz-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; }
 .cz-svg.placing { cursor: crosshair; }
@@ -1101,6 +1111,9 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 @container czbox (max-width: 1259px) {
   .cz-body { grid-template-columns: 172px 1fr 400px; }
   .cz-pal .qe-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* list rows stack, the drawing over its name, so the name has the column's width */
+  .cz-pal .cz-part { flex-direction: column; justify-content: center; gap: 4px; padding: 6px 4px; }
+  .cz-pal .cz-part > span { max-width: 100%; text-align: center; }
 }
 @container czbox (max-width: 1099px) { .cz-body { grid-template-columns: 172px 1fr 300px; } }
 @container czbox (max-width: 959px) {
@@ -1109,25 +1122,28 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
   .cz-search { padding: 12px 8px 8px; }
   .cz-search .search-field { padding: 0 6px; }
   .cz-list { padding: 0 4px 16px; }
-  .cz-cat-t { padding: 8px 4px 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .cz-cat-t { padding: 8px 4px 4px; overflow-wrap: break-word; text-wrap: balance; } /* a long title wraps, not cut */
   .cz-cat-t .badge { display: none; }
   .cz-pal .cz-part { justify-content: center; height: 40px; padding: 0; }
   .cz-pal .cz-part > span { display: none; }
   /* physics objects keep their names (wrapped), not their commands */
   .cz-pal .phy-part { height: auto; min-height: 40px; padding: 4px; }
   .cz-pal .phy-part code { display: none; }
-  .cz-pal .phy-part > span { display: block; white-space: normal; text-align: center; font-size: 11px; line-height: 1.2; overflow-wrap: anywhere; }
+  .cz-pal .phy-part > span { display: block; white-space: normal; text-align: center; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
 }
 @media (max-width: 800px) { .cz-body { grid-template-columns: 1fr; grid-template-rows: 1fr 40%; } .cz-pal { display: none; } .cz-side { border-left: 0; border-top: 1px solid var(--rule); } }
 .cz-svg .hitfill { fill: transparent; pointer-events: none; }
 /* quantum circuit editor: same shell as the circuit editor, a cell grid on paper */
 .qe-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
-.qe-item { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 72px; padding: 6px 4px; border: 1px solid transparent; background: transparent; color: var(--ink); font-size: 11px; line-height: 1.2; touch-action: none; --qe-paper: var(--sheet); }
+.qe-item { min-width: 0; height: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 72px; padding: 6px 4px; border: 1px solid transparent; background: transparent; color: var(--ink); font-size: 11px; line-height: 1.2; touch-action: none; --qe-paper: var(--sheet); }
 .qe-item:hover { background: var(--wash); --qe-paper: var(--sheet-raised); }
 .qe-item.on { background: var(--marker-wash); border-color: var(--marker); --qe-paper: var(--sheet-raised); }
 .qe-item .qcmini { flex: none; max-width: 100%; color: var(--ink); stroke-width: initial; }
-.qe-item .qe-fig { height: 44px; display: flex; align-items: center; justify-content: center; max-width: 100%; }
-.qe-item > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--graphite); }
+.qe-item .qe-fig { flex: none; height: 44px; display: flex; align-items: center; justify-content: center; max-width: 100%; }
+/* a long name takes more lines rather than an ellipsis or a clamp, and may use the tile's side padding; the line is tall enough for the face's descenders (g, p) in every engine (1.3 is not, in Firefox),
+   and neither the drawing nor the name is squeezed when a tile holds more than its 72px */
+.qe-item > span:last-child { flex: none; max-width: calc(100% + 8px); margin-inline: -4px; line-height: 1.4; text-align: center; text-wrap: balance; overflow-wrap: break-word;
+  display: block; color: var(--graphite); }
 .qe-paper { fill: #fffdf8; stroke: var(--rule); stroke-width: 1; }
 .qe-rule { stroke: rgba(28, 27, 25, .08); stroke-width: 1; fill: none; pointer-events: none; }
 .qe-grow { fill: none; stroke: rgba(28, 27, 25, .22); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
@@ -1474,8 +1490,7 @@ body.mode-quick #quick.qk-blocks { display: flex; flex-direction: column; overfl
 #files .panel-head button.icon.on { color: var(--ink); }
 .ctx.sort-menu { z-index: 45; min-width: 200px; }
 
-/* Language is a device preference, beside appearance. Native Thai fonts work offline. */
-html:lang(th) { --font-ui: 'Atkinson Hyperlegible Next', 'Leelawadee UI', 'Thonburi', 'Noto Sans Thai', system-ui, sans-serif; }
+/* Language is a device preference, beside appearance. Thai is drawn in Sarabun in both languages (--font-ui). */
 html:lang(th) #topbar button, html:lang(th) .panel-head, html:lang(th) .sec-title { line-height: 1.6; }
 
 

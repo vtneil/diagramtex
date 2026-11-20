@@ -51,7 +51,8 @@
     "test:modals": "node tests/modal-responsive.mjs",
     "test:menus": "node tests/context-menu-layout.mjs",
     "test:snap-modes": "node tests/snapping-modes.mjs",
-    "test:format-preview": "node tests/format-preview.mjs"
+    "test:format-preview": "node tests/format-preview.mjs",
+    "test:palette-fit": "node tests/palette-fit.mjs"
   },
   "devDependencies": {
     "@jridgewell/remapping": "^2.3.5",

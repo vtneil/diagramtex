@@ -141,7 +141,7 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 
 - 4px grid. Controls are `--ctl` 28px; `--ctl-sm` 24px only for dense secondary ones. UI text is Atkinson
   Hyperlegible Next (Medium as normal, 13px; labels 12px; section titles 11px/600 in pencil) plus Atkinson
-  Hyperlegible Mono with tabular numbers for values and code, both served from `public/fonts/`. Nothing below 10px. **No serif in the UI**: `--font-tex` is for content only.
+  Hyperlegible Mono with tabular numbers for values and code, with Thai in Sarabun, all served from `public/fonts/`. Nothing below 10px. **No serif in the UI**: `--font-tex` is for content only.
 - Radii (`tokens.css`): `--r-sm` 4px (swatches, kbd, segments), `--r` 8px (buttons, inputs, tracks,
   menu rows), `--r-lg` 12px (menus, popovers, cards: 8 + 4 inset), `--r-xl` 20px (modals: head buttons sit
   12px in, 8 + 12).

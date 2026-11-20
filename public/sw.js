@@ -5,7 +5,7 @@
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate. (This literal is for the
 // dev server only: scripts/build.js names dist/sw.js's cache after a hash of everything it precaches.)
-const CACHE = 'diagramtex-v120';
+const CACHE = 'diagramtex-v122';
 const SLOW_MS = 4000;
 const PRECACHE = [
     './',
@@ -32,6 +32,10 @@ const PRECACHE = [
     'fonts/atkinson-hyperlegible-mono-latin-ext-wght-normal.woff2',
     'fonts/atkinson-hyperlegible-mono-latin-wght-italic.woff2',
     'fonts/atkinson-hyperlegible-mono-latin-ext-wght-italic.woff2',
+    'fonts/sarabun-thai-500-normal.woff2',
+    'fonts/sarabun-thai-600-normal.woff2',
+    'fonts/sarabun-thai-700-normal.woff2',
+    'fonts/sarabun-thai-800-normal.woff2',
     'fonts/tlwg-garuda.woff2',
     'fonts/tlwg-garuda-bold.woff2',
     'fonts/tlwg-garuda-oblique.woff2',

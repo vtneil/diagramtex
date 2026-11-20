@@ -112,7 +112,7 @@ HTML strings uses too; nothing in the kit has scoped styles, because both kinds 
   hover (at once within 400ms of another hiding) or on keyboard focus, and a press hides it until the pointer leaves.
   A trailing "(shortcut)" is a `<kbd>` (Mac glyphs via `macKeys`); "Name (key): what it does" puts the description on
   a muted second line.
-- **Names cut short**: any name the interface cuts with an ellipsis (a file, layer, palette item, menu row, tab;
+- **Names cut short**: any name the interface cuts with an ellipsis (a file, layer, menu row, tab;
   `text-overflow: ellipsis` or a line clamp) shows in full in the same tooltip when hovered, with no markup of its own
   (the tooltip service measures it). Hovering elsewhere in its row (an icon, the padding) finds it, when the row is
   at most 48px tall and holds only that one cut-short name. A control's own tip goes under the name as the muted
@@ -161,6 +161,13 @@ HTML strings uses too; nothing in the kit has scoped styles, because both kinds 
   (package, count, Copy), note, code and message line. Every block editor's palette is the kit Palette, drawn from
   data (`editorPalette()`, src/editors/editor-palette.svelte.ts): a search matches every word of the query; Esc
   clears it, then leaves it; Enter picks the first match; a palette's drawings share one scale (`fitMini`).
+  **A palette item is never cut** (src/ui/kit/fit-item.ts, `npm run test:palette-fit`): once shown, a drawing that
+  reaches past its own box (set glyphs, maths, edge strokes) gets a wider viewBox, refitted within fitMini's bounds;
+  a name wraps onto as many lines as it needs (no ellipsis, no line clamp, lines tall enough for descenders in every
+  engine), may use a tile's side padding, and a single word too wide for it gets smaller text, down to 10px, rather
+  than breaking mid-word (browsers don't hyphenate reliably, and `text-wrap: balance` with `overflow-wrap: anywhere`
+  splits words, so names use `break-word`). In a 2-column palette, list rows stack their drawing over their name;
+  in the 1-column palette, category titles wrap.
 - **EditorFrame**: every block editor's window, as one component: the head (icon, title, its tools, a spacer, Cancel
   and Done) over the palette, the stage and the side (properties over the code). Every editor opens at the same size,
   up to 1600×900 (97vw × 93vh), set once in kit.css (`.modal-box.cz-box`).
@@ -194,7 +201,7 @@ Hairline rgba rules and rounded corners: `--r-sm` 4px, `--r` 8px (buttons, input
 
 ## Typography
 The UI uses only two families: sans and mono. The serif (`--font-tex`, KaTeX_Main) is kept for content: text on the canvas (`.tx`) and the typeset document page (`.doc-page`). Never use it for UI chrome.
-- **UI:** Atkinson Hyperlegible Next at 13px, a variable font served from `public/fonts/` (Latin and Latin Extended, normal and italic; Thai falls back to the system's Thai font). The normal weight is Medium: its `@font-face` rules declare weights 500–800, so text set at 400 (the `font:` shorthand's default) is drawn at 500; 600 and 700 lead as SemiBold and Bold. The Latin files of both families are preloaded and all are precached by `sw.js`, so the chrome looks the same on every platform. It is drawn at 106% (`size-adjust`): at the same font size its lowercase was 4% and its capitals 9% shorter than Inter Display's, which the type scale was set with. It is also wider: the Table toolbar is full at 1400px, so its style select is 104px (the longest name, Academic, is about 61px of the 72px inside).
+- **UI:** Atkinson Hyperlegible Next at 13px, a variable font served from `public/fonts/` (Latin and Latin Extended, normal and italic). Thai, in either interface language, is drawn in Sarabun (`fonts/sarabun-thai-*.woff2`, OFL, Thai-only `unicode-range`, Medium to ExtraBold with Medium also answering 400, at 105% so its x-height meets Atkinson's), placed after Atkinson in `--font-ui` and `--font-mono`, so Thai looks the same on every platform. The normal weight is Medium: its `@font-face` rules declare weights 500–800, so text set at 400 (the `font:` shorthand's default) is drawn at 500; 600 and 700 lead as SemiBold and Bold. The Latin files of both families are preloaded and all (Sarabun too) are precached by `sw.js`, so the chrome looks the same on every platform. It is drawn at 106% (`size-adjust`): at the same font size its lowercase was 4% and its capitals 9% shorter than Inter Display's, which the type scale was set with. It is also wider: the Table toolbar is full at 1400px, so its style select is 104px (the longest name, Academic, is about 61px of the 72px inside).
 - **Section titles** (`.sec-title`, `.pop-title`, `.panel-head span`, `.sc`): 11px, weight 600, sentence case, in pencil.
 - **Type scale:** 10 (rulers, captions) · 11 · 12 · 13 (body) · 15 (titles). Nothing below 10px (HIG macOS minimum).
 - **Labels:** buttons, menu items and dialog titles use title-style capitalisation; checkbox labels and hints use sentence case. On macOS, shortcuts show as glyphs in the order ⌥⇧⌘.

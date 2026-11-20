@@ -7,12 +7,15 @@
   // match. Items are buttons, so Enter and Space pick them too; `onitemdown` lets an editor start a drag from one.
   // `itemclick: false` leaves item clicks to the editor (one that places by pressing and dragging, and hears its own
   // clicks); `bare` draws the contents only, into a .cz-pal already there; `notice` (markup) stands in for the list.
+  // Each drawing is widened once shown if it draws past its own box, and a name whose longest word has no room gets
+  // smaller text (fit-item.ts), so no glyph, stroke or word is cut.
   import type { Snippet } from 'svelte';
   import { t, locale } from '../../i18n';
   import SearchField from './SearchField.svelte';
   import EmptyState from './EmptyState.svelte';
   import Badge from './Badge.svelte';
   import { filterPalette, type PaletteCategory, type PaletteItem } from './palette';
+  import { fitItem } from './fit-item';
   let { categories, layout = 'rows', armed, searchLabel, bare = false, itemclick = true, listClass, notice, placeholder, label, collapsible = false, open = {}, ontoggle, onpick, onitemdown, empty, emptyText, query = $bindable(''), searchEl = $bindable() }: {
     categories: PaletteCategory[]; layout?: 'rows' | 'grid'; armed?: string; searchLabel?: string; bare?: boolean; itemclick?: boolean; listClass?: string; notice?: string;
     /** the search field's placeholder and name ("Search parts") */
@@ -39,11 +42,11 @@
 </script>
 {#snippet item(i: PaletteItem, how: string)}
   {@const on = armed === i.id || !!i.on}
-  {#if how === 'icons'}<button type="button" class={[on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} aria-label={i.label} {...i.attrs}
+  {#if how === 'icons'}<button type="button" class={[on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {@attach fitItem(i.svg, i.label)} aria-label={i.label} {...i.attrs}
     onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}>{@html i.svg}</button>
-  {:else if how === 'grid'}<button type="button" class={['qe-item', on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {...i.attrs}
+  {:else if how === 'grid'}<button type="button" class={['qe-item', on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {@attach fitItem(i.svg, i.label)} {...i.attrs}
     onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}><span class="qe-fig">{@html i.svg}</span>{#if i.label}<span>{i.label}</span>{/if}</button>
-  {:else}<button type="button" class={['cz-part', on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {...i.attrs}
+  {:else}<button type="button" class={['cz-part', on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {@attach fitItem(i.svg, i.label)} {...i.attrs}
     onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}>{@html i.svg}<span>{i.label}</span></button>{/if}
 {/snippet}
 {#snippet items(c: PaletteCategory)}

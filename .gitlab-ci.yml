@@ -101,5 +101,6 @@ browser-check:
           - modal-responsive
           - context-menu-layout
           - snapping-modes
+          - palette-fit
   script:
     - node "tests/${SUITE}.mjs" --dist

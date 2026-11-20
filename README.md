@@ -141,4 +141,4 @@ DiagramTeX is released under the [GNU Affero General Public License v3.0](LICENS
 
 Diagrams, LaTeX code, images, PDFs and other content you create with DiagramTeX are not covered by the AGPL just because DiagramTeX produced them. You may use your own creations in academic, commercial or proprietary work with no licensing obligations from DiagramTeX. Third-party assets included in an output may keep their own licences.
 
-The compiled UI bundles Svelte, clsx and esm-env (MIT), KaTeX (MIT), Temml (MIT), MathLive (MIT), MathJax and its TeX font data (Apache-2.0), the Latin Modern Math font (GUST Font License) and Atkinson Hyperlegible Next and Mono (SIL Open Font License); their licence files are in `public/vendor/` and `public/fonts/`.
+The compiled UI bundles Svelte, clsx and esm-env (MIT), KaTeX (MIT), Temml (MIT), MathLive (MIT), MathJax and its TeX font data (Apache-2.0), the Latin Modern Math font (GUST Font License) Atkinson Hyperlegible Next and Mono and Sarabun (SIL Open Font License); their licence files are in `public/vendor/` and `public/fonts/`.

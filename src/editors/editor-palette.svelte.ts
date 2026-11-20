@@ -87,5 +87,10 @@ export function fitMini(svg: string, maxW: number, maxH: number, top: number): s
   const [, , vw, vh] = m[1].split(/[\s,]+/).map(Number);
   if (!(vw > 0 && vh > 0)) return svg;
   const k = Math.min(top, maxW / vw, maxH / vh), r = (v: number) => Math.round(v * 100) / 100;
-  return svg.replace(/<svg\b/, `<svg style="width:${r(vw * k)}px;height:${r(vh * k)}px"`);
+  const size = `width:${r(vw * k)}px;height:${r(vh * k)}px;`, fit = `data-fit="${maxW} ${maxH} ${top}"`;
+  // the size joins a style the drawing already has (a second style attribute would be dropped, and its own with it);
+  // data-fit lets the palette fit it again once it has measured what it draws (src/ui/kit/fit-item.ts)
+  return svg.replace(/<svg\b[^>]*>/, (open) => (/\sstyle="/.test(open)
+    ? open.replace(/\sstyle="/, ` ${fit} style="${size}`)
+    : open.replace(/^<svg\b/, `<svg ${fit} style="${size}"`)));
 }
