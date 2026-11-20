@@ -1,6 +1,7 @@
 import type { Vec3 } from './contracts';
 import type { TextSpan } from './contracts';
 import { runtime as TD } from '../runtime';
+import { unbraceOnce as unbrace } from './tex-groups';
 // 3D geometry block: a tikz-3dplot picture. The code is the object. It is drawn on the canvas by reading the
 // commands it uses (\tdplotsetmaincoords, \tdplotsetcoord, \tdplotdrawarc, rotated frames, theta planes,
 // \coordinate, \draw / \fill / \filldraw / \shade / \node paths with --, cycle, circle, ellipse, arc,
@@ -49,7 +50,6 @@ function trimSpan(src: string, s: number, e: number): TextSpan {
   while (e > s && /\s/.test(src[e - 1])) e--;
   return { s, e, t: src.slice(s, e) };
 }
-const unbrace = (t: any) => { t = String(t).trim(); return t[0] === '{' && t[t.length - 1] === '}' && close(t, 0) === t.length ? t.slice(1, -1).trim() : t; };
 // options [k=v, …] inside a span: [{ s, e, t, k, v }]
 function optList(src: any, s: any, e: any) {
   return splitTop(src, s, e).map((x) => {

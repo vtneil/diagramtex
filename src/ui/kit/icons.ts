@@ -28,6 +28,13 @@ export interface IconDef { d: string; box?: string; cls?: string }
 export const TREE_CHILD = '<rect class="qo" x="6.5" y="1.5" width="7" height="5"/><path class="qo" d="M10 6.5v6"/><rect class="qf" x="6" y="12.5" width="8" height="6"/>';
 export const TREE_SIBLING = '<path class="qo" d="M10 1.5v3M5.5 4.5h9M5.5 4.5v3M14.5 4.5v3"/><rect class="qo" x="2" y="7.5" width="7" height="5"/><rect class="qf" x="10.5" y="7" width="8" height="6"/>';
 
+// the snap modes' drawings: objects and grid keep the lower-right corner for a solid magnet badge; all and off share
+// the plain magnet (the button's pressed state tells them apart)
+const SNAP_MAGNET = '<g class="snap-magnet"><path d="M10.5 9.5V15a4.5 4.5 0 009 0V9.5H17V15a2 2 0 01-4 0V9.5z" fill="currentColor" stroke="none"/><path d="M10.5 12H13M17 12h2.5" stroke="var(--sheet-raised)" stroke-width="1"/></g>';
+const SNAP_ANCHORS = '<g fill="currentColor" stroke="none"><circle cx="2" cy="2" r="1.5"/><circle cx="13" cy="2" r="1.5"/><circle cx="2" cy="13" r="1.5"/></g>';
+// a Table border choice: a quiet cell grid, with the borders it applies drawn in ink
+const border = (path: string) => `<path d="M3 3h14v14H3zM10 3v14M3 10h14" opacity=".2" stroke-width="1"/>${path ? `<path d="${path}" stroke-width="1.5"/>` : ''}`;
+
 export const ICONS = {
   // files and commands (the "/" search)
   newFile: { d: '<path d="M5 2.5h7l3 3v12H5z"/><path d="M10 9v6M7 12h6"/>' },
@@ -38,7 +45,6 @@ export const ICONS = {
   exportAll: { d: '<path d="M3.5 3.5h10l3 3v10h-13z"/><path d="M6.5 3.5v4h6v-4"/>' },
   print: { d: '<path d="M5.5 7.5V3h9v4.5M5.5 14.5h-3v-7h15v7h-3"/><path d="M5.5 11.5h9v6h-9z"/>' },
   addPage: { d: '<path d="M5 2.5h10v15H5z"/><path d="M10 7.5v5M7.5 10h5"/>' },
-  snap: { d: '<path d="M5 3v7a5 5 0 0010 0V3h-3.5v7a1.5 1.5 0 01-3 0V3z"/><path d="M5 6.5h3.5M11.5 6.5H15"/>' },
   search: { d: '<circle cx="8.5" cy="8.5" r="5"/><path d="M12.5 12.5l4.5 4.5"/>' },
   rename: { d: '<path d="M3 6h9M3 10h6M3 14h5"/><path d="M11 17l.6-2.6L16 10l2 2-4.4 4.4z"/>' },
   sidebar: { d: '<rect x="3" y="4" width="14" height="12"/><path d="M8 4v12"/>' },
@@ -48,6 +54,8 @@ export const ICONS = {
   export: { d: '<path d="M9 4H4v12h12v-5"/><path d="M10 10l6.5-6.5M11.5 3.5h5v5"/>' },
   folder: { d: '<path d="M2.5 5.5v10h15v-8H9L7.5 5.5z"/>' },
   download: { d: '<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>' },
+  saveAs: { d: '<path d="M8 3v8M5 8l3 3 3-3"/><path d="M3.5 12v4.5h9"/><path d="M15 11v6M12 14h6"/>' },
+  history: { d: '<path d="M3.5 10a6.5 6.5 0 101.9-4.6"/><path d="M3 3v3.5h3.5"/><path d="M10 6.5V10l2.5 1.5"/>' }, // recovery copies
   undo: { d: '<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>' },
   redo: { d: '<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>' },
   edit: { d: '<path d="M4 16l1-4 8-8 3 3-8 8z"/>' },
@@ -72,6 +80,10 @@ export const ICONS = {
   pencil: { d: '<path d="M4 16l1-4 8.5-8.5 3 3L8 15z M12 5l3 3"/>' },
   renameItem: { d: '<path d="M12 4l4 4M4 12l9-9 4 4-9 9-5 1z"/>' },
   guides: { d: '<path d="M3 3h14v14H3zM7 3v4M11 3v3M15 3v4M3 7h4M3 11h3M3 15h4"/>' },
+  guidesLocked: { d: '<path d="M3 17V3h10M3 7h3M3 11h2M7 3v3"/><g class="guide-lock"><path d="M11 10V7.5a2.5 2.5 0 015 0V10"/><rect x="8.5" y="10" width="10" height="8" rx="1.5" fill="currentColor" stroke="none"/><path d="M13.5 13v2" stroke="var(--sheet-raised)" stroke-width="2"/></g>' },
+  snap: { d: '<g class="snap-magnet"><path d="M5 3v7a5 5 0 0010 0V3h-3.5v7a1.5 1.5 0 01-3 0V3zM5 6.5h3.5M11.5 6.5H15"/></g>' },
+  snapObjects: { d: '<path d="M13 7V2H2v11h5"/>' + SNAP_ANCHORS + SNAP_MAGNET },
+  snapGrid: { d: '<path d="M13 8V2H2v11h6M2 7.5h11M7.5 2v11"/>' + SNAP_MAGNET },
   newGroup: { d: '<path d="M2.5 5.5v10h15v-8H9.5L8 5.5z"/><path d="M10 9.5v4M8 11.5h4"/>' },
   ungroup: { d: '<path d="M3 3h7v6H3zM10 11h7v6h-7z"/>' },
   fileClassic: { d: '<path d="M3.5 7.5h10V11a5 5 0 01-10 0zM13.5 8h1.75a2.25 2.25 0 010 4.5H13M2.5 17h13M6 5V3M10 5V3"/>' },
@@ -133,6 +145,21 @@ export const ICONS = {
   groupFigures3d: { d: '<text x="10" y="15" text-anchor="middle" font-size="14.5" font-weight="800" letter-spacing="-.6" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">3D</text>' },
   groupBlocks: { d: '<path d="M10 2l4 2.3v4.6L10 11.2 6 8.9V4.3zM6 4.3l4 2.3 4-2.3M10 6.6v4.6M6 8.9l4 2.3v4.6L6 18.1 2 15.8v-4.6zM2 11.2l4 2.3 4-2.3M6 13.5v4.6M14 8.9l4 2.3v4.6L14 18.1 10 15.8v-4.6zM10 11.2l4 2.3 4-2.3M14 13.5v4.6"/>' },
   // arrange
+  arrange: { d: '<path d="M3 3h9v9H3z" class="f"/><path d="M8 8h9v9H8z"/>' }, // order: one in front of another
+  // shapes lined up against one another (text alignment is alignLeft …)
+  alignLefts: { d: '<path d="M3 2v16M6 5h10v3.5H6zM6 11.5h6V15H6z"/>' },
+  alignCentres: { d: '<path d="M10 2v16M4 5h12v3.5H4zM7 11.5h6V15H7z"/>' },
+  alignRights: { d: '<path d="M17 2v16M4 5h10v3.5H4zM8 11.5h6V15H8z"/>' },
+  alignTops: { d: '<path d="M2 3h16M5 6v10h3.5V6zM11.5 6v6H15V6z"/>' },
+  alignMiddles: { d: '<path d="M2 10h16M5 4v12h3.5V4zM11.5 7v6H15V7z"/>' },
+  alignBottoms: { d: '<path d="M2 17h16M5 4v10h3.5V4zM11.5 8v6H15V8z"/>' },
+  // combining shapes into one outline
+  combineUnite: { d: '<path d="M3 3h9v5h5v9H8v-5H3z" fill="currentColor" stroke="none"/>' },
+  combineIntersect: { d: '<path d="M3 3h9v9H3zM8 8h9v9H8z" fill="none"/><path d="M8 8h4v4H8z" fill="currentColor" stroke="none"/>' },
+  combineSubtract: { d: '<path d="M3 3h9v5H8v4H3z" fill="currentColor" stroke="none"/><path d="M8 8h9v9H8z" fill="none" stroke-dasharray="2 1.5"/>' },
+  combineExclude: { d: '<path d="M3 3h9v5H8v4H3zM12 8h5v9H8v-5h4z" fill="currentColor" stroke="none"/><path d="M8 8h4v4H8z" fill="none"/>' },
+  combineDivide: { d: '<path d="M3 3h9v9H3zM8 8h9v9H8z" fill="none"/><path d="M8 8h4v4H8z" fill="currentColor" stroke="none" opacity=".5"/>' },
+  distribute: { d: '<path d="M2 3v14M18 3v14"/><path d="M6 6h3v8H6zM11 6h3v8h-3z"/>' },
   rotate: { d: '<path d="M15.5 8.5A6 6 0 1 0 16 12"/><path d="M16.5 4v4.5H12"/>' },
   mirrorH: { d: '<path d="M10 3v14" stroke-dasharray="2 2"/><path d="M7.5 6L3 14h4.5zM12.5 6l4.5 8h-4.5z"/>' },
   mirrorV: { d: '<path d="M3 10h14" stroke-dasharray="2 2"/><path d="M6 7.5L14 3v4.5zM6 12.5l8 4.5v-4.5z"/>' },
@@ -167,6 +194,8 @@ export const ICONS = {
   arrowTriangle: { d: '<path d="M3 10h9M12 6l5 4-5 4z"/>' },
   arrowDiamond: { d: '<path d="M2 10l3.5-3 3.5 3-3.5 3zM9 10h8"/>' },
   // cells, rows, groups and blocks
+  check: { d: '<path d="M4 10.5l4 4 8-9"/>' }, // a check that passed (the K-map's groups)
+  attention: { d: '<path d="M10 4v8M10 15.5v.5"/>' }, // a check that did not
   clear: { d: '<path d="M4 4l12 12M16 4L4 16"/>' },
   moveLeft: { d: '<path d="M16 10H4M8.5 5.5L4 10l4.5 4.5"/>' },
   moveRight: { d: '<path d="M4 10h12M11.5 5.5L16 10l-4.5 4.5"/>' },
@@ -181,8 +210,26 @@ export const ICONS = {
   fitWidth: { d: '<path d="M3 10h14M6 7l-3 3 3 3M14 7l3 3-3 3"/>' },
   umlAttributes: { d: '<rect x="3" y="3" width="14" height="14" rx="1"/><path d="M3 8h14M6 11.5h6"/>' },
   umlOperations: { d: '<rect x="3" y="3" width="14" height="14" rx="1"/><path d="M3 8h14M6 14h6"/>' },
-  selectAll: { d: '<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>' },
+  selectAll: { d: '<path d="M3 3h14v14H3z" stroke-dasharray="2.5 2"/>' }, // a marquee round everything (not Fit's corners)
   importText: { d: '<path d="M5 3h7l3 3v11H5z"/><path d="M8 10h5M8 13h5"/>' },
+  // the Table: merging and splitting cells, the header rows, and where borders go (a quiet cell grid for context,
+  // the borders an action applies in ink)
+  mergeCells: { d: '<path d="M3 4h14v12H3z"/><path d="M7 10h6M11 8l2 2-2 2M9 8l-2 2 2 2"/>' },
+  splitCells: { d: '<path d="M3 4h14v12H3zM10 4v12"/><path d="M4.5 10h3M6 8.5L7.5 10 6 11.5M15.5 10h-3M14 8.5L12.5 10l1.5 1.5"/>' },
+  headerRows: { d: '<path d="M3 3h14v14H3z"/><path d="M3 7.5h14" stroke-width="2.5"/>' },
+  ruleThin: { d: '<path d="M3 10h14"/>' },
+  ruleThick: { d: '<path d="M3 10h14" stroke-width="3"/>' },
+  ruleDouble: { d: '<path d="M3 8h14M3 12h14"/>' },
+  borderAll: { d: border('M3 3h14v14H3zM10 3v14M3 10h14') },
+  borderOuter: { d: border('M3 3h14v14H3z') },
+  borderInner: { d: border('M10 3v14M3 10h14') },
+  borderInnerH: { d: border('M3 10h14') },
+  borderInnerV: { d: border('M10 3v14') },
+  borderTop: { d: border('M3 3h14') },
+  borderBottom: { d: border('M3 17h14') },
+  borderLeft: { d: border('M3 3v14') },
+  borderRight: { d: border('M17 3v14') },
+  borderNone: { d: border('') },
   // grids (gridBlocks above): the filled block is the one an action makes, where it goes
   rowAbove: { d: gridBlocks(0, false, false), cls: 'qe-ic' },
   rowBelow: { d: gridBlocks(2, false, false), cls: 'qe-ic' },
@@ -201,6 +248,7 @@ export const ICONS = {
   listNumber: { d: '<path d="M8 5.5h9M8 10h9M8 14.5h9M3.5 4l1-.5v4M3.2 12.2c.4-.6 1.8-.6 1.8.3 0 .7-1.8 1.4-1.8 2.2H5"/>' },
   checklist: { d: '<path d="M3 4h4v4H3zM3.8 13.5l1.2 1.2 2.2-2.6M10 6h7M10 14h7"/>' },
   link: { d: '<path d="M8.5 11.5l3-3M7 9.5L5.2 11.3a2.5 2.5 0 003.5 3.5L10.5 13M13 10.5l1.8-1.8a2.5 2.5 0 00-3.5-3.5L9.5 7"/>' },
+  unlink: { d: '<path d="M8.5 11.5l-2 2a2.5 2.5 0 01-3.5-3.5l2-2M11.5 8.5l2-2a2.5 2.5 0 00-3.5-3.5l-2 2"/><path d="M13 13l3.5 3.5M3.5 3.5L7 7"/>' },
   source: { d: '<path d="M7 5.5L2.5 10 7 14.5M13 5.5l4.5 4.5-4.5 4.5M11 4l-2 12"/>' },
   // trees
   treeChild: { d: `<g class="fe-turn">${TREE_CHILD}</g>`, cls: 'qe-ic' },
@@ -211,6 +259,13 @@ export type IconName = keyof typeof ICONS;
 
 /** The alignment switches' icons by their one-letter keys (the Table, the Document's text bar and blocks) */
 export const ALIGN_ICON = { l: 'alignLeft', c: 'alignCentre', r: 'alignRight', j: 'alignJustify' } as const satisfies Record<string, IconName>;
+
+/** Draws another named icon into an <svg> already on the page (a control whose icon follows its state). */
+export function setIcon(svg: SVGElement, name: IconName) {
+  const icon: IconDef = ICONS[name];
+  svg.setAttribute('viewBox', icon.box ?? '0 0 20 20');
+  svg.innerHTML = icon.d;
+}
 
 /** The icon as markup, for code that still builds HTML strings. */
 export function iconSvg(name: IconName): string {

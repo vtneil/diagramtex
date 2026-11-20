@@ -1,5 +1,4 @@
 import { isSwapGate, boundedSpan } from './qc-span';
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { onLocale, t, message } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -13,6 +12,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Quantum circuit editor: the overlay that opens on a Quantum block. A palette of quantikz elements,
 // the circuit drawn by the canvas renderer over a grid of cells (wires × steps) where elements are
 // dropped, moved and linked, the selected cell's properties, and beside them the quantikz code, live
@@ -268,7 +268,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   root.id = 'qcModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   mountFrame(root, QceditorFrame);
   document.body.appendChild(root);
   const svg = $('.qe-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('editor.qc.searchElements', 'Search elements'), label: message('editor.commonA.elements', 'Elements'), listClass: 'qe-list', onpick: (k) => choose(k) }), list = pal.list, search = pal.search;
@@ -287,23 +286,15 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   // { M, sel: {r1, c1, r2, c2} | null, arm, view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, st, codeAt, codeTimer, clip }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   const snap = () => codeOf(E.M);
-  function begin() { if (E.pending == null) E.pending = snap(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snap();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const { begin, commit, undo, redo } = TD.editorSession.history({
+    state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
+  });
   // one edit: begin, change, commit, redraw
   function edit(fn: any) { begin(); fn(); commit(); clampSel(); draw(); keepInView(); renderProps(); }
   // while the view is fitted (on open, or after Fit / 0), every edit fits the circuit again; once the user pans
   // or zooms, the camera stays where they put it until Fit is pressed again
   function keepInView() { if (E.G && E.fitted) fit(); }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); dock.changed(); }
   const at = (r: any, c: any) => (E.M.rows[r] && E.M.rows[r][c]) || null;
   function clampSel() {
     const s = E.sel;
@@ -538,9 +529,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     const cx = (c: any) => (xs[c] + xs[c + 1]) / 2, cy = (r: any) => (L.R && L.geo && r < L.R ? L.geo.cy[r] : (ys[r] + ys[r + 1]) / 2);
     return { s, L, xs, ys, R, C, cx, cy };
   }
-  const rect = () => svg.getBoundingClientRect();
-  const overStage = (e: any) => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [0.4, 6], redraw: () => { draw(); }, beforeWheel: () => { E.fitted = false; } });
   const toL = (e: any) => { const [x, y] = pos(e), v = E.view; return [(x - v.ox) / v.k, (y - v.oy) / v.k]; };
   // the cell under the pointer (r == R or c == C: the growing edge), or null
   // the cell a click picks: a covered cell gives the tall gate over it
@@ -576,21 +566,10 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     // the paper's edges, with room past them for the delete gutters
     const x1 = Math.min(G.xs[0], G.L.bb.x) - 16, x2 = Math.max(G.xs[G.xs.length - 1], G.L.bb.x + G.L.bb.w) + 10;
     const y1 = Math.min(G.ys[0], G.L.bb.y) - 24, y2 = Math.max(G.ys[G.ys.length - 1], G.L.bb.y + G.L.bb.h) + 10;
-    const k = Math.max(0.6, Math.min(3, Math.min((r.width - 80) / (x2 - x1), (r.height - 80) / (y2 - y1))));
-    E.view = { k, ox: r.width / 2 - ((x1 + x2) / 2) * k, oy: r.height / 2 - ((y1 + y2) / 2) * k };
+    E.view = fitView(r, { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, { min: 0.6, max: 3 });
     E.fitted = true;
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    E.fitted = false;
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.4, Math.min(6, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   function draw() {
@@ -1417,37 +1396,13 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
 
   // ---------------------------------------------------------------- open / close
   // Ctrl+S: write the circuit back to the page (one undo step there) and keep editing; Esc then has nothing to discard
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = E.codeAt != null && document.activeElement === codeTa ? codeTa.value : snap();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    flashSaved();
-  }
-  function flashSaved() { stageNote.flash(t('editor.commonA.saved', 'Saved to the page'), 1500); }
-  // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap() });
-  TD.unsaved.push(() => !!E && !dock.docked() && snap() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = E.codeAt != null && document.activeElement === codeTa ? codeTa.value : snap();
-    const changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(t('editor.qc.discard', 'Discard changes to this circuit?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    localeOff?.(); localeOff = undefined;
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: () => snap(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => t('editor.qc.discard', 'Discard changes to this circuit?'),
+    source: () => (E.codeAt != null && document.activeElement === codeTa ? codeTa.value : snap()),
+  });
+  const { save, finish } = dock;
   let localeOff: (() => void) | undefined;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
@@ -1465,5 +1420,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.qcEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
+  TD.qcEditor = { open, dockable: true, close: () => dock.detach() };
 })();

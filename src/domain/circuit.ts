@@ -1,5 +1,6 @@
 import { crossingSections, isCrossing } from './circuit-crossings';
 import { runtime as TD } from '../runtime';
+import { unbraceOnce as unbrace } from './tex-groups';
 // Circuit block: a schematic drawn with circuitikz parts (czcore.ts + czparts-*.ts) and exported as
 // circuitikz code. The block holds a list of items in its own frame (cm, y up, origin at (s.x, s.y)):
 //   bipole { id, part, a: [x, y], b: [x, y], l, ann, v, i, poles, name, opts }  → \draw (a) to[…] (b);
@@ -373,7 +374,6 @@ function partFor(list: any, kind: any, st0?: CzStyle) {
   }
   return null;
 }
-const unbrace = (v: any) => v.trim().replace(/^\{([\s\S]*)\}$/, '$1');
 
 // ---------------------------------------------------------------- circuitikz's own names for parts
 // The short names circuitikz defines (R, L, C, V, I, D, sV, leD* …, from pgfcircbipoles.tex): name=what it stands for.

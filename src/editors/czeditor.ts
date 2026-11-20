@@ -1,6 +1,5 @@
 import { wireIntersections } from '../domain/circuit-crossings';
 import { connectedWires, projectOnWire, wireJunctions } from './circuit-wires';
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
 import { t as uiText, message, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -14,6 +13,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Circuit editor: the overlay that opens on a Circuit block. A searchable palette of circuitikz parts,
 // a drafting grid where parts are dropped, dragged, rotated and wired (ends snap to pins), the selected
 // part's properties, and beside them the circuitikz it writes, live both ways (edits there are read back).
@@ -43,7 +43,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   root.id = 'czModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   mountFrame(root, CzeditorFrame);
   document.body.appendChild(root);
   const svg = $('.cz-svg', root), stage = $('.cz-stage', root), pal = editorPalette(root, { placeholder: message('ui.search.parts', 'Search parts'), label: message('ui.elements', 'Elements'), layout: 'rows', collapsible: true, isOpen, ontoggle: (id, open) => { if (isOpen(id) !== open) lsSet(OPEN_KEY, { ...lsGet(OPEN_KEY, {}), [id]: open }); }, empty: (query) => uiText('editor.cz.noPartMatches', 'No part matches “{query}”', { query }), onpick: (k) => arm(k) }), list = pal.list, search = pal.search;
@@ -55,18 +54,11 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   const byId = (id: any) => E.items.find((it: any) => it.id === id);
   const sel = () => E.items.filter((it: any) => E.sel.has(it.id));
   const snap = () => JSON.stringify({ items: E.items, raw: E.raw });
-  function begin() { if (E.pending == null) E.pending = snap(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snap();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const history = TD.editorSession.history({ state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed() });
+  const { begin, commit } = history;
+  function undo() { if (E.wire) endWire(); history.undo(); }
+  function redo() { if (E.wire) endWire(); history.redo(); }
   function restore(j: any) { const v = JSON.parse(j); E.items = v.items; E.raw = v.raw; for (const id of [...E.sel]) if (!byId(id)) E.sel.delete(id); draw(); renderProps(); updateTools(); }
-  function undo() { if (E.wire) endWire(); commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { if (E.wire) endWire(); commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); dock.changed(); }
 
   // ---------------------------------------------------------------- palette
   // categories fold (opening or closing one is remembered; nothing else opens one); "Recently used" and "Common" are
@@ -118,27 +110,18 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- view
-  const rect = () => svg.getBoundingClientRect();
-  const overStage = (e: any) => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage } = editorStage(svg, stage, { view: () => E?.view, zoom: [15, 240], redraw: () => { draw(); } });
   function toCm(e: any) { const r = rect(), v = E.view; return [(e.clientX - r.left - v.ox) / v.k, (v.oy - (e.clientY - r.top)) / v.k]; }
   const m = (x: any, y: any) => [E.view.ox + x * E.view.k, E.view.oy - y * E.view.k];
   function fit() {
     if (!E) return;
     const r = rect(), b = C.itemsBox(E.items, { size: 'normalsize', font: 'default', vstyle: C.vstyleOf(E.raw) }) || { x1: -2, y1: -1, x2: 2, y2: 1 };
-    const w = Math.max(b.x2 - b.x1, 2), h = Math.max(b.y2 - b.y1, 2);
-    const k = Math.max(20, Math.min(110, Math.min((r.width - 80) / w, (r.height - 80) / h)));
-    E.view = { k, ox: r.width / 2 - ((b.x1 + b.x2) / 2) * k, oy: r.height / 2 + ((b.y1 + b.y2) / 2) * k };
+    // at least 2 cm each way, about the circuit's centre (its y runs up, the stage's down)
+    const w = Math.max(b.x2 - b.x1, 2), h = Math.max(b.y2 - b.y1, 2), cx = (b.x1 + b.x2) / 2, cy = -(b.y1 + b.y2) / 2;
+    E.view = fitView(r, { x: cx - w / 2, y: cy - h / 2, w, h }, { min: 20, max: 110 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, r = rect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(15, Math.min(240, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- snapping
   // all pins: [{ id, name, p }]; skip: ids whose pins don't count (the ones being moved)
@@ -726,36 +709,13 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
 
   // ---------------------------------------------------------------- open / close
   // Ctrl+S: write the circuit back to the page (one undo step there) and keep editing; Esc then has nothing to discard
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    if (pop) pop.close();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const now = snap();
-    if (now !== E.start) { E.start = now; E.done({ items: clone(E.items), raw: E.raw }); }
-    flashSaved();
-  }
-  function flashSaved() { stageNote.flash(uiText('editor.commonB.saved', 'Saved to the page'), 1500); }
-  // reloading or closing the tab asks first while this holds edits not yet applied (app.ts, beforeunload)
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap(), result: () => ({ items: clone(E.items), raw: E.raw }) });
-  TD.unsaved.push(() => !!E && !dock.docked() && snap() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    closeMenu();
-    if (!E) return;
-    if (pop) pop.close();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const changed = snap() !== E.start;
-    if (!ok && changed && !(await TD.confirm(uiText('editor.cz.discardCircuit', 'Discard changes to this circuit?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
-    const done = E.done, res = { items: E.items, raw: E.raw };
-    stopLocale?.(); stopLocale = null;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    E = null;
-    if (ok && changed) done(res);
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot: () => snap(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeMenu(); if (pop) pop.close(); }, discardTitle: () => uiText('editor.cz.discardCircuit', 'Discard changes to this circuit?'),
+    result: () => ({ items: clone(E.items), raw: E.raw }),
+  });
+  const { save, finish } = dock;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
     E = { items: clone(block.items || []), raw: block.raw || '', sel: new Set(), tool: 'select', part: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], done, pending: null, hover: null, drag: null, codeAt: null, codeTimer: null };
@@ -770,5 +730,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.czEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
+  TD.czEditor = { open, dockable: true, close: () => dock.detach() };
 })();

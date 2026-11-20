@@ -18,6 +18,8 @@
 import './localization.mjs';
 import './console-errors.test.mjs';
 import './qc-span.mjs';
+import './tex-groups.mjs';
+import './editor-stage.mjs';
 import './circuit-wires.mjs';
 import './canvas-grid.mjs';
 import './smart-snap.mjs';

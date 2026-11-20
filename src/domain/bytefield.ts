@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { unbrace } from './tex-groups';
 // Bit fields written with the bytefield package (v2). The source is the object: a bytefield environment of
 // \bitheader, \bitbox, \bitboxes, \wordbox and \skippedwords rows broken by \\, with rightwordgroup and
 // leftwordgroup braces, \bytefieldsetup keys and the [lrtb] border option. It is read into a list of items
@@ -88,7 +89,6 @@ function keyvals(str: any) {
   push();
   return out;
 }
-const unbrace = (t: any) => { t = String(t).trim(); while (t[0] === '{' && closeAt(t, 0) === t.length) t = t.slice(1, -1).trim(); return t; };
 
 const BOX = new Set(['bitbox', 'bitboxes', 'wordbox']);
 // src → { pre, head: { opts, bits, src }, items, tail, post, warnings }

@@ -1,6 +1,4 @@
 import { flushSync, mount } from 'svelte';
-import { runtime as TD } from '../../runtime';
-import { caption } from '../../i18n';
 import SelectMenu, { type SelectMenuModel, type SelectMenuRow } from '../SelectMenu.svelte';
 // Custom menu for every select element in the app, so all dropdowns match the dash/width menus instead of
 // mixing in the native system menu. The select element stays the source of truth: picking an item sets its
@@ -8,10 +6,13 @@ import SelectMenu, { type SelectMenuModel, type SelectMenuRow } from '../SelectM
 // Focus never leaves the select element; the keyboard is handled on it (arrows, Home/End, Enter/Space,
 // Escape, Tab, type-to-select). The menu is src/ui/SelectMenu.svelte, drawn from `model`.
 /** What a select's menu shows beyond its options' text (set by the kit's Select): a drawing and a note per
- *  value, a grid of drawing tiles `columns` across, and a custom line at the foot that takes a typed value. */
+ *  value, a grid of drawing tiles `columns` across, picture tiles (each drawing over its short name), and a custom
+ *  line at the foot that takes a typed value. */
 export interface SelectExtras {
   svg?: Record<string, string>;
   notes?: Record<string, string>;
+  short?: Record<string, string>;
+  pictures?: boolean;
   columns?: number;
   custom?: { label: string; value: string; placeholder?: string; title?: string; on?: boolean; apply(text: string): void };
 }
@@ -59,10 +60,8 @@ export function installSelectMenu() {
     close();
     sel = s;
     clearTimeout(leaveTimer);
-    // a select with data-pics names a set of pictures (TD.selectPics[name][value] = [short label, svg]):
-    // its options are tiles in a grid, like the Blocks menu
-    const pics = s.dataset.pics && TD.selectPics && TD.selectPics[s.dataset.pics];
-    const x = extras.get(s) || {};
+    // picture tiles (the kit's Tile) in a grid, like the Blocks menu: each option's drawing over its short name
+    const x = extras.get(s) || {}, pics = !!x.pictures;
     const rows: SelectMenuRow[] = [];
     let group: any = null;
     [...s.options].forEach((o: any, i: number) => {
@@ -73,7 +72,7 @@ export function installSelectMenu() {
       // an option with data-swatch shows that colour before its name
       const svg = x.svg?.[o.value];
       rows.push({ i, text: o.textContent, on: i === s.selectedIndex, dis: o.disabled, svg, tile: !!(svg && x.columns), note: x.notes?.[o.value],
-        pic: pics && pics[o.value] ? { svg: pics[o.value][1], label: caption(pics[o.value][0]) } : undefined, swatch: o.dataset.swatch, font: o.style.fontFamily });
+        pic: pics && svg ? { svg, label: x.short?.[o.value] ?? o.textContent } : undefined, swatch: o.dataset.swatch, font: o.style.fontFamily });
     });
     custom = x.custom || null;
     // a grid of pictures, or of drawings without names (arrow tips) `columns` across

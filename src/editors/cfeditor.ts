@@ -1,5 +1,4 @@
 import { GRID_STYLES } from '../ui/canvas-grid';
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { onLocale, t, message } from '../i18n';
 import { section, row } from '../ui/forms';
@@ -12,6 +11,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Chemistry editor: the overlay that opens on a Chemistry block. A palette of atoms, bonds, rings,
 // functional groups, charges and reaction arrows; the molecules and schemes drawn by the canvas renderer,
 // where atoms are picked, relabelled and grown by dragging their blue handle; the selected atom's, bond's
@@ -684,19 +684,11 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   // { M, sel: { v: key } | { b: bond item } | { a: arrow seg } | null, arm, bond (kind new bonds get), view: { k, ox, oy }, undo, redo, pending, start, done, drag, hover }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   const snapCode = () => codeOf(E.M);
-  function begin() { if (E.pending == null) E.pending = snapCode(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snapCode();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const { begin, commit, undo, redo } = TD.editorSession.history({
+    state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
+  });
   function edit(fn: any) { begin(); const r = fn(); L = null; commit(); clampSel(); draw(); renderProps(); return r; }
   function restore(code: any) { E.M = load(code); L = null; E.sel = null; draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() { if (E.sel && !selV() && !selB() && !selA() && !selM()) E.sel = null; }
 
   // ---------------------------------------------------------------- palette
@@ -854,9 +846,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const overStage = (e: any) => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [0.3, 12], redraw: () => { draw(); if (Lb) Lb.pop.place(); } });
   const S = (x: any, y: any) => [E.view.ox + x * E.view.k, E.view.oy + y * E.view.k];
   const D = (X: any, Y: any) => [(X - E.view.ox) / E.view.k, (Y - E.view.oy) / E.view.k];
   function vRadius(v: any) { const b = v.boxes[v.k]; return b && !b.empty ? Math.max(b.w, b.asc + b.desc) / 2 * E.view.k + 3 : 6; }
@@ -903,9 +894,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     return best;
   }
   function fit() {
-    const Lo = lay(), r = rect(), bb = Lo.empty ? { x: -40, y: -30, w: 80, h: 60 } : Lo.bb;
-    const k = Math.max(0.5, Math.min(4, Math.min((r.width - 120) / bb.w, (r.height - 120) / bb.h)));
-    E.view = { k, ox: r.width / 2 - (bb.x + bb.w / 2) * k, oy: r.height / 2 - (bb.y + bb.h / 2) * k };
+    const Lo = lay();
+    E.view = fitView(rect(), Lo.empty ? { x: -40, y: -30, w: 80, h: 60 } : Lo.bb, { pad: 120, min: 0.5, max: 4 });
     draw();
   }
   // the view stays put unless the drawing has grown out of it
@@ -920,16 +910,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     E.view.oy += y1 < 24 ? 24 - y1 : y2 > r.height - 24 ? r.height - 24 - y2 : 0;
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.3, Math.min(12, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (Lb) Lb.pop.place();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   const SNAP = 15;
@@ -1523,39 +1503,15 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = snapCode();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    const saved = t('editor.commonA.saved', 'Saved to the page');
-    stageNote.flash(saved, 1500);
-  }
-  // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
   // a bond is selected by its own object, which a reopened drawing doesn't share: it is kept by its place in the layout
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode(),
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; L = null; }, snapshot: () => snapCode(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => t('editor.cf.discard', 'Discard changes to this drawing?'),
     selOut: () => (E.sel?.v ? { v: E.sel.v } : E.sel?.b ? { bi: lay().bonds.findIndex((b: any) => b.item === E.sel.b) } : null),
-    selIn: (s: any) => { const b = s?.bi >= 0 ? lay().bonds[s.bi] : null; E.sel = s?.v && findV(s.v) ? { v: s.v } : b ? { b: b.item } : null; } });
-  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(t('editor.cf.discard', 'Discard changes to this drawing?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    localeOff?.(); localeOff = undefined;
-    E = null; L = null;
-    if (ok && changed) done({ src });
-  }
+    selIn: (s: any) => { const b = s?.bi >= 0 ? lay().bonds[s.bi] : null; E.sel = s?.v && findV(s.v) ? { v: s.v } : b ? { b: b.item } : null; },
+  });
+  const { save, finish } = dock;
   let localeOff: (() => void) | undefined;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
@@ -1581,5 +1537,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.chemEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
+  TD.chemEditor = { open, dockable: true, close: () => dock.detach() };
 })();

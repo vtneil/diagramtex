@@ -2,7 +2,6 @@ import { canScale, objectScale } from '../domain/scale';
 import { snapTranslation, createSnapIndex, type Guide, type SnapLine } from '../core/smart-snap';
 import { createCanvasMagnifier } from '../ui/canvas-magnifier';
 import { GRID_STYLES, snapCanvasGrid } from '../ui/canvas-grid';
-import { SNAP_ICONS } from '../ui/snap-icons';
 import { applyWelcomeEdits } from './examples/welcome-edits';
 import { exampleDiagramBlocks } from './example-diagrams';
 import { previewFadeFinished } from '../platform/preview-fade';
@@ -37,7 +36,7 @@ import { row, section } from '../ui/forms';
 import type { FormRow, FormSection } from '../ui/forms';
 import { mountFrame } from '../ui/mount-frame';
 import { keyLabel } from '../ui/kit/keys';
-import type { IconName } from '../ui/kit/icons';
+import { iconSvg, setIcon, type IconName } from '../ui/kit/icons';
 import { unmount } from 'svelte';
 import { runtime as TD } from '../runtime';
 import { emptyStateHtml } from '../ui/kit/markup';
@@ -1222,9 +1221,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const text = guideMode === 'show' ? uiText('assist.showGuides', 'Show guide') : guideMode === 'locked' ? uiText('assist.lockGuides', 'Show and lock guide') : uiText('assist.noGuides', 'No guide');
     button.dataset.guideMode = guideMode; button.title = text; button.setAttribute('aria-label',text);
     button.setAttribute('aria-pressed',String(guideMode !== 'off')); button.classList.toggle('on',guideMode !== 'off');
-    button.querySelector('svg').innerHTML = guideMode === 'locked'
-      ? '<path d="M3 17V3h10M3 7h3M3 11h2M7 3v3"/><g class="guide-lock"><path d="M11 10V7.5a2.5 2.5 0 015 0V10"/><rect x="8.5" y="10" width="10" height="8" rx="1.5" fill="currentColor" stroke="none"/><path d="M13.5 13v2" stroke="var(--sheet-raised)" stroke-width="2"/></g>'
-      : '<path d="M3 3h14v14H3zM7 3v4M11 3v3M15 3v4M3 7h4M3 11h3M3 15h4"/>';
+    setIcon(button.querySelector('svg'), guideMode === 'locked' ? 'guidesLocked' : 'guides');
     document.body.classList.toggle('guides-editable',guideMode === 'show');
   }
   function removeGuide(id: string, all = false) {
@@ -1271,7 +1268,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     button.dataset.snapMode = mode; button.title = label; button.setAttribute('aria-label',label);
     button.setAttribute('aria-pressed',String(mode !== 'off')); button.classList.toggle('on',mode !== 'off');
     const svg = button.querySelector('svg');
-    svg.innerHTML = SNAP_ICONS[mode]; svg.dataset.snapIcon = mode; svg.setAttribute('aria-hidden','true');
+    setIcon(svg, mode === 'objects' ? 'snapObjects' : mode === 'grid' ? 'snapGrid' : 'snap'); svg.dataset.snapIcon = mode; svg.setAttribute('aria-hidden','true');
   }
   function snapPoint(p: any, e: any, exclude?: any) {
     smartLines = [];
@@ -3213,11 +3210,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         { kind: 'hint', text: [s.curv ? uiText('pt.help.curv', 'Click a point to choose it, Delete removes it. Drag a + to add a point there; double-click a point to turn it between smooth and corner.')
           : uiText('pt.help', 'Click a point to choose it. Drag a + to add a point there; double-click a point to remove it.')] }], 'sec'), summary: String(s.pts.length) });
     }
-    if (units().length > 1) after.push(section(captions["ui.align"], [{ kind: 'controls', class: 'align-row', controls: [
-      ['left', 'M3 2v16M6 5h10v3.5H6zM6 11.5h6V15H6z', uiText('arr.left', 'Align left')], ['center', 'M10 2v16M4 5h12v3.5H4zM7 11.5h6V15H7z', uiText('arr.centres', 'Align centres')], ['right', 'M17 2v16M4 5h10v3.5H4zM8 11.5h6V15H8z', uiText('arr.right', 'Align right')],
-      ['top', 'M2 3h16M5 6v10h3.5V6zM11.5 6v6H15V6z', uiText('arr.top', 'Align top')], ['middle', 'M2 10h16M5 4v12h3.5V4zM11.5 7v6H15V7z', uiText('arr.middles', 'Align middles')], ['bottom', 'M2 17h16M5 4v10h3.5V4zM11.5 8v6H15V8z', uiText('arr.bottom', 'Align bottom')],
-    ].map(([key, path, title]) => ({ kind: 'button', text: '', svg: `<svg viewBox="0 0 20 20"><path d="${path}"/></svg>`, attrs: { class: 'icon', 'data-act': 'l:' + key, title } })) }], 'sec'));
-    if (combinable()) after.push(section(uiText('combine.title', 'Combine'), [{ kind: 'controls', class: 'align-row', controls: COMBINE.map(([key]) => ({ kind: 'button', text: '', svg: `<svg viewBox="0 0 20 20">${COMBINE_IC[key]}</svg>`, attrs: { class: 'icon', 'data-act': 'cb:' + key, title: key === 'subtract' ? uiText('combine.subtract.title', '{name}: cut the shapes above out of the bottom one', { name: combineName(key) }) : key === 'divide' ? uiText('combine.divide.title', '{name}: split into every overlap piece', { name: combineName(key) }) : combineName(key) } })) }], 'sec'));
+    if (units().length > 1) after.push(section(captions["ui.align"], [{ kind: 'controls', class: 'align-row', controls: ([
+      ['left', 'alignLefts', uiText('arr.left', 'Align left')], ['center', 'alignCentres', uiText('arr.centres', 'Align centres')], ['right', 'alignRights', uiText('arr.right', 'Align right')],
+      ['top', 'alignTops', uiText('arr.top', 'Align top')], ['middle', 'alignMiddles', uiText('arr.middles', 'Align middles')], ['bottom', 'alignBottoms', uiText('arr.bottom', 'Align bottom')],
+    ] as [string, IconName, string][]).map(([key, icon, title]) => ({ kind: 'button', text: '', icon, attrs: { class: 'icon', 'data-act': 'l:' + key, title } })) }], 'sec'));
+    if (combinable()) after.push(section(uiText('combine.title', 'Combine'), [{ kind: 'controls', class: 'align-row', controls: COMBINE.map(([key]) => ({ kind: 'button', text: '', icon: COMBINE_ICON[key], attrs: { class: 'icon', 'data-act': 'cb:' + key, title: key === 'subtract' ? uiText('combine.subtract.title', '{name}: cut the shapes above out of the bottom one', { name: combineName(key) }) : key === 'divide' ? uiText('combine.divide.title', '{name}: split into every overlap piece', { name: combineName(key) }) : combineName(key) } })) }], 'sec'));
     if (units().length >= 3) after.push(section(uiText('ctx.distribute', 'Distribute'), [{ kind: 'actions', class: 'btns', buttons: [
       { text: uiText('ctx.horizontally', 'Horizontally'), attrs: { 'data-act': 'd:h' } },
       { text: uiText('ctx.vertically', 'Vertically'), attrs: { 'data-act': 'd:v' } },
@@ -3873,13 +3870,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     return key === 'unite' ? uiText('combine.unite', 'Unite') : key === 'intersect' ? uiText('combine.intersect', 'Intersect') : key === 'subtract' ? uiText('combine.subtract', 'Subtract')
       : key === 'exclude' ? uiText('combine.exclude', 'Exclude') : uiText('combine.divide', 'Divide');
   }
-  const COMBINE_IC: Record<string, any> = {
-    unite: '<path d="M3 3h9v5h5v9H8v-5H3z" fill="currentColor" stroke="none"/>',
-    intersect: '<path d="M3 3h9v9H3zM8 8h9v9H8z" fill="none"/><path d="M8 8h4v4H8z" fill="currentColor" stroke="none"/>',
-    subtract: '<path d="M3 3h9v5H8v4H3z" fill="currentColor" stroke="none"/><path d="M8 8h9v9H8z" fill="none" stroke-dasharray="2 1.5"/>',
-    exclude: '<path d="M3 3h9v5H8v4H3zM12 8h5v9H8v-5h4z" fill="currentColor" stroke="none"/><path d="M8 8h4v4H8z" fill="none"/>',
-    divide: '<path d="M3 3h9v9H3zM8 8h9v9H8z" fill="none"/><path d="M8 8h4v4H8z" fill="currentColor" stroke="none" opacity=".5"/>',
-  };
+  const COMBINE_ICON: Record<string, IconName> = { unite: 'combineUnite', intersect: 'combineIntersect', subtract: 'combineSubtract', exclude: 'combineExclude', divide: 'combineDivide' };
   const combinable = () => { const sel = selected(); return sel.length > 1 && sel.every((s: any) => TD.canCombine && TD.canCombine(s)); };
   function combineSel(op: any) {
     const sel = selected();
@@ -4058,11 +4049,6 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     thumbs.set(s.id, { key, html, pendingIds: pendingDependencies(html) });
     return html;
   }
-  const LIC = {
-    folder: '<path d="M2.5 5.5v10h15v-8H9.5L8 5.5z"/>',
-    text: '<path d="M5 5h10M10 5v11"/>',
-  };
-  const lsvg = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   // the rows, top of the stack first; a group at its topmost member
   function layerRows() {
     const all = shapes(), rows = [], seen = new Set(), groups = groupIndex || groupsOf();
@@ -4084,11 +4070,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const buttons = (f: any) => ({ eye: { icon: (f.hid ? 'hide' : 'show') as IconName, title: f.hid ? eyeT : eyeF }, lock: { icon: (f.lk ? 'lock' : 'unlock') as IconName, title: f.lk ? lockT : lockF } });
     if (r.g) {
       const f = flags(r.m), open = openGroups.has(r.g);
-      return { key: 'g:' + r.g, g: r.g, name: groupName(r.g), ...f, ...buttons(f), open, count: r.m.length, thumb: lsvg(LIC.folder), icon: true,
+      return { key: 'g:' + r.g, g: r.g, name: groupName(r.g), ...f, ...buttons(f), open, count: r.m.length, thumb: iconSvg('folder'), icon: true,
         fold: { icon: 'disclosure' as IconName, title: open ? uiText('layers.fold', 'Fold') : uiText('layers.unfold', 'Unfold'), label: open ? uiText('layers.foldGroup', 'Fold group') : uiText('layers.unfoldGroup', 'Unfold group') } };
     }
     const s = r.s, f = flags([s]);
-    return { key: s.id, id: s.id, name: layerName(s), ...f, ...buttons(f), inGroup: !!r.in, thumb: s.type === 'text' ? lsvg(LIC.text) : thumb(s), icon: s.type === 'text' };
+    return { key: s.id, id: s.id, name: layerName(s), ...f, ...buttons(f), inGroup: !!r.in, thumb: s.type === 'text' ? iconSvg('toolText') : thumb(s), icon: s.type === 'text' };
   }
   function scheduleLayers() {
     if (layersRaf) return;
@@ -4507,43 +4493,10 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   let ctxShown = false;
   const ctxOpen = () => ctxShown;
   function closeCtx() { if (ctxShown) closeContextMenu(); }
-  const IC: Record<string, string> = {
-    copy: '<path d="M7 7h9v10H7z"/><path d="M4 13V3h9"/>',
-    cut: '<circle cx="5.5" cy="15" r="2.5"/><circle cx="14.5" cy="15" r="2.5"/><path d="M7 13.2L15 3M13 13.2L5 3"/>',
-    paste: '<path d="M6 4H4v14h12V4h-2"/><path d="M7 2.5h6v3H7z"/>',
-    dup: '<path d="M3 3h10v10H3z"/><path d="M7 17h10V7"/>',
-    history: '<path d="M3.5 10a6.5 6.5 0 101.9-4.6"/><path d="M3 3v3.5h3.5"/><path d="M10 6.5V10l2.5 1.5"/>',
-    del: '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>',
-    group: '<path d="M2.5 2.5h15v15h-15z" stroke-dasharray="2 2"/><path d="M5 5h6v5H5zM9 8h6v6H9z"/>',
-    ungroup: '<path d="M3 3h7v6H3zM10 11h7v6h-7z"/>',
-    arrange: '<path d="M3 3h9v9H3z" class="f"/><path d="M8 8h9v9H8z"/>',
-    rotate: '<path d="M15.5 8A6 6 0 104 11"/><path d="M15.5 3.5V8H11"/>',
-    align: '<path d="M3 2v16"/><path d="M6 5h10v3.5H6zM6 11.5h6V15H6z"/>',
-    dist: '<path d="M2 3v14M18 3v14"/><path d="M6 6h3v8H6zM11 6h3v8h-3z"/>',
-    edit: '<path d="M4 16l1-4 8-8 3 3-8 8z"/>',
-    tikz: '<path d="M7 5l-4 5 4 5M13 5l4 5-4 5"/>',
-    all: '<path d="M3 3h14v14H3z" stroke-dasharray="2.5 2"/>',
-    fit: '<path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/>',
-    open: '<path d="M2.5 5.5v11h13l2-7H5l-2.5 7"/><path d="M2.5 5.5V3.5h5l1.5 2h6v4"/>',
-    save: '<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>',
-    saveas: '<path d="M8 3v8M5 8l3 3 3-3"/><path d="M3.5 12v4.5h9"/><path d="M15 11v6M12 14h6"/>',
-    unlink: '<path d="M8.5 11.5l-2 2a2.5 2.5 0 01-3.5-3.5l2-2M11.5 8.5l2-2a2.5 2.5 0 00-3.5-3.5l-2 2"/><path d="M13 13l3.5 3.5M3.5 3.5L7 7"/>',
-    exp: '<path d="M10 12V3M6.5 6.5L10 3l3.5 3.5"/><path d="M3.5 10v6.5h13V10"/>',
-    image: '<rect x="3" y="4" width="14" height="12" rx="1.5"/><circle cx="7.5" cy="8.5" r="1.5"/><path d="M3.5 15l4.5-4.5 3 3 2-2 3.5 3.5"/>',
-    rename: '<path d="M3 6h9M3 10h6M3 14h5"/><path d="M11 17l.6-2.6L16 10l2 2-4.4 4.4z"/>',
-    newdoc: '<path d="M5 2.5h6.5l3.5 3.5v11.5H5z"/><path d="M10 8.5v6M7 11.5h6"/>',
-    folder: '<path d="M2.5 4.5h5l1.5 2h8.5v9.5h-15z"/>',
-    fold: '<path d="M6 8l4 4 4-4"/>',
-    link: '<path d="M8.5 11.5l3-3"/><path d="M7 9.5l-2 2a2.5 2.5 0 003.5 3.5l2-2M13 10.5l2-2A2.5 2.5 0 0011.5 5l-2 2"/>',
-    eye: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.5"/>',
-    eyeoff: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><path d="M3.5 16.5l13-13"/>',
-    lock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 016 0V9"/>',
-    unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 015.8-1.1"/>',
-  };
   type CtxRow = MenuEntry | '' | false | null | undefined;
-  function item(label: any, act: string, { ic, key, dis, sub, danger }: { ic?: string; key?: string; dis?: boolean; sub?: CtxRow[]; danger?: boolean } = {}): MenuItemSpec {
+  function item(label: any, act: string, { ic, key, dis, sub, danger }: { ic?: IconName; key?: string; dis?: boolean; sub?: CtxRow[]; danger?: boolean } = {}): MenuItemSpec {
     // deleting turns the red pen when highlighted, as everywhere
-    return { act, label: caption(label), svg: ic ? IC[ic] : undefined, key: key || undefined, disabled: !!dis, danger: danger ?? /del(ete)?$/.test(act), sub: sub ? tidyMenu(sub) : undefined };
+    return { act, label: caption(label), icon: ic, key: key || undefined, disabled: !!dis, danger: danger ?? /del(ete)?$/.test(act), sub: sub ? tidyMenu(sub) : undefined };
   }
   const hr = '-' as const;
   function placeCtx(rows: CtxRow[], x: number, y: number, on: typeof ctxFor = {}) {
@@ -4561,23 +4514,23 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (layer) {
       const ls = layer.ids.map(byId).filter(Boolean), hid = ls.every((q: any) => q.hidden), lk = ls.every((q: any) => q.locked);
       h.push(item(captions["ui.rename"], 'layer:rename', { ic: 'rename' }),
-        item(hid ? captions["ui.show"] : captions["ui.hide"], 'layer:' + (hid ? 'show' : 'hide'), { ic: hid ? 'eye' : 'eyeoff' }),
+        item(hid ? captions["ui.show"] : captions["ui.hide"], 'layer:' + (hid ? 'show' : 'hide'), { ic: hid ? 'show' : 'hide' }),
         item(lk ? captions["ui.unlock"] : captions["ui.lock"], 'layer:' + (lk ? 'unlock' : 'lock'), { ic: lk ? 'unlock' : 'lock' }), hr);
-      if (ls.some((q: any) => q.hidden || q.locked)) { placeCtx([...h, item(captions["ui.delete"], 'layer:del', { ic: 'del', key: 'Del' })], x, y, on); return; }
+      if (ls.some((q: any) => q.hidden || q.locked)) { placeCtx([...h, item(captions["ui.delete"], 'layer:del', { ic: 'delete', key: 'Del' })], x, y, on); return; }
     }
     if (n) {
       const one = n === 1 ? sel[0] : null;
       const image = (verb: string) => [item(uiText('ctx.pngBg', 'PNG (Background)'), `img:${verb}-png`), item(uiText('ctx.pngClear', 'PNG (Transparent)'), `img:${verb}-png-t`), item('SVG', `img:${verb}-svg`)];
       if (one && (one.type === 'text' || one.label !== undefined)) h.push(item(one.type === 'text' ? uiText('ctx.editText', 'Edit Text') : uiText('ctx.editLabel', 'Edit Label'), 'edit', { ic: 'edit', key: 'Enter' }), hr);
       h.push(item(captions["ui.copy"], 'copy', { ic: 'copy', key: 'Ctrl+C' }),
-        item(captions["ui.copy.tikz.code"], 'copytikz', { ic: 'tikz' }),
-        item(uiText('ctx.copyImage', 'Copy as Image'), '', { ic: 'image', sub: image('copy') }),
-        item(uiText('ctx.saveImage', 'Save as Image'), '', { ic: 'save', sub: image('save') }),
+        item(captions["ui.copy.tikz.code"], 'copytikz', { ic: 'code' }),
+        item(uiText('ctx.copyImage', 'Copy as Image'), '', { ic: 'toolImage', sub: image('copy') }),
+        item(uiText('ctx.saveImage', 'Save as Image'), '', { ic: 'download', sub: image('save') }),
         sel.some((s: any) => (s.text || s.label || '').trim()) && item(uiText('ctx.copyText', 'Copy Text'), 'copytext', { ic: 'copy' }),
         item(captions["ui.cut"], 'cut', { ic: 'cut', key: 'Ctrl+X' }),
         item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }),
-        item(captions["ui.duplicate"], 'dup', { ic: 'dup', key: 'Ctrl+D' }),
-        item(captions["ui.delete"], 'del', { ic: 'del', key: 'Del' }), hr,
+        item(captions["ui.duplicate"], 'dup', { ic: 'duplicate', key: 'Ctrl+D' }),
+        item(captions["ui.delete"], 'del', { ic: 'delete', key: 'Del' }), hr,
         canGroup() && item(captions["ui.group"], 'group', { ic: 'group', key: 'Ctrl+G' }),
         canUngroup() && item(captions["ui.ungroup"], 'ungroup', { ic: 'ungroup', key: 'Ctrl+Shift+G' }),
         n > 1 && item(uiText('comp.make', 'Make Component'), 'comp:make', { ic: 'group' }),
@@ -4588,13 +4541,13 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         rotatable() && item(uiText('ctx.rotate', 'Rotate'), '', { ic: 'rotate', sub: [
           item(uiText('ctx.cw', 'Rotate 90° Clockwise'), 'r:cw', { key: 'Ctrl+R', dis: !turnable() }), item(uiText('ctx.ccw', 'Rotate 90° Counterclockwise'), 'r:ccw', { key: 'Ctrl+Shift+R', dis: !turnable() }), hr,
           item(uiText('ctx.flipH', 'Flip Horizontal'), 'r:fliph'), item(uiText('ctx.flipV', 'Flip Vertical'), 'r:flipv')] }),
-        item(captions["ui.align"], '', { ic: 'align', dis: nu < 2, sub: [
+        item(captions["ui.align"], '', { ic: 'alignLefts', dis: nu < 2, sub: [
           item(captions["ui.left"], 'l:left'), item(captions["ui.center"], 'l:center'), item(captions["ui.right"], 'l:right'), hr,
           item(captions["ui.top"], 'l:top'), item(uiText('ctx.middle', 'Middle'), 'l:middle'), item(captions["ui.bottom"], 'l:bottom')] }),
-        item(uiText('ctx.distribute', 'Distribute'), '', { ic: 'dist', dis: nu < 3, sub: [item(uiText('ctx.horizontally', 'Horizontally'), 'd:h'), item(uiText('ctx.vertically', 'Vertically'), 'd:v')] }));
+        item(uiText('ctx.distribute', 'Distribute'), '', { ic: 'distribute', dis: nu < 3, sub: [item(uiText('ctx.horizontally', 'Horizontally'), 'd:h'), item(uiText('ctx.vertically', 'Vertically'), 'd:v')] }));
     } else {
       h.push(item(captions["ui.paste"], 'paste', { ic: 'paste', key: 'Ctrl+V', dis: !clip() }),
-        item(uiText('ctx.selectAll', 'Select All'), 'all', { ic: 'all', key: 'Ctrl+A', dis: !shapes().length }), hr,
+        item(uiText('ctx.selectAll', 'Select All'), 'all', { ic: 'selectAll', key: 'Ctrl+A', dis: !shapes().length }), hr,
         item(uiText('ctx.fit', 'Zoom to Fit'), 'fit', { ic: 'fit' }), item(uiText('ctx.fitWidth', 'Zoom to Fit Width'), 'fitw'),
         item(state.grid ? uiText('ctx.hideGrid', 'Hide Grid') : uiText('ctx.showGrid', 'Show Grid'), 'grid', { key: 'G' }));
     }
@@ -4781,7 +4734,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     showHint(uiText('hint.nothingToPaste', 'Nothing to paste: copy a file first'), 1600);
   }
   // A menu of a few actions for another part of the app (Quick's sidebar list), drawn and placed like this one.
-  function openMenu(entries: { label: string; act: string; ic?: string; danger?: boolean; dis?: boolean; sep?: boolean }[], x: number, y: number, pick: (act: string) => void) {
+  function openMenu(entries: { label: string; act: string; ic?: IconName; danger?: boolean; dis?: boolean; sep?: boolean }[], x: number, y: number, pick: (act: string) => void) {
     placeCtx(entries.flatMap((e) => [e.sep && hr, item(e.label, 'menu:' + e.act, { ic: e.ic, danger: e.danger, dis: e.dis })]), x, y, { pick });
   }
   function openDocCtx(id: any, x: any, y: any) {
@@ -4791,41 +4744,41 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       h = [id !== state.docId && item(captions["ui.open"], d('open'), { ic: 'open' }), hr,
         item(uiText('ctx.renameDots', 'Rename…'), d('rename'), { ic: 'rename' }),
         item(uiText('ctx.moveToFolder', 'Move to Folder…'), d('move'), { ic: 'folder' }),
-        item(captions["ui.duplicate"], d('dup'), { ic: 'dup' }),
-        item(uiText('ctx.saveCopy', 'Save a Copy…'), d('saveas'), { ic: 'dup' }),
+        item(captions["ui.duplicate"], d('dup'), { ic: 'duplicate' }),
+        item(uiText('ctx.saveCopy', 'Save a Copy…'), d('saveas'), { ic: 'duplicate' }),
         item(uiText('ctx.recovery', 'Recovery Copies…'), d('recovery'), { ic: 'history' }), hr,
         item(captions["ui.copy"], d('copy'), { ic: 'copy' }),
         item(captions["ui.paste"], d('paste'), { ic: 'paste' }),
         item(uiText('ctx.copyShare', 'Copy Share Link'), d('share'), { ic: 'link' }), hr,
-        ...(!TD.files.can ? [item(uiText('ctx.download', 'Download (.diagramtex)'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' })]
-          : [lf ? item(uiText('ctx.saveTo', 'Save to {file}', { file: lf.name }), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+S' : '' })
-            : item(uiText('ctx.saveToFile', 'Save to File…'), d('save'), { ic: 'save', key: id === state.docId ? 'Ctrl+Shift+S' : '' }),
-            item(lf ? uiText('ctx.saveToAnother', 'Save to Another File…') : uiText('ctx.saveToNew', 'Save to New File…'), d('savenew'), { ic: 'saveas' }),
+        ...(!TD.files.can ? [item(uiText('ctx.download', 'Download (.diagramtex)'), d('save'), { ic: 'download', key: id === state.docId ? 'Ctrl+Shift+S' : '' })]
+          : [lf ? item(uiText('ctx.saveTo', 'Save to {file}', { file: lf.name }), d('save'), { ic: 'download', key: id === state.docId ? 'Ctrl+S' : '' })
+            : item(uiText('ctx.saveToFile', 'Save to File…'), d('save'), { ic: 'download', key: id === state.docId ? 'Ctrl+Shift+S' : '' }),
+            item(lf ? uiText('ctx.saveToAnother', 'Save to Another File…') : uiText('ctx.saveToNew', 'Save to New File…'), d('savenew'), { ic: 'saveAs' }),
             lf && item(uiText('ctx.unlink', 'Unlink {file}', { file: lf.name }), d('unlink'), { ic: 'unlink' })]),
-        item(captions["ui.export"], '', { ic: 'exp', sub: [
+        item(captions["ui.export"], '', { ic: 'export', sub: [
           item(uiText('ctx.latexDoc', 'LaTeX Document (.tex)'), d('latex'), { key: id === state.docId ? 'Ctrl+Shift+E' : '' }),
           !page && item(uiText('ctx.tikzCode', 'TikZ Code…'), d('tikz'), { key: id === state.docId ? 'Ctrl+E' : '' }),
           item(uiText('ctx.webPage', 'Web Page (.html)'), d('html')),
           item(uiText('ctx.image', 'Image (PNG, SVG, PDF)…'), d('image')), hr,
           item(uiText('ctx.print', 'Print or Save as PDF…'), d('print'), { key: id === state.docId ? 'Ctrl+P' : '' })] }), hr,
-        item(uiText('ctx.moveToBin', 'Move to Recycle Bin'), d('del'), { ic: 'del' })];
+        item(uiText('ctx.moveToBin', 'Move to Recycle Bin'), d('del'), { ic: 'delete' })];
     } else {
-      h = [item(page ? uiText('ctx.newPage', 'New Page') : uiText('ctx.newDocument', 'New Document'), d('new'), { ic: 'newdoc' }),
+      h = [item(page ? uiText('ctx.newPage', 'New Page') : uiText('ctx.newDocument', 'New Document'), d('new'), { ic: 'newFile' }),
         item(uiText('ctx.newFolder', 'New Folder…'), d('newfolder'), { ic: 'folder' }),
         item(uiText('ctx.openFile', 'Open File…'), d('openfile'), { ic: 'open', key: 'Ctrl+O' }), hr,
         item(captions["ui.paste"], d('paste'), { ic: 'paste' }), hr,
-        item(uiText('ctx.exportAll', 'Export All Files…'), d('exportall'), { ic: 'save' }),
-        item(uiText('ctx.bin', 'Recycle Bin…'), d('bin'), { ic: 'del' })];
+        item(uiText('ctx.exportAll', 'Export All Files…'), d('exportall'), { ic: 'download' }),
+        item(uiText('ctx.bin', 'Recycle Bin…'), d('bin'), { ic: 'delete' })];
     }
     placeCtx(h, x, y, { doc: id || '' });
   }
   function openFolderCtx(path: any, x: any, y: any) {
     const d = (k: any) => 'doc:' + k, shut = folded.has(foldKey(path));
-    placeCtx([item(state.doc.kind === 'page' ? uiText('ctx.newPageHere', 'New Page Here') : state.doc.kind === 'board' ? uiText('ctx.newBoardHere', 'New Whiteboard Here') : uiText('ctx.newDocHere', 'New Document Here'), d('newin'), { ic: 'newdoc' }),
+    placeCtx([item(state.doc.kind === 'page' ? uiText('ctx.newPageHere', 'New Page Here') : state.doc.kind === 'board' ? uiText('ctx.newBoardHere', 'New Whiteboard Here') : uiText('ctx.newDocHere', 'New Document Here'), d('newin'), { ic: 'newFile' }),
       item(uiText('ctx.newFolderInside', 'New Folder Inside…'), d('newfolderin'), { ic: 'folder' }), hr,
       item(uiText('ctx.renameFolder', 'Rename Folder…'), d('renamefolder'), { ic: 'rename' }),
-      item(shut ? uiText('layers.unfold', 'Unfold') : uiText('layers.fold', 'Fold'), d('fold'), { ic: 'fold' }), hr,
-      item(uiText('ctx.deleteFolder', 'Delete Folder…'), d('delfolder'), { ic: 'del', danger: true })], x, y, { folder: path });
+      item(shut ? uiText('layers.unfold', 'Unfold') : uiText('layers.fold', 'Fold'), d('fold'), { ic: 'disclosure' }), hr,
+      item(uiText('ctx.deleteFolder', 'Delete Folder…'), d('delfolder'), { ic: 'delete', danger: true })], x, y, { folder: path });
   }
   // Rename in place: the row's name becomes a field. Enter or leaving keeps it, Esc cancels; the file stays closed.
   function renameDoc(id: any, name: any) {
@@ -4921,8 +4874,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const guideHit = e.target.closest?.('[data-guide-id]');
     if (guideHit && guideMode === 'show') {
       selectedGuide = guideHit.dataset.guideId; state.sel.clear(); renderOverlay(); renderProps();
-      placeCtx([item(uiText('assist.editGuide', 'Edit position'), 'guide:edit', { ic: 'edit' }), item(uiText('assist.deleteGuide', 'Delete guide'), 'guide:delete', { ic: 'del', key: 'Del' }), hr,
-        item(uiText('assist.deleteAllGuides', 'Delete all guides'), 'guide:deleteAll', { ic: 'del', danger: true })], e.clientX, e.clientY, { guideId: selectedGuide! });
+      placeCtx([item(uiText('assist.editGuide', 'Edit position'), 'guide:edit', { ic: 'edit' }), item(uiText('assist.deleteGuide', 'Delete guide'), 'guide:delete', { ic: 'delete', key: 'Del' }), hr,
+        item(uiText('assist.deleteAllGuides', 'Delete all guides'), 'guide:deleteAll', { ic: 'delete', danger: true })], e.clientX, e.clientY, { guideId: selectedGuide! });
       return;
     }
     selectedGuide = null;

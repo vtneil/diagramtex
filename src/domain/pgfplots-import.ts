@@ -1,5 +1,6 @@
 import { runtime as TD } from '../runtime';
 import { limits as plotLimits } from './plots.ts';
+import { unbrace } from './tex-groups';
 // pgfplots import: a hand-written \begin{axis} … \end{axis} (or semilogxaxis / semilogyaxis / loglogaxis) read into the
 // app's own plot object (src/domain/plots.ts), drawn as pdflatex would draw it.
 //
@@ -48,7 +49,6 @@ import { limits as plotLimits } from './plots.ts';
     out.push(buf);
     return out;
   }
-  const unbrace = (v: string) => { v = String(v ?? '').trim(); while (/^\{[\s\S]*\}$/.test(v) && matchClose(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
   type Opt = { k: string, v: string | null };
   // Styles that each name another several times would expand exponentially within the depth limit:
   // like the TikZ importer, one call expands at most STYLE_BUDGET styles in all, and keeps the rest as written.

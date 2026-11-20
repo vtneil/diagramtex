@@ -28,7 +28,6 @@ T.test('3D solids: the Shape menu is a grid of pictures, without 3D axes', async
   TD.app.newDoc('Solid menu', null, null, null, null, 'board');
   const s = make('cone'); s.id = 'solidMenu'; TD.state.doc.shapes.push(s); TD.state.sel = new Set([s.id]); TD.app.render(); TD.app.renderProps();
   const sel = document.querySelector('#props select[data-p="kind"]');
-  T.eq(sel.dataset.pics, 'solid');
   T.ok(![...sel.options].some((o) => o.value === 'axes'), '3D axes is no longer offered');
   sel.focus(); const key = (k) => sel.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
   key('ArrowDown');
@@ -38,6 +37,11 @@ T.test('3D solids: the Shape menu is a grid of pictures, without 3D axes', async
     const tiles = [...menu.querySelectorAll('.selmenu-item')];
     T.eq(tiles.length, sel.options.length);
     T.ok(tiles.every((t) => t.querySelector('svg .a1') && t.textContent.trim()), 'every tile has a picture and a name');
+    T.ok(tiles.every((t) => t.classList.contains('tile') && t.getAttribute('role') === 'option'), 'the tiles are the kit\'s Tile, as options of the list');
+    T.ok(menu.querySelector('.selmenu-item.on').getAttribute('aria-selected') === 'true', 'the current one is the selected option');
+    T.ok(tiles.every((t) => { const a = t.getBoundingClientRect(), p = t.querySelector('svg').getBoundingClientRect(); return Math.abs(p.left + p.width / 2 - (a.left + a.width / 2)) < 0.5; }), 'every picture is centred in its tile');
+    const cur = menu.querySelector('.selmenu-item.on');
+    T.eq(getComputedStyle(cur).borderTopColor, getComputedStyle(document.body).color, 'the current one keeps its ink edge, highlighted or not');
     T.ok(menu.querySelector('.selmenu-item.on').textContent.includes('Cone'), 'the current shape is marked');
     const across = tiles.filter((t) => t.offsetTop === tiles[0].offsetTop).length;
     T.eq(across, 4, 'four across');

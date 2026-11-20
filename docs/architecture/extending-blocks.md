@@ -38,17 +38,26 @@ CD legacy upgrade, flat 2D geometry options and the XyMatrix adapter remain expl
 
 ## Shared editor infrastructure
 
-`src/core/editor-session.ts` supplies history and save/discard lifecycle utilities.
-K-map and bit-field editors are the initial adopters. State remains owned by each
-editor session, including the existing 200-step history limit, source snapshots,
-selection clamping and domain rendering. The lifecycle preserves Save without closing,
-Done, confirmation before discarding and unsaved-change checks. Bit-field label cleanup
-is a domain hook.
+`src/core/editor-session.ts` supplies the history and the save/discard lifecycle, and every
+block editor uses both: `history()` for undo and redo (begin, commit, the 200-step limit), and
+`lifecycle()` for Save without closing, Done, the discard prompt, the unsaved-change check and
+embedding in a pane (Quick), which it does through `dockable()`. State stays owned by each
+editor, as do source snapshots, selection clamping and domain rendering.
 
-Other editors should adopt these utilities only after checking their differences.
-In particular, source snapshots, parsed models, in-place labels and selection restore
-are not interchangeable across editors. Domain gestures and layout do not belong in
-the shared service.
+What differs between editors is passed as hooks rather than copied: `snapshot` (the source the
+history and the save compare), `settle` (close an in-place label, popup or menu before a save or
+a close), `clear` (the editor's own state on close), `discardTitle`, and, where needed, `source`
+(the code as typed, the Quantum editor), `result` (what Done hands back when it is more than
+`{ src }`, the Circuit editor) and `selOut` / `selIn` (a selection that holds model objects, kept
+across a docked editor's reopening). An undo that must first end a gesture (a wire being drawn, a
+paint stroke) wraps the shared `undo` / `redo`. Domain gestures and layout do not belong in the
+shared service. `tests/suites/80-architecture.js` runs every editor through the lifecycle.
+
+The drawing area is shared too (`src/editors/editor-stage.ts`): `editorStage(svg, stage, hooks)`
+gives `rect`, `pos` and `overStage` and handles the wheel (pan, and zoom about the pointer with
+Ctrl/⌘ or a pinch) within the editor's zoom limits; `fitView(area, box, options)` is the camera
+that shows a box whole and centred, from the bounds each editor works out for its own drawing
+(y down the stage; a drawing with y up negates it).
 
 ## Project files and dependencies
 

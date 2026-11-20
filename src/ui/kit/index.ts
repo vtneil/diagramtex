@@ -21,7 +21,7 @@ export { default as MenuItem } from './MenuItem.svelte';
 export { default as ContextMenu } from './ContextMenu.svelte';
 export { openContextMenu, closeContextMenu, contextMenuOpen, type ContextMenuOptions } from './context-menu';
 export { tidy as tidyMenu, type MenuEntry, type MenuItemSpec } from './menu';
-export { ICONS, iconSvg, type IconName } from './icons';
+export { ICONS, iconSvg, setIcon, type IconName } from './icons';
 export { buttonClass, type ButtonVariant, type ButtonSize } from './button';
 export { keyLabel, isMac, macKeys } from './keys';
 export type { SegmentOption } from './segmented';

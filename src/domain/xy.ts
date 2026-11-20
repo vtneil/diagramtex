@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { unbraceOnce as unbrace } from './tex-groups';
 // XyMatrix block: a commutative diagram written for the xy package (\xymatrix{…}). The code is the object, as
 // with tikz-cd. To draw and edit it, the code is read into tikz-cd's form (an \arrow[dirs, options] per \ar),
 // laid out by cd.ts with xy's own geometry (3pt object margins, 2pc between entries, xy's arrow tips and curves),
@@ -270,7 +271,6 @@ function toCd(src: any) {
 }
 
 // ---------------------------------------------------------------- tikz-cd → xymatrix
-const unbrace = (v: any) => String(v == null ? '' : v).trim().replace(/^\{([\s\S]*)\}$/, '$1');
 const POS: Record<string, any> = { 'at start': 0, 'very near start': 0.125, 'near start': 0.25, midway: 0.5, 'near end': 0.75, 'very near end': 0.875, 'at end': 1 };
 const LINE = /^(dashed|dotted|densely dotted|loosely dotted|squiggly)$/;
 function arrowXy(a: any) {

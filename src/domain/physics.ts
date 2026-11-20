@@ -1,5 +1,6 @@
 import type { QuantityParameter } from './contracts';
 import { runtime as TD } from '../runtime';
+import { unbraceOnce as unbrace } from './tex-groups';
 // Physics block: a constraint-aware physics figure described by a short LaTeX-flavoured source, one domain per
 // block (optics, fields, waves, spacetime, energy levels, mechanics). Each line is one object:
 //
@@ -97,7 +98,6 @@ function splitTop(s: string, sep = ','): string[] {
   out.push(s.slice(from).trim());
   return out.filter((x, i, a) => x !== '' || a.length > 1);
 }
-const unbrace = (v: any) => { v = v.trim(); return v[0] === '{' && group(v, 0, '{', '}') === v.length ? v.slice(1, -1).trim() : v; };
 function kv(part: string): { k: string; v: string | null } {
   const s = splitTop(part, '=');
   if (s.length < 2) return { k: part.trim(), v: null };

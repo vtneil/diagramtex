@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
 import { t as uiText, message, onLocale } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
@@ -13,6 +12,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Physics editor: the overlay that opens on a Physics block. A palette of the domain's objects, grouped;
 // the figure solved and drawn on a centimetre grid, where objects are selected, moved and reshaped by their
 // handles (lens focus, ray angle, slope angle, …); the selected object's settings, generated from its
@@ -337,9 +337,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const overStage = (e: any) => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [8, 600], redraw: () => { draw(); } });
   // cm (y up) ↔ screen
   const m = (p: any) => [E.view.ox + p[0] * E.view.k, E.view.oy - p[1] * E.view.k];
   const toCm = (e: any, snapOn = true) => { const [x, y] = pos(e), v = E.view; return [snapN((x - v.ox) / v.k, snapOn), snapN((v.oy - y) / v.k, snapOn)]; };
@@ -387,23 +386,11 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   const moveHandle = (i: any) => R().handles.find((h: any) => h.obj === i && h.kind === 'move') || null;
   function fit() {
     if (!E) return;
-    const r0 = rect(), r = R(), b = r.empty ? { x0: -1, y0: -1, x1: 4, y1: 2 } : r.bb;
-    const w = b.x1 - b.x0 + 1, h = b.y1 - b.y0 + 1;
-    const k = Math.max(16, Math.min(160, Math.min((r0.width - 80) / w, (r0.height - 80) / h)));
-    const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
-    E.view = { k, ox: r0.width / 2 - cx * k, oy: r0.height / 2 + cy * k };
+    const r = R(), b = r.empty ? { x0: -1, y0: -1, x1: 4, y1: 2 } : r.bb;
+    // the figure's y runs up, the stage's down
+    E.view = fitView(rect(), { x: b.x0, y: -b.y1, w: b.x1 - b.x0, h: b.y1 - b.y0 }, { margin: 0.5, min: 16, max: 160 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    if (!E) return;
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(8, Math.min(600, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   const HK: Record<string, any> = { move: 'move', rot: 'rot', size: 'size', focus: 'focus', corner: 'size', axisEnd: 'rot' };
@@ -848,8 +835,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
 
   // ---------------------------------------------------------------- open / close
   const session = TD.editorSession.lifecycle({
-    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot, commit, root, code: codeTa, readCode, setTip, tip,
-    discardTitle: () => uiText('editor.phy.discard', 'Discard changes to this figure?'), beforeClose: closeMenu,
+    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot, commit, root, code: codeTa, readCode, note: stageNote,
+    discardTitle: () => uiText('editor.phy.discard', 'Discard changes to this figure?'), settle: closeMenu,
   });
   const { save, finish } = session;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done

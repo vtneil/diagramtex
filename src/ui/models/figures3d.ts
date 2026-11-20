@@ -4,11 +4,11 @@ import { message as msg, type Message } from '../../i18n';
 import { T, KINDS, SPRE, SDEF, V3, RDEF } from '../../domain/figures3d.ts';
 import { row, input, section, select, errors, view, check, help, captioned } from '../forms';
 import { SOLID_ICONS } from '../solid-icons';
-// the Shape menu shows pictures (selectmenu.ts); 3D axes alone is no longer offered, but a solid that is one keeps it
-TD.selectPics = { ...(TD.selectPics || {}), solid: SOLID_ICONS };
+// the Shape menu shows pictures (the kit Select's `pictures`); 3D axes alone is no longer offered, but a solid that is
+// one keeps it
 const shapeSelect = (k: string) => {
   const c = select('kind', KINDS.filter(([v]: string[]) => v !== 'axes' || k === 'axes'), k) as Extract<ReturnType<typeof select>, { attrs: unknown }>;
-  return { ...c, attrs: { ...c.attrs, 'data-pics': 'solid' } };
+  return { ...c, pictures: SOLID_ICONS };
 };
 
 TD.panels = TD.panels || {};

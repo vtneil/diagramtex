@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { unbraceOnce as unbrace } from './tex-groups';
 // Commutative diagrams written with tikz-cd. The source is the object: it is drawn here as vectors,
 // following the package's own sizes (cells, separations, arrow tips, labels), and exported unchanged
 // inside \begin{tikzcd}. The visual editor (js/cdeditor.ts) rewrites the code cell by cell.
@@ -266,7 +267,6 @@ const COMPASS: Record<string, any> = { north: [0, -1], south: [0, 1], east: [1, 
 // arrow options → look
 // PR: another package's geometry (src/domain/xy.ts) — PR.item reads the options only that package has
 let DEFS: Record<string, any> = Object.create(null);
-const unbrace = (v: any) => String(v == null ? '' : v).trim().replace(/^\{([\s\S]*)\}$/, '$1');
 // name/.style={…} definitions: in \tikzset{…} or \tikzcdset{…} around the diagram, or in its options
 function styleDefs(src: any, envList: any) {
   const out: Record<string, any> = Object.create(null); // style names are the user's (constructor, __proto__)

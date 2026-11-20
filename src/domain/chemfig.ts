@@ -1,5 +1,6 @@
 import { measurementElement } from './measurement';
 import { runtime as TD } from '../runtime';
+import { unbrace } from './tex-groups';
 // Chemistry with the chemfig package: structural formulas (\chemfig{…}) and reaction schemes
 // (\schemestart … \schemestop). The source is the object. It is read into a tree that keeps every piece as
 // written, laid out here by chemfig's own rules (read from chemfig.tex 1.6: atom sep 3em, bond offset 2pt,
@@ -46,7 +47,6 @@ function split(s: any, sep = ',') {
   out.push(cur);
   return out;
 }
-const unbrace = (v: any) => { v = String(v ?? '').trim(); while (v[0] === '{' && close(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
 // An arrow's label of several lines. chemfig sets a label in a plain TikZ node, where \\ doesn't break the
 // line, so the editor writes the lines in a one-column tabular (\shortstack is read too); a label written
 // with line breaks in the text (older drawings) is read as lines as well.

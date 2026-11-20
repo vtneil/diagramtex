@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { unbrace } from './tex-groups';
 // Bloch sphere block: the code of a blochsphere environment is the object. It is read here and drawn
 // with the package's own geometry (its projection, its circle planes and how each splits into a back
 // and a front half, its shaded ball, its dotted state vectors), and exported as written.
@@ -47,7 +48,6 @@ function split(s: any, sep = ',') {
   if (cur.trim()) out.push(cur.trim());
   return out;
 }
-const unbrace = (v: any) => { v = String(v).trim(); while (v[0] === '{' && close(v, 0, '{', '}') === v.length - 1) v = v.slice(1, -1).trim(); return v; };
 // key=value options as [[key, value]], in order
 const keyvals = (s: any) => split(s || '').map((x) => { const i = x.indexOf('='); return i < 0 ? [x.trim(), null] : [x.slice(0, i).trim(), unbrace(x.slice(i + 1))]; });
 const stripComments = (t: any) => t.replace(/(^|[^\\])%.*$/gm, '$1');

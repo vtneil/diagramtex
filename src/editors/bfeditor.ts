@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
 import { onLocale, t, message } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -12,6 +11,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Bit field editor: the overlay that opens on a bit field block. A palette of fields (bit boxes, word
 // boxes, bits, skipped words, the bit header) and word groups; the field drawn as the package draws it over
 // a grid of its bit columns, where a click selects a field, a drag on the line between two fields moves it
@@ -88,7 +88,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   root.id = 'bfModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const TRASH = '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>';
   mountFrame(root, BfeditorFrame);
   document.body.appendChild(root);
@@ -443,8 +442,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [12, 600], redraw: () => { draw(); if (LB) LB.pop.place(); } });
   // layout px ↔ screen
   const S = (x: any, y: any) => [E.view.ox + (x / PX) * E.view.k, E.view.oy + (y / PX) * E.view.k];
   const toL = (sx: any, sy: any) => [((sx - E.view.ox) / E.view.k) * PX, ((sy - E.view.oy) / E.view.k) * PX];
@@ -476,23 +475,9 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   }
   const boxOf = (ii: any, sub?: any) => lay().boxes.find((b: any) => b.ii === ii && (sub == null || b.sub === sub)) || lay().boxes.find((b: any) => b.ii === ii);
   function fit() {
-    const L = lay(), r = rect(), bb = L.bb;
-    const w = bb.w / PX + 0.8, h = bb.h / PX + 0.8;
-    const k = Math.max(20, Math.min(160, Math.min((r.width - 80) / w, (r.height - 80) / h)));
-    const cx = (bb.x + bb.w / 2) / PX, cy = (bb.y + bb.h / 2) / PX;
-    E.view = { k, ox: r.width / 2 - cx * k, oy: r.height / 2 - cy * k };
+    E.view = fitView(rect(), lay().bb, { scale: PX, margin: 0.4, min: 20, max: 160 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (LB) LB.pop.place();
-  }, { passive: false });
 
   // the bits a box covers, as the header numbers them
   function bitRange(b: any) {
@@ -1026,7 +1011,7 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   // ⌘S: write the field back to the page (one undo step there) and keep editing
   const session = TD.editorSession.lifecycle({
     state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: snapCode, commit,
-    root, code: codeTa, readCode, setTip, tip, discardTitle: () => t('editor.bf.discard', 'Discard changes to this bit field?'), beforeClose: () => { if (LB) LB.pop.close(); },
+    root, code: codeTa, readCode, note: stageNote, discardTitle: () => t('editor.bf.discard', 'Discard changes to this bit field?'), settle: () => { if (LB) LB.pop.close(); },
   });
   const { save, finish } = session;
   let localeOff: (() => void) | undefined;

@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { message, onLocale, t } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
@@ -11,6 +10,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Class diagram editor: the overlay that opens on a UML block. A palette of classes (class, interface,
 // abstract, static, object), notes and relations; the diagram drawn at pgf-umlcd's sizes on a centimetre
 // grid, where classes and notes are placed and moved (their lines follow) and relations are dragged from
@@ -153,19 +153,11 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   //   arm, kind, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, knobAt, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   const snapCode = () => codeOf(E.M);
-  function begin() { if (E.pending == null) E.pending = snapCode(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snapCode();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const { begin, commit, undo, redo } = TD.editorSession.history({
+    state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
+  });
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() {
     const s = E.sel;
     if (!s) return;
@@ -401,9 +393,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const overStage = (e: any) => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [12, 600], redraw: () => { draw(); if (Lb) Lb.pop.place(); } });
   // screen ↔ cm (y up); pt (y up) → screen
   const m = (x: any, y: any) => [E.view.ox + x * E.view.k, E.view.oy - y * E.view.k];
   const P = (x: number, y: number) => [E.view.ox + (x / CMPT) * E.view.k, E.view.oy - (y / CMPT) * E.view.k];
@@ -439,23 +430,10 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     return best;
   }
   function fit() {
-    const L = lay(), r = rect(), bb = L.empty ? { x: 0, y: -2 * PX, w: 4 * PX, h: 2 * PX } : L.bb;
-    const w = bb.w / PX + 1, h = bb.h / PX + 1;
-    const k = Math.max(20, Math.min(160, Math.min((r.width - 80) / w, (r.height - 80) / h)));
-    const cx = (bb.x + bb.w / 2) / PX, cy = -(bb.y + bb.h / 2) / PX;
-    E.view = { k, ox: r.width / 2 - cx * k, oy: r.height / 2 + cy * k };
+    const L = lay();
+    E.view = fitView(rect(), L.empty ? { x: 0, y: -2 * PX, w: 4 * PX, h: 2 * PX } : L.bb, { scale: PX, margin: 0.5, min: 20, max: 160 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (Lb) Lb.pop.place();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   // what the visual edits wrote, put in the order pgf-umlcd needs (a parent typed into "Inherits from", a link to a
@@ -1086,36 +1064,12 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
 
   // ---------------------------------------------------------------- open / close
   // ⌘S: write the diagram back to the page (one undo step there) and keep editing
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = snapCode();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    const saved = t('editor.commonA.saved', 'Saved to the page');
-    stageNote.flash(saved, 1500);
-  }
-  // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode() });
-  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(t('editor.uml.discard', 'Discard changes to this class diagram?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    localeOff?.(); localeOff = undefined;
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: () => snapCode(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => t('editor.uml.discard', 'Discard changes to this class diagram?'),
+  });
+  const { save, finish } = dock;
   let localeOff: (() => void) | undefined;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
@@ -1132,5 +1086,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
   // for the tests: the state, the layout and a box on screen
-  TD.umlEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); }, _state: () => E, _lay: () => lay(), _scr: (b: any) => boxScr(b), _select: (sel: any) => { E.sel = sel; draw(); renderProps(); } };
+  TD.umlEditor = { open, dockable: true, close: () => dock.detach(), _state: () => E, _lay: () => lay(), _scr: (b: any) => boxScr(b), _select: (sel: any) => { E.sel = sel; draw(); renderProps(); } };
 })();

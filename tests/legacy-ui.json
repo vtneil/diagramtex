@@ -1,16 +1,4 @@
 {
-  "inline-svg-icon": {
-    "src/application/app.ts": 3,
-    "src/editors/bfeditor.ts": 1,
-    "src/editors/cdeditor.ts": 1,
-    "src/editors/czeditor.ts": 1,
-    "src/editors/fteditor.ts": 1,
-    "src/editors/g3editor.ts": 1,
-    "src/editors/kmeditor.ts": 3,
-    "src/editors/qceditor.ts": 1,
-    "src/ui/services/quick.ts": 1,
-    "src/ui/services/table.ts": 2
-  },
   "style-assignment": {
     "src/application/app.ts": 11,
     "src/application/docview.ts": 14,
@@ -46,8 +34,5 @@
   },
   "range-input": {
     "src/ui/services/sliders.ts": 1
-  },
-  "select-element": {
-    "src/ui/solid-icons.ts": 1
   }
 }

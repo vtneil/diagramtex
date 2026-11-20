@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { unbraceOnce as unbrace } from './tex-groups';
 // UML sequence diagrams written for pgf-umlsd. The source is the object: a sequencediagram environment of
 // \newinst and \newthread instances, \mess messages, call, callself and messcall environments (nested calls),
 // sdblock frames, \prelevel / \postlevel, \setthreadbias and \tikzstyle{inststyle} changes. It is drawn here
@@ -36,7 +37,6 @@ const tt = () => TD.texText;
 const close = (s: string, i: number) => tt().close(s, i);
 const opts = (s: any) => tt().split(String(s || '')).map((x: string) => x.trim()).filter(Boolean);
 const kv = (it: string) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null as string | null }; };
-const unbrace = (v: any) => { const t = String(v ?? '').trim(); return t[0] === '{' && close(t, 0) === t.length - 1 ? t.slice(1, -1).trim() : t; };
 const num = (v: number) => String(Math.round(v * 1000) / 1000).replace(/^-0$/, '0');
 const cmOf = (v: any, dflt: number) => { const t = String(v ?? '').trim(); if (!t) return dflt; const m = /^(-?[\d.]+)\s*(cm|mm|pt|in)?$/.exec(t); if (!m) return NaN; const x = parseFloat(m[1]); return m[2] === 'mm' ? x / 10 : m[2] === 'pt' ? x / CM : m[2] === 'in' ? x * 2.54 : x; };
 

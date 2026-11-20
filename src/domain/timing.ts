@@ -63,7 +63,6 @@ function split(s: any, sep = ',', braces = false) {
 }
 const opts = (s: any) => split(s || '').map((x) => x.trim()).filter(Boolean);
 const kv = (it: any) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null }; };
-const unbrace = (v: any) => { v = String(v ?? '').trim(); while (v[0] === '{' && close(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
 const stripComments = (s: any) => s.replace(/(^|[^\\])%.*$/gm, '$1');
 const skip = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 const num = (n: any) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); };

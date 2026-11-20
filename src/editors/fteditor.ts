@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
 import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -13,6 +12,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Tree editor: the overlay that opens on a Tree block. A palette of subtrees, templates and node and edge
 // styles; the tree drawn by the canvas renderer, where nodes are selected, added, relabelled and dragged
 // onto other nodes; the selection's properties; and beside them the forest code, live both ways.
@@ -120,7 +120,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   const TURNS = new Set(['child', 'sib', 'sibBefore', 'parent', 'earlier', 'later', 'lift', 'unwrap']);
   // the drawing inside the icon (a menu row draws it in its own svg), turned to follow the tree where it points
   const ficIn = (k: any, L?: any) => (TURNS.has(k) ? `<g class="fe-turn" transform="${turnXf(L)}">${FI[k]}</g>` : FI[k]);
-  const fic = (k: any, L?: any) => `<svg viewBox="0 0 20 20" class="qe-ic">${ficIn(k, L)}</svg>`;
   // the 20×20 icon's x axis along the siblings (U) and y axis along the growth (G), about its centre
   function turnXf(L: any) {
     const U = (L && L.U) || [1, 0], G = (L && L.G) || [0, 1], r = (v: any) => Math.round(v * 1000) / 1000;
@@ -136,15 +135,9 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   let stopLocale: (() => void) | null = null;
   const snap = () => codeOf(E.T);
-  function begin() { if (E.pending == null) E.pending = snap(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snap();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const { begin, commit, undo, redo } = TD.editorSession.history({
+    state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
+  });
   function edit(fn: any) { begin(); fn(); commit(); cleanSel(); draw(); keepInView(); renderProps(); }
   function restore(code: any) {
     const idx = E.sel.map((n: any) => order(E.T).indexOf(n));
@@ -153,8 +146,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     E.sel = idx.map((i: any) => o[i]).filter(Boolean);
     draw(); renderProps(); updateTools();
   }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snap()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snap()); restore(E.redo.pop()); dock.changed(); }
   function cleanSel() { const o = new Set(order(E.T)); E.sel = E.sel.filter((n: any) => o.has(n)); }
   const one = () => (E.sel.length === 1 ? E.sel[0] : null);
   const select = (nodes: any) => { E.sel = nodes; draw(); renderProps(); };
@@ -355,9 +346,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const overStage = (e: any) => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [0.3, 6], redraw: () => { draw(); if (Lb) Lb.pop.place(); } });
   const toL = (e: any) => { const [x, y] = pos(e), v = E.view; return [(x - v.ox) / v.k, (y - v.oy) / v.k]; };
   // the node under the pointer (index into the preorder), or -1
   function nodeAt(e: any, pad = 3) {
@@ -384,10 +374,7 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function fit() {
     if (!E) return;
     E.L = TD.ft.layout(blockOf());
-    const b = E.L.empty ? { x: -60, y: -30, w: 120, h: 60 } : E.L.bb, r = rect();
-    const x1 = b.x - 30, x2 = b.x + b.w + 30, y1 = b.y - 30, y2 = b.y + b.h + 30;
-    const k = Math.max(0.5, Math.min(2.5, Math.min((r.width - 60) / (x2 - x1), (r.height - 60) / (y2 - y1))));
-    E.view = { k, ox: r.width / 2 - ((x1 + x2) / 2) * k, oy: r.height / 2 - ((y1 + y2) / 2) * k };
+    E.view = fitView(rect(), E.L.empty ? { x: -60, y: -30, w: 120, h: 60 } : E.L.bb, { margin: 30, pad: 60, min: 0.5, max: 2.5 });
     draw();
   }
   function keepInView() {
@@ -396,16 +383,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     const b = L.bb;
     if (v.ox + b.x * v.k < 0 || v.oy + b.y * v.k < 0 || v.ox + (b.x + b.w) * v.k > r.width || v.oy + (b.y + b.h) * v.k > r.height) fit();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(0.3, Math.min(6, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (Lb) Lb.pop.place();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   function draw() {
@@ -772,37 +749,13 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = snap();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    stageNote.flash(saved, 1500);
-  }
-  // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snap(),
-    selOut: () => E.sel.map((n: any) => order(E.T).indexOf(n)), selIn: (idx: any) => { const o = order(E.T); E.sel = (idx || []).map((i: any) => o[i]).filter(Boolean); } });
-  TD.unsaved.push(() => !!E && !dock.docked() && snap() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = snap(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(uiText('editor.ft.discardTree', 'Discard changes to this tree?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    stopLocale?.(); stopLocale = null;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot: () => snap(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => uiText('editor.ft.discardTree', 'Discard changes to this tree?'),
+    selOut: () => E.sel.map((n: any) => order(E.T).indexOf(n)), selIn: (idx: any) => { const o = order(E.T); E.sel = (idx || []).map((i: any) => o[i]).filter(Boolean); },
+  });
+  const { save, finish } = dock;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
     const T = load(block.src);
@@ -819,5 +772,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.ftEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
+  TD.ftEditor = { open, dockable: true, close: () => dock.detach() };
 })();

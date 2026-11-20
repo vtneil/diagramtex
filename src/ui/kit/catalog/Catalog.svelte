@@ -1,7 +1,8 @@
 <script lang="ts">
   // Every kit component in every variant, in light and dark, in English and Thai: change a component, check it here.
   // Development only (npm run dev → /kit.html); not part of the app or the production build.
-  import { t, locale, setLocale } from '../../../i18n';
+  import { t, caption, locale, setLocale } from '../../../i18n';
+  import { SOLID_ICONS } from '../../solid-icons';
   import { runtime as TD } from '../../../runtime';
   import { Button, IconButton, Icon, ICONS, Kbd, Separator, Spacer, Segmented, Checkbox, Switch, Select, TextField, TextArea, NumberField, TexField, ColourButton, Slider, keyLabel, Menu, openContextMenu, openTextPopup, Tooltip, macKeys, Popover, Flyout, closeFlyouts, openPopover, type PopoverHandle, Badge, EmptyState, SearchField, PanelSection, FormRow, Help, Tile, TileGrid, SplitButton, ListRow, Toolbar, ToolbarGroup, Palette, Swatches, CodePane, EditorFrame, type PaletteCategory, type TextPopupKind, type IconName, type MenuEntry, type SelectOption } from '..';
   const swatchColours = ['#c62828', '#e8a33d', '#f5e44c', '#7e5530', '#8fd14f', '#4a7a1e', '#b02ad6', '#8a2be2', '#5b8ede', '#7adfc5', '#c5e897', '#000000', '#4a4a4a', '#9e9e9e', '#808080', '#ffffff'];
@@ -104,7 +105,9 @@
   // dropdowns: dash patterns (with a custom one), line widths, arrow tips
   const dashSvg = (da: string) => `<svg class="dprev" viewBox="0 0 48 8" preserveAspectRatio="none"><path d="M1 4H47" stroke="currentColor" stroke-width="1.5"${da ? ` stroke-dasharray="${da}"` : ''}/></svg>`;
   const DASHES = [['solid', 'Solid', ''], ['dashed', 'Dashed', '6 4'], ['dotted', 'Dotted', '1.5 3'], ['dashdot', 'Dash dot', '6 3 1.5 3'], ['densely', 'Densely dashed', '4 2']];
-  let dash = $state('dashed'), customDash = $state(''), width = $state(1.5), tip = $state('stealth');
+  let dash = $state('dashed'), customDash = $state(''), width = $state(1.5), tip = $state('stealth'), solid = $state('cone');
+  // a picture menu (`pictures`): each option's drawing over its short name, the full label in its tooltip
+  const solidOptions = $derived(['box', 'cube', 'cylinder', 'cone', 'sphere', 'torus', 'pyramid', 'prism'].map((v) => ({ value: v, label: caption(SOLID_ICONS[v][0], $locale), short: caption(SOLID_ICONS[v][0], $locale), svg: SOLID_ICONS[v][1] })));
   const dashOptions: SelectOption[] = DASHES.map(([value, label, da]) => ({ value, label, svg: dashSvg(da) }));
   let font = $state('atkinson');
   const fontOptions: SelectOption[] = [['atkinson', 'Atkinson Hyperlegible', '"Atkinson Hyperlegible Next", sans-serif'], ['helvetica', 'Helvetica', 'Helvetica, Arial, sans-serif'],
@@ -231,13 +234,14 @@
 
   <section>
     <h2>Select <code>Select.svelte</code></h2>
-    <p>One control for every pick-one list. A native select stays underneath (value, change events, type-to-select); the app's menu draws it. Options can carry a drawing (also shown in the closed control), a note or a font; <code>columns</code> makes tiles; <code>custom</code> adds a line for a typed value; <code>attached</code> is only a chevron, joined to the field before it.</p>
+    <p>One control for every pick-one list. A native select stays underneath (value, change events, type-to-select); the app's menu draws it. Options can carry a drawing (also shown in the closed control), a note or a font; <code>columns</code> makes tiles; <code>pictures</code> picture tiles (the kit's Tile as options: a drawing over a short name); <code>custom</code> adds a line for a typed value; <code>attached</code> is only a chevron, joined to the field before it.</p>
     <div id="props" class="kit-panel"><div class="sec">
       <div class="row"><label for="kit-font">{t('ui.font', 'Font', {}, $locale)}</label><div class="ctl"><Select id="kit-font" value={font} options={fontOptions} onchange={(e) => (font = e.currentTarget.value)} /></div></div>
       <div class="row"><label for="kit-dash">{t('style.dashPattern', 'Dash pattern', {}, $locale)}</label><div class="ctl"><Select id="kit-dash" value={dash} options={dashOptions} onchange={(e) => (dash = e.currentTarget.value)}
         custom={{ label: t('dd.custom', 'Custom…', {}, $locale), shown: 'Custom', svg: dashSvg(dash.startsWith('p:') ? dash.slice(2) : ''), value: customDash, placeholder: 'on off … (pt)', apply: (text) => { customDash = text; dash = 'p:' + text; } }} /></div></div>
       <div class="row"><label for="kit-width">{t('ui.width', 'Width', {}, $locale)}</label><div class="ctl"><NumberField id="kit-width" value={width} min="0.25" step="0.25" oninput={(e) => (width = +e.currentTarget.value)} /><Select attached title={t('ui.line.width.presets', 'Line width presets', {}, $locale)} value={String(width)} options={widthOptions} onchange={(e) => (width = +e.currentTarget.value)} /><span class="val">px</span></div></div>
       <div class="row"><label for="kit-tip">{t('editor.tm.tips', 'Tips', {}, $locale)}</label><div class="ctl"><Select id="kit-tip" value={tip} columns={3} options={tipOptions} onchange={(e) => (tip = e.currentTarget.value)} /></div></div>
+      <div class="row"><label for="kit-solid">{t('ui.shape', 'Shape', {}, $locale)}</label><div class="ctl"><Select id="kit-solid" value={solid} pictures options={solidOptions} onchange={(e) => (solid = e.currentTarget.value)} /></div></div>
     </div></div>
   </section>
 

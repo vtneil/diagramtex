@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { unbrace } from './tex-groups';
 // Feynman diagrams written with the tikz-feynman package. The source is the object: \vertex lines that
 // place the vertices and a \diagram* that joins them with propagators. It is drawn here as vectors at
 // the package's own sizes (wave, coil, arrow and momentum measured from its output), and exported
@@ -70,7 +71,6 @@ function split(s: any, sep = ',') {
 }
 const opts = (s: any) => split(s || '').map((x) => x.trim()).filter(Boolean);
 const kv = (it: any) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null }; };
-const unbrace = (v: any) => { v = String(v ?? '').trim(); while (v[0] === '{' && close(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
 const stripComments = (s: any) => s.replace(/(^|[^\\])%.*$/gm, '$1');
 // \(…\) and \[…\] as $…$ for drawing
 const shown = (t: any) => String(t || '').replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$').replace(/\\\[([\s\S]*?)\\\]/g, '$$$1$$');

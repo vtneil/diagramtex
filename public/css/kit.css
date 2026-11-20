@@ -130,17 +130,13 @@ select[data-by-pointer]:focus { outline: none; }
 #props .swsel select, .cz-props .swsel select { padding-left: 30px; }
 .selmenu-group { padding: 8px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--pencil); }
 @media (prefers-reduced-motion: reduce) { .selmenu, .selmenu.leaving[hidden] { animation: none; } }
-/* a picture menu (select[data-pics]): tiles like the Blocks menu's, four across, with the same highlight states */
+/* a picture menu (Select `pictures`): the kit's Tiles as options, four across, the pointer's in the well tone */
 .selmenu.pics:not([hidden]) { display: grid; } /* not over [hidden]: the grid must still close */
 .selmenu.pics { grid-template-columns: repeat(4, 76px); gap: 4px; max-width: none; }
-.selmenu.pics .selmenu-item { margin: 0; height: auto; min-height: 64px; flex-direction: column; justify-content: flex-start; gap: 4px; padding: 8px 2px 6px;
-  border: 1px solid var(--rule); background: var(--sheet); color: var(--graphite); font-size: 11px; line-height: 1.2; white-space: normal; text-align: center; }
-.selmenu.pics .selmenu-item.hi { background: var(--well); border-color: var(--rule-strong); color: var(--ink); }
-.selmenu.pics .selmenu-item.on { background: var(--wash-strong); border-color: var(--ink); color: var(--ink); }
-.selmenu.pics svg { width: 40px; height: 30px; flex: none; fill: none; stroke: var(--graphite); stroke-width: 1.2; stroke-linejoin: round; }
-.selmenu.pics svg .a1 { fill: #d6e2f2; stroke: var(--bluepen); }
-.selmenu.pics svg .d { stroke-dasharray: 1.6 1.4; }
-.selmenu.pics svg .h { fill: var(--sheet); }
+.selmenu.pics .tile { margin: 0; }
+.selmenu.pics .tile > svg { margin: 0; } /* not a drawn row's gap before its name (.selmenu-item > svg): the picture is centred */
+.selmenu.pics .tile.hi { background: var(--well); border-color: var(--rule-strong); color: var(--ink); }
+.selmenu.pics .tile.on { background: var(--wash-strong); border-color: var(--ink); } /* the current one keeps its ink edge while highlighted */
 /* drawn rows (Select options with svg / note): a 60×10 drawing before the name, a quiet mono note after it */
 .selmenu-item > svg { width: 60px; height: 10px; flex: none; margin-right: 8px; color: var(--ink); fill: none; stroke: currentColor; }
 .selmenu-item > svg.sprev { height: 14px; } /* a shaft drawing: two or three strokes */
@@ -416,16 +412,18 @@ input.search-field:focus { outline: none; border-color: var(--bluepen); box-shad
 :is(.toolbar, .tb-bar) button.icon.on { background: var(--wash-strong); color: var(--ink); }
 :is(.toolbar, .tb-bar) button.icon:disabled { color: var(--faint); }
 
-/* ---------- Tile, TileGrid (Tile.svelte, TileGrid.svelte: the flyouts' picture tiles) ---------- */
+/* ---------- Tile, TileGrid (Tile.svelte, TileGrid.svelte: the flyouts' picture tiles, and a Select's picture options) ---------- */
 .tile-grid { display: grid; grid-template-columns: repeat(var(--tile-cols, 4), 1fr); gap: 4px; }
-button.tile { height: auto; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px; font-size: 11px; line-height: 1.25;
+button.tile, .tile[role="option"] { height: auto; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 2px; font-size: 11px; line-height: 1.25;
   border-color: var(--rule); background: var(--sheet); color: var(--graphite); }
 button.tile:hover { border-color: var(--rule-strong); color: var(--ink); background: var(--wash); }
-button.tile.on { border-color: var(--ink); background: var(--wash-strong); color: var(--ink); }
-button.tile > svg { width: 40px; height: 30px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
+button.tile.on, .tile[role="option"].on { border-color: var(--ink); background: var(--wash-strong); color: var(--ink); }
+button.tile > svg, .tile[role="option"] > svg { width: 40px; height: 30px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; }
 /* a long name (Thai runs longer) wraps to a second line, then is cut */
-button.tile > span { max-width: 100%; overflow: hidden; white-space: normal; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+button.tile > span, .tile[role="option"] > span { max-width: 100%; overflow: hidden; white-space: normal; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 button.tile.soon, button.tile.soon:hover { border-style: dashed; border-color: var(--rule-strong); background: transparent; color: var(--graphite); }
+/* an option is not a button: its own edge and corners, and no hand (the list box picks it) */
+.tile[role="option"] { border-width: 1px; border-style: solid; border-radius: var(--r); white-space: normal; cursor: default; user-select: none; }
 
 /* ---------- ListRow (ListRow.svelte; the file list, layers and Recycle Bin rows are copies) ---------- */
 .list-row { display: flex; align-items: center; gap: 8px; height: var(--ctl); padding: 0 4px 0 calc(8px + var(--depth, 0) * 16px); border-radius: var(--r);

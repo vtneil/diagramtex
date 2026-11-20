@@ -17,10 +17,18 @@ interface LifecycleHooks {
   root: HTMLElement;
   code: HTMLTextAreaElement;
   readCode(): void;
-  setTip(value: string): void;
-  tip?: HTMLElement;
+  /** the stage's tip line (stageTip in src/ui/editor-notes.ts), where "Saved to the page" shows */
+  note: { flash(text: string, ms: number): void };
   discardTitle: string | (() => string); // a getter reads it in the current interface language
-  beforeClose?(): void;
+  /** closes what is open in place (a label being typed, a popup, a menu) before a save or a close */
+  settle?(): void;
+  /** the source a save or a close compares and hands back, when it is not the snapshot (the code as typed) */
+  source?(): string;
+  /** what done receives, when it is more than { src } */
+  result?(): any;
+  /** the selection as plain data and back, for an embedded editor (see DockHooks) */
+  selOut?(): any;
+  selIn?(saved: any): void;
 }
 interface DockHooks {
   root: HTMLElement;
@@ -63,10 +71,6 @@ export function createEditorSession(services: {
     function redo() { commit(); const e = state(); if (!e.redo.length) return; e.undo.push(snapshot()); restore(e.redo.pop()!); changed?.(); }
     return { begin, commit, undo, redo };
   }
-  /**
-   * The editor supplies its source reader, pending-edit commit and domain cleanup. Prompts and
-   * save-baseline timing match the original K-map/bit-field editors, including save-without-closing.
-   */
   /**
    * Embedded (Quick): the editor fills a pane instead of opening over the page, and hands every edit back through
    * its done callback, so it is never unsaved and never closes on its own (Esc, Cancel and Done do nothing while
@@ -133,38 +137,43 @@ export function createEditorSession(services: {
     // true when the editor opened where it was left (its view restored), so it draws instead of fitting
     return { show, changed, release, elsewhere, docked: () => !!dock, resumed: () => resumed };
   }
-  function lifecycle({ state, clear, snapshot, commit, root, code, readCode, setTip, tip, discardTitle, beforeClose }: LifecycleHooks) {
-    const { show, changed, release, elsewhere, docked, resumed } = dockable({ root, state, snapshot });
+  /**
+   * Opening, saving and closing a block editor: the editor supplies its source reader, pending-edit commit and domain
+   * cleanup; this keeps the save baseline, the discard prompt and the unsaved check. It is also the editor's dock.
+   */
+  function lifecycle({ state, clear, snapshot, commit, root, code, readCode, note, discardTitle, settle, source, result, selOut, selIn }: LifecycleHooks) {
+    const { show, changed, release, elsewhere, docked, resumed } = dockable({ root, state, snapshot, result, selOut, selIn });
+    const saved = () => (source ? source() : snapshot());
+    // embedded: back over the page, and closed as Done would (the host's close)
     function detach() { if (!docked()) return; release(); finish(true); }
     services.unsaved.push(() => { const e = state(); return !!e && !docked() && snapshot() !== e.start; });
+    // ⌘S: write the drawing back to the page (one undo step there) and keep editing; embedded, every edit already is
     function save() {
+      if (!state()) return;
       if (docked()) { if (document.activeElement === code) readCode(); commit(); changed(); return; }
+      settle?.();
       if (document.activeElement === code) readCode();
       commit();
-      const e = state()!, src = snapshot();
-      if (src !== e.start) { e.start = src; e.done({ src }); }
-      setTip(t('editor.saved', 'Saved to the page'));
-      setTimeout(() => { if (state()) setTipAfterSave(); }, 1500);
+      const e = state()!, src = saved();
+      if (src !== e.start) { e.start = src; e.done(result ? result() : { src }); }
+      note.flash(t('editor.saved', 'Saved to the page'), 1500);
     }
-    // Avoid erasing a newer, domain-specific hint while the saved message's timer is pending.
-    function setTipAfterSave() {
-      if (tip && tip.textContent === t('editor.saved', 'Saved to the page')) setTip('');
-    }
+    // Done (ok) hands the drawing back when it changed; Cancel asks before throwing changes away
     async function finish(ok: boolean) {
       if (!state() || docked()) return;
-      if (beforeClose) beforeClose();
+      settle?.();
       if (document.activeElement === code) readCode();
       if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
       commit();
-      const e = state()!, src = snapshot(), changed = src !== e.start;
-      if (!ok && changed && !(await services.confirm(typeof discardTitle === 'function' ? discardTitle() : discardTitle, t('editor.discard.body', 'Your edits since opening the editor will be lost.'), { ok: t('editor.discard.ok', 'Discard'), danger: true }))) return;
-      const done = e.done;
+      const e = state()!, src = saved(), edited = src !== e.start;
+      if (!ok && edited && !(await services.confirm(typeof discardTitle === 'function' ? discardTitle() : discardTitle, t('editor.discard.body', 'Your edits since opening the editor will be lost.'), { ok: t('editor.discard.ok', 'Discard'), danger: true }))) return;
+      const done = e.done, out = ok && edited ? (result ? result() : { src }) : null;
       root.hidden = true;
       document.body.classList.remove('cz-open');
       clear();
-      if (ok && changed) done({ src });
+      if (out) done(out);
     }
-    return { save, finish, show, changed, detach, elsewhere, docked, resumed };
+    return { save, finish, show, changed, release, detach, elsewhere, docked, resumed };
   }
   /** Redraw when the editor's box changes size: the window, or (embedded) the pane it sits in. */
   function watchSize(root: HTMLElement, redraw: () => void) {

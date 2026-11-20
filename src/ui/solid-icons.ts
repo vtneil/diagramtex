@@ -1,4 +1,4 @@
-// Pictures for the Solid block's Shape menu (a <select data-pics="solid">, drawn as tiles by selectmenu.ts):
+// Pictures for a 3D solid's Shape menu (a form select's `pictures`, drawn as the kit's picture Tiles by Select):
 // drawn like the Blocks menu tiles (32×24, line icons; .a1 = the solid's silhouette in the blue-pen wash,
 // .d = hidden edges dashed, .h = a hole).
 import { message as msg, type Message } from '../i18n';

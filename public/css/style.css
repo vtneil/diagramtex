@@ -560,15 +560,17 @@ input[type=range]:not(.cp input) { width: 100%; min-width: 0; accent-color: var(
 .cp-edit { width: 100%; margin-top: 8px; font-size: 12px; }
 
 /* popovers: kit.css, Popover */
-/* the drawings in picture tiles (the kit's Tile): a blue curve, green and red ones, a tinted area, data dots, bars, a heat map, letters */
-button.tile svg .c1 { stroke: var(--bluepen); stroke-width: 1.6; }
-button.tile svg .c2 { stroke: #3d7a3a; stroke-width: 1.4; }
-button.tile svg .c3 { stroke: var(--redpen); stroke-width: 1.4; }
-button.tile svg .a1 { fill: #d6e2f2; stroke: var(--bluepen); }
-button.tile svg .dots circle { fill: var(--redpen); stroke: none; }
-button.tile svg .bars rect { fill: #4e6f98; stroke: none; }
-button.tile svg .heat rect { stroke: none; }
-button.tile svg text { fill: var(--ink); stroke: none; font-family: var(--font-mono); }
+/* the drawings in picture tiles (the kit's Tile): a blue curve, green and red ones, a tinted area, hidden edges, a hole, data dots, bars, a heat map, letters */
+.tile svg .c1 { stroke: var(--bluepen); stroke-width: 1.6; }
+.tile svg .c2 { stroke: #3d7a3a; stroke-width: 1.4; }
+.tile svg .c3 { stroke: var(--redpen); stroke-width: 1.4; }
+.tile svg .a1 { fill: #d6e2f2; stroke: var(--bluepen); }
+.tile svg .d { stroke-dasharray: 1.6 1.4; }
+.tile svg .h { fill: var(--sheet); }
+.tile svg .dots circle { fill: var(--redpen); stroke: none; }
+.tile svg .bars rect { fill: #4e6f98; stroke: none; }
+.tile svg .heat rect { stroke: none; }
+.tile svg text { fill: var(--ink); stroke: none; font-family: var(--font-mono); }
 
 /* Main menus scroll independently; fixed submenus escape the parent's scroll
    clip and are measured/clamped individually when their row is entered. */

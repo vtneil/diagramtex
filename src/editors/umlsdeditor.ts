@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
 import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -12,6 +11,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Sequence diagram editor: the overlay that opens on a pgf-umlsd block. A palette of instances and threads,
 // the kinds of message (call, self call, message, call without return) and blocks; the diagram drawn as the
 // package draws it, where a message is dragged from one lifeline to another (on the same one: a self call) and
@@ -102,19 +102,11 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   let stopLocale: (() => void) | null = null;
   const snapCode = () => codeOf(E.M);
-  function begin() { if (E.pending == null) E.pending = snapCode(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snapCode();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const { begin, commit, undo, redo } = TD.editorSession.history({
+    state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
+  });
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() { if (E.sel && !itemAt(E.sel)) E.sel = null; }
   const selIt = () => itemAt(E.sel);
   const lay = () => U.layout({ src: snapCode() });
@@ -285,8 +277,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [12, 600], redraw: () => { draw(); if (Lb) Lb.pop.place(); } });
   // pt (y up) ↔ screen
   const P = (x: number, y: number) => [E.view.ox + (x / CMPT) * E.view.k, E.view.oy - (y / CMPT) * E.view.k];
   const toPt = (sx: number, sy: number) => [((sx - E.view.ox) / E.view.k) * CMPT, ((E.view.oy - sy) / E.view.k) * CMPT];
@@ -344,23 +336,10 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     return null;
   }
   function fit() {
-    const L = lay(), r = rect(), bb = L.empty ? { x: 0, y: 0, w: 4 * PX, h: 2 * PX } : L.bb;
-    const w = bb.w / PX + 1, h = bb.h / PX + 1;
-    const k = Math.max(20, Math.min(120, Math.min((r.width - 80) / w, (r.height - 80) / h)));
-    const cx = (bb.x + bb.w / 2) / PX, cy = -(bb.y + bb.h / 2) / PX;
-    E.view = { k, ox: r.width / 2 - cx * k, oy: r.height / 2 + cy * k };
+    const L = lay();
+    E.view = fitView(rect(), L.empty ? { x: 0, y: 0, w: 4 * PX, h: 2 * PX } : L.bb, { scale: PX, margin: 0.5, min: 20, max: 120 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (Lb) Lb.pop.place();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   const path = (pts: number[][]) => pts.map((p, i) => { const [X, Y] = P(p[0], p[1]); return `${i ? 'L' : 'M'}${r2(X)},${r2(Y)}`; }).join('');
@@ -775,35 +754,12 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = snapCode();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    stageNote.flash(saved, 1500);
-  }
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode() });
-  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(uiText('editor.umlsd.discard', 'Discard changes to this sequence diagram?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    stopLocale?.(); stopLocale = null;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot: () => snapCode(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => uiText('editor.umlsd.discard', 'Discard changes to this sequence diagram?'),
+  });
+  const { save, finish } = dock;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
@@ -820,5 +776,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
   // for the tests: the state, the layout, a point on screen, and selecting
-  TD.umlsdEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); }, _state: () => E, _lay: () => lay(), _P: (x: number, y: number) => P(x, y), _select: (ref: any) => { E.sel = ref; draw(); renderProps(); } };
+  TD.umlsdEditor = { open, dockable: true, close: () => dock.detach(), _state: () => E, _lay: () => lay(), _P: (x: number, y: number) => P(x, y), _select: (ref: any) => { E.sel = ref; draw(); renderProps(); } };
 })();

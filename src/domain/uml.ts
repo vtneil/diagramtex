@@ -1,5 +1,6 @@
 import { measurementElement } from './measurement';
 import { runtime as TD } from '../runtime';
+import { unbrace } from './tex-groups';
 // UML class diagrams written for pgf-umlcd. The source is the object: a tikzpicture of class, interface,
 // abstractclass, staticclass and object environments (\attribute, \operation, \inherit, \implement,
 // \instanceOf), \association, \unidirectionalAssociation, \aggregation and \composition between them, \umlnote
@@ -68,7 +69,6 @@ function split(s: string, sep = ',') {
 }
 const opts = (s: any) => split(String(s || '')).map((x) => x.trim()).filter(Boolean);
 const kv = (it: string) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null as string | null }; };
-const unbrace = (v: any) => { v = String(v ?? '').trim(); while (v[0] === '{' && close(v, 0) === v.length - 1) v = v.slice(1, -1).trim(); return v; };
 const stripComments = (s: string) => s.replace(/(^|[^\\])%.*$/gm, '$1');
 const skip = (s: string, i: number) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 function nextSemi(s: string, i: number) {

@@ -3,7 +3,7 @@ import { runtime as TD } from '../../runtime';
 import { renderView, destroyView } from '../render-view.svelte';
 import { openContextMenu, closeContextMenu } from '../kit/context-menu';
 import type { MenuEntry, MenuItemSpec } from '../kit/menu';
-import type { IconName } from '../kit/icons';
+import { iconSvg, type IconName } from '../kit/icons';
 import TableWorkspace, { type TableWorkspaceModel } from '../TableWorkspace.svelte';
 import TablePanel, { type TablePanelModel } from '../TablePanel.svelte';
 import { t, message as msg, caption, onLocale, type Message } from '../../i18n';
@@ -116,32 +116,14 @@ const PICTURE_MS = 10;
   function hint(text: string, ms = 1600) { if (TD.app && TD.app.showHint) TD.app.showHint(text, ms); }
 
   // ---------------------------------------------------------------- icons
-  const ic = (d: string) => `<svg viewBox="0 0 20 20" aria-hidden="true">${d}</svg>`;
+  // the toolbar's text glyphs (its drawn icons are the kit's: src/ui/kit/icons.ts)
   const I = {
-    undo: ic('<path transform="translate(0 -2)" d="M7 5L3 9l4 4M3 9h9a5 5 0 010 10h-2"/>'),
-    redo: ic('<path transform="translate(0 -2)" d="M13 5l4 4-4 4M17 9H8a5 5 0 000 10h2"/>'),
-    imp: ic('<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>'),
-    dl: ic('<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>'),
-    print: ic('<path d="M5.5 7.5V3h9v4.5M5.5 14.5h-3v-7h15v7h-3"/><path d="M5.5 11.5h9v6h-9z"/>'),
     b: '<b class="tb-glyph">B</b>', i: '<i class="tb-glyph" style="font-family:Georgia,serif">I</i>', u: '<span class="tb-glyph" style="text-decoration:underline">U</span>', tt: '<span class="tb-glyph tb-mono">T</span>',
-    border: ic('<path d="M3 3h14v14H3z" stroke-dasharray="1.5 2"/><path d="M3 17h14"/>'),
-    merge: ic('<path d="M3 4h14v12H3z"/><path d="M7 10h6M11 8l2 2-2 2M9 8l-2 2 2 2" />'),
-    split: ic('<path d="M3 4h14v12H3zM10 4v12"/><path d="M4.5 10h3M6 8.5L7.5 10 6 11.5M15.5 10h-3M14 8.5L12.5 10l1.5 1.5"/>'),
     num: '<span class="tb-glyph tb-mono" style="font-size:12px">.00</span>',
   };
-  // A quiet cell grid provides context; only the borders being applied carry ink.
-  const borderIcon = (path: string) => ic(`<path d="M3 3h14v14H3zM10 3v14M3 10h14" opacity=".2" stroke-width="1"/>${path ? `<path d="${path}" stroke-width="1.5"/>` : ''}`);
-  const B: Record<BorderWhere, string> = {
-    all: borderIcon('M3 3h14v14H3zM10 3v14M3 10h14'),
-    outer: borderIcon('M3 3h14v14H3z'),
-    inner: borderIcon('M10 3v14M3 10h14'),
-    innerH: borderIcon('M3 10h14'),
-    innerV: borderIcon('M10 3v14'),
-    top: borderIcon('M3 3h14'),
-    bottom: borderIcon('M3 17h14'),
-    left: borderIcon('M3 3v14'),
-    right: borderIcon('M17 3v14'),
-    none: borderIcon(''),
+  const B: Record<BorderWhere, IconName> = {
+    all: 'borderAll', outer: 'borderOuter', inner: 'borderInner', innerH: 'borderInnerH', innerV: 'borderInnerV',
+    top: 'borderTop', bottom: 'borderBottom', left: 'borderLeft', right: 'borderRight', none: 'borderNone',
   };
   const BNAME = (): Record<BorderWhere, string> => ({ all: t('table.border.all', 'All borders'), outer: t('table.border.outer', 'Outer borders'), inner: t('table.border.inner', 'Inner borders'), innerH: t('table.border.innerH', 'Inner horizontal'), innerV: t('table.border.innerV', 'Inner vertical'), top: t('table.border.top', 'Top border'), bottom: t('table.border.bottom', 'Bottom border'), left: t('table.border.left', 'Left border'), right: t('table.border.right', 'Right border'), none: t('table.border.none', 'No borders') });
   // the presets' names and descriptions (the domain's PRESETS holds the English)
@@ -170,7 +152,7 @@ const PICTURE_MS = 10;
     const x = M.cells[act[0]][act[1]], all = anchorsSel(), g = range();
     return {
       session: !!session, fresh, mod: MOD, shift: SHIFT,
-      icons: { imp: I.imp, b: I.b, i: I.i, u: I.u, tt: I.tt, merge: I.merge, split: I.split, num: I.num, dl: I.dl, print: I.print, border: B[lastBorder] },
+      icons: { b: I.b, i: I.i, u: I.u, tt: I.tt, num: I.num, border: B[lastBorder] },
       // the colour buttons' bars show the colour they apply
       colours: { ...lastColour },
       borderName: borderPicked ? BNAME()[lastBorder] : '',
@@ -264,7 +246,7 @@ const PICTURE_MS = 10;
       h += '</tr>';
     }
     // the strips past the last column and under the last row: hovering one shows a + that adds a column or a row
-    const plus = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 5v10M5 10h10"/></svg>';
+    const plus = iconSvg('add');
     g.innerHTML = `<div class="tg-box">${h}</tbody></table><button type="button" class="tg-add tg-addc" data-add="col" title="${esc(t('table.addCol', 'Add a column'))}" aria-label="${esc(t('table.addCol', 'Add a column'))}">${plus}</button><button type="button" class="tg-add tg-addr" data-add="row" title="${esc(t('table.addRow', 'Add a row'))}" aria-label="${esc(t('table.addRow', 'Add a row'))}">${plus}</button></div>`;
     // a button doesn't stretch between top and bottom like a div does, so the strips get their size here
     const tbl = g.querySelector('table') as HTMLElement, addc = g.querySelector('.tg-addc') as HTMLElement, addr = g.querySelector('.tg-addr') as HTMLElement;
@@ -497,9 +479,9 @@ const PICTURE_MS = 10;
     }, { class: 'tb-ctx', below: from?.getBoundingClientRect(), owner: from ?? undefined, minWidth: from ? 220 : undefined, onclose: () => { menuOpen = false; menuFrom = null; } });
     menuOpen = true; menuFrom = from;
   }
-  // o.name: a registry icon (kit/icons.ts); o.icon: one of the Table's own drawings
-  const item = (label: string, act2: string, o: { name?: IconName; icon?: string; key?: string; dis?: boolean; danger?: boolean; checked?: boolean } = {}): MenuItemSpec =>
-    ({ act: act2, label, icon: o.name, svg: o.name ? undefined : o.icon, key: o.key, disabled: o.dis, danger: o.danger, checked: o.checked });
+  // o.name: the row's icon (kit/icons.ts)
+  const item = (label: string, act2: string, o: { name?: IconName; key?: string; dis?: boolean; danger?: boolean; checked?: boolean } = {}): MenuItemSpec =>
+    ({ act: act2, label, icon: o.name, key: o.key, disabled: o.dis, danger: o.danger, checked: o.checked });
   // ---- number format (siunitx): a column's numbers start out as they were typed (1,955.98 keeps its commas)
   const startNum = (c: number) => T.typedNum(M.cells.slice(M.head).map((row: TCell[]) => (row[c].cs && row[c].cs! > 1 ? '' : row[c].t)));
   /** a change to the number settings of the selected columns; a column that wasn't aligned is aligned first */
@@ -528,8 +510,8 @@ const PICTURE_MS = 10;
   }
   function bordersMenu(anchor: HTMLElement) {
     const where: BorderWhere[] = ['all', 'outer', 'inner', 'innerH', 'innerV', 'top', 'bottom', 'left', 'right', 'none'];
-    openMenu([{ tiles: where.map((w) => ({ act: `b:${w}`, label: BNAME()[w], svg: B[w] })), columns: 5 }, '-',
-      item(t('table.rules.thick', 'Thick Rules'), 'bw:2', { icon: ic('<path d="M3 10h14" stroke-width="3"/>'), checked: borderW === 2 }), item(t('table.rules.thin', 'Thin Rules'), 'bw:1', { icon: ic('<path d="M3 10h14"/>'), checked: borderW === 1 }), item(t('table.rules.double', 'Double Rules'), 'bw:3', { icon: ic('<path d="M3 8h14M3 12h14"/>'), checked: borderW === 3 })], anchor);
+    openMenu([{ tiles: where.map((w) => ({ act: `b:${w}`, label: BNAME()[w], icon: B[w] })), columns: 5 }, '-',
+      item(t('table.rules.thick', 'Thick Rules'), 'bw:2', { name: 'ruleThick', checked: borderW === 2 }), item(t('table.rules.thin', 'Thin Rules'), 'bw:1', { name: 'ruleThin', checked: borderW === 1 }), item(t('table.rules.double', 'Double Rules'), 'bw:3', { name: 'ruleDouble', checked: borderW === 3 })], anchor);
   }
   let borderW: Rule = 1;
   function ctxMenu(x: number, y: number) {
@@ -543,8 +525,8 @@ const PICTURE_MS = 10;
       item(manyC ? t('table.insertColsLeft', 'Insert {n} Columns Left', { n: cols }) : t('table.insertColLeft', 'Insert Column Left'), 'col-left', { name: 'colBefore' }),
       item(manyC ? t('table.insertColsRight', 'Insert {n} Columns Right', { n: cols }) : t('table.insertColRight', 'Insert Column Right'), 'col-right', { name: 'colAfter' }), '-',
       item(t('table.moveUp', 'Move Up'), 'up', { dis: g.r0 === 0 }), item(t('table.moveDown', 'Move Down'), 'down', { dis: g.r1 === nr - 1 }), item(t('table.moveLeft', 'Move Left'), 'left', { dis: g.c0 === 0 }), item(t('table.moveRight', 'Move Right'), 'right', { dis: g.c1 === nc - 1 }), '-',
-      item(t('table.mergeCells', 'Merge Cells'), 'merge', { icon: I.merge, dis: !multi }), item(t('table.splitCells', 'Split Cells'), 'split', { icon: I.split, dis: !merged }),
-      item(g.r1 < M.head && g.r0 === 0 ? t('table.headerAbove', 'Header: rows above this one') : t('table.headerRows', 'Header: rows 1–{n}', { n: g.r1 + 1 }), 'head', { icon: ic('<path d="M3 3h14v14H3z"/><path d="M3 7.5h14" stroke-width="2.5"/>') }), '-',
+      item(t('table.mergeCells', 'Merge Cells'), 'merge', { name: 'mergeCells', dis: !multi }), item(t('table.splitCells', 'Split Cells'), 'split', { name: 'splitCells', dis: !merged }),
+      item(g.r1 < M.head && g.r0 === 0 ? t('table.headerAbove', 'Header: rows above this one') : t('table.headerRows', 'Header: rows 1–{n}', { n: g.r1 + 1 }), 'head', { name: 'headerRows' }), '-',
       item(t('table.clearText', 'Clear Text'), 'clear-text', { key: 'Del' }), item(t('table.clearFormat', 'Clear Formatting'), 'clear-format'),
       item(many ? t('table.deleteRows', 'Delete {n} Rows', { n: rows }) : t('table.deleteRow', 'Delete Row'), 'del-rows', { danger: true, dis: rows >= nr, name: 'rowDelete' }),
       item(manyC ? t('table.deleteCols', 'Delete {n} Columns', { n: cols }) : t('table.deleteCol', 'Delete Column'), 'del-cols', { danger: true, dis: cols >= nc, name: 'colDelete' })], { x, y });
@@ -927,9 +909,9 @@ const PICTURE_MS = 10;
     if (!cmd) return;
     switch (cmd) {
       case 'import':
-        openMenu([item(t('table.menu.paste', 'Paste a Table…'), 'imp-text', { icon: ic('<path d="M7 3.5h6v2H7z"/><path d="M13 4.5h2.5v13h-11v-13H7"/><path d="M7.5 10h5M7.5 13h3"/>') }),
-          item(t('table.menu.open', 'Open a File…'), 'imp-file', { icon: ic('<path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/>') }),
-          '-', item(t('table.menu.blank', 'New Empty Table'), 'imp-blank', { icon: ic('<path d="M3 4h14v12H3zM3 8h14M3 12h14M8 4v12"/>') })], b);
+        openMenu([item(t('table.menu.paste', 'Paste a Table…'), 'imp-text', { name: 'paste' }),
+          item(t('table.menu.open', 'Open a File…'), 'imp-file', { name: 'open' }),
+          '-', item(t('table.menu.blank', 'New Empty Table'), 'imp-blank', { name: 'fileTable' })], b);
         break;
       case 'file': chooseFile(); break;
       case 'blank': replaceTable(T.create(4, 3, 'booktabs')); break;

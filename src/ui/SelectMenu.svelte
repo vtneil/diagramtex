@@ -1,7 +1,7 @@
 <script lang="ts" module>
   /** A row of the menu: a group's heading, or an option (its index in the select). An option shows a colour chip, a
    *  drawing before its name and a quiet note after it; in a grid of tiles, its drawing alone (`tile`), or a picture
-   *  over a short name (`pic`). */
+   *  over a short name (`pic`, the kit's Tile as an option). */
   export type SelectMenuRow =
     | { group: string }
     | { i: number; text: string; on: boolean; dis: boolean; svg?: string; tile?: boolean; note?: string; pic?: { svg: string; label: string }; swatch?: string; font?: string };
@@ -21,6 +21,7 @@
   // the select, which keeps the focus): the same rows as the app's other menus, the highlighted one in the well tone,
   // the current value in the stronger wash. It pops in, and fades out while closed (`leaving`).
   import TextField from './kit/TextField.svelte';
+  import Tile from './kit/Tile.svelte';
   let { model: m, oncustomkey, oncustomblur }: {
     model: SelectMenuModel;
     oncustomkey: (e: KeyboardEvent, input: HTMLInputElement) => void; oncustomblur: () => void;
@@ -32,8 +33,9 @@
   {#each m.rows as r, k (k)}
     {#if 'group' in r}<div class="selmenu-group">{r.group}</div>
     {:else}
-      <div class={['selmenu-item', r.on && 'on', r.dis && 'dis', r.i === m.hi && 'hi']} data-i={r.i} role="option" aria-selected={r.on} style:font-family={r.font || undefined}
-        title={r.pic || r.tile ? r.text : undefined}>{#if r.pic}{@html r.pic.svg}<span>{r.pic.label}</span>{:else if r.tile}{@html r.svg}{:else}{#if r.swatch}<span class="selmenu-sw" style:background={r.swatch}></span>{/if}{#if r.svg}{@html r.svg}{/if}{r.text}{#if r.note}<i>{r.note}</i>{/if}{/if}</div>
+      {#if r.pic}<Tile option label={r.pic.label} svg={r.pic.svg} on={r.on} class={['selmenu-item', r.dis && 'dis', r.i === m.hi && 'hi']} data-i={r.i} title={r.text} />
+      {:else}<div class={['selmenu-item', r.on && 'on', r.dis && 'dis', r.i === m.hi && 'hi']} data-i={r.i} role="option" aria-selected={r.on} style:font-family={r.font || undefined}
+        title={r.tile ? r.text : undefined}>{#if r.tile}{@html r.svg}{:else}{#if r.swatch}<span class="selmenu-sw" style:background={r.swatch}></span>{/if}{#if r.svg}{@html r.svg}{/if}{r.text}{#if r.note}<i>{r.note}</i>{/if}{/if}</div>{/if}
     {/if}
   {/each}
   {#if m.custom}

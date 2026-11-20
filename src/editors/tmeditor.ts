@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { captions } from '../i18n/messages';
 import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -12,6 +11,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Timing editor: the overlay that opens on a timing block. A palette of signal values, rows and
 // annotations; the table drawn by the canvas renderer on a grid of periods, where transitions are dragged
 // along the time axis, values are painted onto rows and arrows are drawn between edges; the selected
@@ -175,15 +175,10 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   let stopLocale: (() => void) | null = null;
   const snapCode = () => codeOf(E.M);
-  function begin() { if (E.pending == null) E.pending = snapCode(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snapCode();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const history = TD.editorSession.history({ state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed() });
+  const { begin, commit } = history;
+  function undo() { dropPaint(); history.undo(); }
+  function redo() { dropPaint(); history.redo(); }
   function edit(fn: any) { begin(); fn(); syncBreaks(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   // a break crosses every row that draws something (not blank rows), at its row's height
   const breakYs = () => E.M.rows.map((row: any, r: any) => (row.segs.length ? -r * cfg().rowdist : null)).filter((y: any) => y != null);
@@ -197,8 +192,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     E.sel = { x: E.M.ext.length - 1 }; draw(); renderProps();
   }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { dropPaint(); commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { dropPaint(); commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() {
     const s = E.sel;
     if (!s) return;
@@ -386,7 +379,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   // hovers; a marker or break at a time. Letting go over the drawing places it as one undo step; anywhere else, or
   // Esc, drops it. A press without a drag picks the item, as a click.
   let palDrag: any = null;
-  const overStage = (e: any) => { const r = rect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
   list.addEventListener('pointerdown', (e: any) => {
     const b = e.target.closest('.qe-item');
     if (!b || e.button !== 0 || !E) return;
@@ -477,8 +469,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   const armHint = () => (E.arm && E.arm[0] === 'v' ? uiText('editor.tm.armValue', '{name}: drag along a row to paint it, or click, point and click again. Esc when done.', { name: caption(ITEM[E.arm].name) }) : '');
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [4, 300], redraw: () => { draw(); if (Lb) Lb.pop.place(); } });
   // screen ↔ table units (periods along, signal heights up)
   const m = (t: any, y: any) => [E.view.ox + t * E.view.k, E.view.oy - y * E.view.k];
   const toT = (e: any) => { const [x, y] = pos(e), v = E.view; return [(x - v.ox) / v.k, (v.oy - y) / v.k]; };
@@ -539,24 +531,11 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     return null;
   }
   function fit() {
-    const L = lay(), r = rect(), bb = L.empty ? { x: 0, y: -2 * U, w: 8 * U, h: 3 * U } : L.bb;
-    const w = bb.w / U + 2, h = bb.h / U + 2;
+    const L = lay();
     // room under the drawing for the add-row buttons
-    const k = Math.max(6, Math.min(80, Math.min((r.width - 80) / w, (r.height - 80 - (L.empty ? 0 : 44)) / h)));
-    const cx = (bb.x + bb.w / 2) / U, cy = -(bb.y + bb.h / 2) / U;
-    E.view = { k, ox: r.width / 2 - cx * k, oy: r.height / 2 + cy * k - (L.empty ? 0 : 22) };
+    E.view = fitView(rect(), L.empty ? { x: 0, y: -2 * U, w: 8 * U, h: 3 * U } : L.bb, { scale: U, margin: 1, min: 6, max: 80, below: L.empty ? 0 : 44 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(4, Math.min(300, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (Lb) Lb.pop.place();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   function draw() {
@@ -1210,36 +1189,12 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
 
   // ---------------------------------------------------------------- open / close
   // ⌘S: write the diagram back to the page (one undo step there) and keep editing
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = snapCode();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    const saved = uiText('editor.commonB.saved', 'Saved to the page');
-    stageNote.flash(saved, 1500);
-  }
-  // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode() });
-  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(uiText('editor.commonB.discardDiagram', 'Discard changes to this diagram?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    stopLocale?.(); stopLocale = null;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot: () => snapCode(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => uiText('editor.commonB.discardDiagram', 'Discard changes to this diagram?'),
+  });
+  const { save, finish } = dock;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
@@ -1255,5 +1210,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.timingEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); }, paint, norm };
+  TD.timingEditor = { open, dockable: true, close: () => dock.detach(), paint, norm };
 })();

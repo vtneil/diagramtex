@@ -50,37 +50,61 @@ T.test('architecture: every block editor opens through Enter, panel alias and co
   }
 });
 
+// Every block editor saves, cancels and closes through the one shared lifecycle (src/core/editor-session.ts).
 for (const [type, editorName, modalId, action] of [
   ['kmap', 'kmapEditor', 'kmModal', 'ke'], ['bytefield', 'bytefieldEditor', 'bfModal', 'be'], ['physics', 'physicsEditor', 'phyModal', 'pe'],
+  ['cd', 'cdEditor', 'cdModal', 'ce'], ['chemfig', 'chemEditor', 'cfModal', 'ce'], ['cz', 'czEditor', 'czModal', 'cz'],
+  ['automata', 'fsmEditor', 'fsmModal', 'fe'], ['forest', 'ftEditor', 'ftModal', 'fe'], ['feynman', 'feynEditor', 'fyModal', 'fe'],
+  ['geo3d', 'geo3dEditor', 'g3Modal', 'ge'], ['graph', 'graphEditor', 'graphModal', 'ge'], ['qc', 'qcEditor', 'qcModal', 'qe'],
+  ['timing', 'timingEditor', 'tmModal', 'te'], ['uml', 'umlEditor', 'umlModal', 'ue'], ['umlsd', 'umlsdEditor', 'umlsdModal', 'ue'],
+  ['zx', 'zxEditor', 'zxModal', 'ze'],
 ]) T.test(`architecture: ${type} editor history, save, cancel and reopen keep their lifecycle`, async () => {
   const block = T.make(type), saves = [], originalConfirm = TD.confirm;
   const root = document.getElementById(modalId), code = root.querySelector('.cz-code textarea');
   const click = (name) => root.querySelector(`[data-${action}="${name}"]`).click();
   const typeCode = async (src) => { code.focus(); code.value = src; code.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 300)); code.blur(); };
+  // an edit each editor keeps: a comment after the code, or (where the editor writes the code afresh) a changed label
+  const EDIT = { cz: ['l=$R$', 'l=$R_1$'], forest: ['[Root', '[Top'], qc: ['\\gate{H}', '\\gate{X}'], zx: ['\\zxZ{\\alpha}', '\\zxZ{\\gamma}'] };
+  const edit = (src) => (EDIT[type] ? src.replace(EDIT[type][0], EDIT[type][1]) : src + '\n% preserve this comment');
+  // the circuit editor hands back its items, the others their source
+  const keep = (r) => saves.push(r.src !== undefined ? r.src : JSON.stringify(r));
   try {
-    TD[editorName].open(block, (r) => saves.push(r.src));
-    const initial = code.value, changed = initial + '\n% preserve this comment';
-    await typeCode(changed);
+    TD[editorName].open(block, keep);
+    // the shared stage (src/editors/editor-stage.ts): the wheel pans, and with Ctrl/⌘ zooms, and draws again
+    const svg = root.querySelector('.cz-svg'), r = svg.getBoundingClientRect();
+    const wheel = (extra) => { const e = new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, ...extra }); svg.dispatchEvent(e); return e.defaultPrevented; };
+    let drawn = svg.innerHTML;
+    T.ok(wheel({ deltaX: 40, deltaY: 30 }), 'the wheel is the editor\'s');
+    T.ok(svg.innerHTML !== drawn, 'the wheel pans the drawing');
+    drawn = svg.innerHTML;
+    T.ok(wheel({ deltaY: -100, ctrlKey: true }), 'Ctrl+wheel is the editor\'s');
+    T.ok(svg.innerHTML !== drawn, 'Ctrl+wheel zooms the drawing');
+    const initial = code.value;
+    await typeCode(edit(initial));
+    const changed = code.value;
+    T.ok(changed !== initial, 'the edit shows in the code');
     click('undo'); T.eq(code.value, initial, 'undo');
     click('redo'); T.eq(code.value, changed, 'redo');
     T.ok(TD.unsaved.some((f) => f()), 'unapplied edits reported');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, metaKey: true, bubbles: true }));
-    T.eq(saves, [changed], 'save writes back without closing');
+    T.eq(saves.length, 1, 'save writes back');
+    if (type !== 'cz') T.eq(saves, [changed], 'save writes the code shown');
     T.ok(!root.hidden, 'stays open after Save');
     T.ok(!TD.unsaved.some((f) => f()), 'saved editor no longer dirty');
     click('cancel'); await tick();
     T.ok(root.hidden, 'Cancel after Save closes without discarding saved edits');
-    TD[editorName].open(block, (r) => saves.push(r.src));
+    TD[editorName].open(block, keep);
     T.ok(root.querySelector(`[data-${action}="undo"]`).disabled, 'new session has fresh history');
-    await typeCode(changed);
+    await typeCode(edit(initial));
     TD.confirm = async () => false;
     click('cancel'); await tick(); T.ok(!root.hidden, 'declined discard stays open');
     TD.confirm = async () => true;
     click('cancel'); await tick(); T.ok(root.hidden, 'confirmed discard closes');
     T.eq(saves.length, 1, 'cancel never writes back');
-    TD[editorName].open(block, (r) => saves.push(r.src));
-    await typeCode(changed); click('done'); await tick();
-    T.ok(root.hidden, 'Done closes'); T.eq(saves, [changed, changed], 'Done applies changed source');
+    TD[editorName].open(block, keep);
+    await typeCode(edit(initial)); click('done'); await tick();
+    T.ok(root.hidden, 'Done closes'); T.eq(saves.length, 2, 'Done applies the changed drawing');
+    if (type !== 'cz') T.eq(saves, [changed, changed], 'Done applies the code shown');
   } finally { TD.confirm = async () => true; if (!root.hidden) { click('cancel'); await tick(); } TD.confirm = originalConfirm; }
 });
 

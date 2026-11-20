@@ -5,7 +5,7 @@
   import Inline from './Inline.svelte';
   import FormRows from './FormRows.svelte';
   import PhysicsResults from './PhysicsResults.svelte';
-  import { Button, Help, Segmented, TextArea, type SegmentOption } from './kit';
+  import { Button, Help, Icon, Segmented, TextArea, type SegmentOption } from './kit';
   let { rows }: { rows: FormRow[] } = $props();
   const uid = $props.id();
   // A switch row (forms.ts switchRow, editor-fields' segments()) is the kit's switch in the panel's track; with
@@ -27,8 +27,8 @@
   {:else if row.kind === 'actions'}<div class={row.class}>{#each row.buttons as button}{@const { class: cls, ...rest } = button.attrs as Record<string, any>}<Button {...rest} class={cls || undefined}>{caption(button.text, $locale)}</Button>{/each}</div>
   {:else if row.kind === 'controls'}<div class={row.class}>{#each row.controls as control}<ControlView {control}/>{/each}</div>
   {:else if row.kind === 'codeButtons'}<div class={row.class}>{#each row.items as item}{@const { class: cls, ...attrs } = item.attrs as Record<string, any>}<Button {...attrs} class={cls || undefined}><span>{caption(item.label, $locale)}</span><code>{item.code}</code></Button>{/each}</div>
-  {:else if row.kind === 'status'}<div class={row.class}>{@html row.icon}<span>{caption(row.text, $locale)}</span></div>
-  {:else if row.kind === 'kmapGroups'}<div class="km-groups">{#each row.groups as group}<Button data-gi={group.index} title={caption(group.title, $locale)}><i class={'km-sw' + (group.bw ? ' bw' : '')} style={group.bw ? undefined : 'background:' + group.css}></i><span class="t">{#if group.valid}{@html group.math}{:else}{group.text}{/if}</span>{@html group.icon}</Button>{/each}</div>
+  {:else if row.kind === 'status'}<div class={row.class}><Icon name={row.icon} class={row.iconClass} /><span>{caption(row.text, $locale)}</span></div>
+  {:else if row.kind === 'kmapGroups'}<div class="km-groups">{#each row.groups as group}<Button data-gi={group.index} title={caption(group.title, $locale)}><i class={'km-sw' + (group.bw ? ' bw' : '')} style={group.bw ? undefined : 'background:' + group.css}></i><span class="t">{#if group.valid}{@html group.math}{:else}{group.text}{/if}</span><Icon name={group.icon} class={group.iconClass} /></Button>{/each}</div>
   {:else if row.kind === 'points'}<div class="g3-pts">{#each row.points as point, i}<div class="g3-pt-row"><span>{i + 1}</span>{#each point as control}<ControlView {control}/>{/each}</div>{/each}</div>
   {:else if row.kind === 'physicsResults'}<PhysicsResults results={row.results}/>
   {:else if row.kind === 'rendered'}<div class={row.class}>{@html row.svgOrMath}</div>

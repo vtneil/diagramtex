@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { unbraceOnce as unbrace } from './tex-groups';
 // Trees written for the forest package. The source is the object: the bracket code is drawn here as
 // vectors (an approximation of forest's packing) and exported unchanged inside \begin{forest}.
 // The visual editor (js/fteditor.ts) rewrites the code from the tree it holds.
@@ -45,7 +46,6 @@ function splitTop(s: any, ch: any) {
   out.push(s.slice(a));
   return out;
 }
-const unbrace = (v: any) => { v = v.trim(); return v[0] === '{' && close(v, 0) === v.length - 1 ? v.slice(1, -1).trim() : v; };
 // "key=value" → { k, v, op ('', '+', '-', '*', ':'), prime }; a bare key has v null
 function opt(str: any) {
   const p = splitTop(str, '=');

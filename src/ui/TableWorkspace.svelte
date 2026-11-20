@@ -9,7 +9,7 @@
     /** the shortcut prefixes of this computer ("⌘", "⇧" on a Mac; "Ctrl+", "Shift+" elsewhere) */
     mod: string; shift: string;
     /** drawings: full <svg> markup or a glyph (fg and bg carry the last colour picked; border the last border) */
-    icons: { imp: string; b: string; i: string; u: string; tt: string; merge: string; split: string; num: string; dl: string; print: string; border: string };
+    icons: { b: string; i: string; u: string; tt: string; num: string; border: IconName };
     /** the colours the text colour and fill buttons apply (their bars show them) */
     colours: { fg: string; bg: string };
     borderName: string;
@@ -33,7 +33,8 @@
   import ToolbarGroup from './kit/ToolbarGroup.svelte';
   import Button from './kit/Button.svelte';
   import IconButton from './kit/IconButton.svelte';
-  import { ALIGN_ICON } from './kit/icons';
+  import { ALIGN_ICON, type IconName } from './kit/icons';
+  import Icon from './kit/Icon.svelte';
   import SplitButton from './kit/SplitButton.svelte';
   import Segmented from './kit/Segmented.svelte';
   import Select from './kit/Select.svelte';
@@ -55,7 +56,7 @@
     </div>
   {/if}
   <Toolbar label={t('ui.table', 'Table', {}, $locale)} class="tb-bar">
-    <ToolbarGroup><Button data-t="import" class="tb-imp" aria-haspopup="menu" title={t('table.importTip', 'Import a table: paste or open CSV, TSV, Excel (.xlsx), Markdown, HTML or LaTeX', {}, $locale)}>{@html m.icons.imp}{t('table.import', 'Import', {}, $locale)}</Button></ToolbarGroup>
+    <ToolbarGroup><Button data-t="import" class="tb-imp" aria-haspopup="menu" title={t('table.importTip', 'Import a table: paste or open CSV, TSV, Excel (.xlsx), Markdown, HTML or LaTeX', {}, $locale)}><Icon name="importFile" />{t('table.import', 'Import', {}, $locale)}</Button></ToolbarGroup>
     <ToolbarGroup>
       <IconButton variant="default" icon="undo" data-t="undo" disabled={!m.can.undo} title={t('table.undoTip', 'Undo ({key})', { key: m.mod + 'Z' }, $locale)} />
       <IconButton variant="default" icon="redo" data-t="redo" disabled={!m.can.redo} title={t('table.redoTip', 'Redo ({key})', { key: m.shift + m.mod + 'Z' }, $locale)} />
@@ -76,12 +77,12 @@
     <Segmented class="seg-align tb-grp tb-seg" label={t('ui.alignment', 'Alignment', {}, $locale)}
       options={ALIGN.map((a) => ({ icon: ALIGN_ICON[a], on: m.align === a, title: alignTips[a], name: alignTips[a], attrs: { 'data-t': 'al', 'data-v': a } }))} />
     <ToolbarGroup>
-      <SplitButton toolbar svg={m.icons.border} mainAttrs={{ 'data-t': 'border' }} moreAttrs={{ 'data-t': 'borders' }}
+      <SplitButton toolbar icon={m.icons.border} mainAttrs={{ 'data-t': 'border' }} moreAttrs={{ 'data-t': 'borders' }}
         title={m.borderName ? t('table.border.last', '{name} (the last one picked)', { name: m.borderName }, $locale) : t('table.bordersLast', 'Borders: the last one picked', {}, $locale)} moreTitle={t('table.borders', 'Borders', {}, $locale)} />
     </ToolbarGroup>
     <ToolbarGroup>
-      <IconButton variant="default" svg={m.icons.merge} data-t="merge" disabled={!m.can.merge} title={t('table.mergeTip', 'Merge cells (\\multicolumn, \\multirow)', {}, $locale)} />
-      <IconButton variant="default" svg={m.icons.split} data-t="split" disabled={!m.can.split} title={t('table.splitTip', 'Split cells', {}, $locale)} />
+      <IconButton variant="default" icon="mergeCells" data-t="merge" disabled={!m.can.merge} title={t('table.mergeTip', 'Merge cells (\\multicolumn, \\multirow)', {}, $locale)} />
+      <IconButton variant="default" icon="splitCells" data-t="split" disabled={!m.can.split} title={t('table.splitTip', 'Split cells', {}, $locale)} />
     </ToolbarGroup>
     <ToolbarGroup>
       <SplitButton toolbar svg={m.icons.num} on={m.on.num} mainAttrs={{ 'data-t': 'num' }} moreAttrs={{ 'data-t': 'numfmt' }}
@@ -103,12 +104,12 @@
       <Button variant="primary" data-o="copy" title={t('table.copyLatexTip', 'Copy the LaTeX ({key})', { key: m.shift + m.mod + 'C' }, $locale)}>{m.copied === 'copy' ? t('ui.copied', 'Copied', {}, $locale) : t('table.copyLatex', 'Copy LaTeX', {}, $locale)}</Button>
       <Button data-o="copy-png" data-render="" title={t('table.copyPngTip', 'Copy the table as a PNG picture', {}, $locale)}>{m.copied === 'copy-png' ? t('ui.copied', 'Copied', {}, $locale) : t('table.copyPng', 'Copy PNG', {}, $locale)}</Button>
       <span class="tb-join" role="group" aria-label={t('ui.download', 'Download', {}, $locale)}>
-        <Button data-o="dl-tex" title={t('table.dlTexTip', 'Download the LaTeX: a document that compiles on its own', {}, $locale)}>{@html m.icons.dl}.tex</Button>
+        <Button data-o="dl-tex" title={t('table.dlTexTip', 'Download the LaTeX: a document that compiles on its own', {}, $locale)}><Icon name="download" />.tex</Button>
         <Button data-o="dl-svg" data-render="" title={t('table.dlSvgTip', 'Download a vector SVG (maths fonts embedded)', {}, $locale)}>SVG</Button>
         <Button data-o="dl-png" data-render="" title={t('table.dlPngTip', 'Download a PNG at the resolution on the right', {}, $locale)}>PNG</Button>
       </span>
       <Select data-o="dpi" options={DPI} value={String(m.dpi)} aria-label={t('table.pngRes', 'PNG resolution', {}, $locale)} title={t('table.pngRes', 'PNG resolution', {}, $locale)} />
-      <IconButton variant="default" svg={m.icons.print} data-o="print" data-render="" aria-label={t('table.print', 'Print', {}, $locale)} title={t('table.printTip', 'Print the table or save it as a PDF ({key})', { key: m.mod + 'P' }, $locale)} />
+      <IconButton variant="default" icon="print" data-o="print" data-render="" aria-label={t('table.print', 'Print', {}, $locale)} title={t('table.printTip', 'Print the table or save it as a PDF ({key})', { key: m.mod + 'P' }, $locale)} />
     </div>
     <!-- the preview and the LaTeX are drawn here by the controller -->
     <div class="tb-prev" data-pane="preview" hidden={m.tab !== 'preview'}></div>

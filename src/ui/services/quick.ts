@@ -85,7 +85,6 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
     return all.map((d, i) => d.name || (short.indexOf(short[i]) !== short.lastIndexOf(short[i]) ? when(d.t, true) : short[i]));
   }
   const blockName = (type: string) => blockCaption(type, 'label', TD.blocks.get(type)?.menu.label || type);
-  const FORMULA_IC = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 11h2.5l2.5 5.5 4-13h6"/><path d="M12.5 9l4 5M16.5 9l-4 5"/></svg>';
   // a draft's mark: outlined, filled for the one open
   const DOT = '<svg class="qk-dot" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/></svg>';
 
@@ -95,7 +94,7 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
     const top = list.scrollTop;
     const blocks = dockBlocks();
     renderView(list, QuickList, {
-      formula: { label: t('quick.formula', 'Formula'), svg: FORMULA_IC, active: store.view === 'formula' },
+      formula: { label: t('quick.formula', 'Formula'), active: store.view === 'formula' },
       head: blocks.length ? t('quick.blocks', 'Blocks') : null,
       // a block row is a folder of its drafts: the open block's row heads them, unfilled; the open draft is the filled row
       blocks: blocks.map(([type, def]) => {
@@ -415,11 +414,11 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
       const name = v === 'formula' ? t('quick.formula', 'Formula') : blockCaption(v, 'label', def?.menu?.label || v);
       menu([
         { label: t('quick.ctxOpen', 'Open'), act: 'open', ic: 'open', dis: v === store.view },
-        ...(v !== 'formula' ? [{ label: t('quick.ctxNew', 'New {block}', { block: name }), act: 'new', ic: 'newdoc' }] : []),
+        ...(v !== 'formula' ? [{ label: t('quick.ctxNew', 'New {block}', { block: name }), act: 'new', ic: 'newFile' }] : []),
       ], (a) => { if (a === 'open') show(v); if (a === 'new') addDrawing(v); });
       return;
     }
-    if (row.dataset.new) { menu([{ label: t('quick.new', 'New'), act: 'new', ic: 'newdoc' }], () => addDrawing(type)); return; }
+    if (row.dataset.new) { menu([{ label: t('quick.new', 'New'), act: 'new', ic: 'newFile' }], () => addDrawing(type)); return; }
     const id = row.dataset.hist;
     if (!id) return;
     const d = (store.items[type] || []).find((x) => x.id === id);
@@ -428,8 +427,8 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
       { label: t('quick.ctxOpen', 'Open'), act: 'open', ic: 'open', dis: id === store.cur[type] },
       { label: t('quick.ctxRename', 'Rename…'), act: 'rename', ic: 'rename' },
       { label: placeCaption()[0], act: 'place', ic: 'paste', sep: true },
-      { label: t('quick.ctxDup', 'Duplicate'), act: 'dup', ic: 'dup' },
-      { label: t('quick.ctxDelete', 'Delete'), act: 'del', ic: 'del', danger: true, sep: true },
+      { label: t('quick.ctxDup', 'Duplicate'), act: 'dup', ic: 'duplicate' },
+      { label: t('quick.ctxDelete', 'Delete'), act: 'del', ic: 'delete', danger: true, sep: true },
     ], (a) => {
       if (a === 'open') openDrawing(type, id);
       else if (a === 'rename') renameDrawing(type, id);

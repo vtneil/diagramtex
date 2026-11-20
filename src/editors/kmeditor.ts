@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { message, onLocale, t } from '../i18n';
 import type { FormRow } from '../ui/forms';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -12,6 +11,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Karnaugh map editor: the overlay that opens on a Karnaugh map block. A palette of map sizes and cell
 // values; the map drawn by the canvas renderer, where a click turns a cell through 0, 1 and don't care and
 // a drag across cells draws a group (past an edge, it wraps round); the selected group's or the map's
@@ -79,7 +79,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   root.id = 'kmModal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   const TRASH = '<path d="M4 5.5h12M8 5.5V3.5h4v2M5.5 5.5l1 12h7l1-12"/>';
   mountFrame(root, KmeditorFrame);
   document.body.appendChild(root);
@@ -162,8 +161,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function setTip(t: any) { stageNote.set(t); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [12, 400], redraw: () => { draw(); } });
   // layout px (y down) ↔ screen
   const S = (x: any, y: any) => [E.view.ox + (x / PX) * E.view.k, E.view.oy + (y / PX) * E.view.k];
   const toCm = (e: any) => { const [x, y] = pos(e), v = E.view; return [(x - v.ox) / v.k, -(y - v.oy) / v.k]; };
@@ -202,22 +201,9 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     return null;
   }
   function fit() {
-    const L = lay(), r = rect(), bb = L.bb;
-    const w = bb.w / PX + 0.6, h = bb.h / PX + 0.6;
-    const k = Math.max(20, Math.min(110, Math.min((r.width - 80) / w, (r.height - 80) / h)));
-    const cx = (bb.x + bb.w / 2) / PX, cy = (bb.y + bb.h / 2) / PX;
-    E.view = { k, ox: r.width / 2 - cx * k, oy: r.height / 2 - cy * k };
+    E.view = fitView(rect(), lay().bb, { scale: PX, margin: 0.3, min: 20, max: 110 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(400, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   // the handles on a group's four sides, where they can be seen: [{ side, x, y }]
@@ -429,7 +415,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
 
   // ---------------------------------------------------------------- properties
   const math = (t: any) => TD.textHtml ? TD.textHtml(`$${t}$`) : esc(t);
-  const OK = '<svg viewBox="0 0 20 20" class="km-st ok"><path d="M4 10.5l4 4 8-9"/></svg>', BAD = '<svg viewBox="0 0 20 20" class="km-st bad"><path d="M10 4v8M10 15.5v.5"/></svg>';
+  // a group's mark: a check when it is a valid prime implicant, else the attention mark (kmap.css colours them)
+  const OK = { icon: 'check', iconClass: 'km-st ok' } as const, BAD = { icon: 'attention', iconClass: 'km-st bad' } as const;
   function renderProps() {
     if (!E) return;
     const M = E.M, C = F.check(M, E.mode), g = selG(), want = E.mode === 'pos' ? '0' : '1';
@@ -438,7 +425,7 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
       const i = E.sel.g, G = C.groups[i], R = F.rectOf(M, g);
       const status = G.ok ? (G.redundant ? t('editor.km.status.redundant', 'Valid, but its {value}s are all in other groups', { value: want }) : G.prime ? t('editor.km.status.prime', 'Valid and as large as it can be') : t('editor.km.status.larger', 'Valid, but it could be larger')) : G.why;
       const rows: FormRow[] = [{ kind: 'rendered' as const, class: 'km-term', svgOrMath: G.ok ? math(G.term) : '—' },
-        { kind: 'status' as const, class: 'km-status ' + (G.ok && G.prime && !G.redundant ? 'ok' : 'bad'), icon: G.ok ? OK : BAD, text: status }];
+        { kind: 'status' as const, class: 'km-status ' + (G.ok && G.prime && !G.redundant ? 'ok' : 'bad'), ...(G.ok ? OK : BAD), text: status }];
       if (M.Z > 1) rows.push(switchRow(t('editor.km.subMaps', 'Sub maps'), Array.from<any, any>({ length: M.Z }, (_, m) => ({ text: M.Z === 2 ? String(m) : m.toString(2).padStart(2, '0'), on: g.maps.includes(m), title: M.Z === 2 ? t('editor.km.subMap', 'Sub map {n}', { n: m }) : t('editor.km.subMapBits', 'Sub map {n} ({bits})', { n: m, bits: m.toString(2).padStart(2, '0') }), attrs: { 'data-fm': m } })), { many: true, class: 'km-maps' }));
       rows.push(codeRow(groupCode(g)), note(t('editor.km.help.group', 'Drag its outline to move it, or a handle to resize it; past an edge it wraps round. Arrow keys move it, '), { kbd: '⇧' }, t('editor.km.help.groupResize', ' arrows resize it.')), actionRow('ke', 'gdel', t('editor.km.deleteGroup', 'Delete Group')));
       renderView(props, FormPanel, { sections: [{ ...section(t('editor.km.groupN', 'Group {n}', { n: i + 1 }), rows, 'sec'), swatch: swatch(i), summary: `${R.h} × ${R.w}${g.maps.length > 1 ? ` × ${g.maps.length}` : ''}` }] }); return;
@@ -453,9 +440,9 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     renderView(props, FormPanel, { sections: [
       { ...section(message('editor.km.title', 'Karnaugh map'), [...labels, segments(t('ui.labels', 'Labels'), 'lmode', F.labelMode(M), [['middle', t('editor.km.labels.sides', 'Sides')], ['corner', t('editor.km.labels.corner', 'Corner'), t('editor.km.labels.cornerTitle', 'label=corner: both names at the top left corner')]]), segments(t('editor.km.groups', 'Groups'), 'bw', M.bw ? 1 : 0, [[0, t('editor.km.groups.coloured', 'Coloured')], [1, t('editor.km.groups.outlined', 'Outlined'), t('editor.km.groups.outlinedTitle', 'karnaugh-map*: black and white')]])], 'sec'), summary: `${t('editor.km.nVariables', '{n} variables', { n: nv })} · ${M.groups.length === 1 ? t('editor.km.oneGroup', '1 group') : t('editor.km.nGroups', '{n} groups', { n: M.groups.length })}` },
       section(t('editor.km.check', 'Check'), [segments(t('editor.km.groupThe', 'Group the'), 'mode', E.mode, [['sop', '1s', t('editor.km.sop', 'Sum of products')], ['pos', '0s', t('editor.km.pos', 'Product of sums')]]),
-        { kind: 'rendered' as const, class: 'km-term', svgOrMath: math(`F = ${C.expr}`) }, { kind: 'status' as const, class: 'km-status ' + (allOk ? 'ok' : 'bad'), icon: allOk ? OK : BAD, text: missing },
+        { kind: 'rendered' as const, class: 'km-term', svgOrMath: math(`F = ${C.expr}`) }, { kind: 'status' as const, class: 'km-status ' + (allOk ? 'ok' : 'bad'), ...(allOk ? OK : BAD), text: missing },
         ...(C.groups.length ? [{ kind: 'kmapGroups' as const, groups: C.groups.map((G: any) => ({ index: G.i, title: G.ok ? (G.redundant ? t('editor.km.groupTitle.redundant', 'Its cells are all in other groups') : G.prime ? t('editor.km.groupTitle.valid', 'Valid') : t('editor.km.groupTitle.larger', 'Could be larger')) : G.why,
-          ...swatch(G.i), valid: G.ok, math: G.ok ? math(G.term) : '', text: G.why, icon: G.ok && G.prime && !G.redundant ? OK : BAD })) }] : []),
+          ...swatch(G.i), valid: G.ok, math: G.ok ? math(G.term) : '', text: G.why, ...(G.ok && G.prime && !G.redundant ? OK : BAD) })) }] : []),
         { kind: 'actions' as const, class: 'row km-acts', buttons: [{ text: t('editor.km.findGroups', 'Find Groups'), attrs: { 'data-ke': 'solve', title: t('editor.km.findGroupsTitle', 'Replace the groups with a smallest cover of the {value}s', { value: want }) } }, { text: t('editor.km.removeGroups', 'Remove Groups'), attrs: { class: 'danger', 'data-ke': 'clear', ...(!M.groups.length ? { disabled: true } : {}) } }] },
         note(t('editor.km.help.map', "Click a cell to turn it through 0, 1 and don't care ("), { kbd: '⇧' }, t('editor.km.help.mapRest', ' goes back). Drag across cells to group them; drag past an edge to wrap round. Right-click a cell or group for more.')),
       ], 'sec'),
@@ -600,7 +587,7 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   // ⌘S: write the map back to the page (one undo step there) and keep editing
   const session = TD.editorSession.lifecycle({
     state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: snapCode, commit,
-    root, code: codeTa, readCode, setTip, tip, discardTitle: () => t('editor.km.discard', 'Discard changes to this map?'),
+    root, code: codeTa, readCode, note: stageNote, discardTitle: () => t('editor.km.discard', 'Discard changes to this map?'),
   });
   const { save, finish } = session;
   let localeOff: (() => void) | undefined;

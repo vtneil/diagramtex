@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { onLocale, t, message } from '../i18n';
 import FormPanel from '../ui/FormPanel.svelte';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -12,6 +11,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // 3D geometry editor: the overlay that opens on a 3D geometry block. A palette of things to add (frames,
 // points, vectors, lines, planes, angles, circles, spheres, labels); the picture drawn in 3D, where dragging
 // empty space turns the view, dragging a point moves it (level, or up and down with ⇧), and clicking a line,
@@ -295,7 +295,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   root.id = 'g3Modal';
   root.className = 'modal';
   root.hidden = true;
-  const ic = (d: any) => `<svg viewBox="0 0 20 20">${d}</svg>`;
   mountFrame(root, G3editorFrame);
   document.body.appendChild(root);
   const svg = $('.g3-svg', root), stage = $('.cz-stage', root), palette = editorPalette(root, { placeholder: message('editor.commonA.search', 'Search'), searchLabel: message('editor.commonA.searchPalette', 'Search the palette'), label: message('editor.commonA.elements', 'Elements'), listClass: 'g3-list', onpick: (k) => { if (E) add(k); } }), list = palette.list, search = palette.search;
@@ -305,19 +304,13 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   // { src, sel: statement index | null, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   const L = () => G.layout(E.src, FLAT);
-  function begin() { if (E.pending == null) E.pending = E.src; }
-  function commit() {
-    if (E.pending == null) return;
-    if (E.src !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const history = TD.editorSession.history({ state: () => E, snapshot: () => E.src, restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed() });
+  const { begin, commit } = history;
+  function undo() { E.many = null; history.undo(); }
+  function redo() { E.many = null; history.redo(); }
   // a change to the code; keepSel: the selected statement stays the one at the same place in the list
   function edit(fn: any) { E.many = null; begin(); const r = fn(); if (typeof r === 'string') E.src = r; commit(); clampSel(); draw(); renderProps(); }
   function restore(src: any) { E.src = src; clampSel(); draw(); renderProps(); updateTools(); }
-  function undo() { E.many = null; commit(); if (!E.undo.length) return; E.redo.push(E.src); restore(E.undo.pop()); dock.changed(); }
-  function redo() { E.many = null; commit(); if (!E.redo.length) return; E.undo.push(E.src); restore(E.redo.pop()); dock.changed(); }
   const drawable = (st: any) => st && !['comment', 'begin', 'end', 'raw'].includes(st.k);
   function clampSel() { if (E.sel != null && !drawable(L().S[E.sel])) E.sel = null; }
   const selSt = () => (E.sel != null ? L().S[E.sel] || null : null);
@@ -539,29 +532,17 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function flashTip(t: any) { stageNote.flash(t, 1400); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [12, 2000], redraw: () => { draw(); if (Lb) Lb.pop.place(); } });
   const fitOf = () => ({ k: E.view.k, px: (p: any) => ({ x: E.view.ox + p[0] * E.view.k, y: E.view.oy - p[1] * E.view.k }) });
   const S = (p: any) => { const q = fitOf().px(p); return [q.x, q.y]; };
   function fit() {
     const Lx = L(), r = rect();
     if (Lx.empty) { E.view = { k: 120, ox: r.width / 2, oy: r.height / 2 }; draw(); return; }
     // bounds in projected units
-    const b = Lx.bb, k0 = Lx.k, w = b.w / k0, h = b.h / k0, cx = (b.x + b.w / 2) / k0, cy = -(b.y + b.h / 2) / k0;
-    const k = Math.max(20, Math.min(900, Math.min((r.width - 100) / w, (r.height - 100) / h)));
-    E.view = { k, ox: r.width / 2 - cx * k, oy: r.height / 2 + cy * k };
+    E.view = fitView(r, Lx.bb, { scale: Lx.k, pad: 100, min: 20, max: 900 });
     draw();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(2000, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (Lb) Lb.pop.place();
-  }, { passive: false });
   // what is under the pointer: a point handle first, then the topmost drawn item
   function handleAt(e: any, px = 9) {
     const Lx = L(), [x, y] = pos(e);
@@ -1344,35 +1325,12 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    if (E.src !== E.start) { E.start = E.src; E.done({ src: E.src }); }
-    const saved = t('editor.commonA.saved', 'Saved to the page');
-    stageNote.flash(saved, 1500);
-  }
-  // reloading or closing the tab asks first while this holds edits not yet applied (src/application/app.ts, beforeunload)
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => E.src });
-  TD.unsaved.push(() => !!E && !dock.docked() && E.src !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = E.src, changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(t('editor.g3.discard', 'Discard changes to this figure?'), t('editor.commonA.discardBody', 'Your edits since opening the editor will be lost.'), { ok: t('editor.commonA.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    localeOff?.(); localeOff = undefined;
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { localeOff?.(); localeOff = undefined; E = null; }, snapshot: () => E.src, commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => t('editor.g3.discard', 'Discard changes to this figure?'),
+  });
+  const { save, finish } = dock;
   let localeOff: (() => void) | undefined;
   // the chrome that depends on the kind of figure, set after the frame's own captions
   function chrome() {
@@ -1405,5 +1363,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.geo3dEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
+  TD.geo3dEditor = { open, dockable: true, close: () => dock.detach() };
 })();

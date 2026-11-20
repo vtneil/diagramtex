@@ -23,7 +23,7 @@ interface is put together, what to reuse, and rules that have each earned a corr
   `Icon` (a named icon from `icons.ts`; `iconSvg(name)` gives the same markup to string-building code),
   `Button` (`variant` default / `primary` / `flat`, `size` `sm`, `danger`, optional leading `icon`), `IconButton`
   (icon only, `title` required, `flat` by default), `Segmented` (a switch: `options`, `many` for toggles, `panel`
-  for the properties track), `Checkbox` and `Switch`, `Select` (every pick-one list: option drawings, notes, swatches and groups; `columns` for tiles; `custom` for a typed value; `attached` for a chevron joined to a field; `pics`), `TextField`, `TexField`
+  for the properties track), `Checkbox` and `Switch`, `Select` (every pick-one list: option drawings, notes, swatches and groups; `columns` for tiles; `pictures` for picture tiles; `custom` for a typed value; `attached` for a chevron joined to a field), `TextField`, `TexField`
   (`tx` math/text, `none`), `NumberField`, `ColourButton` (swatch and name), `Slider` (with its readout; `defaultValue` for the double-click reset), `Menu` and
   `openContextMenu(items, x, y, pick, { below, owner })` (a right-click menu from data; `below` opens it under a control, `owner` lets that control toggle it), `TextPopup` and `openTextPopup(host, opts)`
   (the in-place label editor, LaTeX or MathLive), `Tooltip` (what every `title` becomes), `Popover` (a panel opened from a control, `below` or `beside`; `openPopover(anchor, { content })` from string-building code)
@@ -196,8 +196,8 @@ replace the copies.
   field, which gets its text once and is never written again. Every input needs a name: `aria-label` or a
   linked `<label>`.
 - **Dropdowns:** `Select` from the kit in Svelte, for plain and drawn lists alike (dash, width presets, tips, shafts: built by
-  `drawnPicker` in app.ts); never a button that opens its own picker. Any `<select>` gets the custom menu from `src/ui/services/selectmenu.svelte.ts`; add
-  `data-pics="name"` with `TD.selectPics[name]` for a grid of picture tiles. Don't build another, and never
+  `drawnPicker` in app.ts); never a button that opens its own picker. Any `<select>` gets the custom menu from `src/ui/services/selectmenu.svelte.ts`; give
+  `Select` `pictures` (options' `svg` and `short`; a form row's `pictures`) for a grid of picture tiles, the kit's Tile as options. Don't build another, and never
   let a native menu show.
 - **Switches:** `Segmented` in Svelte (`.seg`, or `.seg-ctl` with `panel`), plus `src/ui/services/segthumb.ts` for the sliding knob (220ms, `--ease`, still under
   reduced motion). On/off flags that belong together share one `.seg.ze-flags` track (`many`) with no knob; the
@@ -227,8 +227,10 @@ replace the copies.
 - **Editor notes:** the code pane's message and the stage tip go through `showCodeNotes(codeMsg, lines)` and
   `stageTip(tip)` (`set(text)`, `flash(text, ms)` for "Saved to the page") from `src/ui/editor-notes.ts`; never write
   HTML into `.cz-msg` or `.cz-tip`.
-- **Editor plumbing:** undo/redo via `TD.editorSession.history`; Cancel/Done/⌘S, the discard prompt and
-  `TD.unsaved` via `TD.editorSession.lifecycle`; embedding in Quick via `TD.editorSession.dockable`
+- **Editor plumbing:** every block editor takes undo/redo from `TD.editorSession.history` and Cancel/Done/⌘S, the
+  discard prompt, `TD.unsaved` and embedding in Quick from `TD.editorSession.lifecycle` (its differences are hooks:
+  `settle`, `source`, `result`, `selOut`/`selIn`), and the stage's pointer helpers, wheel pan and zoom and fit from
+  `editorStage` / `fitView` (`src/editors/editor-stage.ts`); never copy them into an editor
   (`src/core/editor-session.ts`). Label editing in place uses `TD.input.popup` (a wrapper round the kit's `openTextPopup`, which is also the canvas's
   text editor), which follows the user's
   LaTeX or MathLive setting. Grid editors share the delete gutters (`TD.gridDel`) and the insert/delete

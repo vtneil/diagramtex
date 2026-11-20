@@ -1,4 +1,3 @@
-import { wheelZoomFactor } from '../ui/wheel-zoom';
 import { t as uiText, message, caption, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { section, row } from '../ui/forms';
@@ -11,6 +10,7 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
+import { editorStage, fitView } from './editor-stage';
 // Graph editor: the overlay that opens on a Graph block. A palette of node kinds, edge kinds and whole
 // graphs; the graph drawn on a centimetre grid, where nodes are placed, dragged (alone or several at once)
 // and joined by dragging a node's blue handle to another; a selected edge's middle handle bends it; Auto
@@ -343,19 +343,11 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 }, clip: any = null;
   let stopLocale: (() => void) | null = null;
   const snapCode = () => codeOf(E.M);
-  function begin() { if (E.pending == null) E.pending = snapCode(); }
-  function commit() {
-    if (E.pending == null) return;
-    const now = snapCode();
-    if (now !== E.pending) { E.undo.push(E.pending); if (E.undo.length > 200) E.undo.shift(); E.redo = []; }
-    E.pending = null;
-    updateTools();
-    dock.changed();
-  }
+  const { begin, commit, undo, redo } = TD.editorSession.history({
+    state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
+  });
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
   function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); if (E.M.nodes.length) fitIfOut(); }
-  function undo() { commit(); if (!E.undo.length) return; E.redo.push(snapCode()); restore(E.undo.pop()); dock.changed(); }
-  function redo() { commit(); if (!E.redo.length) return; E.undo.push(snapCode()); restore(E.redo.pop()); dock.changed(); }
   function clampSel() {
     const s = E.sel;
     if (s && s.n) { s.n = s.n.filter((x: string) => nOf(x)); if (!s.n.length) E.sel = null; }
@@ -477,9 +469,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   function duplicate() { if (!copySel()) return; pasteText(clip.text); }
 
   // ---------------------------------------------------------------- geometry
-  const rect = () => svg.getBoundingClientRect();
-  const overStage = (e: any) => { const r = stage.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
-  const pos = (e: any) => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  // the pointer on the stage, and the wheel's pan and zoom: src/editors/editor-stage.ts
+  const { rect, overStage, pos } = editorStage(svg, stage, { view: () => E?.view, zoom: [12, 600], redraw: () => { draw(); if (Lb) Lb.pop.place(); } });
   const m = (x: number, y: number) => [E.view.ox + x * E.view.k, E.view.oy - y * E.view.k];
   const toCm = (e: any, snapOn = true) => { const [x, y] = pos(e), v = E.view; return [snap((x - v.ox) / v.k, snapOn), snap((v.oy - y) / v.k, snapOn)]; };
   const S = (x: number, y: number) => [E.view.ox + (x / PX) * E.view.k, E.view.oy + (y / PX) * E.view.k];
@@ -514,11 +505,8 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     return best;
   }
   function fit() {
-    const L = lay(), r = rect(), bb = L.empty ? { x: 0, y: -2 * PX, w: 4 * PX, h: 2 * PX } : L.bb;
-    const w = bb.w / PX + 1, h = bb.h / PX + 1;
-    const k = Math.max(20, Math.min(140, Math.min((r.width - 80) / w, (r.height - 80) / h)));
-    const cx = (bb.x + bb.w / 2) / PX, cy = -(bb.y + bb.h / 2) / PX;
-    E.view = { k, ox: r.width / 2 - cx * k, oy: r.height / 2 + cy * k };
+    const L = lay();
+    E.view = fitView(rect(), L.empty ? { x: 0, y: -2 * PX, w: 4 * PX, h: 2 * PX } : L.bb, { scale: PX, margin: 0.5, min: 20, max: 140 });
     draw();
   }
   // fit only when part of the drawing is out of view
@@ -526,16 +514,6 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     const L = lay(), r = rect(), [x1, y1] = S(L.bb.x, L.bb.y), [x2, y2] = S(L.bb.x + L.bb.w, L.bb.y + L.bb.h);
     if (x1 < 0 || y1 < 0 || x2 > r.width || y2 > r.height) fit();
   }
-  svg.addEventListener('wheel', (e: any) => {
-    e.preventDefault();
-    const v = E.view, [sx, sy] = pos(e);
-    if (e.ctrlKey || e.metaKey) {
-      const k2 = Math.max(12, Math.min(600, v.k * wheelZoomFactor(e)));
-      v.ox = sx - ((sx - v.ox) * k2) / v.k; v.oy = sy - ((sy - v.oy) * k2) / v.k; v.k = k2;
-    } else { v.ox -= e.deltaX; v.oy -= e.deltaY; }
-    draw();
-    if (Lb) Lb.pop.place();
-  }, { passive: false });
 
   // ---------------------------------------------------------------- drawing
   function outline(q: any, cls: string, pad: number) {
@@ -1103,34 +1081,12 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
   }, true);
 
   // ---------------------------------------------------------------- open / close
-  function save() {
-    if (E && dock.docked()) { commit(); return; }
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    commit();
-    const src = snapCode();
-    if (src !== E.start) { E.start = src; E.done({ src }); }
-    flash(uiText('editor.commonB.saved', 'Saved to the page'), 1500);
-  }
-  // embedded in a pane (Quick): src/core/editor-session.ts dockable
-  const dock = TD.editorSession.dockable({ root, state: () => E, snapshot: () => snapCode() });
-  TD.unsaved.push(() => !!E && !dock.docked() && snapCode() !== E.start);
-  async function finish(ok: any) {
-    if (dock.docked()) return;
-    if (!E) return;
-    closeLabel();
-    if (document.activeElement === codeTa) readCode();
-    if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
-    commit();
-    const src = snapCode(), changed = src !== E.start;
-    if (!ok && changed && !(await TD.confirm(uiText('editor.graph.discard', 'Discard changes to this graph?'), uiText('editor.commonB.discardBody', 'Your edits since opening the editor will be lost.'), { ok: uiText('editor.commonB.discard', 'Discard'), danger: true }))) return;
-    const done = E.done;
-    stopLocale?.(); stopLocale = null;
-    root.hidden = true;
-    document.body.classList.remove('cz-open');
-    E = null;
-    if (ok && changed) done({ src });
-  }
+  // saving, closing, the discard prompt, the unsaved check (beforeunload) and embedding in a pane (Quick): src/core/editor-session.ts lifecycle
+  const dock = TD.editorSession.lifecycle({
+    state: () => E, clear: () => { stopLocale?.(); stopLocale = null; E = null; }, snapshot: () => snapCode(), commit, root, code: codeTa, readCode, note: stageNote,
+    settle: () => { closeLabel(); }, discardTitle: () => uiText('editor.graph.discard', 'Discard changes to this graph?'),
+  });
+  const { save, finish } = dock;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
@@ -1146,5 +1102,5 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }
-  TD.graphEditor = { open, dockable: true, close: () => { if (!dock.docked()) return; dock.release(); finish(true); } };
+  TD.graphEditor = { open, dockable: true, close: () => dock.detach() };
 })();

@@ -7,7 +7,7 @@
     drafts?: { newTitle: string; newLabel: string; rows: QuickDraft[] };
   }
   export interface QuickListModel {
-    formula: { label: string; svg: string; active: boolean };
+    formula: { label: string; active: boolean };
     head: string | null; // "Blocks", when there are any
     blocks: QuickBlock[];
     icons: { dot: string };
@@ -27,7 +27,7 @@
   let { model }: { model: QuickListModel } = $props();
 </script>
 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role (a row that switches the view: quick.ts takes its Enter and Space) -->
-<li class={['qk-nav', model.formula.active && 'active']} data-view="formula" tabindex="0" role="button">{@html model.formula.svg}<span class="nm">{model.formula.label}</span></li>
+<li class={['qk-nav', model.formula.active && 'active']} data-view="formula" tabindex="0" role="button"><Icon name="fileQuick" /><span class="nm">{model.formula.label}</span></li>
 {#if model.head}<li class="qk-head" aria-hidden="true">{model.head}</li>{/if}
 {#each model.blocks as b (b.type)}
   <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role (a row that switches the view: quick.ts takes its Enter and Space) -->

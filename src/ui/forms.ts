@@ -1,14 +1,15 @@
 import { message as msg, type Message } from '../i18n';
+import type { IconName } from './kit/icons';
 /** Declarative form contracts shared by the scientific property panels. */
 export type Attributes = Record<string, string | number | boolean | null | undefined>;
 export type Inline = string | Message | { code: string } | { bold: string } | { kbd: string } | { br: true };
 export type Control = { caption?: Message; captionAttrs?: Record<string, Message> } & (
   | { kind: 'input'; attrs: Attributes; value: string | number; checked?: boolean }
-  | { kind: 'select'; attrs: Attributes; value: string; options: (string | Message)[][] }
+  | { kind: 'select'; attrs: Attributes; value: string; options: (string | Message)[][]; pictures?: Record<string, [short: string | Message, svg: string]> }
   | { kind: 'colour'; index: number; value: string; css: string }
   | { kind: 'fillColour'; attrs: Attributes; label: string; css: string; none: boolean }
   | { kind: 'angle'; attrs: Attributes; value: string | number; numericValue: string | number; unit: string }
-  | { kind: 'button'; attrs: Attributes; text: string | Message; svg?: string; swatch?: { css: string; none: boolean } }
+  | { kind: 'button'; attrs: Attributes; text: string | Message; svg?: string; icon?: IconName; swatch?: { css: string; none: boolean } }
   | { kind: 'code'; text: string; class?: string }
   | { kind: 'spacer' }
   | { kind: 'texColour'; attrs: Attributes; value: string; label: string; css: string; nullable: boolean; none: boolean; title: string | Message; defaultLabel?: string; defaultSwatch?: string }
@@ -27,8 +28,8 @@ export type FormRow =
   | { kind: 'controls'; class: string; controls: Control[] }
   | { kind: 'switch'; label?: Inline[]; labelTitle?: string | Message; many?: boolean; class?: string; options: SwitchOption[] }
   | { kind: 'codeButtons'; class: string; items: { attrs: Attributes; label: string | Message; code: string }[] }
-  | { kind: 'status'; class: string; icon: string; text: string | Message }
-  | { kind: 'kmapGroups'; groups: { index: number; title: string; bw: boolean; css: string; valid: boolean; math: string; text: string; icon: string }[] }
+  | { kind: 'status'; class: string; icon: IconName; iconClass?: string; text: string | Message }
+  | { kind: 'kmapGroups'; groups: { index: number; title: string; bw: boolean; css: string; valid: boolean; math: string; text: string; icon: IconName; iconClass?: string }[] }
   | { kind: 'rendered'; class: string; svgOrMath: string }
   | { kind: 'points'; points: Control[][] }
   | { kind: 'physicsResults'; results: { label: string; value: string; kind: string; status: string; title: string }[] }
