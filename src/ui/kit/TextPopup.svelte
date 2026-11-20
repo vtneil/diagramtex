@@ -99,15 +99,19 @@
   }
   // Attachments re-run when what they read changes: untracked, so a box that moves (x, y) never resets the text
   function field(ta: HTMLTextAreaElement) {
-    untrack(() => { ta.value = v0; size(ta); place(); });
-    requestAnimationFrame(() => {
-      if (done) return;
+    // shown first (place opens the popover), then sized: measured before, it takes the full 160px over what it labels
+    untrack(() => { ta.value = v0; place(); size(ta); place(); });
+    const start = () => {
       ta.focus({ preventScroll: true });
       if (ta.value !== v0) return; // typing already started
       const at = caret ?? (kind === 'code' ? 'end' : 'all');
       if (typeof at === 'number') ta.setSelectionRange(at, at);
       else if (at === 'end') { ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollTop = ta.scrollHeight; } else ta.select();
-    });
+    };
+    // focused at once (it is shown by now), so keys typed straight after the double-click are the label's, not the
+    // canvas's shortcuts; again a frame later, in case what opened it was still taking the focus
+    start();
+    requestAnimationFrame(() => { if (!done && document.activeElement !== ta) start(); });
   }
   function keys(e: KeyboardEvent) {
     e.stopPropagation(); // keep typing away from the app's shortcuts

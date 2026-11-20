@@ -64,3 +64,18 @@ T.test('math rendering: Temml keeps the entire equation and every matrix cell', 
     } finally { box.remove(); }
   } finally { TD.math.set(was); await TD.math.whenReady(); }
 });
+
+T.test('paragraph box: made narrower, it grows to take in the text it now wraps to, so its handles do too', () => {
+  const T0 = TD.TYPES.text, s = T0.create({ x: 0, y: 0 }, TD.state.defaults);
+  Object.assign(s, { id: 'para', text: 'A paragraph long enough to wrap onto several more lines when its box is made narrow.', tw: 400, th: 40, align: 'left', x: 200, y: 20 });
+  const o = JSON.parse(JSON.stringify(s)), top = s.y - s.th / 2;
+  T0.setHandle(s, 'e', { x: 0 + 90, y: 20 }, {}, o); // the right edge dragged in to 90px wide
+  const L = TD.paraLayout(s), handles = T0.handles(s), lowest = Math.max(...handles.map((h) => h.y));
+  T.ok(Math.abs(s.tw - 90) < 0.5, 'the width is what was dragged: ' + s.tw);
+  T.ok(Math.abs(s.y - s.th / 2 - top) < 0.01, 'the top edge holds');
+  T.ok(lowest >= L.f.y + 2 * L.p + L.b.h - 0.01, `the bottom handles reach the text's last line (${lowest} vs ${L.f.y + L.b.h})`);
+  // dragging the bottom edge up past the text stops at it
+  const o2 = JSON.parse(JSON.stringify(s));
+  T0.setHandle(s, 's', { x: 50, y: top + 10 }, {}, o2);
+  T.ok(Math.abs(s.th - o2.th) < 0.01, 'and it cannot be dragged shorter than its text');
+});

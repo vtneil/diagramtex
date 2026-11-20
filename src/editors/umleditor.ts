@@ -8,9 +8,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
 // Class diagram editor: the overlay that opens on a UML block. A palette of classes (class, interface,
 // abstract, static, object), notes and relations; the diagram drawn at pgf-umlcd's sizes on a centimetre
 // grid, where classes and notes are placed and moved (their lines follow) and relations are dragged from
@@ -152,12 +153,12 @@ import { editorStage, fitView } from './editor-stage';
   // { M, sel: { n: item index } (class or note) | { r: item index } (relation or line) | { h: { child, parent, kind } } | null,
   //   arm, kind, view: { k (px per cm), ox, oy }, undo, redo, pending, start, done, drag, hover, knobAt, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
-  const snapCode = () => codeOf(E.M);
+  const snapCode = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
   const { begin, commit, undo, redo } = TD.editorSession.history({
     state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
   });
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
-  function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
+  function restore(code: any) { E.typed = code; E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
   function clampSel() {
     const s = E.sel;
     if (!s) return;
@@ -1012,7 +1013,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps(); updateTools();
     showCodeNotes(codeMsg, U.layout({ src: codeTa.value }).warnings);
@@ -1022,8 +1023,8 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
@@ -1075,7 +1076,7 @@ import { editorStage, fitView } from './editor-stage';
   function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
     E = { M, sel: null, arm: null, kind: 'association', view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
-    E.start = codeOf(M);
+    E.typed = String(block.src || ''); E.start = snapCode();
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');

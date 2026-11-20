@@ -67,6 +67,15 @@ export const thai: Record<string, string> = {
 
   // ZX
   "editor.zx.cat.spiders": "สไปเดอร์",
+  "editor.zx.chooseWireEnd": "คลิกอีกช่องหนึ่งเพื่อเชื่อม กด Esc เพื่อยกเลิก",
+  "editor.zx.editNode": "แก้ไขโหนด",
+  "editor.zx.rowGap": "ระยะห่างแถว",
+  "editor.zx.columnGap": "ระยะห่างคอลัมน์",
+  "editor.zx.setPhase": "ตั้งเฟสเป็น {phase}",
+  "editor.zx.wireToolTip": "ลากระหว่างช่อง หรือคลิกช่องเริ่มต้นแล้วคลิกช่องปลายทางเพื่อเชื่อม",
+  "editor.zx.selectTool": "เลือกและย้าย (V)",
+  "editor.zx.wireTool": "วาดเส้นเชื่อม (W)",
+  "editor.zx.diagramSettings": "ระยะห่างและตัวเลือกของแผนภาพ",
   "editor.zx.cat.boxes": "กล่องและจุด",
   "editor.zx.zSpider": "สไปเดอร์ Z",
   "editor.zx.xSpider": "สไปเดอร์ X",

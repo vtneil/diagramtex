@@ -101,6 +101,7 @@ select:disabled:not([multiple], [size]) { background-image: var(--select-chev-of
 .group { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
 #topbar button.icon { border-color: transparent; background: transparent; color: var(--graphite); }
 #topbar button.icon:hover { background: var(--wash); color: var(--ink); }
+#topbar button.icon.tb-arrow { background: var(--sheet); } /* opaque over the controls it covers (kit.css) */
 #topbar button.icon:disabled { color: var(--faint); background: transparent; }
 #topbar button.icon.toggle.on { background: var(--wash-strong); color: var(--ink); }
 #topbar .group > button:not(.icon) { padding: 0 12px 0 10px; display: inline-flex; align-items: center; gap: 6px; }
@@ -524,7 +525,9 @@ input[type=range]:not(.cp input) { width: 100%; min-width: 0; accent-color: var(
 #props .x { color: var(--pencil); }
 #props .row.presets { gap: 4px; }
 #props .presets button { flex: 1; height: var(--ctl-sm); font-size: 11px; padding: 0 4px; color: var(--graphite); }
-#props .help code { white-space: nowrap; }
+/* code in a help line wraps at its spaces (\usetikzlibrary{automata, arrows.meta}), and within a word only when that
+   word alone is wider than the panel: kept on one line, a long one ran past the panel's edge */
+#props .help code { white-space: normal; overflow-wrap: break-word; }
 #props .keys { width: 100%; border-collapse: collapse; font-size: 12px; color: var(--graphite); }
 #props .keys td { padding: 2px 0; vertical-align: baseline; line-height: 20px; }
 #props .keys td:first-child { white-space: nowrap; padding-right: 8px; }
@@ -641,6 +644,7 @@ body.drop-over #stage, body.drop-over #docview { box-shadow: inset 0 0 0 2px var
 #tikzOut .cl.chg::after { background: var(--bluepen); }
 #tikzOut .cl.err { text-decoration: underline wavy var(--redpen); text-decoration-skip-ink: none; text-underline-offset: 3px; }
 #tikzOut .cl.err::before { color: var(--redpen); font-weight: 600; }
+.imp-how { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 16px; border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--graphite); }
 .imp-note { flex: none; padding: 8px 16px; color: var(--redpen); background: var(--redpen-wash); font-size: 12px; border-bottom: 1px solid var(--rule); }
 .modal-foot { padding: 8px 16px; min-height: 32px; color: var(--redpen); font-size: 12px; border-top: 1px solid var(--rule); }
 .modal-foot:empty { display: none; }
@@ -660,17 +664,26 @@ body.drop-over #stage, body.drop-over #docview { box-shadow: inset 0 0 0 2px var
 #docview { display: none; flex: 1; overflow: auto; scrollbar-gutter: stable; background: var(--paper); padding: 28px 16px 80px; position: relative; order: 2; }
 /* Native gutters already reserve their width; overlay scrollbars need an explicit 16px strip. */
 body.mode-doc #docview { display: block; padding-right: calc(var(--props-w) + 8px + max(0px, 16px - var(--doc-scrollbar-width, 0px))); } /* the page centres in the space beside the side panel */
+/* too narrow for that (docview.ts, narrowView), the page takes the whole width and the panel floats over it */
+body.mode-doc.doc-narrow #docview { padding-right: max(0px, 16px - var(--doc-scrollbar-width, 0px)); }
 body.mode-doc #tools, body.mode-doc #stage { display: none; }
 /* Document view has no undo, grid or snap: they are hidden but keep their room, so the Diagram | Document
    switch stays put when it is flipped. */
 body.mode-doc .diag-only { visibility: hidden; }
 .doc-page { margin: 0 auto; background: var(--canvas); position: relative; font-family: var(--font-tex); line-height: calc(1.5 * var(--spread, 1)); color: #111;
   box-shadow: 0 0 0 1px rgba(28,27,25,.07), 0 1px 2px rgba(28,27,25,.06), 0 4px 14px rgba(28,27,25,.06); }
+/* a word longer than the line (a URL, a long name) wraps at the edge instead of widening the page: printed, a wider
+   page shrinks the whole document to fit; a table's column can narrow the same way. Formulas keep to themselves. */
+.doc-page { overflow-wrap: anywhere; }
+.doc-page .katex { overflow-wrap: normal; }
 /* Scale the fixed paper layout inside a wrapper whose size matches the visible sheet. */
 .doc-sheet { position: relative; margin: 0 auto; overflow: clip; box-shadow: 0 0 0 1px rgba(28,27,25,.07), 0 1px 2px rgba(28,27,25,.06), 0 4px 14px rgba(28,27,25,.06); }
 .doc-sheet > .doc-page { position: absolute; left: 0; top: 0; margin: 0; transform-origin: top left; box-shadow: none; }
 .cm-probe { position: absolute; width: 1cm; height: 0; visibility: hidden; }
 .doc-title { text-align: center; font-weight: 400; font-size: 1.75em; margin: 0 0 1em; text-wrap: balance; overflow-wrap: break-word; }
+/* \author under \maketitle's title: the title keeps its own space below only when there is no author */
+.doc-title:has(+ .doc-author) { margin-bottom: 0.6em; }
+.doc-page .doc-author { text-align: center; font-size: 1.2em; margin: 0 0 1.5em; overflow-wrap: break-word; }
 .doc-page h2 { font-size: 1.3em; margin: 1.1em 0 .35em; text-wrap: balance; }
 .doc-page h3 { font-size: 1.12em; margin: .9em 0 .3em; }
 .doc-page h4 { font-size: 1em; margin: .8em 0 .25em; }
@@ -775,16 +788,19 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .blk-ie a { cursor: text; }
 /* the box a formula is edited in: over the page, placed in the window's coordinates */
 #docPop { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
-#docPop > * { pointer-events: auto; }
+#docPop > :not(.tx-hl) { pointer-events: auto; } /* the maths colouring over the text box lets clicks through to it */
 .ins { display: flex; justify-content: center; gap: 0; height: 14px; opacity: 0; transition: opacity .12s var(--ease); font-family: var(--font-ui); position: relative; z-index: 1; }
 .ins:hover, .doc-page > .ins:last-child { opacity: 1; }
 .ins { gap: 4px; }
 .ins button { height: var(--ctl-sm); font-size: 11px; padding: 0 10px; margin-top: -5px; color: var(--graphite); background: var(--sheet-raised); }
+.ins { transform: scale(var(--unzoom, 1)); transform-origin: top center; } /* screen size at any zoom (docview.ts, scalePage) */
 .doc-page > .ins:last-child { height: auto; margin-top: 16px; }
 .pg-brk { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--faint); pointer-events: none; }
 .pg-brk span { position: absolute; right: 8px; top: 3px; font: 10px var(--font-mono); color: var(--pencil); }
 .doc-hud { position: fixed; right: 16px; bottom: 16px; display: flex; align-items: center; height: var(--ctl); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r); overflow: hidden; box-shadow: var(--shadow-knob); font: 11px var(--font-mono); z-index: 3; font-variant-numeric: tabular-nums; }
 body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
+body.mode-doc.doc-narrow .doc-hud { right: auto; left: calc(var(--files-w) + 16px); } /* clear of the sidebar, not under it */
+body.mode-doc.doc-narrow.no-files .doc-hud { left: 16px; }
 .doc-hud .pg-info { padding: 0 10px; color: var(--graphite); }
 .doc-hud button { border: 0; border-radius: 0; border-left: 1px solid var(--rule); height: 100%; font: inherit; background: transparent; color: var(--graphite); }
 .doc-hud button.on { color: var(--sheet); background: var(--ink); }
@@ -800,7 +816,9 @@ body.mode-doc .doc-hud { right: calc(var(--props-w) + 24px); }
   .doc-sheet { width: auto !important; height: auto !important; overflow: visible; box-shadow: none; }
   .doc-sheet > .doc-page { position: static; transform: none !important; }
   .ins, .blk-tools { display: none !important; }
-  .blk { border-color: transparent !important; }
+  /* flush with the text column: the screen's -9px sides (room for the block's outline) would pass the paper's edge,
+     and a print wider than the paper is shrunk to fit */
+  .blk { border-color: transparent !important; margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; border-left-width: 0; border-right-width: 0; }
 }
 
 /* ---------- tool flyouts ---------- */
@@ -945,12 +963,13 @@ body.mode-board #emptyHint .eh-board { display: block; }
 .exp-row label, .exp-dirl { color: var(--graphite); }
 .exp-dpi { display: inline-flex; gap: 4px; }
 .exp-dpi select { width: 92px; }
-.exp-dpi input { width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+.exp-dpi input { width: 68px; /* four digits: up to 2400 */ text-align: right; font-variant-numeric: tabular-nums; }
 .exp-meta { display: flex; justify-content: space-between; gap: 8px; color: var(--pencil); font-variant-numeric: tabular-nums; margin-bottom: 8px; }
 .exp-sw { cursor: pointer; color: var(--graphite); }
 .exp-meta span { flex: none; white-space: nowrap; }
 .exp-chk { display: flex; align-items: center; gap: 6px; color: var(--graphite); margin-bottom: 8px; }
 .exp-note { color: var(--pencil); line-height: 1.4; margin-bottom: 8px; }
+.exp-note.err { color: var(--redpen); } /* what stops the export */
 /* the button that exports, full width; two share the width (Quick's Copy and Download) */
 .exp-go { display: flex; gap: 8px; }
 .exp-go button { flex: 1 1 0; height: var(--ctl); justify-content: center; }
@@ -1050,9 +1069,10 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-pin { fill: var(--canvas); stroke: var(--bluepen); stroke-width: 1.2; pointer-events: none; }
 .cz-h { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.2; cursor: grab; }
 .cz-ghost { opacity: .7; pointer-events: none; }
+.cz-junction { fill: var(--canvas); stroke: var(--bluepen); stroke-width: 1.5; } /* wires meet here (editor only); a printed dot is a Junction node */
+.cz-junction.on { stroke: var(--redpen); }
 .cz-snap { fill: none; stroke: var(--faint); stroke-width: 1.2; pointer-events: none; }
 .cz-snap.on { stroke: var(--bluepen); stroke-width: 2; }
-.cz-mq { fill: var(--redpen-wash); stroke: var(--redpen); stroke-width: 1; stroke-dasharray: 3 2; }
 .cz-tip { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 4px 10px; border-radius: var(--r); background: var(--ink); color: var(--sheet); font-size: 12px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cz-tip[hidden], .cz-tip:empty { display: none; }
 .cz-side { border-left: 1px solid var(--rule); background: var(--sheet); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -1182,6 +1202,11 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 /* Tree editor (src/editors/fteditor.ts): the Quantum editor's shell, with nodes in place of cells */
 .fe-svg { cursor: default; }
 .fe-phantom { fill: none; stroke: rgba(28, 27, 25, .3); stroke-width: 1; stroke-dasharray: 2 2; pointer-events: none; }
+/* chemistry: where a compound's name would go; double-click to type it */
+.cf-phantom { fill: none; stroke: rgba(28, 27, 25, .3); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.cf-phantom.on { stroke: var(--bluepen); fill: color-mix(in srgb, var(--bluepen) 6%, transparent); }
+.cf-phantom-t { fill: rgba(28, 27, 25, .4); font: 500 11px var(--font-ui); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.cf-phantom-t.on { fill: var(--bluepen); }
 .fe-moving { fill: rgba(28, 27, 25, .05); stroke: rgba(28, 27, 25, .35); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
 .fe-bar { stroke: var(--bluepen); stroke-width: 3; stroke-linecap: round; pointer-events: none; }
 .fe-add { cursor: pointer; }
@@ -1377,8 +1402,11 @@ body.mode-quick #docName, body.mode-quick #saveState, body.mode-quick #autosaveN
 .qk-edit math-field:focus-within { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 22%, transparent); }
 .qk-loading { padding: 18px 14px; color: var(--pencil); border: 1px dashed var(--rule-strong); border-radius: var(--r); }
 /* the picture: content, so it stays on white (or a checkerboard when transparent) in both appearances */
-.qk-stage { display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 32px 24px; overflow-x: auto;
+.qk-stage { display: flex; align-items: center; min-height: 200px; padding: 32px 24px; overflow-x: auto;
   border: 1px solid var(--rule); border-radius: var(--r-lg); background: #fff; color: #000; }
+/* centred while it fits; a formula wider than the box starts at its left edge, so all of it can be scrolled to
+   (justify-content: center would push its start out of reach) */
+.qk-stage > * { margin-inline: auto; }
 .qk-stage.clear { background: repeating-conic-gradient(#ececec 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
 .qk-prev { transition: opacity .15s ease; }
 .qk-prev.stale { opacity: .3; }
@@ -1576,8 +1604,9 @@ input.slider-value-editor, :is(#props, .cz-props, .fmt-bar) input.slider-value-e
 #impDefs { display: block; box-sizing: border-box; width: 100%; max-height: 160px; padding: 8px; resize: vertical; font: 12px/1.6 var(--font-mono); color: var(--ink); background: var(--sheet); border: 1px solid var(--rule); }
 
 /* Diagram chooser: keep the drawing previews on paper in either appearance. */
-#blockSel { padding-right: 8px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#blockSel::after { content: ''; display: inline-block; width: 10px; height: 10px; margin-left: 12px; vertical-align: middle; background: var(--select-chev) center / 10px 10px no-repeat; } /* the same chevron as every <select> */
+/* One fixed width whatever the diagram is called, so the arrows and pencil beside it never move; long names end in … */
+#blockSel { position: relative; width: 200px; padding-right: 30px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#blockSel::after { content: ''; position: absolute; right: 10px; top: 50%; width: 10px; height: 10px; margin-top: -5px; background: var(--select-chev) center / 10px 10px no-repeat; } /* the same chevron as every <select> */
 .diagram-gallery { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--rule); border-radius: var(--r-xl); background: var(--sheet-raised); color: var(--ink); box-shadow: var(--shadow); overflow: hidden; }
 .diagram-gallery[open] { display: flex; flex-direction: column; }
 .diagram-gallery::backdrop { background: rgba(0,0,0,.35); }

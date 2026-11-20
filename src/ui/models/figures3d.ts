@@ -65,9 +65,10 @@ TD.panels.revolve = {
       const r = T.revolve.run(s);
       const colour = (index: any, value: any) => ({ kind: 'colour' as const, index, value, css: TD.css(value) });
       return { sections: [
-        section(msg('f3.region', 'Region'), [row(msg('f3.upper', 'Upper f(x)'), input('f', s.f)), row(msg('f3.lowerG', 'Lower g(x)'), input('g', s.g, { placeholder: '0' })), row(msg('f3.xRange', 'x from, to'), input('a', s.a), input('b', s.b)), ...errors(r.error),
+        section(msg('f3.region', 'Region'), [row(msg('f3.upper', 'Upper f(x)'), input('f', s.f)), row(msg('f3.lowerG', 'Lower g(x)'), input('g', s.g, { placeholder: '0' })), row(msg('f3.xRange', 'x from, to'), input('a', s.a), input('b', s.b)),
           row(msg('f3.turnAbout', 'Turn about'), select('axis', [['x', msg('f3.xAxisDisks', 'x-axis (disks, washers)')], ['y', msg('f3.yAxisShells', 'y-axis (shells)')]], s.axis || 'x')),
           row(msg('f3.sweep', 'Sweep (°)'), captioned(input('sweep', s.sweep, { title: '360 for the whole solid; less to cut it open and show the region' }), { title: msg('f3.sweep.title', '360 for the whole solid; less to cut it open and show the region') })),
+          ...errors(r.error),
           row(captions["ui.colour"], colour(0, s.solidColor)), row(msg('f3.cutColour', 'Cut colour'), colour(1, s.regionColor))]),
         section(msg('f3.slice', 'Slice'), [row(msg('f3.showSlice', 'Show a slice'), check('showSlice', !!s.showSlice)),
           ...(s.showSlice ? [row(msg('f3.atXWidth', 'At x, width'), captioned(input('x0', s.x0, { placeholder: 'middle' }), { placeholder: msg('f3.middle', 'middle') }), captioned(input('dx', s.dx, { placeholder: 'auto' }), { placeholder: msg('plot.auto', 'auto') })),

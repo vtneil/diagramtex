@@ -34,10 +34,10 @@
     { value: '', label: t('doc.fmt.paragraph', 'Paragraph', {}, $locale) }, { value: '#', label: t('doc.fmt.section', 'Section', {}, $locale) },
     { value: '##', label: t('doc.fmt.subsection', 'Subsection', {}, $locale) }, { value: '###', label: t('doc.fmt.subsubsection', 'Subsubsection', {}, $locale) },
   ]);
-  const ALIGN: [string, string][] = [['j', 'justify'], ['l', 'left'], ['c', 'center'], ['r', 'right']];
+  const ALIGN: [string, string][] = [['l', 'left'], ['c', 'center'], ['r', 'right'], ['j', 'justify']];
   const alignTips = $derived<Record<string, string>>({
     j: t('doc.fmt.justify', 'Justified (LaTeX default)', {}, $locale), l: t('doc.fmt.left', 'Align left', {}, $locale),
-    c: t('doc.fmt.center', 'Align center', {}, $locale), r: t('doc.fmt.right', 'Align right', {}, $locale),
+    c: t('doc.fmt.center', 'Align centre', {}, $locale), r: t('doc.fmt.right', 'Align right', {}, $locale),
   });
   const colourName = $derived(t('doc.fmt.colour', 'Text colour — \\textcolor', {}, $locale));
   const highlightName = $derived(t('doc.fmt.highlight', 'Highlight — \\colorbox', {}, $locale));

@@ -5,7 +5,7 @@ import { runtime as TD } from '../runtime';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.55.5'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.56.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -1601,6 +1601,10 @@ import { runtime as TD } from '../runtime';
         // never collapse past the minimum: hold the edge opposite the dragged one
         if (nb.w < MIN) { nb.w = MIN; if (k.includes('w')) nb.x = f.x + f.w - MIN; else if (k.includes('e')) nb.x = f.x; }
         if (nb.h < MIN) { nb.h = MIN; if (k.includes('n')) nb.y = f.y + f.h - MIN; else if (k.includes('s')) nb.y = f.y; }
+        // nor shorter than its text at the new width (narrower, it wraps to more lines): the frame, and so its
+        // handles, take in all of it; the edge opposite the dragged one holds (the top, dragging a side)
+        const need = paraLayout({ ...o, tw: nb.w, th: nb.h }), fit = need.bottom - need.f.y;
+        if (nb.h < fit - 0.01) { if (k.includes('n')) nb.y += nb.h - fit; nb.h = fit; }
         s.tw = nb.w; s.th = nb.h; s.x = nb.x + nb.w / 2; s.y = nb.y + nb.h / 2;
         return;
       }
@@ -1699,7 +1703,7 @@ import { runtime as TD } from '../runtime';
     legal: { name: 'US Legal', w: 21.59, h: 35.56, opt: 'legalpaper' },
     custom: { name: 'Custom' },
   };
-  TD.PAGE_DEFAULT = { paper: 'a4', orient: 'portrait', w: 21, h: 29.7, mt: 2.5, mb: 2.5, ml: 2.5, mr: 2.5, font: 11, title: true, spread: 1, numbered: false };
+  TD.PAGE_DEFAULT = { paper: 'a4', orient: 'portrait', w: 21, h: 29.7, mt: 2.5, mb: 2.5, ml: 2.5, mr: 2.5, font: 11, title: true, author: '', spread: 1, numbered: false };
   // Resolved page size in cm: {W, H, textW, textH}
   TD.pageSize = function (pg: any) {
     pg = { ...TD.PAGE_DEFAULT, ...(pg || {}) };
@@ -1708,6 +1712,8 @@ import { runtime as TD } from '../runtime';
     if (pg.orient === 'landscape') [W, H] = [Math.max(W, H), Math.min(W, H)];
     return { ...pg, W, H, textW: W - pg.ml - pg.mr, textH: H - pg.mt - pg.mb };
   };
+  // whether a page setup leaves room for text: margins are checked against the paper, not only one at a time
+  TD.pageFits = (pg: any) => { const P = TD.pageSize(pg); return P.textW >= 1 && P.textH >= 1; };
 
   // ---------- generic operations ----------
   TD.translate = function (s: any, dx: any, dy: any) {
@@ -1925,6 +1931,24 @@ import { runtime as TD } from '../runtime';
     if (cur.trim()) out.push(cur.trim());
     return out;
   }
+  // An imported picture's options kept for code written from its shapes (s.tex.po, on its first shape). Those every
+  // node or path takes (every node/.style, nodes={…}, inner sep=… and the other keys only nodes read) are wrapped
+  // round the statements kept as written, which rely on them; code written from a shape already says all of it, and a
+  // shape added here must not take them (a text would be boxed by every node/.style={draw}). Named styles and >=Tip
+  // stay on the picture.
+  const EVERY = /^\s*(every\b[^=]*\/\.(?:append )?style|nodes|(?:inner|outer) [xy]?sep|minimum (?:size|width|height)|align|text (?:width|centered|height|depth))\s*(?:=|$)/;
+  function pictureOpts(shapes: any) {
+    const own: string[] = [], every = new Map<string, string>(); // picture → its every-node options
+    const all = [...new Set(shapes.map((s: any) => s.tex && s.tex.po).filter(Boolean))];
+    for (const s of shapes) {
+      const po = s.tex && s.tex.po;
+      if (!po) continue;
+      const E = splitOpts(po).filter((o) => EVERY.test(o));
+      if (E.length) every.set(s.tex.p, E.join(', '));
+      if (all.length === 1 && !own.length) own.push(...splitOpts(po).filter((o) => !EVERY.test(o)));
+    }
+    return { own, every };
+  }
   // a node placed with the positioning library (s.pos = { k: 'right', v: '1cm of a', of, off }): written so
   // again while it is still where that puts it from the node it names
   function posCode(s: any, code: any, list: any, n: any) {
@@ -1997,6 +2021,7 @@ import { runtime as TD } from '../runtime';
       if (X.preDefs) X.preDefs.add(preamble);
       else items.push({code:preamble,ctx:[],group:null});
     }
+    const every = pictureOpts(shapes).every;
     for (let n = 0; n < shapes.length;) {
       const s = shapes[n], t = s.tex;
       if (t && t.i === 0 && t.src != null) {
@@ -2025,7 +2050,8 @@ import { runtime as TD } from '../runtime';
           const own = TD.rawTikz.dedent((patched ?? t.src).slice(t.cut));
           // only moved: as written, in a shift scope outside its own scopes
           const ids = run.map((r: any) => r.id);
-          if (own.trim()) items.push(d ? { code: mark(ids, TD.rawTikz.wrapCode(own, t.ctx || [], X.c(d.dx, d.dy))), ctx: [], group: exportGroup(s) } : { code: mark(ids, own), ctx: t.ctx || [], group: exportGroup(s) });
+          const ctx = [...(every.has(t.p) ? [every.get(t.p)] : []), ...(t.ctx || [])];
+          if (own.trim()) items.push(d ? { code: mark(ids, TD.rawTikz.wrapCode(own, ctx, X.c(d.dx, d.dy))), ctx: [], group: exportGroup(s) } : { code: mark(ids, own), ctx, group: exportGroup(s) });
           if (t.drop) (X.notes = X.notes || new Set()).add(`Picture options left out (they belong to the whole picture): ${t.drop.join(', ')}`);
           n += t.n; continue;
         }
@@ -2109,8 +2135,8 @@ import { runtime as TD } from '../runtime';
   // \begin{tikzpicture}[…] for written code: the source picture's options that only set defaults the generated
   // code does not rely on (>=Stealth), when the shapes came from one picture
   TD.tikzOpen = function (shapes: any) {
-    const po = [...new Set(shapes.map((s: any) => s.tex && s.tex.po).filter(Boolean))];
-    return `\\begin{tikzpicture}[x=1cm, y=1cm${po.length === 1 ? ', ' + po[0] : ''}]`;
+    const { own } = pictureOpts(shapes);
+    return `\\begin{tikzpicture}[x=1cm, y=1cm${own.length ? ', ' + own.join(', ') : ''}]`;
   };
   // what the picture's own options use (a style naming DarkBlue, a library's keys), for the preamble
   const openUses = (open: any, X: any) => { if (!TD.lint || !TD.lint.uses) return; const u = TD.lint.uses(open); for (const l of u.libs) X.libs.add(l); for (const p of u.pkgs) X.pkgs.add(p); };
@@ -2125,9 +2151,27 @@ import { runtime as TD } from '../runtime';
 
   const notesOf = (X: any) => [...(X.notes || [])].map((n) => '% Note: ' + n);
   // Full TikZ document generation.
+  // TeX holds lengths up to 16383.99pt (575.8 cm). A drawing that far from the origin (a Whiteboard scrolled a long
+  // way) is written moved back to it, by whole centimetres, which changes nothing in the picture; one bigger than that
+  // can't be written at all, and the code says so (`note`).
+  const TEX_REACH_CM = 560;
+  TD.texReach = function (shapes: any[]): { shapes: any[]; note: string | null } {
+    const L = shapes.filter((s: any) => !s.hidden);
+    if (!L.length) return { shapes, note: null };
+    const B = TD.bboxOf(L.flatMap((s: any) => { const b = TD.bbox(s); return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]; }), 0);
+    if (Math.max(Math.abs(B.x), Math.abs(B.y), Math.abs(B.x + B.w), Math.abs(B.y + B.h)) / PX <= TEX_REACH_CM) return { shapes, note: null };
+    const note = `The drawing reaches ${Math.round(Math.max(B.w, B.h) / PX)} cm across; TeX's lengths stop at 575 cm, so LaTeX stops with "Dimension too large". Move its parts closer together.`;
+    // too big to fit, or placed by expressions that a move would not follow
+    if (Math.max(B.w, B.h) / PX > TEX_REACH_CM || L.some((s: any) => s.ex && Object.keys(s.ex).length)) return { shapes, note };
+    const dx = -Math.round(B.x / PX) * PX, dy = -Math.round(B.y / PX) * PX;
+    return { shapes: shapes.map((s: any) => { const c = JSON.parse(JSON.stringify(s)); TD.translate(c, dx, dy); return c; }), note: null };
+  };
   TD.toTikz = function (shapes: any, { standalone = false } = {}) {
     const X = makeX();
     if (standalone) X.preDefs = new Set();
+    const reach = TD.texReach(shapes);
+    shapes = reach.shapes;
+    if (reach.note) (X.notes = X.notes || new Set()).add(reach.note);
     const pic = TD.tikzPicture(shapes, X);
     // the maths and text styles in labels: their packages, and definitions for \mathbfit and \mathsfit
     const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(pic) : { pkgs: [], defs: [] };

@@ -99,6 +99,8 @@
     --shadow-modal: 0 0 0 .5px rgba(0,0,0,.6), 0 20px 50px rgba(0,0,0,.55);
     --shadow-knob: 0 .5px 1px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.35);
 }
+/* a block editor's stage is drawn on the light --canvas: its blue-pen marks (pins, snap rings, junction hints) take the light pen */
+[data-theme=dark] .cz-stage svg { --bluepen: #2459a6; }
 /* the typeset page is a light surface: everything drawn on it uses the light tokens */
 [data-theme=dark] .doc-page {
     color-scheme: light;

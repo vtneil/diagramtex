@@ -1,0 +1,8 @@
+% Requires: \usepackage{tikz} \usetikzlibrary{arrows.meta}
+\begin{tikzpicture}[x=1cm, y=1cm, every node/.style={draw}]
+  \node[draw, line width=0.4pt, rectangle, inner sep=0pt, minimum width=0.5cm, minimum height=0.48cm, outer sep=0pt] (a) at (8.25,-8.75) {A};
+  \node[draw, line width=0.4pt, rectangle, inner sep=0pt, minimum width=0.48cm, minimum height=0.48cm, outer sep=0pt] (b) at (11.25,-8.75) {B};
+  \draw[line width=0.4pt, -{To}] (a) -- node[auto, pos=0.5] {yes} (b);
+  \node at (4.75,-3.75) {hello};
+\end{tikzpicture}
+

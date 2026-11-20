@@ -12,4 +12,8 @@ import { runtime as TD } from '../runtime';
     pins: { center: [0, 0] }, draw: (g: any) => g.circle(0, 0, NODE_R).paper() });
   P({ key: 'circ', name: 'Junction node', cat: 'wires', kind: 'node', tikz: 'circ', keywords: 'dot connection pole',
     pins: { center: [0, 0] }, draw: (g: any) => g.circle(0, 0, NODE_R).ink() });
+  // text on its own, `\node[above] at (x,y) {…}`: no body and no pins, only its text (drawn as a node's text is);
+  // its palette drawing is the kit's `letter` icon (it has no body to draw)
+  P({ key: 'text', name: 'Text', cat: 'wires', kind: 'node', tikz: '', text: true, keywords: 'text label annotation caption note',
+    draw() {}, icon: 'letter' });
 })();

@@ -3,6 +3,7 @@ import { snapTranslation, createSnapIndex, type Guide, type SnapLine } from '../
 import { createCanvasMagnifier } from '../ui/canvas-magnifier';
 import { GRID_STYLES, snapCanvasGrid } from '../ui/canvas-grid';
 import { applyWelcomeEdits } from './examples/welcome-edits';
+import { dashName, tipName, shaftName, placeName, anchorName, optionName } from '../i18n/names';
 import { exampleDiagramBlocks } from './example-diagrams';
 import { previewFadeFinished } from '../platform/preview-fade';
 import { updateSvg } from '../platform/update-svg';
@@ -24,6 +25,7 @@ import { readPicture, svgFilePdf, texBundle, texFiles, type Picture } from '../p
 import { svgVectorPdf } from '../platform/svgpdf';
 import { createBrowserStore } from '../platform/browser-store';
 import { createAutosave } from '../core/autosave';
+import { mergeFile } from '../core/merge';
 import type { HistoryStep } from '../core/contracts';
 import { createRecovery, RECOVERY_DEFAULTS, RECOVERY_EVERY, RECOVERY_KEEP, RECOVERY_KEY, RECOVERY_QUICK, type RecoveryCopy, type RecoverySettings } from '../core/recovery';
 import { createDocumentFactory } from '../core/document';
@@ -60,7 +62,15 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
 // DiagramTeX editor: state, interaction, history, properties panel, storage and export.
 (function () {
   const { TYPES, util } = TD;
-  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; v.title = uiText('app.version.title', 'DiagramTeX {version}: this release on GitLab', { version: TD.VERSION }); (v as HTMLAnchorElement).href = `https://gitlab.com/igniting-space/diagramtex/-/tags/v${TD.VERSION}`; } }
+  // the version link's tip follows the interface language, as the rest of the shell does (newer: a release to reload into)
+  let newerVersion = '';
+  const versionTip = () => {
+    const v = document.getElementById('appVer');
+    if (v) v.title = newerVersion ? uiText('app.version.update', 'DiagramTeX {version} is out (this is {current}): click to reload', { version: newerVersion, current: TD.VERSION })
+      : uiText('app.version.title', 'DiagramTeX {version}: this release on GitLab', { version: TD.VERSION });
+  };
+  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; versionTip(); (v as HTMLAnchorElement).href = `https://gitlab.com/igniting-space/diagramtex/-/tags/v${TD.VERSION}`; } }
+  onLocale(versionTip);
   // a newer release on this host (dist/version.json, written by the build): a marker dot by the version, and
   // a click reloads into it. Asked once per load, past every cache; no answer (dev, offline) changes nothing.
   {
@@ -69,7 +79,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       const v = document.getElementById('appVer'), n = j && j.version;
       if (!v || !n || !newer(n, TD.VERSION)) return;
       v.classList.add('update');
-      v.title = uiText('app.version.update', 'DiagramTeX {version} is out (this is {current}): click to reload', { version: n, current: TD.VERSION });
+      newerVersion = n; versionTip();
       v.removeAttribute('target'); (v as HTMLAnchorElement).href = location.href;
       v.addEventListener('click', (e) => { e.preventDefault(); location.reload(); });
     }).catch(() => {});
@@ -199,7 +209,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   // back whichever was undone last.
   function undo() {
     finishEdit(); finishPoly(); commit();
-    const st = state.undo[state.undo.length - 1], f = canUndoFile() ? fileUndo[fileUndo.length - 1] : null;
+    const st = state.undo[state.undo.length - 1], f = fileUndo[fileStep(fileUndo, binnedOf)];
     if (f && (!st || f.t > (st.t || 0))) { undoFile(); return; }
     if (!st) return;
     state.undo.pop(); st.r = stamp(); state.redo.push(st); applyStep(st, true);
@@ -209,17 +219,17 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   function undoDocument(back: boolean) {
     const dv = TD.docview;
     if (back) {
-      const t = dv?.lastDone() || 0, f = canUndoFile() ? fileUndo[fileUndo.length - 1] : null;
+      const t = dv?.lastDone() || 0, f = fileUndo[fileStep(fileUndo, binnedOf)];
       if (f && (!t || f.t > t)) undoFile(); else if (t) dv.applyUndo(true);
     } else {
-      const r = dv?.lastUndone() || 0, f = canRedoFile() ? fileRedo[fileRedo.length - 1] : null;
+      const r = dv?.lastUndone() || 0, f = fileRedo[fileStep(fileRedo, listedOf)];
       if (f && (!r || (f.r || 0) > r)) redoFile(); else if (r) dv.applyUndo(false);
     }
     updateTopbar();
   }
   function redo() {
     finishEdit(); commit();
-    const st = state.redo[state.redo.length - 1], f = canRedoFile() ? fileRedo[fileRedo.length - 1] : null;
+    const st = state.redo[state.redo.length - 1], f = fileRedo[fileStep(fileRedo, listedOf)];
     if (f && (!st || (f.r || 0) > (st.r || 0))) { redoFile(); return; }
     if (!st) return;
     state.redo.pop(); st.t = stamp(); state.undo.push(st); trimUndo(); applyStep(st, false);
@@ -359,7 +369,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       el.addEventListener('transitionend', end);
     });
   }
-  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, gridStyle: state.gridStyle, guideMode, snap: state.snap, snapMode: snapMode(), defaults: state.defaults, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
+  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, gridStyle: state.gridStyle, guideMode, snap: state.snap, snapMode: snapMode(), defaults: state.defaults, bucketFill, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
 
   // ---- Undo history per file (and per diagram of a classic file). Leaving a file keeps its steps; coming back
   // gives them back, as long as what they apply to is still exactly as it was left. Another tab's edit, a
@@ -508,6 +518,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       else if (same.length) openDoc((same[same.length - 1] as any).id); else step.created = newDoc(null, null, null, null, null, kind);
     }
     renderDocList(); renderBinRow();
+    step.seen = listIds();
     if (step.ids.length) { fileUndo.push(step); if (fileUndo.length > 50) fileUndo.shift(); }
     updateTopbar();
   }
@@ -515,13 +526,23 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   // they had in the list and under their names (a name taken since gets "copy"), and reopens the file that
   // was open. A file restored or erased from the bin dialog since is no longer the step's to bring back.
   // `t` / `r`: when it was done and undone (`stamp()`), so it takes its turn among the files' own steps;
-  // `back`: the file that was open before undo, where redo returns to.
-  interface FileStep { t: number; r?: number; back?: string | null; ids: string[]; folder?: string; at: number[]; open: string | null; created: string | null; folded: string[] }
+  // `back`: the file that was open before undo, where redo returns to; `seen`: the files in the list once it was done
+  // (or undone). Only their undo and redo reach it: a file made or opened since has nothing to undo or redo.
+  interface FileStep { t: number; r?: number; back?: string | null; seen?: string[]; ids: string[]; folder?: string; at: number[]; open: string | null; created: string | null; folded: string[] }
   const fileUndo: FileStep[] = [], fileRedo: FileStep[] = [];
   const binnedOf = (step: FileStep) => { const b = new Set(bin().map((x) => x.id)); return step.ids.filter((id) => b.has(id) && store.get(LS_DOC + id, null)); };
   const listedOf = (step: FileStep) => { const l = new Set(index().map((x) => x.id)); return step.ids.filter((id) => l.has(id)); };
-  const canUndoFile = () => { while (fileUndo.length && !binnedOf(fileUndo[fileUndo.length - 1]).length) fileUndo.pop(); return fileUndo.length > 0; };
-  const canRedoFile = () => { while (fileRedo.length && !listedOf(fileRedo[fileRedo.length - 1]).length) fileRedo.pop(); return fileRedo.length > 0; };
+  // the last step the open file can reach (-1: none); steps whose files have been restored or erased since are dropped
+  function fileStep(list: FileStep[], live: (step: FileStep) => string[]) {
+    for (let k = list.length - 1; k >= 0; k--) {
+      if (!live(list[k]).length) { list.splice(k, 1); continue; }
+      if (!list[k].seen || list[k].seen!.includes(state.docId!)) return k;
+    }
+    return -1;
+  }
+  const listIds = () => index().map((d: any) => d.id);
+  const canUndoFile = () => fileStep(fileUndo, binnedOf) >= 0;
+  const canRedoFile = () => fileStep(fileRedo, listedOf) >= 0;
   // a file made only because the last one of its kind was deleted, and still untouched
   const isBlankNew = (id: string) => {
     const d: any = store.get(LS_DOC + id, null), e: any = docEntry(id);
@@ -529,8 +550,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     return !(d.sheet?.shapes?.length) && (d.blocks || []).every((b: any) => b.type === 'diagram' && !(b.shapes || []).length);
   };
   function undoFile() {
-    if (!canUndoFile()) return;
-    const step = fileUndo.pop()!, ids = binnedOf(step), items = bin().filter((x) => ids.includes(x.id));
+    const at = fileStep(fileUndo, binnedOf);
+    if (at < 0) return;
+    const step = fileUndo.splice(at, 1)[0], ids = binnedOf(step), items = bin().filter((x) => ids.includes(x.id));
     if (step.created && step.created === state.docId) saveNow();
     const idx: any[] = index();
     // back in list order, each at its old place (or the end, when the list has shrunk since)
@@ -553,18 +575,21 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     store.set(LS_BIN, bin().filter((x) => !ids.includes(x.id)));
     for (const k of step.folded) folded.add(k);
     if (step.folded.length) store.set(LS_FOLDED, [...folded]);
-    fileRedo.push({ ...step, ids, created: null, r: stamp(), back: dropped && state.docId === step.created ? null : state.docId });
+    const again: FileStep = { ...step, ids, created: null, r: stamp(), back: dropped && state.docId === step.created ? null : state.docId };
+    fileRedo.push(again);
     const reopen = step.open && ids.includes(step.open) ? step.open : null;
     if (dropped && state.docId === step.created) state.docId = null; // nothing of it left to save
     if (reopen) openDoc(reopen);
     else if (!state.docId) { const same = idx.filter((d) => (d.kind || 'classic') === state.doc.kind); if (same.length) openDoc(same[same.length - 1].id); }
+    again.seen = listIds();
     renderDocList(); renderBinRow(); updateTopbar();
     const first: any = items.find((x) => x.id === ids[0]);
     showHint(step.folder ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(step.folder) }) : ids.length === 1 ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(first.name) }) : uiText('hint.restored.many', 'Restored {n} files', { n: ids.length }), 1600);
   }
   function redoFile() {
-    if (!canRedoFile()) return;
-    const step = fileRedo.pop()!, ids = listedOf(step);
+    const at = fileStep(fileRedo, listedOf);
+    if (at < 0) return;
+    const step = fileRedo.splice(at, 1)[0], ids = listedOf(step);
     const it: any = docEntry(ids[0]);
     binDocs(ids, step.folder, step.back);
     for (const k of step.folded) folded.delete(k);
@@ -828,7 +853,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   function renderDocList() {
     const ul = $('#docList'), kind = state.doc.kind;
     $('#filesTitle').textContent = caption(({ page: captions["ui.pages"], board: captions["ui.whiteboards"], classic: captions["ui.classic.documents"] } as Record<string, any>)[kind]);
-    $('#btnNewDoc').title = caption(({ page: captions["ui.new.page"], board: captions["ui.new.whiteboard"], classic: captions["ui.new.classic.document"] } as Record<string, any>)[kind]);
+    const newName = caption(({ page: captions["ui.new.page"], board: captions["ui.new.whiteboard"], classic: captions["ui.new.classic.document"] } as Record<string, any>)[kind]);
+    $('#btnNewDoc').title = newName; $('#btnNewDoc').setAttribute('aria-label', newName);
     const docs = index().filter((d) => ((d as any).kind || 'classic') === kind);
     // a file just opened is shown: the folders around it unfold
     if (state.docId && listShows !== state.docId) {
@@ -1168,7 +1194,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     }
     if (!shapes().length) { state.view = { x: -60, y: -60, zoom: 1 }; render(); return; }
     const b = TD.bboxOf(shapes().flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }));
-    const z = Math.max(0.1, Math.min(width ? 8 : 3, (r.w - 80) / Math.max(b.w, 1), width ? Infinity : (r.h - 80) / Math.max(b.h, 1)));
+    // as far out as zooming by hand goes (a Whiteboard 3%), so Fit always brings everything into view
+    const z = Math.max(state.mode === 'board' ? 0.03 : 0.1, Math.min(width ? 8 : 3, (r.w - 80) / Math.max(b.w, 1), width ? Infinity : (r.h - 80) / Math.max(b.h, 1)));
     state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: width ? b.y - 40 / z : b.y + b.h / 2 - r.h / 2 / z };
     render();
   }
@@ -1177,7 +1204,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   // Construction guides belong to the active diagram/sheet, never exported drawing objects.
   function nativeNodeSections(sel: Shape[]): FormSection[] {
     if (sel.length !== 1) return [];
-    const s = sel[0], options = TD.nodeFeatures.placements.map((k: string) => [k, k]);
+    const s = sel[0], options = TD.nodeFeatures.placements.map((k: string) => [k, placeName(k)]);
     const field = (key: string, label: string, fallback: any = '', numeric = false) => row(label, { kind: 'input' as const, value: s[key] ?? fallback, attrs: { type: numeric ? 'number' : 'text', 'data-native': key, ...(numeric ? { min: 0, step: 1 } : { 'data-tx': key === 'nodeName' ? '' : 'text' }) } }, ...(numeric ? [{ kind: 'text' as const, text: 'px', class: 'val' }] : []));
     const place = (key: string, label: string) => row(label, { kind: 'select' as const, value: s[key] || (key==='nodePinPosition'?'right':'above'), options, attrs: { 'data-native': key } });
     if (TD.nodeFeatures.types.has(s.type)) return [section(uiText('native.node', 'TikZ node'), [
@@ -1191,7 +1218,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const nodes = shapes().filter(n => n.id !== s.id && TD.nodeFeatures.types.has(n.type));
     return [section(uiText('native.attachments', 'Node anchors'), ['link1','link2'].flatMap((key, i) => [
       row(i ? uiText('native.end', 'End node') : uiText('native.start', 'Start node'), { kind: 'select' as const, value: s[key]?.id || '', options: [['', uiText('native.detached', 'Detached')], ...nodes.map(n => [n.id, n.nodeName || n.name || typeName(n.type) + ' ' + n.id])], attrs: { 'data-native-link': key } }),
-      row(uiText('native.anchor', 'Anchor'), { kind: 'select' as const, value: s[key] ? TD.nodeFeatures.anchorName(s[key].u,s[key].v,byId(s[key].id)?.type) || 'custom' : 'center', options: [...TD.nodeFeatures.anchors.map((a: string)=>[a,a]), ['custom', uiText('native.customAnchor', 'Custom border point')]], attrs: { 'data-native-anchor': key, disabled: !s[key] } }),
+      row(uiText('native.anchor', 'Anchor'), { kind: 'select' as const, value: s[key] ? TD.nodeFeatures.anchorName(s[key].u,s[key].v,byId(s[key].id)?.type) || 'custom' : 'center', options: [...TD.nodeFeatures.anchors.map((a: string)=>[a, anchorName(a)]), ['custom', uiText('native.customAnchor', 'Custom border point')]], attrs: { 'data-native-anchor': key, disabled: !s[key] } }),
     ]), 'sec native-anchors')];
   }
   function applyNativeField(t: any, final: boolean) {
@@ -1270,6 +1297,14 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const svg = button.querySelector('svg');
     setIcon(svg, mode === 'objects' ? 'snapObjects' : mode === 'grid' ? 'snapGrid' : 'snap'); svg.dataset.snapIcon = mode; svg.setAttribute('aria-hidden','true');
   }
+  // What a point (a new shape's corner, a line's end) snaps to: a shape's box without the half of its stroke that lies
+  // outside the outline, so it lands where the outline (and TikZ's coordinate) is and shapes drawn in turn don't drift.
+  // Moving shapes still lines up what is seen, the outside of the stroke (tests/snapping-modes.mjs).
+  function snapBox(s: any) {
+    const b = TD.nodeFeatures?.bodyBox(s) || TD.bbox(s);
+    const p = s.type === 'text' ? 0 : Math.min(b.w, b.h, (s.width || 0) * (canScale(s) ? objectScale(s) : 1)) / 2;
+    return p > 0 ? { x: b.x + p, y: b.y + p, w: b.w - 2 * p, h: b.h - 2 * p } : b;
+  }
   function snapPoint(p: any, e: any, exclude?: any) {
     smartLines = [];
     if (!state.snap || (e && e.altKey)) return { x: p.x, y: p.y };
@@ -1287,7 +1322,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (best) return { x: best.x, y: best.y, anchor: true };
     const excluded = [...(exclude || [])].join(',');
     if (!pointSnapCache || pointSnapCache.owner !== home() || pointSnapCache.list !== shapes() || pointSnapCache.excluded !== excluded) {
-      const others = shapes().filter(s => !s.hidden && !exclude?.has(s.id)).map(s => TD.nodeFeatures?.bodyBox(s) || TD.bbox(s));
+      const others = shapes().filter(s => !s.hidden && !exclude?.has(s.id)).map(snapBox);
       pointSnapCache = { owner:home(), list:shapes(), excluded, others, index:createSnapIndex(others) };
     }
     const match = snapTranslation({ x: p.x, y: p.y, w: 0, h: 0 }, 0, 0, pointSnapCache.others, activeGuides(), thr, false, pointSnapCache.index);
@@ -1838,9 +1873,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     document.querySelectorAll('#tools button[data-fly]').forEach((b) => b.classList.toggle('active', flyOf(t) === (b as HTMLElement).dataset.fly));
   }
   const canBucketFill = (s: any) => !s.hidden && !s.locked && s.type !== 'ball' && s.type !== 'dot' && TD.canCombine(s);
+  // the bucket's own colour (remembered with the preferences): not Default style's fill, which every new shape takes
+  let bucketFill: any = '#cfe2f3';
   function fillShapes(list: any[], clear = false) {
     const eligible = list.filter(canBucketFill); if (!eligible.length) return;
-    const fill = clear ? null : state.defaults.fill;
+    const fill = clear ? null : bucketFill;
     if (eligible.every(s=>JSON.stringify(s.fill)===JSON.stringify(fill))) return;
     begin(); for (const s of eligible) s.fill = clone(fill); commit(); render();
   }
@@ -1849,7 +1886,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     finishPoly();
     if (t === 'image') { $('#imageInput').value = ''; $('#imageInput').click(); t = 'select'; }
     state.tool = t;
-    if (t === 'bucket' && previous !== 'bucket') fillShapes(selected());
+    // the selection takes the bucket's colour at once (one undo step); an empty bucket never clears a fill this way
+    if (t === 'bucket' && previous !== 'bucket' && bucketFill != null) fillShapes(selected());
     if (previous === 'bucket' || t === 'bucket') renderProps();
     magnifier.hide(); smartLines = [];
     markTools();
@@ -2385,7 +2423,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       createMove(drag, p, e);
       return;
     }
-    const now = performance.now();
+    const now = e.timeStamp; // when the press happened, not when a busy page got to it: two quick presses stay a double-click
     const dbl = now - lastDown.t < 350 && Math.hypot(e.clientX - lastDown.x, e.clientY - lastDown.y) < 6;
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const hitG = e.target.closest && e.target.closest('[data-id]');
@@ -2461,11 +2499,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     // select tool
     const ap = e.target.closest && e.target.closest('[data-addpt]');
     if (ap) {
-      const s = byId(ap.dataset.hid), i = +ap.dataset.addpt;
+      const s = byId(ap.dataset.hid), i = +ap.dataset.addpt, before = clone(s);
       begin();
       polyInsert(s, i);
       state.vertex = { id: s!.id, i: i + 1 };
-      drag = { mode: 'handle', id: s!.id, key: 'v' + (i + 1), orig: clone(s) };
+      drag = { mode: 'handle', id: s!.id, key: 'v' + (i + 1), orig: clone(s), before };
       render(); renderProps();
       return;
     }
@@ -2479,9 +2517,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         renderOverlay(); renderProps();
       }
       begin();
-      const hs0 = byId(h.dataset.hid);
+      const hs0 = byId(h.dataset.hid), before = clone(hs0); // (before: what Esc puts back)
       if (CONNECT.has(hs0!.type) && END[h.dataset.handle]) delete hs0![END[h.dataset.handle][0]]; // re-attached where it's dropped
-      drag = { mode: 'handle', id: h.dataset.hid, key: h.dataset.handle, orig: clone(hs0), p0: p };
+      drag = { mode: 'handle', id: h.dataset.hid, key: h.dataset.handle, orig: clone(hs0), p0: p, before };
       svg.style.setProperty('--drag-cur', h.style.cursor || 'move'); svg.classList.add('drag-cur'); // keep it while the pointer outruns the handle
       return;
     }
@@ -2525,11 +2563,20 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       renderOverlay(); renderProps();
       return;
     }
+    // a double-click inside a box drawn without a fill (only its outline is hit): label it, as on its outline
+    if (dbl && state.tool === 'select') {
+      const box = [...shapes()].reverse().find((s: any) => BOXED.has(s.type) && (s.type !== 'poly' || s.closed) && !s.hidden && !s.locked && TD.containsClosedShape(s, p));
+      if (box) { state.sel = new Set([box.id]); labelInside(box); return; }
+    }
     if (!e.shiftKey) state.sel.clear();
     drag = { mode: 'marquee', base: new Set(state.sel) };
     marquee = { a: p, b: p };
     renderOverlay(); renderProps();
   });
+  // A press that opened an edit (a double-click on text, a label or inside a box: the handler above finishes any
+  // other edit first) keeps the focus in its box. Otherwise the mousedown that follows moves the focus off it, and
+  // keys typed straight after the double-click reach the canvas's shortcuts.
+  svg.addEventListener('pointerdown', (e: PointerEvent) => { if (editing) e.preventDefault(); });
 
   svg.addEventListener('pointermove', (e: any) => {
     const p = toWorld(e);
@@ -2733,6 +2780,26 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (t.fix) t.fix(c);
     return t.valid(c);
   }
+  // Esc while dragging: what the drag changed goes back as it was, and nothing is added to undo. A shape being drawn
+  // goes; a move, a resize or a turn returns; a marquee leaves the selection as it found it. (A pan is left be.)
+  function cancelDrag() {
+    const d = drag;
+    if (!d || d.mode === 'pan') return false;
+    const putBack = (q: any, o: any) => { if (!q || q === o) return; for (const k of Object.keys(q)) if (!(k in o)) delete q[k]; Object.assign(q, clone(o)); };
+    drag = null; snapHint = null; linkHint = null; smartLines = [];
+    svg.classList.remove('drag-cur', 'rot-zone');
+    if (d.mode === 'create' || d.mode === 'pencil') { removeShape(d.id); state.sel.clear(); }
+    else if (d.mode === 'move' || d.mode === 'rotate') {
+      if (d.fast) { d.off = { dx: 0, dy: 0 }; fastLinks(d); endFastMove(d); }
+      else for (const [id, o] of d.orig) putBack(byId(id), o);
+    } else if (d.mode === 'handle') putBack(byId(d.id), d.before || d.orig);
+    else if (d.mode === 'marquee') { marquee = null; state.sel = new Set(d.base); }
+    else if (d.mode === 'textframe') marquee = null;
+    else if (d.mode === 'guide') { if (d.beforeGuides) home().guides = d.beforeGuides; else delete home().guides; }
+    documentHistory.cancel();
+    render(); renderProps();
+    return true;
+  }
   function endDrag(e: any) {
     if (!drag) return;
     const d = drag;
@@ -2825,6 +2892,26 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   svg.addEventListener('wheel', (e: WheelEvent) => { if (state.tool !== 'magnify') return; e.preventDefault(); e.stopImmediatePropagation(); magnifier.zoom(wheelZoomFactor(e)); }, { capture: true, passive: false });
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
+  // Touch: a finger held still for half a second opens the object menu, as a right-click does (iPad Safari sends no
+  // contextmenu for it). What the press started (a move, a marquee, a new shape) is undone first; a second finger
+  // (a pinch) or a move of more than 8px is not a long press.
+  let longPress: { id: number; x: number; y: number; timer: number } | null = null, longPressed = 0;
+  const endLongPress = () => { if (longPress) { clearTimeout(longPress.timer); longPress = null; } };
+  svg.addEventListener('pointerdown', (e: PointerEvent) => {
+    endLongPress();
+    if (e.pointerType !== 'touch' || !e.isPrimary || e.button !== 0) return;
+    const at = { clientX: e.clientX, clientY: e.clientY, target: e.target };
+    longPress = { id: e.pointerId, x: e.clientX, y: e.clientY, timer: window.setTimeout(() => {
+      longPress = null;
+      if (drag?.mode === 'pan') return;
+      cancelDrag();
+      longPressed = Date.now();
+      canvasMenu(at);
+    }, 550) };
+  });
+  svg.addEventListener('pointermove', (e: PointerEvent) => { if (longPress && e.pointerId === longPress.id && Math.hypot(e.clientX - longPress.x, e.clientY - longPress.y) > 8) endLongPress(); });
+  svg.addEventListener('pointerup', endLongPress);
+  svg.addEventListener('pointercancel', endLongPress);
   svg.addEventListener('pointerleave', () => { magnifier.hide(); cursorW = null; moveRulerCursor(); });
   svg.addEventListener('pointerleave', () => { if (!drag && state.tool !== 'select' && !polyDraft && !arcDraft && !lineDraft) { snapHint = null; renderOverlay(); } });
 
@@ -2991,8 +3078,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     { key: 'bold', label: message('prop.bold', 'Style'), type: 'bi' },
     { key: 'align', label: message('prop.align', 'Align'), type: 'align' },
     { key: 'valign', label: message('prop.valign', 'Vertical'), type: 'valign' },
-    { key: 'color', label: message('prop.color', 'Text color'), type: 'color' },
-    { key: 'ballColor', label: message('prop.ballColor', 'Ball color'), type: 'color' },
+    { key: 'color', label: message('prop.color', 'Text colour'), type: 'color' },
+    { key: 'ballColor', label: message('prop.ballColor', 'Ball colour'), type: 'color' },
     { key: 'stroke', label: message('prop.stroke', 'Stroke'), type: 'color', nullable: true },
     { key: 'fill', label: message('prop.fill', 'Fill'), type: 'color', nullable: true, fills: true },
     { key: 'width', label: message('prop.width', 'Line width'), type: 'width', min: 0.25, step: 0.25, unit: 'px' },
@@ -3068,13 +3155,16 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const VALIGNS: any[][] = [['top', message('valign.top', 'Align Top: new lines grow the box downward'), 'valignTop'],
     ['middle', message('valign.middle', 'Align Middle: new lines grow the box both ways'), 'valignMiddle'],
     ['bottom', message('valign.bottom', 'Align Bottom: new lines grow the box upward'), 'valignBottom']];
-  function fieldModel(p: any, v: any, labelOverride?: any): StyleModel {
+  // the value a field shows for a shape, as fieldModel reads it (no tips, a single shaft and a solid line are unset)
+  const shownVal = (p: any, v: any) => p.type === 'tip' ? v || 'none' : p.type === 'shaft' ? v || 'single' : p.type === 'dash' ? v || 'solid' : typeof v === 'number' ? +v.toFixed(3) : v ?? null;
+  const MIXABLE = new Set(['color', 'width', 'number', 'select', 'size', 'tip', 'shaft', 'dash']);
+  function fieldModel(p: any, v: any, labelOverride?: any, others?: any[]): StyleModel {
     const model = {
       sliderDefault: p.type === 'range' ? (p.key === 'labelPos' ? 0.5 : p.key === 'opacity' ? 1 : symParams(selected()[0] || {})?.[p.key] ?? ({ phase: 0, duty: 50, fire: 60 } as Record<string, number>)[p.key]) : undefined,
       type: p.type, key: p.key, id: 'f-' + p.key, label: caption(labelOverride || p.label),
       value: p.type === 'size' && typeof v === 'number' ? 'custom' : p.type === 'number' && typeof v === 'number' ? +v.toFixed(3) : p.type === 'width' ? (typeof v === 'number' ? +v.toFixed(3) : '') : v ?? '',
       min: p.min ?? '', max: p.max ?? '', step: p.step ?? 1, unit: p.unit, hint: p.hint && caption(p.hint),
-      options: p.type === 'size' ? [...sizeOpts, ['custom', uiText('prop.size.custom', 'Custom px…')]] : (p.options || []).map((o: any) => [o[0], caption(o[1])]),
+      options: p.type === 'size' ? [...sizeOpts, ['custom', uiText('prop.size.custom', 'Custom px…')]] : (p.options || []).map((o: any) => [o[0], optionName(p.key, o[0]) ?? caption(o[1])]),
       checked: !!v, italic: !!p.italic, px: p.type === 'size' ? Math.round(TD.sizePx(v ?? 'normalsize') * 10) / 10 : 0,
       range: r2(v), radioLabel: p.type === 'align' ? caption(captions["ui.align"]) : p.type === 'valign' ? uiText('prop.valign.radio', 'Vertical alignment') : caption(p.label),
       radios: (p.type === 'align' ? ALIGNS : p.type === 'valign' ? VALIGNS : (p.icons || []) as any[][]).map(([key, label, icon]) => ({ key, icon, on: key === v,
@@ -3086,6 +3176,13 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (p.type === 'tip') model.value = v || 'none';
     else if (p.type === 'shaft') model.value = v || 'single';
     else if (p.type === 'dash') model.value = v || 'solid';
+    // several objects that differ here (others: each one's value): "Mixed", not the first one's value
+    const seen = others && MIXABLE.has(p.type) ? [...new Map(others.map((x) => [JSON.stringify(shownVal(p, x)), x])).values()] : [];
+    if (seen.length > 1) {
+      (model as any).mixed = true;
+      if (p.type === 'color') model.colour = { ...model.colour, none: false, label: uiText('prop.mixed', 'Mixed'), css: `linear-gradient(135deg, ${TD.fillCss(seen[0]) || 'transparent'} 50%, ${TD.fillCss(seen[1]) || 'transparent'} 50%)` };
+      else model.value = '';
+    }
     return model;
   }
 
@@ -3130,14 +3227,14 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   }
   function drawnPicker(type: string, key: string, v: any): StyleModel['drawn'] {
     if (type === 'tip') return { title: uiText('dd.tip.title', 'Arrow tip'), columns: 3,
-      options: TD.TIPS.map(([k, n]: any) => ({ value: k, label: n, svg: k === 'none' ? `<span class="none">${esc(caption(captions['ui.none']))}</span>` : tipPreview(k) })) };
-    if (type === 'shaft') return { title: uiText('style.shaft', 'Shaft'), options: TD.SHAFTS.map(([k, n]: any) => ({ value: k, label: n, svg: shaftPreview(k) })) };
+      options: TD.TIPS.map(([k, n]: any) => ({ value: k, label: tipName(k, n), svg: k === 'none' ? `<span class="none">${esc(caption(captions['ui.none']))}</span>` : tipPreview(k) })) };
+    if (type === 'shaft') return { title: uiText('style.shaft', 'Shaft'), options: TD.SHAFTS.map(([k, n]: any) => ({ value: k, label: shaftName(k, n), svg: shaftPreview(k) })) };
     if (type === 'width') return { title: uiText('ui.line.width.presets', 'Line width presets'),
       options: TD.WIDTHS.map((w: any) => ({ value: String(w), label: `${w} px`, note: `${r2(w * TD.PT_PER_PX)}pt`, svg: `<svg viewBox="0 0 60 10"><path d="M2 5H58" stroke="currentColor" stroke-width="${w}"/></svg>` })) };
     if (type !== 'dash') return undefined;
     const pat = TD.dashPat(v);
     return { title: uiText('style.dashPattern', 'Dash pattern'),
-      options: TD.DASHES.map(([k, n]: any) => ({ value: k, label: n, svg: dashPreview(k, 1.5) })),
+      options: TD.DASHES.map(([k, n]: any) => ({ value: k, label: dashName(k, n), svg: dashPreview(k, 1.5) })),
       custom: { label: uiText('dd.custom', 'Custom…'), shown: 'Custom', svg: dashPreview(v, 1.2), value: pat ? v.slice(2) : '', placeholder: 'on off … (pt)', title: uiText('dd.dash.title', 'Dash lengths in pt, e.g. 4 2 or 6 2 1 2'),
         apply: (text: string) => {
           const nums = text.trim().split(/[\s,]+/).map(Number).filter((n: any) => isFinite(n) && n >= 0);
@@ -3158,7 +3255,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (state.mode === 'document') { if (TD.docview) TD.docview.renderSettings(el); return; }
     const sel = selected(), fields: StyleModel[] = [];
     if (state.tool === 'bucket') {
-      propertiesView = mountFrame(el, MainProperties, { defaults: true, defaultsHint: false, title: uiText('assist.bucketTitle', 'Fill bucket'), fields: PROPS.filter(p => p.key === 'fill').map(p => fieldModel(p, state.defaults[p.key])), before: [], after: [], geometry: false });
+      propertiesView = mountFrame(el, MainProperties, { defaults: true, defaultsHint: false, title: uiText('assist.bucketTitle', 'Fill bucket'), target: 'bucket', fields: PROPS.filter(p => p.key === 'fill').map(p => fieldModel(p, bucketFill)), before: [], after: [], geometry: false });
       return;
     }
     if (!sel.length) {
@@ -3174,7 +3271,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       return;
     }
     const types = [...new Set(sel.map((s: any) => s.type))];
-    const title = sel.length === 1 ? (sel[0].type === 'sym' && TD.SYMS[sel[0].kind]?.hatchPreset ? uiText('shape.hatch', 'Hatch') : typeName(sel[0].type)) : (sel[0].g && sel.every((q: any) => q.g === sel[0].g) ? uiText('props.groupOf', 'Group of {n}', { n: sel.length }) : uiText('props.nObjects', '{n} objects', { n: sel.length }));
+    const title = sel.length === 1 ? (sel[0].type === 'sym' && TD.SYMS[sel[0].kind]?.hatchPreset ? uiText('props.hatchTitle', 'Hatch') : typeName(sel[0].type)) : (sel[0].g && sel.every((q: any) => q.g === sel[0].g) ? uiText('props.groupOf', 'Group of {n}', { n: sel.length }) : uiText('props.nObjects', '{n} objects', { n: sel.length }));
     const has = (k: any) => sel.some((s: any) => hasKey(s, k)), first = (k: any) => keyVal(sel.find((s: any) => hasKey(s, k)), k), isText = types.includes('text');
     for (const p of PROPS) {
       if (p.key === 'mathStyle') { const ms = mathStyleOf(sel); if (ms) fields.push(fieldModel(p, ms, p.label)); continue; }
@@ -3192,11 +3289,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       if (['stroke', 'fill', 'width', 'dash', 'radius'].includes(p.key) && sel.every(s => s.type === 'text' && !s.boxed)) continue;
       let label = p.label;
       if (!isText && p.key === 'size') label = uiText('prop.labelSize', 'Label size');
-      if (!isText && p.key === 'color' && !types.includes('dot')) label = uiText('prop.labelColor', 'Label color');
+      if (!isText && p.key === 'color' && !types.includes('dot')) label = uiText('prop.labelColor', 'Label colour');
       if (types.length === 1 && types[0] === 'dot' && p.key === 'color') label = caption(captions["ui.color"]);
       if (p.type === 'bi') fields.push(fieldModel({ ...p, italic: first('italic') }, first('bold')));
       else if (p.type === 'align') fields.push(fieldModel({ ...p, wraps: sel.some(s => s.tw > 0) }, first('align')));
-      else fields.push(fieldModel(p, first(p.key), label));
+      else fields.push(fieldModel(p, first(p.key), label, sel.length > 1 ? sel.filter((s: any) => hasKey(s, p.key)).map((s: any) => keyVal(s, p.key)) : undefined));
     }
     const before: FormSection[] = [], after: FormSection[] = [];
     if (sel.every(canScale)) before.push({ class: 'sec', rows: [row(captions["ui.scale"],
@@ -3238,6 +3335,17 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const G = pageGeom();
     return { paper: G.paper, paperName: TD.PAPERS[G.paper]?.name || uiText('page.paper.custom', 'Custom'), widthCm: G.W, heightCm: G.H, rawWidthCm: G.w / PX, rawHeightCm: G.h / PX, width: G.w, height: G.h, orient: G.orient, mt: G.mt, ml: G.ml, current: currentPage(), papers: Object.entries<any>(TD.PAPERS).map(([key, v]) => ({ key, name: v.name })), pages: Array.from({ length: G.n }, (_, k) => ({ objects: onPage(k, G).length, thumbnail: pageThumb(k, G) })) };
   }
+  // A new paper, orientation or margins: one undo step. Pages stack by the paper's height, so everything on a page
+  // moves with it and keeps its place on the paper (an object belongs to the page under its centre).
+  function setSheetPage(pg: any) {
+    finishEdit(); finishPoly(); commit();
+    begin();
+    const G0 = pageGeom(), on = shapes().map((s: any) => [s, pageOf(s, G0)] as const);
+    state.doc.page = pg;
+    const d = pageStep() - pageStep(G0);
+    if (d) for (const [s, k] of on) if (k) TD.translate(s, 0, k * d);
+    commit(); render(); renderProps(); scheduleSave();
+  }
   propsEl0().addEventListener('change', (e: any) => {
     const k = e.target.dataset.pp;
     if (!k || state.mode !== 'page') return;
@@ -3245,12 +3353,13 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const pg = { ...state.doc.page };
     if (k === 'paper') { if (v === 'custom') { const G = pageGeom(); pg.w = G.W; pg.h = G.H; } pg.paper = v; }
     else { v = parseFloat(v); if (!isFinite(v) || v < 0) { renderProps(); return; } if (k === 'mt') pg.mt = pg.mb = v; else if (k === 'ml') pg.ml = pg.mr = v; else pg[k] = Math.max(1, v); }
-    state.doc.page = pg; render(); renderProps(); scheduleSave();
+    if (!TD.pageFits(pg)) { showHint(uiText('page.noRoom', 'That leaves no room for text: keep at least 1 cm between the margins'), 2400); renderProps(); return; }
+    setSheetPage(pg);
   });
   propsEl0().addEventListener('click', (e: any) => {
     if (state.mode !== 'page') return;
     const o = e.target.closest('[data-ppo]');
-    if (o) { state.doc.page = { ...state.doc.page, orient: o.dataset.ppo }; render(); renderProps(); scheduleSave(); }
+    if (o && o.dataset.ppo !== pageGeom().orient) setSheetPage({ ...state.doc.page, orient: o.dataset.ppo });
     const a = e.target.closest('[data-pg]');
     if (!a || a.disabled) return;
     const k = +a.dataset.k;
@@ -3324,6 +3433,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     clearFormatPreview(false);
     const target = $('#props .sec[data-target]')?.dataset.target;
     if (target === 'defaults') { state.defaults[key] = value; savePrefs(); return; }
+    if (target === 'bucket') { if (key === 'fill') bucketFill = value; savePrefs(); return; }
     if (key === 'mathStyle') {
       begin();
       for (const s of selected()) if (s.type === 'text') TD.textHold(s, () => setMathStyle(s, value));
@@ -3450,8 +3560,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       applyProp(r.key, r.v, true);
       // a drawn picker (dash, shaft, tips, width presets) shows its new drawing; a width preset fills the number field
       if (t.tagName === 'SELECT' && ['dash', 'shaft', 'tip', 'width'].includes(PROPS.find((q) => q.key === r.key)?.type as string)) renderPropsKeepPicker(t);
-      else if (['label', 'closed', 'boxed'].includes(r.key)) renderProps();
-      if (r.key === 'size') { const px = t.closest('.ctl').querySelector('[data-sizepx]'), sl = t.closest('.ctl').querySelector('select'); if (px) px.value = r2(TD.sizePx(r.v)); if (sl) sl.value = typeof r.v === 'number' ? 'custom' : r.v; }
+      // the panel shows what was set (a number as kept: clamped, rounded), or the field would go back to the old value
+      // when it loses focus, and the next step (↑, ↓) would build on that
+      else renderProps();
     }
   });
   // re-render only the custom panel (keeps generic fields untouched)
@@ -3495,9 +3606,10 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       const key = cb.dataset.color;
       const target = $('#props .sec[data-target]')?.dataset.target;
       const fills = !!cb.dataset.fills;
-      if (target === 'defaults') openPicker(cb, () => state.defaults[key], (v: any) => {
-        state.defaults[key] = v;
-        if (state.tool === 'bucket' && key === 'fill') for (const shape of selected().filter(canBucketFill)) shape.fill = clone(v);
+      if (target === 'defaults') openPicker(cb, () => state.defaults[key], (v: any) => { state.defaults[key] = v; savePrefs(); }, !!cb.dataset.nullable, null, fills);
+      else if (target === 'bucket') openPicker(cb, () => bucketFill, (v: any) => {
+        bucketFill = v;
+        for (const shape of selected().filter(canBucketFill)) shape.fill = clone(v); // the selection follows the bucket
         savePrefs();
       }, !!cb.dataset.nullable, null, fills);
       else {
@@ -3759,7 +3871,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       if (!clean) { openImport(src); return; }
       groupPictures(res);
       placeImported(res, at, docAt);
-      showHint(k === 'block' ? uiText('hint.pastedAs', 'Pasted as a {name}', { name: (TYPES[list[0].type] || {}).name ? typeName(list[0].type) : uiText('hint.block', 'block') })
+      // a block is named (code that became one, too), not counted as a shape
+      const one = list.length === 1 && (k === 'block' || TD.blocks.get(list[0].type)) ? list[0] : null;
+      showHint(one ? uiText('hint.pastedBlock', 'Pasted the {name} block', { name: TYPES[one.type] ? typeName(one.type) : uiText('hint.block', 'block') })
         : list.length === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: list.length }), 1800);
       return;
     }
@@ -3835,7 +3949,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     }
     takeIn(text, files, at, docAt, dt.getData('text/html') || '');
   });
-  function paste() {
+  // at: centred on that point of the drawing (the menu's Paste, where the right-click was); else on the view's middle,
+  // each paste there a little further on
+  function paste(at?: { x: number; y: number }) {
     pasteTimer = 0;
     const c = clip();
     if (!c) return;
@@ -3846,11 +3962,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       return;
     }
     const r = fitArea(), v = state.view, G = TD.GRID; // the clear space left of the panel column
-    const cx = v.x + r.w / 2 / v.zoom, cy = v.y + r.h / 2 / v.zoom;
-    const at = `${Math.round(cx / G)},${Math.round(cy / G)}`;
-    if (c.at !== at) { c.at = at; c.n = 0; }
+    const cx = at ? at.x : v.x + r.w / 2 / v.zoom, cy = at ? at.y : v.y + r.h / 2 / v.zoom;
+    const key = `${Math.round(cx / G)},${Math.round(cy / G)}`;
+    if (c.at !== key) { c.at = key; c.n = 0; }
     const b = TD.bboxOf(c.shapes.flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }));
-    const step = G * 2 * c.n++;
+    const step = at ? 0 : G * 2 * c.n++;
     pasteShapes(c.shapes, Math.round((cx - b.x - b.w / 2) / G) * G + step, Math.round((cy - b.y - b.h / 2) / G) * G + step);
   }
   // Quick's Add to Document / Diagram / Page / Whiteboard: leave Quick and add the shapes to the open file, in the middle of the visible view (a new
@@ -4025,8 +4141,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const pickable = (s: any) => s && !s.hidden && !s.locked;
   function pruneSel() { for (const id of [...state.sel]) if (!pickable(byId(id))) state.sel.delete(id); }
   function autoName(s: any) {
-    const t = ((s.type === 'text' ? s.text : s.label) || '').replace(/\s+/g, ' ').trim();
-    return t ? (t.length > 48 ? t.slice(0, 48) + '…' : t) : (TYPES[s.type] && typeName(s.type)) || s.type;
+    // a library symbol is named by what it says, else by which symbol it is (all of them are of type Shape)
+    const t = ((s.type === 'text' || s.type === 'sym' ? s.text : s.label) || '').replace(/\s+/g, ' ').trim();
+    return t ? (t.length > 48 ? t.slice(0, 48) + '…' : t) : (s.type === 'sym' && TD.SYMS?.[s.kind]?.name) || (TYPES[s.type] && typeName(s.type)) || s.type;
   }
   const layerName = (s: any) => s.name || autoName(s);
   // groups by id in one pass over the shapes, bottom member first; a rebuild of the panel reads it once
@@ -4489,7 +4606,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
   // shortcuts are written the Windows way and shown as glyphs on a Mac (src/ui/kit/keys.ts)
   const kb = (k: string) => keyLabel(k);
-  let ctxFor: { doc?: string; folder?: string; layer?: string; guideId?: string; pick?: (act: string) => void } = {};
+  let ctxFor: { doc?: string; folder?: string; layer?: string; guideId?: string; pick?: (act: string) => void; at?: { x: number; y: number } } = {};
   let ctxShown = false;
   const ctxOpen = () => ctxShown;
   function closeCtx() { if (ctxShown) closeContextMenu(); }
@@ -4507,10 +4624,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   }
   // layer: { key, ids } when opened on a row of the Layers window; its Rename / Hide / Lock come first, and a
   // hidden or locked row (which can't be selected) gets only those and Delete
-  function openCtx(x: any, y: any, layer?: any) {
+  // at: the drawing's point under a right-click on the canvas, where its Paste puts what it pastes
+  function openCtx(x: any, y: any, layer?: any, at?: { x: number; y: number }) {
     const sel = selected(), n = sel.length, nu = n ? units().length : 0;
     const h: CtxRow[] = [];
-    const on = { layer: layer ? layer.key : '' };
+    const on = { layer: layer ? layer.key : '', ...(at ? { at } : {}) };
     if (layer) {
       const ls = layer.ids.map(byId).filter(Boolean), hid = ls.every((q: any) => q.hidden), lk = ls.every((q: any) => q.locked);
       h.push(item(captions["ui.rename"], 'layer:rename', { ic: 'rename' }),
@@ -4867,6 +4985,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
 
   svg.addEventListener('contextmenu', (e: any) => {
     e.preventDefault();
+    if (Date.now() - longPressed < 1000) return; // a long press already opened it (some browsers send this too)
+    canvasMenu(e);
+  });
+  // the object menu at a point, for a right-click or a long press: what is there is selected first
+  function canvasMenu(e: { clientX: number; clientY: number; target: any }) {
     if (drag || polyDraft) return;
     if (lineDraft) { lineCancel(); return; }
     if (editing) finishEdit();
@@ -4888,8 +5011,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       if (!(p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h)) { state.sel.clear(); renderOverlay(); renderProps(); }
     }
     pop.hidden = true;
-    openCtx(e.clientX, e.clientY);
-  });
+    openCtx(e.clientX, e.clientY, undefined, toWorld(e));
+  }
   // what a row of the menu does (also TD.app.cmd.ctxAct, for the tests)
   function ctxAct(act: string) {
     const [a, arg] = act.split(':');
@@ -4905,7 +5028,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       navigator.clipboard.writeText(t).then(() => showHint(uiText('hint.textCopied', 'Text copied'), 1000), () => showHint(uiText('hint.noClipboard', 'Clipboard not available'), 1400));
     }
     if (a === 'cut') { copySel(); deleteSel(); }
-    if (a === 'paste') paste();
+    if (a === 'paste') paste(ctxFor.at);
     if (a === 'dup') duplicate();
     if (a === 'del') deleteSel();
     if (a === 'group') groupSel();
@@ -5032,7 +5155,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     }
     if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (TD.blocks.editable(s.type)) openBlock(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
-      if (drag?.mode === 'guide') { if (drag.beforeGuides) home().guides = drag.beforeGuides; else delete home().guides; drag = null; documentHistory.cancel(); smartLines = []; renderOverlay(); renderProps(); return; }
+      if (cancelDrag()) return;
       if (selectedGuide) { selectedGuide=null; guidePress=null; renderOverlay(); return; }
       if (polyDraft) finishPoly();
       else if (state.tool !== 'select') setTool('select');
@@ -5083,23 +5206,28 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       mo.observe($(root), { subtree: true, attributes: true, attributeFilter: ['class'] });
     });
   }
-  function updateTopbar() {
+  // "Diagram 2 of 3" and its arrows; the Document view calls it after each change to the page (a diagram added,
+  // moved or deleted), as well as everything that updates the top bar
+  function updateBlockNav() {
     const diagrams = state.doc.blocks.map((b: any, i: any) => [b, i]).filter(([b]: any) => b.type === 'diagram');
     const bs = $('#blockSel'), nav = $('#blockNav');
     // Classic views share the same diagram picker and toolbar position.
     nav.hidden = bs.hidden = (state.mode !== 'diagram' && state.mode !== 'document') || !diagrams.length;
     nav.style.visibility = '';
-    const board = state.mode === 'board';
-    $('#btnExport').title = state.mode === 'page' ? uiText('top.export.page', 'Export the page as PNG (choose DPI), SVG or PDF') : board ? uiText('top.export.board', 'Export this whiteboard as PNG (choose DPI), SVG or PDF') : uiText('top.export.diagram', 'Export this diagram as PNG (choose DPI), SVG or PDF');
-    $('#btnTikz').title = state.mode === 'page' ? uiText('top.tikz.page', 'LaTeX for this page, to copy or download (Ctrl+E)') : board ? uiText('top.tikz.board', 'LaTeX code for this whiteboard or the whole document, to copy or download (Ctrl+E)') : caption(captions["ui.latex.code.for.this.diagram.or.the.whole.document.to.copy.or.download.ctrl.e"]);
     const activeDiagram = diagrams.find(([b, i]: any) => i === state.doc.active);
     const activeIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
     bs.textContent = activeDiagram?.[0].name?.trim() || uiText('top.blockSel', 'Diagram {n} of {total}', { n: activeIndex + 1, total: diagrams.length });
     // its name is now the diagram's (what it shows); the tip, which named it while it was empty, describes it
     if (bs.dataset.tipLabel) { bs.removeAttribute('aria-label'); delete bs.dataset.tipLabel; bs.setAttribute('aria-description', bs.dataset.tip); }
-    const diagramIndex = diagrams.findIndex(([, i]: any) => i === state.doc.active);
-    $('#blockPrev').disabled = diagramIndex <= 0;
-    $('#blockNext').disabled = diagramIndex < 0 || diagramIndex >= diagrams.length - 1;
+    $('#blockPrev').disabled = activeIndex <= 0;
+    $('#blockNext').disabled = activeIndex < 0 || activeIndex >= diagrams.length - 1;
+  }
+  function updateTopbar() {
+    updateBlockNav();
+    const board = state.mode === 'board';
+    // what the Export panel offers in this view (expFmts)
+    $('#btnExport').title = state.mode === 'document' ? uiText('top.export.document', 'Export the document as a PDF or a web page') : state.mode === 'page' ? uiText('top.export.page', 'Export the page as PNG (choose DPI), SVG, PDF or a web page') : board ? uiText('top.export.board', 'Export this whiteboard as PNG (choose DPI), SVG, PDF or a web page') : uiText('top.export.diagram', 'Export this diagram as PNG (choose DPI), SVG, PDF or a web page');
+    $('#btnTikz').title = state.mode === 'page' ? uiText('top.tikz.page', 'LaTeX for this page, to copy or download (Ctrl+E)') : board ? uiText('top.tikz.board', 'LaTeX code for this whiteboard or the whole document, to copy or download (Ctrl+E)') : caption(captions["ui.latex.code.for.this.diagram.or.the.whole.document.to.copy.or.download.ctrl.e"]);
     undoButtons();
     updateSnapButton();
     $('#stage').classList.toggle('hide-grid', !state.grid);
@@ -5143,7 +5271,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   { // the percentage is a field: click, type a number, Enter (or leave the field) applies, Esc reverts
     const zv = $('#zoomVal');
     const shown = () => Math.round(state.view.zoom * 100) + '%';
-    zv.addEventListener('focus', () => requestAnimationFrame(() => zv.select()));
+    zv.addEventListener('focus', () => selectOnFocus(zv));
     zv.addEventListener('keydown', (e: any) => {
       if (e.key === 'Enter') { e.preventDefault(); zv.blur(); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); zv.value = shown(); zv.blur(); }
@@ -5155,9 +5283,21 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     });
     zv.addEventListener('blur', () => { zv.value = shown(); });
   }
+  // A field focused by a click selects all of its text, so what is typed replaces it: at once, and again a frame later
+  // (the click's mouseup can put a caret back), but only while it still has focus: select() on a field already left
+  // (Enter, typed quickly) would focus it again, and the next shortcut would be typed into it.
+  function selectOnFocus(f: HTMLInputElement) {
+    f.select();
+    // the mouseup of the click that focused it would put a caret in (WebKit): not that one
+    const keep = (e: Event) => e.preventDefault();
+    f.addEventListener('mouseup', keep, { once: true });
+    setTimeout(() => f.removeEventListener('mouseup', keep), 500); // focused from the keyboard: no click to come
+    const was = f.value; // and not once typing has begun: it would select what was just typed
+    requestAnimationFrame(() => { if (document.activeElement === f && f.value === was) f.select(); });
+  }
   { // grid spacing: a field like the zoom percentage (Enter or leaving applies, Esc reverts)
     const gv = $('#gridVal');
-    gv.addEventListener('focus', () => requestAnimationFrame(() => gv.select()));
+    gv.addEventListener('focus', () => selectOnFocus(gv));
     gv.addEventListener('keydown', (e: any) => {
       if (e.key === 'Enter') { e.preventDefault(); gv.blur(); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); gv.value = fmtGrid(); gv.blur(); }
@@ -5311,7 +5451,16 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     onLocale(() => { hide(); fill(); }); // runs now, too
   }
 
-  const slug = () => (leafOf(state.doc.name) || 'diagram').replace(/[^\w\-]+/g, '_');
+  // a file name from the file's: letters and digits of any script (Thai keeps its vowel and tone marks), others as _
+  const cleanName = (n: string) => String(n || '').normalize('NFC').replace(/[^\p{L}\p{M}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '');
+  const slug = () => cleanName(leafOf(state.doc.name)) || 'diagram';
+  // one diagram of a Classic file (Diagram view): named after the diagram's own name, or numbered when there are several
+  const picSlug = () => {
+    if (state.doc.kind !== 'classic' || state.mode === 'document') return slug();
+    const ds = state.doc.blocks.filter((b: any) => b.type === 'diagram'), b = state.doc.blocks[state.doc.active], n = ds.indexOf(b) + 1;
+    const own = cleanName(b?.name?.trim() || '');
+    return own ? `${slug()}-${own}` : ds.length > 1 && n > 0 ? `${slug()}-diagram-${n}` : slug();
+  };
   function download(name: any, text: any, type: any) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type }));
@@ -5345,18 +5494,24 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   // Open a file from disk: a project file opens as a file of the app (linked to the file on disk when the
   // browser hands over a handle), anything else goes to the LaTeX import.
   async function openText(text: any, name: any, handle: any) {
-    if (!/\.(diagramtex|json)$/i.test(name) && !/^\s*\{/.test(text)) { openImport(text); return; }
+    if (!/\.(diagramtex|json)$/i.test(name) && !/^\s*\{/.test(text)) { openImport(text, name.replace(/\.[a-z0-9]+$/i, '')); return; }
     try {
       let bd = null;
       try { bd = JSON.parse(text); } catch { bd = null; }
       if (isBundle(bd)) { importBundle(bd); return true; }
       const known = handle && (await TD.files.docFor(handle, index().map((x) => (x as any).id)));
       if (known) { await reopenLinked(known, text, name); return true; }
-      if (!openProjectText(text, baseName(name))) throw new Error('not valid JSON');
+      if (!openProjectText(text, baseName(name), true)) throw new Error('not valid JSON'); // a second file never takes an existing name
       // an older .json file is not linked: its first save makes a .diagramtex beside it
       if (handle && name.toLowerCase().endsWith(FILE_EXT)) { await TD.files.link(state.docId, handle, projectJson(state.doc), text); showSaveState(); }
       return true;
-    } catch (err: any) { await TD.alert(uiText('dlg.openFailed.title', 'Couldn\'t open "{name}"', { name }), uiText('dlg.openFailed.body', "It isn't a DiagramTeX file ({error}).", { error: err.message })); return false; }
+    } catch (err: any) {
+      // what went wrong, not only that it did
+      const why = err.code === 'newer' ? uiText('dlg.openFailed.newer', 'It was saved by a newer version of DiagramTeX (file version {version}). Reload the app to get the latest version, then open it again.', { version: err.version })
+        : err.code === 'unknown' ? uiText('dlg.openFailed.unknown', "It holds objects this version of DiagramTeX doesn't know: {types}. If it comes from a newer version, reload the app to get the latest one, then open it again.", { types: err.types.join(', ') })
+        : uiText('dlg.openFailed.invalid', "It isn't a DiagramTeX file, or it is damaged: its contents aren't a drawing DiagramTeX can read.");
+      await TD.alert(uiText('dlg.openFailed.title', 'Couldn\'t open "{name}"', { name }), why); return false;
+    }
   }
   // A file already linked to one of the app's files: open that one, and take the file's contents if it
   // changed on disk since it was last saved or opened.
@@ -5419,7 +5574,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     try { fonts = await TD.inlineMathCss(); } catch (e: any) { fonts = ''; }
     return fonts ? svg.replace(/(<svg\b[^>]*>)/, (m: any) => m + xmlStyle(fonts)) : svg;
   }
-  const exportSvg = async () => { if (shapes().length) out(slug() + '.svg', await svgWithFonts(shapesSvg(shapes())), 'image/svg+xml'); };
+  const exportSvg = async () => { if (shapes().length) out(picSlug() + '.svg', await svgWithFonts(shapesSvg(shapes())), 'image/svg+xml'); };
 
   // ---------------- top-bar commands & insert popover ----------------
   const pop = $('#insertPop');
@@ -5435,7 +5590,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (c === 'save') saveFile();
     if (c === 'saveas') saveFile(true);
     if (c === 'tikz') openTikz();
-    if (c === 'latex') { const r = TD.texImages.collect(() => (state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc))); showHint(noRestore(), 6000); downloadLatex(r.result, r.files); } // a failed export's hint replaces the warning
+    if (c === 'latex') { const r = TD.texImages.collect(() => (state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc))); if (!restorable(r.result)) showHint(noRestore(), 6000); downloadLatex(r.result, r.files); } // a failed export's hint replaces the warning
     if (c === 'svg') { if (state.mode === 'page') exportPageSvg(); else if (shapes().length) exportSvg(); else showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200); }
     if (c === 'import') openImport('');
     if (c === 'print') printDoc();
@@ -5611,10 +5766,15 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     return [{ vb: [b.x, b.y, b.w, b.h], inner: svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '') }];
   }
   const expScale = (dpi = expOpts.dpi) => dpi / 2.54 / PX; // canvas px → image px
+  // the largest picture a browser draws: 40 megapixels, and no side over 32767 px
+  const RASTER_AREA = 4e7, RASTER_SIDE = 32767;
+  const rasterFits = (W: number, H: number) => W * H <= RASTER_AREA && Math.max(W, H) <= RASTER_SIDE;
+  // the highest DPI at which every source fits (whole DPI)
+  const maxDpi = (srcs: any[]) => Math.floor(Math.min(...srcs.map((s: any) => { const [, , w, h] = s.vb, k = 1 / 2.54 / PX; return Math.min(Math.sqrt(RASTER_AREA / (w * k * h * k)), RASTER_SIDE / (Math.max(w, h) * k)); })));
   async function rasterise(src: any, transparent: any, dpi?: any) {
     const sc = expScale(dpi), [x, y, w, h] = src.vb;
     const W = Math.max(1, Math.round(w * sc)), H = Math.max(1, Math.round(h * sc));
-    if (W * H > 16e7 / 4) throw new Error(`${W} × ${H} px is too large; lower the DPI`);
+    if (!rasterFits(W, H)) throw new Error(`${W} × ${H} px is too large; lower the DPI`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${r2(x)} ${r2(y)} ${r2(w)} ${r2(h)}" width="${W}" height="${H}">${await rasterStyle()}${noMathml(src.inner)}</svg>`;
     const img = new Image();
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -5679,18 +5839,18 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (fmt === 'svg') { runCmd('svg'); return; }
     const srcs = exportSources();
     if (!srcs.length) { showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200); return; }
-    if (fmt === 'pdf' && !expOpts.flat) { printVector(srcs); return; }
+    if (fmt === 'pdf' && !expOpts.flat) { printVector(srcs, picSlug()); return; }
     await askDir();
     if (fmt === 'pdf') {
       showHint(uiText('hint.exportingFlatPdf', 'Exporting a flattened PDF at {dpi} DPI…', { dpi: expOpts.flatDpi }), 1500);
-      try { await out(slug() + '.pdf', await flatPdf(srcs, expOpts.flatDpi)); } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
+      try { await out(picSlug() + '.pdf', await flatPdf(srcs, expOpts.flatDpi)); } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
       return;
     }
     showHint(uiText('hint.exportingAt', 'Exporting {fmt} at {dpi} DPI…', { fmt: fmt.toUpperCase(), dpi: expOpts.dpi }), 1500);
     try {
       for (let k = 0; k < srcs.length; k++) {
         const c = await rasterise(srcs[k], expOpts.transparent && !srcs[k].page);
-        await out(slug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
+        await out(picSlug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
       }
     } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
   }
@@ -5735,13 +5895,16 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       if (raster) rows.push({ kind: 'dpi', label: uiText('exp.resolution', 'Resolution'), value: dpi, presets: DPIS, onchange: (v) => { expOpts[expOpts.fmt === 'pdf' ? 'flatDpi' : 'dpi'] = v; saveExpOpts(); renderExpPop(); } },
         { kind: 'meta', text: dim + (srcs.length > 1 ? ' ' + (o.fmt === 'pdf' ? uiText('exp.perPage.pages', 'per page · {n} pages', { n: srcs.length }) : uiText('exp.perPage.files', 'per page · {n} files', { n: srcs.length })) : ''), aside: cm });
       else rows.push({ kind: 'meta', text: uiText('exp.vector', 'Vector, scales to any size'), aside: cm });
+      // said here, before the export, not after it fails: the largest DPI that works instead
+      const tooBig = raster && srcs.length > 0 && srcs.some((s: any) => !rasterFits(Math.round(s.vb[2] * sc), Math.round(s.vb[3] * sc)));
+      if (tooBig) rows.push({ kind: 'error', text: uiText('exp.tooLarge', 'Too large for the browser to draw at {dpi} DPI. Choose {max} DPI or less.', { dpi, max: Math.max(1, maxDpi(srcs)) }) });
       if (o.fmt === 'png' && state.mode !== 'page') rows.push({ kind: 'check', id: 'expTr', label: uiText('exp.transparent', 'Transparent background'), checked: o.transparent, onchange: (on) => { expOpts.transparent = on; saveExpOpts(); } });
       if (flat) rows.push({ kind: 'note', text: srcs.length > 1 ? uiText('exp.flatNote.page', "Each page becomes one image; text can't be selected.") : uiText('exp.flatNote.sheet', "Each sheet becomes one image; text can't be selected.") });
       if (o.fmt === 'pdf' && !flat) rows.push({ kind: 'note', bold: uiText('exp.saveAsPdf', 'Save as PDF'),
         text: srcs.length > 1 ? uiText('exp.pdfNote.pages', 'Vector PDF with selectable text, {n} pages. In the print window, choose {b} as the destination.', { n: srcs.length, b: B }) : uiText('exp.pdfNote', 'Vector PDF with selectable text. In the print window, choose {b} as the destination.', { b: B }) });
       else rows.push(...dirRow());
       model = { head, formats, format: o.fmt, onformat: setFmt, rows,
-        actions: [go(o.fmt === 'pdf' && !flat ? uiText('exp.savePdf', 'Save PDF…') : TD.files.dirOf(state.docId) ? uiText('exp.save', 'Save {fmt}', { fmt: o.fmt.toUpperCase() }) : uiText('exp.download', 'Download {fmt}', { fmt: o.fmt.toUpperCase() }))] };
+        actions: [{ ...go(o.fmt === 'pdf' && !flat ? uiText('exp.savePdf', 'Save PDF…') : TD.files.dirOf(state.docId) ? uiText('exp.save', 'Save {fmt}', { fmt: o.fmt.toUpperCase() }) : uiText('exp.download', 'Download {fmt}', { fmt: o.fmt.toUpperCase() })), disabled: tooBig }] };
     }
     renderSvelteView(expPop!.body, ExportPanel, model);
   }
@@ -5811,8 +5974,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
 
   // ---------------- import ----------------
   const imp = $('#importModal');
-  function openImport(text: any) {
+  // fromName: the file the code came from (a .tex opened from disk), which a new document is named after
+  let importFrom = '';
+  function openImport(text: any, fromName = '') {
     finishEdit(); finishPoly(); commit();
+    importFrom = fromName;
     $('#impText').value = text || '';
     impSay('');
     $('#impDefs').value = '';
@@ -5875,6 +6041,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     commit();
     render(); renderProps();
   }
+  // the one block an import brought in (named in the hint instead of counted as a shape), else null
+  const nIn1 = (res: any) => { const l = res.blocks.flatMap((b: any) => b.shapes || []); return l.length === 1 && TD.blocks.get(l[0].type) && TYPES[l[0].type] ? l[0] : null; };
   function runImport(asNew: any) {
     const src = $('#impText').value;
     let res;
@@ -5882,15 +6050,18 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     groupPictures(res);
     const nShapes = res.blocks.reduce((a: any, b: any) => a + (b.shapes ? b.shapes.length : 0), 0);
     if (!nShapes && !res.blocks.some((b: any) => b.type === 'text')) { impSay(uiText('imp.nothing', 'Nothing recognised in this code.') + (res.warnings.length ? ' ' + res.warnings.join(' ') : '')); return; }
-    if (asNew && state.doc.kind === 'board') { newDoc(res.title || 'Imported', null, null, res.blocks, res.page, 'board'); zoomFit(); }
+    // a new document is named after its \title, else the file it came from, else "Imported"; never an existing name
+    const newName = () => { const n = String(res.title || importFrom || uiText('imp.defaultName', 'Imported')).trim() || uiText('imp.defaultName', 'Imported'); return index().some((x) => (x as any).name === n) ? copyName(n) : n; };
+    if (asNew && state.doc.kind === 'board') { newDoc(newName(), null, null, res.blocks, res.page, 'board'); zoomFit(); }
     else if (asNew) {
-      newDoc(res.title || 'Imported', null, null, res.blocks, res.page);
+      newDoc(newName(), null, null, res.blocks, res.page);
       if (res.blocks.filter((b: any) => b.type === 'diagram').length > 1 || res.blocks.some((b: any) => b.type === 'text')) setMode('document');
       else zoomFit();
     } else placeImported(res, null);
     closeImport();
     const nKept = (res.kept || []).length;
-    const nIn = nShapes - nKept, inMsg = nIn === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: nIn });
+    const only = nIn1(res), nIn = nShapes - nKept;
+    const inMsg = only ? uiText('hint.importedBlock', 'Imported the {name} block', { name: typeName(only.type) }) : nIn === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: nIn });
     showHint(nKept ? uiText('hint.imported.kept', '{shapes} · {n} kept as TikZ code (dashed frames)', { shapes: inMsg, n: nKept }) : inMsg, 3000);
   }
   $('#impClose').onclick = closeImport;
@@ -5954,6 +6125,10 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     markSel(false);
   }
   // the LaTeX carries no copy of the diagram (a long data line stopped pdflatex), so importing it again is a best effort
+  // said only when it applies: importing this LaTeX again leaves something as TikZ code (one plain circle comes back whole)
+  function restorable(tex: string) {
+    try { return TD.importLatex(tex).blocks.every((b: any) => b.type !== 'diagram' || (b.shapes || []).every((s: any) => s.type !== 'tikz' || s.kind === 'defs')); } catch { return false; }
+  }
   const noRestore = () => uiText('hint.noRestore', 'DiagramTeX can\'t restore this LaTeX exactly: importing it again brings back lines, shapes and text, but plots, most blocks and library symbols come back as TikZ code. To keep editing, save the .diagramtex file.');
   function genTikz() {
     const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value;
@@ -5983,7 +6158,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const L = TD.lint ? TD.lint(tikzText, { preview: false }).filter((d: any) => d.sev !== 'info') : [];
     tikzErr = new Map();
     for (const d of L) tikzErr.set(d.line, [...(tikzErr.get(d.line) || []), d.msg]);
-    renderSvelteView($('#tikzLint'), LintList, { note: noRestore(), items: L } satisfies LintListModel);
+    renderSvelteView($('#tikzLint'), LintList, { note: restorable(tikzText) ? '' : noRestore(), items: L } satisfies LintListModel);
     paintTikz();
   }
   // a click on a line selects what it draws (⇧ adds); dragging across lines selects text as usual
@@ -6150,13 +6325,18 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     text(130, 304, 'Plain text in \\textbf{bold}, \\textit{italic} or \\texttt{typewriter}', { size: 'small' });
     // shapes and arrows
     head(440, 150, 'SHAPES AND ARROWS');
-    add('sym', 'sym:rrect', { x: 350, y: 178, w: 76, h: 40, text: 'Idea', fill: '#e8f0fb' });
-    add('line', 'line', { x1: 426, y1: 198, x2: 462, y2: 198, startTip: 'none', endTip: 'stealth', label: '' });
-    add('sym', 'sym:diamond', { x: 462, y: 172, w: 60, h: 52, text: '$?$' });
-    add('line', 'line', { x1: 492, y1: 224, x2: 492, y2: 262, startTip: 'none', endTip: 'stealth', label: '' });
-    add('sym', 'sym:rrect', { x: 454, y: 262, w: 76, h: 40, text: 'Done', fill: '#e6f4ea' });
-    add('ball', 'ball', { cx: 372, cy: 282, r: 16 });
-    add('spring', 'spring', { x1: 388, y1: 282, x2: 446, y2: 282 });
+    // the arrows and the spring are attached (link1/link2: where on the shape, as a fraction of its box), so they follow
+    const idea = add('sym', 'sym:rrect', { x: 350, y: 178, w: 76, h: 40, text: 'Idea', fill: '#e8f0fb' });
+    const toAsk = add('line', 'line', { x1: 426, y1: 198, x2: 462, y2: 198, startTip: 'none', endTip: 'stealth', label: '' });
+    const ask = add('sym', 'sym:diamond', { x: 462, y: 172, w: 60, h: 52, text: '$?$' });
+    const toDone = add('line', 'line', { x1: 492, y1: 224, x2: 492, y2: 262, startTip: 'none', endTip: 'stealth', label: '' });
+    const done = add('sym', 'sym:rrect', { x: 454, y: 262, w: 76, h: 40, text: 'Done', fill: '#e6f4ea' });
+    const ball = add('ball', 'ball', { cx: 372, cy: 282, r: 16 });
+    const spring = add('spring', 'spring', { x1: 388, y1: 282, x2: 446, y2: 282 });
+    const at = (s: any, u: number, v: number) => s && { id: s.id, u, v };
+    if (toAsk) Object.assign(toAsk, { link1: at(idea, 1, 0.5), link2: at(ask, 0, 0.5) });
+    if (toDone) Object.assign(toDone, { link1: at(ask, 0.5, 1), link2: at(done, 0.5, 0) });
+    if (spring) spring.link1 = at(ball, 1, 0.5);
     // circuit
     head(750, 150, 'CIRCUITS');
     add('cz', 'cz', { x: 690, y: 290 }); // y is the circuit's bottom edge
@@ -6252,13 +6432,31 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (changed) store.set(LS_INDEX, idx);
   }
 
-  // Another tab saved the open file. Without changes here, take its version; with changes here, say so (the next
-  // save here replaces it).
+  // Another tab saved the open file. Without changes here, take its version; with changes here, merge the two
+  // (src/core/merge.ts: what only one tab changed comes from that tab, both tabs' new shapes are kept, and where both
+  // changed the same thing this tab's wins) and save the result; files that cannot be merged, say so (the next save
+  // here replaces it).
   let warnedConflict = '';
   function reloadFromOtherTab() {
     const id = state.docId, d: any = store.get<Record<string, any> | null>(LS_DOC + id, null);
     if (!id || !d || editing || drag) return;
     if (autosave.isDirty()) {
+      const base: any = autosave.base(), here = JSON.parse(JSON.stringify({ kind: state.doc.kind, name: state.doc.name, page: state.doc.page, blocks: state.doc.blocks, active: state.doc.active, sheet: state.doc.sheet }));
+      const m = base && mergeFile(base, here, JSON.parse(JSON.stringify(d)));
+      if (m) {
+        const kind = normKind(d.kind), sel = [...state.sel];
+        const theirs = makeDoc(d.name, JSON.parse(JSON.stringify(d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }])), d.active ?? 0, d.page, JSON.parse(JSON.stringify(d.sheet || {})), kind);
+        state.doc = makeDoc(m.merged.name, m.merged.blocks || here.blocks, state.doc.active, m.merged.page, m.merged.sheet || here.sheet, kind);
+        state.sel = new Set(sel.filter((s) => state.doc.shapes.some((x: any) => x.id === s)));
+        state.undo = []; state.redo = []; documentHistory.reset(); // steps made before the merge would undo the other tab's changes too
+        autosave.markSynced(theirs); autosave.scheduleSave();
+        $('#docName').value = state.doc.name;
+        render(); renderProps(); renderDocList(); updateTopbar();
+        if (state.mode === 'document' && TD.docview) TD.docview.render();
+        showHint(m.clash ? uiText('hint.mergedClash', 'This file was also changed in another tab: its changes are added to yours, and where both tabs changed the same thing, yours are kept.')
+          : uiText('hint.merged', 'This file was also changed in another tab: its changes are added to yours.'), 5000);
+        return;
+      }
       if (warnedConflict !== id) { warnedConflict = id; showHint(uiText('hint.conflict', 'This file was also changed in another tab. Your changes here will replace those when saved.'), 6000); }
       return;
     }
@@ -6300,6 +6498,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       state.snap = state.snapMode !== 'off';
       if (prefs.gridCm >= 0.05 && prefs.gridCm <= 5) state.gridCm = prefs.gridCm;
       Object.assign(state.defaults, prefs.defaults || {});
+      if ('bucketFill' in prefs) bucketFill = prefs.bucketFill; else if (prefs.defaults?.fill) bucketFill = clone(prefs.defaults.fill);
       if (prefs.sidebar === false) document.body.classList.add('no-files');
       if (prefs.props === false) setPropsOpen(false);
       if (prefs.layers === false) { $('#layersWin').classList.add('collapsed'); $('#layersToggle').setAttribute('aria-expanded', 'false'); $('#layersToggle').title = uiText('panel.expand', 'Expand panel'); }
@@ -6317,8 +6516,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       renderPageLayer(); // the dimming outside the paper covers the view, which grows each frame
     };
     // A top bar too narrow for its controls scrolls sideways; a plain mouse wheel scrolls it too, and the side with
-    // more to see fades (the kit's fitToolbar; the bar sheds its labels by its own rules, so not `lean`).
-    fitToolbar($('#topbarTools') || $('#topbar'), { lean: false });
+    // more to see fades and shows a ‹ or › that scrolls it on (the kit's fitToolbar; the bar sheds its labels by its
+    // own rules, so not `lean`).
+    fitToolbar($('#topbarTools') || $('#topbar'), { lean: false, arrows: true });
     $('#propsHead').onclick = () => { setPropsOpen($('#propsWin').classList.contains('collapsed'), true); savePrefs(); };
     $('#btnSidebar').onclick = () => {
       const b = document.body, done = () => { if (inTool()) return; if (state.mode !== 'document') render(); else TD.docview.render(); };
@@ -6467,7 +6667,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   TD.math.onReadiness(updateOutputAvailability);
   TD.state = state; // for debugging
   TD.app = {
-    undoDocument, noteEdit: () => { fileRedo.length = 0; undoButtons(); },
+    undoDocument, noteEdit: () => { fileRedo.length = 0; undoButtons(); }, updateBlockNav,
     outputReady, outputAllowed, updateOutputAvailability,
     printShapes: (list: any[], name?: string) => printVector(shapeSources(list), name),
     // renames the open file, keeping its folder (the document's title is its name)
@@ -6478,11 +6678,13 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     parseProject, projectJson, // project files, for the tests
     recovery, restoreRecovery, openRecoveryCopy, // recovery copies, for the tests
     showHint, takeIn, takeText, texBundle, texFiles, svgFilePdf, svgVectorPdf, // pictures, code and text from outside (pasted or dropped); LaTeX with its pictures (an SVG as vector PDF)
+    setBucketFill: (v: any) => { bucketFill = v; }, // tests
     clearAllHistory: () => { histories.clear(); fileUndo.length = fileRedo.length = 0; state.undo = []; state.redo = []; documentHistory.reset(); updateTopbar(); }, // tests
     newDoc, // tests/bench.mjs
     resetHistory: () => { state.undo = []; state.redo = []; documentHistory.reset(); },
     newSample: () => { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); },
     get slug() { return slug(); },
+    get picSlug() { return picSlug(); },
     // pictures of shapes that are not on the canvas (Quick): a standalone SVG, or a PNG at `dpi`
     svgOf: (list: any) => shapesSvg(list, 4),
     defaults: () => state.defaults, // a new shape's style (Quick makes its blocks with them)

@@ -12,13 +12,17 @@
   import Spacer from './kit/Spacer.svelte';
   import Icon from './kit/Icon.svelte';
   import { onMount } from 'svelte';
+  import { isMac } from './kit/keys';
   import { t, caption, message, locale, setLocale, rich, type Message } from '../i18n';
 
   let modeSelectorsExpanded = $state(false);
   type InstallPrompt = Event & { prompt(): Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> };
   let installPrompt = $state.raw<InstallPrompt | null>(null);
   let installed = $state(false);
+  // Ctrl, or ⌘ on a Mac: prerendered as Ctrl, set once in the browser
+  let modKey = $state('Ctrl');
   onMount(() => {
+    modKey = isMac ? '⌘' : 'Ctrl';
     let channel: BroadcastChannel | null = null;
     const markInstalled = () => { installed = true; installPrompt = null; };
     try {
@@ -222,7 +226,8 @@
         <span id="filesTitle">{t("ui.documents", "Documents", {}, $locale)}</span>
         <div class="head-acts">
           <IconButton id="btnSortDocs" title={t("ui.sort", "Sort", {}, $locale)} aria-label={t("ui.sort.files", "Sort files", {}, $locale)} aria-haspopup="menu" aria-expanded="false" icon="sort" variant="default" />
-          <IconButton id="btnNewDoc" title={t("ui.new.document", "New document", {}, $locale)} aria-label={t("ui.new.document", "New document", {}, $locale)} icon="add" variant="default" />
+          <!-- named for the file kind by renderDocList (app.ts), in the interface language; this is only the prerendered name -->
+          <IconButton id="btnNewDoc" title={t("ui.new.document", "New document")} aria-label={t("ui.new.document", "New document")} icon="add" variant="default" />
         </div>
       </div>
       <ul id="docList" role="listbox" aria-labelledby="filesTitle"></ul>
@@ -354,7 +359,7 @@
         </div>
         <div class="eh-board">
           <div class="eh-title">{t("ui.empty.whiteboard", "Empty whiteboard", {}, $locale)}</div>
-          <div>{@html rich(t("shell.sentence6", "Draw anywhere: the board has no edges. Scroll to move around, pinch or <kbd>Ctrl</kbd>+scroll to zoom, <kbd>H</kbd> or <kbd>Space</kbd>-drag to grab it.", {}, $locale))}</div>
+          <div>{@html rich(t("shell.sentence6", "Draw anywhere: the board has no edges. Scroll to move around, pinch or <kbd>{mod}</kbd>+scroll to zoom, <kbd>H</kbd> or <kbd>Space</kbd>-drag to grab it.", { mod: modKey }, $locale))}</div>
           <div>{@html rich(t("shell.sentence7", "Shapes, text, maths, plots and circuits are on the left. <b>Fit</b> brings everything back into view.", {}, $locale))}</div>
         </div>
         <div class="eh-page">
@@ -407,12 +412,15 @@
     <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="impTitle">
       <div class="modal-head">
         <strong id="impTitle">{t("ui.import.latex.or.tikz", "Import LaTeX or TikZ", {}, $locale)}</strong>
-        <Segmented id="impHow" label={t("ui.what.tikz.that.can.t.be.read.exactly.becomes", "What TikZ that can't be read exactly becomes", {}, $locale)} options={[{ label: t("ui.as.written", "As Written", {}, $locale), title: t("ui.keep.it.as.written.exported.exactly.as.it.is.drawn.as.an.approximation.and.group", "Keep it as written: exported exactly as it is, drawn as an approximation, and grouped so it moves as one", {}, $locale), on: true, attrs: { 'data-how': 'code' } }, { label: t("ui.editable.shapes", "Editable Shapes", {}, $locale), title: t("ui.turn.it.into.ordinary.shapes.you.can.edit.drawn.and.exported.from.the.shapes.so.", "Turn it into ordinary shapes you can edit: drawn and exported from the shapes, so some details may change", {}, $locale), attrs: { 'data-how': 'shapes' } }]} />
         <Spacer />
         <Button id="impFile">{t("ui.choose.file", "Choose File…", {}, $locale)}</Button>
         <Button id="impNew" title={t("ui.create.a.new.document.from.the.code", "Create a new document from the code", {}, $locale)}>{t("ui.import.as.new.document", "Import as New Document", {}, $locale)}</Button>
         <Button id="impInsert" variant="primary" title={t("ui.add.the.shapes.to.the.current.diagram.in.the.middle.of.the.view", "Add the shapes to the current diagram, in the middle of the view", {}, $locale)}>{t("ui.insert.into.diagram", "Insert into Diagram", {}, $locale)}</Button>
         <IconButton id="impClose" icon="close" title={t("ui.close", "Close", {}, $locale)} />
+      </div>
+      <!-- a setting, not an action: on its own row, so the head holds the title and the actions on one line -->
+      <div class="imp-how"><span id="impHowLabel">{t("ui.tikz.code.that.can.t.be.read.exactly.becomes", "TikZ code that can't be read exactly becomes", {}, $locale)}</span>
+        <Segmented id="impHow" label={t("ui.tikz.code.that.can.t.be.read.exactly.becomes", "TikZ code that can't be read exactly becomes", {}, $locale)} options={[{ label: t("ui.as.written", "As Written", {}, $locale), title: t("ui.keep.it.as.written.exported.exactly.as.it.is.drawn.as.an.approximation.and.group", "Keep it as written: exported exactly as it is, drawn as an approximation, and grouped so it moves as one", {}, $locale), on: true, attrs: { 'data-how': 'code' } }, { label: t("ui.editable.shapes", "Editable Shapes", {}, $locale), title: t("ui.turn.it.into.ordinary.shapes.you.can.edit.drawn.and.exported.from.the.shapes.so.", "Turn it into ordinary shapes you can edit: drawn and exported from the shapes, so some details may change", {}, $locale), attrs: { 'data-how': 'shapes' } }]} />
       </div>
       <div class="imp-note" role="note">{t("imp.support.note", "Supported sections become shapes. Other sections stay as code; unresolved sections have no preview. Editable Shapes may omit unsupported details.", {}, $locale)}</div>
       <textarea id="impText" spellcheck="false" placeholder={t("ui.paste.a.tikzpicture.a.bare.list.of.draw.node.commands.or.a.whole.latex.document.", "Paste a tikzpicture, a bare list of \\draw / \\node commands, or a whole LaTeX document.\nSupported: \\draw \\fill \\filldraw \\shade \\node \\coordinate \\definecolor, -- / .. controls .. / rectangle / circle / ellipse / arc / cycle, arrows, colours, line widths, dashes, opacity, zigzag springs.\nA full document is split into text and diagram blocks.", {}, $locale)}></textarea>

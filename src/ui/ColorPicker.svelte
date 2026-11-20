@@ -86,7 +86,7 @@
     <label><NumberField data-f="a" min="0" max="100" value={Math.round(m.a * 100)} onchange={change('a')} /><span>A</span></label>
   </div>
   <Swatches class="cp-presets" colours={m.presets} editing={m.editing} label={t('color.presets', 'Preset colours', {}, $locale)} onpick={act.preset} />
-  {#if m.canEdit}<Button class="cp-edit" onclick={act.edit}>{m.editing ? t('color.editDone', 'Done (click a swatch to replace it)', {}, $locale) : t('color.editPresets', 'Change Preset Colors', {}, $locale)}</Button>{/if}
+  {#if m.canEdit}<Button class="cp-edit" onclick={act.edit}>{m.editing ? t('color.editDone', 'Done (click a swatch to replace it)', {}, $locale) : t('color.editPresets', 'Change Preset Colours', {}, $locale)}</Button>{/if}
 </div>
 {#if m.tab === 'grad' && m.grad}<div class="cp-pane fp" data-pane="grad"><GradientPane value={m.grad} onset={act.fill} /></div>{/if}
 {#if m.tab === 'pat' && m.pat}<div class="cp-pane fp" data-pane="pat"><PatternPane value={m.pat} onset={act.fill} /></div>{/if}

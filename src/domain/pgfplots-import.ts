@@ -317,7 +317,7 @@ import { unbrace } from './tex-groups';
       if (CMAP[nm]) shape.colormap = CMAP[nm]; else issue(`colormap ${nm} not held (drawn as hot)`);
     }
     function o2name(o: Opt) { return o.k === 'colormap name' ? String(o.v) : o.k.slice('colormap/'.length); }
-    for (const o of A) if (o.k === 'colormap') issue('a colormap of its own not held');
+    for (const o of A) if (o.k === 'colormap') issue('a colour map of its own not held');
     if (has('colorbar')) shape.colorbar = true;
     // ticks
     for (const a of ['x', 'y', 'z']) {

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { t, caption, message as msg, locale } from '../i18n';
-  import { Button, Checkbox, FormRow, Help, NumberField, PanelSection, Segmented, Select } from './kit';
+  import { Button, Checkbox, FormRow, Help, NumberField, PanelSection, Segmented, Select, TextField } from './kit';
   export interface Model {
-    page: { paper: string; orient: string; w: number; h: number; W: number; H: number; mt: number; mb: number; ml: number; mr: number; textW: number; font: number; title: boolean; spread: number; numbered: boolean };
+    page: { paper: string; orient: string; w: number; h: number; W: number; H: number; mt: number; mb: number; ml: number; mr: number; textW: number; font: number; title: boolean; author?: string; spread: number; numbered: boolean };
     papers: { key: string; name: string }[]; wide: number;
   }
   let { model }: { model: Model } = $props();
@@ -26,6 +26,7 @@
 <PanelSection title={t("ui.text", "Text", {}, $locale)}>
   <FormRow label={t("ui.font.size", "Font size", {}, $locale)}><Select data-pg="font" aria-label={t("ui.font.size", "Font size", {}, $locale)} value={String(+page.font)} options={[10, 11, 12].map((n) => ({ value: String(n), label: t("page.fontPt", "{n} pt", { n }, $locale) }))} /></FormRow>
   <FormRow label={t("ui.title", "Title", {}, $locale)}><Checkbox data-pg="title" checked={page.title}>{t("ui.show.document.name.as.title.variant1", " Show document name as title", {}, $locale)}</Checkbox></FormRow>
+  <FormRow label={t("ui.author", "Author", {}, $locale)}><TextField data-pg="author" value={page.author || ''} disabled={!page.title} placeholder={t("page.authorNone", "None (under the title)", {}, $locale)} aria-label={t("ui.author", "Author", {}, $locale)} /></FormRow>
   <FormRow label={t("ui.line.spacing", "Line spacing", {}, $locale)}><Select data-pg="spread" aria-label={t("ui.line.spacing", "Line spacing", {}, $locale)} value={String(+page.spread || 1)} options={([[1, msg('page.single', 'Single')], [1.15, '1.15'], [1.3, msg('page.oneHalf', 'One and a half')], [1.6, msg('page.double', 'Double')]] as const).map(([value, name]) => ({ value: String(value), label: caption(name, $locale) }))} /></FormRow>
   <FormRow label={t("ui.sections", "Sections", {}, $locale)}><Checkbox data-pg="numbered" checked={page.numbered}>{t("ui.number.headings.1.1.1.1.1.1.variant1", " Number headings (1, 1.1, 1.1.1)", {}, $locale)}</Checkbox></FormRow></PanelSection>
 <PanelSection><Help>{exportedWith[0]}<code>\usepackage&#123;geometry&#125;</code>{exportedWith[1]} {t("page.printSameSize", "Print uses the same page size.", {}, $locale)}</Help></PanelSection>

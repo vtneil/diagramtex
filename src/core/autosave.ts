@@ -11,8 +11,11 @@ export function createAutosave(state: { docId: string | null; doc: DiagramDocume
   let synced: { id: string | null; content: string } = { id: null, content: '' };
   const contentOf = (doc: DiagramDocument) => JSON.stringify({ kind: doc.kind, name: doc.name, page: doc.page,
     ...(doc.kind === 'page' ? { sheet: doc.sheet } : { blocks: doc.blocks, active: doc.active }) });
-  /** The open file now matches storage (just opened or reloaded). */
-  function markSynced() { synced = { id: state.docId, content: contentOf(state.doc) }; }
+  /** The open file now matches storage (just opened or reloaded); or, given `stored` (another tab's version just
+   *  merged into this one), storage holds that, and this tab's merged file is a change to save. */
+  function markSynced(stored?: DiagramDocument) { synced = { id: state.docId, content: contentOf(stored || state.doc) }; }
+  /** What this tab last read or wrote for the open file: what it shares with another tab's save. */
+  function base(): Record<string, unknown> | null { return synced.id === state.docId && synced.content ? JSON.parse(synced.content) : null; }
   /** The open file has changes this tab has not written. */
   function isDirty() { return !!state.docId && (synced.id !== state.docId || synced.content !== contentOf(state.doc)); }
   function saveNow() {
@@ -36,5 +39,5 @@ export function createAutosave(state: { docId: string | null; doc: DiagramDocume
     hooks.renderList();
   }
   function scheduleSave() { clearTimeout(timer); timer = setTimeout(saveNow, 400); }
-  return { saveNow, scheduleSave, markSynced, isDirty };
+  return { saveNow, scheduleSave, markSynced, isDirty, base };
 }

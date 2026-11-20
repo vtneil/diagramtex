@@ -155,7 +155,7 @@ export function createEditorSession(services: {
       if (document.activeElement === code) readCode();
       commit();
       const e = state()!, src = saved();
-      if (src !== e.start) { e.start = src; e.done(result ? result() : { src }); }
+      if (src !== e.start) { e.start = src; e.saved = true; e.done(result ? result() : { src }); }
       note.flash(t('editor.saved', 'Saved to the page'), 1500);
     }
     // Done (ok) hands the drawing back when it changed; Cancel asks before throwing changes away
@@ -166,14 +166,16 @@ export function createEditorSession(services: {
       if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
       commit();
       const e = state()!, src = saved(), edited = src !== e.start;
-      if (!ok && edited && !(await services.confirm(typeof discardTitle === 'function' ? discardTitle() : discardTitle, t('editor.discard.body', 'Your edits since opening the editor will be lost.'), { ok: t('editor.discard.ok', 'Discard'), danger: true }))) return;
+      if (!ok && edited && !(await services.confirm(typeof discardTitle === 'function' ? discardTitle() : discardTitle, (e.saved ? t('editor.discard.bodySaved', 'Your edits since you last saved will be lost.') : t('editor.discard.body', 'Your edits since opening the editor will be lost.')), { ok: t('editor.discard.ok', 'Discard'), danger: true }))) return;
       const done = e.done, out = ok && edited ? (result ? result() : { src }) : null;
       root.hidden = true;
       document.body.classList.remove('cz-open');
       clear();
       if (out) done(out);
     }
-    return { save, finish, show, changed, release, detach, elsewhere, docked, resumed };
+    // a drawing opens with its code from the first column and line, whatever the last one was scrolled to
+    function open(h?: EditorHost | null) { show(h); code.scrollLeft = 0; code.scrollTop = 0; }
+    return { save, finish, show: open, changed, release, detach, elsewhere, docked, resumed };
   }
   /** Redraw when the editor's box changes size: the window, or (embedded) the pane it sits in. */
   function watchSize(root: HTMLElement, redraw: () => void) {

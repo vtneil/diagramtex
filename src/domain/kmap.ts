@@ -354,11 +354,16 @@ function termOf(M: any, cube: any, mode: any) {
     lits.push((mode === 'pos' ? !one : one) ? nm : `\\overline{${nm}}`);
   }
   if (!lits.length) return mode === 'pos' ? '0' : '1';
-  return mode === 'pos' ? (lits.length > 1 ? `(${lits.join(' + ')})` : lits[0]) : lits.join('');
+  return mode === 'pos' ? (lits.length > 1 ? `(${lits.join(' + ')})` : lits[0]) : product(lits);
 }
 function exprOf(terms: any, mode: any) {
   if (!terms.length) return mode === 'pos' ? '1' : '0';
-  return mode === 'pos' ? terms.join('') : terms.join(' + ');
+  return mode === 'pos' ? product(terms) : terms.join(' + ');
+}
+// factors written side by side; two bars next to each other would join into one, which reads as NOT of the pair
+// (\overline{B}\overline{D} as NOT BD), so a thin space keeps them apart
+function product(xs: string[]) {
+  return xs.reduce((s, x, i) => s + (i && x.startsWith('\\overline') && xs[i - 1].startsWith('\\overline') ? '\\,' : '') + x, '');
 }
 
 // prime implicants (Quine–McCluskey) of the cells marked on, with don't cares

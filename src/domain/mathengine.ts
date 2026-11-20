@@ -58,6 +58,7 @@ import { t } from '../i18n';
     mathbfit: '\\boldsymbol{#1}', // bold italic letters, upright bold digits, as isomath and unicode-math draw them
     mathds: '\\mathbb{#1}', mathbbm: '\\mathbb{#1}',
     textsl: '\\textit{#1}', textsc: '\\text{#1}',
+    mbox: '\\text{#1}', // LaTeX's \mbox{…}: text in a box, as chemfig labels use it
     // text-mode declarations, as typed inside \text{…}
     bfseries: '\\bf', itshape: '\\it', slshape: '\\it', sl: '\\it', em: '\\it', upshape: '\\rm', rmfamily: '\\rm',
     sffamily: '\\sf', ttfamily: '\\tt', normalfont: '\\rm', mdseries: '', scshape: '', sc: '',
@@ -67,7 +68,7 @@ import { t } from '../i18n';
     if (macroCache[e]) return macroCache[e];
     const L = lib(e), out: Record<string, any> = {};
     for (const [k, v] of Object.entries<any>(STAND_INS)) {
-      try { L.renderToString(`\\${k}{A}`, { throwOnError: true }); } catch (err: any) { out['\\' + k] = v; }
+      try { L.renderToString(`\\${k}{A}`, { throwOnError: true, ...(e === 'katex' ? { strict: 'ignore' } : {}) }); } catch (err: any) { out['\\' + k] = v; }
     }
     return (macroCache[e] = out);
   }
@@ -98,7 +99,9 @@ import { t } from '../i18n';
   const cleanPreview = (html: string) => html.replace(/<!--td-math-pending:\d+-->/g, '');
   const languageNeutral = (html: string) => html.replace(/^<([a-z][\w-]*)(?=[\s>])/i, '<$1 lang=""');
   function compileResult(work: { engine: 'katex' | 'temml'; tex: string; display: boolean; macros: Record<string, string> }) {
-    const options = { displayMode: work.display, macros: { ...work.macros }, throwOnError: true };
+    // KaTeX's strict mode only warns in the console (an accent like \r in maths, met while a command is still being
+    // typed); the drawing is the same. Temml's strict is a switch, left off.
+    const options = { displayMode: work.display, macros: { ...work.macros }, throwOnError: true, ...(work.engine === 'katex' ? { strict: 'ignore' } : {}) };
     try {
       const html = lib(work.engine).renderToString(work.tex, options);
       return { html: work.engine === 'temml' ? mathmlSvg(html) : html };

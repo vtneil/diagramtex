@@ -288,7 +288,7 @@ VALID & 8L 2H 4L 2H 8L \\
     p.series = [ser('exp(-0.22*x)*cos(2.8*x)', blue, 'Damped response'), ser('exp(-0.22*x)', red, 'Envelope', 'dashed'), ser('-exp(-0.22*x)', red, '', 'dashed'), ser('cos(2.8*x)', '#aaaaaa', 'Undamped', 'dotted'), TD.newSeries({ kind: 'scatter', source: 'data', color: '#000000', mark: '*', legend: 'Samples', data: Array.from({ length: 16 }, (_, i) => { const x = i * 0.6; return x + ' ' + (Math.exp(-0.22 * x) * Math.cos(2.8 * x) + Math.sin(i * 7) * 0.025); }).join('\n') })];
     text(390, 475, '$x(t)=Ae^{-\\zeta\\omega_n t}\\cos(\\omega_d t+\\varphi)$');
   });
-  example('Peaks surface and its contour map', 'A multi-extremum surface is paired with a contour plot of the same function. The two native plots expose camera, colormap, mesh resolution, levels and colour-bar controls.', () => {
+  example('Peaks surface and its contour map', 'A multi-extremum surface is paired with a contour plot of the same function. The two native plots expose camera, colour map, mesh resolution, levels and colour-bar controls.', () => {
     const expr = '3*(1-x)^2*exp(-x^2-(y+1)^2)-10*(x/5-x^3-y^5)*exp(-x^2-y^2)-exp(-(x+1)^2-y^2)/3';
     const p = add('plot', 'plot:surface3d', { x: 55, y: 60, w: 380, h: 330, colormap: 'viridis', view: [32, 35], grid: true });
     p.series = [TD.newSeries({ kind: 'surface', expr, domain: ['-3', '3'], ydomain: ['-3', '3'], samples: 35 })];

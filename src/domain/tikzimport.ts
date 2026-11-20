@@ -707,6 +707,9 @@ import { runtime as TD } from '../runtime';
       return p;
     };
     let pendingOp: any = null, ctrl: any[] = [], lastSegLabel: any = null, lastArc: any = null, toOpts: any[] = [], onSeg: any[] = [];
+    // a rectangle just drawn (its corners), and the nodes written inside one (`rectangle node {…} (b)`) waiting for its
+    // second corner: TikZ puts pos=t on a rectangle that far from its first corner to its second, so 0.5 is the centre
+    let lastRect: any = null, rectNodes: any[] = [];
     // nodes on a -- or to with a placement of their own (above, anchor=…): at pos along it, by that anchor
     const placeOnSeg = (g: any) => {
       for (const n of onSeg) {
@@ -718,6 +721,22 @@ import { runtime as TD } from '../runtime';
       onSeg = [];
     };
     const no0 = (o: any) => parseOpts(o);
+    // a node at `at` (the current point, or a point along the last operation): a node with a border, or a text shape,
+    // drawn on top
+    const nodeAt = (tk: any, no: any[], at: any) => {
+      const pno = [...everyNode(C, nodeShapeName(no) || 'rectangle'), ...no];
+      const border = pno.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none'), shp = nodeShapeName(pno) || (border ? 'rectangle' : null);
+      if (at && shp && NODE_SHAPES[shp] && (border || pno.some((o: any) => /^minimum /.test(o.k)))) {
+        const pl = placeOf(pno, at, C), B = boxNode(C, lineBreaks(tk.text!), pno, pl.at, pl.anchor, shp), made = B.shape;
+        if (tk.name) made.nodeName = tk.name;
+        delete made._importNodeAt;
+        post.push(made);
+        // named, untransformed: its border, so the paths after it stop there as TikZ does
+        const fr = tk.name && !(C.scopes || []).some((L: any) => L.xf && L.xf.length) && !opts.some((o: any) => XF_KEYS.has(o.k)) && TD.rotFrame(made);
+        if (fr) { const g = geoOf(B.kind, fr, B.os); (C.geo ||= {})[tk.name] = g; C.names[tk.name] = { ...g!.c }; (C.kinds ||= {})[tk.name] = 'node'; return; }
+      } else if (at && tk.text!.trim()) { const t = textShape(C, tk.text, pno, at, st.color); delete t._box; post.push(t); }
+      if (tk.name && at) { C.names[tk.name] = toAbs(C, at); if (C.geo) delete C.geo[tk.name]; }
+    };
     const pathTo = () => ({ bend: st.bend, out: st.out, in: st.in, looseness: st.looseness });
     for (let i = 0; i < toks.length; i++) {
       const tk = toks[i];
@@ -787,6 +806,9 @@ import { runtime as TD } from '../runtime';
           flush();
           const x = Math.min(cur.x, p.x), y = Math.min(cur.y, p.y);
           out.push({ type: 'rect', x, y, w: Math.abs(p.x - cur.x), h: Math.abs(p.y - cur.y), radius: st.radius || 0, ...lineStyle, fill: st.fill });
+          lastRect = { a: cur, b: p };
+          for (const n of rectNodes) nodeAt(n.tk, n.no, { x: cur.x + (p.x - cur.x) * n.t, y: cur.y + (p.y - cur.y) * n.t });
+          rectNodes = [];
         } else if (pendingOp === 'grid') {
           flush();
           // lines at the multiples of the step (TikZ's grid is aligned to the origin) inside the rectangle
@@ -895,6 +917,7 @@ import { runtime as TD } from '../runtime';
         const lab = { label: tk.text, labelSide: no.some((o: any) => o.k === 'swap' || o.k === "'") ? 'right' : no.some((o: any) => o.k === 'fill') ? 'on' : 'left', labelPos: isFinite(ns.pos) ? ns.pos : no.some((o: any) => o.k === 'near start') ? 0.25 : no.some((o: any) => o.k === 'near end') ? 0.75 : 0.5, ...fs, color: ns.color || st.color || '#000000' };
         const placed = no.some((o: any) => PLACE_ANCHOR[o.k] || o.k === 'anchor') && !no.some((o: any) => ['sloped', 'auto', 'swap', "'", 'draw', 'fill'].includes(o.k)) && !tk.name;
         if ((pendingOp === '--' || pendingOp === 'to') && placed && tk.text!.trim()) { onSeg.push({ text: tk.text, no, t: lab.labelPos }); continue; }
+        if (pendingOp === 'rectangle') { rectNodes.push({ tk, no, t: lab.labelPos }); continue; }
         if (pendingOp === '--' || pendingOp === 'to' || pendingOp === 'edge') { lastSegLabel = lab; continue; }
         const along = no.some((o: any) => ['midway', 'near start', 'near end', 'pos', 'sloped', 'auto', 'swap'].includes(o.k));
         if (along && segs.length && segs[segs.length - 1].k === 'L' && segs.length === 1) { segs[0].label = lab; continue; }
@@ -904,19 +927,10 @@ import { runtime as TD } from '../runtime';
           if (tk.text!.trim()) { const t = textShape(C, tk.text, no, { x: A.c.x + A.r * Math.cos(a), y: A.c.y - A.r * Math.sin(a) }, st.color); delete t._box; post.push(t); }
           continue;
         }
-        // node at the current point (e.g. after a coordinate): a node with a border, or a text shape, drawn on top
-        const pno = [...everyNode(C, nodeShapeName(no) || 'rectangle'), ...no];
-        const border = pno.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none'), shp = nodeShapeName(pno) || (border ? 'rectangle' : null);
-        if (cur && shp && NODE_SHAPES[shp] && (border || pno.some((o: any) => /^minimum /.test(o.k)))) {
-          const pl = placeOf(pno, cur, C), B = boxNode(C, lineBreaks(tk.text!), pno, pl.at, pl.anchor, shp), made = B.shape;
-          if (tk.name) made.nodeName = tk.name;
-          delete made._importNodeAt;
-          post.push(made);
-          // named, untransformed: its border, so the paths after it stop there as TikZ does
-          const fr = tk.name && !(C.scopes || []).some((L: any) => L.xf && L.xf.length) && !opts.some((o: any) => XF_KEYS.has(o.k)) && TD.rotFrame(made);
-          if (fr) { const g = geoOf(B.kind, fr, B.os); (C.geo ||= {})[tk.name] = g; C.names[tk.name] = { ...g!.c }; (C.kinds ||= {})[tk.name] = 'node'; continue; }
-        } else if (cur && tk.text!.trim()) { const t = textShape(C, tk.text, pno, cur, st.color); delete t._box; post.push(t); }
-        if (tk.name && cur) { C.names[tk.name] = toAbs(C, cur); if (C.geo) delete C.geo[tk.name]; }
+        // midway (or pos=) on the rectangle just drawn: that far from its first corner to its second; otherwise the
+        // node is at the current point (e.g. after a coordinate)
+        const R = along && lastRect && lastRect.b === cur ? lastRect : null;
+        nodeAt(tk, no, R ? { x: R.a.x + (R.b.x - R.a.x) * lab.labelPos, y: R.a.y + (R.b.y - R.a.y) * lab.labelPos } : cur);
         continue;
       }
     }
@@ -2489,6 +2503,36 @@ import { runtime as TD } from '../runtime';
     return { shapes, issues: [...new Set(C.warnings)] };
   }
 
+  // itemize and enumerate (nested too) -> a text block's list lines: "- ", "1. ", and "- [ ] " / "- [x] " for the
+  // checklist items the Document export writes (\item[$\square$], \item[$\boxtimes$]), two spaces deeper per level;
+  // each item on one line. Another \item[label] keeps its label as the start of its text.
+  function listsToText(t: string) {
+    if (!/\\begin\{(itemize|enumerate)\}/.test(t)) return t;
+    const re = /\\begin\{(itemize|enumerate)\}(?:\[[^\]]*\])?|\\end\{(itemize|enumerate)\}|\\item\b[ \t]*(?:\[((?:[^\]{}]|\{[^{}]*\})*)\])?/g;
+    const stack: { kind: string; n: number }[] = [];
+    let out = '', last = 0, item: { head: string; text: string } | null = null;
+    const line = () => { if (out && !out.endsWith('\n')) out += '\n'; };
+    const endItem = () => { if (!item) return; line(); out += item.head + item.text.replace(/\s+/g, ' ').trim() + '\n'; item = null; };
+    for (const m of t.matchAll(re)) {
+      const between = t.slice(last, m.index);
+      last = m.index! + m[0].length;
+      if (item) item.text += between;
+      else if (!stack.length) out += between;
+      else if (between.trim()) { line(); out += '  '.repeat(stack.length) + between.replace(/\s+/g, ' ').trim() + '\n'; }
+      if (m[1]) { endItem(); line(); stack.push({ kind: m[1], n: 0 }); }
+      else if (m[2]) { endItem(); stack.pop(); }
+      else if (stack.length) {
+        endItem();
+        const top = stack[stack.length - 1], lab = m[3];
+        const box = lab == null ? '' : /\\square\b|\\Box\b/.test(lab) ? '[ ] ' : /\\boxtimes|\\checkmark|\\xmark|\\CheckedBox/.test(lab) ? '[x] ' : '';
+        const mark = top.kind === 'enumerate' && !box ? `${++top.n}.` : '-';
+        item = { head: '  '.repeat(stack.length - 1) + mark + ' ' + box, text: lab != null && !box ? lab + ' ' : '' };
+      } else out += m[0];
+    }
+    if (item) (item as any).text += t.slice(last); else out += t.slice(last);
+    endItem();
+    return out.replace(/\n{3,}/g, '\n\n').replace(/^\n+|\s+$/g, '');
+  }
   // LaTeX text (between pictures) -> DiagramTeX text block (simple markdown-ish)
   function latexToText(t: any) {
     t = t
@@ -2499,12 +2543,27 @@ import { runtime as TD } from '../runtime';
       .replace(/\\subsection\*?\{([^}]*)\}/g, '\n## $1\n')
       .replace(/\\subsubsection\*?\{([^}]*)\}/g, '\n### $1\n')
       .replace(/\\(vspace|hspace)\*?\{[^}]*\}/g, '')
-      .replace(/\\caption\{([^}]*)\}/g, '$1')
+      .replace(/\\caption\{([^}]*)\}/g, (_m: any, x: any) => `\n${CAPTION}${x.trim()}\n`) // its own line: textBlocks centres it
       .replace(/\\label\{[^}]*\}/g, '')
       .replace(/\\\[([\s\S]*?)\\\]/g, (m: any, x: any) => `$$${x.trim()}$$`);
     t = t.split('\n').map((l: any) => l.trim()).join('\n').replace(/\n{3,}/g, '\n\n').replace(/^(#{1,3} .*)\n\n/gm, '$1\n').trim();
+    t = listsToText(t);
     // text blocks keep %, &, # literally (export escapes them again); only outside math
     return t.split('\n').map((l: any) => l.includes('$$') ? l : TD.segments(l).map((g: any) => (g.math ? `$${g.s}$` : g.s.replace(/\\([%&#])/g, '$1'))).join('')).join('\n');
+  }
+
+  // a figure's caption (marked by latexToText) as a centred line of small text under its picture: diagram blocks
+  // have no caption of their own; the rest of the text as it was
+  const CAPTION = '\u0001';
+  function textBlocks(t: string) {
+    const out: any[] = [];
+    let run: string[] = [];
+    const flush = () => { const x = run.join('\n').replace(/^\n+|\s+$/g, ''); if (x) out.push({ type: 'text', text: x }); run = []; };
+    for (const l of t.split('\n')) {
+      if (l.startsWith(CAPTION)) { flush(); if (l.slice(1).trim()) out.push({ type: 'text', text: l.slice(1).trim(), align: 'center', size: 'small' }); } else run.push(l);
+    }
+    flush();
+    return out;
   }
 
   function embedded(inner: any) {
@@ -2522,6 +2581,10 @@ import { runtime as TD } from '../runtime';
     const dc = src.match(/\\documentclass(?:\[([^\]]*)\])?\{[^}]*\}/);
     if (!dc) return null;
     const pg: Record<string, any> = { title: /\\maketitle/.test(src) };
+    // \section{…} (not \section*) numbers the headings; \author{…} goes under the title
+    if (/\\(?:sub){0,2}section\{/.test(src)) pg.numbered = true;
+    const au = /\\author\{([^}]*)\}/.exec(src);
+    if (au && au[1].replace(/\\(and|\\)/g, ' ').trim()) pg.author = au[1].replace(/\s*\\and\s*/g, ', ').replace(/\s*\\\\\s*/g, ' ').trim();
     const opts = [(dc[1] || ''), ((src.match(/\\usepackage\[([^\]]*)\]\{geometry\}/) || [])[1] || '')].join(',').split(',').map((x) => x.trim()).filter(Boolean);
     const len = (v: any) => { const m = String(v).match(/^([\d.]+)\s*(cm|mm|in|pt)?$/); if (!m) return null; return +m[1] * { cm: 1, mm: 0.1, in: 2.54, pt: 2.54 / 72.27 }[m[2] || 'cm']!; };
     for (const o of opts) {
@@ -2618,7 +2681,7 @@ import { runtime as TD } from '../runtime';
     for (const f of found) {
       C.styles = new Map(preStyles); C.macros = new Map(preMacros); C.names = {};
       const before = latexToText(bodyS.slice(last, f.at));
-      if (before && docM) blocks.push({ type: 'text', text: before });
+      if (before && docM) blocks.push(...textBlocks(before));
       last = f.end;
       if (f.cz) {
         const q = circuitBlock(f.cz, false);
@@ -2654,10 +2717,10 @@ import { runtime as TD } from '../runtime';
       if (/\\(?:(?:draw|fill|filldraw|node|shade|path|coordinate|foreach|tikzset)\b|begin\{(?:axis|semilog[xy]axis|loglogaxis)\})/.test(bodyS)) {
         const shapes = importPicture(C, bodyS, bodyO, '');
         blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
-      } else if (bodyS.trim()) blocks.push({ type: 'text', text: latexToText(bodyS) });
+      } else if (bodyS.trim()) blocks.push(...textBlocks(latexToText(bodyS)));
     } else {
       const after = latexToText(bodyS.slice(last));
-      if (after && docM) blocks.push({ type: 'text', text: after });
+      if (after && docM) blocks.push(...textBlocks(after));
     }
     const analysis = blocks.filter((b: any) => b.type === 'diagram').flatMap((b: any) => b.shapes)
       .filter((x: any) => !(x.type === 'tikz' && x.kind === 'defs'))
@@ -2787,7 +2850,8 @@ import { runtime as TD } from '../runtime';
     }
     const { items, raw } = TD.cz.parse(code);
     if (!items.length) return null;
-    if (whole && (!items.some((it: any) => !TD.cz.isWire(it)) || String(raw).split('\n').some((l: string) => l.trim() && !/^\\(ctikzset|tikzset)\b/.test(l.trim())))) return null;
+    // a picture is a circuit only with a circuitikz part in it: wires and text alone are plain TikZ
+    if (whole && (!items.some((it: any) => !TD.cz.isWire(it) && it.part !== 'text') || String(raw).split('\n').some((l: string) => l.trim() && !/^\\(ctikzset|tikzset|tikzstyle)\b/.test(l.trim())))) return null;
     const q = { ...TD.TYPES.cz.create({ x: 0, y: 0 }, {}), items, raw, x: 0, y: 0, id: uid8() };
     if (u && u.at) { q.x = u.at[0] * TD.PX_PER_CM; q.y = -u.at[1] * TD.PX_PER_CM; }
     if (size) q.size = size;
@@ -2795,7 +2859,7 @@ import { runtime as TD } from '../runtime';
     if (envScale !== 1 && coordsOnly) {
       // scale without transform shape: the wires' coordinates scale, the parts keep their size (as in circuitikz).
       // Statements kept as code would not scale with them, so then the picture is read some other way.
-      if (String(raw).split('\n').some((l: string) => l.trim() && !/^\\(ctikzset|tikzset)\b/.test(l.trim()))) return null;
+      if (String(raw).split('\n').some((l: string) => l.trim() && !/^\\(ctikzset|tikzset|tikzstyle)\b/.test(l.trim()))) return null;
       const k = envScale, sc = (v: any) => (Array.isArray(v) ? [v[0] * k, v[1] * k] : v);
       q.items = q.items.map((it: any) => ({ ...it, a: sc(it.a), b: sc(it.b), p: sc(it.p) }));
       for (const it of q.items) for (const key of ['a', 'b', 'p']) if (it[key] === undefined) delete it[key];

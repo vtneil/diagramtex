@@ -10,9 +10,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
 // ZX editor: the overlay that opens on a ZX block. A palette of spiders, boxes and points; the diagram
 // drawn by the canvas renderer over its grid of cells, where nodes are dropped and moved and wires are
 // dragged from node to node; the selected node's or wire's properties; and beside them the zx-calculus
@@ -174,7 +175,7 @@ import { editorStage, fitView } from './editor-stage';
   // { M, sel: {r1, c1, r2, c2} | null, wire: [r, c, i] | null, arm, view, undo, redo, pending, start, done, drag, hover, ghost, codeAt, codeTimer, clip, G }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   let stopLocale: (() => void) | null = null;
-  const snap = () => codeOf(E.M);
+  const snap = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
   const { begin, commit, undo, redo } = TD.editorSession.history({
     state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
   });
@@ -185,7 +186,7 @@ import { editorStage, fitView } from './editor-stage';
     const x1 = v.ox + G.xs[0] * v.k, x2 = v.ox + G.xs[G.xs.length - 1] * v.k, y1 = v.oy + G.ys[0] * v.k, y2 = v.oy + G.ys[G.ys.length - 1] * v.k;
     if (x1 < 0 || y1 < 0 || x2 > r.width || y2 > r.height) fit();
   }
-  function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
+  function restore(code: any) { E.typed = code; E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
   const at = (r: any, c: any) => (E.M.rows[r] && E.M.rows[r].cells[c]) || null;
   const wireOf = (w: any) => { const c = w && at(w[0], w[1]); return c && !c.opaque ? c.edges[w[2]] || null : null; };
   function clampSel() {
@@ -852,7 +853,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.M = load(codeTa.value); E.codeAt = codeTa.value;
     clampSel(); draw(); keepInView(); renderProps();
     showCodeNotes(codeMsg, Z.layout({ src: codeTa.value }).warnings);
   }
@@ -861,8 +862,8 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
@@ -938,7 +939,7 @@ import { editorStage, fitView } from './editor-stage';
     const M = load(block.src);
     E = { M, tool: 'select', wireStart: null, pointer: null, sel: null, wire: null, arm: null, view: { ox: 0, oy: 0, k: 4 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null, clip: null, G: null };
     // an untouched diagram hands its own text back
-    E.start = codeOf(M);
+    E.typed = String(block.src || ''); E.start = snap();
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');

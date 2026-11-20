@@ -112,18 +112,24 @@
   });
   const sel = () => root().querySelectorAll('.tm-ssel').length;
 
-  T.test('timing editor: a drag over empty space selects the segments it crosses; ⇧-click selects up to a segment; a value, the panel and Delete act on all', async () => {
+  T.test('timing editor: a drag over empty space selects segments, wholly inside or crossed by its way; ⇧-click selects up to a segment; a value, the panel and Delete act on all', async () => {
     const confirm = TD.confirm;
     try {
       await open();
       const start = code(), B = box(), y = B.y1 + 12;
-      // from below the drawing up across its first rows, a third of the way along
+      // as on the main canvas: left to right takes only the segments wholly inside, right to left any it crosses.
+      // From below the drawing up across its first rows, a third of the way along, each way
       ptr('pointerdown', B.at(0.05), B.y2 + 40);
       ptr('pointermove', B.at(0.2), B.y2); ptr('pointermove', B.at(0.35), B.y1 + 4); await wait();
-      T.ok(root().querySelector('.marquee'), 'the selection box is drawn');
+      T.ok(root().querySelector('.marquee:not(.cross)'), 'left to right draws the window box');
       ptr('pointerup', B.at(0.35), B.y1 + 4); await wait();
+      const inside = sel();
+      ptr('pointerdown', B.at(0.35), B.y2 + 40);
+      ptr('pointermove', B.at(0.2), B.y2); ptr('pointermove', B.at(0.05), B.y1 + 4); await wait();
+      T.ok(root().querySelector('.marquee.cross'), 'right to left draws the crossing box');
+      ptr('pointerup', B.at(0.05), B.y1 + 4); await wait();
       const n = sel();
-      T.ok(n > 2, 'several segments are selected: ' + n);
+      T.ok(n > 2 && n > inside, `the crossing box takes more segments (${n}) than the window (${inside})`);
       T.ok(/segments/.test(root().querySelector('.cz-props').textContent), 'the panel speaks of them all');
       T.ok(!root().querySelector('.marquee'), 'the box goes on release');
       root().querySelector('.qe-item[data-item="v:X"]').click(); await wait();
@@ -199,6 +205,28 @@
       // a press without a drag picks it, as a click
       pal('pointerdown', 'v:H', ...from('v:H')); pal('pointerup', 'v:H', ...from('v:H')); await wait();
       T.ok(item('v:H').matches('.on, [aria-pressed="true"]'), 'a press picks the value');
+    } finally { TD.confirm = async () => true; key('Escape'); await wait(); key('Escape'); await wait(50); TD.confirm = confirm; }
+  });
+
+  T.test('timing editor: Ctrl/Cmd+A selects every segment, and only selects text while typing in a field', async () => {
+    const confirm = TD.confirm;
+    try {
+      await open();
+      key('a', { ctrlKey: true }); await wait();
+      const n = sel();
+      T.ok(n > 2, 'every segment is selected: ' + n);
+      T.ok(/segments/.test(root().querySelector('.cz-props').textContent), 'the panel speaks of them all');
+      key('Escape'); await wait();
+      T.eq(sel(), 0, 'Esc clears it');
+      key('A', { metaKey: true, shiftKey: true }); await wait();
+      T.eq(sel(), n, 'with Cmd, and with Caps Lock or Shift, too');
+      key('Escape'); await wait();
+      const ta = root().querySelector('.cz-code textarea');
+      ta.focus();
+      ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true, cancelable: true }));
+      await wait();
+      T.eq(sel(), 0, 'in the code field it is the field’s own Select All');
+      ta.blur();
     } finally { TD.confirm = async () => true; key('Escape'); await wait(); key('Escape'); await wait(50); TD.confirm = confirm; }
   });
 }

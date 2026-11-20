@@ -292,8 +292,10 @@ function revolveFigure(s: any) {
   const about = s.axis === 'y' ? 'y' : 'x';
   if (about === 'y' && a < 0) throw new Error('Turning about the y-axis needs a ≥ 0');
   const color = s.solidColor || '#2f7fc1', ink = V3.ink(color);
-  const ns = 18, nt = Math.max(12, Math.round(36 * (V3.num(s.sweep, 360) / 360)));
-  const sweep = Math.max(10, Math.min(360, V3.num(s.sweep, 360))) * D2R;
+  const sweepDeg = V3.num(s.sweep, 360);
+  if (!(sweepDeg >= 10 && sweepDeg <= 360)) throw new Error('The sweep needs 10° to 360°');
+  const ns = 18, nt = Math.max(12, Math.round(36 * (sweepDeg / 360)));
+  const sweep = sweepDeg * D2R;
   // the region's edge, counter-clockwise in the (x, y) plane
   const R = [];
   for (let i = 0; i <= ns; i++) { const x = a + ((b - a) * i) / ns; R.push({ p: [x, gx(x)], side: 'g' }); }

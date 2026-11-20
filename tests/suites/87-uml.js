@@ -612,3 +612,10 @@ T.test('block editor: ⌘= / ⌘− zoom its canvas about the middle, ⌘0 fits,
     if (ED._state()) { ED._state().start = null; for (let k = 0; k < 3; k++) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await sleep(10); const d = document.querySelector('.td-dialog button.danger, .td-dialog .primary'); if (d) d.click(); }
   }
 });
+
+T.test('uml: an object named "obj : Class" that wraps is drawn whole, without stray braces', () => {
+  const s = TD.TYPES.uml.create({ x: 0, y: 0 }, TD.state.defaults);
+  s.src = '\\begin{tikzpicture}\n\\begin{object}[text width=1.7cm]{obj1}{0,0}\\instanceOf{Circle}\\attribute{x = 1}\\end{object}\n\\end{tikzpicture}';
+  const text = TD.TYPES.uml.svg(s, {}).replace(/<image[^>]*>/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  T.ok(/obj1 : Circle/.test(text) && !/[{}]/.test(text), `drawn as "${text.trim()}"`);
+});

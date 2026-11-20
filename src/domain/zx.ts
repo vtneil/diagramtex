@@ -495,7 +495,7 @@ function build(s: any) {
     } else {
       let dr = 0, dc = 0;
       for (const ch of e.dirs) { if (ch === 'r') dc++; else if (ch === 'l') dc--; else if (ch === 'd') dr++; else if (ch === 'u') dr--; }
-      if (!e.dirs) { warn('A wire with no direction (like \\ar[r]) is skipped'); return; }
+      if (!e.dirs) { warn('A wire with no direction (like \\ar[]) is skipped'); return; }
       const r2_ = r + dr, c2 = c + dc;
       if (r2_ < 0 || r2_ >= R || c2 < 0 || c2 >= C) { warn(`A wire from row ${r + 1}, column ${c + 1} points outside the diagram`); return; }
       if (!look[r2_][c2]) warn(`A wire from row ${r + 1}, column ${c + 1} ends on an empty cell: LaTeX stops there (put \\zxN{} in it)`);

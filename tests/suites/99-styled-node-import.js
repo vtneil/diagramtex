@@ -48,3 +48,40 @@ T.test('styled node import: body text survives saving and remains editable in th
   T.ok(out.includes('{Central}'),'edited node body exported');
   T.tex('styled node edited body',out);
 });
+
+T.test('styled node import: every node/.style holds only the statements kept as written, not text added later', () => {
+  const sh = TD.importLatex(String.raw`\begin{tikzpicture}[every node/.style={draw}, >=Stealth]
+  \node (a) at (0,0) {A};
+  \node (b) at (3,0) {B};
+  \draw[->] (a) -- node[above, draw=none] {yes} (b);
+\end{tikzpicture}`).blocks[0].shapes;
+  const added = TD.TYPES.text.create({ x: 40, y: 200 }, TD.state.defaults);
+  added.text = 'hello';
+  for (const [name, shapes] of [['kept', sh], ['moved', sh.map((s) => { const c = structuredClone(s); TD.translate(c, 80, 40); return c; })]]) {
+    const out = TD.toTikz([...shapes, added], { standalone: true });
+    T.ok(out.includes('\\begin{tikzpicture}[x=1cm, y=1cm, >=Stealth]'), `${name}: the picture keeps >=Stealth but not every node: ${out}`);
+    // the scopes open round each line
+    const depth = (re) => { let d = 0; for (const l of out.split('\n')) { if (re.test(l)) return d; if (/\\begin\{scope\}/.test(l)) d++; if (/\\end\{scope\}/.test(l)) d--; } return -1; };
+    T.ok(out.includes('\\begin{scope}[every node/.style={draw}]'), `${name}: the statements kept as written are in a scope with it`);
+    T.ok(depth(/draw=none\] \{yes\}/) > 0, `${name}: the edge kept as written is inside it`);
+    T.eq(depth(/\{hello\};/), 0, `${name}: the new text is outside it, unboxed as on the canvas`);
+    T.tex('every node scoped ' + name, out);
+  }
+});
+
+T.test('rectangle import: a node at midway, inside the operation, or with pos sits that far from corner to corner (as TikZ)', () => {
+  const P = TD.PX_PER_CM, at = (s) => [+((s.x + (s.w || 0) / 2) / P).toFixed(2), +(-(s.y + (s.h || 0) / 2) / P).toFixed(2)];
+  const r = TD.importLatex(String.raw`\begin{tikzpicture}
+\draw[red] (0,0) rectangle (2,1) node[midway] {Hi};
+\draw (6,0) rectangle node {Box} (8,1);
+\draw (0,3) rectangle node[pos=0.25] {Q} (4,7);
+\draw (0,8) rectangle (2,9) node {Corner};
+\end{tikzpicture}`);
+  T.eq(r.kept.length, 0);
+  const text = Object.fromEntries(r.blocks[0].shapes.filter((s) => s.type === 'text').map((s) => [s.text, at(s)]));
+  T.eq(text, { Hi: [1, 0.5], Box: [7, 0.5], Q: [1, 4], Corner: [2, 9] });
+  // converted to shapes (not kept as written): the node is written where it was placed
+  const out = TD.toTikz(r.blocks[0].shapes.map((s) => { const c = { ...s }; delete c.tex; return c; }), { standalone: true });
+  T.ok(/\\node[^;]* at \(1, ?0\.5\) \{Hi\}/.test(out), 'converted, "Hi" is written at the centre');
+  T.tex('rectangle node import', out);
+});

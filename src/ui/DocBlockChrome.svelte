@@ -44,7 +44,7 @@
   <span class="sep"></span>
   <Button data-tb="hdr" class={['txt', m.header && 'on'].filter(Boolean).join(' ')} aria-pressed={m.header} title={t('doc.tb.headerTip', 'Set the first row as a header (bold, with a rule under it)', {}, $locale)}>{t('doc.tb.header', 'Header row', {}, $locale)}</Button>
   <span class="sep"></span>
-  {#each [['l', t('doc.tb.alLeft', 'Align columns left', {}, $locale)], ['c', t('doc.tb.alCenter', 'Align columns center', {}, $locale)], ['r', t('doc.tb.alRight', 'Align columns right', {}, $locale)]] as [k, tip] (k)}
+  {#each [['l', t('doc.tb.alLeft', 'Align columns left', {}, $locale)], ['c', t('doc.tb.alCenter', 'Align columns centre', {}, $locale)], ['r', t('doc.tb.alRight', 'Align columns right', {}, $locale)]] as [k, tip] (k)}
     <IconButton icon={ALIGN_ICON[k as 'l']} data-tb={'al:' + k} on={m.align === k} aria-pressed={m.align === k} title={tip} />
   {/each}
   <Select data-tb="borders" title={t('table.rules', 'Rules', {}, $locale)} aria-label={t('table.rules', 'Rules', {}, $locale)} value={m.borders}

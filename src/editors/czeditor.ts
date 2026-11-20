@@ -1,5 +1,5 @@
 import { wireIntersections } from '../domain/circuit-crossings';
-import { connectedWires, projectOnWire, wireJunctions } from './circuit-wires';
+import { connectedWires, onWire, projectOnWire, wireJunctions } from './circuit-wires';
 import { captions } from '../i18n/messages';
 import { t as uiText, message, onLocale } from '../i18n';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
@@ -11,7 +11,9 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { iconSvg } from '../ui/kit/icons';
+import { marquee, marqueeSvg, marqueeTakes, boxPoly, ring } from './marquee';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 // Circuit editor: the overlay that opens on a Circuit block. A searchable palette of circuitikz parts,
@@ -61,18 +63,21 @@ import { editorStage, fitView } from './editor-stage';
   function restore(j: any) { const v = JSON.parse(j); E.items = v.items; E.raw = v.raw; for (const id of [...E.sel]) if (!byId(id)) E.sel.delete(id); draw(); renderProps(); updateTools(); }
 
   // ---------------------------------------------------------------- palette
+  // a part's name in the interface language (src/i18n/th/circuit.ts), else as the part defines it
+  const partName = (k: string) => uiText(`czpart.${k}`, CZ.parts[k]?.name ?? k);
   // categories fold (opening or closing one is remembered; nothing else opens one); "Recently used" and "Common" are
   // shown while browsing, not in a search
   function buildPalette() {
     const row = (k: any) => {
-      const d = CZ.parts[k];
-      return { id: k, label: d.name, title: k === 'short' ? uiText('editor.cz.wireTip', 'Wire (W)') : `${d.name} — ${d.kind === 'node' ? 'node' : 'to'}[${d.tikz}]`, keywords: `${d.tikz} ${d.keywords || ''} ${d.cat}`, svg: CZ.icon(k, 44, 26), on: !!E && (E.part === k || (k === 'short' && E.tool === 'wire')), attrs: { 'data-part': k } };
+      const d = CZ.parts[k], name = partName(k);
+      // found by its English name too, whatever the interface language
+      return { id: k, label: name, title: k === 'short' ? uiText('editor.cz.wireTip', 'Wire (W)') : d.tikz ? `${name} — ${d.kind === 'node' ? 'node' : 'to'}[${d.tikz}]` : `${name} — \\node at (…) {…}`, keywords: `${d.tikz} ${d.keywords || ''} ${d.cat} ${name === d.name ? '' : d.name}`, svg: d.icon ? iconSvg(d.icon) : CZ.icon(k, 44, 26), on: !!E && (E.part === k || (k === 'short' && E.tool === 'wire')), attrs: { 'data-part': k } };
     };
     const recent = lsGet(RECENT_KEY, []).filter((k: any) => CZ.parts[k]);
     pal.render([
       ...(recent.length ? [{ id: 'recent', title: uiText('editor.cz.recent', 'Recently used'), browse: true, items: recent.map(row) }] : []),
       { id: 'common', title: uiText('editor.cz.common', 'Common'), browse: true, items: COMMON.filter((k) => CZ.parts[k]).map(row) },
-      ...CZ.CATS.map(([cat, title]: any) => ({ id: cat, title, items: CZ.order.filter((k: any) => CZ.parts[k].cat === cat).map(row) })),
+      ...CZ.CATS.map(([cat, title]: any) => ({ id: cat, title: uiText(`czcat.${cat}`, title), items: CZ.order.filter((k: any) => CZ.parts[k].cat === cat).map(row) })),
     ]);
   }
   // click a part to arm it; drag it onto the grid to drop it
@@ -105,7 +110,7 @@ import { editorStage, fitView } from './editor-stage';
     E.part = E.part === part && E.tool === 'place' ? null : part;
     E.tool = E.part ? 'place' : 'select';
     updateTools(); buildPalette(); draw();
-    setTip(E.part ? (CZ.parts[part].kind === 'node' ? uiText('editor.cz.armNodeTip', '{name}: click to place. Esc when done.', { name: CZ.parts[part].name }) : uiText('editor.cz.armBipoleTip', '{name}: click, or drag from start to end. Esc when done.', { name: CZ.parts[part].name })) : '');
+    setTip(E.part ? (CZ.parts[part].kind === 'node' ? uiText('editor.cz.armNodeTip', '{name}: click to place. Esc when done.', { name: partName(part) }) : uiText('editor.cz.armBipoleTip', '{name}: click, or drag from start to end. Esc when done.', { name: partName(part) })) : '');
   }
   function setTip(t: any) { stageNote.set(t); }
 
@@ -190,7 +195,7 @@ import { editorStage, fitView } from './editor-stage';
   }
   function newNode(part: any, p: any) {
     const def = CZ.parts[part], pins = Object.keys(def.pins).filter((n) => n !== 'center');
-    return { id: C.uid(), part, p, rot: 0, flip: false, name: pins.length ? freshName(part) : '', text: '', opts: '' };
+    return { id: C.uid(), part, p, rot: 0, flip: false, name: pins.length ? freshName(part) : '', text: part === 'text' ? 'Text' : '', opts: '' }; // a Text node is its text: never placed empty
   }
   const defLen = (part: any) => Math.max(2, Math.ceil(((CZ.parts[part].w || 0) + 0.6) * 2) / 2);
   function dropPart(part: any, q: any) {
@@ -212,6 +217,36 @@ import { editorStage, fitView } from './editor-stage';
       for (const end of ['a', 'b']) { const pin = pins.find((q) => C.same(q.p, it[end])); if (pin) out.push({ it, end, pin }); }
     }
     return out;
+  }
+  // what rides on a moved wire's middle without touching its ends: a T-branch's end and a junction dot. They move with it,
+  // so dragging one segment of a run keeps the run joined (its ends' neighbours follow through attachments).
+  function riders(ids: Set<string>) {
+    const moved = E.items.filter((it: any) => ids.has(it.id) && C.isWire(it)), out: any[] = [];
+    if (!moved.length) return out;
+    const on = (p: any) => moved.some((w: any) => onWire(p, w));
+    for (const it of E.items) {
+      if (ids.has(it.id)) continue;
+      if (C.isWire(it)) { for (const end of ['a', 'b']) if (on(it[end]) && !moved.some((w: any) => C.same(w.a, it[end]) || C.same(w.b, it[end]))) out.push({ it, end, o: it[end].slice() }); }
+      else if (it.p && ['circ', 'ocirc'].includes(it.part) && on(it.p)) out.push({ it, o: it.p.slice() });
+    }
+    return out;
+  }
+  // what a moved selection can snap to (worked out once per drag): `ends` pairs each moved wire end o with a pin p it may
+  // land on; `lines` pairs a point o that moves with a fixed point f its wire would run level or plumb to (a neighbour's
+  // fixed end, a T-branch's other end, the pin a wire end sits on)
+  function moveSnaps(d: any) {
+    if (d.snapTo) return d.snapTo;
+    const wires = [...d.orig.values()].filter((o: any) => C.isWire(o)), lines: any[] = [], skip = new Set<string>(d.orig.keys());
+    for (const { it, end, pin } of d.att) {
+      skip.add(it.id);
+      const other = end === 'a' ? 'b' : 'a';
+      if (!d.att.some((x: any) => x.it === it && x.end === other)) lines.push({ o: pin.p, f: it[other].slice() });
+    }
+    for (const r of d.riders || []) if (r.end) { skip.add(r.it.id); lines.push({ o: r.o, f: r.it[r.end === 'a' ? 'b' : 'a'].slice() }); }
+    for (const c of d.contacts || []) if (C.isWire(byId(c.id))) lines.push({ o: c.p, f: c.p });
+    const pins = allPins(skip), ends: any[] = [];
+    for (const w of wires) for (const o of [w.a, w.b]) for (const pin of pins) if (!C.same(pin.p, o)) ends.push({ o, p: pin.p });
+    return (d.snapTo = { ends, lines });
   }
   function follow(att: any) { for (const { it, end, pin } of att) { const p = C.pinsOf(byId(pin.id))[pin.name]; if (p) it[end] = [r3(p[0]), r3(p[1])]; } }
   // A direct terminal-to-terminal contact needs an explicit wire when separated.
@@ -291,7 +326,7 @@ import { editorStage, fitView } from './editor-stage';
     if (!s.length) return;
     begin();
     const made = s.map((it: any) => {
-      const c = clone(it); c.id = C.uid();
+      const c = clone(it); c.id = C.uid(); delete c.cmt; // the copy is new: the comments stay with the original
       if (c.p) { c.p = [c.p[0] + 1, c.p[1] - 1]; if (c.name) c.name = freshName(c.part); }
       else { c.a = [c.a[0] + 1, c.a[1] - 1]; c.b = [c.b[0] + 1, c.b[1] - 1]; c.name = ''; }
       E.items.push(c); return c.id;
@@ -315,7 +350,11 @@ import { editorStage, fitView } from './editor-stage';
     const colorOf = (it: any, ic: any) => (E.sel.has(it.id) ? 'var(--redpen)' : ic || '#1c1b19');
     const wrap = (it: any, s: any) => {
       let hit;
-      if (it.p) {
+      if (it.part === 'text') {
+        // a Text node is clicked anywhere on its text
+        const b = C.itemsBox([it], { size: 'normalsize', font: 'default' }) || { x1: it.p[0] - 0.15, y1: it.p[1] - 0.15, x2: it.p[0] + 0.15, y2: it.p[1] + 0.15 };
+        hit = `<path class="cz-hit" d="M${[[b.x1, b.y1], [b.x2, b.y1], [b.x2, b.y2], [b.x1, b.y2]].map((q) => m(...(q as [any, any])).map((n) => n.toFixed(1)).join(',')).join('L')}Z"/>`;
+      } else if (it.p) {
         const G = CZ.parts[it.part] && CZ.geom(it.part), T = C.nodeXf(it), b = G ? G.box : { x1: -0.15, y1: -0.15, x2: 0.15, y2: 0.15 };
         hit = `<path class="cz-hit" d="M${[[b.x1, b.y1], [b.x2, b.y1], [b.x2, b.y2], [b.x1, b.y2]].map((q) => m(...(T(...q) as [any, any])).map((n) => n.toFixed(1)).join(',')).join('L')}Z"/>`;
       } else {
@@ -342,7 +381,8 @@ import { editorStage, fitView } from './editor-stage';
     }
     for (const joint of wireJunctions(E.items)) {
       const [x, y] = m(...(joint.p as [any, any]));
-      body += `<circle class="cz-junction" data-id="${joint.id}" cx="${x}" cy="${y}" r="3" fill="${E.sel.has(joint.id) ? 'var(--redpen)' : '#1c1b19'}"/>`;
+      // a hint that the wires meet here, never exported: a hollow blue-pen ring, so it can't pass for a Junction (circ) node's solid dot
+      body += `<circle class="cz-junction${E.sel.has(joint.id) ? ' on' : ''}" data-id="${joint.id}" cx="${x}" cy="${y}" r="3.5"/>`;
     }
     if (E.drag?.contacts) body += `<g class="cz-contact-preview">${C.itemsSvg(contactWires(E.drag.contacts), m, k, { color: '#1c1b19', paper: '#fffdf8' })}</g>`;
     // the part being placed, under the pointer
@@ -359,7 +399,7 @@ import { editorStage, fitView } from './editor-stage';
     if (E.tool === 'wire' && E.hover && !E.drag) { const q = snapPt(E.hover); const [X, Y] = m(...(q.p as [any, any])); ghost += `<circle class="cz-snap${q.pin ? ' on' : ''}" cx="${X}" cy="${Y}" r="5"/>`; }
     if (E.drag && E.drag.snapAt) { const [X, Y] = m(...(E.drag.snapAt as [any, any])); ghost += `<circle class="cz-snap on" cx="${X}" cy="${Y}" r="6"/>`; }
     let mq = '';
-    if (E.drag && E.drag.mode === 'marquee') { const d = E.drag; mq = `<rect class="cz-mq" x="${Math.min(d.sx, d.ex)}" y="${Math.min(d.sy, d.ey)}" width="${Math.abs(d.ex - d.sx)}" height="${Math.abs(d.ey - d.sy)}"/>`; }
+    if (E.drag && E.drag.mode === 'marquee') { const d = E.drag; mq = marqueeSvg(d.sx, d.sy, d.ex, d.ey); }
     // origin cross
     const [OX, OY] = m(0, 0);
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -391,20 +431,22 @@ import { editorStage, fitView } from './editor-stage';
     }
     const h = e.target.closest('.cz-h');
     if (h) {
-      if (C.isWire(sel()[0])) {
-        E.sel = connectedWires(E.items, E.sel); begin();
-        E.drag = { mode: 'move', q0: q, orig: new Map(sel().map((it: any) => [it.id, clone(it)])), att: attachments(E.sel), contacts: terminalContacts(E.sel), moved: false };
-      } else { begin(); E.drag = { mode: 'end', id: sel()[0].id, end: h.dataset.end, att: attachments(E.sel), contacts: terminalContacts(E.sel) }; }
+      begin();
+      const wire = C.isWire(sel()[0]), att = attachments(E.sel);
+      // a segment's end handle reshapes that end and its neighbours follow; it is meant to leave a part's pin, so no stub back to it
+      E.drag = { mode: 'end', id: sel()[0].id, end: h.dataset.end, att, contacts: wire ? [] : terminalContacts(E.sel), skip: wire ? new Set([sel()[0].id, ...att.map((x: any) => x.it.id)]) : null };
       return;
     }
     const g = e.target.closest('[data-id]');
     if (g) {
       const id = g.dataset.id;
       if (e.shiftKey) { if (E.sel.has(id)) E.sel.delete(id); else E.sel.add(id); draw(); renderProps(); return; }
-      if (!E.sel.has(id)) E.sel = new Set([id]);
-      if (C.isWire(byId(id)) || ['circ', 'ocirc'].includes(byId(id).part)) E.sel = connectedWires(E.items, E.sel);
+      // a click takes one wire segment; a double-click takes the whole connected wire (its runs, branches and dots)
+      const run = C.isWire(byId(id)) || ['circ', 'ocirc'].includes(byId(id).part);
+      if (dbl && run) E.sel = connectedWires(E.items, new Set([id]));
+      else if (!E.sel.has(id)) E.sel = new Set([id]);
       begin();
-      E.drag = { mode: 'move', q0: q, orig: new Map(sel().map((it: any) => [it.id, clone(it)])), att: attachments(E.sel), contacts: terminalContacts(E.sel), moved: false };
+      E.drag = { mode: 'move', q0: q, orig: new Map(sel().map((it: any) => [it.id, clone(it)])), att: attachments(E.sel), riders: riders(E.sel), contacts: terminalContacts(E.sel), moved: false };
       draw(); renderProps(); return;
     }
     E.drag = { mode: 'marquee', sx, sy, ex: sx, ey: sy, add: e.shiftKey, base: new Set(E.sel) };
@@ -420,7 +462,7 @@ import { editorStage, fitView } from './editor-stage';
     if (d.mode === 'node') { const it = byId(d.id); it.p = snapPt(q, new Set([d.id])).p; draw(); return; }
     if (d.mode === 'new' || d.mode === 'end') {
       const it = byId(d.id), end = d.mode === 'new' ? 'b' : d.end, other = end === 'a' ? it.b : it.a;
-      const s = snapPt(q, new Set([d.id]), e.shiftKey);
+      const s = snapPt(q, d.skip || new Set([d.id]), e.shiftKey);
       it[end] = s.pin ? s.p : ortho(other, s.p, e.shiftKey);
       d.snapAt = s.pin ? s.p : null;
       if (d.att) follow(d.att);
@@ -430,25 +472,57 @@ import { editorStage, fitView } from './editor-stage';
       let dx = q[0] - d.q0[0], dy = q[1] - d.q0[1];
       if (!d.moved && Math.hypot(dx, dy) * E.view.k < 3) return;
       d.moved = true;
-      // snap the first item's reference point (a node's centre, a part's start) to the grid
+      // snap by a point already on the grid (per axis), so every on-grid point stays on it; a wire's end on an
+      // off-grid pin would otherwise carry the whole run off the grid. With none on it, snap the first item's point.
       const first = d.orig.values().next().value, ref = first.p || first.a;
-      dx = snapG(ref[0] + dx) - ref[0]; dy = snapG(ref[1] + dy) - ref[1];
+      const pts = [...d.orig.values()].flatMap((o: any) => o.p ? [o.p] : [o.a, o.b]);
+      const onG = (v: number) => Math.abs(v / GRID - Math.round(v / GRID)) < 1e-6;
+      const rx = (pts.find((p: any) => onG(p[0])) || ref)[0], ry = (pts.find((p: any) => onG(p[1])) || ref)[1];
+      const raw = [dx, dy], lim = SNAP_PX / E.view.k;
+      dx = snapG(rx + dx) - rx; dy = snapG(ry + dy) - ry;
+      // pins and straight wires win over the grid near the pointer: a moved wire's end lands on a pin, and each wire that
+      // stretches to stay joined (or ends on a pin) snaps level or plumb with its fixed end, so off-grid pins still get straight wires
+      const snapTo = moveSnaps(d), gap = (t: any) => Math.hypot(t.p[0] - t.o[0] - raw[0], t.p[1] - t.o[1] - raw[1]);
+      const hit = snapTo.ends.reduce((m: any, t: any) => gap(t) < (m ? gap(m) : lim) ? t : m, null);
+      d.snapAt = null;
+      if (hit) { dx = hit.p[0] - hit.o[0]; dy = hit.p[1] - hit.o[1]; d.snapAt = hit.p; }
+      else for (const ax of [0, 1]) {
+        let best = lim, pick = null;
+        for (const t of snapTo.lines) { const v = t.f[ax] - t.o[ax], e = Math.abs(v - raw[ax]); if (e < best) { best = e; pick = v; } }
+        if (pick !== null) { if (ax) dy = pick; else dx = pick; }
+      }
       for (const [id, o] of d.orig) {
         const it = byId(id);
         if (o.p) it.p = [r3(o.p[0] + dx), r3(o.p[1] + dy)];
         else { it.a = [r3(o.a[0] + dx), r3(o.a[1] + dy)]; it.b = [r3(o.b[0] + dx), r3(o.b[1] + dy)]; }
       }
+      for (const r of d.riders) { const v = r.o; if (r.end) r.it[r.end] = [r3(v[0] + dx), r3(v[1] + dy)]; else r.it.p = [r3(v[0] + dx), r3(v[1] + dy)]; }
       follow(d.att); draw(); return;
     }
     if (d.mode === 'marquee') {
       d.ex = sx; d.ey = sy;
-      const [x1, y1] = [Math.min(d.sx, d.ex), Math.min(d.sy, d.ey)], [x2, y2] = [Math.max(d.sx, d.ex), Math.max(d.sy, d.ey)];
-      const inside = (p: any) => { const [X, Y] = m(...(p as [any, any])); return X >= x1 && X <= x2 && Y >= y1 && Y <= y2; };
+      // as on the main canvas: left to right takes what is wholly inside, right to left anything it touches
+      const M = marquee(d.sx, d.sy, d.ex, d.ey);
       E.sel = new Set(d.add ? d.base : []);
-      for (const it of E.items) if (it.p ? inside(it.p) : inside(it.a) && inside(it.b)) E.sel.add(it.id);
+      for (const it of E.items) if (marqueeTakes(M, drawnAs(it))) E.sel.add(it.id);
       draw(); return;
     }
   });
+  // what an item is drawn as, on screen, for the marquee: a wire its line; a part its body's box (and its leads);
+  // a Text node its text's box
+  function drawnAs(it: any) {
+    const M = (q: any) => m(q[0], q[1]);
+    if (it.part === 'text') { const b = C.itemsBox([it], { size: 'normalsize', font: 'default' }); if (b) { const p = boxPoly(b.x1, b.y1, b.x2, b.y2).map(M); return { pts: p, areas: [p] }; } }
+    const G = CZ.parts[it.part] && !C.isWire(it) && CZ.geom(it.part);
+    if (it.p) {
+      const T = C.nodeXf(it), b = G ? G.box : { x1: -0.15, y1: -0.15, x2: 0.15, y2: 0.15 }, p = boxPoly(b.x1, b.y1, b.x2, b.y2).map((q: any) => M(T(q[0], q[1])));
+      return { pts: p, areas: [p] };
+    }
+    const a = M(it.a), z = M(it.b);
+    if (!G) return { pts: [a, z], segs: [[a, z]] as any };
+    const T = C.bipXf(it), b = G.box, body = boxPoly(b.x1, b.y1, b.x2, b.y2).map((q: any) => M(T(q[0], q[1])));
+    return { pts: [a, z, ...body], segs: [[a, z], ...ring(body)] as any, areas: [body] };
+  }
   svg.addEventListener('pointerup', (e: any) => {
     if (!E) return;
     if (E.wireDown) {
@@ -556,7 +630,7 @@ import { editorStage, fitView } from './editor-stage';
     rows.push(field('opts', uiText('editor.commonB.options', 'Options'), it.p ? uiText('editor.cz.optsPlaceholder', 'e.g. {code}', { code: 'fill=blue!10' }) : uiText('editor.cz.optsPlaceholder', 'e.g. {code}', { code: 'mirror, color=red' }), true));
     const pins = Object.keys(def.pins).filter(name => name !== 'center');
     if (pins.length) rows.push({ kind: 'help' as const, text: [uiText('editor.cz.pins', 'Pins: '), ...pins.flatMap((name, i) => [...(i ? [' '] : []), { code: name }])] });
-    renderView(props, CircuitProperties, { name: def.name, command: `${it.p ? 'node' : 'to'}[${def.tikz}]`, rows });
+    renderView(props, CircuitProperties, { name: partName(it.part), command: `${it.p ? 'node' : 'to'}[${def.tikz}]`, rows });
   }
   // where a voltage's arrow or a current's arrow goes: its side of the part and the way it points. The icons
   // turn with the part, so they match the canvas. Each choice is written as circuitikz's `v^<=` style mods.
@@ -644,7 +718,7 @@ import { editorStage, fitView } from './editor-stage';
     showRaw();
   }
   function showRaw() {
-    const n = E.raw ? E.raw.split('\n').filter((l: any) => l.trim()).length : 0;
+    const n = E.raw ? E.raw.split('\n').filter((l: any) => l.trim() && !/^\s*%/.test(l)).length : 0; // comment lines are not drawn either, but need no note
     showCodeNotes(codeMsg, n ? [n === 1 ? uiText('editor.cz.rawOne', "1 line can't be drawn here and will be kept as written.") : uiText('editor.cz.rawMany', "{n} lines can't be drawn here and will be kept as written.", { n })] : []);
   }
   function readCode() {
@@ -661,8 +735,8 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; } // never the browser's Save Page
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return; // a label popup handles its own keys
@@ -682,7 +756,7 @@ import { editorStage, fitView } from './editor-stage';
     if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
     if (mod && e.key === 'd') { e.preventDefault(); duplicateSel(); return; }
-    if (mod && e.key === 'a') { e.preventDefault(); E.sel = new Set(E.items.map((it: any) => it.id)); draw(); renderProps(); return; }
+    if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); E.sel = new Set(E.items.map((it: any) => it.id)); draw(); renderProps(); return; }
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
@@ -699,9 +773,11 @@ import { editorStage, fitView } from './editor-stage';
       e.preventDefault();
       const st = e.shiftKey ? 1 : GRID, dx = e.key === 'ArrowLeft' ? -st : e.key === 'ArrowRight' ? st : 0, dy = e.key === 'ArrowUp' ? st : e.key === 'ArrowDown' ? -st : 0;
       begin();
-      const att = attachments(E.sel);
+      // as a drag does: wires on its pins follow, and a terminal touching another part's gets a wire to it
+      const att = attachments(E.sel), ride = riders(E.sel), contacts = terminalContacts(E.sel);
       for (const it of sel()) { if (it.p) it.p = [r3(it.p[0] + dx), r3(it.p[1] + dy)]; else { it.a = [r3(it.a[0] + dx), r3(it.a[1] + dy)]; it.b = [r3(it.b[0] + dx), r3(it.b[1] + dy)]; } }
-      follow(att); commit(); draw();
+      for (const r of ride) { if (r.end) r.it[r.end] = [r3(r.o[0] + dx), r3(r.o[1] + dy)]; else r.it.p = [r3(r.o[0] + dx), r3(r.o[1] + dy)]; }
+      follow(att); E.items.push(...contactWires(contacts)); commit(); draw();
     }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);

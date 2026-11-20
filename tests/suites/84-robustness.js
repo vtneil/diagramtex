@@ -76,3 +76,92 @@ T.test('robustness: a 0 typed for bend, rounded corners and l* stays 0', () => {
   const D = TD.ft.layout({ type: 'forest', x: 0, y: 0, src: '\\begin{forest}for tree={draw, rounded corners}[a]\\end{forest}' });
   T.ok(D.nodes[0].st.rc > 0, 'rounded corners alone keeps its default');
 });
+
+T.test('robustness: a block of a kind this version does not know is shown as a note, kept on save and left out of the LaTeX', async () => {
+  const text = JSON.stringify({ app: 'diagramtex', version: 3, kind: 'classic', name: 'Unknown block test',
+    blocks: [{ type: 'text', text: 'Before.' }, { type: 'whatever', data: { x: 1 } }, { type: 'diagram', shapes: [] }] });
+  const p = TD.app.parseProject(text, 'x');
+  const id = TD.app.newDoc(p.name, null, null, p.blocks, p.page, p.kind);
+  TD.app.setMode('document');
+  await new Promise((r) => setTimeout(r, 50));
+  T.eq(TD.state.docId, id);
+  T.ok(document.querySelector('.blk-other .ph')?.textContent.includes('(whatever)'), 'a note where the block is');
+  const back = JSON.parse(TD.app.projectJson(TD.state.doc)).blocks;
+  T.eq(back[1], { type: 'whatever', data: { x: 1 } }, 'saved as it came');
+  const tex = TD.docToLatex(TD.state.doc);
+  T.ok(tex.includes("% A block this version of DiagramTeX can't export (whatever) is left out here.") && tex.includes('Before.'), tex);
+  TD.app.cmd.docAction('del', id);
+});
+
+T.test('robustness: a drawing far from the origin is written moved back within TeX\'s reach; one too big says why', () => {
+  const P = TD.PX_PER_CM, d = { stroke: '#000000', fill: null, width: 1 };
+  const far = { ...TD.TYPES.rect.create({ x: 2000 * P, y: 10 * P }, d), id: 'far', w: 2 * P, h: P };
+  const out = TD.toTikz([far], { standalone: true });
+  T.ok(out.includes('(0,-1) rectangle (2,0)') && !/Note/.test(out), out);
+  T.eq(far.x, 2000 * P, 'the drawing itself is not moved');
+  T.tex('far from the origin', out);
+  const near = { ...TD.TYPES.rect.create({ x: 0, y: 0 }, d), id: 'near', w: 2 * P, h: P };
+  T.ok(/% Note: The drawing reaches 2002 cm across/.test(TD.toTikz([far, near])), 'too big to fit: a note');
+});
+
+T.test('document import: numbered sections, the author, a figure caption and the preamble\'s packages come back as they were', () => {
+  const src = String.raw`\documentclass{article}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\title{Lab report}
+\author{A. Writer \and B. Writer}
+\begin{document}
+\maketitle
+\section{Method}
+Some text.
+\begin{figure}[h]
+  \centering
+  \begin{tikzpicture}\draw (0,0) rectangle (1,1);\end{tikzpicture}
+  \caption{The apparatus}
+\end{figure}
+More text.
+\end{document}`;
+  const r = TD.importLatex(src);
+  T.ok(r.page.numbered, '\\section (not \\section*) numbers the headings');
+  T.eq(r.page.author, 'A. Writer, B. Writer');
+  const at = r.blocks.findIndex((b) => b.type === 'diagram'), cap = r.blocks[at + 1];
+  T.eq([cap.text, cap.align], ['The apparatus', 'center'], 'the caption sits centred under its picture');
+  T.ok(!r.blocks.some((b) => b.type === 'text' && /apparatus/.test(b.text) && b !== cap), 'and is not in a paragraph');
+  const tex = TD.docToLatex({ kind: 'classic', name: 'Lab report', blocks: r.blocks, page: r.page });
+  T.ok(/\\section\{Method\}/.test(tex), 'exported numbered');
+  T.ok(/\\author\{A\. Writer, B\. Writer\}/.test(tex), 'the author is exported');
+  for (const p of ['amsmath', 'amssymb']) T.eq((tex.match(new RegExp(`\\\\usepackage\\{[^}]*\\b${p}\\b`, 'g')) || []).length, 1, `${p} loaded once`);
+  T.tex('imported-report', tex);
+});
+
+T.test('document import: itemize and enumerate become the page\'s own lists, and export as they came', async () => {
+  const src = String.raw`\documentclass{article}
+\begin{document}
+Intro text.
+\begin{itemize}
+  \item First \textbf{bold}
+  \item Second $x^2$
+  \begin{enumerate}
+    \item One
+    \item Two
+      continued
+  \end{enumerate}
+  \item[$\square$] Open task
+  \item[$\boxtimes$] Done task
+\end{itemize}
+After the list.
+\end{document}`;
+  const r = TD.importLatex(src), text = r.blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+  T.eq(text, 'Intro text.\n- First \\textbf{bold}\n- Second $x^2$\n  1. One\n  2. Two continued\n- [ ] Open task\n- [x] Done task\n\nAfter the list.');
+  TD.app.newDoc('Imported lists', null, null, r.blocks, null, 'classic');
+  TD.app.setMode('document');
+  await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+  const pg = document.querySelector('#docview .doc-page');
+  T.ok(pg.querySelectorAll('li').length >= 6 && !/\\begin|\\item|beginitemize/.test(pg.textContent), 'drawn as lists, no raw commands');
+  // the app's own Welcome export comes back with the same lists
+  TD.app.newSample();
+  const tex = TD.docToLatex(TD.state.doc), back = TD.importLatex(tex);
+  const env = (s) => (s.match(/\\(begin|end)\{(itemize|enumerate)\}|\\item(\[[^\]]*\])?/g) || []).join(' ');
+  T.ok(env(tex).length > 0, 'the Welcome document has lists');
+  T.eq(env(TD.docToLatex({ ...TD.state.doc, blocks: back.blocks })), env(tex));
+});

@@ -3,6 +3,7 @@ import { thai as app } from './th/app';
 import { thai as views } from './th/views';
 import { thai as editorsA } from './th/editors-a';
 import { thai as editorsB } from './th/editors-b';
+import { thai as circuit } from './th/circuit';
 const core: Record<string, string> = {
   "pwa.install": "ติดตั้ง",
   "pwa.install.tip": "ติดตั้ง DiagramTeX เป็นแอป",
@@ -59,6 +60,7 @@ const core: Record<string, string> = {
   "block.table.title": "ตาราง (booktabs เซลล์ผสาน สี ตัวเลข siunitx) แก้ไขในพื้นที่ตารางและเขียนเป็น tabular ในโหนด",
   "editor.saved": "บันทึกลงในหน้าแล้ว",
   "editor.discard.body": "การแก้ไขตั้งแต่เปิดตัวแก้ไขจะหายไป",
+  "editor.discard.bodySaved": "การแก้ไขตั้งแต่บันทึกครั้งล่าสุดจะหายไป",
   "editor.discard.ok": "ทิ้ง",
   "editor.phy.discard": "ทิ้งการแก้ไขรูปนี้หรือไม่?",
   "editor.zx.deleteRowN": "ลบแถว {n}",
@@ -118,6 +120,8 @@ const core: Record<string, string> = {
   "ui.dark.appearance": "รูปลักษณ์มืด",
   "ui.loading.diagramtex": "กำลังโหลด DiagramTeX",
   "ui.sort": "เรียงลำดับ",
+  "ui.scrollBack": "แสดงปุ่มทางซ้าย",
+  "ui.scrollOn": "แสดงปุ่มทางขวา",
   "ui.sort.files": "เรียงลำดับไฟล์",
   "ui.recycle.bin": "ถังรีไซเคิล",
   "ui.text.input": "การป้อนข้อความ",
@@ -255,6 +259,9 @@ const core: Record<string, string> = {
   "ui.left.right": "ซ้าย / ขวา",
   "ui.normal": "ปกติ",
   "ui.title": "ชื่อเรื่อง",
+  "ui.previousDiagram": "แผนภาพก่อนหน้า",
+  "ui.nextDiagram": "แผนภาพถัดไป",
+  "ui.author": "ผู้เขียน",
   "ui.line.spacing": "ระยะห่างบรรทัด",
   "ui.sections": "หัวข้อ",
   "ui.click.to.type.a.value": "คลิกเพื่อพิมพ์ค่า",
@@ -297,7 +304,7 @@ const core: Record<string, string> = {
   "ui.actual.size.100.ctrl.0": "ขนาดจริง 100% (Ctrl+0)",
   "ui.what.the.code.holds": "เนื้อหาของโค้ด",
   "ui.more.ways.to.download.the.zip": "ตัวเลือกเพิ่มเติมในการดาวน์โหลด .zip",
-  "ui.what.tikz.that.can.t.be.read.exactly.becomes": "วิธีจัดการโค้ด TikZ ที่อ่านได้ไม่ครบถ้วน",
+  "ui.tikz.code.that.can.t.be.read.exactly.becomes": "โค้ด TikZ ที่อ่านได้ไม่ครบถ้วนจะกลายเป็น",
   "ui.keep.it.as.written.exported.exactly.as.it.is.drawn.as.an.approximation.and.group": "เก็บโค้ดต้นฉบับ: ส่งออกตามเดิม แสดงภาพโดยประมาณ และจัดกลุ่มเพื่อย้ายพร้อมกัน",
   "ui.turn.it.into.ordinary.shapes.you.can.edit.drawn.and.exported.from.the.shapes.so.": "แปลงเป็นรูปร่างที่แก้ไขได้: วาดและส่งออกจากรูปร่าง รายละเอียดบางอย่างจึงอาจเปลี่ยนไป",
   "ui.create.a.new.document.from.the.code": "สร้างเอกสารใหม่จากโค้ด",
@@ -378,7 +385,7 @@ const core: Record<string, string> = {
   "shell.sentence1": "<b>ตัวแก้ไขต้องใช้หน้าจอที่ใหญ่กว่านี้</b> เปิด <strong>diagramtex.com</strong> บนคอมพิวเตอร์หรือแท็บเล็ตเพื่อเริ่มวาด",
   "shell.sentence4": "เลือกเครื่องมือทางซ้าย หรือกด <kbd>L</kbd> เส้น · <kbd>R</kbd> สี่เหลี่ยม · <kbd>T</kbd> ข้อความ (ลากเพื่อสร้างกล่องย่อหน้า)",
   "shell.sentence5": "กราฟและแผนภูมิอยู่ใต้ปุ่ม <b>กราฟ</b> ส่วนแผนภาพสลับที่ ทรงกลม Bloch วงจรควอนตัม วงจร ต้นไม้ แผนภาพ ZX และ Feynman แผนภาพเวลา เครื่องสถานะ แผนผัง Karnaugh บิตฟิลด์ เคมี และเรขาคณิต 2 มิติและ 3 มิติ อยู่ใต้ <b>บล็อก</b> ส่วนพื้นผิวและทรงตันอยู่ใต้ <b>3D</b> คลิกขวาที่วัตถุเพื่อดูตัวเลือกเพิ่มเติม",
-  "shell.sentence6": "วาดได้ทุกที่ ไวท์บอร์ดไม่มีขอบ เลื่อนเพื่อย้ายมุมมอง จีบนิ้วหรือ <kbd>Ctrl</kbd>+เลื่อนเพื่อซูม กด <kbd>H</kbd> หรือ <kbd>Space</kbd> ค้างแล้วลากเพื่อจับไวท์บอร์ด",
+  "shell.sentence6": "วาดได้ทุกที่ ไวท์บอร์ดไม่มีขอบ เลื่อนเพื่อย้ายมุมมอง จีบนิ้วหรือ <kbd>{mod}</kbd>+เลื่อนเพื่อซูม กด <kbd>H</kbd> หรือ <kbd>Space</kbd> ค้างแล้วลากเพื่อจับไวท์บอร์ด",
   "shell.sentence7": "รูปร่าง ข้อความ สูตร กราฟ และวงจรอยู่ทางซ้าย <b>พอดี</b> จะนำทุกอย่างกลับมาในมุมมอง",
   "shell.sentence8": "วางสิ่งต่าง ๆ ลงบนกระดาษได้โดยตรง: <kbd>T</kbd> ข้อความ · <kbd>M</kbd> สูตร · รูปร่าง กราฟ และรูปภาพจากทางซ้าย",
   "shell.sentence9": "เส้นประสีน้ำเงินคือแนวระยะขอบที่จัดแนวเข้าหาได้ ส่งออกด้วย <b>LaTeX</b>: ทุกอย่างอยู่ในตำแหน่งเดิมทุกประการ",
@@ -422,4 +429,4 @@ const core: Record<string, string> = {
   "vars.exprHint": "ทุกช่องในเรขาคณิตใส่นิพจน์ของตัวแปรเหล่านี้และของวัตถุที่ตั้งชื่อในเลเยอร์ได้: {examples}",
   "vars.exportValues": "การส่งออกจะเขียนเป็นค่าตัวเลข"
 };
-export const thai: Record<string, string> = { ...core, ...app, ...views, ...editorsA, ...editorsB };
+export const thai: Record<string, string> = { ...core, ...app, ...views, ...editorsA, ...editorsB, ...circuit };

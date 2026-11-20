@@ -8,9 +8,11 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
+import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
 // Graph editor: the overlay that opens on a Graph block. A palette of node kinds, edge kinds and whole
 // graphs; the graph drawn on a centimetre grid, where nodes are placed, dragged (alone or several at once)
 // and joined by dragging a node's blue handle to another; a selected edge's middle handle bends it; Auto
@@ -342,12 +344,12 @@ import { editorStage, fitView } from './editor-stage';
   //   pending, start, done, drag, hover, knobAt, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 }, clip: any = null;
   let stopLocale: (() => void) | null = null;
-  const snapCode = () => codeOf(E.M);
+  const snapCode = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
   const { begin, commit, undo, redo } = TD.editorSession.history({
     state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
   });
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
-  function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); if (E.M.nodes.length) fitIfOut(); }
+  function restore(code: any) { E.typed = code; E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); if (E.M.nodes.length) fitIfOut(); }
   function clampSel() {
     const s = E.sel;
     if (s && s.n) { s.n = s.n.filter((x: string) => nOf(x)); if (!s.n.length) E.sel = null; }
@@ -593,7 +595,7 @@ import { editorStage, fitView } from './editor-stage';
       out += `<g class="ze-knob" data-v="${esc(kn_)}"><title>${esc(uiText('editor.graph.knob', 'Drag to another node for an edge, onto the grid for a new node, or back onto this one for a loop'))}</title><circle cx="${kx}" cy="${ky}" r="6"/><path d="M${kx - 3},${ky}h6"/></g>`;
     }
     if ((E.arm || E.ghost) && E.hover && E.hover.at) { const [X, Y] = m(...(E.hover.at as [number, number])); out += `<circle class="cz-snap on" cx="${r2(X)}" cy="${r2(Y)}" r="5"/>`; }
-    if (E.drag && E.drag.mode === 'marquee' && E.drag.moved) { const d = E.drag; out += `<rect class="marquee" x="${r2(Math.min(d.sx, d.x))}" y="${r2(Math.min(d.sy, d.y))}" width="${r2(Math.abs(d.x - d.sx))}" height="${r2(Math.abs(d.y - d.sy))}"/>`; }
+    if (E.drag && E.drag.mode === 'marquee' && E.drag.moved) { const d = E.drag; out += marqueeSvg(d.sx, d.sy, d.x, d.y); }
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     patchSvg(svg, out);
     svg.classList.toggle('placing', !!E.arm);
@@ -662,8 +664,9 @@ import { editorStage, fitView } from './editor-stage';
       d.x = sx; d.y = sy;
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
       d.moved = true;
-      const L = lay(), x1 = Math.min(d.sx, sx), x2 = Math.max(d.sx, sx), y1 = Math.min(d.sy, sy), y2 = Math.max(d.sy, sy);
-      const inside = [...L.nodes.values()].filter((q: any) => { const [X, Y] = S(q.x, q.y); return X >= x1 && X <= x2 && Y >= y1 && Y <= y2; }).map((q: any) => q.name);
+      // as on the main canvas: left to right takes the nodes wholly inside, right to left any it touches
+      const L = lay(), M = marquee(d.sx, d.sy, sx, sy), k = E.view.k / PX;
+      const inside = [...L.nodes.values()].filter((q: any) => { const [X, Y] = S(q.x, q.y), w = q.hw * k, h = q.hh * k; return marqueeTakes(M, boxShape(X - w, Y - h, X + w, Y + h)); }).map((q: any) => q.name);
       const all = [...new Set([...d.base, ...inside])];
       E.sel = all.length ? { n: all } : null;
       draw(); return;
@@ -1017,7 +1020,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit();
     clampSel(); draw(); renderProps(); updateTools();
     showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
@@ -1027,7 +1030,7 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target as Element).closest && (e.target as Element).closest('.td-pop-ta, .td-pop-ml')) return;
@@ -1049,7 +1052,7 @@ import { editorStage, fitView } from './editor-stage';
     if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
-    if (mod && e.key === 'a') { e.preventDefault(); act('all'); return; }
+    if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); act('all'); return; }
     if (mod && e.key === 'c') { if (selNs().length) { e.preventDefault(); copySel(); } return; }
     if (mod && e.key === 'd') { e.preventDefault(); duplicate(); return; }
     if (mod) return;
@@ -1092,7 +1095,7 @@ import { editorStage, fitView } from './editor-stage';
     const M = load(block.src);
     const directed = M.edges.length && M.edges.filter((e: any) => e.op !== '--').length > M.edges.length / 2;
     E = { M, sel: null, arm: null, kind: directed ? 'arrow' : 'line', bent: false, dashed: false, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
-    E.start = codeOf(M);
+    E.typed = String(block.src || ''); E.start = snapCode();
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');

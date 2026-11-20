@@ -10,9 +10,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
 // Physics editor: the overlay that opens on a Physics block. A palette of the domain's objects, grouped;
 // the figure solved and drawn on a centimetre grid, where objects are selected, moved and reshaped by their
 // handles (lens focus, ray angle, slope angle, …); the selected object's settings, generated from its
@@ -199,14 +200,13 @@ import { editorStage, fitView } from './editor-stage';
   }
   // left to right: objects wholly inside; right to left: anything the box touches
   function marqueeSel(d: any) {
-    const r = R(), a = d.a, b = d.b, X0 = Math.min(a[0], b[0]), X1 = Math.max(a[0], b[0]), Y0 = Math.min(a[1], b[1]), Y1 = Math.max(a[1], b[1]), cross = b[0] < a[0];
+    const r = R(), M = marquee(d.a[0], d.a[1], d.b[0], d.b[1]);
     const ids = [...d.base];
     E.M.lines.forEach((L: any, i: any) => {
       if (L.kind !== 'cmd' && L.kind !== 'tikz' && L.kind !== 'shape') return;
       const q = lineBox(i, r);
       if (!q) return;
-      if (q[0] >= X0 && q[2] <= X1 && q[1] >= Y0 && q[3] <= Y1) ids.push(i);
-      else if (cross && q[0] <= X1 && q[2] >= X0 && q[1] <= Y1 && q[3] >= Y0) ids.push(i);
+      if (marqueeTakes(M, boxShape(q[0], q[1], q[2], q[3]))) ids.push(i);
     });
     setSel(ids);
   }
@@ -438,7 +438,7 @@ import { editorStage, fitView } from './editor-stage';
     }
     if (E.drag && E.drag.mode === 'marquee' && E.drag.b) {
       const [ax, ay] = m(E.drag.a), [bx, by] = m(E.drag.b);
-      out += `<rect class="marquee${E.drag.b[0] < E.drag.a[0] ? ' cross' : ''}" x="${r2(Math.min(ax, bx))}" y="${r2(Math.min(ay, by))}" width="${r2(Math.abs(bx - ax))}" height="${r2(Math.abs(by - ay))}"/>`;
+      out += marqueeSvg(ax, ay, bx, by);
     }
     const ss = shapeOf(E.sel);
     if (ss && !E.tool && E.poly == null && typeOf(ss).handles) {
@@ -783,8 +783,8 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || session.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if (document.querySelector('.td-dialog')) return;

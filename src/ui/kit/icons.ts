@@ -77,6 +77,9 @@ export const ICONS = {
   code: { d: '<path d="M7 6l-4 4 4 4M13 6l4 4-4 4M11 4.5l-2 11"/>' },
   prev: { d: '<path d="M12 4l-6 6 6 6"/>' },
   next: { d: '<path d="M8 4l6 6-6 6"/>' },
+  // a toolbar's ‹‹ ›› to the controls scrolled out of sight (fitToolbar's arrows), unlike prev / next
+  scrollBack: { d: '<path d="M10 5l-5 5 5 5M15 5l-5 5 5 5"/>' },
+  scrollOn: { d: '<path d="M10 5l5 5-5 5M5 5l5 5-5 5"/>' },
   pencil: { d: '<path d="M4 16l1-4 8.5-8.5 3 3L8 15z M12 5l3 3"/>' },
   renameItem: { d: '<path d="M12 4l4 4M4 12l9-9 4 4-9 9-5 1z"/>' },
   guides: { d: '<path d="M3 3h14v14H3zM7 3v4M11 3v3M15 3v4M3 7h4M3 11h3M3 15h4"/>' },
@@ -239,6 +242,8 @@ export const ICONS = {
   colDelete: { d: gridBlocks(0, true, true), cls: 'qe-ic' },
   // the Table's and Document's text colour and fill (a SplitButton with `swatch`): the bar (.sw) shows the colour
   textColour: { d: '<path d="M6 14l4-10 4 10M7.4 10.5h5.2"/><path class="sw" d="M3 16.5h14" stroke-width="3"/>' },
+  // text on its own (the Circuit editor's Text node): the letter A
+  letter: { d: '<path d="M6 15.5l4-11 4 11M7.5 11.5h5"/>' },
   fillColour: { d: '<path d="M4.5 9.5l5-5 5 5-5 5z"/><path d="M15.5 11.5s1.5 1.8 1.5 2.8a1.5 1.5 0 01-3 0c0-1 1.5-2.8 1.5-2.8z"/><path class="sw" d="M3 17.5h14" stroke-width="3"/>' },
   // the Document view: a block's tools, a table's steps, the text bar
   remove: { d: '<path d="M5 10h10"/>' },

@@ -9,9 +9,11 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
+import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
 // Timing editor: the overlay that opens on a timing block. A palette of signal values, rows and
 // annotations; the table drawn by the canvas renderer on a grid of periods, where transitions are dragged
 // along the time axis, values are painted onto rows and arrows are drawn between edges; the selected
@@ -174,7 +176,7 @@ import { editorStage, fitView } from './editor-stage';
   //   undo, redo, pending, start, done, drag, hover, codeAt, codeTimer }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   let stopLocale: (() => void) | null = null;
-  const snapCode = () => codeOf(E.M);
+  const snapCode = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
   const history = TD.editorSession.history({ state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed() });
   const { begin, commit } = history;
   function undo() { dropPaint(); history.undo(); }
@@ -191,7 +193,7 @@ import { editorStage, fitView } from './editor-stage';
     disarm();
     E.sel = { x: E.M.ext.length - 1 }; draw(); renderProps();
   }
-  function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
+  function restore(code: any) { E.typed = code; E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
   function clampSel() {
     const s = E.sel;
     if (!s) return;
@@ -605,7 +607,7 @@ import { editorStage, fitView } from './editor-stage';
       out += `<circle class="cz-snap on" cx="${r2(x2)}" cy="${r2(y1)}" r="5"/>`;
     }
     // a selection being dragged out over empty space
-    if (d && d.mode === 'marquee' && d.moved) out += `<rect class="marquee" x="${r2(Math.min(d.sx, d.x))}" y="${r2(Math.min(d.sy, d.y))}" width="${r2(Math.abs(d.x - d.sx))}" height="${r2(Math.abs(d.y - d.sy))}"/>`;
+    if (d && d.mode === 'marquee' && d.moved) out += marqueeSvg(d.sx, d.sy, d.x, d.y);
     // an item dragged from the palette: where a row goes, or where a marker or break lands
     if (E.dnd && E.dnd.line != null) { const [, Y] = m(0, E.dnd.line); out += `<path class="ze-draft" d="M0,${r2(Y)}H${W}"/>`; }
     if (E.dnd && E.dnd.at != null) { const [X] = m(E.dnd.at, 0); out += `<path class="ze-draft" d="M${r2(X)},0V${H}"/>`; }
@@ -666,7 +668,7 @@ import { editorStage, fitView } from './editor-stage';
     lastDown = { t: dbl ? 0 : now, x: e.clientX, y: e.clientY };
     const [sx, sy] = pos(e), [t, y] = toT(e);
     if (E.drag && E.drag.click) { const d = E.drag; E.drag = null; if (e.button === 0) { paintPreview(d, t, e.altKey); placePaint(d); } else dropPaint(); return; }
-    svg.setPointerCapture(e.pointerId);
+    try { svg.setPointerCapture(e.pointerId); } catch { /* a pointer the browser doesn't know: the drag goes on uncaptured */ }
     if (e.button === 1 || E.space) { E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy }; return; }
     {
       // the add-row buttons work whatever is picked; a row name selects the row and puts the tool down
@@ -746,10 +748,11 @@ import { editorStage, fitView } from './editor-stage';
       d.x = sx; d.y = sy;
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 3) return;
       d.moved = true;
-      const x1 = Math.min(d.sx, sx), x2 = Math.max(d.sx, sx), y1 = Math.min(d.sy, sy), y2 = Math.max(d.sy, sy), list = d.base.slice();
+      // as on the main canvas: left to right takes the segments wholly inside, right to left any it touches
+      const M = marquee(d.sx, d.sy, sx, sy), list = d.base.slice();
       E.M.rows.forEach((_: any, r: number) => spansOf(r).forEach((sp: any, i: number) => {
         const b = segBox(r, sp);
-        if (b.x1 <= x2 && b.x2 >= x1 && b.y1 <= y2 && b.y2 >= y1 && !list.some((q: any) => q.r === r && q.i === i)) list.push({ r, i });
+        if (marqueeTakes(M, boxShape(b.x1, b.y1, b.x2, b.y2)) && !list.some((q: any) => q.r === r && q.i === i)) list.push({ r, i });
       }));
       selectSegs(list, d.anchor);
       draw(); return;
@@ -1128,7 +1131,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps();
     showCodeNotes(codeMsg, T.layout({ src: codeTa.value }).warnings);
@@ -1152,8 +1155,8 @@ import { editorStage, fitView } from './editor-stage';
   }
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
@@ -1174,6 +1177,8 @@ import { editorStage, fitView } from './editor-stage';
     if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    // every segment of every row, as a marquee over the whole drawing takes them
+    if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectSegs(E.M.rows.flatMap((_: any, r: number) => spansOf(r).map((_s: any, i: number) => ({ r, i })))); draw(); renderProps(); return; }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
@@ -1199,7 +1204,7 @@ import { editorStage, fitView } from './editor-stage';
   function open(block: any, done: any, _options?: unknown, host?: any) {
     const M = load(block.src);
     E = { M, sel: null, arm: null, view: { ox: 0, oy: 0, k: 30 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null };
-    E.start = codeOf(M);
+    E.typed = String(block.src || ''); E.start = snapCode();
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setHint('');

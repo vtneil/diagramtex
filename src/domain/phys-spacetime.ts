@@ -107,7 +107,7 @@ import { runtime as TD } from '../runtime';
             if (inside(px, box, 0.3)) S.line([G.add(px, G.mul(nx, -d)), G.add(px, G.mul(nx, d))], { w: 'thin', color: col });
           }
           S.result(`γ for ${v.name}`, P.sig(T.g, 5), 'exact', 'γ = 1/√(1 − β²)');
-          S.result(`axis angle of ${v.name}`, `${P.fmt((Math.atan(Math.abs(T.b)) * 180) / Math.PI, 2)}° from the rest axes`, 'exact', "ct' tilts toward the light line by arctan β, and so does x'");
+          S.result(`axis angle of ${v.name}`, `${P.fmt((Math.atan(Math.abs(T.b)) * 180) / Math.PI, 2)}° from the rest axes`, 'exact', "ct' tilts towards the light line by arctan β, and so does x'");
           S.result(`tick spacing of ${v.name}`, `${P.sig(Math.sqrt((1 + T.b * T.b) / (1 - T.b * T.b)), 5)} cm per unit`, 'exact', "one unit of x' or ct' is √((1 + β²)/(1 − β²)) on the page: the ticks lie on the invariant hyperbolas");
           if (tA) S.handle({ at: G.add([0, 0], G.mul(G.norm([T.b, 1]), Math.min(2, G.len(tA[1])))), kind: 'rot', label: 'speed', drag: (Ln: any, p: any, snap: any) => { if (p[1] <= 0.05) return; const b = Math.max(-0.99, Math.min(0.99, p[0] / p[1])); P.setOpt(Ln, 'beta', P.fmt(snap.step ? Math.round(b / 0.05) * 0.05 : b, 3)); } });
           break;

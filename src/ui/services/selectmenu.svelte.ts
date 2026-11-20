@@ -161,6 +161,14 @@ export function installSelectMenu() {
   document.addEventListener('keydown', (e) => {
     const t = e.target;
     if (!usable(t)) return;
+    // picked with the pointer and still focused, closed: a letter is the app's shortcut (L for the line tool), not a
+    // search of the list that changes the value. Focus leaves the select and the key goes on from the page.
+    if (sel !== t && 'byPointer' in (t as HTMLElement).dataset && e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault(); e.stopPropagation();
+      (t as HTMLElement).blur();
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: e.key, code: e.code, shiftKey: e.shiftKey, bubbles: true, cancelable: true }));
+      return;
+    }
     if (e.key !== 'Shift' && e.key !== 'Meta' && e.key !== 'Control' && e.key !== 'Alt') delete (t as HTMLElement).dataset.byPointer;
     if (sel !== t) {
       if (e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); open(t); }

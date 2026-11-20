@@ -67,6 +67,21 @@ const PICTURE_MS = 10;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ table: M, fresh })); } catch (e: any) { /* too large or blocked */ } }, 200);
   }
+  // Leaving the page (reload, the tab closed or put away): saved at once, with the text of a cell still being typed
+  // into, which is otherwise kept only when its editor closes. The editor stays open.
+  function saveNow() {
+    if (session) return;
+    clearTimeout(saveTimer);
+    let table = M;
+    if (editing) {
+      const v = editing.pop ? editing.v : editing.ta!.value;
+      table = JSON.parse(JSON.stringify(M));
+      if (table.cells[editing.r]?.[editing.c]) table.cells[editing.r][editing.c].t = v;
+    }
+    try { localStorage.setItem(KEY, JSON.stringify({ table, fresh: fresh && !editing })); } catch { /* too large or blocked */ }
+  }
+  window.addEventListener('pagehide', saveNow);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
   /** One undoable change: fn edits M; the grid, panel and preview follow. */
   function change(fn: () => unknown) {
     const before = JSON.stringify(M);
@@ -388,7 +403,13 @@ const PICTURE_MS = 10;
     const ta = e.target as HTMLTextAreaElement;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finishEdit(true); focusGrid(); return; }
     if (e.key === 'Enter' && !e.shiftKey && !e.altKey) { e.preventDefault(); finishEdit(); select(step(act, e.metaKey || e.ctrlKey ? 0 : 1, 0)); focusGrid(); return; }
-    if (e.key === 'Tab') { e.preventDefault(); finishEdit(); select(step(act, 0, e.shiftKey ? -1 : 1)); focusGrid(); return; }
+    if (e.key === 'Tab') {
+      const to = step(act, 0, e.shiftKey ? -1 : 1);
+      finishEdit();
+      // nowhere further along the row: from the grid (the editor is gone), focus moves on out of it
+      if (to[0] === act[0] && to[1] === act[1]) { focusGrid(); return; }
+      e.preventDefault(); select(to); focusGrid(); return;
+    }
     // ⌘B etc. wrap the selected text
     if ((e.metaKey || e.ctrlKey) && /^[biu]$/i.test(e.key)) {
       e.preventDefault();
@@ -867,7 +888,7 @@ const PICTURE_MS = 10;
     clearTimeout(copiedTimer);
     copiedTimer = setTimeout(() => { copied = ''; renderShell(); }, 1200);
   }
-  const fileName = () => (M.label.replace(/^tab:/, '') || M.caption.replace(/\\[A-Za-z]+|[$\\{}]/g, '')).trim().replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).toLowerCase() || 'table';
+  const fileName = () => (M.label.replace(/^tab:/, '') || M.caption.replace(/\\[A-Za-z]+|[$\\{}]/g, '')).trim().normalize('NFC').replace(/[^\p{L}\p{M}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 40).toLowerCase() || 'table'; // letters of any script stay
   // The LaTeX is ready at once; the picture outputs wait until every cell's maths is drawn.
   const PICTURE_OUTPUTS = new Set(['copy-png', 'dl-svg', 'dl-png', 'print']);
   async function output(what: string, btn: HTMLElement | null) {
@@ -1104,7 +1125,9 @@ const PICTURE_MS = 10;
       else go(step(from, dr, dc), e.shiftKey);
       return;
     }
-    if (k === 'Tab') { go(step(act, 0, e.shiftKey ? -1 : 1), false); return; }
+    // Tab moves along the row; where it can't go further (a row's end, or its start with Shift), focus leaves the
+    // grid as Tab does anywhere else, so the keyboard is never trapped in it
+    if (k === 'Tab') { const to = step(act, 0, e.shiftKey ? -1 : 1); if ((e.target as Element).matches('.tb-gridwrap') && (to[0] !== act[0] || to[1] !== act[1])) go(to, false); return; }
     if (k === 'Home') { go([mod ? 0 : act[0], 0], e.shiftKey); return; }
     if (k === 'End') { go([mod ? nr - 1 : act[0], nc - 1], e.shiftKey); return; }
     if (k === 'Enter' || k === 'F2') { e.preventDefault(); startEdit(); return; }

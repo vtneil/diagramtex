@@ -9,9 +9,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
 // Karnaugh map editor: the overlay that opens on a Karnaugh map block. A palette of map sizes and cell
 // values; the map drawn by the canvas renderer, where a click turns a cell through 0, 1 and don't care and
 // a drag across cells draws a group (past an edge, it wraps round); the selected group's or the map's
@@ -89,12 +90,12 @@ import { editorStage, fitView } from './editor-stage';
   // { M, sel: { g: index } | null, arm: 'v:1' … | 'g:' | null, mode: 'sop' | 'pos', view: { k (px per cm), ox, oy },
   //   undo, redo, pending, start, done, drag, hover: cell | null, codeAt, codeTimer }
   let E: any = null;
-  const snapCode = () => codeOf(E.M);
+  const snapCode = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
   const { begin, commit, undo, redo } = TD.editorSession.history({
     state: () => E, snapshot: snapCode, restore, updateTools, changed: () => session.changed(),
   });
   function edit(fn: any) { begin(); fn(); E.M.dirty = true; commit(); clampSel(); draw(); renderProps(); }
-  function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
+  function restore(code: any) { E.typed = code; E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
   function clampSel() { if (E.sel && !E.M.groups[E.sel.g]) E.sel = null; }
   const selG = () => (E.sel ? E.M.groups[E.sel.g] || null : null);
   const lay = () => F.layout({ src: snapCode() });
@@ -525,7 +526,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.M = load(codeTa.value); E.codeAt = codeTa.value;
     commit(); // each pause in typing is one undo step
     clampSel(); buildPalette(); draw(); renderProps();
     showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
@@ -547,8 +548,8 @@ import { editorStage, fitView } from './editor-stage';
   }
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || session.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if (document.querySelector('.td-dialog')) return;
@@ -598,7 +599,7 @@ import { editorStage, fitView } from './editor-stage';
     const C1 = F.check(M, 'sop'), C0 = F.check(M, 'pos');
     const mode = M.groups.length && C0.groups.filter((G: any) => G.ok).length > C1.groups.filter((G: any) => G.ok).length ? 'pos' : 'sop';
     E = { M, sel: null, arm: null, mode, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, codeAt: null, codeTimer: null };
-    E.start = codeOf(M);
+    E.typed = String(block.src || ''); E.start = snapCode();
     session.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');

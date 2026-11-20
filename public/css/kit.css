@@ -401,6 +401,17 @@ input.search-field:focus { outline: none; border-color: var(--bluepen); box-shad
 :is(.toolbar, .topbar-row.tools-row).more-l { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px); mask-image: linear-gradient(to right, transparent, #000 32px); }
 :is(.toolbar, .topbar-row.tools-row).more-r { -webkit-mask-image: linear-gradient(to left, transparent, #000 32px); mask-image: linear-gradient(to left, transparent, #000 32px); }
 :is(.toolbar, .topbar-row.tools-row).more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+/* fitToolbar's `arrows`: ‹‹ ›› pinned flush to the edges (over the bar's 8px padding) while there is more that way.
+   They take no room (the negative margin cancels their width and the 8px gap), so showing one moves nothing; the
+   fade starts just inside them. */
+:is(.toolbar, .topbar-row).has-arrows > button.tb-arrow { position: sticky; z-index: 2; flex: none; border-radius: 0; background: var(--tb-bg, var(--sheet)); }
+:is(.toolbar, .topbar-row).has-arrows > button.tb-arrow:hover { box-shadow: inset 0 0 0 40px var(--wash); }
+:is(.toolbar, .topbar-row).has-arrows > button.tb-arrow[hidden] { display: none; }
+:is(.toolbar, .topbar-row).has-arrows > .tb-arrow-l { left: -8px; margin-right: calc(-1 * var(--ctl) - 8px); }
+:is(.toolbar, .topbar-row).has-arrows > .tb-arrow-r { right: -8px; margin-left: calc(-1 * var(--ctl) - 8px); }
+:is(.toolbar, .topbar-row).has-arrows.more-l { -webkit-mask-image: linear-gradient(to right, #000 28px, transparent 28px, #000 60px); mask-image: linear-gradient(to right, #000 28px, transparent 28px, #000 60px); }
+:is(.toolbar, .topbar-row).has-arrows.more-r { -webkit-mask-image: linear-gradient(to left, #000 28px, transparent 28px, #000 60px); mask-image: linear-gradient(to left, #000 28px, transparent 28px, #000 60px); }
+:is(.toolbar, .topbar-row).has-arrows.more-l.more-r { -webkit-mask-image: linear-gradient(to right, #000 28px, transparent 28px, #000 60px, #000 calc(100% - 60px), transparent calc(100% - 28px), #000 calc(100% - 28px)); mask-image: linear-gradient(to right, #000 28px, transparent 28px, #000 60px, #000 calc(100% - 60px), transparent calc(100% - 28px), #000 calc(100% - 28px)); }
 .tb-grp { display: flex; align-items: center; gap: 2px; flex: none; }
 .tb-grp + .tb-grp { margin-left: 4px; padding-left: 8px; border-left: 1px solid var(--rule); }
 .tb-grp.tb-seg + .tb-grp { border-left: 0; padding-left: 4px; }

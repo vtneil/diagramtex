@@ -10,9 +10,10 @@ import { TREE_CHILD, TREE_SIBLING } from '../ui/kit/icons';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
 // Tree editor: the overlay that opens on a Tree block. A palette of subtrees, templates and node and edge
 // styles; the tree drawn by the canvas renderer, where nodes are selected, added, relabelled and dragged
 // onto other nodes; the selection's properties; and beside them the forest code, live both ways.
@@ -134,14 +135,14 @@ import { editorStage, fitView } from './editor-stage';
   // { T, sel: [nodes], view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, drop, ghost, st, codeAt, codeTimer, clip, L }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   let stopLocale: (() => void) | null = null;
-  const snap = () => codeOf(E.T);
+  const snap = () => (E.typed = keepComments(E.typed, codeOf(E.T))); // the drawing's code, keeping the comments last written
   const { begin, commit, undo, redo } = TD.editorSession.history({
     state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
   });
   function edit(fn: any) { begin(); fn(); commit(); cleanSel(); draw(); keepInView(); renderProps(); }
   function restore(code: any) {
     const idx = E.sel.map((n: any) => order(E.T).indexOf(n));
-    E.T = load(code);
+    E.typed = code; E.T = load(code);
     const o = order(E.T);
     E.sel = idx.map((i: any) => o[i]).filter(Boolean);
     draw(); renderProps(); updateTools();
@@ -334,7 +335,7 @@ import { editorStage, fitView } from './editor-stage';
   });
   function pick(k: any) {
     const it = ITEM[k];
-    if (it.kind === 'template') { edit(() => { E.T = load(it.payload); }); E.sel = []; fit(); renderProps(); return; }
+    if (it.kind === 'template') { edit(() => { E.typed = String(it.payload); E.T = load(it.payload); }); E.sel = []; fit(); renderProps(); return; }
     if (it.kind === 'tree') {
       let m;
       edit(() => { m = subtree(it.payload); if (!E.T.root) E.T.root = m; else (one() || E.T.root).k.push(m); });
@@ -671,7 +672,7 @@ import { editorStage, fitView } from './editor-stage';
     if (codeTa.value === E.codeAt) return;
     begin();
     const idx = E.sel.map((n: any) => order(E.T).indexOf(n));
-    E.T = load(codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.T = load(codeTa.value); E.codeAt = codeTa.value;
     const o = order(E.T); E.sel = idx.map((i: any) => o[i]).filter(Boolean);
     draw(); keepInView(); renderProps();
     showCodeNotes(codeMsg, TD.ft.layout({ type: 'forest', src: codeTa.value, size: E.st.size, font: E.st.font }).warnings);
@@ -696,8 +697,8 @@ import { editorStage, fitView } from './editor-stage';
   }
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
@@ -761,7 +762,7 @@ import { editorStage, fitView } from './editor-stage';
     const T = load(block.src);
     E = { T, sel: [], view: { ox: 0, oy: 0, k: 1.5 }, undo: [], redo: [], pending: null, done, drag: null, hover: -1, drop: null, ghost: null, st: { size: block.size || 'normalsize', font: block.font || 'default' }, codeAt: null, codeTimer: null, clip: null, L: null };
     // an untouched tree hands its own text back
-    E.start = codeOf(T);
+    E.typed = String(block.src || ''); E.start = snap();
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');

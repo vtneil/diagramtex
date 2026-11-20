@@ -10,9 +10,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
 // CD editor: the overlay that opens on a commutative diagram. A palette of objects and arrow styles; the
 // diagram drawn over its grid of cells, where objects are typed or dropped and moved, and arrows are
 // dragged from cell to cell; the selected cell's or arrow's properties; and beside them the tikz-cd code,
@@ -211,11 +212,11 @@ import { editorStage, fitView } from './editor-stage';
   // { M, sel, arrow: [r, c, i] | null, arm, style (for new arrows), view, undo, redo, pending, start, done, drag, hover, ghost, codeAt, codeTimer, clip, G }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
   const snap = () => codeOf(E.M);
-  // the code as the block keeps it: tikz-cd, or xymatrix in the xy dialect
-  const out = () => (E.X ? E.X.fromCd(snap()) : snap());
+  // the code as the block keeps it: tikz-cd, or xymatrix in the xy dialect, keeping the comments last written
+  const out = () => (E.typed = keepComments(E.typed, E.X ? E.X.fromCd(snap()) : snap()));
   const layoutOf = (src: any) => (E.X ? E.X.layout : D.layout)({ src });
   const { begin, commit, undo, redo } = TD.editorSession.history({
-    state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
+    state: () => E, snapshot: () => out(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
   });
   function edit(fn: any) { begin(); fn(); commit(); clampSel(); draw(); keepInView(); renderProps(); }
   function keepInView() {
@@ -224,7 +225,7 @@ import { editorStage, fitView } from './editor-stage';
     const x1 = v.ox + G.xs[0] * v.k, x2 = v.ox + G.xs[G.xs.length - 1] * v.k, y1 = v.oy + G.ys[0] * v.k, y2 = v.oy + G.ys[G.ys.length - 1] * v.k;
     if (x1 < 0 || y1 < 0 || x2 > r.width || y2 > r.height) fit();
   }
-  function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
+  function restore(code: any) { E.typed = code; E.M = load(E.X ? E.X.toCd(code) : code); clampSel(); draw(); renderProps(); updateTools(); }
   const at = (r: any, c: any) => (E.M.rows[r] && E.M.rows[r].cells[c]) || null;
   const arrowOf = (w: any) => { const c = w && at(w[0], w[1]); return c ? c.arrows[w[2]] || null : null; };
   function clampSel() {
@@ -928,7 +929,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(E.X ? E.X.toCd(codeTa.value) : codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.M = load(E.X ? E.X.toCd(codeTa.value) : codeTa.value); E.codeAt = codeTa.value;
     clampSel(); draw(); keepInView(); renderProps();
     showCodeNotes(codeMsg, layoutOf(codeTa.value).warnings);
   }
@@ -937,8 +938,8 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
@@ -1020,7 +1021,7 @@ import { editorStage, fitView } from './editor-stage';
     $('.cz-code-head span', root).textContent = lang;
 
     E = { X: X || null, M, sel: null, arrow: null, arm: null, style: 'to', view: { ox: 0, oy: 0, k: 4 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null, clip: null, G: null };
-    E.start = out();
+    E.typed = String(block.src || ''); E.start = out();
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');

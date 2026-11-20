@@ -404,6 +404,7 @@
           <!---->
 <button type="button" class="press icon" title="Sort" id="btnSortDocs" aria-label="Sort files" aria-haspopup="menu" aria-expanded="false"><!--[0--><!---->
 <svg viewBox="0 0 20 20" aria-hidden="true"><!----><path d="M3.5 6h8M3.5 10h6M3.5 14h4M15 4.5v11M12.5 13l2.5 2.5 2.5-2.5"/><!----></svg><!--]--></button><!---->
+          
           <!---->
 <button type="button" class="press icon" title="New document" id="btnNewDoc" aria-label="New document"><!--[0--><!---->
 <svg viewBox="0 0 20 20" aria-hidden="true"><!----><path d="M10 5v10M5 10h10"/><!----></svg><!--]--></button><!---->
@@ -719,6 +720,7 @@
 <!--[-1--><select id="tikzScope" title="What the code holds" aria-label="Code for">
   <!--[--><!--[-1--><!--[--><option value="pic">TikZ picture</option><option value="standalone">Standalone document</option><option value="doc">Whole document</option><!--]--><!--]--><!--]-->
   <!--[-1--><!--]-->
+  <!--[-1--><!--]-->
 <!></select><!--]--><!---->
         <span id="tikzSelWrap"><!---->
 <!--[0--><label class="chk"><input type="checkbox" id="tikzSelOnly"/><!---->Selection only<!----></label><!--]--><!----></span>
@@ -747,7 +749,21 @@
       <div class="modal-head">
         <strong id="impTitle">Import LaTeX or TikZ</strong>
         <!---->
-<div class="seg" role="radiogroup" aria-label="What TikZ that can't be read exactly becomes" id="impHow">
+<span class="spacer"></span><!---->
+        <!---->
+<button type="button" class="press" id="impFile"><!--[-1--><!--]--><!---->Choose File…<!----></button><!---->
+        <!---->
+<button type="button" class="press" id="impNew" title="Create a new document from the code"><!--[-1--><!--]--><!---->Import as New Document<!----></button><!---->
+        <!---->
+<button type="button" class="press primary" id="impInsert" title="Add the shapes to the current diagram, in the middle of the view"><!--[-1--><!--]--><!---->Insert into Diagram<!----></button><!---->
+        <!---->
+<button type="button" class="press icon flat" title="Close" id="impClose"><!--[0--><!---->
+<svg viewBox="0 0 20 20" aria-hidden="true"><!----><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/><!----></svg><!--]--></button><!---->
+      </div>
+      
+      <div class="imp-how"><span id="impHowLabel">TikZ code that can't be read exactly becomes</span>
+        <!---->
+<div class="seg" role="radiogroup" aria-label="TikZ code that can't be read exactly becomes" id="impHow">
   <!---->
   <!--[--><!---->
     <!--[-1-->
@@ -759,17 +775,6 @@
     <!--]-->
   <!--]-->
 </div><!---->
-        <!---->
-<span class="spacer"></span><!---->
-        <!---->
-<button type="button" class="press" id="impFile"><!--[-1--><!--]--><!---->Choose File…<!----></button><!---->
-        <!---->
-<button type="button" class="press" id="impNew" title="Create a new document from the code"><!--[-1--><!--]--><!---->Import as New Document<!----></button><!---->
-        <!---->
-<button type="button" class="press primary" id="impInsert" title="Add the shapes to the current diagram, in the middle of the view"><!--[-1--><!--]--><!---->Insert into Diagram<!----></button><!---->
-        <!---->
-<button type="button" class="press icon flat" title="Close" id="impClose"><!--[0--><!---->
-<svg viewBox="0 0 20 20" aria-hidden="true"><!----><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/><!----></svg><!--]--></button><!---->
       </div>
       <div class="imp-note" role="note">Supported sections become shapes. Other sections stay as code; unresolved sections have no preview. Editable Shapes may omit unsupported details.</div>
       <textarea id="impText" spellcheck="false" placeholder="Paste a tikzpicture, a bare list of \draw / \node commands, or a whole LaTeX document.

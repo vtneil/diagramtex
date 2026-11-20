@@ -488,7 +488,7 @@ function build(s: any, PR?: any) {
       if (m[1] === 'from') from = e; else to = e;
     }
     if (!to) to = { cell: [r, c] };
-    if (from.cell && to.cell && from.cell[0] === to.cell[0] && from.cell[1] === to.cell[1] && !ar.items.some((x: any) => /^loop\b/.test(x.trim()))) { warn('An arrow with no direction (like \\arrow[r]) is skipped'); return; }
+    if (from.cell && to.cell && from.cell[0] === to.cell[0] && from.cell[1] === to.cell[1] && !ar.items.some((x: any) => /^loop\b/.test(x.trim()))) { warn('An arrow with no direction (like \\arrow[]) is skipped'); return; }
     if ((from.cell && !inside(...(from.cell as [any, any]))) || (to.cell && !inside(...(to.cell as [any, any])))) { warn(`An arrow from row ${r + 1}, column ${c + 1} points outside the diagram`); return; }
     const A = style(every.concat(ar.items), warn, PR);
     void base;

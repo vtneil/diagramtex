@@ -35,3 +35,17 @@ T.test('search: "/" opens it; it finds, picks with the arrows, runs with Enter a
     if (TD.app.cmd.setTool) TD.app.cmd.setTool(was);
   }
 });
+
+T.test('search: no two results read the same (the TikZ ellipse and the library oval, the arrows and hatches by their side)', async () => {
+  const inp = () => document.querySelector('#cmdkIn'), rows = () => [...document.querySelectorAll('#cmdk .cmdk-row')];
+  try {
+    document.body.focus();
+    searchKey('/');
+    for (const q of ['ellipse', 'oval', 'arrow', 'hatch', ...'abcdefghijklmnopqrstuvwxyz']) {
+      inp().value = q; inp().dispatchEvent(new Event('input', { bubbles: true }));
+      // the app's own entries; the user's files may share a name (earlier suites leave several called "x")
+      const text = rows().filter((r) => r.querySelector('.cmdk-grp')?.textContent.trim() !== 'Files').map((r) => r.textContent.replace(/\s+/g, ' ').trim());
+      T.eq(text.length, new Set(text).size, `"${q}": ${text.join(' | ')}`);
+    }
+  } finally { searchKey('Escape', inp()); }
+});

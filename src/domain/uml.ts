@@ -555,8 +555,23 @@ function baseOff(st: any) {
 }
 // TeX's space factor: in text, a space after : . ? or ! (a full stop not after a capital) gets the font's extra
 // space too, 1.11pt at 10pt (\nonfrenchspacing). Only for measuring and drawing; the code keeps what was typed.
+// Not inside a {…} group: the space is drawn as $\kern$, and maths there would cut the group in two, its second half
+// shown with its closing braces (an object's \underline{\textbf{obj : Class}} wrapped to two lines).
 function sf(t: string) {
-  return String(t).split(/(\$[^$]*\$)/).map((p, i) => (i % 2 ? p : p.replace(/([^A-Z]\.|[:?!])(?=\s)/g, '$1$\\kern1.11pt$'))).join('');
+  let depth = 0;
+  return String(t).split(/(\$[^$]*\$)/).map((p, i) => {
+    if (i % 2) return p;
+    let out = '';
+    for (let k = 0; k < p.length; k++) {
+      const c = p[k];
+      out += c;
+      if (c === '\\') { out += p[++k] ?? ''; continue; }
+      if (c === '{') depth++;
+      else if (c === '}') depth = Math.max(0, depth - 1);
+      else if (!depth && /\s/.test(p[k + 1] || '') && (/[:?!]/.test(c) || (c === '.' && k > 0 && !/[A-Z]/.test(p[k - 1])))) out += '$\\kern1.11pt$';
+    }
+    return out;
+  }).join('');
 }
 const lineH = () => TD.textBox('X', TEXT).h;
 // a line of text set in a box `tw` pt wide: its width (pt), the lines it wraps to, and how to draw it

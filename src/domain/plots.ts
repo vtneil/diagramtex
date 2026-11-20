@@ -490,7 +490,15 @@ function limits(s: any) {
   if (barPad && !s.pgfAuto) { x[0] -= barPad; x[1] += barPad; }
   if (barZero && !s.pgfAuto) grow(y, 0);
   const fix = (r: any) => { if (!isFinite(r[0])) return [-1, 1]; if (r[0] === r[1]) return [r[0] - 1, r[1] + 1]; return r; };
-  x = fix(x); y = fix(y); z = fix(z);
+  // sampling stops just short of an extreme (sin(x) reaches -0.9999): a limit that close to a round value (a
+  // tenth of the range's order) goes out to it, so the tick there shows. pgfplots' own limits stay the data's.
+  const round = (r: any) => {
+    if (s.pgfAuto) return r;
+    const span = r[1] - r[0], g = 10 ** (Math.floor(Math.log10(span)) - 1), near = span * 1e-3;
+    const lo = Math.floor(r[0] / g + 1e-9) * g, hi = Math.ceil(r[1] / g - 1e-9) * g;
+    return [r[0] - lo < near ? +lo.toPrecision(12) : r[0], hi - r[1] < near ? +hi.toPrecision(12) : r[1]];
+  };
+  x = round(fix(x)); y = round(fix(y)); z = round(fix(z));
   const pick = (src: any, auto: any) => { const v = String(src ?? '').trim() === '' ? NaN : num(src, NaN); return isFinite(v) ? v : auto; };
   const L: Record<string, any> = {
     xmin: pick(s.xmin, x[0]), xmax: pick(s.xmax, x[1]), ymin: pick(s.ymin, y[0]), ymax: pick(s.ymax, y[1]),

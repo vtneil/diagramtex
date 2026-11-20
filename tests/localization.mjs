@@ -31,6 +31,8 @@ function visit(node) {
     if (seenThai.has(id)) errors.push(`Thai id defined twice: ${id}`);
     seenThai.add(id);
     if (id.startsWith('block.')) { const [, type, part] = id.split('.'); if (!blockTypes.has(type) || !/^(label|title)$/.test(part)) errors.push(`Thai caption for an unknown block or part: ${id}`); return; }
+    // the Circuit palette's parts and groups: read by id from the registry (checked against it in tests/suites/97-localization.js)
+    if (id.startsWith('czpart.') || id.startsWith('czcat.')) return;
     if (id.startsWith('shape.')) { if (!shapeTypes.has(id.slice(6))) errors.push(`Thai name for an unknown shape type: ${id}`); else if (placeholders(value)) errors.push(`Placeholder in a shape name: ${id}`); return; }
     if (!defaults.has(id)) errors.push(`Unreferenced Thai id: ${id}`);
     else if (placeholders(value) !== placeholders(defaults.get(id))) errors.push(`Placeholder mismatch: ${id}`);
@@ -39,6 +41,11 @@ function visit(node) {
   ts.forEachChild(node, visit);
 }
 for (const f of catalogs) visit(ts.createSourceFile(f, fs.readFileSync(f, 'utf8'), ts.ScriptTarget.Latest, true));
+// every caption has its Thai, except content shown as written in both languages: package and program names, units,
+// a placeholder reading, and the kit catalogue's demo page
+const ASIS = new Set(['ui.diagramtex', 'ui.latex', 'ui.cm', 'ui.x.0.00.y.0.00.cm', 'ui.circuitikz', 'ui.tikz.automata', 'ui.forest', 'ui.tikz.feynman',
+  'ui.tikz.3dplot', 'ui.tikz.timing', 'ui.pgf.umlsd', 'ui.zx.calculus', 'editor.xy.title', 'ui.reset']);
+for (const id of defaults.keys()) if (!seenThai.has(id) && !ASIS.has(id) && !/\.lang$/.test(id)) errors.push(`No Thai for: ${id} ("${defaults.get(id)}")`);
 if (errors.length) throw new Error(errors.join('\n'));
 console.log(`Localization catalog: ${defaults.size} message ids checked`);
 

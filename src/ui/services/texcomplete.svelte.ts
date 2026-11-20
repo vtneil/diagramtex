@@ -356,5 +356,8 @@ import TexComplete, { type TexCompleteModel } from '../TexComplete.svelte';
     if (li && +(li as HTMLElement).dataset.i! !== model.idx) move(+(li as HTMLElement).dataset.i! - model.idx);
   });
 
-  TD.texComplete = { get commands() { return list(); }, close };
+  // a key the open list takes on its field (the block editors, which listen on window first, leave these to it)
+  const owns = (e: KeyboardEvent) => !pop.hidden && !!field && e.target === field
+    && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab' || e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey));
+  TD.texComplete = { get commands() { return list(); }, close, owns };
 })();

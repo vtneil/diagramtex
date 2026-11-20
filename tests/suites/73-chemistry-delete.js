@@ -52,8 +52,9 @@
       T.ok(/^\\chemfig\{\*6\(--(-\[,,,,draw=none\])---\)\}$/.test(code()), 'one side hidden: ' + code());
       T.ok(q('.cf-hidden'), 'the hidden side is drawn dashed in the editor');
       click(bond(2));
-      T.ok(q('[data-ce="bshow"]'), 'picked, the panel offers to draw it again');
-      q('[data-ce="bshow"]').click();
+      const solid = [...document.querySelectorAll('[data-fs="bdash"]')].find((x) => x.dataset.v === 'solid');
+      T.ok(solid, 'picked, the panel offers to draw it again (Line)');
+      solid.click();
       T.eq(code(), '\\chemfig{*6(------)}', 'drawn again');
       click(vert(2)); key('Delete');
       T.ok(/\*6\(/.test(code()) && (code().match(/draw=none/g) || []).length === 2, 'a ring corner hides its two sides: ' + code());

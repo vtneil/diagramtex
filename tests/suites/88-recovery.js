@@ -289,6 +289,29 @@
     put('diagramtex.index', [...get('diagramtex.index'), ...before.map(id => ({ id, name: 'x', kind: 'board', updated: 1 }))].filter(e => e.id !== blank2));
     cleanup(w, blank2);
   });
+  T.test('history: a file made after a delete or its undo has nothing to undo or redo; the files there then still do', () => {
+    start();
+    const c = fresh('new C'), a = fresh('new A'), beta = fresh('new Beta');
+    C.docAction('del', beta); // Beta was open: another file opens
+    C.undo();
+    T.eq(TD.state.docId, beta, 'undo brings Beta back');
+    const n = fresh('new N');
+    T.ok(!C.canUndo() && !C.canRedo(), 'a new file has nothing to undo or redo');
+    C.redo(); C.undo();
+    T.ok(listed(beta) && !inBin(beta), 'redo in it does not delete Beta again');
+    // a delete made from an older file, then a new file: undo there does not bring the deleted file back
+    C.openDoc(a); C.docAction('del', c);
+    const m = fresh('new M');
+    C.undo();
+    T.ok(inBin(c), 'undo in a newer file leaves the deleted file in the bin');
+    C.openDoc(a); C.undo();
+    T.ok(listed(c), 'from the file it was deleted from, undo still brings it back');
+    const late = fresh('new P');
+    T.ok(!C.canRedo(), 'a file made after the undo cannot redo it');
+    C.openDoc(a); C.redo();
+    T.ok(inBin(c), 'the file it was undone from can');
+    cleanup(a, beta, n, m, late, c);
+  });
   T.test('history: restoring a recovery copy drops the steps it would misapply', () => {
     start();
     localStorage.setItem('diagramtex.recovery', JSON.stringify({ every: 1, keep: 5 }));

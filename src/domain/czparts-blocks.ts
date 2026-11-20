@@ -240,7 +240,7 @@ import { runtime as TD } from '../runtime';
   B('dsp', 'allornothing', 'Comparison (all-or-nothing)', 'allornothing', (g: any) => {
     box(g); g.width(0.6).line(-0.55 * S, -0.4 * S, 0, -0.4 * S, 0, 0.4 * S, 0.55 * S, 0.4 * S);
   }, null, 'comparison comparator all or nothing step');
-  B('dsp', 'fiber', 'Optical fiber', 'fiber', (g: any) => {
+  B('dsp', 'fiber', 'Optical fibre', 'fiber', (g: any) => {
     box(g);
     for (const x of [-0.2, 0, 0.2]) g.circle(x * S, 0.4 * S, 0.4 * S);
     g.line(-S, 0, S, 0);

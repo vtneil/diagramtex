@@ -101,3 +101,16 @@ T.test('3D solids: a bottom label sits below the solid', () => {
     T.ok(dn.at[1] <= Math.min(...ys) + 1e-6, k + ': bottom label under the outline');
   }
 });
+
+T.test('solid of revolution: a sweep outside 10–360° is reported, not quietly changed', () => {
+  const s = TD.TYPES.revolve.create({ x: 0, y: 0 }, TD.state.defaults, 'revolve');
+  Object.assign(s, { w: 300, h: 200 });
+  for (const v of ['-90', '0', '400']) {
+    s.sweep = v;
+    const rows = TD.panels.revolve.model(s).sections.flatMap((x) => x.rows || x.items || []);
+    T.ok(rows.some((r) => r.kind === 'error' && /10° to 360°/.test(r.text)), `the panel says so for ${v}`);
+    T.ok(/10° to 360°/.test(TD.TYPES.revolve.tikz(s, {})), `and the code does not draw ${v} as 10°`);
+  }
+  s.sweep = '270';
+  T.ok(!TD.panels.revolve.model(s).sections.flatMap((x) => x.rows || x.items || []).some((r) => r.kind === 'error'), '270 is fine');
+});

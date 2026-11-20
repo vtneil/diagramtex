@@ -24,6 +24,45 @@ export interface InlineDeps {
 
 const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as Record<string, string>)[c]);
 
+// ---------------------------------------------------------------- display maths
+// A text block's display maths: $$…$$, \[…\] and the amsmath display environments (equation, align, gather…,
+// starred or not), over any number of lines. The page, this editor and the LaTeX export all cut a block with
+// this, so a display is one piece everywhere: drawn as maths, edited as a formula, written back as it was typed.
+// Returns text and displays in turn, [text, display, text, …, text], as String.split with a group would.
+export interface DisplayMath { tex: string; src: string; env: boolean }
+const MATH_ENV = /^(?:equation|align|alignat|gather|multline|flalign|eqnarray|displaymath)\*?$/;
+// where `delim` next starts, from `from`, skipping escaped characters (\\[2pt] is a line break, \$ a dollar)
+function findClose(s: string, delim: string, from: number) {
+  for (let j = from; j < s.length; j++) {
+    if (s.startsWith(delim, j)) return j;
+    if (s[j] === '\\') j++;
+  }
+  return -1;
+}
+export function splitDisplay(text: string): (string | DisplayMath)[] {
+  const s = String(text), n = s.length, out: (string | DisplayMath)[] = [];
+  let i = 0, from = 0;
+  const take = (end: number, tex: string, env = false) => { out.push(s.slice(from, i), { tex, src: s.slice(i, end), env }); i = from = end; };
+  while (i < n) {
+    if (s[i] === '\\') {
+      if (s[i + 1] === '[') { const k = findClose(s, '\\]', i + 2); if (k >= 0) { take(k + 2, s.slice(i + 2, k).trim()); continue; } }
+      const m = s.startsWith('\\begin{', i) ? /^\\begin\{([^{}\n]+)\}/.exec(s.slice(i, i + 40)) : null;
+      if (m && MATH_ENV.test(m[1])) {
+        const end = `\\end{${m[1]}}`, k = s.indexOf(end, i + m[0].length);
+        if (k >= 0) { take(k + end.length, s.slice(i, k + end.length), true); continue; }
+      }
+      i += 2; continue;
+    }
+    if (s[i] === '$' && s[i + 1] === '$') { const k = findClose(s, '$$', i + 2); if (k >= 0) { take(k + 2, s.slice(i + 2, k).trim()); continue; } }
+    i++;
+  }
+  out.push(s.slice(from));
+  return out;
+}
+// an edited display, written the way it was first typed: an environment as itself, \[…\] or $$…$$ around a formula
+export const displaySrc = (tex: string, src = '') =>
+  /^\s*\\begin\{/.test(tex) ? tex.trim() : src.startsWith('\\[') ? `\\[ ${tex.trim()} \\]` : `$$${tex}$$`;
+
 // ---------------------------------------------------------------- source → editable
 // text commands with an editing form: the element they become (and its class)
 const CMD_EL: Record<string, [string, string?]> = {
@@ -32,11 +71,13 @@ const CMD_EL: Record<string, [string, string?]> = {
   textcolor: ['span'], colorbox: ['span', 'cbox'], href: ['a'], url: ['a', 'tt'],
 };
 const NARGS: Record<string, number> = { textcolor: 2, colorbox: 2, href: 2 };
+// what may follow a line break's \\: a star and a length, \\*[2pt]
+export const BREAK_OPT = /^\*?(?:\[[^\]\n]*\])?/;
 
 export const mathChip = (tex: string, D: InlineDeps) =>
   `<span class="ie-m" contenteditable="false" data-tex="${esc(tex)}">${D.katex(tex, false)}</span>`;
-export const displayChip = (tex: string, D: InlineDeps, src?: string) =>
-  `<div class="dmath ie-d" contenteditable="false" data-tex="${esc(tex)}"${src !== undefined ? ` data-src="${esc(src)}"` : ''}>${tex.trim() ? D.katex(tex, true) : '<span class="ie-empty">$$</span>'}</div>`;
+export const displayChip = (tex: string, D: InlineDeps, src?: string, glue = false) =>
+  `<div class="dmath ie-d" contenteditable="false" data-tex="${esc(tex)}"${src !== undefined ? ` data-src="${esc(src)}"` : ''}${glue ? ' data-glue' : ''}>${tex.trim() ? D.katex(tex, true) : '<span class="ie-empty">$$</span>'}</div>`;
 const rawChip = (src: string, html: string) => `<span class="ie-raw" contenteditable="false" data-src="${esc(src)}">${html}</span>`;
 
 export function inlineHtml(src: string, D: InlineDeps): string {
@@ -62,7 +103,10 @@ export function inlineHtml(src: string, D: InlineDeps): string {
     if (c === '\\') {
       const nx = src[i + 1] || '';
       if (nx === '(') { const k = src.indexOf('\\)', i + 2); if (k > 0) { out += mathChip(src.slice(i + 2, k), D); i = k + 2; continue; } }
-      if (nx === '\\') { out += '<br>'; i += 2; continue; }
+      if (nx === '\\') { // a line break, with its spacing (\\[2pt]) kept for writing back
+        const o = BREAK_OPT.exec(src.slice(i + 2))![0];
+        out += o ? `<br data-brk="${esc(o)}">` : '<br>'; i += 2 + o.length; continue;
+      }
       if (nx === ',') { out += ' '; i += 2; continue; }
       if (/[%&#$_{}~^ ]/.test(nx)) {
         out += esc(nx); i += 2;
@@ -131,12 +175,20 @@ function listHtml(l: List): string {
 // The block's source as editable HTML; ctx counts section numbers across blocks, as the page does.
 export function editableHtml(text: string, ctx: { sec: number[]; numbered?: boolean }, D: InlineDeps): string {
   const out: (string | List)[] = [];
-  const parts = String(text).split(/\$\$([\s\S]*?)\$\$/);
-  parts.forEach((part, pi) => {
-    if (pi % 2) { out.push(displayChip(part.trim(), D, `$$${part}$$`)); return; }
+  // a display and the text round it with no blank line between are one paragraph: marked (data-glue) so that
+  // writing back joins them with a line break, not a paragraph break
+  const blank = (s: string) => /\n[ \t]*\n/.test(s);
+  let before = ''; // the text since the last element: does a blank line separate the next one?
+  splitDisplay(text).forEach((part) => {
+    if (typeof part !== 'string') { out.push(displayChip(part.tex, D, part.src, out.length > 0 && !blank(before))); before = ''; return; }
     let para: string[] = [];
     let stack: List[] = [];
-    const flush = () => { if (para.length) out.push(`<p data-src="${esc(para.join('\n'))}">${para.map((l) => inlineHtml(l, D)).join(' ')}</p>`); para = []; };
+    let glue = out.length > 0 && !blank(part.slice(0, part.length - part.trimStart().length));
+    const flush = () => {
+      if (para.length) { out.push(`<p data-src="${esc(para.join('\n'))}"${glue ? ' data-glue' : ''}>${para.map((l) => inlineHtml(l, D)).join(' ')}</p>`); glue = false; }
+      para = [];
+    };
+    before = part.slice(part.trimEnd().length);
     for (const raw of part.split('\n')) {
       const line = raw.replace(/\s+$/, '');
       if (!line.trim()) { flush(); stack = []; continue; }
@@ -144,12 +196,13 @@ export function editableHtml(text: string, ctx: { sec: number[]; numbered?: bool
       if (h) {
         flush(); stack = [];
         const lv = h[1].length, no = D.heading(lv, ctx.sec, !!ctx.numbered);
+        glue = false;
         out.push(`<h${lv + 1} data-src="${esc(line)}">${no ? `<span class="ie-secno" contenteditable="false">${esc(no)}</span>` : ''}${inlineHtml(h[2], D) || '<br>'}</h${lv + 1}>`);
         continue;
       }
       const m = line.match(ITEM_RE);
       if (m) {
-        flush();
+        flush(); glue = false;
         const level = Math.floor(m[1].replace(/\t/g, '  ').length / 2), kind = itemKind(m);
         while (stack.length && stack[stack.length - 1].level > level) stack.pop();
         let top = stack[stack.length - 1], tight = false;
@@ -205,7 +258,7 @@ export function serInline(node: Node): string {
     if (e.classList.contains('ie-m')) { const x = e.dataset.tex || ''; if (x.trim()) s += `$${x}$`; return; }
     if (e.classList.contains('ie-raw')) { s += e.dataset.src || ''; return; }
     if (e.classList.contains('cbx') || e.classList.contains('ie-secno') || isList(e)) return;
-    if (tag === 'BR') { if (!trailing(e)) s += '\\\\ '; return; }
+    if (tag === 'BR') { if (!trailing(e)) s += '\\\\' + (e.dataset.brk || '') + ' '; return; }
     const cmd = e.dataset.cmd || TAG_CMD[tag] || '';
     if (cmd === 'url') { const u = e.textContent || ''; if (u.trim()) s += `\\url{${u}}`; return; }
     const inner = serInline(e);
@@ -269,33 +322,40 @@ export function serialise(root: Element, orig: WeakMap<Element, string>): string
     container.childNodes.forEach((c) => {
       if (c.nodeType === 3) { if ((c.nodeValue || '').trim()) loose.push(c); return; }
       if (c.nodeType !== 1) return;
-      const e = c as HTMLElement, tag = e.tagName;
-      if (!BLOCK.test(tag)) { loose.push(e); return; }
+      const e = c as HTMLElement;
+      if (!BLOCK.test(e.tagName)) { loose.push(e); return; }
       flushLoose();
-      if (/^H[1-6]$/.test(tag)) {
-        const lvl = Math.min(3, Math.max(1, +tag[1] - 1));
-        if (untouched(e) && (e.dataset.src!.match(HEAD_RE) || [])[1]?.length === lvl) blocks.push(e.dataset.src!);
-        else { const s = serInline(e).trim(); if (s) blocks.push('#'.repeat(lvl) + ' ' + s); }
-        return;
-      }
-      if (isList(e)) {
-        const lines: string[] = []; listLines(e, 0, lines);
-        if (!lines.length) return;
-        if (lastList && e.dataset.tight !== undefined) blocks[blocks.length - 1] += '\n' + lines.join('\n');
-        else blocks.push(lines.join('\n'));
-        lastList = true;
-        return;
-      }
-      if (e.classList.contains('dmath')) {
-        const tex = e.dataset.tex || '';
-        if (tex.trim()) blocks.push(untouched(e) ? e.dataset.src! : `$$${tex}$$`);
-        return;
-      }
-      // a block holding blocks (pasted or merged structure) is read block by block
-      if ((Array.from(e.children) as Element[]).some((k) => BLOCK.test(k.tagName))) { walk(e); return; }
-      para(e);
+      const n0 = blocks.length;
+      block(e);
+      // a display and its paragraph with no blank line between them in the source stay one paragraph
+      if (e.dataset.glue !== undefined && n0 > 0 && blocks.length === n0 + 1) { const x = blocks.pop()!; blocks[n0 - 1] += '\n' + x; }
     });
     flushLoose();
+  };
+  const block = (e: HTMLElement) => {
+    const tag = e.tagName;
+    if (/^H[1-6]$/.test(tag)) {
+      const lvl = Math.min(3, Math.max(1, +tag[1] - 1));
+      if (untouched(e) && (e.dataset.src!.match(HEAD_RE) || [])[1]?.length === lvl) blocks.push(e.dataset.src!);
+      else { const s = serInline(e).trim(); if (s) blocks.push('#'.repeat(lvl) + ' ' + s); }
+      return;
+    }
+    if (isList(e)) {
+      const lines: string[] = []; listLines(e, 0, lines);
+      if (!lines.length) return;
+      if (lastList && e.dataset.tight !== undefined) blocks[blocks.length - 1] += '\n' + lines.join('\n');
+      else blocks.push(lines.join('\n'));
+      lastList = true;
+      return;
+    }
+    if (e.classList.contains('dmath')) {
+      const tex = e.dataset.tex || '';
+      if (tex.trim()) blocks.push(untouched(e) ? e.dataset.src! : displaySrc(tex, e.dataset.src));
+      return;
+    }
+    // a block holding blocks (pasted or merged structure) is read block by block
+    if ((Array.from(e.children) as Element[]).some((k) => BLOCK.test(k.tagName))) { walk(e); return; }
+    para(e);
   };
   walk(root);
   return blocks.join('\n\n');

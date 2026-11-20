@@ -43,6 +43,9 @@ export interface HistoryStep {
   na?: string;
   gb?: string;
   ga?: string;
+  /** a Page file's page setup (paper, orientation, margins), as JSON */
+  sb?: string;
+  sa?: string;
   /** when it was done (or redone), and when it was last undone: `stamp()` order across every file */
   t?: number;
   r?: number;
@@ -58,5 +61,7 @@ export interface SourceSession {
   undo: string[];
   redo: string[];
   start: string;
+  /** written back to the page (⌘S) at least once since it opened: Cancel then loses only what came after */
+  saved?: boolean;
   done(result: { src: string }): void;
 }

@@ -2,16 +2,17 @@ import { GRID_STYLES } from '../ui/canvas-grid';
 import { renderView, isViewUpdating } from '../ui/render-view.svelte';
 import { onLocale, t, message } from '../i18n';
 import { section, row } from '../ui/forms';
-import { field, numField, segments, note, actionRow } from '../ui/editor-fields';
+import { field, numField, segments, note, actionRow, texColour } from '../ui/editor-fields';
 import FormPanel from '../ui/FormPanel.svelte';
 import CfeditorFrame from '../ui/editors/CfeditorFrame.svelte';
 import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
 // Chemistry editor: the overlay that opens on a Chemistry block. A palette of atoms, bonds, rings,
 // functional groups, charges and reaction arrows; the molecules and schemes drawn by the canvas renderer,
 // where atoms are picked, relabelled and grown by dragging their blue handle; the selected atom's, bond's
@@ -315,13 +316,33 @@ import { editorStage, fitView } from './editor-stage';
     return sp.atoms;
   }
   // names for \chemmove (@{name}) stay in front of their atoms
-  function writeAtoms(v: any, atoms: any) { setLabel(v, atoms.map((a: any) => (a.name ? `@{${a.name}}` : '') + a.raw).join('')); }
+  // an atom's colour: each atom of the label wrapped as \textcolor{red}{O}, with | between atoms so chemfig still
+  // splits them (a mixed colour is braced, {\textcolor[RGB]{r,g,b}{O}}: chemfig misreads the [ ] otherwise)
+  const TC_RE = /^\\textcolor\s*(?:\[\s*RGB\s*\]\s*\{([^{}]*)\}|\{([^{}]*)\})\s*\{([\s\S]*)\}$/;
+  const tcOf = (raw: string) => { const r = raw.trim(); return TC_RE.exec(/^\{\\textcolor/.test(r) ? C.unbrace(r) : r); };
+  const atomColour = (raw: string) => { const m = tcOf(raw); if (!m) return null; if (m[2] != null) return m[2].trim(); const n = m[1].split(',').map((x) => x.trim()); return `rgb,255:red,${n[0]};green,${n[1]};blue,${n[2]}`; };
+  function colourOfAtoms(v: any) {
+    const atoms = atomsOf(v);
+    if (!atoms || !atoms.length) return '';
+    const cs = atoms.map((a: any) => atomColour(a.raw));
+    return cs.every((c: any) => c && c === cs[0]) ? cs[0] : '';
+  }
+  function setAtomsColour(v: any, c: string) {
+    const atoms = atomsOf(v);
+    if (!atoms || !atoms.length) return;
+    const rgb = /^\{?rgb,\s*255\s*:\s*red,\s*(\d+);\s*green,\s*(\d+);\s*blue,\s*(\d+)\}?$/.exec(c);
+    const wrap = (raw: string) => (!c ? raw : rgb ? `{\\textcolor[RGB]{${rgb[1]},${rgb[2]},${rgb[3]}}{${raw}}}` : `\\textcolor{${c}}{${raw}}`);
+    writeAtoms(v, atoms.map((a: any) => { const m = tcOf(a.raw); return { ...a, raw: wrap(m ? m[3] : a.raw) }; }));
+  }
+  // chemfig starts an atom only at a capital letter: any other atom after the first gets an explicit | before it
+  function writeAtoms(v: any, atoms: any) { setLabel(v, atoms.map((a: any, i: number) => (i && !/^[A-Z]/.test(a.raw.trim()) ? '|' : '') + (a.name ? `@{${a.name}}` : '') + a.raw).join('')); }
   const namesIn = (raw: any) => (String(raw || '').match(/@\{[^}]*\}/g) || []).join('');
   function chargesOf(a: any) { return a && a.charges ? a.charges : []; }
   function setAtomCharges(a: any, list: any) {
     const inner = a.inner != null ? a.inner : a.raw;
     if (!list.length) { a.raw = inner; return; }
-    a.raw = `\\${a.cmd || 'charge'}{${list.map((c: any) => `${c.pos}${c.off ? `:${c.offRaw || c.off}` : ''}${c.tikz || ''}=${c.what}`).join(',')}}{${inner}}`;
+    // its settings stay, inside the list where chemfig reads them: \charge{[.radius=1pt]90=\.}{O}
+    a.raw = `\\${a.cmd || 'charge'}{${a.copt ? `[${a.copt}]` : ''}${list.map((c: any) => `${c.pos}${c.off ? `:${c.offRaw || c.off}` : ''}${c.tikz || ''}=${c.what}`).join(',')}}{${inner}}`;
   }
   // + and − as a superscript on the main atom
   function signOf(a: any) { const t = a ? (a.inner != null ? a.inner : a.raw) : ''; return /\^\{?\+\}?$/.test(t) ? '+' : /\^\{?-\}?$/.test(t) ? '-' : ''; }
@@ -372,6 +393,42 @@ import { editorStage, fitView } from './editor-stage';
     setAtomCharges(a, list);
     writeAtoms(v, atoms);
     return true;
+  }
+  // partial charges, \charge{90:3pt=$\delta+$}{C}: chemfig centres the text on the atom's edge, so it is written with
+  // a distance that clears the atom (its half width or half height out along the angle), which can be changed
+  const PARTIAL_RE = /^\$?\s*\\delta\s*\^?\{?\s*([+-])\s*\}?\s*\$?$/;
+  const mainAtom = (v: any) => { const atoms = atomsOf(v); return atoms && atoms.length ? atoms[Math.min(v.k, atoms.length - 1)] : null; };
+  function partialOf(a: any) { const c = chargesOf(a).find((x: any) => PARTIAL_RE.test(x.what.trim())); return c ? { c, sign: PARTIAL_RE.exec(c.what.trim())![1] } : null; }
+  function clearOff(what: string, angle: number) {
+    const bx = TD.textBox(what, C.TEXT), r = (angle * Math.PI) / 180;
+    // how far along the angle the text's box reaches from its middle, plus a little air
+    const hw = (bx.w - 2) / 2, hh = 0.36 * C.EM, c = Math.abs(Math.cos(r)), sn = Math.abs(Math.sin(r));
+    const px = Math.min(c > 1e-6 ? hw / c : Infinity, sn > 1e-6 ? hh / sn : Infinity) + 0.5 * C.PT;
+    return Math.max(0, Math.round((px / C.PT) * 2) / 2);
+  }
+  function setPartial(v: any, sign: string, angle: number, offPt?: number | null) {
+    const atoms = atomsOf(v);
+    if (!atoms || !atoms.length) return false;
+    const a = atoms[Math.min(v.k, atoms.length - 1)], list = chargesOf(a).filter((c: any) => !PARTIAL_RE.test(c.what.trim())).map((c: any) => ({ ...c }));
+    if (sign) {
+      const what = `$\\delta${sign}$`, o = offPt != null ? offPt : clearOff(what, angle);
+      list.push({ pos: String(angle), angle, off: o * C.PT, offRaw: o ? `${num(o)}pt` : '', what });
+    }
+    if (a.inner == null) { a.inner = a.raw; a.cmd = 'charge'; }
+    setAtomCharges(a, list);
+    writeAtoms(v, atoms);
+    return true;
+  }
+  const POSITIONS = () => [['90', t('editor.commonA.side.above', 'Above')], ['45', t('editor.cf.pos.ne', 'Above right')], ['0', t('editor.commonA.side.right', 'Right')], ['315', t('editor.cf.pos.se', 'Below right')], ['270', t('editor.commonA.side.below', 'Below')], ['225', t('editor.cf.pos.sw', 'Below left')], ['180', t('editor.commonA.side.left', 'Left')], ['135', t('editor.cf.pos.nw', 'Above left')]];
+  function partialRows(main: any) {
+    const pc = partialOf(main), rows: any[] = [segments(t('editor.cf.partial', 'Partial charge'), 'pq', pc ? pc.sign : '', [['', t('ui.none', 'None')], ['+', 'δ+'], ['-', 'δ−']], !main)];
+    if (pc) {
+      const a = String(Math.round(pc.c.angle)), opts = POSITIONS();
+      if (!opts.some((o) => o[0] === a)) opts.push([a, `${a}°`]);
+      rows.push(selectField(t('editor.cf.position', 'Position'), 'pang', a, opts),
+        chemicalNumber(t('editor.cf.distance', 'Distance'), 'poff', +(pc.c.off / C.PT).toFixed(2), 'pt', { step: '0.5', title: t('editor.cf.distanceTitle', 'From the edge of the atom to the middle of the charge') }));
+    }
+    return rows;
   }
   // a free spot for a charge: the quarter with no bond in it
   function freeSpot(v: any) {
@@ -655,6 +712,100 @@ import { editorStage, fitView } from './editor-stage';
     return [{ i: 1, ...at(o.c1, q.out, q.r1) }, { i: 2, ...at(o.c2, q.in, q.r2) }];
   }
 
+  // a bond's line width=…pt among its TikZ options (arg[4]); other units are left in Options as written
+  // TikZ options of a bond (arg[4]) or of every bond (bond style), read and set by what they do: line width=…pt,
+  // a colour (red, draw=…, color=…) and dashed / dotted; anything else is left as written
+  const WIDTH_RE = /^\s*line\s+width\s*=\s*(-?[\d.]+)\s*pt\s*$/;
+  const DASH_RE = /^(dashed|dotted|solid)$/;
+  const optList = (o: any): string[] => C.split(String(o || '')).map((x: any) => x.trim()).filter(Boolean);
+  const colourIn = (x: string) => { const m = /^(?:color|draw)\s*=\s*([\s\S]+)$/.exec(x), c = m ? TD.texColor.unwrap(m[1]) : x; return c !== 'none' && (m || isColour(x)) && TD.tikzColor && TD.tikzColor(c) ? c : ''; };
+  function widthOf(o: any) { for (const x of optList(o)) { const m = WIDTH_RE.exec(x); if (m) return parseFloat(m[1]); } return null; }
+  function withWidth(o: any, n: number | null) { const rest = optList(o).filter((x) => !WIDTH_RE.test(x)); return [...rest, ...(n == null ? [] : [`line width=${num(n)}pt`])].join(','); }
+  const colourOf = (o: any) => optList(o).map(colourIn).find(Boolean) || '';
+  function withColour(o: any, c: string) { const rest = optList(o).filter((x) => !colourIn(x)); return [...rest, ...(!c ? [] : /^[a-zA-Z]+(![\d.]+(![a-zA-Z]+)?)?$/.test(c) ? [c] : [`draw=${TD.texColor.wrap(c)}`])].join(','); }
+  const dashOf = (o: any) => optList(o).find((x) => x === 'dashed' || x === 'dotted') || 'solid';
+  function withDash(o: any, d: string) { const rest = optList(o).filter((x) => !DASH_RE.test(x)); return [...rest, ...(d === 'dashed' || d === 'dotted' ? [d] : [])].join(','); }
+
+  // \setchemfig{…} at the top of the code: the drawing's settings, read in order (a later one wins) and written into
+  // the last one that has the key, else the first, else a new one in front
+  // the settings that count: \setchemfig (and 1.x setters) after the last \resetchemfig that has drawing after it
+  const shows = (g: any) => (g.t === 'text' ? !!g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move', 'nameinit'].includes(g.t));
+  const resetAt = () => { const Ls = E.M.segs; for (let i = Ls.length - 1; i >= 0; i--) if (Ls[i].t === 'reset' && !Ls[i].charge && Ls.slice(i + 1).some(shows)) return i; return -1; };
+  const topSets = () => { const r = resetAt(); return E.M.segs.filter((g: any, i: number) => i > r && g.t === 'set' && !g.tikz && !g.charge); };
+  const settings = (): Record<string, string> => Object.assign({}, ...topSets().map((g: any) => g.kv));
+  const writeSet = (g: any) => { const kv = Object.entries<string>(g.kv); g.raw = `\\setchemfig{${kv.map(([a, b]) => (b === 'true' ? a : `${a}=${/[,=]/.test(b) ? `{${b}}` : b}`)).join(',')}}`; };
+  // chemfig 1.x code (\setatomsep…, \chemfig*…) in today's form, as TD.chem.modernize writes it
+  function upgradeLegacy() {
+    const c = C.modernize(codeOf(E.M));
+    if (!c.changes.length) return;
+    E.M = { ...load(c.code), dirty: false };
+    L = null;
+  }
+  function setSetting(k: string, v: string) {
+    upgradeLegacy();
+    const sets = topSets();
+    let g = [...sets].reverse().find((x: any) => k in x.kv) || sets[0];
+    if (!g) { if (!v) return; g = { t: 'set', kv: {}, raw: '' }; E.M.segs.splice(resetAt() + 1, 0, g); }
+    if (v) g.kv[k] = v; else delete g.kv[k];
+    const kv = Object.entries<string>(g.kv);
+    if (!kv.length) { const L0 = E.M.segs; L0.splice(L0.indexOf(g), 1); }
+    else writeSet(g);
+    E.M.dirty = true;
+  }
+  const LEN_RE = /^-?(\d+\.?\d*|\.\d+)\s*(pt|em|ex|cm|mm|in|bp|pc|sp|dd|cc)$/;
+  // compound names (\chemname): the name drawn under a molecule, or, under one with none, a phantom box where it
+  // would go. Double-click either to type the name in place.
+  const molsIn = (L0: any): any[] => L0.flatMap((g: any) => (g.t === 'mol' ? [g] : g.inner ? molsIn(g.inner) : []));
+  function phantoms() {
+    const Lo = lay(), P = Lo.P || C.DEF, out: any[] = [];
+    let deep = -Infinity;
+    for (const m of Lo.mols || []) {
+      const bb = m.L && m.L.bb;
+      if (!bb || m.seg.sub) continue;
+      const bottom = m.dy + bb.y + bb.h;
+      deep = Math.max(deep, bottom);
+      if (m.seg.owner) continue;
+      // where \chemname would put it: centred, its top name sep under the deepest molecule so far
+      const w = 4 * C.EM, h = 1.2 * C.EM, cx = m.dx + bb.x + bb.w / 2, top = deep + P.nameSep;
+      out.push({ mol: m.seg, x: cx - w / 2, y: top, w, h, cx, cy: top + h / 2 });
+    }
+    return out;
+  }
+  // what is under the pointer: a name's text, or a phantom; { mol, cx, cy } in drawing units
+  function nameAt(e: any) {
+    const [x, y] = pos(e), k = E.view.k;
+    for (const q of lay().texts) {
+      if (!q.name) continue;
+      const [X, Y] = S(q.cx, q.cy);
+      if (Math.abs(X - x) <= (q.b.w / 2 + 2) * k && Math.abs(Y - y) <= (q.b.h / 2 + 2) * k) { const mol = molsIn(q.name.inner)[0]; if (mol) return { mol, cx: q.cx, cy: q.cy }; }
+    }
+    if (!showPhantoms()) return null;
+    for (const f of phantoms()) { const [X, Y] = S(f.x, f.y); if (x >= X && x <= X + f.w * k && y >= Y && y <= Y + f.h * k) return f; }
+    return null;
+  }
+  const showPhantoms = () => !E.drag && !E.arm && !E.ghost;
+  // the name's middle on the stage: its text once it has one, else its phantom
+  function nameSpot(mol: any) {
+    const Lo = lay(), q = mol.owner && Lo.texts.find((x: any) => x.name === mol.owner);
+    if (q) return [q.cx, q.cy];
+    const f = phantoms().find((x) => x.mol === mol);
+    return f ? [f.cx, f.cy] : null;
+  }
+  function editName(mol: any) {
+    if (!TD.input) return false;
+    closeLabel();
+    begin();
+    const me: any = (Lb = {});
+    me.mol = mol;
+    me.pop = TD.input.popup(stage, {
+      text: String(nameOf(mol)).split('\\\\').map((x) => x.trim()).join('\n'), math: false,
+      at: () => { const c = nameSpot(mol) || [0, 0], [X, Y] = S(c[0], c[1]), sr = stage.getBoundingClientRect(), vr = svg.getBoundingClientRect(); return [vr.left - sr.left + X, vr.top - sr.top + Y]; },
+      onInput: (tx: any) => { setName(mol, String(tx || '').split('\n').map((x) => x.trim()).filter(Boolean).join('\\\\')); L = null; draw(); renderProps(); },
+      onDone: () => { if (Lb === me) Lb = null; commit(); draw(); renderProps(); },
+    });
+    draw();
+    return true;
+  }
   function nameOf(mol: any) { return mol.owner ? mol.owner.name : ''; }
   function setName(mol: any, name: any) {
     name = String(name);
@@ -668,6 +819,72 @@ import { editorStage, fitView } from './editor-stage';
       list.splice(i, 1, nm);
     }
     E.M.dirty = true;
+  }
+  // the compound to come: an arrow with nothing after it (up to the next step or the scheme's end) gets a dashed
+  // box where chemfig would set the next compound. Click it to type one, or put an atom, ring or group in it.
+  function tails() {
+    const Lo = lay(), P = Lo.P || C.DEF, out: any[] = [];
+    for (const a of Lo.arrows || []) {
+      const A = a.seg;
+      if (!A || A.t !== 'arrow' || isDirect(A) || out.some((f) => f.A === A)) continue;
+      const p = parentOf(A);
+      if (!p) continue;
+      const Ls = p.list;
+      let empty = true;
+      for (let i = Ls.indexOf(A) + 1; i < Ls.length && !isStep(Ls[i]) && Ls[i].t !== 'stop'; i++) {
+        const g = Ls[i];
+        if (g.t !== 'text' || g.raw.replace(/%[^\n]*/g, '').trim()) { empty = false; break; }
+      }
+      if (!empty) continue;
+      const ux = Math.cos((a.ang * Math.PI) / 180), uy = -Math.sin((a.ang * Math.PI) / 180);
+      const w = 3.2 * C.EM, h = 2 * C.EM, reach = P.aoff + Math.abs(ux) * w / 2 + Math.abs(uy) * h / 2;
+      const cx = a.x2 + ux * reach, cy = a.y2 + uy * reach;
+      out.push({ A, x: cx - w / 2, y: cy - h / 2, w, h, cx, cy });
+    }
+    return out;
+  }
+  const ARMS_MOL = /^[arg]:/;
+  function tailAt(e: any) {
+    const [x, y] = pos(e), k = E.view.k;
+    for (const f of tails()) { const [X, Y] = S(f.x, f.y); if (x >= X && x <= X + f.w * k && y >= Y && y <= Y + f.h * k) return f; }
+    return null;
+  }
+  // a molecule set right after the arrow
+  function addAfterArrow(A: any, code: string) {
+    const Ls = listOf(A), m = newMol(code), i = Ls.indexOf(A) + 1, end = Ls[i] && !blank(Ls[i]);
+    Ls.splice(i, 0, T('\n  '), m, ...(end ? [T('\n')] : []));
+    E.M.dirty = true;
+    return m;
+  }
+  // a molecule typed after an arrow, taken out again with the line breaks it came with
+  function dropMol(m: any) {
+    const Ls = listOf(m), i = Ls.indexOf(m);
+    if (i < 0) return;
+    const a = blank(Ls[i - 1]) ? i - 1 : i, b = blank(Ls[i + 1]) && Ls[i + 2] && !blank(Ls[i + 2]) && Ls[i + 1].raw === '\n' ? i + 1 : i;
+    Ls.splice(a, b - a + 1);
+    E.M.dirty = true;
+  }
+  // type the compound's chemfig code in place: H_2O, CH_3-CH_2-OH…
+  function editTail(f: any) {
+    if (!TD.input) return false;
+    closeLabel();
+    begin();
+    const me: any = (Lb = {}), A = f.A, spot = [f.cx, f.y + f.h]; // under the box, so the compound shows as it is typed
+    me.tail = A;
+    me.pop = TD.input.popup(stage, {
+      text: '', math: false,
+      placeholder: t('editor.cf.compoundPh', 'chemfig code, e.g. {example}', { example: 'CH_3-OH' }), label: t('editor.cf.compoundLabel', 'Next compound'),
+      at: () => { const [X, Y] = S(spot[0], spot[1]), sr = stage.getBoundingClientRect(), vr = svg.getBoundingClientRect(); return [vr.left - sr.left + X, vr.top - sr.top + Y + 8]; },
+      onInput: (tx: any) => {
+        const code = String(tx || '').replace(/\s*\n\s*/g, ' ').trim();
+        if (me.m) dropMol(me.m);
+        me.m = code ? addAfterArrow(A, code) : null;
+        L = null; draw(); renderProps();
+      },
+      onDone: () => { if (Lb === me) Lb = null; commit(); draw(); renderProps(); keepInView(); },
+    });
+    draw();
+    return true;
   }
 
   // ---------------------------------------------------------------- DOM
@@ -683,12 +900,12 @@ import { editorStage, fitView } from './editor-stage';
   // ---------------------------------------------------------------- state
   // { M, sel: { v: key } | { b: bond item } | { a: arrow seg } | null, arm, bond (kind new bonds get), view: { k, ox, oy }, undo, redo, pending, start, done, drag, hover }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
-  const snapCode = () => codeOf(E.M);
+  const snapCode = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
   const { begin, commit, undo, redo } = TD.editorSession.history({
     state: () => E, snapshot: () => snapCode(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
   });
   function edit(fn: any) { begin(); const r = fn(); L = null; commit(); clampSel(); draw(); renderProps(); return r; }
-  function restore(code: any) { E.M = load(code); L = null; E.sel = null; draw(); renderProps(); updateTools(); }
+  function restore(code: any) { E.typed = code; E.M = load(code); L = null; E.sel = null; draw(); renderProps(); updateTools(); }
   function clampSel() { if (E.sel && !selV() && !selB() && !selA() && !selM()) E.sel = null; }
 
   // ---------------------------------------------------------------- palette
@@ -717,14 +934,14 @@ import { editorStage, fitView } from './editor-stage';
       d.moved = true; E.ghost = d.k; d.btn.classList.add('cf-dragging');
     }
     if (!d.moved) return;
-    const to = dropAt(e, d.k), h = to && to.v ? { v: vkey(to.v) } : to && to.b ? { b: to.b.item } : null;
-    if ((h && h.v) !== (E.hover && E.hover.v) || (h && h.b) !== (E.hover && E.hover.b)) { E.hover = h; draw(); }
+    const to = dropAt(e, d.k), h = to && to.v ? { v: vkey(to.v) } : to && to.b ? { b: to.b.item } : null, ht = to && to.tail ? to.tail.A : null;
+    if ((h && h.v) !== (E.hover && E.hover.v) || (h && h.b) !== (E.hover && E.hover.b) || ht !== E.hoverTail) { E.hover = h; E.hoverTail = ht; draw(); }
     setTip(overStage(e) ? dropTip(d.k, to) : '');
   });
   const endPalDrag = (e: any, drop: boolean) => {
     const d = palDrag;
     if (!d) return;
-    palDrag = null; E.ghost = null; E.hover = null; d.btn.classList.remove('cf-dragging');
+    palDrag = null; E.ghost = null; E.hover = null; E.hoverTail = null; d.btn.classList.remove('cf-dragging');
     if (!d.moved) { if (drop) pick(d.k); return; }
     setTip('');
     const to = drop && overStage(e) ? dropAt(e, d.k) : null;
@@ -739,7 +956,11 @@ import { editorStage, fitView } from './editor-stage';
     if (kind === 's') return v ? { v, at: true } : b ? { b, at: true } : { at: true };
     if (v) return { v };
     if (b && (kind === 'b' || kind === 'r') && !b.hook) return { b };
-    if (lay().empty && (kind === 'a' || kind === 'r' || kind === 'g')) return { at: true };
+    if (kind === 'a' || kind === 'r' || kind === 'g') {
+      if (lay().empty) return { at: true };
+      const f = tailAt(e);
+      if (f) return { tail: f };
+    }
     return null;
   }
   function dropTip(k: any, to: any) {
@@ -756,6 +977,7 @@ import { editorStage, fitView } from './editor-stage';
       return;
     }
     if (to.at) { apply(k, null); return; }
+    if (to.tail) { if (!apply(k, to)) draw(); return; }
     E.arm = null;
     if (apply(k, to.v ? { v: to.v } : { b: to.b })) buildPalette();
     else draw();
@@ -777,7 +999,10 @@ import { editorStage, fitView } from './editor-stage';
     E.arm = E.arm === k ? null : k;
     buildPalette(); draw();
     const name = say(ITEM[k].name);
-    setTip(E.arm ? (kind === 'b' || kind === 'r' ? t('editor.cf.tip.armBond', '{name}: click an atom or a bond. Esc when done.', { name }) : t('editor.cf.tip.arm', '{name}: click an atom. Esc when done.', { name })) : kind === 'b' ? t('editor.cf.tip.newBonds', '{name}: new bonds are of this kind', { name }) : '');
+    const box = E.arm && ARMS_MOL.test(k) && tails().length;
+    setTip(E.arm ? (kind === 'b' ? t('editor.cf.tip.armBond', '{name}: click an atom or a bond. Esc when done.', { name })
+      : kind === 'r' ? (box ? t('editor.cf.tip.armBondBox', '{name}: click an atom, a bond or the dashed box after an arrow. Esc when done.', { name }) : t('editor.cf.tip.armBond', '{name}: click an atom or a bond. Esc when done.', { name }))
+      : box ? t('editor.cf.tip.armBox', '{name}: click an atom or the dashed box after an arrow. Esc when done.', { name }) : t('editor.cf.tip.arm', '{name}: click an atom. Esc when done.', { name })) : kind === 'b' ? t('editor.cf.tip.newBonds', '{name}: new bonds are of this kind', { name }) : '');
   }
   // what a palette item does to an atom ({ v }), a bond ({ b }) or the drawing (null); false: nothing
   function apply(k: any, on: any) {
@@ -794,11 +1019,12 @@ import { editorStage, fitView } from './editor-stage';
       draw(); renderProps(); keepInView();
       return true;
     }
-    if (!on) {
-      // an empty drawing: start a molecule
+    if (!on || on.tail) {
+      // an empty drawing, or the box after an arrow: start a molecule
       const code = kind === 'a' ? val || '' : kind === 'r' ? RINGS[val] : kind === 'g' ? GROUPS[val](0) : '';
       if (!code) return false;
-      edit(() => { E.M.segs.push(newMol(code)); E.M.dirty = true; });
+      edit(() => { if (on) addAfterArrow(on.tail.A, code); else { E.M.segs.push(newMol(code)); E.M.dirty = true; } });
+      if (on) { E.arm = null; buildPalette(); }
       E.sel = null; keepInView(); draw(); renderProps();
       return true;
     }
@@ -826,7 +1052,8 @@ import { editorStage, fitView } from './editor-stage';
       let ok = false;
       edit(() => {
         if (val === 'plus' || val === 'minus') { const s = val === 'plus' ? '+' : '-', cur = signOf((atomsOf(v) || [])[v.k]); ok = setSign(v, cur === s ? '' : s); }
-        else ok = toggleDecor(v, ({ pair: '\\:', bar: '\\|', rad: '\\.', dplus: '$\\delta+$', dminus: '$\\delta-$' } as Record<string, any>)[val], freeSpot(v));
+        else if (val === 'dplus' || val === 'dminus') { const s = val === 'dplus' ? '+' : '-', pc = partialOf(mainAtom(v)); ok = setPartial(v, pc && pc.sign === s ? '' : s, pc ? pc.c.angle : freeSpot(v)); }
+        else ok = toggleDecor(v, ({ pair: '\\:', bar: '\\|', rad: '\\.' } as Record<string, any>)[val], freeSpot(v));
       });
       reselect(v);
       return ok;
@@ -893,16 +1120,23 @@ import { editorStage, fitView } from './editor-stage';
     }
     return best;
   }
+  // what the stage shows: the drawing and the dashed boxes round it (names and compounds to come)
+  function shownBox() {
+    const Lo = lay();
+    let x1 = Lo.bb.x, y1 = Lo.bb.y, x2 = x1 + Lo.bb.w, y2 = y1 + Lo.bb.h;
+    for (const f of [...tails(), ...phantoms()]) { x1 = Math.min(x1, f.x); y1 = Math.min(y1, f.y); x2 = Math.max(x2, f.x + f.w); y2 = Math.max(y2, f.y + f.h); }
+    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+  }
   function fit() {
     const Lo = lay();
-    E.view = fitView(rect(), Lo.empty ? { x: -40, y: -30, w: 80, h: 60 } : Lo.bb, { pad: 120, min: 0.5, max: 4 });
+    E.view = fitView(rect(), Lo.empty ? { x: -40, y: -30, w: 80, h: 60 } : shownBox(), { pad: 120, min: 0.5, max: 4 });
     draw();
   }
   // the view stays put unless the drawing has grown out of it
   function keepInView() {
     const Lo = lay(), r = rect();
     if (Lo.empty) return;
-    const [x1, y1] = S(Lo.bb.x, Lo.bb.y), [x2, y2] = S(Lo.bb.x + Lo.bb.w, Lo.bb.y + Lo.bb.h);
+    const bb = shownBox(), [x1, y1] = S(bb.x, bb.y), [x2, y2] = S(bb.x + bb.w, bb.y + bb.h);
     if (x1 >= 8 && y1 >= 8 && x2 <= r.width - 8 && y2 <= r.height - 8) return;
     // pan if it fits at this zoom, else fit
     if (x2 - x1 > r.width - 48 || y2 - y1 > r.height - 48) { fit(); return; }
@@ -950,6 +1184,20 @@ import { editorStage, fitView } from './editor-stage';
     if (E.hover && E.hover.b && (!sb || E.hover.b !== sb.item) && !E.drag) { const hb = Lo.bonds.find((b: any) => b.item === E.hover.b); if (hb) out += `<g ${tr}><path class="cf-bhov" d="M${r2(hb.X0)},${r2(hb.Y0)}L${r2(hb.X1)},${r2(hb.Y1)}" stroke-width="${r2(8 / k)}"/></g>`; }
     if (!Lo.empty) out += `<g ${tr}>${C.draw({ type: 'chemfig', x: Lo.bb.x, y: Lo.bb.y, src: '', color: INK }, { paper: PAPER, export: true }, Lo)}</g>`;
     else out += `<text class="qe-empty" x="${r2(W / 2)}" y="${r2(H / 2)}">${esc(t('editor.cf.empty', 'Pick an atom, a ring or a group on the left to start'))}</text>`;
+    // names to be: a dashed box where a compound's \chemname would go (not while its name is being typed)
+    if (showPhantoms() && !Lo.empty) for (const f of phantoms()) {
+      if (Lb && Lb.mol === f.mol) continue;
+      const [X, Y] = S(f.x, f.y), w = f.w * k, h = f.h * k, on = E.hoverName === f.mol;
+      out += `<rect class="cf-phantom${on ? ' on' : ''}" x="${r2(X)}" y="${r2(Y)}" width="${r2(w)}" height="${r2(h)}" rx="3"/>`;
+      if (w >= 34) out += `<text class="cf-phantom-t${on ? ' on' : ''}" x="${r2(X + w / 2)}" y="${r2(Y + h / 2)}">${esc(t('editor.cf.namePhantom', 'Name'))}</text>`;
+    }
+    // compounds to be: a dashed box after an arrow with nothing after it (also while an atom, ring or group is placed)
+    if (!E.drag && !Lo.empty && (E.arm || E.ghost ? ARMS_MOL.test(E.arm || E.ghost) : true)) for (const f of tails()) {
+      if (Lb && Lb.tail === f.A) continue;
+      const [X, Y] = S(f.x, f.y), w = f.w * k, h = f.h * k, on = E.hoverTail === f.A;
+      out += `<rect class="cf-phantom cf-tail${on ? ' on' : ''}" x="${r2(X)}" y="${r2(Y)}" width="${r2(w)}" height="${r2(h)}" rx="3"/>`;
+      if (w >= 50) out += `<text class="cf-phantom-t${on ? ' on' : ''}" x="${r2(X + w / 2)}" y="${r2(Y + h / 2)}">${esc(t('editor.cf.compoundPhantom', 'Compound'))}</text>`;
+    }
     // bonds kept but not drawn (draw=none): dashed, so they can be picked and drawn again
     const ghosts = Lo.bonds.filter((b: any) => !b.hook && !b.sub && hidden(b.item));
     if (ghosts.length) out += `<path class="cf-hidden" d="${ghosts.map((b: any) => { const [x0, y0] = S(b.X0, b.Y0), [x1, y1] = S(b.X1, b.Y1); return `M${r2(x0)},${r2(y0)}L${r2(x1)},${r2(y1)}`; }).join('')}"/>`;
@@ -1041,6 +1289,8 @@ import { editorStage, fitView } from './editor-stage';
     if (E.arm) {
       if (v || b) { const k = E.arm; apply(k, v ? { v } : { b }); return; }
       if (lay().empty) { apply(E.arm, null); return; }
+      const f = tailAt(e);
+      if (f && apply(E.arm, { tail: f })) return;
     }
     if (v) {
       const key = vkey(v);
@@ -1053,6 +1303,13 @@ import { editorStage, fitView } from './editor-stage';
     if (b) { if (dbl && E.sel && E.sel.b === b.item) { cycleBond(b); return; } E.sel = { b: b.item }; E.drag = null; draw(); renderProps(); return; }
     if (mv) { E.sel = { m: { seg: mv.seg, k: mv.k } }; E.drag = null; draw(); renderProps(); return; }
     if (a) { if (dbl && E.sel && E.sel.a === a.seg) { editArrowLabel(a, 0); return; } E.sel = { a: a.seg }; E.drag = null; draw(); renderProps(); return; }
+    // the dashed boxes are typed into with one click; a name already there, with two (one click on it does nothing)
+    if (!E.arm) {
+      const f = tailAt(e);
+      if (f && editTail(f)) return;
+      const nm = nameAt(e);
+      if (nm && (dbl || nm.w != null) && editName(nm.mol)) return;
+    }
     E.sel = null; E.drag = { mode: 'pan', sx, sy, ox: E.view.ox, oy: E.view.oy, idle: true }; draw(); renderProps();
   });
   svg.addEventListener('pointermove', (e: any) => {
@@ -1069,7 +1326,10 @@ import { editorStage, fitView } from './editor-stage';
       const knob = v ? vkey(v) : kb || onWay ? E.knobAt : null;
       const ch = (h && h.v) !== (E.hover && E.hover.v) || (h && h.b) !== (E.hover && E.hover.b) || knob !== E.knobAt;
       E.hover = h; E.knobAt = knob;
-      svg.style.cursor = E.arm ? '' : kb ? (kb.matches('.ze-ahead, .ze-mctl') ? 'move' : 'crosshair') : v ? (v.inBond && !v.inRing ? 'move' : 'default') : b || arrowAt(e) || moveAt(e, 5) ? 'pointer' : '';
+      svg.style.cursor = E.arm ? '' : kb ? (kb.matches('.ze-ahead, .ze-mctl') ? 'move' : 'crosshair') : v ? (v.inBond && !v.inRing ? 'move' : 'default') : b || arrowAt(e) || moveAt(e, 5) ? 'pointer' : nameAt(e) || tailAt(e) ? 'text' : '';
+      const nh = !E.arm && !v && !b ? nameAt(e) : null, nmol = nh ? nh.mol : null;
+      const th = !v && !b && (!E.arm || ARMS_MOL.test(E.arm)) ? tailAt(e) : null, tA = th ? th.A : null;
+      if (nmol !== E.hoverName || tA !== E.hoverTail) { E.hoverName = nmol; E.hoverTail = tA; draw(); }
       if (ch || (E.arm === 's:move' && E.mvFrom)) draw();
       return;
     }
@@ -1223,6 +1483,9 @@ import { editorStage, fitView } from './editor-stage';
   const brk = (t: any) => (/[\][]/.test(t) && !/^\{[\s\S]*\}$/.test(t) ? `{${t}}` : t);
   // the label box's lines (Shift+Enter), or \\ typed in the panel, as other editors read them
   const panelLabel = (code: any) => C.labelLines(code || '').join(' \\\\ ');
+  // an arrow's TikZ style: what follows its angle and length in \arrow{…}[angle,length,style]
+  const arrowStyle = (A: any) => A.opt.slice(2).filter((x: any) => x && x.trim()).join(',');
+  function setArrowStyle(A: any, st: string) { const o = A.opt.slice(0, 2); while (o.length < 2) o.push(''); A.opt = st ? [...o, st] : o; A.dirty = true; E.M.dirty = true; }
   function setArrowLabel(A: any, which: any, t: any) {
     const l = A.labels.slice();
     while (l.length < which) l.push('');
@@ -1241,18 +1504,109 @@ import { editorStage, fitView } from './editor-stage';
   const noneEg = (example: string) => t('editor.cf.noneEg', 'none, e.g. {example}', { example });
   const selectField = (label: any, key: any, value: any, options: any) => row(label, { kind: 'select' as const, value, options, attrs: { 'data-f': key } });
   const chemicalNumber = (label: any, key: any, value: any, unit: any, attrs = {}) => numField(label, key, value == null ? '' : num(value), unit, attrs);
+  const colourRow = (label: string, key: string, value: string) => ({ ...row(label, texColour(value, { 'data-f': key }, { nullable: true, defaultSwatch: TD.css('#000000'), title: label })), controlClass: 'ctl tc' });
+  const lineKinds = () => [['solid', t('ui.solid', 'Solid')], ['dashed', t('ui.dashed', 'Dashed')], ['dotted', t('ui.dotted', 'Dotted')]];
+  // which atom of a group a bond leaves from (its 3rd argument) and arrives at (its 4th): only for groups of
+  // more than one atom, such as CH_2OH or HO
+  function ends(b: any) {
+    if (b.hook || b.sub) return [];
+    const arg = b.item.arg || [], out: any[] = [];
+    const pickRow = (label: string, key: string, v: any, k: number, val: any) => {
+      const bx = (v && v.boxes) || [];
+      if (bx.length < 2) return;
+      const atom = (i: number) => `${i + 1} · ${String(bx[i].tex || '').trim() || '·'}`;
+      out.push(selectField(label, key, val || '', [['', t('editor.cf.atomAuto', 'Automatic ({atom})', { atom: atom(Math.max(0, Math.min(bx.length - 1, k || 0))) })], ...bx.map((_: any, i: number) => [String(i + 1), atom(i)])]));
+    };
+    pickRow(t('editor.cf.leavesFrom', 'Leaves from'), 'bdep', b.a, b.ka, arg[2]);
+    pickRow(t('editor.cf.arrivesAtAtom', 'Arrives at'), 'barr', b.b, b.kb, arg[3]);
+    return out;
+  }
+  const on = (v: any) => (v && v !== 'false' ? 'true' : '');
+  const offOn = () => [['', t('editor.cf.off', 'Off')], ['true', t('editor.cf.on', 'On')]];
+  // arrow head=…: chemfig's own (-CF, the default), or TikZ's
+  const HEADS = () => [['', t('editor.cf.headCF', 'chemfig (CF)')], ['-stealth', 'Stealth'], ['-latex', 'LaTeX'], ['->', t('editor.cf.headTo', 'Open (to)')]];
+  const headOf = (v: any) => { const h = String(v || '').trim(); return /^-?cf$/i.test(h) || !h ? '' : /stealth/i.test(h) ? '-stealth' : /latex/i.test(h) ? '-latex' : '->'; };
+  // nothing picked: the drawing's \setchemfig settings
+  function settingsSections() {
+    const S0 = settings(), legacy = C.modernize(codeOf(E.M)).changes.length > 0, named = (function has(L: any): boolean { return L.some((g: any) => g.t === 'name' || (g.inner && has(g.inner))); })(E.M.segs);
+    const len = (label: string, key: string, dflt: string) => field(label, 'cf:' + key, S0[key] || '', { class: 'mono', placeholder: dflt, title: key });
+    const bs = S0['bond style'] || '';
+    const rows: any[] = [len(t('editor.cf.bondLength', 'Bond length'), 'atom sep', '3em'), len(t('editor.cf.doubleGap', 'Double gap'), 'double bond sep', '2pt'), len(t('editor.cf.wedgeWidth', 'Wedge width'), 'cram width', '1.5ex'),
+      numField(t('editor.cf.angleStep', 'Angle step'), 'cf:angle increment', S0['angle increment'] || '', '°', { step: '15', min: '1', placeholder: '45', title: 'angle increment' }),
+      segments(t('editor.cf.fixedLength', 'Fixed length'), 'cf:fixed length', on(S0['fixed length']), offOn()),
+      note(t('editor.cf.help.fixed', 'Fixed length measures bonds between the edges of atoms, not their centres.')),
+      len(t('editor.cf.hashWidth', 'Hash width'), 'cram dash width', '1pt'), len(t('editor.cf.hashGap', 'Hash gap'), 'cram dash sep', '2pt'),
+      segments(t('editor.cf.squareWedges', 'Square hashes'), 'cf:cram rectangle', on(S0['cram rectangle']), offOn()),
+      numField(t('editor.cf.circleSize', 'Ring circle'), 'cf:cycle radius coeff', S0['cycle radius coeff'] || '', '×', { step: '0.05', min: '0.05', placeholder: '0.75', title: 'cycle radius coeff' }),
+      ...(legacy ? [note(t('editor.cf.help.legacy', 'Some settings use chemfig 1.x commands (such as {cmd}), which current chemfig stops on.', { cmd: '\\setatomsep' })), actionRow('ce', 'cfup', t('editor.cf.useSetchemfig', 'Update to Current chemfig'), false)] : [])];
+    const bonds = [chemicalNumber(t('editor.cf.lineWidth', 'Line width'), 'cfb:width', widthOf(bs), 'pt', { step: '0.1', min: '0.1', placeholder: t('editor.cf.widthPh', 'default') }), colourRow(t('ui.colour', 'Colour'), 'cfb:colour', colourOf(bs)), segments(t('ui.line', 'Line'), 'cfb:dash', dashOf(bs), lineKinds()),
+      note(t('editor.cf.help.allBonds', 'For every bond (bond style); a bond\'s own options win.'))];
+    const as = S0['arrow style'] || '';
+    const arrows = inScheme() ? [len(t('editor.cf.compoundGap', 'Spacing'), 'compound sep', '5em'), len(t('editor.cf.arrowGap', 'Arrow gap'), 'arrow offset', '1em'),
+      selectField(t('editor.cf.arrowHead', 'Arrow head'), 'cf:arrow head', headOf(S0['arrow head']), HEADS()), colourRow(t('editor.cf.arrowColour', 'Arrow colour'), 'cfa:colour', colourOf(as)), segments(t('editor.cf.arrowLine', 'Arrow line'), 'cfa:dash', dashOf(as), lineKinds())] : [];
+    const scheme = inScheme() || named ? [section(t('editor.cf.scheme', 'Scheme'), [...arrows, ...(named ? [len(t('editor.cf.nameGap', 'Name gap'), 'name sep', '1.5ex')] : [])], 'sec')] : [];
+    return [section(t('editor.cf.drawing', 'Drawing'), rows, 'sec'), section(t('editor.cf.allBonds', 'All bonds'), bonds, 'sec'), ...scheme];
+  }
+  // a plain bond's line as drawn: its own (draw=none, dashed, dotted, solid) over the drawing's bond style
+  const lineOf = (own: any, all: any) => (optList(own).some((x) => /^draw\s*=\s*none$/.test(x)) ? 'none' : optList(own).find((x) => DASH_RE.test(x)) || dashOf(all));
+  // set it: what the bond writes is only what differs from the drawing (solid is written to undo a dashed bond style)
+  function setLine(it: any, val: string) {
+    const arg = (it.arg || []).slice();
+    while (arg.length < 5) arg.push('');
+    const rest = optList(arg[4]).filter((x) => !DASH_RE.test(x) && !/^draw\s*=\s*none$/.test(x)), all = dashOf(settings()['bond style'] || '');
+    arg[4] = [...rest, ...(val === 'none' ? ['draw=none'] : val === 'solid' ? (all !== 'solid' ? ['solid'] : []) : val !== all ? [val] : [])].join(',');
+    it.arg = arg; it.dirty = true;
+  }
+  // a molecule's own settings, \chemfig[key=value,…]{…}: chemfig sets wedge sizes per molecule or drawing, not per bond
+  function molOpts(mol: any): Record<string, string> | null {
+    const h = String(mol.head || ''), q = h.indexOf('[');
+    if (/^\\chemfig\s*\*/.test(h)) return null;
+    if (q < 0) return {};
+    const e = C.close(h, q);
+    if (e < 0 || h.indexOf('[', e + 1) >= 0) return null;
+    const kv: Record<string, string> = {};
+    for (const it of C.split(h.slice(q + 1, e))) { const m = /^\s*([^=]+?)\s*(?:=\s*([\s\S]*?))?\s*$/.exec(it); if (m && m[1]) kv[m[1]] = m[2] == null ? 'true' : C.unbrace(m[2]); }
+    return kv;
+  }
+  function setMolOpt(mol: any, k: string, v: string) {
+    const kv = molOpts(mol);
+    if (!kv) return;
+    if (v) kv[k] = v; else delete kv[k];
+    const body = Object.entries(kv).map(([a, b]) => (b === 'true' ? a : `${a}=${/[,=]/.test(b) ? `{${b}}` : b}`)).join(',');
+    mol.head = body ? `\\chemfig[${body}]` : '\\chemfig'; mol.dirty = true; E.M.dirty = true;
+  }
+  function wedgeSection(mol: any, sym: string) {
+    const kv = molOpts(mol), S0 = settings(), dis = kv ? {} : { disabled: true };
+    const lenRow = (label: string, key: string, dflt: string) => field(label, 'mw:' + key, kv ? kv[key] || '' : '', { class: 'mono', placeholder: S0[key] || dflt, title: key, ...dis });
+    return section(t('editor.cf.wedgesHere', 'Wedges in this molecule'), [lenRow(t('editor.cf.wedgeWidth', 'Wedge width'), 'cram width', '1.5ex'),
+      ...(/:/.test(sym) ? [lenRow(t('editor.cf.hashWidth', 'Hash width'), 'cram dash width', '1pt'), lenRow(t('editor.cf.hashGap', 'Hash gap'), 'cram dash sep', '2pt')] : []),
+      note(t('editor.cf.help.wedgeSizes', 'chemfig sizes wedges for a whole molecule ({code}) or drawing, not one bond. Empty: the drawing\'s.', { code: '\\chemfig[cram width=…]' }))], 'sec');
+  }
+  // a ring's circle (**n): on or off, the arc it spans and its style, written **[start,end,style]n
+  const arcOf = (ring: any) => { const f = ring.arc ? C.split(ring.arc.slice(1, -1)).map((x: any) => x.trim()) : []; return { a0: f[0] || '', a1: f[1] || '', st: f.slice(2).filter(Boolean).join(',') }; };
+  function setArc(ring: any, q: any) {
+    const parts = [q.a0, q.a1, ...(q.st ? [q.st] : [])];
+    while (parts.length && !parts[parts.length - 1]) parts.pop();
+    ring.arc = parts.length ? `[${parts.join(',')}]` : '';
+  }
+  function ringSection(ring: any) {
+    const circle = ring.star === '**', q = arcOf(ring);
+    return section(t('editor.cf.ring', 'Ring'), [segments(t('editor.cf.circle', 'Circle'), 'rcircle', circle ? 'true' : '', offOn()),
+      ...(circle ? [chemicalNumber(t('editor.cf.arcFrom', 'Arc from'), 'rarc0', q.a0 === '' ? null : parseFloat(q.a0), '°', { step: '15', placeholder: '0' }), chemicalNumber(t('editor.cf.arcTo', 'Arc to'), 'rarc1', q.a1 === '' ? null : parseFloat(q.a1), '°', { step: '15', placeholder: '360' }),
+        colourRow(t('ui.colour', 'Colour'), 'rcol', colourOf(q.st)), segments(t('ui.line', 'Line'), 'rdash', dashOf(q.st), lineKinds())] : [])], 'sec');
+  }
   function molSection(mol: any) {
-    if (!inScheme()) return [];
+    const sch = inScheme();
     const lr = lrOf(mol), sub = compOf(mol).sub, bk = lr ? lr.l : '', options = [['', t('ui.none', 'None')], ['[', '[ ]'], ['(', '( )'], ['\\{', '{ }']];
     if (bk && !options.some(o => o[0] === bk)) options.push([bk, `${bk} ${lr.r}`]);
-    const group = sub ? [{ text: t('editor.cf.ungroup', 'Ungroup'), attrs: { 'data-ce': 'ungroup', title: t('editor.cf.ungroupTitle', 'Take its {cmd} apart', { cmd: '\\subscheme' }) } }] : nextStep(mol) ? [{ text: t('editor.cf.groupNext', 'Group with Next'), attrs: { 'data-ce': 'group', title: t('editor.cf.groupNextTitle', 'Put it, the next arrow and the compound after it in a {cmd}', { cmd: '\\subscheme' }) } }] : [];
+    const group = !sch ? [] : sub ? [{ text: t('editor.cf.ungroup', 'Ungroup'), attrs: { 'data-ce': 'ungroup', title: t('editor.cf.ungroupTitle', 'Take its {cmd} apart', { cmd: '\\subscheme' }) } }] : nextStep(mol) ? [{ text: t('editor.cf.groupNext', 'Group with Next'), attrs: { 'data-ce': 'group', title: t('editor.cf.groupNextTitle', 'Put it, the next arrow and the compound after it in a {cmd}', { cmd: '\\subscheme' }) } }] : [];
     return [{ ...section(t('editor.cf.compound', 'Compound'), [field(t('ui.name', 'Name'), 'mname', nameOf(mol), { 'data-tx': 'text', placeholder: t('editor.cf.namePh', 'none, shown under it') }), selectField(t('editor.cf.brackets', 'Brackets'), 'brk', bk, options),
-      ...(sub ? [field(t('editor.cf.arrowsAt', 'Arrows at'), 'subang', subAngleText(sub), { class: 'mono', placeholder: t('editor.cf.defaultEg', 'default, e.g. {example}', { example: '90' }) })] : []), { kind: 'actions' as const, class: 'row', buttons: [...group, { text: t('editor.cf.deleteMolecule', 'Delete Molecule'), attrs: { class: 'danger', 'data-ce': 'mdel' } }] }], 'sec'), ...(sub ? { summary: t('editor.cf.inSubscheme', 'in a subscheme') } : {}) }];
+      ...(sub ? [field(t('editor.cf.arrowsAt', 'Arrows at'), 'subang', subAngleText(sub), { class: 'mono', placeholder: t('editor.cf.defaultEg', 'default, e.g. {example}', { example: '90' }) })] : []), ...(sch ? [{ kind: 'actions' as const, class: 'row', buttons: [...group, { text: t('editor.cf.deleteMolecule', 'Delete Molecule'), attrs: { class: 'danger', 'data-ce': 'mdel' } }] }] : [])], 'sec'), ...(sub ? { summary: t('editor.cf.inSubscheme', 'in a subscheme') } : {}) }];
   }
   function renderProps() {
     if (!E) return;
     const Lo = lay(), v = selV(), b = selB(), a = selA(), mv = selM();
-    const show = (title: any, summary: any, rows: any, mol?: any) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), ...(summary !== undefined ? { summary } : {}) }, ...(mol ? molSection(mol) : [])] });
+    const show = (title: any, summary: any, rows: any, mol?: any, extra?: any) => renderView(props, FormPanel, { sections: [{ ...section(title, rows, 'sec'), ...(summary !== undefined ? { summary } : {}) }, ...(extra ? [].concat(extra) : []), ...(mol ? molSection(mol) : [])] });
     if (v) {
       const n = dirsAt(v).length, atoms = atomsOf(v), main = atoms && atoms[Math.min(v.k, atoms.length - 1)], pairs = pairsOn(main).map((c: any) => Math.round(c.angle)), singles = chargesOf(main).filter((c: any) => kindOf(c) === '\\.').map((c: any) => Math.round(c.angle)), sign = signOf(main), lbl = v.g ? v.g.raw.trim() : '';
       const sides = () => [[90, '↑', t('editor.commonA.side.above', 'Above')], [0, '→', t('editor.commonA.side.right', 'Right')], [270, '↓', t('editor.commonA.side.below', 'Below')], [180, '←', t('editor.commonA.side.left', 'Left')]];
@@ -1262,18 +1616,26 @@ import { editorStage, fitView } from './editor-stage';
       const styleRow: any = segments(t('editor.cf.pairStyle', 'Pairs as'), 'pstyle', main ? styleOf(main) : pairStyle, [['\\:', t('editor.cf.dots', 'Dots'), t('editor.cf.pairDots', 'Two dots (\\:)')], ['\\|', t('editor.cf.bar', 'Bar'), t('editor.cf.pairBar', 'A bar (\\|)')]], !main);
       const singleRow: any = flags(segments(t('editor.cf.radicals', 'Radicals'), 'single', '', sides(), !main), singles);
       show(lbl ? t('editor.cf.atom', 'Atom') : t('editor.cf.vertex', 'Vertex'), n === 1 ? t('editor.cf.oneBond', '1 bond') : t('editor.cf.nBonds', '{n} bonds', { n }), [field(t('ui.label', 'Label'), 'label', lbl, { class: 'mono', 'data-tx': 'math', placeholder: t('editor.cf.labelPh', 'none: a carbon vertex') }),
-        segments(t('editor.cf.charge', 'Charge'), 'sign', sign, [['', t('ui.none', 'None')], ['+', '+', t('editor.cf.superscript', 'A superscript {sign}', { sign: '+' })], ['-', '−', t('editor.cf.superscript', 'A superscript {sign}', { sign: '−' })]], !main), pairRow, styleRow, singleRow,
+        ...(lbl && atoms && atoms.length ? [colourRow(t('ui.colour', 'Colour'), 'vcol', colourOfAtoms(v))] : []),
+        segments(t('editor.cf.charge', 'Charge'), 'sign', sign, [['', t('ui.none', 'None')], ['+', '+', t('editor.cf.superscript', 'A superscript {sign}', { sign: '+' })], ['-', '−', t('editor.cf.superscript', 'A superscript {sign}', { sign: '−' })]], !main), ...partialRows(main), pairRow, styleRow, singleRow,
         ...(!v.g ? [note(t('editor.cf.help.vertex', 'A vertex with no label is a carbon. Give it a label to put charges and lone pairs on it.'))] : []), delRow('vdel', delVertex(v), v.inRing)], v.mol); return;
     }
     if (b) {
       const it = b.item, arg = it.arg || [], inRing = !!b.ring, ang = it.angleUsed != null ? it.angleUsed : b.angle, len = arg[1] ? parseFloat(arg[1]) : 1;
-      show(t('editor.cf.bondTitle', '{kind} bond', { kind: bondNames()[it.sym] || t('editor.cf.bond', 'Bond') }), inRing ? t('editor.cf.ringOf', 'ring of {n}', { n: b.ring.n }) : b.hook ? t('editor.cf.ringClosure', 'ring closure') : '', [selectField(t('ui.type', 'Type'), 'sym', it.sym, Object.entries<any>(bondNames())),
+      const wedge = /^[<>]/.test(it.sym), hollow = /\|$/.test(it.sym), off = b.hook ? { disabled: true } : {};
+      // what this bond draws with: its own options over the drawing's bond style (chemfig puts them after it)
+      const all = settings()['bond style'] || '', allW = widthOf(all), allC = colourOf(all);
+      const rows: any[] = [selectField(t('ui.type', 'Type'), 'sym', it.sym, Object.entries<any>(bondNames())),
         chemicalNumber(t('ui.angle', 'Angle'), 'angle', inRing ? null : Math.round(ang * 100) / 100, '°', inRing || b.hook ? { disabled: true } : { step: '15' }), chemicalNumber(t('editor.cf.length', 'Length'), 'len', inRing ? null : len, '×', inRing || b.hook ? { disabled: true } : { step: '0.25', min: '0.25' }),
-        field(t('ui.options', 'Options'), 'tikz', arg[4] || '', { class: 'mono', placeholder: eg('red, line width=1pt'), ...(b.hook ? { disabled: true } : {}) }),
-        note(hidden(it) ? t('editor.cf.help.hiddenBond', 'A hidden bond keeps its place in chemfig but is not drawn (draw=none). Show Bond, or picking a bond kind, brings it back.') : inRing ? t('editor.cf.help.ringSides', "A ring's sides follow the ring: they have no angle or length of their own.") : t('editor.cf.help.bondDrag', 'Drag the atom at its end to turn and stretch it.')),
-        // Hide or Show beside the deletes; a ring side's Delete Bond only hides it, so a ring offers Delete Ring instead
-        b.hook ? delRow(null, '', inRing) : { kind: 'actions' as const, class: 'row', buttons: [hidden(it) ? { text: t('editor.cf.showBond', 'Show Bond'), attrs: { 'data-ce': 'bshow' } } : { text: t('editor.cf.hideBond', 'Hide Bond'), attrs: { 'data-ce': 'bhide' } },
-          inRing ? { text: t('editor.cf.deleteRing', 'Delete Ring'), attrs: { 'data-ce': 'rdel', class: 'danger' } } : { text: t('editor.cf.deleteBond', 'Delete Bond'), attrs: { 'data-ce': 'bdel', class: 'danger' } }] }], b.mol); return;
+        ...ends(b)];
+      if (!wedge) rows.push(segments(t('ui.line', 'Line'), 'bdash', lineOf(arg[4], all), [...lineKinds(), ['none', t('editor.cf.lineNone', 'None'), t('editor.cf.lineNoneTitle', 'Not drawn: it keeps its place (draw=none)')]], !!b.hook));
+      if (!wedge || hollow) rows.push(chemicalNumber(hollow ? t('editor.cf.outline', 'Outline') : t('ui.width', 'Width'), 'bwidth', widthOf(arg[4]), 'pt', { step: '0.1', min: '0.1', placeholder: allW != null ? num(allW) : '0.4', ...off }));
+      rows.push({ ...row(t('ui.colour', 'Colour'), texColour(colourOf(arg[4]), { 'data-f': 'bcol' }, { nullable: true, defaultLabel: allC || t('ui.default', 'Default'), defaultSwatch: TD.css(allC && TD.tikzColor(allC) ? TD.tikzColor(allC) : '#000000'), title: t('ui.colour', 'Colour') })), controlClass: 'ctl tc' },
+        field(t('ui.options', 'Options'), 'tikz', arg[4] || '', { class: 'mono', placeholder: eg('red, line width=1pt'), ...off }),
+        note(hidden(it) ? t('editor.cf.help.hiddenBond2', 'Not drawn (draw=none): the bond keeps its place in chemfig. Pick a line, or a bond kind, to draw it again.') : inRing ? t('editor.cf.help.ringSides', "A ring's sides follow the ring: they have no angle or length of their own.") : t('editor.cf.help.bondDrag', 'Drag the atom at its end to turn and stretch it.')),
+        b.hook ? delRow(null, '', inRing) : delRow(inRing ? null : 'bdel', t('editor.cf.deleteBond', 'Delete Bond'), inRing));
+      show(t('editor.cf.bondTitle', '{kind} bond', { kind: bondNames()[it.sym] || t('editor.cf.bond', 'Bond') }), inRing ? t('editor.cf.ringOf', 'ring of {n}', { n: b.ring.n }) : b.hook ? t('editor.cf.ringClosure', 'ring closure') : '', rows, b.mol,
+        [...(wedge ? [wedgeSection(b.mol, it.sym)] : []), ...(inRing ? [ringSection(b.ring.item)] : [])]); return;
     }
     if (a && a.seg.t === 'merge') {
       const M = a.seg;
@@ -1285,7 +1647,8 @@ import { editorStage, fitView } from './editor-stage';
       const A = a.seg, direct = isDirect(A);
       show(t('editor.cf.arrowTitle', '{kind} arrow', { kind: arrowNames()[A.type] || t('editor.cf.arrow', 'Arrow') }), undefined, [selectField(t('ui.type', 'Type'), 'atype', A.type, Object.entries<any>(arrowNames())), field(t('editor.commonA.side.above', 'Above'), 'above', panelLabel(A.labels[0]), { 'data-tx': 'text', placeholder: noneEg('$\\Delta$') }), field(t('editor.commonA.side.below', 'Below'), 'below', panelLabel(A.labels[1]), { 'data-tx': 'text', placeholder: noneEg('H$_2$O') }),
         chemicalNumber(t('ui.angle', 'Angle'), 'aangle', direct ? null : A.opt[0] ? parseFloat(A.opt[0]) : a.ang, '°', { step: '15', ...(direct ? { disabled: true } : {}) }), chemicalNumber(t('editor.cf.length', 'Length'), 'alen', direct ? null : A.opt[1] ? parseFloat(A.opt[1]) : 1, '×', { step: '0.25', min: '0.25', ...(direct ? { disabled: true } : {}) }),
-        field(t('editor.cf.ends', 'Ends'), 'aends', A.names ? A.names.slice(1, -1) : '', { class: 'mono', placeholder: t('editor.cf.endsPh', 'none, e.g. {a} or {b}', { a: 'c1--c2', b: '@c1--@c3' }) }), field(t('ui.style', 'Style'), 'astyle', A.opt.slice(2).filter((x: any) => x && x.trim()).join(', '), { class: 'mono', placeholder: noneEg('red, thick') }),
+        field(t('editor.cf.ends', 'Ends'), 'aends', A.names ? A.names.slice(1, -1) : '', { class: 'mono', placeholder: t('editor.cf.endsPh', 'none, e.g. {a} or {b}', { a: 'c1--c2', b: '@c1--@c3' }) }), colourRow(t('ui.colour', 'Colour'), 'acol', colourOf(arrowStyle(A))), segments(t('ui.line', 'Line'), 'adash', dashOf(arrowStyle(A)), lineKinds()),
+        field(t('ui.style', 'Style'), 'astyle', A.opt.slice(2).filter((x: any) => x && x.trim()).join(', '), { class: 'mono', placeholder: noneEg('red, thick') }),
         direct ? note(t('editor.cf.help.direct', 'It joins two compounds already placed (@ names), so it has no angle or length of its own.')) : note(t('editor.cf.help.arrowDrag', 'Drag its head to turn and stretch it (15° steps; '), { kbd: '⌥' }, t('editor.cf.help.anyAngle', ' for any angle).')), actionRow('ce', 'adel', t('editor.cf.deleteArrow', 'Delete Arrow'))]); return;
     }
     if (mv) {
@@ -1295,7 +1658,10 @@ import { editorStage, fitView } from './editor-stage';
       show(t('editor.cf.curved', 'Curved arrow'), '\\chemmove', [selectField(t('editor.cf.tips', 'Tips'), 'mvtip', tips, [['-stealth', t('editor.cf.atEnd', 'At the end')], ['stealth-', t('editor.cf.atStart', 'At the start')], ['stealth-stealth', t('editor.cf.bothEnds', 'Both ends')], ['-', t('ui.none', 'None')]]), selectField(t('ui.line', 'Line'), 'mvline', line, lines), field(t('ui.colour', 'Colour'), 'mvcol', colour, { class: 'mono', placeholder: noneEg('red') }),
         ...(q ? [chemicalNumber(t('editor.cf.leavesAt', 'Leaves at'), 'mvout', q.out, '°', { step: '15' }), chemicalNumber(t('editor.cf.pull', 'Pull'), 'mvr1', q.r1, 'cm', { step: '0.05', min: '0' }), chemicalNumber(t('editor.cf.arrivesAt', 'Arrives at'), 'mvin', q.in, '°', { step: '15' }), chemicalNumber(t('editor.cf.pull', 'Pull'), 'mvr2', q.r2, 'cm', { step: '0.05', min: '0' })] : []), field(t('editor.cf.path', 'Path'), 'mvpath', D0 ? D0.path.trim() : '', { class: 'mono' }), note(q ? t('editor.cf.help.bend', 'Drag the blue handles to bend it.') : t('editor.cf.help.pathAsWritten', "Its path isn't a single curve with two controls, so it is edited as written.")), actionRow('ce', 'mvdel', t('editor.cf.deleteCurved', 'Delete Curved Arrow'))]); return;
     }
-    show(t('editor.cf.title', 'Chemistry'), countsText(Lo), [note(t('editor.cf.help.main', 'Pick an atom and drag its blue handle to grow a bond (it snaps to 15°; '), { kbd: '⌥' }, t('editor.cf.help.mainRest', ' for any angle). Drag an atom to turn its bond. Type a letter to relabel the picked atom; double-click to edit its label, or a bond to step it single, double, triple. Rings, groups and charges on the left go onto the picked atom or bond; Reactions add an arrow and a copy of the molecule to change, a merge, or a curved arrow from one atom or bond to another.'))]);
+    const help = [note(t('editor.cf.help.main', 'Pick an atom and drag its blue handle to grow a bond (it snaps to 15°; '), { kbd: '⌥' }, t('editor.cf.help.mainRest', ' for any angle). Drag an atom to turn its bond. Type a letter to relabel the picked atom; double-click to edit its label, or a bond to step it single, double, triple. Rings, groups and charges on the left go onto the picked atom or bond; Reactions add an arrow and a copy of the molecule to change, a merge, or a curved arrow from one atom or bond to another.'))];
+    if (!Lo.empty) help.push(note(t('editor.cf.help.names', 'Click the dashed box under a compound to name it; double-click a name to change it.')));
+    if (!Lo.empty && tails().length) help.push(note(t('editor.cf.help.tail', 'An arrow with nothing after it ends in a dashed box: click it to type the next compound in chemfig code, or drop an atom, ring or group in it.')));
+    renderView(props, FormPanel, { sections: [{ ...section(t('editor.cf.title', 'Chemistry'), help, 'sec'), summary: countsText(Lo) }, ...settingsSections()] });
   }
   props.addEventListener('focusin', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) begin(); });
   props.addEventListener('focusout', (e: any) => { if (!isViewUpdating() && e.target.matches('input, select')) { commit(); L = null; clampSel(); renderProps(); draw(); } });
@@ -1303,7 +1669,22 @@ import { editorStage, fitView } from './editor-stage';
     const t = ev.target, f = t.dataset.f;
     if (!f) return;
     const v = selV(), b = selB(), a = selA(), mv = selM(), mol = v ? v.mol : b ? b.mol : null;
-    if (mol && (f === 'brk' || f === 'subang')) {
+    if (f.startsWith('cf:')) {
+      const k = f.slice(3), val = t.value.trim();
+      if (k === 'angle increment' || k === 'cycle radius coeff') { const n = parseFloat(val); if (val && !(isFinite(n) && n > 0)) return; setSetting(k, val ? num(n) : ''); }
+      else if (k === 'arrow head') setSetting(k, val);
+      else { if (val && !LEN_RE.test(val)) return; setSetting(k, val); }
+    } else if (f.startsWith('cfb:')) {
+      const bs = settings()['bond style'] || '';
+      if (f === 'cfb:width') { const n = parseFloat(t.value); if (t.value.trim() && !(isFinite(n) && n > 0)) return; setSetting('bond style', withWidth(bs, t.value.trim() ? n : null)); }
+      else if (f === 'cfb:colour') setSetting('bond style', withColour(bs, t.value.trim()));
+    } else if (f === 'cfa:colour') {
+      setSetting('arrow style', withColour(settings()['arrow style'] || '', t.value.trim()));
+    } else if (f.startsWith('mw:') && b) {
+      const val = t.value.trim();
+      if (val && !LEN_RE.test(val)) return;
+      setMolOpt(b.mol, f.slice(3), val);
+    } else if (mol && (f === 'brk' || f === 'subang')) {
       if (f === 'brk') setBrackets(mol, t.value);
       else { const sub = compOf(mol).sub; if (sub) setSubAngle(sub, t.value); }
     } else if (v) {
@@ -1312,15 +1693,39 @@ import { editorStage, fitView } from './editor-stage';
         setLabel(v, t.value); L = null;
         const nv = lay().verts.find((x: any) => (v.g && x.g === v.g) || (v.inBond && x.inBond === v.inBond) || (!v.g && !v.inBond && x.mol === v.mol && x.root));
         E.sel = nv ? { v: vkey(nv) } : { v: key };
+      } else if (f === 'pang' || f === 'poff') {
+        const pc = partialOf(mainAtom(v));
+        if (!pc) return;
+        const n = parseFloat(t.value);
+        if (f === 'pang') { if (!isFinite(n)) return; setPartial(v, pc.sign, n); }
+        else { if (t.value.trim() && !isFinite(n)) return; setPartial(v, pc.sign, pc.c.angle, t.value.trim() ? n : 0); }
+        L = null;
+        const nv = lay().verts.find((x: any) => v.g && x.g === v.g);
+        if (nv) E.sel = { v: vkey(nv) };
+      } else if (f === 'vcol') {
+        const key = vkey(v);
+        setAtomsColour(v, t.value.trim()); L = null;
+        const nv = lay().verts.find((x: any) => v.g && x.g === v.g);
+        E.sel = nv ? { v: vkey(nv) } : { v: key };
       } else if (f === 'mname') setName(v.mol, t.value);
     } else if (b) {
       const it = b.item;
       if (f === 'sym') { it.sym = t.value; it.dirty = true; touch(b.mol); }
-      else if (f === 'angle' || f === 'len' || f === 'tikz') {
+      else if ((f === 'rarc0' || f === 'rarc1' || f === 'rcol') && b.ring) {
+        const ring = b.ring.item, q: any = arcOf(ring), val = t.value.trim();
+        if (f === 'rcol') q.st = withColour(q.st, val);
+        else { const n = parseFloat(val); if (val && !isFinite(n)) return; q[f === 'rarc0' ? 'a0' : 'a1'] = val ? num(n) : ''; }
+        setArc(ring, q); touch(b.mol);
+      }
+      else if (f === 'angle' || f === 'len' || f === 'tikz' || f === 'bwidth' || f === 'bcol' || f === 'bdep' || f === 'barr') {
         const arg = (it.arg || []).slice();
         if (f === 'angle') { const n = parseFloat(t.value); if (!isFinite(n)) return; arg[0] = bondName(arg[0]) + fmtA(n); }
         if (f === 'len') { const n = parseFloat(t.value); if (!isFinite(n) || n <= 0) return; arg[1] = Math.abs(n - 1) < 1e-9 ? '' : num(n); }
         if (f === 'tikz') arg[4] = t.value.trim();
+        if (f === 'bcol') arg[4] = withColour(arg[4], t.value.trim());
+        if (f === 'bdep') arg[2] = t.value;
+        if (f === 'barr') arg[3] = t.value;
+        if (f === 'bwidth') { const n = parseFloat(t.value); if (t.value.trim() && !(isFinite(n) && n > 0)) return; arg[4] = withWidth(arg[4], t.value.trim() ? n : null); }
         it.arg = arg; it.dirty = true; touch(b.mol);
       } else if (f === 'mname') setName(b.mol, t.value);
     } else if (a) {
@@ -1330,6 +1735,7 @@ import { editorStage, fitView } from './editor-stage';
       else if (f === 'msrc') A.srcs = t.value.split(',').map((x: any) => x.trim()).filter(Boolean);
       else if (f === 'mtgt') A.target = t.value.trim();
       else if (f === 'aends') { const w = t.value.trim().replace(/^\(|\)$/g, ''); A.names = w ? `(${w})` : ''; }
+      else if (f === 'acol') setArrowStyle(A, withColour(arrowStyle(A), t.value.trim()));
       else if (f === 'astyle') { const o = A.opt.slice(0, 2); while (o.length < 2) o.push(''); const st = t.value.trim(); A.opt = st ? [...o, st] : o; }
       else if (f === 'above') { setArrowLabel(A, 0, t.value); }
       else if (f === 'below') { setArrowLabel(A, 1, t.value); }
@@ -1357,20 +1763,41 @@ import { editorStage, fitView } from './editor-stage';
       }
     } else return;
     E.M.dirty = true; L = null; draw();
-    if (['sym', 'atype', 'mdir', 'brk', 'mvtip', 'mvline'].includes(f)) { commit(); renderProps(); begin(); }
+    if (['sym', 'atype', 'mdir', 'brk', 'mvtip', 'mvline', 'bdep', 'barr', 'cf:arrow head', 'pang'].includes(f)) { commit(); renderProps(); begin(); }
   });
   props.addEventListener('input', () => { if (E && !isViewUpdating()) renderProps(); });
   props.addEventListener('keydown', (e: any) => { if (e.key === 'Enter' && e.target.matches('input')) e.target.blur(); });
   props.addEventListener('click', (ev: any) => {
     const bt = ev.target.closest('[data-fs]');
     if (!bt || !E || bt.disabled) return;
-    const f = bt.dataset.fs, val = bt.dataset.v, v = selV();
+    const f = bt.dataset.fs, val = bt.dataset.v, v = selV(), b = selB();
+    if (f === 'cf:fixed length' || f === 'cf:cram rectangle' || f === 'cfb:dash' || f === 'cfa:dash') {
+      edit(() => {
+        if (f === 'cfb:dash') setSetting('bond style', withDash(settings()['bond style'] || '', val));
+        else if (f === 'cfa:dash') setSetting('arrow style', withDash(settings()['arrow style'] || '', val));
+        else setSetting(f.slice(3), val);
+      });
+      return;
+    }
+    if ((f === 'rcircle' || f === 'rdash') && b && b.ring) {
+      const ring = b.ring.item;
+      edit(() => {
+        if (f === 'rcircle') { ring.star = val ? '**' : '*'; if (!val) ring.arc = ''; } // a plain ring takes no [arc]
+        else { const q = arcOf(ring); q.st = withDash(q.st, val); setArc(ring, q); }
+        touch(b.mol);
+      });
+      return;
+    }
+    const a = selA();
+    if (f === 'adash' && a && a.seg.t === 'arrow') { edit(() => setArrowStyle(a.seg, withDash(arrowStyle(a.seg), val))); return; }
+    if (f === 'bdash' && b) { edit(() => { setLine(b.item, val); touch(b.mol); }); return; }
     if (!v) return;
     edit(() => {
       if (f === 'sign') setSign(v, val);
       else if (f === 'pair') togglePair(v, +val);
       else if (f === 'pstyle') setPairStyle(v, val);
       else if (f === 'single') toggleDecor(v, '\\.', +val);
+      else if (f === 'pq') { const pc = partialOf(mainAtom(v)); setPartial(v, val, pc ? pc.c.angle : freeSpot(v), pc && val ? pc.c.off / C.PT : null); }
     });
     reselect(v);
   });
@@ -1435,6 +1862,7 @@ import { editorStage, fitView } from './editor-stage';
       if (mol) { edit(() => (x === 'group' ? groupNext(mol) : ungroup(compOf(mol).sub))); renderProps(); }
     }
     else if (x === 'rdel') { const ring = v ? v.ring : b && b.ring ? b.ring.item : null, mol = (v || b).mol; if (ring) { edit(() => deleteRing(ring, mol)); E.sel = null; L = null; draw(); renderProps(); } }
+    else if (x === 'cfup') { edit(() => upgradeLegacy()); }
     else if (x === 'mdel') { const mol = (v || b || {}).mol; if (mol) { edit(() => deleteMol(mol)); E.sel = null; L = null; draw(); renderProps(); } }
     else if (x === 'label') { if (v) editLabel(v); }
     else if (x === 'alabel') { if (a) editArrowLabel(a, 0); }
@@ -1456,7 +1884,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value; L = null;
+    E.typed = codeTa.value; E.M = load(codeTa.value); E.codeAt = codeTa.value; L = null;
     commit();
     clampSel(); draw(); renderProps();
     showCodeNotes(codeMsg, C.layout({ src: codeTa.value }).warnings);
@@ -1466,8 +1894,8 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
@@ -1515,7 +1943,9 @@ import { editorStage, fitView } from './editor-stage';
   let localeOff: (() => void) | undefined;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
-    const M = load(block.src);
+    // chemfig 1.x code opens in today's form: an edit (Done keeps it, Cancel and Undo take it back)
+    const conv = C.modernize(String(block.src || ''));
+    const M = load(conv.changes.length ? conv.code : block.src);
     L = null;
     E = { M, sel: null, arm: null, bond: '-', view: { ox: 0, oy: 0, k: 2 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, codeAt: null, codeTimer: null };
     E.grid = E.gridChoice = 'isometric';
@@ -1526,7 +1956,8 @@ import { editorStage, fitView } from './editor-stage';
       E.gridChoice = E.grid === 'off' ? GRID_STYLES.includes(last as any) ? last : 'isometric' : E.grid;
     } catch { /* private storage */ }
     updateGridTools();
-    E.start = codeOf(M);
+    E.typed = String(conv.changes.length ? conv.code : block.src || ''); E.start = snapCode();
+    if (conv.changes.length) { E.start = String(block.src || ''); E.undo.push(E.start); updateTools(); }
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');
@@ -1534,6 +1965,7 @@ import { editorStage, fitView } from './editor-stage';
     let first = true;
     localeOff?.();
     localeOff = onLocale(() => { if (first) { first = false; return; } if (E) { buildPalette(); renderProps(); draw(); syncCode(); } });
+    if (conv.changes.length) stageNote.flash(t('editor.cf.updated', 'Updated chemfig 1.x code: {list}', { list: conv.changes.join(', ') }), 5000);
     if (dock.resumed()) draw(); // back where it was left (Quick)
     else { fit(); requestAnimationFrame(() => { if (E) fit(); }); }
   }

@@ -104,7 +104,7 @@ import { hsv2rgb, rgb2hsv } from './colour-math';
     cur = { ...opts, anchor, h: 0, s: 0, v: 0, a: 1, none: !opts.value, editing: false, tab: rich && opts.fills ? (opts.value.g ? 'grad' : 'pat') : 'basic', base: rich ? null : opts.value,
       grad: rich && opts.value.g ? JSON.parse(JSON.stringify(opts.value)) : null, pat: rich && opts.value.p ? { ...opts.value } : null };
     setRGB(p.r, p.g, p.b, p.a);
-    Object.assign(model, { tabs: !!opts.fills, nullable: !!opts.nullable, noneLabel: opts.noneLabel || (opts.tex ? t('ui.default', 'Default') : t('color.none', 'No Color')) });
+    Object.assign(model, { tabs: !!opts.fills, nullable: !!opts.nullable, noneLabel: opts.noneLabel || (opts.tex ? t('ui.default', 'Default') : t('color.none', 'No Colour')) });
     sync();
     const handle: PopoverHandle = openPopover(anchor, {
       class: 'cp', inset: 12, width: 240, label: t('ui.colour', 'Colour'),

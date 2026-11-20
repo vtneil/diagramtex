@@ -198,10 +198,10 @@ import { themeField, liftSuggestions } from './mathlive-theme';
   // The kit's TextPopup (src/ui/kit/TextPopup.svelte), floating in `host` (a positioned element): a LaTeX field or
   // MathLive, whichever the Text input setting picks. Enter, Esc or clicking away finishes; it fades out.
   // opts: { text, math: the content is maths without $ (a quantikz gate), bare: a lone command such as
-  //   \ket{0} is maths, at(): [x, y] in host pixels for the box's top centre, onInput(text), onDone() }
+  //   \ket{0} is maths, placeholder and label (the empty field's hint, its name), at(): [x, y] in host pixels for the box's top centre, onInput(text), onDone() }
   // Returns { place() } to follow the anchor (after a pan or zoom) and close().
   function popup(host: HTMLElement, opts: any) {
-    return openTextPopup(host, { text: String(opts.text || ''), math: !!opts.math, bare: !!opts.bare, at: opts.at, onInput: opts.onInput, onDone: opts.onDone });
+    return openTextPopup(host, { text: String(opts.text || ''), math: !!opts.math, bare: !!opts.bare, placeholder: opts.placeholder, label: opts.label, at: opts.at, onInput: opts.onInput, onDone: opts.onDone });
   }
 
   // ---------- setting (left sidebar, above the LaTeX engine) ----------

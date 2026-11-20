@@ -9,9 +9,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { marquee, marqueeSvg, marqueeTakes } from './marquee';
 // 3D geometry editor: the overlay that opens on a 3D geometry block. A palette of things to add (frames,
 // points, vectors, lines, planes, angles, circles, spheres, labels); the picture drawn in 3D, where dragging
 // empty space turns the view, dragging a point moves it (level, or up and down with ⇧), and clicking a line,
@@ -711,7 +712,7 @@ import { editorStage, fitView } from './editor-stage';
       const [ax, ay] = ray(k.a), [bx, by] = ray(k.b);
       out += `<path class="anglepick" d="M${r2(ax)} ${r2(ay)} L${r2(k.x)} ${r2(k.y)} L${r2(bx)} ${r2(by)}"/><circle class="anglepick" cx="${r2(k.x)}" cy="${r2(k.y)}" r="4"/>`;
     }
-    if (d && d.mode === 'marquee' && d.moved) out += `<rect class="marquee${d.x < d.sx ? ' cross' : ''}" x="${r2(Math.min(d.sx, d.x))}" y="${r2(Math.min(d.sy, d.y))}" width="${r2(Math.abs(d.x - d.sx))}" height="${r2(Math.abs(d.y - d.sy))}"/>`;
+    if (d && d.mode === 'marquee' && d.moved) out += marqueeSvg(d.sx, d.sy, d.x, d.y);
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     patchSvg(svg, out);
   }
@@ -861,7 +862,8 @@ import { editorStage, fitView } from './editor-stage';
       // the edits are made against the code as it was when the drag started
       const L0 = G.layout(d.src0, FLAT), h = L0.handles.find((x: any) => x.si === d.si && Math.hypot(x.at.s[0] - d.h.at.s[0], x.at.s[1] - d.h.at.s[1]) < 1e-9) || d.h;
       const up = !FLAT && e.shiftKey, snap = !e.altKey;
-      if (up !== d.up) { d.up = up; d.sx = sx; d.sy = sy; d.m0 = d.m || d.m0; }
+      // ⇧ pressed or let go mid-drag starts the drag again from here (d.up starts false: the first move is a move)
+      if (up !== !!d.up) { d.up = up; d.sx = sx; d.sy = sy; d.m0 = d.m || d.m0; }
       const S0 = S(L0.view.P(d.m0));
       let m = unproject(L0.view, S0[0] + (sx - d.sx), S0[1] + (sy - d.sy), d.m0, up, [d.sx, d.sy]);
       // ⇧ in 2D: a 15° step along a line, or a whole point, whichever is nearer
@@ -901,15 +903,7 @@ import { editorStage, fitView } from './editor-stage';
   }
   // the marquee: left to right takes commands wholly inside it, right to left anything it touches (as on the canvas)
   function marqueeSelect(d: any) {
-    const x1 = Math.min(d.sx, d.x), x2 = Math.max(d.sx, d.x), y1 = Math.min(d.sy, d.y), y2 = Math.max(d.sy, d.y), cross = d.x < d.sx;
-    const inR = (q: any) => q[0] >= x1 && q[0] <= x2 && q[1] >= y1 && q[1] <= y2;
-    // does the segment a-b meet the rect? (an end inside, or it crosses one of the four sides)
-    const seg = (a: any, b: any) => {
-      if (inR(a) || inR(b)) return true;
-      const X = (p: any, q: any, r: any, s: any) => { const d1 = (q[0] - p[0]) * (s[1] - r[1]) - (q[1] - p[1]) * (s[0] - r[0]); if (!d1) return false; const t = ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d1, u = ((r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])) / d1; return t >= 0 && t <= 1 && u >= 0 && u <= 1; };
-      const c = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
-      return c.some((p, i) => X(a, b, p, c[(i + 1) % 4]));
-    };
+    const M = marquee(d.sx, d.sy, d.x, d.y);
     const Lx = L(), f = fitOf(), pts = new Map(), segs = new Map();
     const add = (m: any, si: any, v: any) => { if (!m.has(si)) m.set(si, []); m.get(si).push(v); };
     for (const it of Lx.items) {
@@ -927,7 +921,7 @@ import { editorStage, fitView } from './editor-stage';
       if (!drawable(x) || ['main', 'macro'].includes(x.k)) return;
       const P = pts.get(si);
       if (!P || !P.length) return;
-      if (P.every(inR) || (cross && (P.some(inR) || (segs.get(si) || []).some(([a, b]: any) => seg(a, b))))) sel.add(si);
+      if (marqueeTakes(M, { pts: P, segs: segs.get(si) })) sel.add(si);
     });
     const all = [...sel].sort((a, b) => (a as any) - (b as any));
     E.sel = all.length === 1 ? all[0] : null; E.many = all.length > 1 ? all : null;
@@ -1269,8 +1263,8 @@ import { editorStage, fitView } from './editor-stage';
 
   window.addEventListener('keydown', (e) => {
     if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it) instead of the canvas shortcuts
-    if ((e.key === 'Enter' || e.key === ' ') && (e.target as Element).closest?.('.qe-item, .cz-part, [data-cmd], [data-tool], [data-ex]')) return;
+    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
+    if (pressesFocused(e)) return;
     if (!E || root.hidden || dock.elsewhere(e)) return;
     if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
     if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;

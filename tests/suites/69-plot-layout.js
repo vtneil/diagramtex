@@ -23,3 +23,12 @@ T.test('plot layout: with middle axes the title goes above the y label, in the e
   T.ok(P.samples(s)[0].y <= s.y - 40, 'the bounds reach the title');
   T.tex('plot-middle-title', tex);
 });
+
+T.test('plot layout: an automatic range sampled just short of a round value reaches it (sin(x) from -1 to 1, with its ticks)', () => {
+  const s = plot({ colorbar: false, title: '' });
+  s.series[0].expr = 'sin(x)'; s.series[0].f = 'sin(x)'; s.xmin = '-5'; s.xmax = '5';
+  const tex = TD.toTikz([s], { standalone: true });
+  T.ok(/ymin=-1\b/.test(tex) && /ymax=1\b/.test(tex), (tex.match(/ymin=[^,\]]*|ymax=[^,\]]*/g) || []).join(' '));
+  T.ok(/ytick=\{[^}]*-1[,}]/.test(tex) || !/ytick=/.test(tex), 'and its -1 tick');
+  T.tex('plot sin range', tex);
+});

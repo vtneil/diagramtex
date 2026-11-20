@@ -6,22 +6,30 @@ import { unbraceOnce as unbrace } from './tex-groups';
 //   bipole { id, part, a: [x, y], b: [x, y], l, ann, v, i, poles, name, opts }  → \draw (a) to[…] (b);
 //   node   { id, part, p: [x, y], rot, flip, name, text, opts }               → \node[…] (name) at (p) {text};
 // plus raw lines it could not read back (kept verbatim). A bipole's end that sits on a named node's pin
-// is written as (Name.pin), so the wire meets the pin in LaTeX as it does here.
+// is written as (Name.pin), so the wire meets the pin in LaTeX as it does here. `%` comments go with the statement
+// they sit by: an item's cmt { pre: lines above it, post: the end of its line }, and raw lines keep their own.
 // The circuit is edited in its own overlay editor (czeditor.ts), opened by double-clicking the block.
 const CZ = TD.CZ;
 const { r2, esc } = TD.util;
 const PX = TD.PX_PER_CM, K = TD.PT_PER_PX;
 const RLEN = 1.4, NODE_R = 0.04 * RLEN;
 const EPS = 1e-3;
-const f = (n: any) => { const v = Math.round(n * 100) / 100; return Object.is(v, -0) ? '0' : String(v); };
+const f = (n: any) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); }; // to the 1/8 cm grids exporters use
 const same = (p: any, q: any) => Math.abs(p[0] - q[0]) < EPS && Math.abs(p[1] - q[1]) < EPS;
 const uid = () => Math.random().toString(36).slice(2, 10);
+// where a line's comment starts: the first % that is not \%
+function commentAt(line: string) {
+  for (let i = 0; i < line.length; i++) { if (line[i] === '\\') i++; else if (line[i] === '%') return i; }
+  return -1;
+}
+const uncomment = (s: any) => String(s || '').split('\n').map((l) => { const i = commentAt(l); return i < 0 ? l : l.slice(0, i); }).join('\n');
 
 // ---------------------------------------------------------------- geometry
-// node frame: mirror (xscale=-1) first, then rotate counter-clockwise, then move to p
+// node frame: scale (sc [x, y], when it is not 1) and mirror (xscale=-1) first, then rotate counter-clockwise,
+// then move to p
 function nodeXf(it: any) {
-  const a = ((it.rot || 0) * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a), fx = it.flip ? -1 : 1;
-  return (x: any, y: any) => { x *= fx; return [it.p[0] + x * c - y * s, it.p[1] + x * s + y * c]; };
+  const a = ((it.rot || 0) * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a), [sx, sy] = it.sc || [1, 1], fx = (it.flip ? -1 : 1) * sx;
+  return (x: any, y: any) => { x *= fx; y *= sy; return [it.p[0] + x * c - y * s, it.p[1] + x * s + y * c]; };
 }
 // bipole frame: origin at the middle of a→b, x along the path, y to its left;
 // circuitikz's `mirror` flips the part along the path (x), `invert` across it (y)
@@ -104,7 +112,7 @@ function optsOf(it: any) {
 // the circuit-wide voltage style a `\ctikzset{voltage=…}` (or `\tikzset{… voltages}`) line in the code sets
 function vstyleOf(raw: any) {
   let v = 'european';
-  for (const m of String(raw || '').matchAll(/voltage\s*=\s*(american|european|straight|raised|curved)\b|\b(american|european|straight|raised)\s+voltages\b/g)) v = VSTYLE[m[1] || m[2]];
+  for (const m of uncomment(raw).matchAll(/voltage\s*=\s*(american|european|straight|raised|curved)\b|\b(american|european|straight|raised)\s+voltages\b/g)) v = VSTYLE[m[1] || m[2]];
   return v;
 }
 const colorOf = (it: any) => optsOf(it).color || null;
@@ -149,6 +157,31 @@ function voltageArc(it: any, def: any, G: any) {
   const lab = /^res:/.test(it.part) ? BUMP * 0.308 + VSHIFT : -cy;
   return { p0: [xs, -VSHIFT], c1: [-cx, cy], c2: [cx, cy], p3: [-xs, -VSHIFT], xs, hy, lab };
 }
+// what a node's text shows: exporters wrap it in \rotatebox{…} and \ctikzflipx/y/xy{…} to undo the node's own turn
+// and mirror, so it reads upright, as the canvas draws it anyway
+function shown(t: string) {
+  for (;;) {
+    const s = t.trim(), m = /^\\(?:rotatebox\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}|ctikzflip(?:xy|x|y))\s*\{/.exec(s);
+    if (!m || closeAt(s, m[0].length - 1) !== s.length - 1) return t;
+    t = s.slice(m[0].length, -1);
+  }
+}
+// a TikZ length in cm: `2`, `2cm`, `3pt`, `1.5mm`, `.5in`
+const UNIT: Record<string, number> = { cm: 1, mm: 0.1, pt: 2.54 / 72.27, bp: 2.54 / 72, in: 2.54, em: 0.35, ex: 0.16 };
+const NUM = '(-?(?:\\d+\\.?\\d*|\\.\\d+))\\s*(cm|mm|pt|bp|in|em|ex)?';
+const dim = (v: string, u?: string) => +v * UNIT[u || 'cm'];
+const r6 = (v: number) => { const r = Math.round(v * 1e6) / 1e6; return Object.is(r, -0) ? 0 : r; };
+// where a text node's options put its text from its point: [dx, dy] (the side, each -1, 0 or 1) and a shift [sx, sy]
+function textDir(opts: string) {
+  let dx = 0, dy = 0, sx = 0, sy = 0, m;
+  for (const x of splitTop(opts || '', ',')) {
+    const k = norm(x);
+    if ((m = /^anchor\s*=\s*(.+)$/.exec(k))) { dx = /west/.test(m[1]) ? 1 : /east/.test(m[1]) ? -1 : 0; dy = /south/.test(m[1]) ? 1 : /north/.test(m[1]) ? -1 : 0; }
+    else if ((m = new RegExp(`^(x|y)shift\\s*=\\s*${NUM}$`).exec(k))) { if (m[1] === 'x') sx += dim(m[2], m[3]); else sy += dim(m[2], m[3]); }
+    else if ((m = /^(above|below)?\s*(left|right)?(?:\s*=.*)?$/.exec(k)) && (m[1] || m[2])) { dy = m[1] === 'above' ? 1 : m[1] === 'below' ? -1 : 0; dx = m[2] === 'left' ? -1 : m[2] === 'right' ? 1 : 0; }
+  }
+  return [dx, dy, sx, sy];
+}
 // where the labels go: l (and i) on the left of the path, a and v on the right; node text at its centre.
 // Spots: { t, at, dir } plus arc (a curved arrow), line (a straight one) or arrow (the current's, on the wire)
 function labelSpots(it: any, st: any) {
@@ -156,13 +189,14 @@ function labelSpots(it: any, st: any) {
   const spots: any[] = [];
   if (it.p) {
     if (!it.text) return spots;
+    if (it.part === 'text') { const d = textDir(it.opts); spots.push({ t: shown(it.text), at: [it.p[0] + d[0] * NODE_TXT + d[2], it.p[1] + d[1] * NODE_TXT + d[3]], dir: [d[0], d[1]] }); return spots; }
     // circuitikz: the text of a ground symbol sits above its pin, a supply's beyond its arrow, a transistor's to the side
-    const T = nodeXf(it), up = (sgn: any, x: any, y: any) => { const a = T(0, 0), b = T(0, sgn); return { t: it.text, at: T(x, y), dir: [b[0] - a[0], b[1] - a[1]] }; };
+    const t = shown(it.text), T = nodeXf(it), up = (sgn: any, x: any, y: any) => { const a = T(0, 0), b = T(0, sgn); return { t, at: T(x, y), dir: [b[0] - a[0], b[1] - a[1]] }; };
     if (it.part === 'ground:vcc') spots.push(up(1, 0, 0.42 + NODE_TXT));
     else if (it.part === 'ground:vee') spots.push(up(-1, 0, -0.42 - NODE_TXT));
     else if (/^ground:/.test(it.part)) spots.push(up(1, 0.26, -0.16)); // a ground's text hangs off the pin's upper right
-    else if (/^trans:/.test(it.part)) spots.push({ t: it.text, at: T(/mos|fet/.test(it.part) ? 0.36 : 0.45, 0), dir: [0, 0] });
-    else spots.push({ t: it.text, at: it.p, dir: [0, 0] });
+    else if (/^trans:/.test(it.part)) spots.push({ t, at: T(/mos|fet/.test(it.part) ? 0.36 : 0.45, 0), dir: [0, 0] });
+    else spots.push({ t, at: it.p, dir: [0, 0] });
     return spots;
   }
   const T = bipXf(it, true), hy = G ? Math.max(G.box.y2, -G.box.y1, 0.05) : 0.05;
@@ -290,21 +324,29 @@ function pinRefs(items: any) {
 // the name a part is written with: circuitikz's short name it was read as (`R`, `V` …) while that still means it
 const nameOf = (it: any, def: any, st: CzStyle) => (it.as && partByName(it.as, def.kind, styleWith(st, it.opts || '')) === it.part ? it.as : def.tikz);
 function code(items: any, raw: any) {
-  const lines = [], refs = pinRefs(items), st = styleOf(raw);
+  const lines: string[] = [], refs = pinRefs(items), st = styleOf(raw);
   const pt = (q: any) => { const r = refs.find(([p]) => same(p, q)); return r ? r[1] : `(${f(q[0])},${f(q[1])})`; };
+  // an item's lines, with its comments
+  const put = (it: any, ls: string[]) => {
+    const c = it.cmt;
+    if (c && c.pre) lines.push(...c.pre);
+    if (c && c.post) { if (ls.length) ls[ls.length - 1] += ' ' + c.post; else ls.push(c.post); }
+    lines.push(...ls);
+  };
   for (const it of items) {
     const def = CZ.parts[it.part];
     if (!def || !it.p) continue;
-    const o = [nameOf(it, def, st)];
+    const o = [nameOf(it, def, st)].filter(Boolean), [sx, sy] = it.sc || [1, 1];
     if (it.rot) o.push(`rotate=${f(it.rot)}`);
-    if (it.flip) o.push('xscale=-1');
+    if (it.flip || sx !== 1) o.push(`xscale=${f(it.flip ? -sx : sx)}`);
+    if (sy !== 1) o.push(`yscale=${f(sy)}`);
     if (it.opts) o.push(it.opts);
-    lines.push(`\\node[${o.join(', ')}]${it.name ? ` (${it.name})` : ''} at (${f(it.p[0])},${f(it.p[1])}) {${it.text || ''}};`);
+    put(it, [`\\node${o.length ? `[${o.join(', ')}]` : ''}${it.name ? ` (${it.name})` : ''} at (${f(it.p[0])},${f(it.p[1])}) {${it.text || ''}};`]);
   }
   for (const it of items) {
     const def = CZ.parts[it.part];
     if (!def || it.p) continue;
-    const o = [];
+    const o: string[] = [];
     if (it.l) o.push(`l=${brace(it.l)}`);
     if (it.ann) o.push(`a=${brace(it.ann)}`);
     if (it.v) o.push(`v${it.vm || ''}=${brace(it.v)}`);
@@ -312,13 +354,17 @@ function code(items: any, raw: any) {
     if (it.name) o.push(`n=${it.name}`);
     if (it.poles && it.poles !== '-') o.push(it.poles);
     if (it.opts) o.push(it.opts);
-    if (isWire(it) && !o.length) { for (const [a, b] of crossingSections(it, items)) lines.push(`\\draw ${pt(a)} -- ${pt(b)};`); }
-    else { for (const [a, b] of isWire(it) ? crossingSections(it, items) : [[it.a, it.b]]) lines.push(`\\draw ${pt(a)} to[${[nameOf(it, def, st), ...o].join(', ')}] ${pt(b)};`); }
+    if (isWire(it) && !o.length) put(it, crossingSections(it, items).map(([a, b]: any) => `\\draw ${pt(a)} -- ${pt(b)};`));
+    else put(it, (isWire(it) ? crossingSections(it, items) : [[it.a, it.b]]).map(([a, b]: any) => `\\draw ${pt(a)} to[${[nameOf(it, def, st), ...o].join(', ')}] ${pt(b)};`));
   }
-  // \ctikzset / \tikzset lines go first: they set the style of everything drawn after them
+  // \ctikzset / \tikzset / \tikzstyle lines go first: they set the style of everything drawn after them; comment lines go with
+  // the line under them
   if (raw && raw.trim()) {
-    const R = raw.replace(/\s+$/, '').split('\n'), set = (l: any) => /^\s*\\(ctikzset|tikzset)\b/.test(l);
-    lines.unshift(...R.filter(set)); lines.push(...R.filter((l: any) => !set(l)));
+    const R = raw.replace(/\s+$/, '').split('\n'), set = (c: string[]) => /^\s*\\(ctikzset|tikzset|tikzstyle)\b/.test(c[c.length - 1]);
+    const chunks: string[][] = [];
+    let cur: string[] = [];
+    for (const l of R) { cur.push(l); if (!/^\s*%/.test(l)) { chunks.push(cur); cur = []; } }
+    lines.unshift(...chunks.filter(set).flat()); lines.push(...chunks.filter((c) => !set(c)).flat(), ...cur);
   }
   return lines.join('\n');
 }
@@ -348,11 +394,12 @@ function splitTop(str: any, sep: any) {
   out.push(buf);
   return out;
 }
-const norm = (t: any) => t.trim().replace(/\s+/g, ' ').toLowerCase();
+// a part's option as compared: spaces folded, lower case, a braced value unbraced (`Telmech={M}` is `Telmech=M`)
+const norm = (t: any) => t.trim().replace(/\s+/g, ' ').toLowerCase().replace(/=\s*\{([^{}]*)\}$/, '=$1');
 let tikzIndex: any = null;
 function partFor(list: any, kind: any, st0?: CzStyle) {
   if (!tikzIndex) {
-    tikzIndex = CZ.order.map((k: any) => ({ k, kind: CZ.parts[k].kind, t: splitTop(CZ.parts[k].tikz, ',').map(norm) }));
+    tikzIndex = CZ.order.filter((k: any) => CZ.parts[k].tikz).map((k: any) => ({ k, kind: CZ.parts[k].kind, t: splitTop(CZ.parts[k].tikz, ',').map(norm) }));
     tikzIndex.sort((a: any, b: any) => b.t.length - a.t.length);
   }
   // the part's name usually comes first, but `to[american voltages, R]` is fine too
@@ -454,8 +501,9 @@ function styleWith(st: CzStyle, opts: string) {
 // the style \ctikzset{…} and \tikzset{…} lines set
 function styleOf(raw: any) {
   let st = STYLE0;
-  for (const m of String(raw || '').matchAll(/\\(?:ctikzset|tikzset)\s*\{/g)) {
-    const t = String(raw), j = closeAt(t, m.index! + m[0].length - 1);
+  const t = uncomment(raw);
+  for (const m of t.matchAll(/\\(?:ctikzset|tikzset)\s*\{/g)) {
+    const j = closeAt(t, m.index! + m[0].length - 1);
     if (j > 0) st = styleWith(st, t.slice(m.index! + m[0].length, j));
   }
   return st;
@@ -467,22 +515,31 @@ function partByName(n: string, kind: string, st: CzStyle) {
     canon = new Map();
     for (const k of CZ.order) {
       const t = CZ.parts[k].tikz, kd = CZ.parts[k].kind;
-      if (/,/.test(t)) continue;
+      if (!t || /,/.test(t)) continue;
       for (const v of [t, resolveName(t, STYLE0)]) if (!canon.has(kd + ':' + norm(v))) canon.set(kd + ':' + norm(v), k);
     }
   }
   return canon.get(kind + ':' + norm(resolveName(n.trim(), st))) || null;
 }
 function parse(src: any) {
-  const items: any[] = [], raw = [];
-  let text = String(src || '').replace(/(^|[^\\])%.*$/gm, '$1');
+  const items: any[] = [], raw: string[] = [];
+  // comments are blanked out, the same length, so a statement's place in the text is its place in the source
+  const notes: { at: number; text: string }[] = [];
+  let text = '', at0 = 0;
+  for (const l of String(src || '').split('\n')) {
+    const i = commentAt(l);
+    if (i >= 0) notes.push({ at: at0 + i, text: l.slice(i).trimEnd() });
+    text += (i < 0 ? l : l.slice(0, i) + ' '.repeat(l.length - i)) + '\n';
+    at0 += l.length + 1;
+  }
   // a whole \begin{circuitikz}[…] … \end{circuitikz} (or tikzpicture): its options become a \tikzset line
   const env = [];
-  text = text.replace(/\\end\{(circuitikz|tikzpicture)\}/g, ';');
+  const blank = (s: string) => ';' + s.slice(1).replace(/[^\n]/g, ' '); // the lines stay where they were
+  text = text.replace(/\\end\{(circuitikz|tikzpicture)\}/g, blank);
   for (let bm; (bm = /\\begin\{(circuitikz|tikzpicture)\}\s*/.exec(text));) {
     let e = bm.index + bm[0].length;
     if (text[e] === '[') { const j = closeAt(text, e); if (j > 0) { if (text.slice(e + 1, j).trim()) env.push(`\\tikzset{${text.slice(e + 1, j).trim()}}`); e = j + 1; } }
-    text = text.slice(0, bm.index) + ';' + text.slice(e);
+    text = text.slice(0, bm.index) + blank(text.slice(bm.index, e)) + text.slice(e);
   }
   raw.push(...env);
   let st = styleOf(env.join('\n'));
@@ -492,31 +549,52 @@ function parse(src: any) {
     for (const it of items) if (it.name) for (const [n, q] of Object.entries<any>(pinsOf(it))) { m.set(`${it.name}.${n}`, q); if (n === 'center') m.set(it.name, q); }
     return m;
   };
+  // (x,y) with or without units, (angle:radius), or a name
   const coord = (t: any, names: any) => {
-    const m = /^\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)$/.exec(t.trim());
-    if (m) return [+m[1], +m[2]];
+    const m = new RegExp(`^\\(\\s*${NUM}\\s*,\\s*${NUM}\\s*\\)$`).exec(t.trim());
+    if (m) return [r6(dim(m[1], m[2])), r6(dim(m[3], m[4]))];
+    const pm = new RegExp(`^\\(\\s*(-?[\\d.]+)\\s*:\\s*${NUM}\\s*\\)$`).exec(t.trim());
+    if (pm) { const a = (+pm[1] * Math.PI) / 180, r = dim(pm[2], pm[3]); return [r6(r * Math.cos(a)), r6(r * Math.sin(a))]; }
     const n = /^\(\s*([^()]+?)\s*\)$/.exec(t.trim());
     if (n && names.has(n[1])) return names.get(n[1]).slice();
     return null;
   };
-  for (let stmt of splitTop(text, ';')) {
-    let orig = stmt.trim();
-    if (!orig) continue;
-    // settings ahead of the statement (\ctikzset{…} needs no semicolon): kept as written, on lines of their own
-    let m;
-    while ((m = /^\\(ctikzset|tikzset|usetikzlibrary)\s*\{/.exec(stmt.trim()))) {
-      const t = stmt.trim(), j = closeAt(t, m[0].length - 1);
+  // each statement's comments: the ones above it and inside it (pre), and one after its ; on the same line (post)
+  const stmts = splitTop(text, ';'), pre: string[][] = stmts.map(() => []), post: string[] = [];
+  let k = 0, from = 0;
+  for (const n of notes) {
+    while (k < stmts.length - 1 && n.at >= from + stmts[k].length) { from += stmts[k].length + 1; k++; }
+    if (k && stmts[k - 1].trim() && !text.slice(from, n.at).trim() && !text.slice(from, n.at).includes('\n') && !post[k - 1]) post[k - 1] = n.text;
+    else pre[k].push(n.text);
+  }
+  let carry: string[] = []; // comments by a statement that wrote nothing: they go with the next one
+  const rawLine = (s: string, post?: string) => raw.push(post ? `${s} ${post}` : s);
+  stmts.forEach((stmt, k) => {
+    const lead = carry.concat(pre[k]);
+    carry = [];
+    if (!stmt.trim()) { carry = lead; if (post[k]) carry.push(post[k]); return; }
+    // settings ahead of the statement (\ctikzset{…} and \tikzstyle{…}=[…] need no semicolon): kept as written, on
+    // lines of their own
+    for (;;) {
+      const t = stmt.trim(), m = /^\\(?:ctikzset|tikzset|usetikzlibrary)\s*\{/.exec(t) || /^\\tikzstyle\s*\{[^{}]*\}\s*=?\s*\[/.exec(t);
+      const j = m ? closeAt(t, m[0].length - 1) : -1;
       if (j < 0) break;
-      raw.push(t.slice(0, j + 1)); st = styleOf(t.slice(0, j + 1)) === STYLE0 ? st : styleWith(st, t.slice(m[0].length, j)); stmt = t.slice(j + 1);
+      raw.push(...lead.splice(0)); raw.push(t.slice(0, j + 1)); st = styleOf(t.slice(0, j + 1)) === STYLE0 ? st : styleWith(st, t.slice(m![0].length, j)); stmt = t.slice(j + 1);
     }
-    if (!stmt.trim()) continue;
-    orig = stmt.trim();
+    if (!stmt.trim()) { if (post[k]) { if (raw.length) raw[raw.length - 1] += ' ' + post[k]; else lead.push(post[k]); } carry = lead; return; }
+    const orig = stmt.trim();
     // a named coordinate: kept as written, and its name is known to the statements after it
     const cm = /^\\coordinate\s*\(\s*([^()]+?)\s*\)\s*at\s*(\([^()]*\))$/.exec(orig);
-    if (cm) { const q = coord(cm[2], named()); if (q) coords.set(cm[1], q); raw.push(orig + ';'); continue; }
+    if (cm) { const q = coord(cm[2], named()); if (q) coords.set(cm[1], q); raw.push(...lead); rawLine(orig + ';', post[k]); return; }
     const got = readStmt(orig, coord, named, st);
-    if (got) items.push(...got); else raw.push(orig + ';');
-  }
+    if (got && got.length) {
+      if (lead.length || post[k]) (got[0] as any).cmt = { ...(lead.length ? { pre: lead } : {}), ...(post[k] ? { post: post[k] } : {}) };
+      items.push(...got);
+    } else if (got) { carry = lead; if (post[k]) carry.push(post[k]); }
+    else { raw.push(...lead); rawLine(orig + ';', post[k]); }
+  });
+  // comments after the last statement stay at the end
+  raw.push(...carry);
   return { items, raw: raw.join('\n') };
 }
 // tokens of a path: (coord), [opts], {text}, words, --
@@ -535,41 +613,78 @@ function tokens(s: any) {
   }
   return out;
 }
+// options a text node (`\node[above] at (1,2) {$V_{CC}$}`) may have: where it sits, its font and colour
+const TEXT_OPT = /^(?:(?:above|below)(?: (?:left|right))?|left|right)(?:\s*=.*)?$|^(?:anchor|font|text|color|xshift|yshift|inner sep|inner xsep|inner ysep|outer sep|align|text width|text depth|text height|opacity|text opacity|rotate|scale|xscale|yscale|transform shape)(?:\s*=.*)?$/;
+const textOpt = (t: string) => TEXT_OPT.test(norm(t)) || (!/=/.test(t) && !!(TD.tikzColor && TD.tikzColor(t.trim())));
 function nodeFrom(optStr: any, name: any, p: any, txt: any, st?: CzStyle) {
   const list = splitTop(optStr, ',').map((t) => t.trim()).filter(Boolean);
-  const hit = partFor(list, 'node', st);
-  if (!hit) return null;
+  // a part, or else text on its own (never an empty one: `\node (A) at (1,2) {};` names a point)
+  const hit = partFor(list, 'node', st) || (String(txt || '').trim() && list.every(textOpt) ? { key: 'text', rest: list, as: '' } : null);
+  if (!hit || !CZ.parts[hit.key]) return null;
   const it: Record<string, any> = { id: uid(), part: hit.key, p, rot: 0, flip: false, name: name || '', text: txt || '', opts: '' };
   if (hit.as) it.as = hit.as;
+  // the node's own transformations, in the order written (TikZ applies the last one first) → rot, flip and scale:
+  // a negative xscale mirrors, a negative yscale mirrors and turns half round, a negative scale turns half round
+  let rot = 0, flip = false, sx = 1, sy = 1;
   const rest = [];
   for (const t of hit.rest) {
-    const r = /^rotate\s*=\s*(-?[\d.]+)$/.exec(t);
-    if (r) it.rot = ((+r[1] % 360) + 360) % 360;
-    else if (/^xscale\s*=\s*-1$/.test(t)) it.flip = !it.flip;
-    else rest.push(t);
+    const r = /^rotate\s*=\s*(-?[\d.]+)$/.exec(t), sc = /^(x|y)?scale\s*=\s*(-?[\d.]+)$/.exec(t);
+    if (r) rot += flip ? -r[1] : +r[1];
+    else if (sc && +sc[2]) {
+      const v = +sc[2];
+      if (sc[1] !== 'y') sx *= Math.abs(v);
+      if (sc[1] !== 'x') sy *= Math.abs(v);
+      if (v < 0 && sc[1] !== 'x') rot += 180;
+      if (v < 0 && sc[1]) flip = !flip;
+    } else rest.push(t);
   }
+  it.rot = r6(((rot % 360) + 360) % 360); it.flip = flip;
+  if (Math.abs(sx - 1) > 1e-6 || Math.abs(sy - 1) > 1e-6) it.sc = [r6(sx), r6(sy)];
   it.opts = rest.join(', ');
   return it;
 }
+// a \draw's own options the block can carry: line and colour ones (each part takes them), and circuitikz's style
+// keys (which say what `R`, `V` … stand for)
+const LINE_OPT = /^(?:ultra thin|very thin|thin|semithick|thick|very thick|ultra thick|solid|dashed|dotted|(?:densely|loosely) (?:dashed|dotted)|(?:line width|color|draw|line cap|line join|opacity|draw opacity)\s*=.*)$/;
+const STYLE_OPT = /^(?:american|european|(?:american|european|straight|raised|curved) voltages|(?:american|european) (?:currents|resistors)|(?:american|european|cute) inductors|(?:full|empty|stroke) diodes?|(?:voltage|current|resistor|inductor)\s*=\s*\w+)$/;
 function readStmt(stmt: any, coord: any, named: any, st?: CzStyle) {
   const T = tokens(stmt);
   if (!T || !T.length) return null;
+  // a node's options, name and place, in any order (`\node at (1,2) [circ] {}` too), then its {text}:
+  // { k: the token after it, opt, name, p (null without `at`), txt }
+  const nodeAt = (k: number, names: any) => {
+    const opt: string[] = [];
+    let name = '', p = null;
+    for (; k < T.length && T[k][0] !== '{'; k++) {
+      const t = T[k];
+      if (t[0] === '[') opt.push(t.slice(1, -1));
+      else if (t === 'at') { p = coord(T[++k] || '', names); if (!p) return null; }
+      else if (t[0] === '(' && !name) name = t.slice(1, -1).trim();
+      else return null;
+    }
+    if (!T[k]) return null;
+    return { k: k + 1, opt: opt.filter((o) => o.trim()).join(', '), name, p, txt: T[k].slice(1, -1) };
+  };
   if (T[0] === '\\node') {
-    // \node[opts] (name) at (x,y) {text}
-    let k = 1, opt = '', name = '', p = null, txt = null;
-    if (T[k] && T[k][0] === '[') opt = T[k++].slice(1, -1);
-    if (T[k] && T[k][0] === '(') name = T[k++].slice(1, -1).trim();
-    if (T[k] === 'at') { p = coord(T[k + 1] || '', named()); k += 2; }
-    if (T[k] && T[k][0] === '{') txt = T[k++].slice(1, -1);
-    if (k !== T.length || !p || txt == null) return null;
-    const it = nodeFrom(opt, name, p, txt, st);
+    const n = nodeAt(1, named());
+    if (!n || n.k !== T.length) return null;
+    const it = nodeFrom(n.opt, n.name, n.p || [0, 0], n.txt, st);
     return it ? [it] : null;
   }
   if (T[0] !== '\\draw' && T[0] !== '\\path') return null;
-  const out = [];
-  let names = named(), k = 1, base: any = null;
+  const out: any[] = [];
+  let names = named(), k = 1, base: any = null, start: any = null;
+  // \draw[…]: line and colour options go on every part drawn; style keys only say what the names stand for
+  let dopts: string[] = [];
+  if (T[k] && T[k][0] === '[') {
+    const list = splitTop(T[k++].slice(1, -1), ',').map((x) => x.trim()).filter(Boolean);
+    if (!list.every((x) => LINE_OPT.test(norm(x)) || STYLE_OPT.test(norm(x)) || (!/=/.test(x) && TD.tikzColor && TD.tikzColor(x)))) return null;
+    st = styleWith(st || STYLE0, list.join(','));
+    dopts = list.filter((x) => !STYLE_OPT.test(norm(x)));
+  }
   // the coordinate at T[k]: absolute, ++(dx,dy) (moves the base) or +(dx,dy) (from the base, which stays)
   const at = () => {
+    if (T[k] === 'cycle') { k++; if (!start) return null; base = start.slice(); return start.slice(); } // back to where this run began
     const rel = T[k] === '++' ? 2 : T[k] === '+' ? 1 : 0;
     if (rel) k++;
     const q = coord(T[k] || '', names);
@@ -582,22 +697,27 @@ function readStmt(stmt: any, coord: any, named: any, st?: CzStyle) {
   const wire = (a: any, b: any) => ({ id: uid(), part: 'short', a, b, l: '', ann: '', v: '', i: '', poles: '', name: '', opts: '' });
   let cur = at();
   if (!cur) return null;
+  start = cur.slice();
   while (k < T.length) {
     const t = T[k];
     // a coordinate on its own moves the pen: `(0,0) to[R] (2,0) (0,1) to[C] (2,1)`
-    if (t[0] === '(' || t === '++' || t === '+') { const q = at(); if (!q) return null; cur = q; continue; }
+    if (t[0] === '(' || t === '++' || t === '+') { const q = at(); if (!q) return null; cur = q; start = q.slice(); continue; }
     if (t === 'node') {
       // \draw (x,y) node[opts] (name) {text}
-      let opt = '', name = '', txt = null;
-      k++;
-      if (T[k] && T[k][0] === '[') opt = T[k++].slice(1, -1);
-      if (T[k] && T[k][0] === '(') name = T[k++].slice(1, -1).trim();
-      if (T[k] && T[k][0] === '{') txt = T[k++].slice(1, -1);
-      if (txt == null) return null;
-      const it = nodeFrom(opt, name, cur.slice(), txt, st);
+      const n = nodeAt(k + 1, names);
+      if (!n) return null;
+      k = n.k;
+      const it = nodeFrom(n.opt, n.name, n.p || cur.slice(), n.txt, st);
       if (!it) return null;
       out.push(it);
       continue;
+    }
+    if (t === 'to' && !(T[k + 1] && T[k + 1][0] === '[')) {
+      // a plain `to` is a straight line, a wire
+      k++;
+      const q = at();
+      if (!q) return null;
+      out.push(wire(cur, q)); cur = q; continue;
     }
     if (t === '--' || t === '-|' || t === '|-') {
       // a corner (-| across then up, |- up then across) is two wires
@@ -620,9 +740,9 @@ function readStmt(stmt: any, coord: any, named: any, st?: CzStyle) {
       if (hit.lab) it[({ v: 'v', i: 'i' } as Record<string, string>)[srcKind(hit.key)] || 'l'] = hit.lab;
       const rest = [];
       for (const x of hit.rest) {
-        const m = /^(l|a|v|i|n)\s*=\s*([\s\S]*)$/.exec(x), vi = /^(v|i)([_^<>]{1,3})\s*=\s*([\s\S]*)$/.exec(x);
+        const m = /^(l|a|v|i|n|name)\s*=\s*([\s\S]*)$/.exec(x), vi = /^(v|i)([_^<>]{1,3})\s*=\s*([\s\S]*)$/.exec(x);
         if (vi) { it[vi[1]] = unbrace(vi[3]); it[vi[1] + 'm'] = vi[2]; }
-        else if (m) it[({ l: 'l', a: 'ann', v: 'v', i: 'i', n: 'name' } as Record<string, any>)[(m[1] as any)]] = unbrace(m[2]);
+        else if (m) it[({ l: 'l', a: 'ann', v: 'v', i: 'i', n: 'name', name: 'name' } as Record<string, any>)[(m[1] as any)]] = unbrace(m[2]);
         else if (/^[*o]?-[*o]?$/.test(x)) it.poles = x;
         else rest.push(x);
       }
@@ -633,6 +753,7 @@ function readStmt(stmt: any, coord: any, named: any, st?: CzStyle) {
     }
     return null;
   }
+  if (dopts.length) for (const it of out) it.opts = [it.opts, ...dopts].filter(Boolean).join(', ');
   return out.length ? out : null;
 }
 

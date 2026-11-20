@@ -10,8 +10,10 @@
     | { kind: 'meta'; text: string; aside?: string }
     /** `bold` is set in bold where the text has \u0000 */
     | { kind: 'note'; text: string; bold?: string }
+    /** what stops the export (a size the browser can't draw), in red pen */
+    | { kind: 'error'; text: string }
     | { kind: 'dir'; label: string; folder: string; title: string; onpick(): void; clear?: { title: string; onclick(): void } };
-  export interface ExportAction { label: string; title?: string; primary?: boolean; icon?: IconName; attrs?: Record<string, string>; onclick(): void }
+  export interface ExportAction { label: string; title?: string; primary?: boolean; disabled?: boolean; icon?: IconName; attrs?: Record<string, string>; onclick(): void }
   export interface ExportPanelModel {
     head: string;
     formats: { value: string; label: string }[]; format: string; formatLabel?: string; onformat(value: string): void;
@@ -32,6 +34,7 @@
   import Button from './kit/Button.svelte';
   import IconButton from './kit/IconButton.svelte';
   import Icon from './kit/Icon.svelte';
+  import Help from './kit/Help.svelte';
   let { model }: { model: ExportPanelModel } = $props();
   const dpiOf = (v: string, set: (n: number) => void) => { const n = Math.round(+v); if (n >= 24 && n <= 2400) set(n); };
 </script>
@@ -55,6 +58,8 @@
   {:else if r.kind === 'note'}
     {@const [before, after] = r.text.split('\u0000')}
     <div class="exp-note">{before}{#if after !== undefined}<b>{r.bold}</b>{after}{/if}</div>
+  {:else if r.kind === 'error'}
+    <Help kind="error" class="exp-note">{r.text}</Help>
   {:else if r.kind === 'dir'}
     <div class="exp-row exp-dir"><span class="exp-dirl">{r.label}</span><span class="exp-dirv">
       <Button class="exp-dirb" title={r.title} data-edir onclick={r.onpick}><Icon name="folder" /><span>{r.folder}</span></Button>
@@ -62,5 +67,5 @@
   {/if}
 {/each}
 <div class={['exp-go', model.actions.length > 1 && 'many']}>
-  {#each model.actions as a, i (i)}<Button variant={a.primary ? 'primary' : 'default'} icon={a.icon} title={a.title} {...a.attrs} onclick={a.onclick}>{a.label}</Button>{/each}
+  {#each model.actions as a, i (i)}<Button variant={a.primary ? 'primary' : 'default'} icon={a.icon} title={a.title} disabled={a.disabled} {...a.attrs} onclick={a.onclick}>{a.label}</Button>{/each}
 </div>

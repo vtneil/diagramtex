@@ -57,6 +57,14 @@ T.test('document export: the title is the file name as typed, and pattern and sh
   T.tex('doc-title-patterns', tex);
 });
 
+T.test('document export: a title with < > " prints them, and one with an emoji still compiles', () => {
+  const tex = TD.docToLatex({ name: 'a <b> "c" 🎉 © Ünïcode', page: { title: true, author: 'Ann <ann@x> 👍' }, blocks: [{ type: 'text', text: 'Body.' }] });
+  const title = tex.split('\n').find((l) => l.startsWith('\\title'));
+  T.eq(title, '\\title{a \\textless{}b\\textgreater{} {\\fontencoding{T1}\\selectfont\\char34}c{\\fontencoding{T1}\\selectfont\\char34}  © Ünïcode}');
+  T.ok(tex.includes('\\author{Ann \\textless{}ann@x\\textgreater{} }'), tex.split('\n').find((l) => l.startsWith('\\author')));
+  T.tex('doc-title-symbols', tex);
+});
+
 T.test('every parity figure draws on the canvas (the SVG and PNG export) without throwing', () => {
   const bad = [];
   for (const n of Object.keys(KIT)) {

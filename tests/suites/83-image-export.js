@@ -33,3 +33,14 @@ T.test('image export: rotated translucent image exports alongside other shapes w
   T.ok(document.includes('\\usepackage{graphicx}'), 'whole-document export loads graphicx');
   T.eq(JSON.stringify(image), original, 'export leaves the document unchanged');
 });
+
+T.test('export names: a Thai file name keeps its letters, and each diagram of a document is named apart', () => {
+  const s = () => ({ ...TD.TYPES.rect.create({ x: 0, y: 0 }, TD.state.defaults), w: 40, h: 20 });
+  TD.app.newDoc('การทดลองที่ 1', null, null, [{ type: 'diagram', shapes: [s()] }, { type: 'diagram', shapes: [s()] }, { type: 'diagram', shapes: [s()], name: 'Set-up' }]);
+  T.eq(TD.app.slug, 'การทดลองที่_1', 'letters and marks of any script stay');
+  TD.app.setMode('diagram');
+  const names = [0, 1, 2].map((i) => { TD.app.cmd.openBlock ? TD.app.cmd.openBlock(i) : (TD.state.doc.active = i); return TD.app.picSlug; });
+  T.eq(names, ['การทดลองที่_1-diagram-1', 'การทดลองที่_1-diagram-2', 'การทดลองที่_1-Set-up']);
+  TD.app.newDoc('a: b? c', null, null, [{ type: 'diagram', shapes: [s()] }]);
+  T.eq(TD.app.picSlug, 'a_b_c', 'characters a file name cannot hold become _, one diagram keeps the file\'s name');
+});

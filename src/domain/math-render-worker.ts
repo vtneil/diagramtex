@@ -9,7 +9,7 @@ const scope = globalThis as unknown as {
 };
 scope.importScripts('vendor/temml/temml.min.js', 'vendor/katex/katex.min.js');
 function compile(job: MathJob): MathResult {
-  const options = { displayMode: job.display, macros: { ...job.macros }, throwOnError: true };
+  const options = { displayMode: job.display, macros: { ...job.macros }, throwOnError: true, ...(job.engine === 'katex' ? { strict: 'ignore' } : {}) }; // as mathengine.ts
   try {
     const html = scope[job.engine].renderToString(job.tex, options);
     return { id: job.id, html: job.engine === 'temml' ? mathmlSvg(html) : html };

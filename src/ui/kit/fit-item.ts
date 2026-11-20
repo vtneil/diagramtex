@@ -107,10 +107,17 @@ const fitted = new WeakMap<HTMLElement, string>(); // the room and text each nam
 function fitName(name: HTMLElement, again = false) {
   let cs = getComputedStyle(name);
   if (cs.display === 'none') return;
-  // the room is the widest the name may be (its max-width), whatever its text makes it now
+  // the room is the widest the name may be (its max-width), whatever its text makes it now. With none (a one-column
+  // list), the name is as wide as its text, so that would be no room at all and every one-word name would shrink a
+  // little: there only a word wider than the row it sits in is made smaller
+  if (cs.maxWidth === 'none') {
+    name.style.fontSize = '';
+    const row = name.parentElement, over = row ? row.scrollWidth - row.clientWidth : 0;
+    if (over <= 1) { fitted.set(name, `none|${name.textContent}`); return; }
+  }
   const was = name.style.width;
   if (cs.maxWidth !== 'none') name.style.width = cs.maxWidth;
-  const room = name.getBoundingClientRect().width;
+  const room = name.getBoundingClientRect().width - (cs.maxWidth === 'none' && name.parentElement ? name.parentElement.scrollWidth - name.parentElement.clientWidth : 0);
   name.style.width = was;
   // its own new size (a smaller text) is seen by the observer too: nothing to do while room and text are the same
   const key = `${room.toFixed(1)}|${name.textContent}`;

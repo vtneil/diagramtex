@@ -137,7 +137,7 @@ Bug reports and ideas are welcome in the [issue tracker](https://gitlab.com/igni
 
 ## License
 
-DiagramTeX is released under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-only`). © 2026 Vivatsathorn Thitasirivit.
+DiagramTeX is released under the [GNU Affero General Public License v3.0](LICENSE) (`AGPL-3.0-or-later`). © 2026 Vivatsathorn Thitasirivit.
 
 Diagrams, LaTeX code, images, PDFs and other content you create with DiagramTeX are not covered by the AGPL just because DiagramTeX produced them. You may use your own creations in academic, commercial or proprietary work with no licensing obligations from DiagramTeX. Third-party assets included in an output may keep their own licences.
 

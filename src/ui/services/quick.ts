@@ -273,7 +273,7 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
   let timer: any = null;
   function changed() { save(); clearTimeout(timer); timer = setTimeout(preview, 60); }
   // the preview: the formula at twice the chosen size, on white (or a checkerboard when transparent)
-  let good = false;
+  let good = false, why = ''; // why: what is wrong with the formula, kept for the output buttons
   function preview(): void {
     if (!TD.math.previewing) return TD.math.preview(preview);
     const p = host!.querySelector('.qk-prev'), msg = host!.querySelector('.qk-msg');
@@ -288,7 +288,8 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
       p.classList.remove('stale'); good = true; note('');
     } catch (e: any) {
       p.classList.remove('math-pending'); p.classList.add('stale'); good = false; // the last good picture stays, faded, while the error shows
-      note(String(e.message || e).replace(/^KaTeX parse error: /, ''), true);
+      why = String(e.message || e).replace(/^KaTeX parse error: /, '');
+      note(why, true);
     }
     void msg;
   }
@@ -319,7 +320,8 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
     if (!TD.app.outputAllowed()) return;
     if (isBlockView()) host!.querySelector<HTMLElement>('.qk-dock textarea:focus')?.blur(); // code being typed is read first
     if (isBlockView() && !blockShape()) return;
-    if (!isBlockView() && (!tex() || !good)) { note(tex() ? t('quick.fixFirst', 'Fix the formula first') : t('quick.typeFirst', 'Type a formula first'), true); return; }
+    // what is wrong stays in the message: the output buttons only add that it needs fixing first
+    if (!isBlockView() && (!tex() || !good)) { note(!tex() ? t('quick.typeFirst', 'Type a formula first') : why ? t('quick.fixFirstWhy', 'Fix the formula first: {why}', { why }) : t('quick.fixFirst', 'Fix the formula first'), true); return; }
     try {
       if (what === 'png') {
         // the item is made at once, with the picture still to come: Safari allows a copy only during the click

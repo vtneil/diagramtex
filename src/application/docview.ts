@@ -109,7 +109,7 @@ import { createDocHistory } from './doc-history';
       if (c === '\\') {
         const nx = src[i + 1] || '';
         if (nx === '(') { const k = src.indexOf('\\)', i + 2); if (k > 0) { out += katex(src.slice(i + 2, k), false); i = k + 2; continue; } }
-        if (nx === '\\') { out += '<br>'; i += 2; continue; }
+        if (nx === '\\') { out += '<br>'; i += 2 + IE.BREAK_OPT.exec(src.slice(i + 2))![0].length; continue; } // \\[2pt]: the spacing is LaTeX's
         if (/[%&#$_{}~^ ,]/.test(nx)) { out += nx === ',' ? '&thinsp;' : esc(nx); i += 2; continue; }
         const m = /^\\([A-Za-z]+)\s*/.exec(src.slice(i, i + 40));
         if (m && FMT[m[1]]) {
@@ -144,10 +144,9 @@ import { createDocHistory } from './doc-history';
   }
   function textToHtml(text: any, ctx: any = { sec: [0, 0, 0] }) {
     const out: any[] = [];
-    const parts = String(text).split(/\$\$([\s\S]*?)\$\$/);
     let L = 0; // line number in the block's source, for clickable checkboxes
-    parts.forEach((part, pi) => {
-      if (pi % 2) { out.push(`<div class="dmath">${katex(part.trim(), true)}</div>`); L += (part.match(/\n/g) || []).length; return; }
+    IE.splitDisplay(text).forEach((part) => {
+      if (typeof part !== 'string') { out.push(`<div class="dmath">${katex(part.tex, true)}</div>`); L += (part.src.match(/\n/g) || []).length; return; }
       const lines = part.split('\n');
       let para: any[] = [];
       const stack: any[] = []; // open lists: { kind, level, li }
@@ -202,17 +201,19 @@ import { createDocHistory } from './doc-history';
   // ---------- LaTeX export ----------
   const escTex = (line: any) => TD.segments(line).map((seg: any) => (seg.math ? `$${TD.mathTex(seg)}$` : seg.s.replace(/(^|[^\\])([%&#])/g, '$1\\$2').replace(/(^|[^\\])([%&#])/g, '$1\\$2'))).join('');
   // a name typed as plain text (a file name), every character as it is
-  const PLAIN: Record<string, string> = { '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', $: '\\$', '%': '\\%', '&': '\\&', '#': '\\#', _: '\\_', '^': '\\textasciicircum{}', '~': '\\textasciitilde{}' };
-  const plainTex = (t: any) => String(t).replace(/[\\{}$%&#_^~]/g, (c) => PLAIN[c]);
+  // (< > " have their own: as typed, the document's OT1 font prints them as ¡ ¿ and a curly quote; the straight quote
+  // comes from T1, which has it)
+  const PLAIN: Record<string, string> = { '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', $: '\\$', '%': '\\%', '&': '\\&', '#': '\\#', _: '\\_', '^': '\\textasciicircum{}', '~': '\\textasciitilde{}', '<': '\\textless{}', '>': '\\textgreater{}', '"': '{\\fontencoding{T1}\\selectfont\\char34}' };
+  // emoji are left out: pdfLaTeX has no glyph for them and stops ("Unicode character … not set up")
+  const plainTex = (t: any) => String(t).replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}]/gu, (c) => ('©®™'.includes(c) ? c : '')).replace(/[\\{}$%&#_^~<>"]/g, (c) => PLAIN[c]);
   // The title is the file's name: plain text, except $…$, which is maths (a name like R&D_notes stays as typed).
   const titleParts = (name: string) => String(name).split(/(\$[^$]+\$)/);
   const titleHtml = (name: string) => titleParts(name).map((p, i) => i % 2 ? katex(p.slice(1, -1), false) : esc(p)).join('');
   const titleTex = (name: string) => titleParts(name).map((p, i) => i % 2 ? p : plainTex(p)).join('');
   function textToLatex(text: any, ctx: Record<string, any> = {}) {
-    const parts = String(text).split(/\$\$([\s\S]*?)\$\$/);
     const env: Record<string, any> = { ul: 'itemize', ol: 'enumerate', chk: 'itemize' };
-    return parts.map((part, pi) => {
-      if (pi % 2) return `\\[\n  ${part.trim()}\n\\]`;
+    return IE.splitDisplay(text).map((part) => {
+      if (typeof part !== 'string') return part.env ? part.src : `\\[\n  ${part.tex}\n\\]`;
       const out = [], stack: any[] = [];
       const closeTo = (lvl: any) => { while (stack.length && stack[stack.length - 1].level > lvl) { const t = stack.pop(); out.push('  '.repeat(t.level) + `\\end{${env[t.kind]}}`); } };
       for (const raw of part.split('\n')) {
@@ -311,7 +312,12 @@ import { createDocHistory } from './doc-history';
       }
       if (b.type === 'table') { for (const r of b.rows || []) for (const c of r) textPkgs(c || '', pk); body.push(tableToLatex(b), ''); return; }
       if (b.type === 'image') { if (b.src) { needGraphicx = true; body.push(imageToLatex(b, i, X), ''); } return; }
+      if (b.type !== 'diagram') { body.push(`% A block this version of DiagramTeX can't export (${String(b.type).replace(/\s+/g, ' ')}) is left out here.`, ''); return; }
       if (!b.shapes || !b.shapes.length) return;
+      // a Whiteboard drawn far from the origin: moved back within TeX's reach (or a note why it can't be)
+      const reach = TD.texReach(b.shapes);
+      if (reach.note) body.push('% Note: ' + reach.note);
+      b = { ...b, shapes: reach.shapes };
       X.scene = b.shapes;
       // a picture imported and not changed is written as it was. No data comment: one line of base64 can pass
       // TeX's line limit and stop pdflatex, so the app can't restore its own export exactly (the dialog says so)
@@ -331,7 +337,10 @@ import { createDocHistory } from './doc-history';
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
     // shadings, patterns and parts the pictures declare once
     if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
-    const extra = [...pk].filter((p) => !(p as any).includes('hyperref')).map((p) => `\\usepackage${p}`);
+    // a package the document loads itself is not loaded again for a picture (an imported preamble lists amsmath too)
+    const own = new Set(['amsmath', 'amssymb', 'xcolor', ...(needGraphicx ? ['graphicx'] : [])]);
+    const again = (l: string) => { const m = /^\\usepackage\{([^}]*)\}$/.exec(l); return !!m && m[1].split(',').every((x) => own.has(x.trim())); };
+    const extra = [...pk].filter((p) => !(p as any).includes('hyperref')).map((p) => `\\usepackage${p}`).filter((l) => !again(l));
     const spread = +P.spread || 1;
     return [
       `\\documentclass[${P.font}pt]{article}`,
@@ -341,14 +350,14 @@ import { createDocHistory } from './doc-history';
       ...(needGraphicx ? ['\\usepackage{graphicx}'] : []),
       ...(needBox ? ['\\newsavebox{\\dtxbox}'] : []),
       ...extra,
-      ...pre,
+      ...pre.filter((l: string) => !again(l)),
       ...mathStyleLines(body, X),
       ...(pk.has('{hyperref}') ? ['\\usepackage{hyperref}'] : []), // hyperref goes last
       ...defs,
       ...X.preDefs,
       ...(spread !== 1 ? [`\\linespread{${spread}}`] : []),
       '',
-      ...(P.title ? [`\\title{${titleTex(leafName(doc.name) || 'Untitled')}}`, '\\date{}', ''] : []),
+      ...(P.title ? [`\\title{${titleTex(leafName(doc.name) || 'Untitled')}}`, ...(String(P.author || '').trim() ? [`\\author{${titleTex(P.author.trim())}}`] : []), '\\date{}', ''] : []),
       '\\begin{document}',
       ...(P.title ? ['\\maketitle'] : []),
       '',
@@ -484,6 +493,17 @@ import { createDocHistory } from './doc-history';
   let zoomMode: 'fit' | number = 'fit'; // 'fit', or a zoom factor (1 = 100%)
   let curZoom: any = 1; // the zoom last applied
   const ZMIN = 0.25, ZMAX = 4;
+  // Too narrow to keep the page clear of the side panel (a tablet held upright, a phone), the page uses the whole
+  // width and the panel floats over it, like a popover; the zoom bar then sits at the left (style.css, .doc-narrow).
+  const NARROW_PAGE = 560; // px a page fitted beside the panel would have, below which it takes the whole width
+  function narrowView() {
+    if (!root!.offsetWidth) return false;
+    const propsW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--props-w')) || 280;
+    const on = root!.offsetWidth - propsW - 24 < NARROW_PAGE;
+    if (document.body.classList.contains('doc-narrow') === on) return false;
+    document.body.classList.toggle('doc-narrow', on);
+    return true;
+  }
   function scrollbarSpace() {
     const parent = root!.parentElement!;
     const width = Math.max(0, root!.offsetWidth - root!.clientWidth) + 'px';
@@ -494,7 +514,8 @@ import { createDocHistory } from './doc-history';
   // The panel is a sibling of the scrolling view, so it cannot inherit the
   // browser's scrollbar gutter. Track that gutter without double-counting it.
   new ResizeObserver(() => {
-    if (scrollbarSpace() && app.state.mode === 'document' && zoomMode === 'fit') layoutPage(TD.pageSize(doc().page));
+    const narrowed = narrowView();
+    if ((scrollbarSpace() || narrowed) && app.state.mode === 'document' && zoomMode === 'fit') layoutPage(TD.pageSize(doc().page));
   }).observe(root!);
   const paperSizes = new WeakMap<HTMLElement, { width: number; height: number; pages: number }>();
   function sizeSheet(page: HTMLElement, pages = paperSizes.get(page)?.pages || 1) {
@@ -521,7 +542,7 @@ import { createDocHistory } from './doc-history';
     const P = TD.pageSize(d.page);
     const tctx = { sec: [0, 0, 0], numbered: !!P.numbered };
     let fig = 0;
-    let h = `<div class="doc-page" style="${pageStyle(P)}"><div class="cm-probe"></div>${P.title ? `<h1 class="doc-title"${forPrint ? '' : ` title="${esc(t('doc.title.renameTip', 'Double-click to rename the file'))}"`}>${titleHtml(leafName(d.name) || 'Untitled')}</h1>` : ''}`;
+    let h = `<div class="doc-page" style="${pageStyle(P)}"><div class="cm-probe"></div>${P.title ? `<h1 class="doc-title"${forPrint ? '' : ` title="${esc(t('doc.title.renameTip', 'Double-click to rename the file'))}"`}>${titleHtml(leafName(d.name) || 'Untitled')}</h1>${String(P.author || '').trim() ? `<p class="doc-author">${titleHtml(P.author.trim())}</p>` : ''}` : ''}`;
     d.blocks.forEach((b: any, i: any) => {
       if (!forPrint) h += insertBar(i);
       const ed = i === editingIdx && !forPrint;
@@ -540,6 +561,10 @@ import { createDocHistory } from './doc-history';
       } else if (b.type === 'image') {
         const cap = b.caption && b.caption.trim() ? `<figcaption>Figure ${++fig}: ${inl(b.caption)}</figcaption>` : '';
         h += `<div class="blk blk-image${edc}" data-i="${i}">${tools}${ed ? imageBar() : ''}<figure class="blk-body" lang="en">${b.src ? `<img src="${esc(b.src)}" alt="${esc(b.caption || b.name || '')}" style="width:${(b.width || 0.6) * 100}%">` : `<div class="ph">${forPrint ? 'No picture' : esc(t('doc.img.none', 'No picture'))}</div>`}${cap}</figure></div>`;
+      } else if (b.type !== 'diagram') {
+        // a kind of block this version doesn't know (a file from a newer one): kept as it is, saved with the file,
+        // and only moved or deleted here
+        if (!forPrint) h += `<div class="blk blk-other" data-i="${i}">${tools}<div class="blk-body"><div class="ph">${esc(t('doc.other', "A block this version of DiagramTeX can't show ({type}). It is kept as it is.", { type: String(b.type) }))}</div></div></div>`;
       } else {
         const svg = b.shapes.length ? app.shapesSvg(b.shapes, 6, false, !forPrint) : '';
         h += `<div class="blk blk-diag${i === d.active && !forPrint ? ' active' : ''}" data-i="${i}">${tools}<div class="blk-body" lang="en">${svg || (forPrint ? '' : `<div class="ph">${esc(t('doc.diag.empty', 'Empty diagram — double-click to draw'))}</div>`)}</div></div>`;
@@ -713,8 +738,9 @@ import { createDocHistory } from './doc-history';
     page.style.minHeight = '0';
     page.querySelectorAll('.pg-brk').forEach((e) => e.remove());
     const cmPx = 96 / 2.54; // CSS centimetres, without offsetWidth's integer rounding
+    narrowView();
     scrollbarSpace();
-    // the width beside the side panel (the view's padding keeps clear of it), less a margin
+    // the width beside the side panel (the view's padding keeps clear of it, unless the view is narrow), less a margin
     const cs = getComputedStyle(root!);
     const avail = root!.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 24;
     const z = zoomMode === 'fit' ? Math.min(1.5, avail / (P.W * cmPx)) : zoomMode;
@@ -753,7 +779,8 @@ import { createDocHistory } from './doc-history';
     sheet.style.height = size.height * z + 'px';
     // Scope the changing custom property to the controls: inheriting it from the
     // paper would invalidate styles throughout every formula on each zoom event.
-    for (const tools of page.querySelectorAll<HTMLElement>('.blk-tools')) tools.style.setProperty('--unzoom', String(1 / z));
+    // the block tools and the page's "+ Text / + Diagram…" bars stay their screen size at any zoom
+    for (const tools of page.querySelectorAll<HTMLElement>('.blk-tools, .ins')) tools.style.setProperty('--unzoom', String(1 / z));
     const n = size.pages;
     pageInfo = t('doc.pageInfo', '{paper} · {pages} (approx.) · {zoom}%', { paper: TD.PAPERS[P.paper]?.name || t('ui.custom', 'Custom'), pages: n > 1 ? t('doc.pages', '{n} pages', { n }) : t('doc.page1', '{n} page', { n }), zoom: Math.round((z as any) * 100) });
     renderShell();
@@ -806,8 +833,9 @@ import { createDocHistory } from './doc-history';
     renderView(el, DocumentSettings, { page, wide, papers: Object.entries<any>(TD.PAPERS).map(([key, value]) => ({ key, name: key === 'custom' ? t('page.paper.custom', 'Custom') : value.name })) });
   }
   function setPage(patch: any) {
-    const d = doc();
-    d.page = { ...TD.PAGE_DEFAULT, ...d.page, ...patch };
+    const d = doc(), next = { ...TD.PAGE_DEFAULT, ...d.page, ...patch };
+    if (!TD.pageFits(next)) { app.showHint?.(t('page.noRoom', 'That leaves no room for text: keep at least 1 cm between the margins'), 2400); renderSettings(document.getElementById('props')!); return; }
+    d.page = next;
     changed(); render(); renderSettings(document.getElementById('props')!);
   }
   const propsEl = document.getElementById('props');
@@ -836,6 +864,7 @@ import { createDocHistory } from './doc-history';
   const H = createDocHistory();
   function changed(dirty: number[] | null = null, edit?: { index: number; typing?: boolean; caret?: number | null; cell?: [number, number] }) {
     if (H.record(doc(), dirty, edit)) app.noteEdit?.();
+    if (!edit?.typing) app.updateBlockNav?.(); // "Diagram 2 of 3" follows diagrams added, moved or deleted
     app.scheduleSave();
   }
   // Undo and redo (app.undoDocument picks between these and the file list's steps).
@@ -1595,7 +1624,9 @@ import { createDocHistory } from './doc-history';
 :root { --font-tex: KaTeX_Main, "Times New Roman", serif; }
 body { margin: 0; background: #f4f3ef; color: #111; padding: 24px 12px; }
 ${own}
-.doc-page { margin: 0 auto; max-width: 100%; box-sizing: border-box; min-height: 0 !important; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 6px 20px rgba(0,0,0,.06); }
+/* the page's own rule is left out above (it uses the app's colours), so its type is set here: KaTeX_Main, embedded */
+.doc-page { margin: 0 auto; max-width: 100%; box-sizing: border-box; min-height: 0 !important; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 6px 20px rgba(0,0,0,.06);
+  position: relative; background: #fff; color: #111; font-family: var(--font-tex); line-height: calc(1.5 * var(--spread, 1)); }
 .cm-probe { display: none; }
 @media (max-width: ${Math.round(P.W * 37.8)}px) { .doc-page { padding: 1.2cm 16px !important; } }
 @media print { body { background: #fff; padding: 0; } .doc-page { box-shadow: none; padding: 0 !important; width: auto !important; } @page { size: ${P.W}cm ${P.H}cm; margin: ${P.mt}cm ${P.mr}cm ${P.mb}cm ${P.ml}cm; } }

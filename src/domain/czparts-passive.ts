@@ -158,7 +158,7 @@ import { runtime as TD } from '../runtime';
     plates(g);
     arrow(g, -3 * CR, -CU, 3 * CR, CU);
   }, { keywords: 'tunable trimmer vC' });
-  bip('cap:pol', 'Polarized Capacitor', 'cap', 'curved capacitor', CW, (g: any) => {
+  bip('cap:pol', 'Polarised Capacitor', 'cap', 'curved capacitor', CW, (g: any) => {
     g.line(-CR, CU, -CR, -CU);
     g.curve((t: any) => { const y = CU - 2 * CU * t; return [CR - 1.1 * CR * Math.cos((Math.PI * y) / (2 * CU)), y]; }, 24);
     g.width(THIN).line(CR - 1.1 * CR, 0, CR, 0).width(1);
@@ -172,7 +172,7 @@ import { runtime as TD } from '../runtime';
     g.rect(-CR, -u, -0.4 * CR, u);
     g.rect(0.4 * CR, -u, CR, u).ink();
     g.text(-1.2 * CR - 0.07, 0.6 * u, '+', 0.21, { bold: true });
-  }, { keywords: 'electrolytic polarized elko eC' });
+  }, { keywords: 'electrolytic polarised polarized elko eC' });
   bip('cap:cpe', 'Constant Phase Element', 'cap', 'cpe', 0.4 * RLEN, (g: any) => {
     const r = 0.2 * RLEN;
     g.width(THIN).line(-r, 0, 0, 0).width(1);

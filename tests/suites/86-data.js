@@ -25,7 +25,7 @@ T.test('data: a project file with a wrong page or a null block is handled', () =
   T.eq(err, 'not a DiagramTeX file');
   err = null;
   try { TD.app.parseProject(JSON.stringify({ blocks: [{ type: 'diagram', shapes: [{ type: 'constructor' }] }] })); } catch (e) { err = e.message; }
-  T.eq(err, 'not a DiagramTeX file', 'an inherited name is not a shape type');
+  T.eq(err, "it holds objects this version doesn't know (constructor)", 'an inherited name is not a shape type');
 });
 T.test('data: saving an unchanged file does not overwrite what another tab stored', () => {
   const id = TD.app.newDoc('two tabs', [dataRect('r1', 0)], null, null);

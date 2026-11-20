@@ -31,13 +31,13 @@ try {
    await p.evaluate(()=>{TD.state.doc.shapes.find(s=>s.id==='circle').locked=true;TD.app.render();});await click(140,110);
    assert.equal(await p.evaluate(()=>TD.state.doc.shapes.find(s=>s.id==='left').fill),'#88ccff','locked shapes do not block fillable regions below');
    await p.locator('[data-tool="select"]').click();
-   await p.evaluate(()=>{TD.state.defaults.fill='#ffaa00';TD.state.sel=new Set(['left','middle','circle']);TD.app.render();TD.app.renderProps();});
+   await p.evaluate(()=>{TD.app.setBucketFill('#ffaa00');TD.state.sel=new Set(['left','middle','circle']);TD.app.render();TD.app.renderProps();});
    const bucketUndo=await p.evaluate(()=>TD.state.undo.length);
    await p.locator('[data-tool="bucket"]').click();
    assert(await p.evaluate(()=>['left','middle'].every(id=>TD.state.doc.shapes.find(s=>s.id===id).fill==='#ffaa00')),'activating bucket fills eligible selected shapes immediately');
    assert.equal(await p.evaluate(()=>TD.state.doc.shapes.find(s=>s.id==='circle').fill),'#88ccff','locked selections are excluded');
    assert.equal(await p.evaluate(()=>TD.state.undo.length),bucketUndo+1,'immediate fill is one undo step');
-   await p.locator('#btnUndo').click();await p.evaluate(()=>{TD.state.defaults.fill='#88ccff';});
+   await p.locator('#btnUndo').click();await p.evaluate(()=>{TD.app.setBucketFill('#88ccff');});
    await p.evaluate(()=>{TD.state.sel=new Set(['left','middle']);TD.app.render();TD.app.renderProps();});
    await p.keyboard.down('Shift');await click(280,160);await p.keyboard.up('Shift');
    assert(await p.evaluate(()=>['left','middle'].every(id=>TD.state.doc.shapes.find(s=>s.id===id).fill==='#88ccff')),'Shift-bucket fills selected closed shapes');

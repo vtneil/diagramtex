@@ -13,6 +13,7 @@ import { editorPalette, fitMini } from './editor-palette.svelte';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { keepComments } from './keep-comments';
 // Quantum circuit editor: the overlay that opens on a Quantum block. A palette of quantikz elements,
 // the circuit drawn by the canvas renderer over a grid of cells (wires × steps) where elements are
 // dropped, moved and linked, the selected cell's properties, and beside them the quantikz code, live
@@ -155,14 +156,16 @@ import { editorStage, fitView } from './editor-stage';
     items.forEach((it, i) => { if (verticalWire(it)) last = i; });
     return items.filter((it, i) => !verticalWire(it) || i === last);
   }
+  // a cell whose braces don't pair (an unclosed { swallows the rest of the circuit into it) is broken: kept as written,
+  // whatever is done to it in the drawing, until the code is fixed
   function parseCell(text: any) {
     let unknown = false;
-    const items = Q.cell(text, () => (unknown = true));
-    return { text: text.trim(), items: exclusiveWires(items), opaque: unknown, dirty: !unknown && items.filter(verticalWire).length > 1 };
+    const items = Q.cell(text, () => (unknown = true)), broken = Q.braceFault(text) !== 0;
+    return { text: text.trim(), items: exclusiveWires(items), opaque: unknown || broken, dirty: !unknown && !broken && items.filter(verticalWire).length > 1, ...(broken ? { broken } : {}) };
   }
   const emptyCell = () => ({ text: '', items: [], opaque: false, dirty: false });
   const itemCode = (it: any) => (it.plain ? it.a[0] : `\\${it.name}${it.o.map((o: any) => `[${o}]`).join('')}${it.a.map((a: any) => `{${a}}`).join('')}`);
-  const cellText = (c: any) => (c.dirty ? c.items.map(itemCode).join(' ') : c.text);
+  const cellText = (c: any) => (c.dirty && !c.broken ? c.items.map(itemCode).join(' ') : c.text);
   function load(src: any) {
     const t = String(src || '');
     const { env, inner } = Q.unwrap(t);
@@ -285,16 +288,26 @@ import { editorStage, fitView } from './editor-stage';
   // ---------------------------------------------------------------- state
   // { M, sel: {r1, c1, r2, c2} | null, arm, view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, st, codeAt, codeTimer, clip }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
-  const snap = () => codeOf(E.M);
-  const { begin, commit, undo, redo } = TD.editorSession.history({
+  const snap = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
+  const history = TD.editorSession.history({
     state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),
   });
+  const { begin, undo, redo } = history;
+  // while a cell is broken (its braces don't pair), the drawing is read back from the code after each edit: the broken
+  // cell is kept as written, so a change made to it in the drawing is dropped, and the tip says why
+  function commit() {
+    history.commit();
+    if (!E || !E.M.rows.some((r: any) => r.some((c: any) => c.broken))) return;
+    const dropped = E.M.rows.some((r: any) => r.some((c: any) => c.broken && c.dirty));
+    E.M = load(snap());
+    if (dropped) stageNote.flash(t('editor.qc.broken', "The braces in that part of the code don't pair: fix them in the code first. Until then it is kept as written."), 3200);
+  }
   // one edit: begin, change, commit, redraw
   function edit(fn: any) { begin(); fn(); commit(); clampSel(); draw(); keepInView(); renderProps(); }
   // while the view is fitted (on open, or after Fit / 0), every edit fits the circuit again; once the user pans
   // or zooms, the camera stays where they put it until Fit is pressed again
   function keepInView() { if (E.G && E.fitted) fit(); }
-  function restore(code: any) { E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
+  function restore(code: any) { E.typed = code; E.M = load(code); clampSel(); draw(); renderProps(); updateTools(); }
   const at = (r: any, c: any) => (E.M.rows[r] && E.M.rows[r][c]) || null;
   function clampSel() {
     const s = E.sel;
@@ -1324,7 +1337,7 @@ import { editorStage, fitView } from './editor-stage';
     clearTimeout(E.codeTimer); E.codeTimer = null;
     if (codeTa.value === E.codeAt) return;
     begin();
-    E.M = load(codeTa.value); E.codeAt = codeTa.value;
+    E.typed = codeTa.value; E.M = load(codeTa.value); E.codeAt = codeTa.value;
     clampSel(); draw(); keepInView(); renderProps();
     const L = Q.layout({ src: codeTa.value, size: E.st.size, font: E.st.font });
     showCodeNotes(codeMsg, L.warnings);
@@ -1409,7 +1422,7 @@ import { editorStage, fitView } from './editor-stage';
     const M = load(block.src);
     E = { M, sel: null, arm: null, view: { ox: 0, oy: 0, k: 1.5 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, ghost: null, st: { size: block.size || 'normalsize', font: block.font || 'default' }, codeAt: null, codeTimer: null, clip: null };
     // an untouched circuit hands its own text back
-    E.start = codeOf(M);
+    E.typed = String(block.src || ''); E.start = snap();
     dock.show(host);
     pal.clear();
     buildPalette(); updateTools(); renderProps(); setTip('');

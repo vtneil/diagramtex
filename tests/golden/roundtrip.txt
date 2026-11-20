@@ -154,11 +154,11 @@ xy_turn: 1/1 modelled · regenerated differs from line 4 (xy → xy)
 cd_topath: 0/1 modelled · regenerated same
 cd_from: 1/1 modelled · regenerated differs from line 4 (cd → cd)
 cd_trail: 1/1 modelled · regenerated differs from line 4 (cd → cd)
-chem_sugar: 0/1 modelled · regenerated same
-chem_move: 0/1 modelled · regenerated same
-chem_nitro: 0/1 modelled · regenerated same
-chem_hreac: 0/1 modelled · regenerated same
-chem_text: 0/1 modelled · regenerated same
+chem_sugar: 1/1 modelled · regenerated differs from line 4 (chemfig → chemfig)
+chem_move: 1/1 modelled · regenerated differs from line 4 (chemfig → chemfig)
+chem_nitro: 1/1 modelled · regenerated differs from line 4 (chemfig → chemfig)
+chem_hreac: 1/1 modelled · regenerated differs from line 4 (chemfig → chemfig)
+chem_text: 1/1 modelled · regenerated differs from line 4 (chemfig → chemfig)
 sd_threads: 1/1 modelled · regenerated same
 sd_block: 1/1 modelled · regenerated same
 sd_threadbias: 1/1 modelled · regenerated same

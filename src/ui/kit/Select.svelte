@@ -12,8 +12,10 @@
   import { installSelectMenu, setSelectExtras } from '../services/selectmenu.svelte';
   export interface SelectOption { value: string; label: string; short?: string; title?: string; svg?: string; note?: string; swatch?: string; font?: string; group?: string; disabled?: boolean }
   export interface SelectCustom { label: string; shown?: string; svg?: string; value: string; placeholder?: string; title?: string; apply(text: string): void }
-  let { options, value, pictures = false, columns, custom, attached = false, class: extra, ...rest }: Omit<HTMLSelectAttributes, 'value' | 'class'> & {
+  let { options, value, pictures = false, columns, custom, mixed, attached = false, class: extra, ...rest }: Omit<HTMLSelectAttributes, 'value' | 'class'> & {
     options: SelectOption[]; value?: string | number; pictures?: boolean; columns?: number; custom?: SelectCustom; attached?: boolean; class?: string;
+    /** what it shows with no value ("Mixed": the selected objects differ); not in its menu */
+    mixed?: string;
   } = $props();
   onMount(installSelectMenu);
   let el: HTMLSelectElement | undefined = $state();
@@ -38,5 +40,6 @@
 {#snippet control()}<select bind:this={el} class={[attached && 'attached', extra].filter(Boolean).join(' ') || undefined} {...rest} style:font-family={attached || isCustom ? undefined : current?.font} {@attach value === undefined ? undefined : liveValue(value, options, isCustom)}>
   {#each groups as g, gi (gi)}{#if g.name}<optgroup label={g.name}>{#each g.items as o (o.value)}{@render option(o)}{/each}</optgroup>{:else}{#each g.items as o (o.value)}{@render option(o)}{/each}{/if}{/each}
   {#if isCustom}<option value={String(value)} hidden>{custom!.shown ?? custom!.label}</option>{/if}
+  {#if mixed && String(value ?? '') === '' && !current}<option value="" hidden>{mixed}</option>{/if}
 </select>{/snippet}
 {#if drawing}<span class="sel-prev">{@html drawing}{@render control()}</span>{:else}{@render control()}{/if}

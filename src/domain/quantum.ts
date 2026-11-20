@@ -143,8 +143,25 @@ function measurementOutputs(rows: any) {
   }
   return changed;
 }
+// whether a text's braces pair up: 1 a { is never closed (it swallows the rest of the circuit), -1 a } has no {
+// before it, 0 they pair (\{ \} and comments skipped)
+function braceFault(s: any) {
+  let d = 0;
+  s = String(s || '');
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '\\') i++;
+    else if (c === '%') { const n = s.indexOf('\n', i); if (n < 0) break; i = n; }
+    else if (c === '{') d++;
+    else if (c === '}' && --d < 0) return -1;
+  }
+  return d > 0 ? 1 : 0;
+}
 function parse(src: any) {
   const warnings: any[] = [];
+  const fault = braceFault(src);
+  if (fault > 0) warnings.push('A { in the circuit is not closed: everything after it is read as one cell, and LaTeX stops with "Missing } inserted"');
+  else if (fault < 0) warnings.push('A } in the circuit has no { before it: LaTeX stops with "Too many }\'s"');
   const { env, inner } = unwrap(src);
   const raw: any = grid(inner);
   measurementOutputs(raw);
@@ -774,7 +791,7 @@ TD.TYPES.qc = {
 
 TD.qcLayout = layout;
 // for the visual editor (src/editors/qceditor.ts)
-TD.qc = { ARGS, IGNORED, unwrap, grid, cell, opts, close, draw, layout, fullCode };
+TD.qc = { ARGS, IGNORED, unwrap, grid, cell, opts, close, braceFault, draw, layout, fullCode };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("qc", {
   menu: { order: 3, label: "Quantum", title: "Quantum circuit, written in quantikz", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M2 7h28M2 17h28M14 7v10\"/><rect x=\"5\" y=\"3\" width=\"7\" height=\"8\" class=\"a1\"/><circle cx=\"14\" cy=\"7\" r=\"1.6\" style=\"fill:var(--graphite)\"/><circle cx=\"14\" cy=\"17\" r=\"3.2\" fill=\"none\"/><path d=\"M14 14v6M11 17h6\"/><rect x=\"21\" y=\"13\" width=\"8\" height=\"8\" class=\"a1\"/><path d=\"M22.5 19.5a2.5 2.5 0 015 0M25 19.5l1.8-3\"/></svg>" },

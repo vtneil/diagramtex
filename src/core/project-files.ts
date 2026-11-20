@@ -49,8 +49,17 @@ export function createProjectFiles(types: Record<string, unknown>) {
     if (!doc || typeof doc !== 'object') return false;
     const name = (typeof doc.name === 'string' && doc.name) || fallbackName || 'Untitled';
     onRetired(dropRetiredDoc(doc));
+    // why a file can't be opened, as the open dialog says it (err.code): saved by a newer version, holding objects this
+    // version doesn't know (err.types), or not a DiagramTeX file at all
+    function fail(what: string): never {
+      const version = (doc as { version?: unknown }).version, all = [doc.sheet?.shapes, doc.shapes, ...(Array.isArray(doc.blocks) ? doc.blocks.map(b => isObject(b) ? b.shapes : null) : [])];
+      const unknown = [...new Set(all.flatMap(list => Array.isArray(list) ? list : []).filter(s => isObject(s) && typeof s.type === 'string' && !Object.prototype.hasOwnProperty.call(types, s.type)).map(s => String(s.type)))];
+      const newer = typeof version === 'number' && version > VERSION;
+      throw Object.assign(new Error(newer ? `it comes from a newer DiagramTeX (file version ${version})` : unknown.length ? `it holds objects this version doesn't know (${unknown.join(', ')})` : what),
+        { code: newer ? 'newer' : unknown.length ? 'unknown' : 'invalid', version, types: unknown });
+    }
     if (doc.kind === 'page') {
-      if (!doc.sheet || !validShapes(doc.sheet.shapes)) throw new Error('not a DiagramTeX page file');
+      if (!doc.sheet || !validShapes(doc.sheet.shapes)) fail('not a DiagramTeX page file');
       return { kind: 'page' as const, name, page: pageOf(doc.page),
         sheet: { pages: Math.max(1, (doc.sheet.pages ?? 0) | 0), shapes: doc.sheet.shapes,
           ...(isObject(doc.sheet.vars) ? { vars: doc.sheet.vars } : {}),
@@ -58,7 +67,7 @@ export function createProjectFiles(types: Record<string, unknown>) {
     }
     let blocks = doc.blocks || (Array.isArray(doc.shapes) ? [{ type: 'diagram', shapes: doc.shapes }] : null);
     if (!Array.isArray(blocks) || blocks.some(block => !isObject(block) || typeof block.type !== 'string' || (block.type === 'diagram' && !validShapes(block.shapes)))) {
-      throw new Error('not a DiagramTeX file');
+      fail('not a DiagramTeX file');
     }
     const kind = doc.kind === 'board' ? 'board' : 'classic';
     if (kind === 'board') {

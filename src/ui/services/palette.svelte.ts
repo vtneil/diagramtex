@@ -94,7 +94,8 @@ import CommandSearch, { type CommandSearchModel } from '../CommandSearch.svelte'
   function fromTitle(t: any) {
     t = String(t || '');
     const key = (/\(([A-Z])\)/.exec(t) || [])[1] || '';
-    const cut = t.search(/ \(| — |: /);
+    // the name ends at its key, "Rectangle (R)", or at what it does; other brackets are part of it ("Circular arrow (left)")
+    const cut = t.search(/ \([A-Z]\)| — |: /);
     const label = (cut > 0 ? t.slice(0, cut) : t).trim();
     const rest = cut > 0 ? t.slice(cut).replace(/^\s*\([A-Z]\)\s*/, '').replace(/^\s*(—|:)\s*/, '').replace(/^\(|\)$/g, '').trim() : '';
     return { label, key, detail: rest };

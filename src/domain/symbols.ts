@@ -110,7 +110,7 @@ import { runtime as TD } from '../runtime';
   B('oct', 'Octagon', (b: any) => b.ngon(8, 22.5));
   B('dec', 'Decagon', (b: any) => b.ngon(10, 0));
   B('circle', 'Circle', (b: any) => b.ell(0.5, 0.5, 0.5, 0.5));
-  B('oval', 'Ellipse', (b: any) => b.ell(0.5, 0.5, 0.5, 0.5), { size: [80, 50] });
+  B('oval', 'Oval', (b: any) => b.ell(0.5, 0.5, 0.5, 0.5), { size: [80, 50] });
   B('chord', 'Chord', (b: any) => { b.arc(0.5, 0.5, 0.5, 0.5, 60, 300); return b.Z(); });
   B('pie', 'Pie', (b: any) => { b.M(0.5, 0.5); b.arc(0.5, 0.5, 0.5, 0.5, 45, 315, true); return b.Z(); });
   B('frame', 'Frame', (b: any) => { b.box(0, 0, 1, 1); b.box(0.15, 0.15, 0.85, 0.85); return b; });
@@ -495,9 +495,9 @@ import { runtime as TD } from '../runtime';
     LIB[key].hatchPreset = true;
   };
   hatchPreset('p-hatch', 'Hatch', 'mech', [120, 35], [56, 18], {});
-  hatchPreset('p-ground', 'Hatch — ground', 'mech', [120, 9], [56, 10], { hatchTop: true });
-  hatchPreset('p-ceiling', 'Hatch — ceiling', 'mech', [120, 9], [56, 10], { hatchBottom: true });
-  hatchPreset('p-wall', 'Hatch — wall', 'mech', [9, 100], [10, 40], { hatchRight: true });
+  hatchPreset('p-ground', 'Hatch (ground)', 'mech', [120, 9], [56, 10], { hatchTop: true });
+  hatchPreset('p-ceiling', 'Hatch (ceiling)', 'mech', [120, 9], [56, 10], { hatchBottom: true });
+  hatchPreset('p-wall', 'Hatch (wall)', 'mech', [9, 100], [10, 40], { hatchRight: true });
 
   Ph('p-block', 'Block', 'mech', (b: any) => b.box(0, 0, 1, 1), { size: [50, 40], fill: true, text: true, text0: '$m$' });
   Ph('p-incline', 'Incline', 'mech', (b: any, s: any) => {
@@ -548,7 +548,7 @@ import { runtime as TD } from '../runtime';
     b.pl(...P(b, b.w / 2 - a, 0), 0.5, b.v(a * 1.1), ...P(b, b.w / 2 + a, 0)); b.pl(...P(b, b.w / 2 - a, b.h), 0.5, b.v(b.h - a * 1.1), ...P(b, b.w / 2 + a, b.h));
     return b;
   }, { size: [16, 110], icon: [14, 50] });
-  hatchPreset('p-mirror', 'Hatch — mirror', 'optics', [9, 110], [10, 44], { hatchLeft: true });
+  hatchPreset('p-mirror', 'Hatch (mirror)', 'optics', [9, 110], [10, 44], { hatchLeft: true });
   const curved = (concave: any) => (b: any, s: any) => {
     const hl = 7, sag = Math.max(1, b.w - hl - 1), [R, f] = bow(b.h, sag), cy = b.h / 2;
     // concave: the ends at the left, the middle `sag` px back; convex: the middle at the left
@@ -566,7 +566,7 @@ import { runtime as TD } from '../runtime';
   Ph('p-concmirror', 'Concave mirror', 'optics', curved(true), { size: [22, 110], icon: [16, 50], hatch: true });
   Ph('p-convmirror', 'Convex mirror', 'optics', curved(false), { size: [22, 110], icon: [16, 50], hatch: true });
   Ph('p-prism', 'Prism', 'optics', (b: any) => b.pg(0.5, 0, 1, 1, 0, 1), { size: [80, 70], fill: true });
-  hatchPreset('p-screen', 'Hatch — screen', 'optics', [10, 110], [10, 44], { hatchTop: true, hatchRight: true, hatchBottom: true, hatchLeft: true });
+  hatchPreset('p-screen', 'Hatch (screen)', 'optics', [10, 110], [10, 44], { hatchTop: true, hatchRight: true, hatchBottom: true, hatchLeft: true });
   Ph('p-slit', 'Slits', 'optics', (b: any, s: any) => {
     const n = Math.max(1, Math.round(+s.slits || 2)), g = Math.min(b.h / (2 * n + 1), 10), mid = b.h / 2, span = (n - 1) * g * 2.2;
     let y = 0;
