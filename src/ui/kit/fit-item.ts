@@ -9,7 +9,8 @@
 //
 // The name wraps (CSS); a single word wider than the name's room (Cyclopentane in a narrow tile) would break in the
 // middle, since browsers don't reliably hyphenate, so that name's text is made smaller until its longest word fits,
-// never below 10px. Names are measured again when the palette changes width (2 columns, 1).
+// and smaller again while the page still splits one, never below 10px. Names are measured again when the palette
+// changes width (2 columns, 1).
 //
 // Hidden items (a folded category) have no geometry yet, so each drawing and name waits for its first size (a
 // ResizeObserver) and is then let go before anything is resized: resizing what an observer still watches, inside its
@@ -158,18 +159,31 @@ function widestWord(name: HTMLElement): number {
   name.style.whiteSpace = was;
   return widest;
 }
+// Whether a word of the name is laid out on more than one line (broken in the middle to fit its room)
+function splitWord(name: HTMLElement): boolean {
+  const text = [...name.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim()) as Text | undefined;
+  if (!text) return false;
+  const r = document.createRange();
+  for (const [a, z] of wordSpans(text.data)) {
+    r.setStart(text, a); r.setEnd(text, z);
+    if (new Set([...r.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top))).size > 1) return true;
+  }
+  return false;
+}
 const fitted = new WeakMap<HTMLElement, string>(); // the room and text each name was fitted to
 const names = new Set<HTMLElement>(); // every name fitted, measured again when a font arrives
 function fitName(name: HTMLElement, again = false) {
   let cs = getComputedStyle(name);
   if (cs.display === 'none') return;
-  // the room is the widest the name may be (its max-width), whatever its text makes it now. With none (a one-column
-  // list), the name is as wide as its text, so that would be no room at all and every one-word name would shrink a
-  // little: there only a word wider than the row it sits in is made smaller
+  // the room is the widest the name may be (its max-width), whatever its text makes it now. With none (a list row),
+  // the name is as wide as its text, so that would be no room at all and every one-word name would shrink a little:
+  // there only a word wider than the row it sits in is made smaller: one that pushes the row wider, or one that
+  // wraps to fit it (overflow-wrap breaks it, leaving the row as it was). A name that wraps fills its room, so its
+  // width is the room
   if (cs.maxWidth === 'none') {
     name.style.fontSize = '';
     const row = name.parentElement, over = row ? row.scrollWidth - row.clientWidth : 0;
-    if (over <= 1) { fitted.set(name, `none|${name.textContent}`); return; }
+    if (over <= 1 && !splitWord(name)) { fitted.set(name, `none|${name.textContent}`); return; }
   }
   const was = name.style.width;
   if (cs.maxWidth !== 'none') name.style.width = cs.maxWidth;
@@ -184,8 +198,11 @@ function fitName(name: HTMLElement, again = false) {
   const size = parseFloat(cs.fontSize);
   if (!(room > 0 && size > 0)) return;
   const widest = widestWord(name), fits = room - 0.5; // a hair of room for subpixel rounding
-  if (widest <= fits) return;
-  name.style.fontSize = `${Math.max(MIN_TEXT_PX, Math.floor((size * fits / widest) * 10) / 10)}px`;
+  let px = size;
+  if (widest > fits) name.style.fontSize = `${(px = Math.max(MIN_TEXT_PX, Math.floor((size * fits / widest) * 10) / 10))}px`;
+  // the name as wrapped can still split a word the measure said fits: a balanced wrap (text-wrap: balance) may choose
+  // lines narrower than the room, and Linux draws Thai a little wider. While one is split, a little smaller
+  while (px > MIN_TEXT_PX && splitWord(name)) name.style.fontSize = `${(px = Math.max(MIN_TEXT_PX, Math.round((px - 0.5) * 10) / 10))}px`;
 }
 
 /** Attach to a palette item: fits the drawing and the name it holds (re-run when its drawing or name changes). */
