@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ** code for LaTeX, together with **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata** and **graphs**, **pgf-umlcd**, **pgf-umlsd**, **karnaugh-map**, **bytefield**, **chemfig**, **blochsphere** and **booktabs**. Draw with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ** code for LaTeX, together with **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata** and **graphs**, **pgf-umlcd**, **pgf-umlsd**, **karnaugh-map**, **bytefield**, **chemfig**, **tikz-chemlab**, **blochsphere** and **booktabs**. Draw with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([GNU AGPLv3](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -35,6 +35,7 @@ It is **free and open source** ([GNU AGPLv3](LICENSE)), **works offline**, and n
 - **UML** class (`pgf-umlcd`) and sequence (`pgf-umlsd`) diagrams.
 - **Digital logic:** timing diagrams (`tikz-timing`), Karnaugh maps (`karnaugh-map`, with group checking) and bit fields (`bytefield`).
 - **Chemistry** (`chemfig`): structural formulas, rings, charges, reaction schemes and curved arrows.
+- **Chemistry lab apparatus** (`tikz-chemlab`): glassware, liquids, burners, titrations, reflux, gas collection and distillation, and every part, fitting and substance the package draws, with its line widths and flame, drawn as pdflatex draws them.
 - **Physics figures that are computed:** mechanics, optics (ray tracing), fields, waves, Minkowski diagrams and energy levels, each result marked exact, ideal, approx or schematic. See [docs/physics.md](docs/physics.md).
 - **Tables:** a spreadsheet-like **Table** mode that imports from Excel, Sheets, CSV, Markdown, HTML or LaTeX and writes `booktabs` LaTeX, SVG or PNG.
 - **Whole documents:** text, maths and figures on A4 or Letter pages, exported as a complete LaTeX `article`.

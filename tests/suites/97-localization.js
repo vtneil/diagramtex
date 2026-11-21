@@ -91,3 +91,21 @@ T.test('Guide: English and Thai cover the same anchors with valid language links
   }
   T.eq(th.querySelector('pre').textContent, en.querySelector('pre').textContent, 'LaTeX example unchanged');
 });
+
+T.test('Document view: pictures that load together lay the page out once, not once each (a change of language reloads every label)', async () => {
+  TD.app.newSample(); TD.app.setMode('document');
+  const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await frame();
+  const root = document.querySelector('#docview'), img = root.querySelector('img, image');
+  T.ok(img, 'the Welcome document has a picture in it');
+  // layoutPage measures the view's padding: count those measurements
+  const real = window.getComputedStyle;
+  let layouts = 0;
+  window.getComputedStyle = function (el, ...rest) { if (el === root) layouts++; return real.call(this, el, ...rest); };
+  try {
+    for (let i = 0; i < 40; i++) img.dispatchEvent(new Event('load'));
+    T.eq(layouts, 0, 'not laid out while the pictures load');
+    await frame();
+    T.ok(layouts >= 1 && layouts <= 3, `laid out after them, not once each (${layouts} for 40)`);
+  } finally { window.getComputedStyle = real; }
+});

@@ -835,7 +835,7 @@ function fan(bundle: any[], a: string, last?: any) {
 TD.fsm = { parse, write, layout, fan, lines, isMultiline, draw, along, kv, opts, unbrace, fullCode, shown, num, autoLayout, isInitial, isAccepting, applyNodeOpts, baseStyle, DIRS, LOOPS, TEXT, libsOf };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("automata", {
-  menu: { order: 9, label: "Automaton", title: "State machine, written with the TikZ automata library", icon: "<svg viewBox=\"0 0 32 24\"><circle cx=\"9\" cy=\"14\" r=\"4.5\"/><circle cx=\"24\" cy=\"14\" r=\"4.5\" class=\"a1\"/><circle cx=\"24\" cy=\"14\" r=\"2.6\"/><path d=\"M13.5 14h6M17.5 12l2 2-2 2\"/><path d=\"M1 14h3.5M2.8 12.2l1.8 1.8-1.8 1.8\"/><path d=\"M7.4 9.8C5.5 3.5 12.5 3.5 10.6 9.8\"/></svg>" },
+  menu: { order: 9, group: 'computing', label: "Automaton", title: "State machine, written with the TikZ automata library", icon: "<svg viewBox=\"0 0 32 24\"><circle cx=\"9\" cy=\"14\" r=\"4.5\"/><circle cx=\"24\" cy=\"14\" r=\"4.5\" class=\"a1\"/><circle cx=\"24\" cy=\"14\" r=\"2.6\"/><path d=\"M13.5 14h6M17.5 12l2 2-2 2\"/><path d=\"M1 14h3.5M2.8 12.2l1.8 1.8-1.8 1.8\"/><path d=\"M7.4 9.8C5.5 3.5 12.5 3.5 10.6 9.8\"/></svg>" },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   editor: { get: () => TD.fsmEditor, alias: "fsmOpen", layout: (s) => TD.fsm.layout(s) }

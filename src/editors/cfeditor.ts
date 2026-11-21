@@ -758,15 +758,17 @@ import { keepComments } from './keep-comments';
   const molsIn = (L0: any): any[] => L0.flatMap((g: any) => (g.t === 'mol' ? [g] : g.inner ? molsIn(g.inner) : []));
   function phantoms() {
     const Lo = lay(), P = Lo.P || C.DEF, out: any[] = [];
-    let deep = -Infinity;
+    // \chemname measures depth from the molecule's own baseline (m.dy), not the page: a compound raised by its arrow
+    // keeps its name under it. The depth is the deepest of this molecule and the names before it (\chemname*
+    // leaves it alone; molecules without a name don't count)
+    let dp = 0;
     for (const m of Lo.mols || []) {
       const bb = m.L && m.L.bb;
       if (!bb || m.seg.sub) continue;
-      const bottom = m.dy + bb.y + bb.h;
-      deep = Math.max(deep, bottom);
-      if (m.seg.owner) continue;
-      // where \chemname would put it: centred, its top name sep under the deepest molecule so far
-      const w = 4 * C.EM, h = 1.2 * C.EM, cx = m.dx + bb.x + bb.w / 2, top = deep + P.nameSep;
+      const desc = bb.y + bb.h;
+      if (m.seg.owner) { if (!/^\\chemname\s*\*/.test(m.seg.owner.head || '')) dp = Math.max(dp, desc); continue; }
+      // where \chemname would put it: centred, its top name sep under that depth
+      const w = 4 * C.EM, h = 1.2 * C.EM, cx = m.dx + bb.x + bb.w / 2, top = m.dy + Math.max(dp, desc) + P.nameSep;
       out.push({ mol: m.seg, x: cx - w / 2, y: top, w, h, cx, cy: top + h / 2 });
     }
     return out;

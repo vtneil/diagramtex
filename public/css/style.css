@@ -256,8 +256,8 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 #canvas.tool-text { cursor: text; }
 #canvas.pan-ready, #canvas.pan-ready * { cursor: grab !important; }
 #canvas.panning, #canvas.panning * { cursor: grabbing !important; }
-.phy-svg.pan-ready, .phy-svg.pan-ready * { cursor: grab !important; }
-.phy-svg.panning, .phy-svg.panning * { cursor: grabbing !important; }
+.phy-svg.pan-ready, .phy-svg.pan-ready *, .cl-svg.pan-ready, .cl-svg.pan-ready * { cursor: grab !important; }
+.phy-svg.panning, .phy-svg.panning *, .cl-svg.panning, .cl-svg.panning * { cursor: grabbing !important; }
 #canvas.drag-cur, #canvas.drag-cur * { cursor: var(--drag-cur) !important; }
 #paper { fill: var(--canvas); }
 .grid-minor { stroke: var(--grid-minor); stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -1064,6 +1064,11 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-gmaj { stroke: var(--grid-major); stroke-width: 1; fill: none; }
 .cz-origin { stroke: var(--origin); stroke-width: 1; fill: none; }
 .cz-hit { fill: transparent; stroke: none; cursor: move; }
+/* the Chem. Lab. editor: over a piece of apparatus, a label or a leader line's end */
+.cl-svg.cl-over { cursor: move; }
+.cl-svg.cl-turn, .cl-svg.cl-turn * { cursor: grab; }
+.cl-svg.cl-level, .cl-svg.cl-level * { cursor: ns-resize; }
+.cl-stem { fill: none; stroke: var(--redpen); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
 .cz-hitline { stroke: transparent; stroke-width: 12; fill: none; }
 .cz-svg.placing .cz-hit { pointer-events: none; }
 .cz-pin { fill: var(--canvas); stroke: var(--bluepen); stroke-width: 1.2; pointer-events: none; }
@@ -1629,6 +1634,15 @@ input.slider-value-editor, :is(#props, .cz-props, .fmt-bar) input.slider-value-e
 .ze-phase-presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 8px 0; }
 .ze-phase-presets button { padding: 0 4px; }
 .ze-phase-presets button[aria-pressed="true"] { background: var(--wash-strong); border-color: var(--rule-strong); }
-/* ZX previews use drawing-paper colours so phases remain legible in dark UI. */
-#zxModal .qe-fig { width: 100%; border-radius: var(--r-sm); background: var(--canvas); }
-#zxModal .qe-fig .zxmini { color: #1c1b19; }
+/* ZX and Chemistry Laboratory previews use drawing-paper colours so phases and glassware remain legible in dark UI. */
+#zxModal .qe-fig, #clModal .qe-fig { width: 100%; border-radius: calc(var(--r) - 4px); background: var(--canvas); }
+/* the paper 4px inside the tile's edge on three sides (1px edge + 3px), its corners nested in the tile's: 8 − 4 */
+#zxModal .qe-item, #clModal .qe-item { padding: 3px 3px 6px; }
+#zxModal .qe-fig .zxmini, #clModal .qe-fig { color: #1c1b19; }
+/* Chemistry Laboratory: apparatus is as tall as it is (a burette, a condenser), so each category fills its columns top to
+   bottom and every tile takes its drawing's height, instead of rows that squeeze tall drawings to the shortest */
+.cl-list .qe-grid { display: block; column-count: 3; column-gap: 2px; }
+.cl-list .qe-item { width: 100%; margin-bottom: 2px; break-inside: avoid; }
+.cl-list .qe-item .qe-fig { height: auto; min-height: 44px; padding: 8px 0; } /* 8px of paper round every drawing: at most 42px wide on 58px */
+@container czbox (max-width: 1259px) { .cl-list .qe-grid { column-count: 2; } }
+@container czbox (max-width: 959px) { .cl-list .qe-grid { column-count: 1; } }

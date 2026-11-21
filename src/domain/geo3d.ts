@@ -1141,7 +1141,7 @@ function fullCode(src: any) { return String(src || '').trim(); }
 TD.geo3d = { parse, layout, draw, fitAt, bounds, labelAt, edits, setNum, setRadius, shiftEdits, setOpt, moveHandle, setView, setScale, optList, styleOf, splitTop, evalExpr, viewOf, euler, fmt, partsOf, POS, WIDTHS, DEFAULT };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("geo3d", {
-  menu: { order: 14, label: "3D Geometry", title: "3D geometry, written for tikz-3dplot: frames, points, vectors, planes, angles and projections, edited visually", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M10 16V3M10 16l17 2M10 16l-7 5\"/><path d=\"M10 16l11-8\" class=\"c1\"/><path d=\"M14 13a5 5 0 001-4\"/><path d=\"M21 8v10\" stroke-dasharray=\"1.6 1.4\"/></svg>" },
+  menu: { order: 14, group: 'maths', label: "3D Geometry", title: "3D geometry, written for tikz-3dplot: frames, points, vectors, planes, angles and projections, edited visually", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M10 16V3M10 16l17 2M10 16l-7 5\"/><path d=\"M10 16l11-8\" class=\"c1\"/><path d=\"M14 13a5 5 0 001-4\"/><path d=\"M21 8v10\" stroke-dasharray=\"1.6 1.4\"/></svg>" },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   editor: { get: () => TD.geo3dEditor, alias: "geo3dOpen", layout: (s) => TD.geo3d.layout(s.src) }

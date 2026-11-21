@@ -22,7 +22,8 @@ export interface BlockEditor {
   keepEmptyBounds?: boolean;
 }
 export interface BlockDefinition {
-  menu: { order: number; label: string; title: string; icon: string; flyout?: string };
+  /** `group`: the Blocks flyout's section (BLOCK_GROUPS in src/application/app.ts) */
+  menu: { order: number; group?: string; label: string; title: string; icon: string; flyout?: string };
   fixed: boolean;
   geometry?: string[][];
   refreshOnDoubleClick?: boolean;
@@ -47,9 +48,9 @@ export function createBlocks(types: Record<string, unknown>, alias: (name: strin
     bindOpen(fn: (id: string) => unknown) { openById = fn; },
     // The Blocks flyout's tiles, in menu order, captioned in the interface language (src/i18n/shapes.ts; English is the
     // definition's own). A block with its own toolbar menu (menu.flyout) is listed there instead.
-    menuEntries(): { type: string; icon: string; title: string; label: string }[] {
+    menuEntries(): { type: string; group?: string; icon: string; title: string; label: string }[] {
       return [...definitions].filter(([, b]) => !b.menu.flyout).sort((a, b) => a[1].menu.order - b[1].menu.order)
-        .map(([type, { menu }]) => ({ type, icon: menu.icon, title: blockCaption(type, 'title', menu.title), label: blockCaption(type, 'label', menu.label) }));
+        .map(([type, { menu }]) => ({ type, group: menu.group, icon: menu.icon, title: blockCaption(type, 'title', menu.title), label: blockCaption(type, 'label', menu.label) }));
     },
     // The callback receives an operation, not a detached shape: the app re-resolves the live id
     // before applying it, so deleting an object while an editor is open cannot resurrect it.

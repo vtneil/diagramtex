@@ -637,7 +637,7 @@ TD.ftLayout = layout;
 TD.ft = { opt, optList, splitTop, unbrace, unwrap, parse, code, fullCode, layout, draw, len };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("forest", {
-  menu: { order: 5, label: "Tree", title: "Tree or hierarchy, written for forest", icon: "<svg viewBox=\"0 0 32 24\"><rect x=\"12\" y=\"2\" width=\"8\" height=\"6\" class=\"a1\"/><path d=\"M16 8v3M7 11h18M7 11v3M25 11v3M16 11v3\"/><rect x=\"4\" y=\"14\" width=\"6\" height=\"6\"/><rect x=\"13\" y=\"14\" width=\"6\" height=\"6\"/><rect x=\"22\" y=\"14\" width=\"6\" height=\"6\"/></svg>" },
+  menu: { order: 5, group: 'general', label: "Tree", title: "Tree or hierarchy, written for forest", icon: "<svg viewBox=\"0 0 32 24\"><rect x=\"12\" y=\"2\" width=\"8\" height=\"6\" class=\"a1\"/><path d=\"M16 8v3M7 11h18M7 11v3M25 11v3M16 11v3\"/><rect x=\"4\" y=\"14\" width=\"6\" height=\"6\"/><rect x=\"13\" y=\"14\" width=\"6\" height=\"6\"/><rect x=\"22\" y=\"14\" width=\"6\" height=\"6\"/></svg>" },
   nodeImport: { re: /\\begin\{forest\}[\s\S]*\\end\{forest\}/, order: 2, bb: (q) => TD.ftLayout(q).bb },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],

@@ -82,4 +82,17 @@
       cleanup(id);
     }
   });
+  T.test('bin and recovery dialogs: closed before their first frame, nothing is left to focus and nothing throws', async () => {
+    const id = TD.app.newDoc('quick close', [rect('q', 0)], null, null), errors = [];
+    const on = (e) => errors.push(e.message), mm = window.matchMedia;
+    window.addEventListener('error', on);
+    // reduced motion: no fade, so the dialog's content goes at once (as when a busy page runs the fade's timer first)
+    window.matchMedia = (q) => (/reduced-motion/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {} } : mm.call(window, q));
+    try {
+      C.openRecovery(id); key('Escape', document.querySelector('#recDlg'));
+      C.openBin(); key('Escape', document.querySelector('#binDlg'));
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      T.eq(errors, [], 'no error from focusing a dialog that has closed');
+    } finally { window.matchMedia = mm; window.removeEventListener('error', on); cleanup(id); }
+  });
 }

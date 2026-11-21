@@ -831,7 +831,7 @@ const markOf = (kind: 'v' | 'i', it: any) => (kind === 'v' ? voltOf : currOf)({ 
 TD.cz = { markOf, markMods, vstyleOf, colorOf, pinsOf, nodeXf, bipXf, xfOf, itemsSvg, itemsBox, code, parse, layout, same, uid, isWire, NODE_R, RLEN, defaultItems };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("cz", {
-  menu: { order: 4, label: "Circuit", title: "Circuit, drawn with circuitikz parts", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M4 18V6h7M21 6h7v12H4\"/><path d=\"M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3\" class=\"c1\"/><path d=\"M14 18v-3M18 18v-3\" class=\"c1\"/><path d=\"M12 15h8M12 21h8\" class=\"c1\"/></svg>" },
+  menu: { order: 4, group: 'electronics', label: "Circuit", title: "Circuit, drawn with circuitikz parts", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M4 18V6h7M21 6h7v12H4\"/><path d=\"M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3\" class=\"c1\"/><path d=\"M14 18v-3M18 18v-3\" class=\"c1\"/><path d=\"M12 15h8M12 21h8\" class=\"c1\"/></svg>" },
   fixed: true,
   editor: { get: () => TD.czEditor, alias: "czOpen", apply: (s, result) => { s.items = result.items; s.raw = result.raw; } }
 });

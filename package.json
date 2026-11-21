@@ -52,7 +52,8 @@
     "test:menus": "node tests/context-menu-layout.mjs",
     "test:snap-modes": "node tests/snapping-modes.mjs",
     "test:format-preview": "node tests/format-preview.mjs",
-    "test:palette-fit": "node tests/palette-fit.mjs"
+    "test:palette-fit": "node tests/palette-fit.mjs",
+    "test:chemlab-parity": "node tests/chemlab-parity.mjs"
   },
   "devDependencies": {
     "@jridgewell/remapping": "^2.3.5",

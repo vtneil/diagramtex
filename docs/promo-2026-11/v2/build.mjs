@@ -11,8 +11,8 @@ const slides = [
   { file: 'f01-hero', title: 'A visual TikZ editor: draw instead of guessing coordinates, and get readable tikzpicture code',
     inset: { file: 'f01-code', box: [291, 141, 858, 362], w: 720, x: 110, y: 690, label: 'LaTeX for the selection' } },
   { file: 'f02-plot3d', title: '2D and 3D pgfplots: functions, parametric, polar, implicit, contour, heatmap, bar and scatter' },
-  { file: 'f02b-blocks', title: 'Blocks for tikz-cd, quantikz, circuitikz, forest, chemfig, tikz-feynman and more, each with its own editor', crop: [0, 290, 1000, 610] },
-  { file: 'f03-circuit', title: 'A drag-and-drop circuit editor with 415 circuitikz components that exports circuitikz code' },
+  { file: 'f02b-blocks', title: 'Blocks for tikz-cd, quantikz, circuitikz, forest, chemfig, tikz-chemlab and more, grouped by subject, each with its own editor', crop: [0, 140, 1130, 760] },
+  { file: 'f03-circuit', title: 'A drag-and-drop circuit editor with over 400 circuitikz components that exports circuitikz code' },
   { file: 'f04-table', title: 'Tables that work like a spreadsheet: import from Excel or CSV, and copy clean booktabs LaTeX' },
   { file: 'f05-shapes', title: 'Build figures from basic shapes and lines, with LaTeX maths labels that render as you type' },
   { file: 'f06-physics', title: 'Physics figures that are computed, not just drawn: Atwood machines, inclines, pendulums and linkages' },
@@ -20,7 +20,7 @@ const slides = [
   { file: 'f08-document', title: 'Lay out text, maths and figures on A4 or Letter pages and export a complete LaTeX article' },
   { file: 'f09-geo3d', title: '3D geometry in tikz-3dplot: turn the view by dragging, and add points, vectors, planes and surfaces' },
   { file: 'f10-imported', title: 'Import existing TikZ: paste code or open a .tex file to keep editing figures you already have',
-    inset: { file: 'f10-import', box: [291, 141, 858, 383], w: 640, x: 110, y: 700, label: 'Pasted source' } },
+    inset: { file: 'f10-import', box: [291, 141, 858, 383], w: 580, x: 110, y: 250, label: 'Pasted source' } },
   { file: 'f11-chem', title: 'A chemfig editor for structural formulas and reaction schemes, with charges, lone pairs and arrows' },
   { file: 'f12-cd', title: 'A tikz-cd editor: type objects on a grid and drag arrows from cell to cell, with live code' },
   { file: 'f14-quick', title: 'Quick mode turns one formula into a picture: copy a PNG or SVG for slides, documents or chats', crop: [300, 80, 960, 520] },
@@ -52,6 +52,8 @@ for (const [dir, ext] of [['pages', '.html'], ['final', '.png']]) {
   fs.mkdirSync(path.join(DIR, dir), { recursive: true });
   for (const f of fs.readdirSync(path.join(DIR, dir))) if (f.endsWith(ext)) fs.unlinkSync(path.join(DIR, dir, f));
 }
+// a package name (tikz-chemlab) is never split at its hyphen
+const nobreak = (t) => t.replace(/\S+-\S+/g, (w) => `<span style="white-space:nowrap">${w}</span>`);
 const TOP = 196, BOTTOM = 36, SIDE = 64;
 const pages = slides.map((sl, i) => {
   const box = sl.crop || [0, 0, VW, VH];
@@ -65,7 +67,7 @@ const pages = slides.map((sl, i) => {
     inset = `<div class="inset-wrap" style="left:${sl.inset.x}px;top:${sl.inset.y}px"><span class="tag">${sl.inset.label}</span><div class="inset" style="width:${k.w}px;height:${k.h}px">${k.html}</div></div>`;
   }
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${sl.title}</title><style>${css}</style></head>
-<body class="${sl.light ? 'light' : ''}"><h1>${sl.title}</h1><div class="brand"><i class="mark"></i>DiagramTeX</div>
+<body class="${sl.light ? 'light' : ''}"><h1>${nobreak(sl.title)}</h1><div class="brand"><i class="mark"></i>DiagramTeX</div>
 <div class="shot" style="left:${left}px;top:${top}px;width:${c.w}px;height:${c.h}px">${c.html}</div>${inset}</body></html>`;
   const name = `${String(i + 1).padStart(2, '0')}-${sl.file.replace(/^f\d+b?-/, '')}`;
   fs.writeFileSync(path.join(DIR, 'pages', name + '.html'), html);

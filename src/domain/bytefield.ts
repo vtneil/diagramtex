@@ -679,7 +679,7 @@ const summary = (L: any) => {
 TD.bytefield = { parse, write, fmt, layout, draw, fullCode, exportCode, keyvals, setKey, getKey, settings, len, style, sides, tokens, headerNums, colour, shown, summary, brace, bitsOf, BITWIDTH, EM, EX };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("bytefield", {
-  menu: { order: 11, label: "Bit field", title: "Bit field: packet headers and register layouts, written for bytefield", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M3 9h26v12H3zM10 9v12M15 9v12M22 9v12\"/><path d=\"M3 5.5v1M10 5.5v1M15 5.5v1M22 5.5v1M29 5.5v1\" class=\"a1\"/></svg>" },
+  menu: { order: 11, group: 'electronics', label: "Bit field", title: "Bit field: packet headers and register layouts, written for bytefield", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M3 9h26v12H3zM10 9v12M15 9v12M22 9v12\"/><path d=\"M3 5.5v1M10 5.5v1M15 5.5v1M22 5.5v1M29 5.5v1\" class=\"a1\"/></svg>" },
   nodeImport: { re: /(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*\\end\{bytefield\}/, order: 6, dedent: true, place: (q: any, at: any) => { const L = TD.bytefield.layout(q), b = L.bb, t = L.tbox; q.x = at.x - (t.x - b.x + t.w / 2); q.y = at.y - (t.y - b.y + t.h / 2); } },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],

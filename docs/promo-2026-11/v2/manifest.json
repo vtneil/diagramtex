@@ -9,11 +9,11 @@
   },
   {
     "file": "03-blocks.png",
-    "title": "Blocks for tikz-cd, quantikz, circuitikz, forest, chemfig, tikz-feynman and more, each with its own editor"
+    "title": "Blocks for tikz-cd, quantikz, circuitikz, forest, chemfig, tikz-chemlab and more, grouped by subject, each with its own editor"
   },
   {
     "file": "04-circuit.png",
-    "title": "A drag-and-drop circuit editor with 415 circuitikz components that exports circuitikz code"
+    "title": "A drag-and-drop circuit editor with over 400 circuitikz components that exports circuitikz code"
   },
   {
     "file": "05-table.png",

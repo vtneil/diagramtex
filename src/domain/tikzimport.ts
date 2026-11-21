@@ -1867,6 +1867,8 @@ import { runtime as TD } from '../runtime';
     let i = 0;
     // pgf-umlcd classes somewhere in this code: a shifted scope may hold a class diagram
     const umlIn = !!TD.uml && /\\begin\s*\{(?:class|interface|abstractclass|staticclass|object)\}/.test(s);
+    // tikz-chemlab apparatus too: a shifted scope may be a Chemistry Laboratory block (how a picture with other objects exports it)
+    const labIn = !!TD.chemlab && TD.chemlab.USES.test(s);
     const scopeCtx = () => (C.scopes || []).map((L: any) => L.opts).filter(Boolean);
     const scopeIssue = () => (C.scopes || []).map((L: any) => L.issue).filter(Boolean).reverse();
     // one statement: shapes when exact, else one code object previewing them
@@ -1932,6 +1934,12 @@ import { runtime as TD } from '../runtime';
           const uml = stop > 0 && /\\begin\s*\{(?:class|interface|abstractclass|staticclass|object)\}/.test(s.slice(bs, stop))
             ? TD.uml.fromPicture(`\\begin{tikzpicture}\n${o.slice(bs, stop)}\n\\end{tikzpicture}`) : null;
           if (uml) { done(bs, stop, applyXf([uml], C.scopes || []), issues()); i = stop; continue; }
+        }
+        if (name === 'begin' && env === 'scope' && labIn && /^\\begin\{scope\}\s*\[\s*shift\s*=/.test(s.slice(bs, bs + 40))) {
+          let d = 0, stop = -1;
+          for (const m of s.slice(bs).matchAll(/\\(begin|end)\{scope\}/g)) if ((d += m[1] === 'begin' ? 1 : -1) === 0) { stop = bs + m.index! + m[0].length; break; }
+          const lab = stop > 0 && TD.chemlab.USES.test(s.slice(bs, stop)) ? TD.chemlab.fromPicture(`\\begin{tikzpicture}\n${o.slice(bs, stop)}\n\\end{tikzpicture}`) : null;
+          if (lab) { done(bs, stop, applyXf([lab], C.scopes || []), issues()); i = stop; continue; }
         }
         if (name === 'begin' && env === 'scope') {
           i = e + 1; while (/\s/.test(s[i])) i++;
@@ -2705,6 +2713,9 @@ import { runtime as TD } from '../runtime';
       // a pgf-umlcd class diagram: the whole picture is the block's code
       const uml = rescaled(TD.uml && TD.uml.fromPicture(pic1), sc);
       if (uml) { blocks.push({ type: 'diagram', shapes: withDefs([uml], preDefs, C) }); continue; }
+      // a picture of tikz-chemlab apparatus: the whole picture is the block's code
+      const lab = rescaled(TD.chemlab && TD.chemlab.fromPicture(pic1), sc);
+      if (lab) { blocks.push({ type: 'diagram', shapes: withDefs([lab], preDefs, C) }); continue; }
       // a picture drawn wholly with circuitikz parts: a Circuit block
       const czq = rescaled(circuitBlock(pic1, true) || automataBlock(pic1) || graphBlock(pic1), sc);
       if (czq) { blocks.push({ type: 'diagram', shapes: withDefs([czq], preDefs, C) }); continue; }
@@ -2922,7 +2933,7 @@ import { runtime as TD } from '../runtime';
     return q;
   }
   // packages a picture's code may need (others in a preamble are the document's own)
-  const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'pgf-umlcd', 'pgf-umlsd', 'blochsphere',
+  const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'pgf-umlcd', 'pgf-umlsd', 'tikz-chemlab', 'blochsphere',
     'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',
     'amsmath', 'amssymb', 'amsfonts', 'mathrsfs', 'stmaryrd', 'upgreek', 'esint', 'dsfont', 'bbm']);
   // the preamble's definitions go with each picture, as a code object that exports them to the preamble

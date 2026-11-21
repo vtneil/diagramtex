@@ -39,15 +39,18 @@
     else if (e.key === 'Enter') { const first = shown[0]?.items[0]; if (first) { e.preventDefault(); onpick(first.id); (e.currentTarget as HTMLElement).blur(); } }
   }
   const tip = (i: PaletteItem) => (i.title ?? i.label) + (i.key ? ` (${i.key})` : '');
+  // A name left in English (a package's term, a molecule) is marked so: in the Thai interface it would be drawn as Thai,
+  // and Firefox on Linux sets Thai at 13px or more, so an 11px name in English grew past its tile and broke mid-word
+  const nameLang = (label: string) => (/[\u0E00-\u0E7F]/.test(label) ? undefined : 'en');
 </script>
 {#snippet item(i: PaletteItem, how: string)}
   {@const on = armed === i.id || !!i.on}
   {#if how === 'icons'}<button type="button" class={[on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {@attach fitItem(i.svg, i.label)} aria-label={i.label} {...i.attrs}
     onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}>{@html i.svg}</button>
   {:else if how === 'grid'}<button type="button" class={['qe-item', on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {@attach fitItem(i.svg, i.label)} {...i.attrs}
-    onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}><span class="qe-fig">{@html i.svg}</span>{#if i.label}<span>{i.label}</span>{/if}</button>
+    onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}><span class="qe-fig">{@html i.svg}</span>{#if i.label}<span lang={nameLang(i.label)}>{i.label}</span>{/if}</button>
   {:else}<button type="button" class={['cz-part', on && 'on', i.class]} data-item={i.id} aria-pressed={on} title={tip(i)} {@attach fitItem(i.svg, i.label)} {...i.attrs}
-    onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}>{@html i.svg}<span>{i.label}</span></button>{/if}
+    onclick={itemclick ? () => onpick(i.id) : undefined} onpointerdown={(e) => onitemdown?.(e, i.id)}>{@html i.svg}<span lang={nameLang(i.label)}>{i.label}</span></button>{/if}
 {/snippet}
 {#snippet items(c: PaletteCategory)}
   {@const how = c.layout ?? layout}

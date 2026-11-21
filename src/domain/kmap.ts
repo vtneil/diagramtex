@@ -627,7 +627,7 @@ TD.TYPES.kmap = {
 TD.kmap = { parse, write, layout, draw, groupShapes, check, solve, labelsOf, labelMode, rectOf, rectCells, groupFor, cellAt, posOf, centre, mapOrigin, varsOf, varName, truth, fullCode, shown, colorList, colour, SIZES, DEF_LABEL, TEXT };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("kmap", {
-  menu: { order: 10, label: "K-map", title: "Karnaugh map, written for karnaugh-map: 2 to 6 variables", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M6 4h20v16H6zM11 4v16M16 4v16M21 4v16M6 12h20\"/><rect x=\"12.5\" y=\"5.5\" width=\"7\" height=\"13\" rx=\"2.5\"/></svg>" },
+  menu: { order: 10, group: 'electronics', label: "K-map", title: "Karnaugh map, written for karnaugh-map: 2 to 6 variables", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M6 4h20v16H6zM11 4v16M16 4v16M21 4v16M6 12h20\"/><rect x=\"12.5\" y=\"5.5\" width=\"7\" height=\"13\" rx=\"2.5\"/></svg>" },
   nodeImport: { re: /\\begin\{karnaugh-map\}[\s\S]*\\end\{karnaugh-map\}/, order: 5, bb: (q) => TD.kmap.layout(q).bb },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],

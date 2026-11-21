@@ -45,9 +45,10 @@ export function fitToolbar(bar: HTMLElement, { lean = true, arrows = false }: { 
     e.preventDefault();
     bar.scrollLeft += e.deltaY;
   };
-  // the bar and each control: a group shown or hidden changes the content's width
+  // the bar and each control: a group shown or hidden changes the content's width. Not the arrows: fit shows and hides
+  // them, and an element watched that changes size in its own observer's callback is a "ResizeObserver loop" (an error)
   const ro = new ResizeObserver(fit);
-  const watch = () => { ro.disconnect(); ro.observe(bar); for (const c of bar.children) ro.observe(c); };
+  const watch = () => { ro.disconnect(); ro.observe(bar); for (const c of bar.children) if (c !== back && c !== on) ro.observe(c); };
   const mo = new MutationObserver(watch);
   watch();
   mo.observe(bar, { childList: true });

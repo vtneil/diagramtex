@@ -1094,7 +1094,7 @@ TD.uml = { parse, write, settle, layout, draw, kv, opts, unbrace, fullCode, num,
 // TeX's text metrics, shared with the sequence diagram (src/domain/umlsd.ts)
 TD.texText = { hd, baseOff, close, split };
 TD.blocks.register('uml', {
-  menu: { order: 9.5, label: 'Class', title: 'UML class diagram, written for pgf-umlcd', icon: '<svg viewBox="0 0 32 24"><rect x="2" y="3" width="12" height="18" rx="1"/><path d="M2 8h12M2 14h12M14 12h5M19 9l3 3-3 3z"/><rect x="22" y="7" width="8" height="10" rx="1"/><path d="M22 11h8"/></svg>' },
+  menu: { order: 9.5, group: 'computing', label: 'Class', title: 'UML class diagram, written for pgf-umlcd', icon: '<svg viewBox="0 0 32 24"><rect x="2" y="3" width="12" height="18" rx="1"/><path d="M2 8h12M2 14h12M14 12h5M19 9l3 3-3 3z"/><rect x="22" y="7" width="8" height="10" rx="1"/><path d="M22 11h8"/></svg>' },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   editor: { get: () => TD.umlEditor, alias: 'umlOpen', layout: (s: any) => TD.uml.layout(s) },

@@ -75,7 +75,7 @@ const TABLE_RE = {
   },
 } as unknown as RegExp;
 TD.blocks.register('table', {
-  menu: { order: 12.5, label: 'Table', title: 'A table (booktabs, merged cells, colours, siunitx numbers), edited in the Table workspace and written as a tabular in a node', icon: '<svg viewBox="0 0 32 24"><rect x="5" y="5" width="22" height="4.5" class="a1"/><path d="M5 19h22"/><path d="M5 14.25h22M15 9.5V19" stroke-width=".8"/></svg>' },
+  menu: { order: 12.5, group: 'general', label: 'Table', title: 'A table (booktabs, merged cells, colours, siunitx numbers), edited in the Table workspace and written as a tabular in a node', icon: '<svg viewBox="0 0 32 24"><rect x="5" y="5" width="22" height="4.5" class="a1"/><path d="M5 19h22"/><path d="M5 14.25h22M15 9.5V19" stroke-width=".8"/></svg>' },
   nodeImport: {
     order: 50, re: TABLE_RE,
     // the importer gives the code as src: read it into the model, centred where the node was

@@ -688,7 +688,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         const yes = await TD.confirm(uiText('dlg.eraseBin.title', 'Delete "{name}" for good?', { name: name || '' }), ids.length > 1 ? uiText('dlg.eraseBin.many', "Its {n} files are removed from this browser. This can't be undone.", { n: ids.length }) : uiText('dlg.eraseBin.one', "It is removed from this browser. This can't be undone."), { ok: caption(captions["ui.delete"]), danger: true });
         root.hidden = false;
         if (yes) { eraseFromBin(ids); draw(); }
-        ((root.querySelector('.bin-restore') || root.querySelector('.bin-done'))! as HTMLElement).focus();
+        (root.querySelector<HTMLElement>('.bin-restore') || root.querySelector<HTMLElement>('.bin-done'))?.focus();
       } else if ((e.target! as Element).closest('.bin-empty')) {
         const n = bin().length;
         root.hidden = true;
@@ -707,7 +707,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         e.preventDefault(); (f[(i + (e.shiftKey ? n - 1 : 1)) % n] as HTMLElement).focus();
       }
     });
-    requestAnimationFrame(() => ((root.querySelector('.bin-restore') || root.querySelector('.bin-done'))! as HTMLElement).focus());
+    requestAnimationFrame(() => (root.querySelector<HTMLElement>('.bin-restore') || root.querySelector<HTMLElement>('.bin-done'))?.focus()); // closed within the frame: nothing to focus
   }
   // ---- Recovery copies of one file: the newest first, each restored in place or opened as a new file. ----
   const HIST_IC = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2.8 8a5.2 5.2 0 101.5-3.7" fill="none" stroke="currentColor"/><path d="M2.4 2.4v2.8h2.8" fill="none" stroke="currentColor"/><path d="M8 5.2V8l2 1.2" fill="none" stroke="currentColor"/></svg>';
@@ -808,7 +808,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         ev.preventDefault(); (f[(i + (ev.shiftKey ? n - 1 : 1)) % n] as HTMLElement).focus();
       }
     });
-    requestAnimationFrame(() => ((root.querySelector('.bin-restore') || root.querySelector('.rec-done'))! as HTMLElement).focus());
+    requestAnimationFrame(() => (root.querySelector<HTMLElement>('.bin-restore') || root.querySelector<HTMLElement>('.rec-done'))?.focus()); // closed within the frame: nothing to focus
   }
   // Folders are only a way of showing names: a file named "Physics/Lab 1" is listed as "Lab 1" inside a
   // folder "Physics" (like a path in cloud storage). A folder exists while a file is in it; folded folders
@@ -1958,13 +1958,24 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const D = TD.physics && TD.physics.domains[k];
     return { insert: 'physics:' + k, title: uiText('phys.computed', '{title}: computed, with an editor', { title: caption(title) }), svg: `<svg viewBox="0 0 32 24">${d}</svg>`, label: D ? D.label : k };
   });
-  // the blocks, then the ones still to come
-  const blockTiles = (): ToolTileSpec[] => [
-    ...TD.blocks.menuEntries().map((b: any) => ({ insert: b.type, title: b.title, svg: b.icon, label: b.label })),
-    { soon: true, title: uiText('ui.tensor.network.coming.soon', 'Tensor network — coming soon'), label: uiText('ui.tensor', 'Tensor'), svg: '<svg viewBox="0 0 32 24"><path d="M2 12h4M12 12h8M26 12h4M9 6V2M23 6V2M9 18v4M23 18v4"/><rect x="5" y="7" width="8" height="10" rx="2"/><rect x="19" y="7" width="8" height="10" rx="2"/></svg>' },
-    { soon: true, title: uiText('ui.string.diagram.coming.soon', 'String diagram — coming soon'), label: uiText('ui.string', 'String'), svg: '<svg viewBox="0 0 32 24"><path d="M9 2v6M23 2v6M16 16v6M9 16c0 3 7 0 7 0"/><rect x="5" y="8" width="22" height="8" rx="1"/></svg>' },
-    { soon: true, title: uiText('ui.braid.and.knot.coming.soon', 'Braid and knot — coming soon'), label: uiText('ui.braid', 'Braid'), svg: '<svg viewBox="0 0 32 24"><path d="M6 2c0 6 10 6 10 10s-10 4-10 10"/><path d="M16 2c0 4-3 5-4.5 6.5M8.5 15.5C7 17 6 18 6 22"/><path d="M26 2v10c0 4-10 4-10 10M19.5 17.5c2-1.5 6.5-2 6.5-5.5"/></svg>' },
+  // the Blocks flyout: one titled section per subject (a block's menu.group), the ones still to come at the end of theirs
+  const BLOCK_GROUPS: [string, any][] = [
+    ['general', message('fly.blocks.general', 'General')], ['maths', message('fly.blocks.maths', 'Maths')],
+    ['quantum', message('fly.blocks.quantum', 'Quantum and physics')], ['electronics', message('fly.blocks.electronics', 'Electronics')],
+    ['computing', message('fly.blocks.computing', 'Computing')], ['chemistry', message('fly.blocks.chemistry', 'Chemistry')],
   ];
+  const SOON_BLOCKS = (): Record<string, ToolTileSpec[]> => ({ maths: [
+      { soon: true, title: uiText('ui.string.diagram.coming.soon', 'String diagram — coming soon'), label: uiText('ui.string', 'String'), svg: '<svg viewBox="0 0 32 24"><path d="M9 2v6M23 2v6M16 16v6M9 16c0 3 7 0 7 0"/><rect x="5" y="8" width="22" height="8" rx="1"/></svg>' },
+      { soon: true, title: uiText('ui.braid.and.knot.coming.soon', 'Braid and knot — coming soon'), label: uiText('ui.braid', 'Braid'), svg: '<svg viewBox="0 0 32 24"><path d="M6 2c0 6 10 6 10 10s-10 4-10 10"/><path d="M16 2c0 4-3 5-4.5 6.5M8.5 15.5C7 17 6 18 6 22"/><path d="M26 2v10c0 4-10 4-10 10M19.5 17.5c2-1.5 6.5-2 6.5-5.5"/></svg>' },
+      { soon: true, title: uiText('ui.tensor.network.coming.soon', 'Tensor network — coming soon'), label: uiText('ui.tensor', 'Tensor'), svg: '<svg viewBox="0 0 32 24"><path d="M2 12h4M12 12h8M26 12h4M9 6V2M23 6V2M9 18v4M23 18v4"/><rect x="5" y="7" width="8" height="10" rx="2"/><rect x="19" y="7" width="8" height="10" rx="2"/></svg>' },
+  ] });
+  const blockSections = (): ToolSection[] => {
+    const all = TD.blocks.menuEntries(), soon = SOON_BLOCKS();
+    return BLOCK_GROUPS.map(([g, name]) => ({ title: caption(name), tiles: [
+      ...all.filter((b: any) => (b.group ?? 'general') === g).map((b: any) => ({ insert: b.type, title: b.title, svg: b.icon, label: b.label })),
+      ...(soon[g] ?? []),
+    ] })).filter((sec) => sec.tiles.length);
+  };
 
   // the same drawing tools, for block editors that hold plain shapes too (the Physics editor): every tool but
   // images, plots, 3D and blocks. Items are [tool, title, icon svg]; TD.toolType gives the shape type of a tool.
@@ -2000,7 +2011,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       { entry: { insert: 'cz', title: uiText('fly.cz.title', 'A circuit drawn with circuitikz parts: 415 components, wires that snap to pins'), label: [czLabel[0], 'circuitikz', czLabel[1] ?? ''],
         svg: '<svg viewBox="0 0 32 24"><path d="M4 18V6h7M21 6h7v12H4"/><path d="M11 6l1.2-3 2.4 6 2.4-6 2.4 6 1.6-3" class="c1"/><path d="M14 18v-3M18 18v-3" class="c1"/><path d="M12 15h8M12 21h8" class="c1"/></svg>',
         help: uiText('fly.cz.help', 'Every circuitikz part, wired on a grid and exported as circuitikz.') } }]);
-    panel('fly-blocks', [{ title: uiText('ui.blocks.experimental', 'Blocks (experimental)'), warn: uiText('ui.some.inputs.might.not.be.rendered.correctly', 'Some inputs might not be rendered correctly.'), tiles: blockTiles() }]);
+    panel('fly-blocks', [{ title: uiText('ui.blocks.experimental', 'Blocks (experimental)'), warn: uiText('ui.some.inputs.might.not.be.rendered.correctly', 'Some inputs might not be rendered correctly.') }, ...blockSections()]);
   }
   let flyBuilt = false;
   onLocale(() => {
@@ -6258,7 +6269,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     '- \\textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.',
     '- \\textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.',
     '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; and 3D geometry in tikz-3dplot (points, vectors, planes, rotated frames, projections and angles), edited by dragging.',
-    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), graphs (TikZ graphs), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), UML class diagrams (pgf-umlcd), UML sequence diagrams (pgf-umlsd), Karnaugh maps (karnaugh-map), bit fields (bytefield), molecules and reactions (chemfig), 2D geometry (TikZ), tables (booktabs) and computed physics figures.',
+    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), graphs (TikZ graphs), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), UML class diagrams (pgf-umlcd), UML sequence diagrams (pgf-umlsd), Karnaugh maps (karnaugh-map), bit fields (bytefield), molecules and reactions (chemfig), laboratory apparatus (tikz-chemlab), 2D geometry (TikZ), tables (booktabs) and computed physics figures.',
     '- \\textbf{Images} and \\textbf{freehand} pencil strokes.',
     '',
     '# Five modes',

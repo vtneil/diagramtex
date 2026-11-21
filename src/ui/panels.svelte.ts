@@ -5,7 +5,7 @@ import SourcePanel from './SourcePanel.svelte';
 import type { SourcePanelModel } from './contracts';
 
 runtime.panelViews = { bloch: panelView(BlochPanel, shape => runtime.panels.bloch.model(shape)) };
-for (const type of ['qc', 'forest', 'zx', 'cd', 'xy', 'feynman', 'timing', 'kmap', 'bytefield', 'automata', 'graph', 'uml', 'umlsd', 'chemfig', 'table']) {
+for (const type of ['qc', 'forest', 'zx', 'cd', 'xy', 'feynman', 'timing', 'kmap', 'bytefield', 'automata', 'graph', 'uml', 'umlsd', 'chemfig', 'chemlab', 'table']) {
   runtime.panelViews[type] = panelView(SourcePanel, shape => runtime.panels[type].model(shape) as SourcePanelModel);
 }
 

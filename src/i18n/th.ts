@@ -42,6 +42,8 @@ const core: Record<string, string> = {
   "block.feynman.title": "แผนภาพ Feynman เขียนสำหรับ tikz-feynman",
   "block.chemfig.label": "เคมี",
   "block.chemfig.title": "เคมี: สูตรโครงสร้างและแผนผังปฏิกิริยา เขียนสำหรับ chemfig",
+  "block.chemlab.label": "แล็บเคมี",
+  "block.chemlab.title": "อุปกรณ์ห้องปฏิบัติการเคมี: เครื่องแก้ว ตะเกียง การไทเทรต และการกลั่น เขียนสำหรับ tikz-chemlab",
   "block.uml.label": "คลาส",
   "block.uml.title": "แผนภาพคลาส UML เขียนสำหรับ pgf-umlcd",
   "block.automata.label": "ออโตมาตา",

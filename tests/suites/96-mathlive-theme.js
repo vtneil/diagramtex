@@ -20,11 +20,14 @@
       // the suggestion box: MathLive's own, or one standing in for it
       let box = document.getElementById('mathlive-suggestion-popover');
       if (!box) { box = made = document.createElement('div'); box.id = 'mathlive-suggestion-popover'; document.body.append(box); await wait(); }
-      box.classList.add('is-visible'); await wait();
+      // checked on the next microtask: the lift runs as a MutationObserver callback, queued when the class changes. A timer
+      // could come after MathLive has tidied away a box with its id (WebKit on CI, within 200 ms)
+      const tick = () => new Promise(r => queueMicrotask(r));
+      box.classList.add('is-visible'); await tick();
       T.ok(box.matches(':popover-open'), 'in the top layer while shown');
       const cs = getComputedStyle(box);
       T.eq(cs.borderTopLeftRadius, getComputedStyle(document.documentElement).getPropertyValue('--r-lg').trim() || '12px', 'a card with the menus\' corners');
-      box.classList.remove('is-visible'); await wait();
+      box.classList.remove('is-visible'); await tick();
       T.ok(!box.matches(':popover-open'), 'and out of it when hidden');
     } finally { ed.destroy(); host.remove(); if (made) made.remove(); }
   });

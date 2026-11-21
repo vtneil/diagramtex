@@ -905,7 +905,7 @@ TD.TYPES.graph = {
 // for the visual editor (src/editors/grapheditor.ts)
 TD.graph = { fan, lines, isMultiline, parse, write, layout, draw, fullCode, libsOf, autoLayout, fromText, read, absToModel, graphOpts, nodeOpts, nodeBase, reach, along, kv, opts, unbrace, shown, num, split, isBendOpt, labelTex, DIRS, LOOPS };
 TD.blocks.register('graph', {
-  menu: { order: 5.5, label: 'Graph', title: 'Graph of nodes and edges, written with the TikZ graphs library', icon: '<svg viewBox="0 0 32 24"><circle cx="6" cy="17" r="3.5"/><circle cx="16" cy="6" r="3.5" class="a1"/><circle cx="26" cy="17" r="3.5"/><path d="M8.4 14.4l5.2-5.8M18.4 8.6l5.2 5.8M9.5 17h13"/></svg>' },
+  menu: { order: 5.5, group: 'general', label: 'Graph', title: 'Graph of nodes and edges, written with the TikZ graphs library', icon: '<svg viewBox="0 0 32 24"><circle cx="6" cy="17" r="3.5"/><circle cx="16" cy="6" r="3.5" class="a1"/><circle cx="26" cy="17" r="3.5"/><path d="M8.4 14.4l5.2-5.8M18.4 8.6l5.2 5.8M9.5 17h13"/></svg>' },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   editor: { get: () => TD.graphEditor, alias: 'graphOpen', layout: (s: any) => TD.graph.layout(s) },

@@ -2,7 +2,8 @@
 //
 // The drawing: its viewBox comes from the block's own layout, which measures letters and maths from estimates; set
 // glyphs (C, O, \mathbb{Z}) and some strokes reach past it, and an <svg> clips what lies outside its box. Once the
-// drawing is shown, this measures what it really draws (its shapes' boxes on screen) and widens the viewBox to hold it, then sizes it again
+// drawing is shown, this measures what it really draws (its shapes' boxes on screen, cut to any clip path they are
+// drawn inside) and widens the viewBox to hold it, then sizes it again
 // inside the bounds fitMini gave (data-fit="maxW maxH top"), so every drawing keeps the palette's weight. A drawing that
 // already fits is left exactly as it is.
 //
@@ -23,6 +24,7 @@ const NAME = ':scope > span:last-child:not(.qe-fig)';
 let observer: ResizeObserver | null = null;
 let lists: ResizeObserver | null = null;
 const listWidth = new WeakMap<Element, number>();
+let fontsHeard = false;
 function watcher() {
   observer ??= new ResizeObserver((entries) => {
     const shown = entries.filter((e) => e.contentRect.width || e.contentRect.height).map((e) => e.target);
@@ -31,8 +33,15 @@ function watcher() {
       const run = el instanceof SVGSVGElement ? () => fitSvg(el) : (again = false) => fitName(el as HTMLElement, again);
       run();
       if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (el.isConnected) run(true); });
+      if (!(el instanceof SVGSVGElement)) names.add(el as HTMLElement);
     }
   });
+  // A font can start loading after a name was fitted (Thai text in Sarabun is fetched when it first shows, a weight when
+  // it is first used): what was measured in the fallback is measured again once a font arrives
+  if (!fontsHeard && document.fonts) {
+    fontsHeard = true;
+    document.fonts.addEventListener('loadingdone', () => { for (const n of names) if (n.isConnected) fitName(n, true); else names.delete(n); });
+  }
   // the list's width: the names' room (3 columns, 2, 1)
   lists ??= new ResizeObserver((entries) => {
     for (const e of entries) {
@@ -83,27 +92,74 @@ function drawn(svg: SVGSVGElement, shown: DOMRect, cx: number, cy: number, cw: n
   // the viewBox is centred in the element (preserveAspectRatio's default, xMidYMid meet)
   const ox = shown.left + (shown.width - cw * ppu) / 2, oy = shown.top + (shown.height - ch * ppu) / 2;
   let l = Infinity, t = Infinity, r = -Infinity, d = -Infinity;
+  const clips = new Map<Element, Edges | null>();
   for (const el of svg.querySelectorAll(SHAPES)) {
     if (el.closest('defs,clipPath,mask,marker,pattern,symbol')) continue;
     const q = el.getBoundingClientRect();
     if (!q.width && !q.height) continue;
-    l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); d = Math.max(d, q.bottom);
+    let e: Edges = { l: q.left, t: q.top, r: q.right, d: q.bottom };
+    // a clipped shape shows only inside its clips (glassware's liquid is a wide band cut to the glass)
+    for (let g: Element | null = el; g && g !== svg.parentElement; g = g.parentElement) {
+      if (!g.hasAttribute('clip-path')) continue;
+      if (!clips.has(g)) clips.set(g, clipEdges(svg, g));
+      const c = clips.get(g);
+      if (c) e = { l: Math.max(e.l, c.l), t: Math.max(e.t, c.t), r: Math.min(e.r, c.r), d: Math.min(e.d, c.d) };
+    }
+    if (e.r < e.l || e.d < e.t) continue; // clipped away
+    l = Math.min(l, e.l); t = Math.min(t, e.t); r = Math.max(r, e.r); d = Math.max(d, e.d);
   }
   if (!(r >= l && d >= t)) return null;
   return { x: cx + (l - ox) / ppu, y: cy + (t - oy) / ppu, width: (r - l) / ppu, height: (d - t) / ppu };
 }
 
-let ctx: CanvasRenderingContext2D | null = null;
+type Edges = { l: number; t: number; r: number; d: number };
+// A clip's box on screen: its shapes' boxes in its own units (those of the element it clips), mapped by that element's
+// transform. Null (the shape counts whole, as if unclipped) when it can't be told: an objectBoundingBox clip, no shapes.
+function clipEdges(svg: SVGSVGElement, g: Element): Edges | null {
+  const id = /url\(\s*["']?#([^"')\s]+)/.exec(g.getAttribute('clip-path') || '')?.[1];
+  const cp = id ? svg.querySelector(`clipPath[id="${CSS.escape(id)}"]`) : null;
+  const ctm = (g as SVGGraphicsElement).getScreenCTM?.();
+  if (!cp || !ctm || cp.getAttribute('clipPathUnits') === 'objectBoundingBox') return null;
+  let e: Edges | null = null;
+  try {
+    for (const k of cp.children) {
+      if (!(k instanceof SVGGraphicsElement)) continue;
+      const b = k.getBBox(), own = k.transform?.baseVal.consolidate()?.matrix;
+      const m = own ? ctm.multiply(own) : ctm;
+      for (const [x, y] of [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]) {
+        const X = m.a * x + m.c * y + m.e, Y = m.b * x + m.d * y + m.f;
+        e = e ? { l: Math.min(e.l, X), t: Math.min(e.t, Y), r: Math.max(e.r, X), d: Math.max(e.d, Y) } : { l: X, t: Y, r: X, d: Y };
+      }
+    }
+  } catch { return null; }
+  return e;
+}
+
 // Intl.Segmenter (word breaks in any language, Thai included) is newer than this project's TypeScript library
-interface WordSegmenter { segment(text: string): Iterable<{ segment: string; isWordLike?: boolean }> }
+interface WordSegmenter { segment(text: string): Iterable<{ segment: string; index: number; isWordLike?: boolean }> }
 let words: WordSegmenter | null = null;
-const wordsOf = (text: string): string[] => {
+/** Each word's [start, end) in the text. */
+const wordSpans = (text: string): [number, number][] => {
   const Seg = (Intl as unknown as { Segmenter?: new (lang?: string, o?: { granularity: 'word' }) => WordSegmenter }).Segmenter;
-  if (!Seg) return text.split(/\s+/).filter(Boolean);
+  if (!Seg) return [...text.matchAll(/\S+/g)].map((m) => [m.index!, m.index! + m[0].length]);
   words ??= new Seg(document.documentElement.lang || undefined, { granularity: 'word' });
-  return [...words.segment(text)].filter((s) => s.isWordLike).map((s) => s.segment);
+  return [...words.segment(text)].filter((s) => s.isWordLike).map((s) => [s.index, s.index + s.segment.length]);
 };
+// The widest word as the page draws it: each word's box with the name held on one line. (A canvas measured with the
+// same font is not the page: Firefox on Linux drew "Association" 61px on one and 75px on the other.)
+function widestWord(name: HTMLElement): number {
+  const text = [...name.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim()) as Text | undefined;
+  if (!text) return 0;
+  const was = name.style.whiteSpace;
+  name.style.whiteSpace = 'nowrap';
+  const r = document.createRange();
+  let widest = 0;
+  for (const [a, z] of wordSpans(text.data)) { r.setStart(text, a); r.setEnd(text, z); widest = Math.max(widest, r.getBoundingClientRect().width); }
+  name.style.whiteSpace = was;
+  return widest;
+}
 const fitted = new WeakMap<HTMLElement, string>(); // the room and text each name was fitted to
+const names = new Set<HTMLElement>(); // every name fitted, measured again when a font arrives
 function fitName(name: HTMLElement, again = false) {
   let cs = getComputedStyle(name);
   if (cs.display === 'none') return;
@@ -127,12 +183,7 @@ function fitName(name: HTMLElement, again = false) {
   cs = getComputedStyle(name);
   const size = parseFloat(cs.fontSize);
   if (!(room > 0 && size > 0)) return;
-  ctx ??= document.createElement('canvas').getContext('2d');
-  if (!ctx) return;
-  ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-  let widest = 0;
-  for (const w of wordsOf(name.textContent || '')) widest = Math.max(widest, ctx.measureText(w).width);
-  const fits = room - 1; // canvas and layout measure a word a fraction of a pixel apart
+  const widest = widestWord(name), fits = room - 0.5; // a hair of room for subpixel rounding
   if (widest <= fits) return;
   name.style.fontSize = `${Math.max(MIN_TEXT_PX, Math.floor((size * fits / widest) * 10) / 10)}px`;
 }

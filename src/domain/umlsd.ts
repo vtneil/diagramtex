@@ -616,7 +616,7 @@ TD.TYPES.umlsd = {
 // for the visual editor (src/editors/umlsdeditor.ts)
 TD.umlsd = { parse, write, settle, lateRefs, layout, draw, kv, opts, unbrace, num, fullCode, CM, U };
 TD.blocks.register('umlsd', {
-  menu: { order: 9.6, label: 'Sequence', title: 'UML sequence diagram, written for pgf-umlsd', icon: '<svg viewBox="0 0 32 24"><rect x="3" y="2" width="9" height="5" rx="1"/><rect x="20" y="2" width="9" height="5" rx="1"/><path d="M7.5 7v15M24.5 7v15" stroke-dasharray="1.5 1.5"/><path d="M7.5 11h15M20 9l3 2-3 2M24.5 17h-15" /><path d="M12 15l-3 2 3 2"/></svg>' },
+  menu: { order: 9.6, group: 'computing', label: 'Sequence', title: 'UML sequence diagram, written for pgf-umlsd', icon: '<svg viewBox="0 0 32 24"><rect x="3" y="2" width="9" height="5" rx="1"/><rect x="20" y="2" width="9" height="5" rx="1"/><path d="M7.5 7v15M24.5 7v15" stroke-dasharray="1.5 1.5"/><path d="M7.5 11h15M20 9l3 2-3 2M24.5 17h-15" /><path d="M12 15l-3 2 3 2"/></svg>' },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   editor: { get: () => TD.umlsdEditor, alias: 'umlsdOpen', layout: (s: any) => TD.umlsd.layout(s) },

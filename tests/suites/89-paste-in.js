@@ -13,6 +13,14 @@ const pasteEvent = (dt) => {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'v', metaKey: true, ctrlKey: true, bubbles: true }));
   document.dispatchEvent(T.clipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
 };
+// The last copy in the app reached the system clipboard, so what is pasted now is newer. (When a copy fails to reach
+// it, as on CI's Chromium where an earlier suite's copy was refused, the app pastes its own copy instead: by design.)
+const copiedOutside = async () => {
+  const real = navigator.clipboard.writeText;
+  navigator.clipboard.writeText = () => Promise.resolve();
+  try { TD.app.newDoc('Copied', [T.make('rect')], null, null, null, 'board'); TD.state.sel = new Set(); document.body.focus(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', metaKey: true, ctrlKey: true, bubbles: true })); await new Promise((r) => setTimeout(r, 0)); }
+  finally { navigator.clipboard.writeText = real; }
+};
 const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 // the entries of a stored (uncompressed) .zip
 function unzip(u8) {
@@ -145,6 +153,7 @@ T.test('paste in: a block environment, TikZ, a formula and text land on the canv
 });
 
 T.test('paste in: ⌘V of a picture inserts it as the Image tool does, GIF and WebP as PNG, SVG kept', async () => {
+  await copiedOutside();
   board('Paste pictures');
   for (const [type, want] of [['image/png', 'png'], ['image/jpeg', 'jpeg'], ['image/webp', 'png']]) {
     const blob = await canvasBlob(type), dt = new DataTransfer();
@@ -153,7 +162,9 @@ T.test('paste in: ⌘V of a picture inserts it as the Image tool does, GIF and W
     pasteEvent(dt);
     await until(() => TD.state.doc.shapes.length > n);
     const s = TD.state.doc.shapes[n];
-    T.ok(s && s.type === 'image', type + ' pasted as an image');
+    // when it fails, why: what came in instead, or what stopped the paste (an open dialog, the focus in a field)
+    const why = () => `added ${JSON.stringify(TD.state.doc.shapes.slice(n).map((q) => q.type))}; modal ${!document.querySelector('#modal')?.hidden}; import ${!document.querySelector('#importModal')?.hidden}; hint "${document.querySelector('#hint')?.textContent}"; focus ${document.activeElement?.tagName}#${document.activeElement?.id}`;
+    T.ok(s && s.type === 'image', type + ' pasted as an image' + (s && s.type === 'image' ? '' : ': ' + why()));
     T.ok(s.src.startsWith(`data:image/${want}`), `${type} stored as ${want}: ${s.src.slice(0, 22)}`);
     T.ok(Math.abs(s.w / s.h - 2) < 0.01, 'keeps its aspect');
     T.ok(TD.state.sel.has(s.id), 'selected');

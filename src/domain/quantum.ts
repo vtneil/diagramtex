@@ -794,7 +794,7 @@ TD.qcLayout = layout;
 TD.qc = { ARGS, IGNORED, unwrap, grid, cell, opts, close, braceFault, draw, layout, fullCode };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("qc", {
-  menu: { order: 3, label: "Quantum", title: "Quantum circuit, written in quantikz", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M2 7h28M2 17h28M14 7v10\"/><rect x=\"5\" y=\"3\" width=\"7\" height=\"8\" class=\"a1\"/><circle cx=\"14\" cy=\"7\" r=\"1.6\" style=\"fill:var(--graphite)\"/><circle cx=\"14\" cy=\"17\" r=\"3.2\" fill=\"none\"/><path d=\"M14 14v6M11 17h6\"/><rect x=\"21\" y=\"13\" width=\"8\" height=\"8\" class=\"a1\"/><path d=\"M22.5 19.5a2.5 2.5 0 015 0M25 19.5l1.8-3\"/></svg>" },
+  menu: { order: 3, group: 'quantum', label: "Quantum", title: "Quantum circuit, written in quantikz", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M2 7h28M2 17h28M14 7v10\"/><rect x=\"5\" y=\"3\" width=\"7\" height=\"8\" class=\"a1\"/><circle cx=\"14\" cy=\"7\" r=\"1.6\" style=\"fill:var(--graphite)\"/><circle cx=\"14\" cy=\"17\" r=\"3.2\" fill=\"none\"/><path d=\"M14 14v6M11 17h6\"/><rect x=\"21\" y=\"13\" width=\"8\" height=\"8\" class=\"a1\"/><path d=\"M22.5 19.5a2.5 2.5 0 015 0M25 19.5l1.8-3\"/></svg>" },
   nodeImport: { re: /\\begin\{quantikz\}[\s\S]*\\end\{quantikz\}/, order: 0, bb: (q) => TD.qcLayout(q).bb, dedent: true },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],

@@ -1,0 +1,192 @@
+{
+ "default": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n  \\tkzTestTube[liquidLevel1=40]\n  \\begin{scope}[shift={(3,0)}]\n    \\tkzTestTube[glassType=erlenmeyer, liquidStyle1=Champagne]\n  \\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -7.68224,
+   -0.37697,
+   62.54028,
+   51.78407
+  ]
+ },
+ "glass": {
+  "src": "\\begin{tikzpicture}[scale=0.6]\n\\tkzTestTube[glassType=roundFlask]\n\\begin{scope}[xshift=3cm]\\tkzTestTube[glassType=beaker,liquidLevel1=60,liquidStyle1=Diffusion]\\end{scope}\n\\begin{scope}[xshift=6cm]\\tkzTestTube[glassType=reagentBottle,liquidLevel1=30,liquidLevel2=20,liquidStyle2=Oil]\\end{scope}\n\\begin{scope}[xshift=9cm]\\tkzTestTube[glassType=volumetricFlask,liquidLevel1=70]\\end{scope}\n\\begin{scope}[xshift=12cm]\\tkzTestTube[glassType=watchGlass,liquidLevel1=20,liquidStyle1=Blood]\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -24.71048,
+   -3.35435,
+   225.80038,
+   63.61826
+  ]
+ },
+ "tubes": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n\\tkzTestTube[stopper, label, Number=A]\n\\begin{scope}[xshift=3cm]\\tkzTestTube[straightTube,tiltAngle=20]\\end{scope}\n\\begin{scope}[xshift=6cm]\\tkzTestTube[elbowTube, clamp]\\end{scope}\n\\begin{scope}[xshift=16cm]\\tkzTestTube[uTube,substance={\\tkzChampagneBubbles[25]}]\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -8.91286,
+   -1.69781,
+   295.05511,
+   116.11034
+  ]
+ },
+ "heat": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n\\tkzHeatTube[liquidLevel1=30]\n\\end{tikzpicture}",
+  "bb": [
+   -18.15991,
+   -71.5088,
+   47.6431,
+   38.84692
+  ]
+ },
+ "titration": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n\\tkzTitration[glassType=erlenmeyer, buretteReagent={NaOH}, beakerReagent={HCl}]\n\\end{tikzpicture}",
+  "bb": [
+   -28.45274,
+   0,
+   28.45274,
+   227.62195
+  ]
+ },
+ "distill": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n\\tkzDistillation\n\\end{tikzpicture}",
+  "bb": [
+   -56.90549,
+   -142.26372,
+   113.81097,
+   99.5846
+  ]
+ },
+ "sep": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n\\tkzSeparatoryFunnel[stopper,TapOpen]\n\\begin{scope}[xshift=5cm]\\tkzStand\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -27.69156,
+   -85.73518,
+   151.3248,
+   237.323
+  ]
+ },
+ "misc": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n\\tkzFunnel\n\\begin{scope}[xshift=4cm]\\tkzGraduatedCylinder[liquidLevel1=60]\\end{scope}\n\\begin{scope}[xshift=7cm]\\tkzPipette\\end{scope}\n\\begin{scope}[xshift=9cm]\\tkzLargePipette\\end{scope}\n\\begin{scope}[xshift=12cm]\\tkzColumn\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -14.42636,
+   -28.8297,
+   181.58629,
+   149.57689
+  ]
+ },
+ "flask": {
+  "src": "\\begin{tikzpicture}[scale=0.4]\n\\tkzHeatFlask[glassType=roundFlask,curvedTube,gasCollection]\n\\end{tikzpicture}",
+  "bb": [
+   -14.5277,
+   -57.28,
+   114.11076,
+   69.0546
+  ]
+ },
+ "reflux": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n\\tkzRoundFlask[glassType=roundFlask,condenserBulbs]\n\\end{tikzpicture}",
+  "bb": [
+   -35.76591,
+   -14.42636,
+   28.65274,
+   160.95802
+  ]
+ },
+ "chain": {
+  "src": "\\begin{tikzpicture}[scale=0.4]\n  \\tkzTitration\n  \\tkzTitration[pHMeter, glassType=beaker, liquidLevel1=30]\n  \\tkzTitration\n\\end{tikzpicture}",
+  "bb": [
+   -22.76184,
+   0,
+   159.33298,
+   182.09477
+  ]
+ },
+ "flasks": {
+  "src": "\\begin{tikzpicture}[scale=0.4]\n  \\tkzRoundFlask[glassType=roundFlask, straightTube]\n  \\tkzRoundFlask[glassType=erlenmeyer, elbowTube, liquidLevel1=30, liquidLevel2=20, liquidStyle2=Blood]\n  \\tkzRoundFlask[glassType=beaker, label, Number=B, tiltAngle=10]\n\\end{tikzpicture}",
+  "bb": [
+   -16.47322,
+   -2.23613,
+   139.13185,
+   98.72952
+  ]
+ },
+ "gas2": {
+  "src": "\\begin{tikzpicture}[scale=0.4]\n  \\tkzHeatFlask[glassType=roundFlask, curvedTubeShort, gasCollection]\n\\end{tikzpicture}",
+  "bb": [
+   -5.0923,
+   9.14479,
+   91.34892,
+   93.72186
+  ]
+ },
+ "gas3": {
+  "src": "\\begin{tikzpicture}[scale=0.4]\n  \\tkzHeatFlask[glassType=roundFlask, doubleTube, gasCollection]\n\\end{tikzpicture}",
+  "bb": [
+   -5.0923,
+   9.14479,
+   93.62508,
+   93.72186
+  ]
+ },
+ "bubbling": {
+  "src": "\\begin{tikzpicture}[scale=0.4]\n  \\tkzHeatFlask[glassType=erlenmeyer, uTubeLong, bubbling]\n\\end{tikzpicture}",
+  "bb": [
+   -14.5277,
+   -57.20616,
+   66.4646,
+   74.02597
+  ]
+ },
+ "heattube2": {
+  "src": "\\begin{tikzpicture}[scale=0.4]\n  \\tkzHeatTube[bubbling]\n  \\begin{scope}[xshift=16cm]\\tkzHeatTube[glassType=roundFlask, bunsenBurner=false]\\end{scope}\n  \\begin{scope}[xshift=24cm]\\tkzHeatTube[tubeOnly, stopper]\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -14.5277,
+   -58.73715,
+   322.36684,
+   37.53079
+  ]
+ },
+ "settings": {
+  "src": "\\begin{tikzpicture}[scale=0.5, MyStyle/.style={fill=orange,draw=none}]\n  \\chemlabset{style=bold}\n  \\tkzTestTube[liquidStyle1=MyStyle, liquidLevel1=60]\n  \\begin{scope}[shift={(3,0)}]\\tkzTestTube[glassType=beaker, liquidLevel1=40, liquidLevel2=20, liquidLevel3=10, liquidStyle2=Oil, liquidStyle3=YellowStripes]\\end{scope}\n  \\begin{scope}[shift={(6,0)}]\\tkzBunsenBurner\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -7.51317,
+   -0.29999,
+   103.44118,
+   88.91481
+  ]
+ },
+ "tilts": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n  \\tkzFunnel[tiltAngle=20]\n  \\begin{scope}[shift={(5,0)}]\\tkzFunnel[glassType=beaker]\\end{scope}\n  \\begin{scope}[shift={(10,0)}]\\tkzGraduatedCylinder[tiltAngle=-20, liquidLevel1=40, liquidStyle1=Cobalt]\\end{scope}\n  \\begin{scope}[shift={(14,0)}]\\tkzPipette[reagentLevel=8, reagentColor=red]\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -14.42636,
+   -30.15056,
+   213.39557,
+   85.35823
+  ]
+ },
+ "sep2": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n  \\tkzSeparatoryFunnel[liquidLevel1=9, liquidLevel2=11.5]\n  \\begin{scope}[shift={(5,0)}]\\tkzColumn\\end{scope}\n  \\begin{scope}[shift={(8,0)}]\\tkzThermometer\\end{scope}\n  \\begin{scope}[shift={(11,0)}]\\tkzCrystallizingDish\\end{scope}\n  \\begin{scope}[shift={(16,0)}]\\tkzHeaterRoundFlask\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -27.69156,
+   -18.1599,
+   256.27469,
+   213.82234
+  ]
+ },
+ "labels": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n  \\tkzTestTube[liquidLevel1=40]\n  \\node at (2,5) {Water};\n  \\draw[->, thick] (2,4.5) -- (0.4,2);\n  \\node[red] at (5,1) {$\\mathrm{H_2O}$};\n\\end{tikzpicture}",
+  "bb": [
+   -7.68224,
+   -0.37695,
+   84.3468,
+   77.88148
+  ],
+  "tol": 0.6
+ },
+ "substances": {
+  "src": "\\begin{tikzpicture}[scale=0.5]\n  \\tkzTestTube[substance={\\tkzFilaments[5]{red}}]\n  \\begin{scope}[shift={(3,0)}]\\tkzTestTube[glassType=beaker, solid=\\tkzIronNail, liquidLevel1=30]\\end{scope}\n  \\begin{scope}[shift={(6,0)}]\\tkzTestTube[glassType=erlenmeyer, solid=\\tkzCopperTurnings]\\end{scope}\n  \\begin{scope}[shift={(9,0)}]\\tkzTestTube[glassType=beaker, solid=\\tkzZincGranules, substance=\\tkzBalls]\\end{scope}\n  \\begin{scope}[shift={(12,0)}]\\tkzTestTube[substance={\\tkzBubblesThreeD[40]{blue}}]\\end{scope}\n\\end{tikzpicture}",
+  "bb": [
+   -7.68224,
+   -0.37697,
+   178.3987,
+   51.78407
+  ]
+ }
+}

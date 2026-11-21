@@ -273,6 +273,8 @@ export async function runBrowserUI(page, filter = '') {
     }
   });
   await test('Fill bucket: an empty bucket never clears the selection, and it fills with its own colour, not Default style\'s', async () => {
+    // keys reach the canvas with nothing focused (the test before ends in a panel field, where K would be typed)
+    await page.evaluate(() => document.activeElement?.blur());
     await page.evaluate(() => {
       TD.app.newDoc('Bucket', [{ id: 'r', type: 'rect', x: 100, y: 100, w: 120, h: 80, stroke: '#000000', width: 1, fill: '#0000ff' }, { id: 'q', type: 'rect', x: 300, y: 100, w: 120, h: 80, stroke: '#000000', width: 1, fill: null }], null, null, null, 'board');
       TD.state.defaults.fill = null; TD.app.setBucketFill(null);
@@ -815,9 +817,11 @@ export async function runBrowserUI(page, filter = '') {
     await language('th');
     try {
       for (const [type, tool] of [['rect', 'rect'], ['text', 'text'], ['line', 'line']]) {
-        const got = await page.evaluate(([type, tool]) => {
+        const got = await page.evaluate(async ([type, tool]) => {
           const s = { ...TD.TYPES[type].create({ x: 0, y: 0 }, TD.state.defaults, tool), id: 'th', x: 0, y: 0, w: 80, h: 40, x1: 0, y1: 0, x2: 100, y2: 0, text: 'A' };
           TD.app.newDoc('Thai', [s], null, null, null, 'board'); TD.state.sel = new Set(['th']); TD.app.render(); TD.app.renderProps();
+          // measured in Sarabun: Thai in a weight not shown yet is drawn in a wider fallback until its file arrives
+          await new Promise((r) => requestAnimationFrame(r)); await document.fonts.ready;
           const cut = [...document.querySelectorAll('#props label')].filter((e) => e.offsetParent && e.scrollWidth > e.clientWidth).map((e) => e.textContent.trim());
           const opts = [...document.querySelectorAll('#props option')].map((o) => o.textContent.trim());
           return { cut, opts };
@@ -954,6 +958,29 @@ export async function runBrowserUI(page, filter = '') {
     }
     await language('en');
   });
+  await test('Palette names are measured as the page draws them, not on a canvas (Firefox on Linux drew a canvas narrower, so names broke mid-word)', async () => {
+    const was = page.viewportSize();
+    const open = () => page.evaluate(() => TD.blocks.get('chemfig').editor.get().open({ id: 'cfit', ...TD.TYPES.chemfig.create({ x: 0, y: 0 }, TD.state.defaults, 'chemfig') }, () => {}));
+    try {
+      await page.setViewportSize({ width: 1280, height: 1000 });
+      await open(); await page.waitForTimeout(800); await closeEditor();
+      // a canvas that says every word fits: only a measurement of the page itself still sees Cyclopentane's width
+      await page.evaluate(() => { window.__measure = CanvasRenderingContext2D.prototype.measureText; CanvasRenderingContext2D.prototype.measureText = function (t) { const m = window.__measure.call(this, t); return { ...m, width: 0 }; }; });
+      await page.setViewportSize({ width: 1600, height: 1000 });
+      await open(); await page.waitForTimeout(1200);
+      // every word on one line (Cyclopropane, Cyclopentane and Cycloheptane need a smaller size here in Chromium)
+      const broken = await page.evaluate(() => [...document.querySelectorAll('[data-item] > span:last-child')].filter((n) => n.offsetParent && n.firstChild?.nodeType === 3).flatMap((n) => {
+        const text = n.firstChild, r = document.createRange(), out = [];
+        for (const m of text.data.matchAll(/\S+/g)) { r.setStart(text, m.index); r.setEnd(text, m.index + m[0].length); if (r.getClientRects().length > 1) out.push(m[0]); }
+        return out;
+      }));
+      assert.deepEqual(broken, [], 'no name breaks in the middle of a word');
+    } finally {
+      await page.evaluate(() => { if (window.__measure) CanvasRenderingContext2D.prototype.measureText = window.__measure; });
+      await closeEditor();
+      await page.setViewportSize(was);
+    }
+  });
   await test('Tablet held upright: the document fills the width, its controls stay usable, and the top bar shows what is scrolled away', async () => {
     const size = page.viewportSize();
     await page.setViewportSize({ width: 820, height: 1180 });
@@ -972,7 +999,10 @@ export async function runBrowserUI(page, filter = '') {
       const bar = page.locator('#topbarTools'), on = bar.locator('.tb-arrow-r');
       await bar.evaluate((b) => { b.scrollLeft = 0; });
       await page.waitForFunction(() => !document.querySelector('#topbarTools .tb-arrow-r').hidden && document.querySelector('#topbarTools .tb-arrow-l').hidden); // » only: nothing to the left at the start
-      for (let k = 0; k < 6 && await on.isVisible(); k++) { await on.click(); await page.waitForTimeout(400); }
+      // each » scrolls the bar smoothly: wait for it to come to rest (slower in Firefox) before looking for the arrow again,
+      // or the next click finds an arrow that goes as the scroll reaches the end
+      const settled = () => page.waitForFunction(() => new Promise((r) => { const b = document.querySelector('#topbarTools'); let last = NaN; const tick = () => { if (b.scrollLeft === last) r(true); else { last = b.scrollLeft; setTimeout(tick, 120); } }; tick(); }));
+      for (let k = 0; k < 6 && await on.isVisible(); k++) { await on.click(); await settled(); }
       assert.ok(await on.isHidden(), 'the » arrow takes the bar to its end, and goes');
       const exp = await page.evaluate(() => { const b = document.querySelector('#topbarTools').getBoundingClientRect(), e = document.querySelector('#btnExport').getBoundingClientRect(); return e.left >= b.left && e.right <= b.right; });
       assert.ok(exp, 'Export is in view');

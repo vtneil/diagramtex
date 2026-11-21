@@ -612,7 +612,7 @@ TD.TYPES.feynman = {
 TD.feyn = { parse, write, layout, draw, along, polyline, readEdgeOpts, kv, opts, unbrace, styleOf, fullCode, shown, num, EDGE_TYPES, VERTEX_STYLES, TEXT };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("feynman", {
-  menu: { order: 7, label: "Feynman", title: "Feynman diagram, written for tikz-feynman", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M3 3l7 9-7 9M29 3l-7 9 7 9\"/><path d=\"M10 12c1-2.5 2-2.5 3 0s2 2.5 3 0 2-2.5 3 0 2 2.5 3 0\" class=\"a1\"/><path d=\"M5.6 6.4l2.2.2-.3-2.2M7.5 19.6l-2.2.2.3-2.2\" /></svg>" },
+  menu: { order: 7, group: 'quantum', label: "Feynman", title: "Feynman diagram, written for tikz-feynman", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M3 3l7 9-7 9M29 3l-7 9 7 9\"/><path d=\"M10 12c1-2.5 2-2.5 3 0s2 2.5 3 0 2-2.5 3 0 2 2.5 3 0\" class=\"a1\"/><path d=\"M5.6 6.4l2.2.2-.3-2.2M7.5 19.6l-2.2.2.3-2.2\" /></svg>" },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   editor: { get: () => TD.feynEditor, alias: "feynOpen", layout: (s) => TD.feyn.layout(s) }

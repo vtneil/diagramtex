@@ -786,7 +786,13 @@ import { createDocHistory } from './doc-history';
     renderShell();
   }
   window.addEventListener('resize', () => { if (app.state.mode === 'document' && zoomMode === 'fit') layoutPage(TD.pageSize(doc().page)); });
-  root!.addEventListener('load', () => { if (app.state.mode === 'document') layoutPage(TD.pageSize(doc().page)); }, true);
+  // a picture that loads (a label, an image) can change the page's height: laid out again, once a frame however many
+  // load together (a whole document's labels after a change of language), as each layout measures the whole page
+  let loadLayout = 0;
+  root!.addEventListener('load', () => {
+    if (loadLayout) return;
+    loadLayout = requestAnimationFrame(() => { loadLayout = 0; if (app.state.mode === 'document') layoutPage(TD.pageSize(doc().page)); });
+  }, true);
   // Zoom to z, keeping the point under (cx, cy) (view coordinates; the view's centre by default) in place.
   function zoomTo(z: any, cx?: any, cy?: any) {
     z = Math.min(ZMAX, Math.max(ZMIN, z));

@@ -167,11 +167,15 @@ VALID & 8L 2H 4L 2H 8L \\
 \end{rightwordgroup}
 \end{bytefield}`);
   });
-  example('Aromatic chemistry: salicylic acid and aspirin', 'Two native chemfig blocks show aromatic rings, branches, carbonyls and heteroatoms. The arrow and reaction annotation are editable canvas shapes; double-click either structure for the chemistry editor.', () => {
+  example('Aromatic chemistry: salicylic acid and aspirin', 'Two native chemfig blocks show aromatic rings, branches, carbonyls and heteroatoms; a Chemistry Laboratory block shows the round flask heated under a reflux condenser. The arrow and reaction annotation are editable canvas shapes; double-click a structure for the chemistry editor, or the apparatus for the lab editor.', () => {
     block('chemfig', R`\chemfig{**6((-OH)-(-C(=[1]O)-[7]OH)-----)}`, { x: 50, y: 100 });
     block('chemfig', R`\chemfig{**6((-O-C(=[2]O)-[7]CH_3)-(-C(=[1]O)-[7]OH)-----)}`, { x: 510, y: 100 });
     arrow(290, 155, 440, 155, { width: 2 }); text(365, 115, 'Acetylation', { size: 15 }); text(365, 200, '$H^+$', { size: 16 });
     text(140, 355, 'Salicylic acid'); text(620, 355, 'Acetylsalicylic acid (aspirin)');
+    const lab = block('chemlab', R`\begin{tikzpicture}[scale=0.6]
+  \tkzRoundFlask[glassType=roundFlask, condenserBulbs]
+\end{tikzpicture}`, { x: 900, y: 30 });
+    note(lab, 'Heated under reflux', 25);
   });
   example('Composite design pattern with interface and ownership', 'A class hierarchy combines an abstract component, leaf and composite implementations, attributes, operations and a collection relationship. The UML editor owns all classes and relations.', () => {
     block('uml', R`\begin{tikzpicture}

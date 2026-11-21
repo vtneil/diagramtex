@@ -41,9 +41,30 @@ const MEASURE = async (type) => {
         n++;
         const R = svg.getBoundingClientRect();
         let c = null;
+        // what a clip path lets show, on screen: its shapes' boxes, mapped by the clipped element's transform
+        const clipOf = (g) => {
+          const id = /url\(\s*["']?#([^"')\s]+)/.exec(g.getAttribute('clip-path') || '')?.[1];
+          const cp = id && svg.querySelector(`clipPath[id="${CSS.escape(id)}"]`), m0 = g.getScreenCTM();
+          if (!cp || !m0) return null;
+          let q = null;
+          for (const k of cp.children) {
+            const b = k.getBBox(), own = k.transform?.baseVal.consolidate()?.matrix, m = own ? m0.multiply(own) : m0;
+            for (const [x, y] of [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]) {
+              const X = m.a * x + m.c * y + m.e, Y = m.b * x + m.d * y + m.f;
+              q = q ? { l: Math.min(q.l, X), t: Math.min(q.t, Y), r: Math.max(q.r, X), b: Math.max(q.b, Y) } : { l: X, t: Y, r: X, b: Y };
+            }
+          }
+          return q;
+        };
         for (const el of svg.querySelectorAll('path,line,rect,circle,ellipse,polygon,polyline,text,image,foreignObject,use')) {
           if (el.closest('defs,clipPath,mask,marker,pattern')) continue;
-          const r = el.getBoundingClientRect(); if (!r.width && !r.height) continue;
+          const r0 = el.getBoundingClientRect(); if (!r0.width && !r0.height) continue;
+          let r = { left: r0.left, top: r0.top, right: r0.right, bottom: r0.bottom };
+          for (let g = el; g && g !== svg.parentElement; g = g.parentElement) {
+            const q = g.hasAttribute('clip-path') && clipOf(g);
+            if (q) r = { left: Math.max(r.left, q.l), top: Math.max(r.top, q.t), right: Math.min(r.right, q.r), bottom: Math.min(r.bottom, q.b) };
+          }
+          if (r.right < r.left || r.bottom < r.top) continue;
           c = c ? { l: Math.min(c.l, r.left), t: Math.min(c.t, r.top), r: Math.max(c.r, r.right), b: Math.max(c.b, r.bottom) } : { l: r.left, t: r.top, r: r.right, b: r.bottom };
         }
         const over = c ? Math.max(R.left - c.l, R.top - c.t, c.r - R.right, c.b - R.bottom) : 0;

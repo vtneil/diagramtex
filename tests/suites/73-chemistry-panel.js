@@ -131,6 +131,23 @@
     });
   });
 
+  T.test('chemistry names: a compound raised by its arrow has its phantom under it, where its name goes', async () => {
+    // \chemname measures from each compound's own baseline: C sits above A-B's bottom, so its name does too
+    await run('\\schemestart\\chemfig{A-[6]B}\\arrow[30]\\chemfig{C}\\schemestop', async () => {
+      const ph = [...root().querySelectorAll('.cf-phantom:not(.cf-tail)')].map((x) => x.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+      T.eq(ph.length, 2, 'a phantom under each compound');
+      T.ok(ph[1].top < ph[0].top - 20, `the raised compound's phantom is higher: ${ph[1].top} vs ${ph[0].top}`);
+      // below C by what its name will be below it (naming C moves C: the arrow meets its taller box)
+      const k = screen(0, 1)[1] - screen(0, 0)[1];
+      const below = (L, y) => (y - screen(0, L.mols[1].dy)[1]) / k; // drawing units under C's baseline
+      const at = [ph[1].left + ph[1].width / 2, ph[1].top + ph[1].height / 2], was = below(TD.chem.build(code()), at[1]);
+      await clickAt(at);
+      await typePop('Bar');
+      const L = TD.chem.build(code()), nm = L.texts.find((x) => x.name), now = nm.cy - L.mols[1].dy;
+      T.ok(Math.abs(now - was) < ph[1].height / 2 / k, `the name as far under C as its phantom was: ${now} vs ${was}`);
+    });
+  });
+
   T.test('chemistry scheme: an arrow with nothing after it ends in a box; click it to type the next compound', async () => {
     await run('\\schemestart\\chemfig{A}\\arrow\\schemestop', async () => {
       T.eq(root().querySelectorAll('.cf-tail').length, 1, 'one box, after the arrow');

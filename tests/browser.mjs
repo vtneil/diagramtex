@@ -58,8 +58,11 @@ const engines = { chromium, webkit, firefox };
 const chrome = process.env.CHROME || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(file => fs.existsSync(file));
 export async function launchBrowser(name, url, contextOptions = {}, launchOptions = {}) {
   if (!Object.hasOwn(engines, name)) throw new Error('Unknown browser: ' + name);
+  // Firefox on Linux draws Thai at 13px or more (font.minimum-size.th), on macOS at any size: set everywhere, so a
+  // run on any machine sees the Thai interface as Linux users do (11px names and 12px labels grow)
+  const firefoxUserPrefs = name === 'firefox' ? { 'font.minimum-size.th': 13, ...launchOptions.firefoxUserPrefs } : undefined;
   const browser = await engines[name].launch({ headless: true,
-    ...(name === 'chromium' && chrome ? { executablePath: chrome } : {}), ...launchOptions });
+    ...(name === 'chromium' && chrome ? { executablePath: chrome } : {}), ...launchOptions, ...(firefoxUserPrefs ? { firefoxUserPrefs } : {}) });
   try {
     const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1, serviceWorkers: 'block', locale: 'en-GB', ...contextOptions });
     const page = await context.newPage(), errors = consoleErrors(), logs = errors.logs, warnings = [];
@@ -70,7 +73,7 @@ export async function launchBrowser(name, url, contextOptions = {}, launchOption
     page.on('requestfailed', request => record({ type: 'requestfailed', url: request.url(), failure: request.failure() }));
     page.on('response', response => { if (response.status() >= 400) record({ type: 'http', url: response.url(), status: response.status() }); });
     page.on('pageerror', error => record({ type: 'pageerror', message: String(error) }));
-    page.on('pageerror', error => logs.push('exception: ' + error.stack));
+    page.on('pageerror', error => logs.push('exception: ' + (error.stack || error.message || String(error)))); // a thrown non-Error has no stack
     page.on('console', message => {
       if (message.type() === 'error') errors.record(message.text());
       if (message.type() === 'warning') warnings.push(message.text());

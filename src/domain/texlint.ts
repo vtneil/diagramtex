@@ -58,6 +58,7 @@ import { runtime as TD } from '../runtime';
     ['tikz-timing', /\\(?:texttiming|tikztiming)\b|\\begin\{tikztimingtable\}/],
     ['pgf-umlcd', /\\begin\{(?:class|interface|abstractclass|staticclass|object)\}\[?[^\n]*\}\{[^}]*,[^}]*\}|\\(?:umlnote|unidirectionalAssociation|switchUmlcdSchool)\b/],
     ['pgf-umlsd', /\\begin\{sequencediagram\}/],
+    ['tikz-chemlab', /\\(?:tkz(?:TestTube|HeatTube|RoundFlask|HeatFlask|Funnel|GraduatedCylinder|Pipette|LargePipette|Titration|Distillation|SeparatoryFunnel)|chemlabset)\b/],
     ['amssymb', /\\(?:mathbb|mathfrak|Bbb|frak|bold|varnothing|leqslant|geqslant|square|blacksquare|checkmark)\b/],
     ['amsmath', /\\(?:text|dfrac|tfrac|binom|operatorname|xrightarrow|xleftarrow|boldsymbol)\b|\\begin\{(?:align|aligned|pmatrix|bmatrix|vmatrix|cases|gather|multline)\*?\}/],
     ['siunitx', /\\(?:SI|si|qty|unit|num|ang)\s*[[{]/],
@@ -67,7 +68,7 @@ import { runtime as TD } from '../runtime';
     ['bm', /\\bm\b/],
     ['physics', /\\(?:ket|bra|braket|dv|pdv|abs|norm)\{/],
   ];
-  const LOADS_TIKZ = ['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'forest', 'tikz-feynman', 'tikz-timing', 'quantikz', 'chemfig', 'tikz-3dplot', 'tkz-euclide', 'smartdiagram', 'zx-calculus', 'blochsphere', 'karnaugh-map', 'pgf-pie', 'pgf-umlcd', 'pgf-umlsd'];
+  const LOADS_TIKZ = ['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'forest', 'tikz-feynman', 'tikz-timing', 'quantikz', 'chemfig', 'tikz-3dplot', 'tkz-euclide', 'smartdiagram', 'zx-calculus', 'blochsphere', 'karnaugh-map', 'pgf-pie', 'pgf-umlcd', 'pgf-umlsd', 'tikz-chemlab'];
   const PKG_IMPLIES: Record<string, any> = { amssymb: ['amsfonts'], mathtools: ['amsmath'], physics: [], quantikz: ['tikz-cd'], 'tikz-cd': [], bm: [] };
   // pdflatex can't run these; the app compiles and exports for pdflatex
   const LUA = [
