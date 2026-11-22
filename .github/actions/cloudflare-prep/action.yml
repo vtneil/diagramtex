@@ -1,0 +1,35 @@
+name: Prepare a Cloudflare upload
+description: >
+  Everything a deploy needs, done without the Cloudflare token: the build job's dist/,
+  wrangler from package-lock.json installed with no install scripts, and wrangler.ci.toml
+  (wrangler.toml without its [build] table, so the upload runs no npm code but wrangler's own).
+
+runs:
+  using: composite
+  steps:
+    # Built and checked by the build job, which never sees a secret.
+    - uses: actions/download-artifact@v4
+      with:
+        name: dist
+        path: dist/
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    # --ignore-scripts: no package's install code runs on this machine at all.
+    - name: Install wrangler (no install scripts)
+      shell: bash
+      run: npm ci --ignore-scripts --no-audit --no-fund
+
+    - name: Write wrangler.ci.toml without [build]
+      shell: bash
+      run: |
+        node -e "
+          const fs = require('fs');
+          const s = fs.readFileSync('wrangler.toml', 'utf8');
+          const o = s.replace(/^\[build\][\s\S]*?(?=^\[)/m, '');
+          if (o === s || /^\[build\]/m.test(o)) { console.error('could not drop [build] from wrangler.toml'); process.exit(1); }
+          fs.writeFileSync('wrangler.ci.toml', o);
+        "
+        test -f dist/index.html

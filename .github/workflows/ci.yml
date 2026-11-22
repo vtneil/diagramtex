@@ -136,8 +136,12 @@ jobs:
           if-no-files-found: ignore
 
   # main → a Preview named "main" at its own workers.dev URL (production untouched),
-  # once the build and the static checks pass. wrangler.toml's [build] command
-  # reinstalls, typechecks and builds before uploading.
+  # once the build and the static checks pass.
+  #
+  # The Cloudflare token is only in the final wrangler step. That step uploads the
+  # build job's dist/ with wrangler.ci.toml (no [build] table), so the only code
+  # running with the token is wrangler itself, at the version in package-lock.json,
+  # installed without install scripts (.github/actions/cloudflare-prep).
   preview:
     if: github.ref == 'refs/heads/main'
     needs: [build, typecheck, label-glyphs]
@@ -151,18 +155,17 @@ jobs:
       url: ${{ steps.preview.outputs.url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
+          persist-credentials: false
+      - uses: ./.github/actions/cloudflare-prep
       - id: preview
+        name: Upload the Preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -o pipefail
-          npx wrangler preview --name main --message "${GITHUB_SHA::7}" | tee preview.log
+          node_modules/.bin/wrangler preview -c wrangler.ci.toml --name main --message "${GITHUB_SHA::7}" | tee preview.log
           # Prefer the Preview's stable address (main-…) over this upload's own one.
           urls=$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' preview.log || true)
           url=$(printf '%s\n' "$urls" | grep -m1 '^https://main-' || printf '%s\n' "$urls" | tail -1)
@@ -170,6 +173,7 @@ jobs:
 
   # A vX.Y.Z tag → production, only after every check above passed on that
   # commit, then a GitHub Release for the tag with the release commit's title.
+  # The token is handled as in preview: only the wrangler step has it.
   deploy:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build, typecheck, label-glyphs, functional, browser-check]
@@ -185,16 +189,14 @@ jobs:
       url: https://diagramtex.com
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
+          persist-credentials: false
+      - uses: ./.github/actions/cloudflare-prep
       - name: Deploy to Cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --tag "$GITHUB_REF_NAME" --message "${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
+        run: node_modules/.bin/wrangler deploy -c wrangler.ci.toml --tag "$GITHUB_REF_NAME" --message "${GITHUB_REF_NAME} (${GITHUB_SHA::7})"
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
