@@ -12,14 +12,14 @@ runs:
     # Only the build saves the cache; the parallel jobs just read it.
     - name: Restore and save the npm cache
       if: inputs.save-cache == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: .npm
         key: npm-playwright-noble-${{ hashFiles('package-lock.json') }}
         restore-keys: npm-playwright-noble-
     - name: Restore the npm cache
       if: inputs.save-cache != 'true'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: .npm
         key: npm-playwright-noble-${{ hashFiles('package-lock.json') }}

@@ -8,14 +8,16 @@ runs:
   using: composite
   steps:
     # Built and checked by the build job, which never sees a secret.
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: dist
         path: dist/
 
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with:
         node-version: 22
+        # Never restore a cache in a job that later holds the token.
+        package-manager-cache: false
 
     # --ignore-scripts: no package's install code runs on this machine at all.
     - name: Install wrangler (no install scripts)
