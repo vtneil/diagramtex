@@ -6,7 +6,7 @@
   "criteria": "Success: recognisable at 16 px, works in one colour, says 'diagram' and 'TeX' without a compass, a pencil or Overleaf green.",
   "industry": "software",
   "mockups": ["app-icon", "favicon-tab", "readme", "website", "terminal", "sticker"],
-  "nav": ["Editor", "Examples", "GitLab"],
+  "nav": ["Editor", "Examples", "GitHub"],
   "brand_color": "#23205A",
   "tile_color": "#23205A",
   "greyscale": false,

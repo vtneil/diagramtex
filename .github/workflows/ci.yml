@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every job runs in the Playwright image. Keep its version aligned with
+# playwright in package-lock.json (all five `image:` lines below).
+# GitHub-hosted runners give every job its own fresh machine, so the browser
+# suites run in parallel without competing for CPU (GitLab's single runner
+# needed them one at a time).
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          save-cache: "true"
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          include-hidden-files: true
+          retention-days: 7
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: npm run check
+
+  label-glyphs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: node scripts/generate-label-glyphs.js --check
+
+  # Every test uses the same production build. A failing suite doesn't stop the others.
+  functional:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+      options: --user 1001
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit, firefox]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - run: node tests/run.mjs --dist --no-tex --${{ matrix.browser }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-${{ matrix.browser }}
+          path: .ci-artifacts/diagramtex-*/
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # One job per specialist suite. Each runner keeps its own browser matrix,
+  # including comparisons that need several engines together.
+  browser-check:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+      options: --user 1001
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - rendering-parity
+          - document-layout
+          - webkit-rendering
+          - mixed-labels
+          - label-clipping
+          - text-alignment
+          - math-performance
+          - label-display
+          - document-performance
+          - math-loading
+          - math-priority
+          - output-readiness
+          - preview-fade
+          - label-swap
+          - page-print
+          - format-preview
+          - construction-tools
+          - modal-responsive
+          - context-menu-layout
+          - snapping-modes
+          - palette-fit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - run: node "tests/${{ matrix.suite }}.mjs" --dist
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-check-${{ matrix.suite }}
+          path: .ci-artifacts/diagramtex-*/
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: ignore

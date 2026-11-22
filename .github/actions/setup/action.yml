@@ -1,0 +1,38 @@
+name: Install dependencies
+description: Install the locked dependencies from the npm cache and keep test diagnostics inside the checkout.
+
+inputs:
+  save-cache:
+    description: "'true' to save the npm cache after installing (only the build job does)."
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    # Only the build saves the cache; the parallel jobs just read it.
+    - name: Restore and save the npm cache
+      if: inputs.save-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: .npm
+        key: npm-playwright-noble-${{ hashFiles('package-lock.json') }}
+        restore-keys: npm-playwright-noble-
+    - name: Restore the npm cache
+      if: inputs.save-cache != 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: .npm
+        key: npm-playwright-noble-${{ hashFiles('package-lock.json') }}
+        restore-keys: npm-playwright-noble-
+
+    - name: npm ci
+      shell: bash
+      run: npm ci --include=dev --cache .npm --prefer-offline --no-audit --no-fund
+
+    # The test runners write diagnostics under os.tmpdir(). Keep them inside the
+    # checkout so a failed job can upload them.
+    - name: Keep diagnostics in the checkout
+      shell: bash
+      run: |
+        mkdir -p "$GITHUB_WORKSPACE/.ci-artifacts"
+        echo "TMPDIR=$GITHUB_WORKSPACE/.ci-artifacts" >> "$GITHUB_ENV"

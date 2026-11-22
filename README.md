@@ -134,7 +134,7 @@ DiagramTeX was built with the help of generative AI: much of its code, tests and
 
 ## Contributing
 
-Bug reports and ideas are welcome in the [issue tracker](https://gitlab.com/igniting-space/diagramtex/-/issues). If `pdflatex` reports a problem with exported code, please include the code and the error.
+Bug reports and ideas are welcome in the [issue tracker](https://github.com/vtneil/diagramtex/issues). If `pdflatex` reports a problem with exported code, please include the code and the error.
 
 ## License
 

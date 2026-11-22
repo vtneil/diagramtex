@@ -68,7 +68,7 @@ const core: Record<string, string> = {
   "editor.zx.deleteRowN": "ลบแถว {n}",
   "editor.zx.deleteColumnN": "ลบคอลัมน์ {n}",
   "ui.draw.physics.and.maths.diagrams.in.your.browser.and.export.them.as.latex.tikz.pd": "วาดแผนภาพฟิสิกส์และคณิตศาสตร์ในเบราว์เซอร์ แล้วส่งออกเป็น LaTeX/TikZ, PDF, SVG หรือ PNG ทั้งวงจร วงจรควอนตัม แผนภาพสลับที่ ทรงกลม Bloch ต้นไม้ และกราฟ พร้อมเรียงพิมพ์สมการขณะพิมพ์ ใช้ฟรีและทำงานแบบออฟไลน์ได้",
-  "ui.diagramtex.on.gitlab": "DiagramTeX บน GitLab",
+  "ui.diagramtex.on.github": "DiagramTeX บน GitHub",
   "ui.physics.experimental.results.and.drawings.might.not.be.correct.computed.figures.": "ฟิสิกส์ (ทดลอง ผลลัพธ์และภาพอาจไม่ถูกต้อง): รูปที่คำนวณได้ (กลศาสตร์ ทัศนศาสตร์ สนาม คลื่น กาลอวกาศ ระดับพลังงาน) และสัญลักษณ์กลศาสตร์และทัศนศาสตร์",
   "ui.blocks.experimental.some.inputs.might.not.be.rendered.correctly.commutative.diag": "บล็อก (ทดลอง ข้อมูลบางอย่างอาจแสดงผลไม่ถูกต้อง): แผนภาพสลับที่ ทรงกลม Bloch วงจรควอนตัม วงจร ต้นไม้ ZX Feynman แผนภาพเวลา เครื่องสถานะ แผนผัง Karnaugh บิตฟิลด์ เคมี และเรขาคณิต 2 มิติและ 3 มิติ",
   "ui.surface.z.f.x.y.shaded.or.as.a.mesh.type.in.pgfplots": "พื้นผิว z = f(x, y) แบบแรเงาหรือแบบตาข่าย (ชนิด) ด้วย pgfplots",

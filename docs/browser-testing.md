@@ -42,21 +42,18 @@ node tests/run.mjs --dist          # after npm run build
 node tests/run.mjs --no-tex        # same suites/goldens; skips pdflatex
 ```
 
-GitLab CI shows separate `build`, `typecheck`, and `label-glyphs` jobs. The build
-publishes `dist/` as an artifact; every browser-test job installs the locked
-dependencies and tests that same production build.
+GitHub Actions (`.github/workflows/ci.yml`) shows separate `build`, `typecheck`, and
+`label-glyphs` jobs. The build uploads `dist/` as an artifact; every browser-test job
+installs the locked dependencies and tests that same production build.
 
-The functional suite is split into `functional: [chromium]`, `functional: [webkit]`,
-and `functional: [firefox]`, each using `--dist --no-tex`. Specialist checks appear
-as separate jobs such as `browser-check: [label-clipping]`,
-`browser-check: [page-print]`, and `browser-check: [modal-responsive]`. Each specialist
+The functional suite is split into `functional (chromium)`, `functional (webkit)`,
+and `functional (firefox)`, each using `--dist --no-tex`. Specialist checks appear
+as separate jobs such as `browser-check (label-clipping)`,
+`browser-check (page-print)`, and `browser-check (modal-responsive)`. Each specialist
 runner retains its existing browser coverage; cross-engine parity comparisons
-remain together. All browser-test jobs share the `browser-tests` resource group,
-so only one runs at a time, including across pipelines. The matrix expands named
-jobs; the shared resource group serializes their execution. This keeps browser
-startup, preview-fade checks, and performance measurements from competing with
-other browser suites. Build, typecheck, and glyph validation can run in parallel.
-See [GitLab resource groups](https://docs.gitlab.com/ci/resource_groups/).
+remain together. Every job runs on its own GitHub-hosted runner, a fresh machine,
+so browser startup, preview-fade checks, and performance measurements never compete
+with another suite even though the jobs run in parallel.
 
 Test jobs depend only on the build, so a failing suite does not prevent the other
 suites from reporting results. A failed typecheck or glyph

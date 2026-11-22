@@ -258,7 +258,7 @@ export const captions = {
   "ui.diagramtex": message("ui.diagramtex", "DiagramTeX"),
   "ui.draw.physics.and.maths.diagrams.in.your.browser.and.export.them.as.latex.tikz.pd": message("ui.draw.physics.and.maths.diagrams.in.your.browser.and.export.them.as.latex.tikz.pd", "Draw physics and maths diagrams in your browser and export them as LaTeX/TikZ, PDF, SVG or PNG. Circuits, quantum circuits, commutative diagrams, Bloch spheres, trees and plots, with maths typeset as you type. Free, and it works offline."),
   "ui.latex": message("ui.latex", "LaTeX"),
-  "ui.diagramtex.on.gitlab": message("ui.diagramtex.on.gitlab", "DiagramTeX on GitLab"),
+  "ui.diagramtex.on.github": message("ui.diagramtex.on.github", "DiagramTeX on GitHub"),
   "ui.physics.experimental.results.and.drawings.might.not.be.correct.computed.figures.": message("ui.physics.experimental.results.and.drawings.might.not.be.correct.computed.figures.", "Physics (experimental; results and drawings might not be correct): computed figures (mechanics, optics, fields, waves, spacetime, energy levels) and mechanics and optics symbols"),
   "ui.blocks.experimental.some.inputs.might.not.be.rendered.correctly.commutative.diag": message("ui.blocks.experimental.some.inputs.might.not.be.rendered.correctly.commutative.diag", "Blocks (experimental; some inputs might not be rendered correctly): commutative diagram, Bloch sphere, quantum circuit, circuit, tree, ZX, Feynman, timing, state machine, Karnaugh map, bit field, chemistry, 2D and 3D geometry"),
   "ui.surface.z.f.x.y.shaded.or.as.a.mesh.type.in.pgfplots": message("ui.surface.z.f.x.y.shaded.or.as.a.mesh.type.in.pgfplots", "Surface z = f(x, y), shaded or as a mesh (Type), in pgfplots"),

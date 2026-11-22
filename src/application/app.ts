@@ -67,9 +67,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const versionTip = () => {
     const v = document.getElementById('appVer');
     if (v) v.title = newerVersion ? uiText('app.version.update', 'DiagramTeX {version} is out (this is {current}): click to reload', { version: newerVersion, current: TD.VERSION })
-      : uiText('app.version.title', 'DiagramTeX {version}: this release on GitLab', { version: TD.VERSION });
+      : uiText('app.version.title', 'DiagramTeX {version}: this release on GitHub', { version: TD.VERSION });
   };
-  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; versionTip(); (v as HTMLAnchorElement).href = `https://gitlab.com/igniting-space/diagramtex/-/tags/v${TD.VERSION}`; } }
+  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; versionTip(); (v as HTMLAnchorElement).href = `https://github.com/vtneil/diagramtex/releases/tag/v${TD.VERSION}`; } }
   onLocale(versionTip);
   // a newer release on this host (dist/version.json, written by the build): a marker dot by the version, and
   // a click reloads into it. Asked once per load, past every cache; no answer (dev, offline) changes nothing.

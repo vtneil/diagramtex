@@ -44,7 +44,7 @@ export const thai: Record<string, string> = {
   "ui.gridDot": "จุด",
   "ui.gridIsometric": "ไอโซเมตริก",
   "ui.gridIsometricDot": "จุดไอโซเมตริก",
-  "app.version.title": "DiagramTeX {version}: รุ่นนี้บน GitLab",
+  "app.version.title": "DiagramTeX {version}: รุ่นนี้บน GitHub",
   "app.version.update": "DiagramTeX {version} ออกแล้ว (รุ่นนี้คือ {current}): คลิกเพื่อโหลดใหม่",
   "mode.corner": "มุมถึงมุม",
   "mode.center": "จากจุดกึ่งกลาง",
