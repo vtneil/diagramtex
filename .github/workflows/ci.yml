@@ -163,7 +163,9 @@ jobs:
         run: |
           set -o pipefail
           npx wrangler preview --name main --message "${GITHUB_SHA::7}" | tee preview.log
-          url=$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev[^ ]*' preview.log | tail -1 || true)
+          # Prefer the Preview's stable address (main-…) over this upload's own one.
+          urls=$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' preview.log || true)
+          url=$(printf '%s\n' "$urls" | grep -m1 '^https://main-' || printf '%s\n' "$urls" | tail -1)
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
   # A vX.Y.Z tag → production, only after every check above passed on that
