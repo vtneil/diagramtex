@@ -1,0 +1,51 @@
+name: Mirror to GitLab
+
+# Keeps gitlab.com/vtneil/diagramtex an exact copy of this repository's
+# branches and tags, independent of CI. It logs in with a GitLab deploy key
+# (write access to that one project, allowed to push and force-push to main);
+# its private half is the GITLAB_MIRROR_KEY secret.
+
+on:
+  push:
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One mirror push at a time, oldest first; the newest run always carries every ref.
+concurrency:
+  group: mirror-gitlab
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Push branches and tags to GitLab
+        env:
+          SSH_KEY: ${{ secrets.GITLAB_MIRROR_KEY }}
+          # gitlab.com's published host keys (fingerprints checked against
+          # docs.gitlab.com/user/gitlab_com/#ssh-host-keys-fingerprints)
+          KNOWN_HOSTS: |
+            gitlab.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBFSMqzJeV9rUzU4kWitGjeR4PWSa29SPqJ1fVkhtj3Hw9xjLVXVYrU9QlYWrOLXBpQ6KWjbjTDTdDkoohFzgbEY=
+            gitlab.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAfuCHKVTjquxvt6CM6tdG4SLp1Btn/nOeHHE5UOzRdf
+            gitlab.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCsj2bNKTBSpIYDEGk9KxsGh3mySTRgMtXL583qmBpzeQ+jqCMRgBqB98u3z++J1sKlXHWfM9dyhSevkMwSbhoR8XIq/U0tCNyokEi/ueaBMCvbcTHhO7FcwzY92WK4Yt0aGROY5qX2UKSeOvuP4D6TPqKF1onrSzH9bx9XUf2lEdWT/ia1NEKjunUqu1xOB/StKDHMoX4/OKyIzuS0q/T1zOATthvasJFoPrAjkohTyaDUz2LN5JoH839hViyEG82yB+MjcFV5MU3N1l1QL3cVUCh93xSaua1N85qivl+siMkPGbO5xR/En4iEY6K2XPASUEMaieWVNTRCtJ4S8H+9
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/gitlab && chmod 600 ~/.ssh/gitlab
+          printf '%s' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/gitlab -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git update-ref -d refs/remotes/origin/HEAD 2>/dev/null || true
+          git remote add gitlab git@gitlab.com:vtneil/diagramtex.git
+          # Every GitHub branch and tag; anything GitLab has that GitHub doesn't is deleted.
+          git push --force --prune gitlab \
+            'refs/remotes/origin/*:refs/heads/*' \
+            'refs/tags/*:refs/tags/*'
