@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a DiagramTeX release. Usage `/release <subminor|minor>`. Bumps TD.VERSION and the service-worker CACHE, squashes the un-pushed commits into one "Title (vX.Y.Z)" commit, tags vX.Y.Z, and pushes the branch and the tag. Does not deploy.
+description: Cut a DiagramTeX release. Usage `/release <subminor|minor>`. Bumps TD.VERSION and the service-worker CACHE, squashes the un-pushed commits into one "Title (vX.Y.Z)" commit, tags vX.Y.Z, and pushes the branch and the tag. Pushing the tag deploys to production through CI (after every check passes) and publishes a GitHub Release.
 argument-hint: <subminor|minor>
 disable-model-invocation: true
 ---
@@ -29,10 +29,10 @@ If the argument is missing or is neither word, ask which one. Never guess.
    `git reset --soft @{u}` then `git add` the bumped files (and approved files) and `git commit -m "Title (vX.Y.Z)"`. Keep the commit's attribution trailer if the session asks for one.
 6. **Tag:** `git tag vX.Y.Z` (annotated is not needed; match existing tags: check `git tag -l | tail -3`). If the tag already exists, stop.
 7. **Push** the branch and the tag: `git push origin <branch>` then `git push origin vX.Y.Z`. No force pushes. If the push is rejected, stop and report.
-8. **Report** the new version, the commit title, and the pushed ref names.
+8. **Report** the new version, the commit title, and the pushed ref names. Say that the tag's CI run deploys it: `gh run list -L 2` shows it, and production updates and the GitHub Release appears only once every check on the tag passes.
 
 ## Rules
 
-- Never deploy (`npx wrangler deploy`) unless the user asks separately.
+- Pushing the branch updates the "main" Cloudflare Preview; pushing the tag deploys production (the `preview` and `deploy` jobs in `.github/workflows/ci.yml`). Never run `npx wrangler deploy` by hand unless the user asks separately.
 - Never ask whether to tag: a release always tags.
 - Squashing rewrites only un-pushed commits, so it is safe; never squash anything already on the remote.
