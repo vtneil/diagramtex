@@ -16,10 +16,12 @@ import { marquee, marqueeSvg, marqueeTakes, boxPoly, ring } from './marquee';
 import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
+import { onLabelFontsChange } from '../domain/label-image';
 // Circuit editor: the overlay that opens on a Circuit block. A searchable palette of circuitikz parts,
 // a drafting grid where parts are dropped, dragged, rotated and wired (ends snap to pins), the selected
 // part's properties, and beside them the circuitikz it writes, live both ways (edits there are read back).
-// TD.czEditor.open(block, onDone) — block: { items, raw }; onDone({ items, raw }) on Done.
+// TD.czEditor.open(block, onDone) — block: { items, raw, size, font } (its labels drawn in the block's size and font, as on
+// the canvas); onDone({ items, raw }) on Done.
 (function () {
   const CZ = TD.CZ, C = TD.cz;
   const $ = (s: any, r: any = document) => r.querySelector(s);
@@ -53,6 +55,8 @@ import { editorStage, fitView } from './editor-stage';
   // ---------------------------------------------------------------- state
   let stopLocale: (() => void) | null = null;
   let E: any = null; // { items, raw, sel: Set, tool, part, view: {ox, oy, k}, undo, redo, done, start, drag, hover, codeAt, codeTimer }
+  // a served font read for the label pictures (src/domain/label-image.ts): an open editor draws its labels again in it
+  onLabelFontsChange(() => { if (E) draw(); });
   const byId = (id: any) => E.items.find((it: any) => it.id === id);
   const sel = () => E.items.filter((it: any) => E.sel.has(it.id));
   const snap = () => JSON.stringify({ items: E.items, raw: E.raw });
@@ -121,7 +125,7 @@ import { editorStage, fitView } from './editor-stage';
   const m = (x: any, y: any) => [E.view.ox + x * E.view.k, E.view.oy - y * E.view.k];
   function fit() {
     if (!E) return;
-    const r = rect(), b = C.itemsBox(E.items, { size: 'normalsize', font: 'default', vstyle: C.vstyleOf(E.raw) }) || { x1: -2, y1: -1, x2: 2, y2: 1 };
+    const r = rect(), b = C.itemsBox(E.items, { ...E.st, vstyle: C.vstyleOf(E.raw) }) || { x1: -2, y1: -1, x2: 2, y2: 1 };
     // at least 2 cm each way, about the circuit's centre (its y runs up, the stage's down)
     const w = Math.max(b.x2 - b.x1, 2), h = Math.max(b.y2 - b.y1, 2), cx = (b.x1 + b.x2) / 2, cy = -(b.y1 + b.y2) / 2;
     E.view = fitView(r, { x: cx - w / 2, y: cy - h / 2, w, h }, { min: 20, max: 110 });
@@ -352,7 +356,7 @@ import { editorStage, fitView } from './editor-stage';
       let hit;
       if (it.part === 'text') {
         // a Text node is clicked anywhere on its text
-        const b = C.itemsBox([it], { size: 'normalsize', font: 'default' }) || { x1: it.p[0] - 0.15, y1: it.p[1] - 0.15, x2: it.p[0] + 0.15, y2: it.p[1] + 0.15 };
+        const b = C.itemsBox([it], E.st) || { x1: it.p[0] - 0.15, y1: it.p[1] - 0.15, x2: it.p[0] + 0.15, y2: it.p[1] + 0.15 };
         hit = `<path class="cz-hit" d="M${[[b.x1, b.y1], [b.x2, b.y1], [b.x2, b.y2], [b.x1, b.y2]].map((q) => m(...(q as [any, any])).map((n) => n.toFixed(1)).join(',')).join('L')}Z"/>`;
       } else if (it.p) {
         const G = CZ.parts[it.part] && CZ.geom(it.part), T = C.nodeXf(it), b = G ? G.box : { x1: -0.15, y1: -0.15, x2: 0.15, y2: 0.15 };
@@ -368,7 +372,7 @@ import { editorStage, fitView } from './editor-stage';
       }
       return `<g data-id="${it.id}">${s}${hit}</g>`;
     };
-    let body = C.itemsSvg(E.items, m, k, { colorOf, paper: '#fffdf8', wrap, st: { size: 'normalsize', font: 'default', vstyle: C.vstyleOf(E.raw) } });
+    let body = C.itemsSvg(E.items, m, k, { colorOf, paper: '#fffdf8', wrap, st: { ...E.st, vstyle: C.vstyleOf(E.raw) } });
     // pins: shown while wiring, placing or dragging an end
     let pins = '';
     const showPins = E.tool !== 'select' || (E.drag && (E.drag.mode === 'end' || E.drag.mode === 'new'));
@@ -390,7 +394,7 @@ import { editorStage, fitView } from './editor-stage';
     if (E.tool === 'place' && E.part && E.hover && !E.drag) {
       const def = CZ.parts[E.part];
       const g = def.kind === 'node' ? newNode(E.part, snapPt(E.hover).p) : (() => { const L = defLen(E.part), a = [snapG(E.hover[0] - L / 2), snapG(E.hover[1])]; return newBip(E.part, a, [r3(a[0] + L), a[1]]); })();
-      ghost = `<g class="cz-ghost">${C.itemsSvg([g], m, k, { color: 'var(--bluepen)', paper: '#fffdf8' })}</g>`;
+      ghost = `<g class="cz-ghost">${C.itemsSvg([g], m, k, { color: 'var(--bluepen)', paper: '#fffdf8', st: E.st })}</g>`;
     }
     if (E.wire && E.hover) {
       const b = wireEnd(E.hover, E.wireFree);
@@ -512,7 +516,7 @@ import { editorStage, fitView } from './editor-stage';
   // a Text node its text's box
   function drawnAs(it: any) {
     const M = (q: any) => m(q[0], q[1]);
-    if (it.part === 'text') { const b = C.itemsBox([it], { size: 'normalsize', font: 'default' }); if (b) { const p = boxPoly(b.x1, b.y1, b.x2, b.y2).map(M); return { pts: p, areas: [p] }; } }
+    if (it.part === 'text') { const b = C.itemsBox([it], E.st); if (b) { const p = boxPoly(b.x1, b.y1, b.x2, b.y2).map(M); return { pts: p, areas: [p] }; } }
     const G = CZ.parts[it.part] && !C.isWire(it) && CZ.geom(it.part);
     if (it.p) {
       const T = C.nodeXf(it), b = G ? G.box : { x1: -0.15, y1: -0.15, x2: 0.15, y2: 0.15 }, p = boxPoly(b.x1, b.y1, b.x2, b.y2).map((q: any) => M(T(q[0], q[1])));
@@ -794,7 +798,7 @@ import { editorStage, fitView } from './editor-stage';
   const { save, finish } = dock;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
-    E = { items: clone(block.items || []), raw: block.raw || '', sel: new Set(), tool: 'select', part: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], done, pending: null, hover: null, drag: null, codeAt: null, codeTimer: null };
+    E = { items: clone(block.items || []), raw: block.raw || '', st: { size: block.size || 'normalsize', font: block.font || 'default' }, sel: new Set(), tool: 'select', part: null, view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], done, pending: null, hover: null, drag: null, codeAt: null, codeTimer: null };
     E.start = snap();
     dock.show(host);
     pal.clear();

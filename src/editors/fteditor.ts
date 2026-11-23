@@ -14,6 +14,7 @@ import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow,
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
+import { onLabelFontsChange } from '../domain/label-image';
 // Tree editor: the overlay that opens on a Tree block. A palette of subtrees, templates and node and edge
 // styles; the tree drawn by the canvas renderer, where nodes are selected, added, relabelled and dragged
 // onto other nodes; the selection's properties; and beside them the forest code, live both ways.
@@ -134,6 +135,8 @@ import { keepComments } from './keep-comments';
   // ---------------------------------------------------------------- state
   // { T, sel: [nodes], view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, drop, ghost, st, codeAt, codeTimer, clip, L }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  // a served font read for the label pictures (src/domain/label-image.ts): an open editor draws its labels again in it
+  onLabelFontsChange(() => { if (E) draw(); });
   let stopLocale: (() => void) | null = null;
   const snap = () => (E.typed = keepComments(E.typed, codeOf(E.T))); // the drawing's code, keeping the comments last written
   const { begin, commit, undo, redo } = TD.editorSession.history({

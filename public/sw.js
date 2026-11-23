@@ -7,6 +7,10 @@
 // dev server only: scripts/build.js names dist/sw.js's cache after a hash of everything it precaches.)
 const CACHE = 'diagramtex-v128';
 const SLOW_MS = 4000;
+// The in-browser pdfLaTeX (tex/: the engine and its TeX Live bundle) is not precached: it is downloaded the first time
+// someone compiles, into a cache of its own that a deploy doesn't clear. The bundle's chunks are named after their
+// contents, so they come from that cache once there; the rest of tex/ is checked with the server like the app.
+const TEX_CACHE = 'diagramtex-tex';
 const PRECACHE = [
     './',
     'math-render-worker.js',
@@ -93,15 +97,23 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k.startsWith('diagramtex-') && k !== CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k.startsWith('diagramtex-') && k !== CACHE && k !== TEX_CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const tex = new URL(req.url).pathname.startsWith(new URL('tex/', self.registration.scope).pathname);
   e.respondWith((async () => {
-    const cache = await caches.open(CACHE);
+    const cache = await caches.open(tex ? TEX_CACHE : CACHE);
+    if (tex && /\/bundle\/.+\.(?:gz|bin)$/.test(new URL(req.url).pathname)) {
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok && res.type === 'basic') await cache.put(req, res.clone());
+      return res;
+    }
     const fromCache = async () => (await cache.match(req, { ignoreSearch: true }))
       || (req.mode === 'navigate' ? cache.match('./') : undefined);
     // checked with the server (a 304 when unchanged), except files named after their contents, which never change

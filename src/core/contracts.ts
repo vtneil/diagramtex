@@ -46,6 +46,9 @@ export interface HistoryStep {
   /** a Page file's page setup (paper, orientation, margins), as JSON */
   sb?: string;
   sa?: string;
+  /** the file's named styles, as JSON */
+  yb?: string;
+  ya?: string;
   /** when it was done (or redone), and when it was last undone: `stamp()` order across every file */
   t?: number;
   r?: number;

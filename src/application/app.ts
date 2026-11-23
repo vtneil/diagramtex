@@ -22,13 +22,16 @@ import type { EditorState } from '../core/state';
 import { createEditorState, SNAP_MODES, type SnapMode } from '../core/state';
 import { downloadBlob, downloadImage, createExportWriter } from '../platform/download';
 import { readPicture, svgFilePdf, texBundle, texFiles, type Picture } from '../platform/images';
+import { texEngine, type TexSupport } from '../platform/tex-engine';
+import { docFont, hasThai, type TexEngine } from '../core/doc-fonts';
 import { svgVectorPdf } from '../platform/svgpdf';
 import { createBrowserStore } from '../platform/browser-store';
 import { createAutosave } from '../core/autosave';
 import { mergeFile } from '../core/merge';
 import type { HistoryStep } from '../core/contracts';
-import { createRecovery, RECOVERY_DEFAULTS, RECOVERY_EVERY, RECOVERY_KEEP, RECOVERY_KEY, RECOVERY_QUICK, type RecoveryCopy, type RecoverySettings } from '../core/recovery';
+import { arrayCopies, createRecovery, type CopyStore, RECOVERY_DEFAULTS, RECOVERY_EVERY, RECOVERY_KEEP, RECOVERY_KEY, RECOVERY_QUICK, type RecoveryCopy, type RecoverySettings } from '../core/recovery';
 import { createDocumentFactory } from '../core/document';
+import { keysFrom, link, markOverrides, nameProblem, reset as resetStyle, styleable, stylesOf, sync as syncStyles, unlink, type NamedStyle } from '../core/named-styles';
 import { conformShape } from '../core/conform';
 import { createDocumentHistory, stamp } from '../core/history';
 import MainProperties from '../ui/MainProperties.svelte';
@@ -53,7 +56,7 @@ import BinDialog, { type BinDialogModel } from '../ui/BinDialog.svelte';
 import RecoveryDialog, { type RecoveryDialogModel } from '../ui/RecoveryDialog.svelte';
 import ToolPanel, { type ToolPanelModel, type ToolSection, type ToolSymbol, type ToolTileSpec } from '../ui/ToolPanel.svelte';
 import ExportPanel, { type ExportPanelModel, type ExportRow, type ExportAction } from '../ui/ExportPanel.svelte';
-import LintList, { type LintListModel } from '../ui/LintList.svelte';
+import LintList, { type LintItem, type LintListModel } from '../ui/LintList.svelte';
 import ImportReport, { type ImportReportModel } from '../ui/ImportReport.svelte';
 import DiagramGallery, { type DiagramGalleryModel } from '../ui/DiagramGallery.svelte';
 import { openModal as showModalEl, closeModal as hideModalEl, closeDialogElement, fadeOutDialog } from '../ui/kit/modal';
@@ -195,13 +198,121 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
 
   // Document transactions are independent of DOM and persistence. Input completion stays here.
   const documentHistory = createDocumentHistory(state, {
-    syncLinks,
+    // a linked shape's field changed away from its named style is an override from now on
+    // (and one whose style is not in this file, pasted from another, is unlinked)
+    syncLinks() { syncLinks(); markOverrides(state.doc.shapes, namedStyles()); syncStyles([home()], namedStyles()); },
     changed() { fileRedo.length = 0; scheduleSave(); }, // a new edit ends what redo could bring back
-    applied() { render(); renderProps(); scheduleSave(); updateTopbar(); },
+    // undo brought back the styles table: every diagram's linked shapes follow it (only this one's are in the step)
+    applied() { syncNamed(); render(); renderProps(); scheduleSave(); updateTopbar(); },
     updateTools: updateTopbar,
   });
   const { commit, apply: applyStep, trim: trimUndo } = documentHistory;
   function begin() { pointSnapCache = null; clearFormatPreview(false); documentHistory.begin(); }
+
+  // ---------------- named styles (src/core/named-styles.ts) ----------------
+  // The file's styles live in its settings (page.styles). Each linked shape keeps the values; a change to the table
+  // is copied onto every diagram's linked shapes at once, so the table and the shapes never disagree.
+  const namedStyles = () => stylesOf(state.doc.page);
+  TD.namedStyles = namedStyles; // for the export (src/domain/shapes.ts)
+  const styleOwners = () => (state.doc.kind === 'page' ? [state.doc.sheet] : state.doc.blocks.filter((b: any) => b.type === 'diagram'));
+  function syncNamed() { syncStyles(styleOwners(), namedStyles()); }
+  function setStyles(list: NamedStyle[]) { if (list.length) state.doc.page.styles = list; else delete state.doc.page.styles; syncNamed(); }
+  const styleTargets = () => selected().filter(styleable);
+  const usersOf = (id: string) => styleOwners().reduce((n: number, o: any) => n + o.shapes.filter((q: any) => q.style === id).length, 0);
+  async function askStyleName(title: string, ok: string, value: string, taken: string[]) {
+    for (;;) {
+      const v = await TD.prompt(title, value, { ok, placeholder: uiText('ns.name.placeholder', 'Name, e.g. block') });
+      if (v == null) return null;
+      const name = String(v).trim(), problem = nameProblem(name, taken);
+      if (!problem) return name;
+      showHint(problem === 'chars' ? uiText('ns.bad.chars', 'A style name uses letters, digits, spaces and hyphens, and starts with a letter.')
+        : problem === 'reserved' ? uiText('ns.bad.reserved', '"{name}" is one of TikZ’s own keys. Choose another name.', { name })
+        : problem === 'taken' ? uiText('ns.bad.taken', 'This file already has a style named "{name}".', { name }) : uiText('ns.bad.empty', 'Type a name for the style.'), 4000);
+      value = String(v);
+    }
+  }
+  /** A new style from the first selected object's style; the selection is linked to it. */
+  async function newNamedStyle() {
+    const sel = styleTargets();
+    if (!sel.length) return;
+    const name = await askStyleName(uiText('ns.new.title', 'New Style'), uiText('ns.new.ok', 'Create'), '', namedStyles().map((x) => x.name));
+    if (name == null || !styleTargets().length) return;
+    begin();
+    const st: NamedStyle = { id: uid(), name, keys: keysFrom(sel[0]) };
+    setStyles([...namedStyles(), st]);
+    for (const q of sel) link(q, st);
+    render(); commit(); renderProps();
+    showHint(uiText('hint.ns.made', 'Made the style "{name}". The LaTeX defines it once and names it on each object.', { name }), 3000);
+  }
+  /** Link the selection to style `id`, or with '' unlink it (it keeps how it looks). */
+  function applyNamed(id: string) {
+    const st = namedStyles().find((x) => x.id === id);
+    if (id && !st) return;
+    begin();
+    for (const q of styleTargets()) { if (st) link(q, st); else unlink(q); }
+    render(); commit(); renderProps();
+  }
+  const linkedOf = () => { const q = styleTargets().find((x) => x.style); return q ? { q, st: namedStyles().find((x) => x.id === q.style) } : null; };
+  /** The style takes the first linked object's values; every object linked to it follows. */
+  function updateNamed() {
+    const L = linkedOf();
+    if (!L || !L.st) return;
+    begin();
+    setStyles(namedStyles().map((x) => (x.id === L.st!.id ? { ...x, keys: { ...x.keys, ...keysFrom(L.q) } } : x)));
+    delete L.q.so;
+    syncNamed();
+    render(); commit(); renderProps();
+    showHint(uiText('hint.ns.updated', 'Updated the style "{name}". Every object linked to it follows.', { name: L.st.name }), 3000);
+  }
+  function resetNamed() { begin(); for (const q of styleTargets()) resetStyle(q, namedStyles()); render(); commit(); renderProps(); }
+  async function renameNamed() {
+    const st = linkedOf()?.st;
+    if (!st) return;
+    const name = await askStyleName(uiText('ns.rename.title', 'Rename Style'), uiText('ns.rename.ok', 'Rename'), st.name, namedStyles().filter((x) => x.id !== st.id).map((x) => x.name));
+    if (name == null || name === st.name) return;
+    begin(); setStyles(namedStyles().map((x) => (x.id === st.id ? { ...x, name } : x))); render(); commit(); renderProps();
+  }
+  async function deleteNamed() {
+    const st = linkedOf()?.st;
+    if (!st) return;
+    const n = usersOf(st.id);
+    const yes = await TD.confirm(uiText('dlg.ns.delete.title', 'Delete the style "{name}"?', { name: st.name }),
+      n === 1 ? uiText('dlg.ns.delete.one', '1 object uses it. It keeps how it looks and is no longer linked.') : uiText('dlg.ns.delete.many', '{n} objects use it. They keep how they look and are no longer linked.', { n }),
+      { ok: caption(captions["ui.delete"]), danger: true });
+    if (!yes) return;
+    begin(); setStyles(namedStyles().filter((x) => x.id !== st.id)); render(); commit(); renderProps();
+  }
+  function namedMenu(btn: HTMLElement) {
+    const L = linkedOf(), over = styleTargets().some((q) => q.style && q.so?.length);
+    if (!L || !L.st) return;
+    openContextMenu([
+      { act: 'update', label: uiText('ns.update', 'Update "{name}" from This Object', { name: L.st.name }), icon: 'history', title: uiText('ns.update.title', 'The style takes this object’s values; every object linked to it follows') },
+      { act: 'reset', label: uiText('ns.reset', 'Reset to Style'), icon: 'undo', disabled: !over, title: uiText('ns.reset.title', 'Drop what the selection sets differently from its style') },
+      { act: 'detach', label: uiText('ns.detach', 'Detach from Style'), icon: 'unlink' }, '-',
+      { act: 'rename', label: uiText('ns.renameDots', 'Rename Style…'), icon: 'rename' },
+      { act: 'delete', label: uiText('ns.deleteDots', 'Delete Style…'), icon: 'delete', danger: true },
+    ], 0, 0, (act) => {
+      if (act === 'update') updateNamed(); else if (act === 'reset') resetNamed(); else if (act === 'detach') applyNamed('');
+      else if (act === 'rename') void renameNamed(); else if (act === 'delete') void deleteNamed();
+    }, { below: btn.getBoundingClientRect(), align: 'end', owner: btn, minWidth: 220, label: uiText('ns.menu', 'Style actions') });
+  }
+  /** The Style row over the selection's fields: which named style it follows, and what it sets differently. */
+  function namedSection(sel: Shape[]): FormSection[] | undefined {
+    const targets = sel.filter(styleable);
+    if (!targets.length) return undefined;
+    const list = namedStyles(), ids = [...new Set(targets.map((q) => q.style || ''))], cur = ids.length === 1 ? ids[0] : '*';
+    const options: string[][] = [['', uiText('ns.none', 'None')], ...list.map((st) => [st.id, st.name]), ...(cur === '*' ? [['*', uiText('prop.mixed', 'Mixed')]] : []), ['+', uiText('ns.newFromSel', 'New Style from Selection…')]];
+    const linked = targets.some((q) => q.style);
+    const rows: FormRow[] = [{ ...row(uiText('ns.label', 'Style'),
+      { kind: 'select', attrs: { 'data-named': '', 'aria-label': uiText('ns.label.aria', 'Named style') }, options, value: cur },
+      ...(linked ? [{ kind: 'button' as const, attrs: { 'data-act': 'ns:menu', class: 'icon', title: uiText('ns.menu', 'Style actions'), 'aria-haspopup': 'menu' }, text: '', icon: 'more' as IconName }] : [])) }];
+    const st = cur && cur !== '*' ? list.find((x) => x.id === cur) : null, so = [...new Set(targets.flatMap((q) => (q.style && Array.isArray(q.so) ? q.so : [])))];
+    if (st && so.length) {
+      const names = so.map((k: string) => { const p = PROPS.find((x) => x.key === k || (x.key === 'bold' && k === 'italic')); return p ? caption(p.label) : k; });
+      rows.push({ kind: 'hint', text: [uiText('ns.differs', 'Differs from "{name}" in {fields}. Reset to Style drops that.', { name: st.name, fields: [...new Set(names)].join(', ') })] });
+    }
+    return [{ class: 'sec named-row', rows }];
+  }
 
   // The open file's own steps come first; once they run out, undo reaches the file list (a file or folder
   // moved to the Recycle Bin comes back), as redo does the other way.
@@ -251,7 +362,10 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     return { every: RECOVERY_EVERY.includes(s.every as number) ? s.every as number : RECOVERY_DEFAULTS.every,
       keep: RECOVERY_KEEP.includes(s.keep as number) ? s.keep as number : RECOVERY_DEFAULTS.keep };
   };
-  const recovery = createRecovery(store, recoverySettings);
+  // Copies are kept in the database one record per copy; without it, as one array per file in localStorage.
+  const arrayed = arrayCopies(store), copyStore = (): CopyStore => (DS?.active ? DS.copies : arrayed);
+  const recovery = createRecovery({ list: (id) => copyStore().list(id), put: (id, c) => copyStore().put(id, c),
+    del: (id, t) => copyStore().del(id, t), clear: (id) => copyStore().clear(id) }, recoverySettings);
   const autosave = createAutosave(state, store, { index, inBin: (id) => bin().some((x) => (x as any).id === id), inDatabase: inDb, report: reportSave, showState: showSaveState, renderList: renderDocList,
     replacing: (id, stored, updated) => { recovery.take(id, stored, updated); } });
   // A file linked to one on disk that the browser lets the page write to is also written there, a second
@@ -260,7 +374,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   function writeLinked(id: string | null = state.docId) {
     clearTimeout(fileTimer); fileTimer = undefined; fileId = null;
     if (!id || id !== state.docId || !TD.files.autoSaving(id)) return;
+    const edit = diskEdit(id);
     TD.files.autoWrite(id, projectJson(state.doc)).then((r: string) => {
+      if (r === 'saved') diskWritten(id, edit);
       if (r === 'changed') {
         const f = TD.files.fileOf(id);
         showHint(uiText('hint.fileChangedOnDisk', '{file} changed on disk, so changes are no longer saved to it as you work. {key} saves over it.', { file: f?.name || '', key: isMac ? '⌘S' : 'Ctrl+S' }), 6000);
@@ -270,9 +386,35 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   }
   function scheduleSave() {
     autosave.scheduleSave();
+    if (state.docId && TD.files.fileOf(state.docId)) diskChanged(state.docId); // its dot turns yellow with the change
     if (state.docId && TD.files.autoSaving(state.docId)) { clearTimeout(fileTimer); fileId = state.docId; fileTimer = setTimeout(() => writeLinked(fileId), 1000); }
   }
   function saveNow() { autosave.saveNow(); if (fileTimer) writeLinked(fileId); }
+  // Files linked to one on disk with changes not yet written there: the top bar's dot is yellow for the open one, and
+  // closing the tab asks first. Known from what happens, never by comparing the file's contents: an edit marks its
+  // file, and a write that lands (autosave's, Ctrl+S, or the file opened or reloaded from disk) clears it, unless
+  // the file was edited again while it was being written. Kept across a reload, as the changes are.
+  const DISK_DIRTY = 'diagramtex.diskDirty';
+  const diskDirty = new Set<string>(store.get<string[]>(DISK_DIRTY, []) || []);
+  const diskEdits = new Map<string, number>(); // edits counted per file, so a write knows which edit it holds
+  const diskEdit = (id: string | null) => (id && diskEdits.get(id)) || 0;
+  function diskChanged(id: string) {
+    diskEdits.set(id, diskEdit(id) + 1);
+    if (diskDirty.has(id)) return;
+    diskDirty.add(id); store.set(DISK_DIRTY, [...diskDirty]);
+    if (id === state.docId) showSaveState();
+  }
+  // `edit`: the edit the write was started with (none: the file holds the document as it is now)
+  function diskWritten(id: string | null, edit = diskEdit(id)) {
+    if (!id) return;
+    if (edit !== diskEdit(id) || !diskDirty.has(id)) { if (id === state.docId) showSaveState(); return; }
+    diskDirty.delete(id); store.set(DISK_DIRTY, [...diskDirty]);
+    if (id === state.docId) showSaveState();
+  }
+  function unsavedToDisk() {
+    const open = new Set(store.get<any[]>(LS_INDEX, []).map((d) => d.id)); // not one in the bin
+    return [...diskDirty].some((id) => open.has(id) && !!TD.files.fileOf(id));
+  }
   // Where autosave keeps the open file: nowhere (no IndexedDB), the browser, or also its file on disk.
   const autosaveMode = (): 'none' | 'browser' | 'file' => !DS?.active ? 'none' : state.docId && TD.files.autoSaving(state.docId) ? 'file' : 'browser';
   TD.files.onChange(() => { showSaveState(); });
@@ -286,29 +428,57 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (!ok && !was) showHint(full ? uiText('hint.autosave.tooLarge', 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.')
       : uiText('hint.autosave.unavailable', 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.'), 6000);
   }
-  // Beside the file name: autosave, or, for a file linked to one on disk, that file's name, marked while the
-  // document has changes not yet saved to it.
+  // The status line, its file name cut in the middle where the bar has no room ("Lectur…tes.diagramtex"): the start
+  // of the name and its end, with the extension, stay readable. Fitted again when the bar changes width.
+  let statusLine: { file: string; make: (name: string) => string } = { file: '', make: () => '' };
+  function cutMiddle(name: string, keep: number) {
+    const ext = /\.[^.\s]{1,12}$/.exec(name)?.[0] || '', stem = name.slice(0, name.length - ext.length);
+    if (keep >= stem.length) return name;
+    const head = Math.ceil(keep / 2), tail = keep - head;
+    return stem.slice(0, head) + '…' + (tail ? stem.slice(-tail) : '') + ext;
+  }
+  function fitStatus() {
+    const txt = $('#saveStatus .save-text');
+    if (!txt) return;
+    const set = (s: string) => { if (txt.textContent !== s) txt.textContent = s; }; // unchanged text is not re-announced
+    const { file, make } = statusLine;
+    set(make(file));
+    const fits = () => txt.scrollWidth <= txt.clientWidth;
+    if (!file || make('') === make(file) || !txt.clientWidth || fits()) return; // no name in it, or it fits
+    // the most of the name's stem that fits, found by halves, but at least a few letters of it: where even those don't
+    // fit, the bar's own ellipsis cuts the line's end (the tooltip has all of it)
+    const least = 8;
+    let lo = least, hi = file.length;
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); set(make(cutMiddle(file, mid))); if (fits()) lo = mid; else hi = mid - 1; }
+    set(make(cutMiddle(file, lo)));
+  }
+  { const row = document.querySelector('#topbar .doc-row'); if (row && typeof ResizeObserver === 'function') new ResizeObserver(() => fitStatus()).observe(row); }
+  // Beside the logo: a status dot and where the open file is kept. Red: no autosave, or it failed; yellow: kept only
+  // in this browser though it could be on disk (not linked to a file yet, or changes not saved to its file); green:
+  // saved to its file on disk; blue: kept in this browser, which can't link files (Safari, Firefox).
   function showSaveState() {
-    const st = $('#saveState'), f = TD.files.fileOf(state.docId), mode = autosaveMode();
-    // while autosave writes the file, there is nothing to mark between a change and its write
-    const dirty = !!f && saveOk && mode !== 'file' && !TD.files.isSaved(state.docId, projectJson(state.doc));
-    const note = $('#autosaveNote');
-    const noteText = mode === 'none' ? uiText('save.autosaveNone', 'Autosave is unsupported') : mode === 'file' ? uiText('save.autosaveFile', 'Autosave is enabled (File)') : uiText('save.autosaveBrowser', 'Autosave is enabled (browser)');
-    if (note.textContent !== noteText) note.textContent = noteText;
-    note.title = mode === 'none' ? uiText('save.autosaveNone.tip', 'This browser can’t keep your work as you go. Save it as a file to keep it.')
-      : mode === 'file' ? uiText('save.autosaveFile.tip', 'Every change is saved to {file} as you work, and kept in this browser', { file: f.name })
-      : f ? uiText('save.autosaveBrowserLinked.tip', 'Every change is saved in this browser as you work. {key} saves to {file}.', { file: f.name, key: isMac ? '⌘S' : 'Ctrl+S' })
-      : caption(captions["ui.every.change.is.saved.in.this.browser.as.you.work"]);
-    const msg = !saveOk ? (saveFull ? uiText('save.state.full', 'Autosave failed: browser storage is full') : uiText('save.state.unavailable', 'Autosave failed: browser storage unavailable')) : f ? f.name : '';
-    note.classList.toggle('unavailable', !saveOk && mode !== 'none');
-    st.classList.toggle('err', !saveOk);
-    st.classList.toggle('linked', saveOk && !!f);
-    st.classList.toggle('dirty', dirty);
-    if (st.textContent !== msg) st.textContent = msg; // unchanged text is not re-announced
-    st.title = !saveOk ? msg // the full message where only "Not saved" fits
-      : mode === 'file' ? uiText('save.state.auto', 'Every change is saved to {file} as you work', { file: f.name })
-      : f ? (dirty ? uiText('save.state.dirty', 'Changes not yet saved to {file}. Ctrl+S saves them.', { file: f.name }) : uiText('save.state.saved', 'Saved to {file}. Ctrl+S saves changes to it.', { file: f.name }))
-      : note.title;
+    const f = TD.files.fileOf(state.docId), mode = autosaveMode();
+    // with autosave writing the file, a change is yellow until its write lands a second later
+    const onDisk = !!f && !!state.docId && !diskDirty.has(state.docId);
+    const file = f?.name || '';
+    const fixed = (t: string) => () => t; // a line with no file name in it
+    const ctrlS = keyLabel('Ctrl+S'), saveKey = keyLabel('Ctrl+Shift+S');
+    // [dot, the line (given the file name, which may come cut), what it means]
+    const [tone, make, tip]: [string, (name: string) => string, string] =
+      mode === 'none' ? ['err', fixed(uiText('save.status.none', 'Autosave unavailable')), uiText('save.autosaveNone.tip', 'This browser can’t keep your work as you go. Save it as a file to keep it.')]
+      : !saveOk ? ['err', fixed(saveFull ? uiText('save.state.full', 'Autosave failed: browser storage is full') : uiText('save.state.unavailable', 'Autosave failed: browser storage unavailable')), '']
+      : onDisk ? ['ok', (name) => uiText('save.status.saved', 'Changes are saved to {file}', { file: name }),
+        mode === 'file' ? uiText('save.autosaveFile.tip', 'Every change is written to it as you work, and kept in this browser too.') : uiText('save.state.saved', '{key} saves later changes to it.', { key: ctrlS })]
+      : f ? ['warn', (name) => uiText('save.status.notOnDisk', 'Autosaved in browser only · Not saved to {file} yet', { file: name }), uiText('save.state.dirty', '{key} saves them to it.', { key: ctrlS })]
+      : TD.files.can ? ['warn', fixed(uiText('save.status.toDisk', 'Autosaved in browser only · Save it to disk with {key}', { key: saveKey })),
+        uiText('save.status.toDisk.tip', 'Every change is saved in this browser as you work. {key} saves it to a file on your computer, and later changes go to that file.', { key: saveKey })]
+      : ['info', fixed(uiText('save.status.browser', 'Autosaved in browser only')), caption(captions["ui.every.change.is.saved.in.this.browser.as.you.work"])];
+    const text = make(file);
+    const el = $('#saveStatus');
+    el.dataset.tone = tone;
+    el.title = tip ? `${text}\n${tip}` : text; // the whole line, where the bar cuts it short
+    statusLine = { file, make };
+    fitStatus();
     const b = $('#topbar [data-cmd="save"]');
     if (b) b.title = f ? uiText('save.btn.linked', 'Save to {file} (Ctrl+S)', { file: f.name }) : TD.files.can ? uiText('save.btn.files', 'Save to a .diagramtex file on your computer; later saves go to the same file (Ctrl+Shift+S)') : caption(captions["ui.save.to.a.diagramtex.file.that.you.can.open.again.ctrl.shift.s"]);
   }
@@ -405,6 +575,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     state.docId = id;
     const kind = normKind(d.kind);
     state.doc = makeDoc(d.name, d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }], d.active ?? 0, d.page, d.sheet, kind);
+    // a file changed by a version without named styles: what differs from a shape's style is an override
+    for (const o of styleOwners()) markOverrides(o.shapes, namedStyles());
+    syncNamed();
     const fit = !(d.view && d.view.zoom > 0);
     if (!fit) state.view = d.view;
     state.sel.clear(); takeHistory();
@@ -673,7 +846,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         rows: rows.map((r) => ({ key: r.ids.join(','), attrs: { 'data-ids': r.ids.join(',') }, svg: r.ic, name: r.name,
           detail: `${r.detail} · ${uiText('bin.deletedWhen', 'deleted {ago}, {left}', { ago: ago(r.t), left: left(r.t) })}`,
           restore: { label: uiText('bin.restore', 'Restore') },
-          act: { class: 'bin-erase', icon: 'delete' as const, title: uiText('bin.deleteForGood', 'Delete for good'), label: uiText('bin.deleteForGood.aria', 'Delete {name} for good', { name: r.name }) } })) } } satisfies BinDialogModel);
+          acts: [{ class: 'bin-erase', icon: 'delete' as const, title: uiText('bin.deleteForGood', 'Delete for good'), label: uiText('bin.deleteForGood.aria', 'Delete {name} for good', { name: r.name }) }] })) } } satisfies BinDialogModel);
     };
     // the focus goes back at once; the dialog fades out, then goes
     const close = () => { root.id = ''; if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); fadeOutDialog(root, () => { destroyView(root); root.remove(); }); };
@@ -722,7 +895,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const m = Math.round((Date.now() - t) / 6e4);
     return m < 1 ? uiText('time.justNow', 'just now') : m < 60 ? uiText('time.minAgo', '{n} min ago', { n: m }) : m < 60 * 24 ? uiText('time.hoursAgo', '{n} h ago', { n: Math.round(m / 60) }) : ago(t);
   }
-  const sizeOf = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+  const sizeOf = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1073741824).toFixed(1)} GB`;
   function contentsOf(d: any) {
     const count = (n: number) => n === 1 ? uiText('count.objects.one', '1 object') : uiText('count.objects.many', '{n} objects', { n });
     if (d.kind === 'page') { const n = d.sheet?.shapes?.length || 0; return count(n); }
@@ -743,15 +916,48 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const idx: any[] = index(), it = idx.find((x) => x.id === id);
     if (it) { it.updated = Date.now(); store.set(LS_INDEX, idx); }
     if (open) { state.docId = null; openDoc(id); } else renderDocList();
-    showHint(uiText('hint.recRestored', 'Restored the copy from {when}. The state before it is kept as a recovery copy.', { when: whenOf(copy.at) }), 3200);
+    showHint(restoredHint(copy), 3200);
   }
+  const restoredHint = (copy: RecoveryCopy) => copy.name ? uiText('hint.versionRestored', 'Restored the version "{name}". The state before it is kept in the version history.', { name: copy.name })
+    : uiText('hint.recRestored', 'Restored the copy from {when}. The state before it is kept in the version history.', { when: whenOf(copy.at) });
   function openRecoveryCopy(id: string, copy: RecoveryCopy) {
     const e: any = docEntry(id);
     if (!e) return;
-    let name = `${e.name} (${whenOf(copy.at)})`;
+    let name = `${e.name} (${copy.name || whenOf(copy.at)})`;
     if (index().some((x) => x.name === name)) name = copyName(name);
     openDoc(storeCopy(copy.doc, name, id));
-    showHint(uiText('hint.recOpened', 'Opened the recovery copy as "{name}"', { name: leafOf(name) }), 1800);
+    showHint(uiText('hint.recOpened', 'Opened the copy as "{name}"', { name: leafOf(name) }), 1800);
+  }
+  // A saved version is marked with a bookmark; automatic copies with the clock.
+  const VERSION_IC = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" fill="none" stroke="currentColor" stroke-linejoin="round"/></svg>';
+  // How a copy differs from the file now, counted in objects (shapes are matched by id across the file's diagrams).
+  function shapesOf(d: any) {
+    const m = new Map<string, string>(), add = (list: any[] | undefined, at: string) => { for (const x of list || []) m.set(at + ':' + x.id, JSON.stringify(x)); };
+    if (d.kind === 'page') add(d.sheet?.shapes, 's');
+    else (d.blocks || []).forEach((b: any, i: number) => add(b.shapes, b.id || String(i)));
+    return m;
+  }
+  function differenceOf(copy: any, now: any, nowShapes: Map<string, string>) {
+    const content = (d: any) => JSON.stringify({ page: d.page, blocks: d.blocks, sheet: d.sheet });
+    if (content(copy) === content(now)) return uiText('rec.diff.same', 'same as now');
+    const mine = shapesOf(copy);
+    let n = 0;
+    for (const [k, v] of mine) if (nowShapes.get(k) !== v) n++;
+    for (const k of nowShapes.keys()) if (!mine.has(k)) n++;
+    return !n ? uiText('rec.diff.other', 'differs from now') : n === 1 ? uiText('rec.diff.one', '1 object differs from now') : uiText('rec.diff.many', '{n} objects differ from now', { n });
+  }
+  /** Keep what file `id` holds now as a saved version, asking for its name. */
+  async function saveVersion(id?: string) {
+    id = id || state.docId || undefined;
+    if (!id || !docEntry(id)) return null;
+    if (id === state.docId) { finishEdit(); finishPoly(); commit(); saveNow(); }
+    const name = await TD.prompt(uiText('dlg.saveVersion.title', 'Save Version'), '', { ok: uiText('dlg.saveVersion.ok', 'Save'), placeholder: uiText('dlg.saveVersion.placeholder', 'Name, e.g. Before review') });
+    if (name == null) return null;
+    const cur = store.get<Record<string, unknown> | null>(LS_DOC + id, null);
+    if (!cur) return null;
+    const v = recovery.save(id, cur, docEntry(id)?.updated, String(name).trim() || whenOf(Date.now()));
+    showHint(uiText('hint.versionSaved', 'Saved the version "{name}". It is kept until you delete it.', { name: v.name! }), 3000);
+    return v;
   }
   function openRecovery(id?: string) {
     id = id || state.docId || undefined;
@@ -762,28 +968,54 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     root.className = 'td-dialog'; root.id = 'recDlg';
     const opts = (vals: number[], word: (v: number) => string) => vals.map((v) => ({ value: String(v), label: word(v) }));
     document.body.appendChild(root);
-    let copies: RecoveryCopy[] = [];
+    let copies: RecoveryCopy[] = [], usage = '', usageHigh = false;
+    // how much of the browser's storage the app uses, read once (the browser answers later)
+    navigator.storage?.estimate?.().then((e) => {
+      if (!e.quota) return;
+      usage = uiText('rec.usage', 'DiagramTeX uses {used} of the {quota} this browser allows.', { used: sizeOf(e.usage || 0), quota: sizeOf(e.quota) });
+      usageHigh = (e.usage || 0) > 0.8 * e.quota;
+      if (root.isConnected) draw();
+    }).catch(() => {});
     const draw = () => {
       const e: any = docEntry(id!), s = recoverySettings();
       copies = recovery.list(id!);
+      const now: any = store.get(LS_DOC + id!, {}), nowShapes = shapesOf(now);
       const total = copies.reduce((n, c) => n + JSON.stringify(c.doc).length, 0);
       const nm = leafOf(e.name);
       const sub = !s.every ? uiText('rec.sub.off', 'Copies of "{name}" are no longer kept. Those below stay until the file is deleted for good.', { name: nm })
         : (s.every > RECOVERY_QUICK ? uiText('rec.sub.everyQuick', 'Earlier states of "{name}", kept on their own while you edit: one {every} at most, the newest {keep}, and one more in between, {quick}.', { name: nm, every: everyWord(s.every), keep: s.keep, quick: everyWord(RECOVERY_QUICK) })
           : uiText('rec.sub.every', 'Earlier states of "{name}", kept on their own while you edit: one {every} at most, the newest {keep}.', { name: nm, every: everyWord(s.every), keep: s.keep })) +
+          ' ' + uiText('rec.sub.saved', 'Versions you save and name are kept until you delete them.') +
           (copies.length ? ' ' + uiText('rec.sub.size', 'They take {size} in this browser.', { size: sizeOf(total) }) : '');
-      renderSvelteView(root, RecoveryDialog, { title: uiText('rec.title', 'Recovery Copies'), sub, doneLabel: caption(captions["ui.done"]),
+      renderSvelteView(root, RecoveryDialog, { title: uiText('rec.title', 'Version History'), sub, doneLabel: caption(captions["ui.done"]),
+        saveLabel: uiText('rec.saveVersion', 'Save Version…'), saveTitle: uiText('rec.saveVersion.title', 'Keep the file as it is now, under a name, until you delete it'),
+        usage, usageHigh,
         every: { label: uiText('rec.keepCopy', 'Keep a copy'), aria: uiText('rec.keepCopy.aria', 'How often a copy is kept'), value: s.every, options: opts(RECOVERY_EVERY, (v) => v ? everyWord(v) : uiText('rec.never', 'never')) },
         keep: { label: uiText('rec.keepNewest', 'Keep the newest'), aria: uiText('rec.keepNewest.aria', 'How many copies are kept'), value: s.keep, options: opts(RECOVERY_KEEP, (v) => String(v)) },
         list: {
         empty: s.every ? uiText('rec.none.on', 'No copies yet. The first is kept when the file is next changed.') : uiText('rec.none.off', 'No copies yet. The first is kept when the file is next changed, once copies are turned on.'),
-        rows: copies.map((c, i) => ({ key: String(c.at) + ':' + i, attrs: { 'data-i': String(i) }, svg: HIST_IC, name: whenOf(c.at),
-          detail: `${sinceOf(c.at)} · ${contentsOf(c.doc)} · ${sizeOf(JSON.stringify(c.doc).length)}`,
-          restore: { label: uiText('bin.restore', 'Restore'), title: uiText('rec.restore.title', 'Put this copy in place of the file. Its state now is kept as a copy.') },
-          act: { class: 'rec-open', icon: 'duplicate' as const, title: uiText('rec.openNew', 'Open as a new file'), label: uiText('rec.openNew.aria', 'Open the copy from {when} as a new file', { when: whenOf(c.at) }) } })) } } satisfies RecoveryDialogModel);
+        rows: copies.map((c, i) => {
+          const when = whenOf(c.at), size = sizeOf(JSON.stringify(c.doc).length), diff = differenceOf(c.doc, now, nowShapes);
+          return { key: String(c.taken), attrs: { 'data-i': String(i) }, svg: c.name ? VERSION_IC : HIST_IC, name: c.name || when,
+            detail: c.name ? `${when} · ${diff} · ${contentsOf(c.doc)} · ${size}` : `${sinceOf(c.at)} · ${diff} · ${contentsOf(c.doc)} · ${size}`,
+            restore: { label: uiText('bin.restore', 'Restore'), title: uiText('rec.restore.title', 'Put this copy in place of the file. Its state now is kept as a copy.') },
+            acts: [
+              { class: 'rec-act rec-name', icon: 'rename' as const, title: c.name ? uiText('rec.rename', 'Rename Version…') : uiText('rec.name', 'Name and Keep…'),
+                label: c.name ? uiText('rec.rename.aria', 'Rename the version {name}', { name: c.name }) : uiText('rec.name.aria', 'Name the copy from {when} and keep it', { when }) },
+              { class: 'rec-act rec-open', icon: 'duplicate' as const, title: uiText('rec.openNew', 'Open as a new file'), label: uiText('rec.openNew.aria', 'Open the copy from {when} as a new file', { when }) },
+              { class: 'rec-act rec-del', icon: 'delete' as const, title: uiText('rec.delete', 'Delete'), label: uiText('rec.delete.aria', 'Delete the copy from {when}', { when }) }] };
+        }) } } satisfies RecoveryDialogModel);
     };
     // the focus goes back at once; the dialog fades out, then goes
     const close = () => { root.id = ''; if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true }); fadeOutDialog(root, () => { destroyView(root); root.remove(); }); };
+    // a dialog over this one: this one hides meanwhile, then is drawn again and takes the focus back
+    const over = async <T,>(ask: () => Promise<T>, focus = '.rec-save') => {
+      root.hidden = true;
+      const r = await ask();
+      root.hidden = false; draw();
+      root.querySelector<HTMLElement>(focus)?.focus();
+      return r;
+    };
     draw();
     root.addEventListener('change', (ev) => {
       const t = ev.target as HTMLSelectElement, s = recoverySettings();
@@ -796,8 +1028,20 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     root.addEventListener('click', (ev) => {
       const t = ev.target as Element, li = t.closest('li[data-i]'), c = li ? copies[+(li as HTMLElement).dataset.i!] : null;
       if (t.closest('.rec-done')) close();
+      else if (t.closest('.rec-save')) void over(() => saveVersion(id));
       else if (c && t.closest('.bin-restore')) { close(); restoreRecovery(id!, c); }
       else if (c && t.closest('.rec-open')) { close(); openRecoveryCopy(id!, c); }
+      else if (c && t.closest('.rec-name')) void over(async () => {
+        const name = await TD.prompt(c.name ? uiText('dlg.renameVersion.title', 'Rename Version') : uiText('dlg.nameVersion.title', 'Name and Keep This Copy'), c.name || '',
+          { ok: c.name ? uiText('dlg.renameVersion.ok', 'Rename') : uiText('dlg.nameVersion.ok', 'Keep'), placeholder: uiText('dlg.saveVersion.placeholder', 'Name, e.g. Before review') });
+        // an empty name turns a version back into an automatic copy
+        if (name != null && (String(name).trim() || c.name)) recovery.rename(id!, c.taken, String(name));
+      });
+      else if (c && t.closest('.rec-del')) void over(async () => {
+        const yes = await TD.confirm(c.name ? uiText('dlg.deleteVersion.title', 'Delete the version "{name}"?', { name: c.name }) : uiText('dlg.deleteCopy.title', 'Delete the copy from {when}?', { when: whenOf(c.at) }),
+          uiText('dlg.deleteVersion.body', "It is removed from this browser. This can't be undone."), { ok: caption(captions["ui.delete"]), danger: true });
+        if (yes) recovery.remove(id!, c.taken);
+      });
     });
     for (const ty of ['pointerdown', 'mousedown']) root.addEventListener(ty, (ev) => { ev.stopPropagation(); if (ev.target === root) { ev.preventDefault(); close(); } });
     root.addEventListener('keydown', (ev) => {
@@ -3306,6 +3550,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       else if (p.type === 'align') fields.push(fieldModel({ ...p, wraps: sel.some(s => s.tw > 0) }, first('align')));
       else fields.push(fieldModel(p, first(p.key), label, sel.length > 1 ? sel.filter((s: any) => hasKey(s, p.key)).map((s: any) => keyVal(s, p.key)) : undefined));
     }
+    const so = new Set(sel.flatMap((q: any) => (q.style && Array.isArray(q.so) ? q.so : [])));
+    for (const fm of fields) if (so.has(fm.key) || (fm.type === 'bi' && (so.has('bold') || so.has('italic')))) fm.overridden = true;
+    const named = namedSection(sel);
     const before: FormSection[] = [], after: FormSection[] = [];
     if (sel.every(canScale)) before.push({ class: 'sec', rows: [row(captions["ui.scale"],
       { kind: 'input', value: sel.every(s => objectScale(s) === objectScale(sel[0])) ? objectScale(sel[0]) : '', attrs: { type: 'number', min: '0.01', step: '0.01', 'data-object-scale': '', 'aria-label': uiText('ui.scale', 'Scale') } },
@@ -3338,7 +3585,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     after.push({ class: 'sec', rows: [{ kind: 'actions', class: 'btns', buttons }, { kind: 'hint', text: [turnable(sel) ? uiText('props.more.turn', 'Right-click for more: rotate, flip, arrange, distribute.') : rotatable(sel) ? uiText('props.more.flip', 'Right-click for more: flip, arrange, distribute.') : uiText('props.more', 'Right-click for more: arrange, distribute.')] }] });
     const panel = sel.length === 1 && TD.panels[sel[0].type];
     propertyAfter = after;
-    propertiesView = mountFrame(el, MainProperties, { defaults: false, title, fields, before, after, ...(panel ? { panel: sel[0].type } : {}), geometry: sel.length === 1 && !!GEOM[sel[0].type] });
+    propertiesView = mountFrame(el, MainProperties, { defaults: false, title, fields, ...(named ? { named } : {}), before, after, ...(panel ? { panel: sel[0].type } : {}), geometry: sel.length === 1 && !!GEOM[sel[0].type] });
     if (panel) panelType = sel[0].type, panelView = TD.panelViews[sel[0].type].mount(el.querySelector('[data-panel]'), sel[0] as Shape & { src: string });
     renderGeom();
   }
@@ -3504,6 +3751,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   });
   propsEl.addEventListener('change', (e: any) => {
     const t = e.target;
+    if (t.dataset.named != null) {
+      const v = t.value;
+      if (v === '+') void newNamedStyle(); else if (v !== '*') applyNamed(v);
+      renderProps(); return;
+    }
     if (t.dataset.objectScale != null) {
       const value = Number(t.value);
       if (!Number.isFinite(value) || value <= 0) { renderProps(); return; }
@@ -3654,6 +3906,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const vd = e.target.closest('[data-vdel]');
     if (vd) { begin(); delete home().vars![vd.dataset.vdel]; if (!Object.keys(home().vars!).length) delete home().vars; render(); commit(); renderProps(); return; }
     const act = e.target.closest('[data-act]')?.dataset.act;
+    if (act === 'ns:menu') return namedMenu(e.target.closest('[data-act]'));
     if (act === 'comp:make') return makeComponent();
     if (act === 'comp:edit') return editComponent(selected()[0]);
     if (act === 'comp:detach') return detachComponent(selected()[0]);
@@ -4875,7 +5128,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         item(uiText('ctx.moveToFolder', 'Move to Folder…'), d('move'), { ic: 'folder' }),
         item(captions["ui.duplicate"], d('dup'), { ic: 'duplicate' }),
         item(uiText('ctx.saveCopy', 'Save a Copy…'), d('saveas'), { ic: 'duplicate' }),
-        item(uiText('ctx.recovery', 'Recovery Copies…'), d('recovery'), { ic: 'history' }), hr,
+        item(uiText('ctx.saveVersion', 'Save Version…'), d('saveversion'), { ic: 'history' }),
+        item(uiText('ctx.recovery', 'Version History…'), d('recovery'), { ic: 'history' }), hr,
         item(captions["ui.copy"], d('copy'), { ic: 'copy' }),
         item(captions["ui.paste"], d('paste'), { ic: 'paste' }),
         item(uiText('ctx.copyShare', 'Copy Share Link'), d('share'), { ic: 'link' }), hr,
@@ -4939,6 +5193,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       case 'delfolder': deleteFolder(ctxFor.folder!); break;
       case 'bin': openBin(); break;
       case 'recovery': openRecovery(id); break;
+      case 'saveversion': void saveVersion(id); break;
       case 'fold': setFolded(ctxFor.folder!, !folded.has(foldKey(ctxFor.folder!))); break;
       case 'move': {
         if (!it) break;
@@ -4966,7 +5221,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       case 'exportall': exportAll(); break;
       case 'save': openFirst(); saveFile(); break;
       case 'savenew': openFirst(); saveFile(true); break;
-      case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { if (id === state.docId) showSaveState(); if (f) showHint(uiText('hint.unlinked', 'No longer linked to {file}', { file: f.name }), 1400); }); break; }
+      case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { diskWritten(id, diskEdit(id)); if (id === state.docId) showSaveState(); if (f) showHint(uiText('hint.unlinked', 'No longer linked to {file}', { file: f.name }), 1400); }); break; }
       case 'latex': case 'tikz': case 'html': case 'print': openFirst(); runCmd(a); break;
       case 'image': {
         openFirst();
@@ -5488,10 +5743,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   async function saveFile(pick?: any) {
     finishEdit(); finishPoly(); commit();
     if (state.docId) saveNow();
-    const id = state.docId, text = projectJson(state.doc);
+    const id = state.docId, text = projectJson(state.doc), edit = diskEdit(id);
     if (!TD.files.can) { download(fileName(), text, FILE_TYPE); return; }
     try {
       const name = await TD.files.saveDoc(id, text, fileName(), pick);
+      if (name) diskWritten(id, edit);
       if (name) showHint(uiText('hint.savedTo', 'Saved to {file}', { file: name }), 1200);
     } catch (e: any) {
       showHint(uiText('hint.saveFailed', "Couldn't save the file ({error}). Downloaded a copy instead.", { error: e.message }), 3500);
@@ -5514,7 +5770,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       if (known) { await reopenLinked(known, text, name); return true; }
       if (!openProjectText(text, baseName(name), true)) throw new Error('not valid JSON'); // a second file never takes an existing name
       // an older .json file is not linked: its first save makes a .diagramtex beside it
-      if (handle && name.toLowerCase().endsWith(FILE_EXT)) { await TD.files.link(state.docId, handle, projectJson(state.doc), text); showSaveState(); }
+      if (handle && name.toLowerCase().endsWith(FILE_EXT)) { const id = state.docId; await TD.files.link(id, handle, projectJson(state.doc), text); diskWritten(id); }
       return true;
     } catch (err: any) {
       // what went wrong, not only that it did
@@ -5532,11 +5788,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (!fresh) { showHint(uiText('hint.isOpen', '"{name}" is open', { name }), 1200); return; }
     const p = parseProject(text, baseName(name));
     if (!p) throw new Error('not valid JSON');
-    if (!TD.files.isSaved(id, projectJson(state.doc)) &&
+    if (diskDirty.has(id) &&
       !(await TD.confirm(uiText('dlg.changedOnDisk.title', '"{name}" changed on disk', { name }), uiText('dlg.changedOnDisk.body', 'This file also has changes that are not saved to it. Replace them with the version on disk?'), { ok: uiText('dlg.changedOnDisk.ok', 'Use the Version on Disk') }))) return;
     replaceDoc(id, p);
     await TD.files.link(id, TD.files.fileOf(id).handle, projectJson(state.doc), text);
-    showSaveState();
+    diskWritten(id);
     showHint(uiText('hint.reloaded', 'Reloaded "{name}" from disk', { name }), 1400);
   }
   async function openFile() {
@@ -5880,7 +6136,16 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const o = expOpts, fmt = expFmt();
     expPop!.el.setAttribute('aria-label', caption(captions["ui.export"]));
     const setFmt = (v: string) => { expOpts.fmt = v; saveExpOpts(); renderExpPop(); };
-    const go = (label: string): ExportAction => ({ label, primary: true, attrs: { 'data-ego': '' }, onclick: () => { closeExport(); if (expFmt() === 'html') exportHtml(); else if (state.mode === 'document') printDoc(); else runExport(); } });
+    const go = (label: string): ExportAction => ({ label, primary: true, attrs: { 'data-ego': '' }, onclick: () => { closeExport(); if (expFmt() === 'html') exportHtml(); else if (expFmt() === 'pdf' && expRender !== 'shown') void exportTexPdf(expRender); else if (state.mode === 'document') printShown(); else runExport(); } });
+    // a PDF made by LaTeX in this browser, where an engine runs: the choice, and what it makes
+    const renderRow = (): ExportRow[] => expEngines.length ? [{ kind: 'select', id: 'expRender', label: uiText('exp.render', 'Render'),
+      title: uiText('exp.render.title', 'As shown: the PDF of what you see here. pdfLaTeX or XeLaTeX: the file’s LaTeX compiled in this browser'),
+      value: expRender, options: [{ value: 'shown', label: uiText('print.asShown', 'As shown') }, ...expEngines.map((e) => ({ value: e, label: ENGINE_NAME[e] }))],
+      onchange: (v) => { expRender = v as typeof expRender; renderExpPop(); } }] : [];
+    const texRows = (): ExportRow[] => [{ kind: 'note', text: uiText('exp.texNote', 'The file’s LaTeX compiled with {engine} here, in this browser, as the PDF LaTeX makes it.', { engine: ENGINE_NAME[expRender as TexEngine] }) },
+      // pdfLaTeX for a Thai file: it sets the Thai, but XeLaTeX sets it best
+      ...(expRender === 'pdflatex' && expEngines.includes('xelatex') && thaiFile(state.doc) ? [{ kind: 'note', warn: true, text: uiText('tex.thaiBest', 'This file has Thai: XeLaTeX sets it best, its Latin letters in the Thai font too.') } as ExportRow] : []), ...dirRow()];
+    const texGo = () => go(TD.files.dirOf(state.docId) ? uiText('exp.save', 'Save {fmt}', { fmt: 'PDF' }) : uiText('exp.download', 'Download {fmt}', { fmt: 'PDF' }));
     const formats = expFmts().map(([value, label]) => ({ value, label }));
     let model: ExportPanelModel;
     if (fmt === 'html') {
@@ -5890,8 +6155,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     } else if (state.mode === 'document') {
       // the document's PDF is the print of its pages: vector, selectable text, no flattening
       model = { head: uiText('exp.h.document', 'Export document'), formats, format: fmt, onformat: setFmt,
-        rows: [{ kind: 'note', bold: uiText('exp.saveAsPdf', 'Save as PDF'), text: uiText('exp.pdfNote', 'Vector PDF with selectable text. In the print window, choose {b} as the destination.', { b: '\u0000' }) }],
-        actions: [go(uiText('exp.savePdf', 'Save PDF…'))] };
+        rows: [...renderRow(), ...(expRender !== 'shown' ? texRows() : [{ kind: 'note', bold: uiText('exp.saveAsPdf', 'Save as PDF'), text: uiText('exp.pdfNote', 'Vector PDF with selectable text. In the print window, choose {b} as the destination.', { b: '\u0000' }) } as ExportRow])],
+        actions: [expRender !== 'shown' ? texGo() : go(uiText('exp.savePdf', 'Save PDF…'))] };
+    } else if (o.fmt === 'pdf' && expRender !== 'shown') {
+      model = { head: state.mode === 'page' ? uiText('exp.h.page', 'Export page') : state.mode === 'board' ? uiText('exp.h.board', 'Export whiteboard') : uiText('exp.h.diagram', 'Export diagram'),
+        formats, format: o.fmt, onformat: setFmt, rows: [...renderRow(), ...texRows()], actions: [texGo()] };
     } else {
       const flat = o.fmt === 'pdf' && o.flat, dpi = flat ? o.flatDpi : o.dpi;
       const srcs = exportSources(), sc = expScale(dpi);
@@ -5901,6 +6169,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       const head = state.mode === 'page' ? (srcs.length > 1 ? uiText('exp.h.pages', 'Export pages') : uiText('exp.h.page', 'Export page')) : state.mode === 'board' ? uiText('exp.h.board', 'Export whiteboard') : uiText('exp.h.diagram', 'Export diagram');
       const B = '\u0000';
       const rows: ExportRow[] = [];
+      if (o.fmt === 'pdf') rows.push(...renderRow());
       if (o.fmt === 'pdf') rows.push({ kind: 'switch', id: 'expFlat', label: uiText('exp.flatten', 'Flatten'), title: uiText('exp.flatten.title', 'Pages as images at a set DPI, instead of vector with selectable text'), checked: flat,
         onchange: (on) => { expOpts.flat = on; saveExpOpts(); setTimeout(renderExpPop, 220); } }); // after the knob slides
       if (raster) rows.push({ kind: 'dpi', label: uiText('exp.resolution', 'Resolution'), value: dpi, presets: DPIS, onchange: (v) => { expOpts[expOpts.fmt === 'pdf' ? 'flatDpi' : 'dpi'] = v; saveExpOpts(); renderExpPop(); } },
@@ -5928,9 +6197,13 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       onpick: () => { TD.files.pickDir(state.docId).then(renderExpPop, (err: any) => showHint(uiText('hint.folderFailed', "Couldn't use that folder ({error})", { error: err.message }), 2500)); },
       clear: f ? { title: uiText('exp.dirClear', 'Download exports instead'), onclick: () => { TD.files.clearDir(state.docId).then(renderExpPop); } } : undefined }];
   }
+  // Export PDF's renderer: as shown, or a LaTeX engine; starts as shown each time the panel opens
+  let expRender: 'shown' | TexEngine = 'shown', expEngines: TexEngine[] = [];
   function openExport(btn: any) {
     if (!outputAllowed()) return;
     if (expOpen()) { closeExport(); return; }
+    expRender = 'shown'; expEngines = [];
+    void texEnginesHere().then((e) => { expEngines = e; if (e.length) renderExpPop(); });
     // Esc and a press outside are the popover's own
     // the panel goes once the popover has faded out
     const pop = openPopover(btn, { width: 264, class: 'exp-pop', label: caption(captions["ui.export"]), onclose: () => { const body = pop.body; setTimeout(() => destroyView(body), 400); } });
@@ -5961,7 +6234,22 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     setTimeout(() => { if (outputAllowed()) window.print(); document.body.classList.remove('printing-page'); host.innerHTML = ''; document.title = title; }, 300);
   }
   const printPage = () => printVector(exportSources());
-  function printDoc() {
+  // Print: as shown (the browser's drawing, as always), or the LaTeX compiled here, asked each time where an engine runs
+  async function printDoc() {
+    if (!outputAllowed()) return;
+    const engines = await texEnginesHere();
+    if (engines.length) {
+      // pdfLaTeX for a Thai file: said while it is the one chosen
+      const thai = thaiFile(state.doc) && engines.includes('xelatex') ? uiText('tex.thaiBest', 'This file has Thai: XeLaTeX sets it best, its Latin letters in the Thai font too.') : null;
+      const pick = await TD.choose(uiText('print.title', 'Print'), uiText('print.how.msg', 'As shown prints what you see here. pdfLaTeX and XeLaTeX compile the file’s LaTeX in this browser and print that PDF.'),
+        [uiText('print.asShown', 'As shown'), ...engines.map((e) => ENGINE_NAME[e])], { ok: uiText('print.go', 'Print'), choiceLabel: uiText('print.renderWith', 'Render with'),
+          choiceNotes: [null, ...engines.map((e) => (e === 'pdflatex' ? thai : null))] });
+      if (pick == null) return;
+      if (pick > 0) { void printTexPdf(engines[pick - 1]); return; }
+    }
+    printShown();
+  }
+  function printShown() {
     if (!outputAllowed()) return;
     finishEdit(); finishPoly(); commit();
     if (!outputAllowed()) return;
@@ -6068,7 +6356,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       newDoc(newName(), null, null, res.blocks, res.page);
       if (res.blocks.filter((b: any) => b.type === 'diagram').length > 1 || res.blocks.some((b: any) => b.type === 'text')) setMode('document');
       else zoomFit();
-    } else placeImported(res, null);
+    } else {
+      // what the file held before the import stays in its version history
+      if (state.docId) { commit(); saveNow(); const cur = store.get<Record<string, unknown> | null>(LS_DOC + state.docId, null); recovery.take(state.docId, cur, docEntry(state.docId)?.updated, true); }
+      placeImported(res, null);
+    }
     closeImport();
     const nKept = (res.kept || []).length;
     const only = nIn1(res), nIn = nShapes - nKept;
@@ -6141,17 +6433,24 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     try { return TD.importLatex(tex).blocks.every((b: any) => b.type !== 'diagram' || (b.shapes || []).every((s: any) => s.type !== 'tikz' || s.kind === 'defs')); } catch { return false; }
   }
   const noRestore = () => uiText('hint.noRestore', 'DiagramTeX can\'t restore this LaTeX exactly: importing it again brings back lines, shapes and text, but plots, most blocks and library symbols come back as TikZ code. To keep editing, save the .diagramtex file.');
+  // the engine the dialog's code is for (its menu): pdfLaTeX, or XeLaTeX for the document's font or Thai text
+  const tikzEngine = (): TexEngine => ($('#tikzEngine').value === 'xelatex' ? 'xelatex' : 'pdflatex');
+  /** The engine a file's LaTeX starts with: XeLaTeX when its font or its text is Thai. */
+  const engineFor = (doc: any): TexEngine => (thaiFile(doc) ? 'xelatex' : 'pdflatex');
+  /** A file in a Thai document font or with Thai text: XeLaTeX sets it best (pdfLaTeX can, with the TLWG Type 1 fonts). */
+  // (a document's blocks, a page's sheet, a whiteboard's shapes: every content a file kind keeps, not its name)
+  function thaiFile(doc: any) { return !!docFont(doc?.page?.family).thai || hasThai(JSON.stringify([doc?.blocks, doc?.sheet, doc?.shapes])); }
   function genTikz() {
-    const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value;
+    const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value, engine = tikzEngine();
     $('#tikzSelWrap').style.display = state.sel.size && scope !== 'doc' ? '' : 'none';
     const selOnly = $('#tikzSelOnly').checked && state.sel.size && scope !== 'doc';
     const list = selOnly ? selected() : shapes();
     let raw;
     TD.srcMark = true;
     try {
-      ({ result: raw, files: tikzFiles } = TD.texImages.collect(() => scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null })
-        : scope === 'doc' ? TD.docToLatex(state.doc)
-        : TD.toTikz(list, { standalone: scope === 'standalone' })));
+      ({ result: raw, files: tikzFiles } = TD.texImages.collect(() => scope === 'page' ? TD.pageToLatex(state.doc, { only: selOnly ? list : null, engine })
+        : scope === 'doc' ? TD.docToLatex(state.doc, { engine })
+        : TD.toTikz(list, { standalone: scope === 'standalone', engine })));
     } finally { TD.srcMark = false; }
     // the pictures the code names: a .zip carries them with the .tex
     const n = tikzFiles.size, svgs = [...tikzFiles.keys()].some((k) => /\.svg$/i.test(k));
@@ -6166,12 +6465,16 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const m = TD.srcMap(raw);
     tikzText = m.text; tikzSpans = m.spans;
     // what would stop pdflatex: mostly TikZ code kept as written (imported or typed in a code object)
-    const L = TD.lint ? TD.lint(tikzText, { preview: false }).filter((d: any) => d.sev !== 'info') : [];
+    const L = TD.lint ? TD.lint(tikzText, { preview: false, engine }).filter((d: any) => d.sev !== 'info') : [];
     tikzErr = new Map();
     for (const d of L) tikzErr.set(d.line, [...(tikzErr.get(d.line) || []), d.msg]);
-    renderSvelteView($('#tikzLint'), LintList, { note: restorable(tikzText) ? '' : noRestore(), items: L } satisfies LintListModel);
+    tikzLint = L;
+    showTikzLint();
+    clearCompiled(); // the code has changed: a PDF made from the last would mislead
     paintTikz();
   }
+  let tikzLint: LintItem[] = [], tikzStatus: LintListModel['status'];
+  function showTikzLint() { renderSvelteView($('#tikzLint'), LintList, { note: restorable(tikzText) ? '' : noRestore(), items: tikzLint, ...(tikzStatus ? { status: tikzStatus } : {}) } satisfies LintListModel); }
   // a click on a line selects what it draws (⇧ adds); dragging across lines selects text as usual
   view.addEventListener('click', (e: any) => {
     const el = e.target.closest('.cl');
@@ -6213,15 +6516,18 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (state.mode !== 'page') $('#tikzScope').value = scope || (state.mode === 'document' ? 'doc' : $('#tikzScope').value === 'doc' ? 'pic' : $('#tikzScope').value);
     const ttl = $('#modal .modal-head strong'); if (ttl) ttl.textContent = caption(state.mode === 'page' ? captions["ui.latex.for.this.page"] : captions["ui.latex.code.variant1"]);
     $('#tikzSelOnly').checked = false;
+    $('#tikzEngine').value = engineFor(state.doc);
     genTikz();
+    void offerCompile();
     showModalEl($('#modal'));
     view.focus({ preventScroll: true }); view.scrollTop = 0;
     markSel(true);
   }
-  function closeModal() { closeZipMenu(); hideModalEl($('#modal')); }
+  function closeModal() { closeZipMenu(); clearCompiled(); hideModalEl($('#modal')); }
   $('#modalClose').onclick = closeModal;
   $('#modal').addEventListener('pointerdown', (e: any) => { if (e.target.id === 'modal') closeModal(); });
   $('#tikzScope').onchange = genTikz;
+  $('#tikzEngine').onchange = () => { genTikz(); void offerCompile(); };
   $('#tikzSelOnly').onchange = genTikz;
   $('#tikzCopy').onclick = async () => {
     try { await navigator.clipboard.writeText(tikzText); } catch (e: any) { const t = document.createElement('textarea'); t.value = tikzText; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
@@ -6230,6 +6536,143 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     taken();
   };
   $('#tikzDownload').onclick = () => { out(slug() + '.tex', tikzText, 'text/x-tex'); taken(); };
+
+  // ---- Compile: pdfLaTeX in this browser (src/platform/tex-engine.ts), the PDF beside the code, or TeX's errors on
+  // their lines. A picture is compiled as the standalone document it would be in; its errors are moved to its lines.
+  let compiledUrl = '', compiledPdf: Uint8Array | null = null, compileRun = 0;
+  const ENGINE_NAME: Record<TexEngine, string> = { pdflatex: 'pdfLaTeX', xelatex: 'XeLaTeX' };
+  const mb = (n: number) => `${(n / 1e6).toFixed(n < 1e7 ? 1 : 0)} MB`;
+  const texWhyNot = (s: Extract<TexSupport, { ok: false }>) => s.reason === 'wasm' ? uiText('tex.no.wasm', 'This browser can’t run WebAssembly, which the LaTeX engine needs.')
+    : s.reason === 'worker' || s.reason === 'stream' ? uiText('tex.no.browser', 'This browser is too old to run the LaTeX engine.')
+    : s.reason === 'memory' ? uiText('tex.no.memory', 'This browser won’t give the LaTeX engine the memory it needs.')
+    : s.reason === 'space' ? uiText('tex.no.space', 'There isn’t room in this browser’s storage for the LaTeX engine.')
+    : uiText('tex.no.bundle', 'The LaTeX engine isn’t available on this site.');
+  // the button says what a first compile downloads, or why this browser can't
+  async function offerCompile() {
+    const engine = tikzEngine(), b = $('#tikzCompile'), s = await texEngine.support(engine);
+    if (engine !== tikzEngine()) return; // the menu changed meanwhile
+    b.hidden = !s.ok && s.reason === 'bundle'; // a site without the engine doesn't offer it (the buttons beside it stay put)
+    b.disabled = !s.ok;
+    b.title = !s.ok ? texWhyNot(s) : s.cached ? uiText('tex.compile.title', 'Compile with {engine} here, in this browser, and see the PDF', { engine: ENGINE_NAME[engine] })
+      : uiText('tex.compile.first', 'Compile with {engine} here, in this browser, and see the PDF. The first time downloads the LaTeX engine ({size}), kept for offline use.', { size: mb(s.size), engine: ENGINE_NAME[engine] });
+  }
+  function clearCompiled() {
+    compileRun++;
+    if (compiledUrl) { URL.revokeObjectURL(compiledUrl); compiledUrl = ''; compiledPdf = null; }
+    const pane = $('#tikzPdfPane');
+    if (pane && !pane.hidden) { pane.hidden = true; $('#tikzPdf').removeAttribute('src'); $('#modal .modal-box').classList.remove('with-pdf'); }
+    if (tikzStatus) { tikzStatus = undefined; showTikzLint(); }
+    const b = $('#tikzCompile'); if (b) { b.disabled = false; b.textContent = uiText('ui.compile', 'Compile'); }
+  }
+  async function compileTikz() {
+    const engine = tikzEngine(), s = await texEngine.support(engine);
+    if (!s.ok) { tikzStatus = { kind: 'error', text: texWhyNot(s) }; showTikzLint(); return; }
+    clearCompiled();
+    const run = compileRun, b = $('#tikzCompile');
+    b.disabled = true; b.textContent = uiText('tex.compiling', 'Compiling…');
+    const say = (text: string, kind: 'info' | 'warn' | 'error' | 'ok' = 'info') => { if (run === compileRun) { tikzStatus = { kind, text }; showTikzLint(); } };
+    say(s.cached ? uiText('tex.compiling', 'Compiling…') : uiText('tex.downloading', 'Downloading the LaTeX engine ({size})…', { size: mb(s.size) }));
+    // what is compiled: the dialog's LaTeX; a bare picture inside the standalone document it would be in
+    const scope = state.mode === 'page' ? 'page' : $('#tikzScope').value;
+    let src = tikzText, shift = 0;
+    if (scope === 'pic') {
+      const list = $('#tikzSelOnly').checked && state.sel.size ? selected() : shapes();
+      src = TD.texImages.collect(() => TD.toTikz(list, { standalone: true, engine })).result;
+      const at = (t: string) => t.split('\n').findIndex((l) => l.startsWith('\\begin{tikzpicture}'));
+      shift = at(src) - at(tikzText);
+    }
+    try {
+      const entries = await texFiles(tikzFiles, TD.texImages.svgFallback, true); // SVGs as PDFs: nothing calls Inkscape
+      const files = Object.fromEntries(entries.map((e: any) => [e.name, e.data]));
+      const r = await texEngine.compile(TD.texImages.noInkscape(src), files, {
+        engine,
+        onProgress: (done, total) => say(uiText('tex.downloadingOf', 'Downloading the LaTeX engine: {done} of {total}…', { done: mb(done), total: mb(total) })),
+      });
+      if (run !== compileRun) return; // the code changed or the dialog closed meanwhile
+      b.disabled = false; b.textContent = uiText('ui.compile', 'Compile');
+      if (r.ok && r.pdf) {
+        compiledPdf = r.pdf;
+        compiledUrl = URL.createObjectURL(new Blob([r.pdf as BlobPart], { type: 'application/pdf' }));
+        $('#modal .modal-box').classList.add('with-pdf');
+        $('#tikzPdfPane').hidden = false;
+        // a browser without a PDF viewer in pages (most phones) offers the PDF to open or save instead
+        const inPage = (navigator as any).pdfViewerEnabled !== false;
+        $('#tikzPdfNone').hidden = inPage;
+        if (inPage) $('#tikzPdf').src = compiledUrl + '#navpanes=0&view=FitH'; // (the viewer's thumbnails take room the page needs)
+        say(uiText('tex.done', 'Compiled with {engine} (TeX Live {year}) in {s} s.', { engine: ENGINE_NAME[engine], year: s.texlive, s: (r.ms / 1000).toFixed(1) }), 'ok');
+        return;
+      }
+      if (r.timedOut) { say(uiText('tex.timeout', '{engine} took too long and was stopped. A very large plot or a loop that never ends can do this.', { engine: ENGINE_NAME[engine] }), 'error'); return; }
+      // TeX's errors on their lines (those outside the code shown, in the standalone document's own lines, as they are)
+      const n = tikzText.split('\n').length, errs = r.errors.map((e) => ({ ...e, at: e.line != null && e.line - shift >= 1 && e.line - shift <= n ? e.line - shift : null }));
+      tikzErr = new Map(tikzErr);
+      for (const e of errs) if (e.at != null) tikzErr.set(e.at, [...(tikzErr.get(e.at) || []), e.message]);
+      tikzLint = [...errs.filter((e) => e.at != null).map((e) => ({ sev: 'error', line: e.at!, msg: e.message })), ...tikzLint];
+      paintTikz();
+      // a file TeX said it couldn't find (packages probe for files they can do without; those aren't counted)
+      const lost = r.missing.filter((f) => /\.(sty|cls|tex)$/.test(f) && errs.some((e) => e.message.includes('`' + f + "'")));
+      say(lost.length ? uiText('tex.missing', '{engine} stopped: {files} isn’t among the packages this LaTeX engine has.', { files: lost.join(', '), engine: ENGINE_NAME[engine] })
+        : errs.length ? (errs.length === 1 ? (errs[0].at != null ? uiText('tex.error.at', '{engine} stopped on line {n}.', { n: errs[0].at, engine: ENGINE_NAME[engine] }) : uiText('tex.error.one', '{engine} stopped: {msg}', { msg: errs[0].message, engine: ENGINE_NAME[engine] })) : uiText('tex.error.many', '{engine} stopped with {n} errors, marked on their lines.', { n: errs.length, engine: ENGINE_NAME[engine] }))
+        : uiText('tex.error.none', '{engine} could not make a PDF of this.', { engine: ENGINE_NAME[engine] }), 'error');
+      const lv = $('#tikzOut .cl.err'); if (lv) view.scrollTop = Math.max(0, lv.offsetTop - 48);
+    } catch (e: any) {
+      if (run !== compileRun) return;
+      b.disabled = false; b.textContent = uiText('ui.compile', 'Compile');
+      say(uiText('tex.failed', 'The LaTeX engine could not start: {error}', { error: e?.message || String(e) }), 'error');
+    }
+  }
+  $('#tikzCompile').onclick = () => { void compileTikz(); };
+
+  // ---- Print and Export PDF through LaTeX: the file's own LaTeX (what Download .tex gives), compiled here with
+  // pdfLaTeX or XeLaTeX, in place of the browser's drawing of it. Chosen each time; As shown is today's.
+  /** The engines this browser can compile with (none where the site has no LaTeX bundle). */
+  async function texEnginesHere(): Promise<TexEngine[]> {
+    const all: TexEngine[] = ['pdflatex', 'xelatex'], ok = await Promise.all(all.map((e) => texEngine.support(e)));
+    return all.filter((_, i) => ok[i].ok);
+  }
+  /** The file's LaTeX for an engine: the document, the page, or the diagram as a standalone document. */
+  const fileLatex = (engine: TexEngine) => TD.texImages.collect(() => state.mode === 'page' ? TD.pageToLatex(state.doc, { engine })
+    : state.mode === 'document' ? TD.docToLatex(state.doc, { engine }) : TD.toTikz(shapes(), { standalone: true, engine }));
+  /** The file compiled with an engine: its PDF, or null once what stopped it has been said. */
+  async function compileFile(engine: TexEngine): Promise<Uint8Array | null> {
+    finishEdit(); finishPoly(); commit();
+    const name = ENGINE_NAME[engine], { result, files } = fileLatex(engine);
+    showHint(uiText('tex.compilingWith', 'Compiling with {engine}…', { engine: name }), 0);
+    try {
+      const entries = await texFiles(files, TD.texImages.svgFallback, true);
+      const r = await texEngine.compile(TD.texImages.noInkscape(result), Object.fromEntries(entries.map((e: any) => [e.name, e.data])), {
+        engine, onProgress: (done, total) => showHint(uiText('tex.downloadingOf', 'Downloading the LaTeX engine: {done} of {total}…', { done: mb(done), total: mb(total) }), 0),
+      });
+      if (r.ok && r.pdf) { showHint(''); return r.pdf; }
+      const e = r.errors[0];
+      showHint(r.timedOut ? uiText('tex.timeout', '{engine} took too long and was stopped. A very large plot or a loop that never ends can do this.', { engine: name })
+        : e ? uiText('tex.stoppedOpen', '{engine} stopped: {msg} The LaTeX window (Ctrl+E) shows where.', { engine: name, msg: e.message })
+        : uiText('tex.error.none', '{engine} could not make a PDF of this.', { engine: name }), 7000);
+      return null;
+    } catch (err: any) {
+      showHint(uiText('tex.failed', 'The LaTeX engine could not start: {error}', { error: err?.message || String(err) }), 5000);
+      return null;
+    }
+  }
+  async function exportTexPdf(engine: TexEngine) {
+    const pdf = await compileFile(engine);
+    if (pdf) { await out(slug() + '.pdf', pdf as BlobPart, 'application/pdf'); taken(); }
+  }
+  // The PDF printed: in a hidden frame, through the browser's PDF viewer (WebKit's can't print from a frame, so there
+  // it opens in a tab of its own, to print from)
+  async function printTexPdf(engine: TexEngine) {
+    const pdf = await compileFile(engine);
+    if (!pdf) return;
+    const url = URL.createObjectURL(new Blob([pdf as BlobPart], { type: 'application/pdf' }));
+    const webkit = /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Edg|Firefox/.test(navigator.userAgent);
+    if (webkit || (navigator as any).pdfViewerEnabled === false) { window.open(url, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(url), 60e3); return; }
+    const f = document.createElement('iframe');
+    f.className = 'tex-print'; f.setAttribute('aria-hidden', 'true'); f.src = url;
+    f.onload = () => { try { f.contentWindow!.focus(); f.contentWindow!.print(); } catch { window.open(url, '_blank', 'noopener'); } setTimeout(() => { f.remove(); URL.revokeObjectURL(url); }, 60e3); };
+    document.body.append(f);
+  }
+  $('#tikzPdfOpen').onclick = () => { if (compiledUrl) window.open(compiledUrl, '_blank', 'noopener'); };
+  $('#tikzPdfSave').onclick = () => { if (compiledPdf) out(slug() + '.pdf', compiledPdf as BlobPart, 'application/pdf'); };
   $('#tikzZip').onclick = async () => { closeZipMenu(); await downloadLatex(tikzText, tikzFiles, true); taken(); };
   // the split button's menu (the kit's): the two .zip downloads, the first the same as the button
   let zipMenuOpen = false;
@@ -6455,6 +6898,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       const base: any = autosave.base(), here = JSON.parse(JSON.stringify({ kind: state.doc.kind, name: state.doc.name, page: state.doc.page, blocks: state.doc.blocks, active: state.doc.active, sheet: state.doc.sheet }));
       const m = base && mergeFile(base, here, JSON.parse(JSON.stringify(d)));
       if (m) {
+        // what this tab had before the merge stays in the file's version history
+        recovery.take(id, here, Date.now(), true);
         const kind = normKind(d.kind), sel = [...state.sel];
         const theirs = makeDoc(d.name, JSON.parse(JSON.stringify(d.blocks || [{ type: 'diagram', shapes: d.shapes || [] }])), d.active ?? 0, d.page, JSON.parse(JSON.stringify(d.sheet || {})), kind);
         state.doc = makeDoc(m.merged.name, m.merged.blocks || here.blocks, state.doc.active, m.merged.page, m.merged.sheet || here.sheet, kind);
@@ -6497,6 +6942,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
           if (k.startsWith(RECOVERY_KEY)) recovery.stale(k.slice(RECOVERY_KEY.length));
           if (k === LS_DOC + state.docId) reloadFromOtherTab();
         },
+        // a tab still running an older version: this one keeps its changes for it, but it should be reloaded
+        older: () => showHint(uiText('hint.olderTab', 'DiagramTeX is open in another tab running an older version. Reload that tab to keep working there.'), 8000),
       });
     }
     const prefs: any = store.get(LS_PREFS, null);
@@ -6575,8 +7022,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   }
   window.addEventListener('beforeunload', (e) => {
     commit(); saveNow();
-    // documents save themselves; an open block editor's edits don't until Done, so the browser asks before they go
-    if (TD.unsaved.some((f) => { try { return f(); } catch { return false; } })) { e.preventDefault(); e.returnValue = ''; }
+    // documents save themselves in the browser, but not to a linked file until saved (or written by autosave), and an
+    // open block editor's edits don't until Done: for those the browser asks before the page goes
+    if (unsavedToDisk() || TD.unsaved.some((f) => { try { return f(); } catch { return false; } })) { e.preventDefault(); e.returnValue = ''; }
   });
   // a tab put away (or closed on a phone, where beforeunload may not come) saves what it has
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { commit(); if (state.docId) saveNow(); } });
@@ -6687,7 +7135,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     magnifier,
     state, render, renderProps, setActiveBlock, setMode, scheduleSave, saveNow, begin, commit, uid, shapesSvg, zoomFit, openImport,
     parseProject, projectJson, // project files, for the tests
-    recovery, restoreRecovery, openRecoveryCopy, // recovery copies, for the tests
+    recovery, restoreRecovery, openRecoveryCopy, saveVersion, openRecovery, // version history, for the tests
+    namedSync: syncNamed, styleNameProblem: nameProblem, // named styles, for the tests
     showHint, takeIn, takeText, texBundle, texFiles, svgFilePdf, svgVectorPdf, // pictures, code and text from outside (pasted or dropped); LaTeX with its pictures (an SVG as vector PDF)
     setBucketFill: (v: any) => { bucketFill = v; }, // tests
     clearAllHistory: () => { histories.clear(); fileUndo.length = fileRedo.length = 0; state.undo = []; state.redo = []; documentHistory.reset(); updateTopbar(); }, // tests
@@ -6710,7 +7159,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     // for the command search (src/ui/services/palette.svelte.ts)
     cmd: {
       runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, ctxAct, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
-      toggleSnap: cycleSnapMode,
+      toggleSnap: cycleSnapMode, unsavedToDisk, showSaveState, diskChanged, diskWritten,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
       canUndo: () => state.undo.length > 0 || canUndoFile(), canRedo: () => state.redo.length > 0 || canRedoFile(),

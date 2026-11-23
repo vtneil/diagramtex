@@ -13,7 +13,11 @@ const PX = TD.PX_PER_CM, K = TD.PT_PER_PX, PT = 1 / K;
 let EM = 10 * PT, EX = 4.3056 * PT;
 const LW = 0.4 * PT;
 let TEXT = { size: 10 * PT, font: 'default' };
-const setSize = (pt: number) => { EM = pt * PT; EX = 0.43056 * pt * PT; TEXT = { size: pt * PT, font: 'default' }; };
+// em and ex are the font's own (Computer Modern's quad and x-height at each size, measured with pdfLaTeX): a smaller
+// design is wider for its size, so \scriptsize's em is 7.97pt, not 7
+const QUAD: Record<number, [number, number]> = { 5: [6.80565, 2.15277], 7: [7.97224, 3.01389], 8: [8.50012, 3.44444], 9: [9.24994, 3.87498], 10: [10, 4.30554],
+  12: [11.74988, 5.16667], 14.4: [14.09984, 6.2], 17.28: [15.84985, 7.43889], 20.74: [19.0235, 8.92839], 24.88: [22.82086, 10.71062] };
+const setSize = (pt: number) => { const q = QUAD[pt] || [pt, 0.43056 * pt]; EM = q[0] * PT; EX = q[1] * PT; TEXT = { size: pt * PT, font: 'default' }; };
 // \setcharge{…} (and \charge[…]'s own): .radius of a dot, :sep between a pair's dots, the "length and "width of a
 // bar, extra sep round the atom, overlay
 const CHARGE = () => ({ r: 0.15 * EX, sep: 0.3 * EM, len: 1.5 * EX, wid: 0.3 * EX, extra: 1.5 * PT, overlay: true });
@@ -693,8 +697,8 @@ function layMol(seg: any, P: any, warn: any) {
         const t = atomTex(a.stack.text), tb = TD.textBox(t, TEXT), m = vmetrics(a.stack.text);
         const k = /\\scriptscriptstyle/.test(a.stack.text) ? 0.5 : /\\scriptstyle/.test(a.stack.text) ? 0.7 : 1;
         const base = a.stack.dir < 0 ? (b as any).base - b.asc - 1.5 * PT - m.desc * k : (b as any).base + b.desc + 1.5 * PT + m.asc * k;
-        // chemfig's \vbox to the atom's height: the stacked text overhangs, outside TeX's box
-        texts.push({ t, cx: (b as any).cx, cy: base - baseOff(TEXT) + tb.h / 2, b: tb, ink: [base - m.asc * k, base + m.desc * k], stack: true });
+        // \chemabove's \vbox to the atom's height: the stacked text overhangs, outside TeX's box; \Chemabove's counts
+        texts.push({ t, cx: (b as any).cx, cy: base - baseOff(TEXT) + tb.h / 2, b: tb, ink: [base - m.asc * k, base + m.desc * k], stack: a.cmd[0] === 'c' });
       }
     }
     // hooks: the first ? remembers the atom, the next one with that name draws a bond to it
@@ -922,7 +926,7 @@ function layMol(seg: any, P: any, warn: any) {
   }
   for (const t of texts) if (!t.box && !t.charge && !t.stack) ext(t.cx - (t.b.w - 2) / 2, t.ink ? t.ink[0] : t.cy - t.b.h / 2, t.cx + (t.b.w - 2) / 2, t.ink ? t.ink[1] : t.cy + t.b.h / 2);
   if (!(x2 >= x1)) { x1 = x2 = 0; y1 = y2 = 0; }
-  return { verts, bonds, rings, paths, texts, dots, names, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } };
+  return { verts, bonds, rings, paths, texts, dots, names, sep: P.sep, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } };
 }
 // where a ray from an atom box's centre at ang (degrees, y up) leaves the box (TikZ's angle anchor)
 function edge(b: any, ang: any) {
@@ -965,6 +969,8 @@ function bondStyle(t: any, warn: any) {
     if (k === 'shorten <' || k === 'shorten >') continue;
     const col = (k === 'draw' || k === 'color') && v ? v : v == null ? k : null;
     if (col && TD.tikzColor) { const c = TD.tikzColor(col); if (c) { r.color = c; continue; } }
+    // a chemfig setting among a bond's TikZ options: TikZ doesn't know it, and LaTeX stops there
+    if (warn && CHEMFIG_KEYS.has(k)) { warn(`"${k}" is a chemfig setting, not a bond option: LaTeX stops on it here. Set it on the molecule, \\chemfig[${it}]{…}, or for the drawing, \\setchemfig{${it}}`); continue; }
     if (warn) warn(`The bond option "${it}" isn't drawn here (it is kept in the code)`);
   }
   return r;
@@ -1106,6 +1112,10 @@ function layPieces(segs: any, P: any, warn: any, G: any, lead0?: any) {
     }
     if (pendingSpace && F.pieces.length) x += 3.333 * PT;
     pendingSpace = false;
+    // \setchemfig, \setcharge and their resets: from here to the end of this run (a line, a scheme's compound, the
+    // inside of \chemleft…\chemright), as TeX's grouping has it; what comes before keeps the settings it had
+    if (g.t === 'set' && !g.tikz) { P = { ...P, charge: { ...P.charge } }; if (g.charge) applyCharge(P.charge, g.kv, warn); else applyKV(P, g.kv, warn); continue; }
+    if (g.t === 'reset') { P = g.charge ? { ...P, charge: CHARGE() } : { ...defaults(), submols: P.submols, styles: P.styles, charge: P.charge }; continue; }
     if (g.t === 'mol') {
       const L = layMol(g, molP(g, P, warn), warn), mx = x - L.bb.x;
       F.mols.push({ seg: g, L, x: mx, y: 0 });
@@ -1150,6 +1160,7 @@ function layPieces(segs: any, P: any, warn: any, G: any, lead0?: any) {
   }
   F.w = x; F.asc = asc; F.desc = desc;
   F.bb = { x1: 0, y1: -asc, x2: x, y2: desc };
+  F.P = P; // the settings at the end of the run
   return F;
 }
 // \chemleft[ … \chemright]: delimiters as tall as the contents (TeX's \left…\right: delimiter factor 901,
@@ -1160,33 +1171,63 @@ function layLR(g: any, P: any, warn: any, G: any) {
   // delimiter is sized for half that height plus the maths axis (2.5pt) and centred on the contents
   const ax = 2.5 * PT, D = (C.asc + C.desc) / 2 + ax, mid = (C.desc - C.asc) / 2;
   const H = Math.max(0.901 * 2 * D, 2 * D - 5 * PT), top = mid - H / 2, bot = mid + H / 2;
-  const wl = delim(g.l, F, 0, top, bot, warn, false);
-  attach(F, C, wl, 0);
-  const wr = delim(g.r, F, wl + C.w, top, bot, warn, true);
-  F.bb = { x1: 0, y1: Math.min(-C.asc, top), x2: wl + C.w + wr, y2: Math.max(C.desc, bot) };
+  // a space just inside either delimiter is set (\chemleft[ \chemfig{…} \chemright])
+  const bare = (q: any) => (q && q.t === 'text' ? q.raw.replace(/%[^\n]*(\n[ \t]*)?/g, '') : null);
+  const first = bare(g.inner[0]), last = bare(g.inner[g.inner.length - 1]);
+  const s1 = first != null && /^\s/.test(first) ? 3.333 * PT : 0, s2 = last != null && /\s$/.test(last) && (g.inner.length > 1 || first!.trim()) ? 3.333 * PT : 0;
+  // each side is its own \left…\right. pair: the invisible . adds \nulldelimiterspace (1.2pt) inside it
+  const nul = 1.2 * PT, l = delim(g.l, F, 0, top, bot, warn, false), x0 = l.w + nul + s1;
+  attach(F, C, x0, 0);
+  const r = delim(g.r, F, x0 + C.w + s2 + nul, top, bot, warn, true);
+  F.bb = { x1: 0, y1: Math.min(-C.asc, l.top, r.top), x2: x0 + C.w + s2 + nul + r.w, y2: Math.max(C.desc, l.bot, r.bot) };
   return F;
 }
-// a delimiter drawn into F from x, between top and bot; returns its width
+// TeX's delimiters, as \left…\right picks them (Computer Modern, measured with pdfLaTeX): the smallest of the font's
+// sizes at least as tall as asked (1, 1.2, 1.8, 2.4, 3em: the normal glyph, \big, \Big, \bigg, \Bigg), then one built
+// from pieces, 3.6em and up by 0.6em (| goes from 1em to pieces, 1.2em up by 0.6em). Each size has its own width (em).
+const DELIMS: Record<string, { w: number[]; ext: number; sizes?: number[] }> = {
+  '[': { w: [0.278, 0.417, 0.472, 0.528, 0.583], ext: 0.667 },
+  '(': { w: [0.389, 0.458, 0.597, 0.736, 0.792], ext: 0.875 },
+  '\\{': { w: [0.5, 0.583, 0.667, 0.75, 0.806], ext: 0.889 },
+  '|': { w: [0.278], ext: 0.333, sizes: [1] },
+};
+const DELIM_OF: Record<string, string> = { '[': '[', ']': '[', '(': '(', ')': '(', '\\{': '\\{', '\\}': '\\{', '|': '|', '\\lbrack': '[', '\\rbrack': '[', '\\lbrace': '\\{', '\\rbrace': '\\{', '\\vert': '|', '\\lvert': '|', '\\rvert': '|' };
+const DELIM_SHUT: Record<string, boolean> = { ']': true, ')': true, '\\}': true, '\\rbrack': true, '\\rbrace': true };
+// the delimiter `tok` for a span `need` tall: its kind, width, height, and whether it is a closing one
+function delimFit(tok: any, need: number) {
+  const t = String(tok || '').trim(), kind = DELIM_OF[t];
+  if (!kind) return { kind: t === '.' ? '.' : null, w: 1.2 * PT, T: need, shut: false, t }; // \right. : \nulldelimiterspace
+  const D = DELIMS[kind], sizes = D.sizes || [1, 1.2, 1.8, 2.4, 3];
+  for (let k = 0; k < sizes.length; k++) if (sizes[k] * EM >= need - 1e-6) return { kind, w: D.w[k] * EM, T: sizes[k] * EM, shut: !!DELIM_SHUT[t], t };
+  const base = kind === '|' ? 1.2 : 3.6, n = Math.max(0, Math.ceil((need / EM - base) / 0.6 - 1e-6));
+  return { kind, w: D.ext * EM, T: (base + 0.6 * n) * EM, shut: !!DELIM_SHUT[t], t };
+}
+// a delimiter drawn into F from x, sized for the span between top and bot (and centred on it); returns its width
+// and the top and bottom it reaches
 function delim(tok: any, F: any, x: any, top: any, bot: any, warn: any, right: any) {
-  let t = String(tok || '').trim();
-  t = { '\\lbrack': '[', '\\rbrack': ']', '\\lbrace': '\\{', '\\rbrace': '\\}', '\\vert': '|', '\\lvert': '|', '\\rvert': '|' }[t] || t;
-  const H = bot - top, m = (top + bot) / 2, sw = 0.5 * PT;
-  const W = { '[': 0.667, ']': 0.667, '(': 0.75, ')': 0.75, '\\{': 0.889, '\\}': 0.889, '|': 0.278 }[t];
-  if (W == null) { if (t !== '.') warn(`The delimiter "${t}" isn't drawn here`); return 1.2 * PT; }
-  const w = W * EM;
-  // drawn as the left one; a right one is mirrored
-  const mir = t === ']' || t === ')' || t === '\\}';
-  const X = (u: any) => r2(mir ? x + w - u * EM : x + u * EM), Y = (v: any) => r2(v);
+  const m = (top + bot) / 2, f = delimFit(tok, bot - top);
+  if (!f.kind) { warn(`The delimiter "${f.t}" isn't drawn here`); return { w: f.w, top: m, bot: m }; }
+  if (f.kind === '.') return { w: f.w, top: m, bot: m };
+  const w = f.w, H = f.T, y0 = m - H / 2, y1 = m + H / 2, sw = 0.5 * PT;
+  // drawn as the left one across its width; a closing one is mirrored
+  const X = (u: number) => r2(f.shut ? x + w - u * w : x + u * w), Y = (v: number) => r2(v);
   let d;
-  if (t === '[' || t === ']') d = `M${X(0.6)},${Y(top)}L${X(0.2)},${Y(top)}L${X(0.2)},${Y(bot)}L${X(0.6)},${Y(bot)}`;
-  else if (t === '(' || t === ')') d = `M${X(0.6)},${Y(top)}C${X(0.12)},${Y(top + H * 0.3)} ${X(0.12)},${Y(bot - H * 0.3)} ${X(0.6)},${Y(bot)}`;
-  else if (t === '|') d = `M${X(0.139)},${Y(top)}L${X(0.139)},${Y(bot)}`;
+  if (f.kind === '[') d = `M${X(0.88)},${Y(y0)}L${X(0.42)},${Y(y0)}L${X(0.42)},${Y(y1)}L${X(0.88)},${Y(y1)}`;
+  else if (f.kind === '(') {
+    // curved ends, straight between them once it is tall (the pieces of a built one); a crescent, thickest midway
+    const c = Math.min(H / 2, 1.5 * EM), t = Math.min(0.07 * EM, 0.12 * w), xo = 0.25, xi = xo + t / w;
+    const side = (u: number) => `C${X(0.5 * u + 0.4)},${Y(y0 + 0.2 * c)} ${X(u)},${Y(y0 + 0.55 * c)} ${X(u)},${Y(y0 + c)}L${X(u)},${Y(y1 - c)}C${X(u)},${Y(y1 - 0.55 * c)} ${X(0.5 * u + 0.4)},${Y(y1 - 0.2 * c)}`;
+    d = `M${X(0.85)},${Y(y0)}${side(xo)} ${X(0.85)},${Y(y1)}`;
+    // the thicker middle: a second stroke just inside the first, meeting it at the ends
+    F.paths.push({ d: `M${X(0.85)},${Y(y0)}${side(xi)} ${X(0.85)},${Y(y1)}`, sw });
+  }
+  else if (f.kind === '|') d = `M${X(0.5)},${Y(y0)}L${X(0.5)},${Y(y1)}`;
   else {
     const k = Math.min(0.08 * H, 0.3 * EM);
-    d = `M${X(0.75)},${Y(top)}Q${X(0.42)},${Y(top)} ${X(0.42)},${Y(top + k)}L${X(0.42)},${Y(m - k)}Q${X(0.42)},${Y(m)} ${X(0.1)},${Y(m)}Q${X(0.42)},${Y(m)} ${X(0.42)},${Y(m + k)}L${X(0.42)},${Y(bot - k)}Q${X(0.42)},${Y(bot)} ${X(0.75)},${Y(bot)}`;
+    d = `M${X(0.85)},${Y(y0)}Q${X(0.5)},${Y(y0)} ${X(0.5)},${Y(y0 + k)}L${X(0.5)},${Y(m - k)}Q${X(0.5)},${Y(m)} ${X(0.12)},${Y(m)}Q${X(0.5)},${Y(m)} ${X(0.5)},${Y(m + k)}L${X(0.5)},${Y(y1 - k)}Q${X(0.5)},${Y(y1)} ${X(0.85)},${Y(y1)}`;
   }
   F.paths.push({ d, sw });
-  return w;
+  return { w, top: y0, bot: y1 };
 }
 // \charge{…}{…} around a whole box (outside \chemfig)
 function layCharge(g: any, P: any, warn: any, G: any) {
@@ -1230,7 +1271,8 @@ function layScheme(body: any, P0: any, warn: any, G: any, opt: any) {
     const nm = name || nextName || 'c' + G.cnt;
     const keep = G.nextAnchor;
     G.nextAnchor = nextAnchor;
-    const C: any = layPieces(gs, P, warn, G);
+    // (spaces at a compound's ends are dropped, but one after a \setchemfig… at its start is set, as on a line)
+    const C: any = layPieces(gs, P, warn, G, true);
     G.nextAnchor = keep;
     const cs = compoundStyle([nextStyle, style].filter(Boolean).join(','), nextAnchor, P, warn), is = cs.sep;
     // the node: the compound with inner sep around it
@@ -1242,9 +1284,9 @@ function layScheme(body: any, P0: any, warn: any, G: any, opt: any) {
     // left/right delimiter (TikZ's matrix library): $\left[ \vcenter{node height} \right.$ against the node's side
     if (cs.ld || cs.rd) {
       const h = cur.h, H = Math.max(0.901 * h, h - 5 * PT), m = cur.y + h / 2, top = m - H / 2, bot = m + H / 2, nul = 1.2 * PT;
-      const wOf = (d: any) => delim(d, frag(), 0, top, bot, () => {}, false);
-      if (cs.ld) { const w = wOf(cs.ld), x = cur.x - nul - w; delim(cs.ld, S, x, top, bot, warn, false); ext(S, x, top, cur.x, bot); }
-      if (cs.rd) { const x = cur.x + cur.w + nul, w = delim(cs.rd, S, x, top, bot, warn, true); ext(S, cur.x + cur.w, top, x + w, bot); }
+      const wOf = (d: any) => delim(d, frag(), 0, top, bot, () => {}, false).w;
+      if (cs.ld) { const x = cur.x - nul - wOf(cs.ld), e = delim(cs.ld, S, x, top, bot, warn, false); ext(S, x, e.top, cur.x, e.bot); }
+      if (cs.rd) { const x = cur.x + cur.w + nul, e = delim(cs.rd, S, x, top, bot, warn, true); ext(S, cur.x + cur.w, e.top, x + e.w, e.bot); }
     }
     G.names[nm] = { F: S, ...cur };
     G.comps.push({ name: nm, entry: G.names[nm], level: G.level, segs: gs });
@@ -1467,8 +1509,9 @@ function emitMol(m: any, dx: any, dy: any, K: any) {
     else K.texts.push({ t: t.t, cx: t.cx + dx, cy: t.cy + dy, b: t.b });
   }
   const map = new Map();
-  for (const v of L.verts) { const c = { ...v, X: v.x + dx, Y: v.y + dy, mol: seg, dx, dy }; map.set(v, c); K.verts.push(c); }
-  for (const b of L.bonds) K.bonds.push({ ...b, a: map.get(b.a), b: map.get(b.b), X0: b.p0[0] + dx, Y0: b.p0[1] + dy, X1: b.p1[0] + dx, Y1: b.p1[1] + dy, mol: seg });
+  // sep: the molecule's atom sep, what a bond's length counts in
+  for (const v of L.verts) { const c = { ...v, X: v.x + dx, Y: v.y + dy, mol: seg, sep: L.sep, dx, dy }; map.set(v, c); K.verts.push(c); }
+  for (const b of L.bonds) K.bonds.push({ ...b, a: map.get(b.a), b: map.get(b.b), X0: b.p0[0] + dx, Y0: b.p0[1] + dy, X1: b.p1[0] + dx, Y1: b.p1[1] + dy, mol: seg, sep: L.sep });
   for (const r of L.rings) K.rings.push({ ...r, X: r.cx + dx, Y: r.cy + dy, mol: seg });
 }
 // \printatom{X} sets X as an atom: upright maths
@@ -1661,9 +1704,27 @@ function border(box: any, ang: any) {
 }
 
 // the whole thing: lines of compounds, schemes and text, or an \hreac row
+/**
+ * Blank lines (paragraph breaks) where chemfig reads its argument, inside a \chemfig{…} or other braces or in a scheme,
+ * written as "%" lines: there LaTeX would stop ("Paragraph ended before…"), and to the reader they are only spacing.
+ * Blank lines between drawings stay. Returns the code and whether it changed.
+ */
+function parSafe(code: string) {
+  let depth = 0, scheme = 0, changed = false;
+  const out = code.split('\n').map((raw) => {
+    const line = raw.replace(/(^|[^\\])%.*$/, '$1');
+    if (!line.trim() && !/(^|[^\\])%/.test(raw) && (depth > 0 || scheme > 0)) { changed = true; return raw + '%'; }
+    scheme += (line.match(/\\schemestart\b/g) || []).length - (line.match(/\\schemestop\b/g) || []).length;
+    const plain = line.replace(/\\[{}]/g, '');
+    depth += (plain.match(/\{/g) || []).length - (plain.match(/\}/g) || []).length;
+    return raw;
+  });
+  return { code: changed ? out.join('\n') : code, changed };
+}
 function build(src: any, segsIn?: any) {
   const warnings: any[] = [], warn = (w: any) => { if (!warnings.includes(w)) warnings.push(w); };
   const segs = segsIn || parseDoc(src, warn);
+  if (parSafe(String(src || '')).changed) warn('A blank line inside a molecule or a scheme stops LaTeX (chemfig reads it as the end of a paragraph). The app\'s LaTeX writes it as %; in this code, remove it or put % on it');
   // \scriptsize, \small… written in the code: the size of the whole drawing
   const sizes = segs.filter((g: any) => g.t === 'text').flatMap((g: any) => topSizes(g.raw.replace(/%[^\n]*/g, '')).names);
   if (new Set(sizes).size > 1) warn(`Only one font size is drawn here, \\${sizes[0]} (it is kept in the code)`);
@@ -1680,11 +1741,13 @@ function build(src: any, segsIn?: any) {
   const shows = (g: any) => (g.t === 'text' ? !!g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move', 'nameinit'].includes(g.t));
   const lastReset = (charge: boolean) => { for (let i = segs.length - 1; i >= 0; i--) if (segs[i].t === 'reset' && !!segs[i].charge === charge && segs.slice(i + 1).some(shows)) return i; return -1; };
   const rs = lastReset(false), rc = lastReset(true);
-  if (rs >= 0 && segs.slice(0, rs).some(shows)) warn('Drawn with the settings after \\resetchemfig; what comes before it keeps its own in the PDF');
+  // what the drawing starts with: each \setchemfig takes effect where it is written (layPieces)
+  const P0 = { ...P, charge: { ...P.charge } };
+  // the settings in force at the end of the top level (the editor's name and compound boxes go by these)
   P.charge = { ...P.charge };
   segs.forEach((g: any, i: number) => {
     if (g.t !== 'set' || g.tikz) return;
-    if (g.charge) { if (i > rc) applyCharge(P.charge, g.kv, warn); } else if (i > rs) applyKV(P, g.kv, warn);
+    if (g.charge) { if (i > rc) applyCharge(P.charge, g.kv, () => {}); } else if (i > rs) applyKV(P, g.kv, () => {});
   });
   for (const g of segs) {
     if (g.t !== 'set') continue;
@@ -1734,9 +1797,10 @@ function build(src: any, segsIn?: any) {
     }
     const lines: any[][] = [[]];
     for (const g of items) { if (g.t === 'par') lines.push([]); else lines[lines.length - 1].push(g); }
-    let y = 0, prev: any = null;
+    let y = 0, prev: any = null, Pl = P0; // (the top level is one group: settings carry from line to line)
     lines.forEach((line, j) => {
-      const F: any = layPieces(line, P, warn, G, j === 0);
+      const F: any = layPieces(line, Pl, warn, G, j === 0);
+      Pl = F.P;
       if (!F.pieces.length) return;
       // TeX's \baselineskip 12pt, or \lineskip 1pt between the boxes when they would come closer
       if (prev != null) y += Math.max(12 * PT, prev + F.asc + 1 * PT);
@@ -1977,7 +2041,7 @@ TD.TYPES.chemfig = {
     const o = ['anchor=north west', 'inner sep=0pt'];
     const col = s.color && TD.parseColor(s.color).hex !== '#000000' ? X.col(s.color) : null;
     if (col) o.push(`text=${col}`);
-    const src = String(s.src || '').trim();
+    const src = parSafe(String(s.src || '').trim()).code; // (a blank line inside a molecule or scheme would stop LaTeX)
     // paragraphs (\par, a blank line) need a node with a text width
     if (/\\par(?![A-Za-z])|\n[ \t]*\n/.test(src.replace(/%[^\n]*/g, ''))) o.push(`text width=${r2(layout(s).bb.w / PX + 0.05)}cm`, 'align=left');
     return `\\node[${o.join(', ')}] at ${X.c(s.x, s.y)} {${src.includes('\n') ? `%\n${src}%\n` : src}};`;

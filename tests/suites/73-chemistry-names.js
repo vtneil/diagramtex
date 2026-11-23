@@ -24,7 +24,10 @@
     const n = build('\\chemfig{A-B}'), s = build('\\scriptsize\\chemfig{A-B}');
     T.eq(s.warnings, [], 'no warnings');
     T.ok(!s.texts.some((t) => /scriptsize/.test(t.t)), 'the command is not printed');
-    T.ok(Math.abs(s.bb.w / n.bb.w - 0.7) < 0.02, `the bond (in em) and the atoms are 0.7 as wide (${s.bb.w} / ${n.bb.w})`);
+    // its em is cmr7's own, 7.97pt (pdfLaTeX's \fontdimen6), not 7: the atoms 3em apart are 0.797 as far apart
+    const gap = (L) => L.verts[1].X - L.verts[0].X;
+    T.ok(Math.abs(gap(s) / gap(n) - 0.797) < 0.005, `the atoms 3em of cmr7 apart (${gap(s)} / ${gap(n)})`);
+    T.ok(s.bb.w < n.bb.w * 0.82, 'and the drawing smaller');
     T.eq(build('\\chemfig{A-B}').bb.w, n.bb.w, 'the size does not leak into the next drawing');
   });
 

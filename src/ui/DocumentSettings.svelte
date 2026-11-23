@@ -2,8 +2,10 @@
   import { t, caption, message as msg, locale } from '../i18n';
   import { Button, Checkbox, FormRow, Help, NumberField, PanelSection, Segmented, Select, TextField } from './kit';
   export interface Model {
-    page: { paper: string; orient: string; w: number; h: number; W: number; H: number; mt: number; mb: number; ml: number; mr: number; textW: number; font: number; title: boolean; author?: string; spread: number; numbered: boolean };
+    page: { paper: string; orient: string; w: number; h: number; W: number; H: number; mt: number; mb: number; ml: number; mr: number; textW: number; font: number; family?: string; title: boolean; author?: string; spread: number; numbered: boolean };
     papers: { key: string; name: string }[]; wide: number;
+    /** the document fonts (src/core/doc-fonts.ts); with a Thai one, pdfLaTeX sets only the Thai in it */
+    fonts: { key: string; label: string; css: string; thai: boolean }[];
   }
   let { model }: { model: Model } = $props();
   let page = $derived(model.page);
@@ -24,6 +26,8 @@
   <FormRow label={t("ui.size.cm", "Size (cm)", {}, $locale)}>{#if page.paper === 'custom'}{@render number('w', page.w)}<span class="x">×</span>{@render number('h', page.h)}{:else}<span class="ro">{round(page.W)} × {round(page.H)}</span>{/if}</FormRow></PanelSection>
 <PanelSection title={t("ui.margins.cm", "Margins (cm)", {}, $locale)}><FormRow label={t("ui.top.bottom", "Top / bottom", {}, $locale)}>{@render number('mt', page.mt)}{@render number('mb', page.mb)}</FormRow><FormRow label={t("ui.left.right", "Left / right", {}, $locale)}>{@render number('ml', page.ml)}{@render number('mr', page.mr)}</FormRow><div class="row presets">{#each [[msg('page.narrow', 'Narrow'), 1.27], [msg('ui.normal', 'Normal'), 2.5], [msg('page.wide', 'Wide'), 3.5]] as const as [name, value]}<Button data-pgm={value} title={t('page.allSides', '{value} cm on all sides', { value }, $locale)}>{caption(name, $locale)}</Button>{/each}</div><Help kind="hint">{t("page.textWidth", "Text width {w} cm", { w: round(page.textW) }, $locale)}{#if model.wide} · <b>{model.wide > 1 ? t("page.wideMany", "{n} diagrams are wider and will be scaled down", { n: model.wide }, $locale) : t("page.wideOne", "1 diagram is wider and will be scaled down", {}, $locale)}</b>{/if}</Help></PanelSection>
 <PanelSection title={t("ui.text", "Text", {}, $locale)}>
+  <FormRow label={t("ui.font", "Font", {}, $locale)}><Select data-pg="family" aria-label={t("ui.font", "Font", {}, $locale)} value={page.family || 'cm'} options={model.fonts.map((f) => ({ value: f.key, label: f.label, font: f.css }))} /></FormRow>
+  {#if model.fonts.find((f) => f.key === page.family)?.thai}<Help kind="hint">{t("page.font.thai", "With XeLaTeX all the text is in this font; pdfLaTeX sets only the Thai in it, and the rest in Computer Modern. Choose the engine when you Compile, Print or Export PDF with LaTeX.", {}, $locale)}</Help>{/if}
   <FormRow label={t("ui.font.size", "Font size", {}, $locale)}><Select data-pg="font" aria-label={t("ui.font.size", "Font size", {}, $locale)} value={String(+page.font)} options={[10, 11, 12].map((n) => ({ value: String(n), label: t("page.fontPt", "{n} pt", { n }, $locale) }))} /></FormRow>
   <FormRow label={t("ui.title", "Title", {}, $locale)}><Checkbox data-pg="title" checked={page.title}>{t("ui.show.document.name.as.title.variant1", " Show document name as title", {}, $locale)}</Checkbox></FormRow>
   <FormRow label={t("ui.author", "Author", {}, $locale)}><TextField data-pg="author" value={page.author || ''} disabled={!page.title} placeholder={t("page.authorNone", "None (under the title)", {}, $locale)} aria-label={t("ui.author", "Author", {}, $locale)} /></FormRow>

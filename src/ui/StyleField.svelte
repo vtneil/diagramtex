@@ -13,6 +13,8 @@
     drawn?: { options: SelectOption[]; columns?: number; custom?: SelectCustom; title: string };
     /** the selected objects differ here: the field shows "Mixed" until a value is chosen for them all */
     mixed?: boolean;
+    /** a selected object linked to a named style sets this differently from the style */
+    overridden?: boolean;
   }
   let { model }: { model: Model } = $props();
   const grouped = $derived(['bi', 'align', 'valign', 'icons'].includes(model.type));
@@ -20,7 +22,7 @@
   const fontOf = (value: string) => model.key === 'font' ? TD.FONTS.find((font: string[]) => font[0] === value)?.[2] : undefined;
   const radioAttrs = (key: string) => model.type === 'align' ? { 'data-alignv': key } : model.type === 'valign' ? { 'data-valign': key } : model.type === 'icons' ? { 'data-pk': model.key, 'data-pv': key } : {};
 </script>
-<div class="row">{#if grouped}<span class="field-label" id={model.id + '-label'}>{caption(model.label, $locale)}</span>{:else}<label for={model.id}>{caption(model.label, $locale)}</label>{/if}<div class="ctl" role={model.type === 'bi' ? 'group' : undefined} aria-labelledby={model.type === 'bi' ? model.id + '-label' : undefined}>
+<div class="row">{#if grouped}<span class="field-label" id={model.id + '-label'}>{caption(model.label, $locale)}{#if model.overridden}<span class="ovr" title={t("style.overridden", "Differs from the style", {}, $locale)}></span>{/if}</span>{:else}<label for={model.id}>{caption(model.label, $locale)}{#if model.overridden}<span class="ovr" title={t("style.overridden", "Differs from the style", {}, $locale)}></span>{/if}</label>{/if}<div class="ctl" role={model.type === 'bi' ? 'group' : undefined} aria-labelledby={model.type === 'bi' ? model.id + '-label' : undefined}>
   {#if model.type === 'textarea'}<textarea id={model.id} data-key={model.key} data-tx="text" placeholder={t("ui.text.math", "Text, $math$", {}, $locale)} {@attach liveValue(model.value)}></textarea>
   {:else if model.type === 'text'}<TexField id={model.id} data-key={model.key} tx={model.key === 'lbl' ? 'math' : 'text'} value={model.value} />
   {:else if model.type === 'number'}<NumberField id={model.id} data-key={model.key} value={model.value} min={model.min} step={model.step} placeholder={mixedText} />{#if model.unit}<span class="val">{model.unit}</span>{/if}

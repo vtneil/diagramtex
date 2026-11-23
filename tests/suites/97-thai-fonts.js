@@ -2,7 +2,7 @@
 // their Thai names, load when text uses them (regular, bold, slanted), and are for viewing only: the LaTeX output
 // keeps the document's font.
 {
-  T.test('Thai fonts: listed with their Thai names, loaded when text uses them, nothing written to LaTeX', async () => {
+  T.test('Thai fonts: listed with their Thai names, loaded when text uses them, written to LaTeX for each engine', async () => {
     const names = Object.fromEntries(TD.FONTS.map(f => [f[0], f[1]]));
     T.eq(names.garuda, 'Garuda (ครุฑ)', 'Garuda');
     T.eq(names.kinnari, 'Kinnari (กินรี)', 'Kinnari');
@@ -14,7 +14,8 @@
     const s = { ...TD.TYPES.text.create({ x: 0, y: 0 }, TD.state.defaults), id: 'th', text: 'สวัสดี', font: 'garuda', bold: true };
     const tex = TD.toTikz([s]);
     T.ok(tex.includes('สวัสดี'), 'the text is exported');
-    T.ok(!/garuda|fontfamily/i.test(tex), 'in the document\'s font: ' + tex.split('\n').find(l => l.includes('สวัสดี')));
-    T.ok(/\\bfseries/.test(tex), 'bold still is');
+    // pdfLaTeX: the font's LTH face (fonts-tlwg), the Thai run marked; XeLaTeX: the font by fontspec
+    T.ok(tex.includes('font=\\fontencoding{LTH}\\fontfamily{garuda}\\selectfont\\def\\tdthaifam{garuda}\\bfseries') && tex.includes('\\tdth{สวัสดี}'), 'pdfLaTeX: ' + tex.split('\n').find(l => l.includes('สวัสดี')));
+    T.ok(TD.toTikz([s], { engine: 'xelatex' }).includes('font=\\tdgaruda\\bfseries'), 'XeLaTeX');
   });
 }

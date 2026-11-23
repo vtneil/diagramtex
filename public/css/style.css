@@ -88,9 +88,15 @@ select:disabled:not([multiple], [size]) { background-image: var(--select-chev-of
 .brand svg { display: block; height: 20px; width: auto; }
 .brand .brand-word { height: 20px; }
 .brand-ink { fill: var(--brand-ink); }
-.autosave-note { flex: none; color: var(--pencil); font-size: 11px; font-weight: 400; white-space: nowrap; }
-.autosave-note.unavailable { visibility: hidden; }
-@media (max-width: 600px) { .autosave-note { display: none; } }
+.save-status { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; color: var(--pencil); font-size: 11px; font-weight: 400; white-space: nowrap;
+  max-width: calc(50% - 300px); } /* stops short of the centred file name (320px wide) past the logo; the text is cut, never the dot */
+.save-status .save-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.save-status .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--bluepen); }
+.save-status[data-tone=err] .dot { background: var(--redpen); }
+.save-status[data-tone=warn] .dot { background: var(--marker); }
+.save-status[data-tone=ok] .dot { background: var(--okpen); }
+@media (max-width: 719px) { .save-status { max-width: none; } } /* the name is in the row's flow there */
+@media (max-width: 600px) { .save-status .save-text { display: none; } } /* the dot alone; its tooltip says the rest */
 .doc-name { border: 1px solid transparent; height: var(--ctl); padding: 0 8px; font: inherit; font-weight: 600; text-align: center; width: 320px; min-width: 120px; max-width: min(640px, 100%); flex-shrink: 1; background: transparent; color: var(--ink); }
 .doc-name:hover { border-color: var(--rule); }
 /* the name field is as wide as the name, so the autosave label sits right after it */
@@ -198,32 +204,24 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 .bin-list .bin-none:hover { background: none; }
 .bin-box .tdd-btns { align-items: center; }
 .bin-box .tdd-btns .sp { flex: 1; }
-.bin-box .bin-empty { min-width: 0; border: 0; background: none; color: var(--graphite); padding: 0 8px; margin-left: -8px; }
+.bin-box .bin-empty { min-width: 0; border: 0; background: none; color: var(--graphite); padding: 0 8px; margin-left: calc(var(--tdd-pad) - var(--tdd-inset) - 8px); } /* no box to nest: its text lines up with the list's */
 .bin-box .bin-empty:hover:not([disabled]) { color: var(--redpen); background: none; }
 .bin-box .bin-empty[disabled] { color: var(--faint); }
-.rec-list .rec-open { flex: none; width: var(--ctl-sm); height: var(--ctl-sm); padding: 0; color: var(--pencil); }
-.rec-list .rec-open svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.rec-list .rec-open:hover { color: var(--ink); background: none; }
+.tdd-box.bin-box.rec-box { width: min(620px, 100%); }
+.rec-list .rec-act { flex: none; width: var(--ctl-sm); height: var(--ctl-sm); padding: 0; color: var(--pencil); }
+.rec-list .rec-act svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.rec-list .rec-act:hover { color: var(--ink); background: none; }
+.rec-list .rec-del:hover { color: var(--redpen); }
+.rec-list li { gap: 6px; }
+.rec-list .bin-nm { margin-right: 4px; }
+.rec-usage { margin: 8px 0 0; font-size: 12px; color: var(--pencil); }
+.rec-usage.rec-high { color: var(--redpen); }
 .rec-set { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--graphite); }
 .rec-set label { display: flex; align-items: center; gap: 8px; }
 .rec-set select { height: var(--ctl-sm); }
 .files-foot { display: flex; align-items: baseline; gap: 8px; padding: 8px 16px; color: var(--pencil); font-size: 11px; border-top: 1px solid var(--rule-soft); }
 .files-foot .app-src { align-self: center; display: inline-flex; padding: 3px; margin: -3px 0 -3px -3px; }
 .files-foot .app-ver { margin-left: auto; }
-/* beside the file name: empty while autosave works (no badge, the top bar needs the room); a failure or a linked file shows */
-#saveState:not(.err):not(.linked) { display: none; }
-#saveState { flex: 0 0 auto; min-width: 0; margin-left: 2px; color: var(--pencil); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#saveState.err { color: var(--redpen); font-weight: 600; }
-/* linked to a file on disk: that file's name, with a dot while there are changes not yet saved to it */
-#saveState.linked { max-width: 180px; color: var(--graphite); }
-#saveState.linked::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; background: var(--rule-strong); }
-#saveState.linked.dirty::before { background: var(--marker); }
-@media (max-width: 1699px) {
-  #saveState.linked { max-width: 120px; }
-  /* below this the top bar has no room to spare: a short "Not saved" when a save fails */
-  #saveState.err { font-size: 0; }
-  #saveState.err::after { content: "Not saved"; font-size: 11px; }
-}
 .files-foot .app-ver { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* a newer release is deployed: a marker dot (as on a linked file with unsaved changes), pulsing twice when it appears */
 .files-foot .app-ver.update { color: var(--graphite); }
@@ -581,7 +579,7 @@ input[type=range]:not(.cp input) { width: 100%; min-width: 0; accent-color: var(
 /* dialogs (alert / confirm / prompt): kit.css, Dialog */
 /* Welcome tour (src/ui/services/tour.svelte.ts): the dialog sheet at one fixed size, a map of the window with the part
    in question marked in blue pen, then the text; Skip | dots | Previous Next keep their places on every step */
-.tour-box { width: min(500px, 100%); padding: 24px 24px var(--tdd-inset); border-radius: calc(var(--r) + var(--tdd-inset)); }
+.tour-box { --tdd-pad: 24px; width: min(500px, 100%); border-radius: calc(var(--r) + var(--tdd-inset)); }
 .tour-box h2 { font-size: 17px; }
 .tour-pic { display: flex; justify-content: center; padding: 18px 0; margin: -10px -10px 18px; background: var(--wash); border-radius: var(--r); } /* --tdd-inset from the top and sides: card radius − inset = --r, concentric with the card */
 .tour-map { width: 280px; height: 140px; display: block; }
@@ -602,7 +600,7 @@ input[type=range]:not(.cp input) { width: 100%; min-width: 0; accent-color: var(
 .tour-body code { font: 13px var(--font-mono); color: var(--ink); }
 .tour-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 2px; }
 .tour-tags span { padding: 2px 6px; border-radius: var(--r-sm); background: var(--wash-strong); font-size: 13px; color: var(--ink); }
-.tour-box .tdd-btns { align-items: center; margin-top: 24px; margin-left: calc(var(--tdd-inset) - 24px); margin-right: calc(var(--tdd-inset) - 24px); } /* both corner buttons sit the inset from the side and the bottom, so they nest in the card's corners */
+.tour-box .tdd-btns { align-items: center; margin-top: 24px; } /* both corner buttons nest in the card's corners (kit.css .tdd-btns) */
 .tour-box .tdd-btns button { min-width: 0; padding: 0 14px; height: 32px; font-size: 14px; }
 .tour-box .tdd-btns [data-t="next"] { min-width: 88px; }
 .tour-skip { margin-right: auto; border-color: transparent; background: transparent; color: var(--pencil); }
@@ -633,6 +631,22 @@ body.drop-over #stage, body.drop-over #docview { box-shadow: inset 0 0 0 2px var
 .modal-head .modal-ic svg text { fill: var(--ink); stroke: none; font-family: var(--font-mono); }
 .modal-head label { display: flex; align-items: center; gap: 6px; color: var(--graphite); }
 .modal-head > .spacer + button, .modal-head > button + button { margin-left: -4px; }
+/* the code beside the PDF a compile made (the dialog widens for it) */
+#tikzBody { flex: 1 0 96px; min-height: 96px; display: flex; min-width: 0; }
+#tikzBody > #tikzOut { flex: 1 1 0; }
+#tikzPdfPane { flex: 1 1 0; min-width: 0; border-left: 1px solid var(--rule); background: var(--wash); }
+#tikzPdfPane[hidden], #tikzCompile[hidden] { display: none; }
+#tikzPdf { display: block; width: 100%; height: 100%; border: 0; }
+#tikzPdfPane:has(#tikzPdfNone:not([hidden])) #tikzPdf { display: none; }
+#tikzPdfNone { height: 100%; display: grid; place-items: center; padding: 16px; }
+#tikzPdfNone[hidden] { display: none; }
+/* the LaTeX PDF being printed (Print with pdfLaTeX / XeLaTeX): present for the browser's PDF viewer, never seen */
+iframe.tex-print { position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; border: 0; opacity: 0; pointer-events: none; }
+.pdf-none-acts { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+#modal .modal-box { transition: width .24s var(--ease); }
+#modal .modal-box.with-pdf { width: min(1360px, 96vw); }
+@media (prefers-reduced-motion: reduce) { #modal .modal-box { transition: none; } }
+.lint.tex-status.ok { color: var(--ink); }
 #tikzOut, #impText { flex: 1 0 96px; min-height: 96px; min-width: 0; border: 0; border-radius: 0; padding: 16px; font: 12px/1.6 var(--font-mono); resize: none; outline: none; color: var(--ink); background: var(--sheet); }
 /* the code dialog: one row per line, numbers in a gutter that copying leaves out (src/application/app.ts copies the text) */
 #tikzOut { padding: 12px 16px 12px 0; overflow: auto; white-space: pre; user-select: text; cursor: text; }
@@ -1395,7 +1409,7 @@ body.mode-quick #inputBox,
 body.mode-quick #topbar .group:not(.files-grp),
 body.mode-quick #blockNav, body.mode-quick #classicSeg { display: none !important; }
 /* hidden but keeping their space, so the mode switch and the sidebar's engine box stay where they are in the other modes */
-body.mode-quick #docName, body.mode-quick #saveState, body.mode-quick #autosaveNote, body.mode-quick #topbar .files-grp, body.mode-quick #files .panel-head, body.mode-quick #binRow, body.mode-quick #gridFlags { visibility: hidden; }
+body.mode-quick #docName, body.mode-quick #saveStatus, body.mode-quick #topbar .files-grp, body.mode-quick #files .panel-head, body.mode-quick #binRow, body.mode-quick #gridFlags { visibility: hidden; }
 .qk { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .qk-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .qk-label { font-size: 15px; font-weight: 600; color: var(--ink); }
@@ -1646,3 +1660,8 @@ input.slider-value-editor, :is(#props, .cz-props, .fmt-bar) input.slider-value-e
 .cl-list .qe-item .qe-fig { height: auto; min-height: 44px; padding: 8px 0; } /* 8px of paper round every drawing: at most 42px wide on 58px */
 @container czbox (max-width: 1259px) { .cl-list .qe-grid { column-count: 2; } }
 @container czbox (max-width: 959px) { .cl-list .qe-grid { column-count: 1; } }
+
+/* named styles: the Style row above the fields, and a dot by a field that differs from the selection's style */
+#props .named-row .ctl { display: flex; gap: 4px; }
+#props .named-row .ctl select, #props .named-row .ctl .select { flex: 1; min-width: 0; }
+#props .ovr { display: inline-block; width: 5px; height: 5px; margin-left: 5px; border-radius: 50%; background: var(--graphite); vertical-align: middle; }

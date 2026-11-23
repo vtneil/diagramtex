@@ -60,8 +60,8 @@ if (!NOTEX) {
   try { TEXVERSION = execFileSync('pdflatex', ['--version'], { encoding: 'utf8' }).split('\n')[0].trim(); }
   catch (e) { TEXVERSION = 'pdflatex unavailable'; }
 }
-function compile(src, files) {
-  const h = crypto.createHash('sha1').update(TEXVERSION + '\0' + src + (files ? '\0' + JSON.stringify(files) : '')).digest('hex');
+function compile(src, files, engine = 'pdflatex') {
+  const h = crypto.createHash('sha1').update(TEXVERSION + '\0' + (engine === 'pdflatex' ? '' : engine + '\0') + src + (files ? '\0' + JSON.stringify(files) : '')).digest('hex');
   const ok = path.join(CACHE, h + '.ok');
   if (!NOCACHE && fs.existsSync(ok)) return Promise.resolve({ ok: true, cached: true });
   const dir = fs.mkdtempSync(path.join(CACHE, 'run-'));
@@ -74,9 +74,9 @@ function compile(src, files) {
     if (t) fs.utimesSync(f, t, t);
   }
   return new Promise((res) => {
-    const p = spawn('pdflatex', ['-no-shell-escape', '-interaction=nonstopmode', '-halt-on-error', 'doc.tex'], { cwd: dir });
+    const p = spawn(engine, ['-no-shell-escape', '-interaction=nonstopmode', '-halt-on-error', 'doc.tex'], { cwd: dir });
     let log = ''; p.stdout.on('data', (d) => { log += d; });
-    p.on('error', (e) => res({ ok: false, log: 'pdflatex: ' + e.message }));
+    p.on('error', (e) => res({ ok: false, log: engine + ': ' + e.message }));
     p.on('close', (code) => {
       fs.rmSync(dir, { recursive: true, force: true });
       if (code === 0) fs.writeFileSync(ok, '');
@@ -139,7 +139,7 @@ for (const r of results) {
   if (!NOTEX) for (const t of r.tex) texJobs.push({ r, errs, ...t });
   r.errs = errs;
 }
-const texRes = await pool(texJobs, Math.max(2, os.cpus().length - 2), (j) => compile(j.src, j.files));
+const texRes = await pool(texJobs, Math.max(2, os.cpus().length - 2), (j) => compile(j.src, j.files, j.engine));
 texJobs.forEach((j, i) => { if (!texRes[i].ok) j.errs.push(`LaTeX ${j.name} did not compile:\n${texRes[i].log.replace(/^/gm, '    ')}`); });
 for (const r of results) {
   if (r.errs.length) { fail++; console.log(`✗ ${r.name}\n  ${r.errs.join('\n  ')}`); }

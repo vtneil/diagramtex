@@ -80,4 +80,23 @@
       await tick(0); const d = document.querySelector('.td-dialog [data-r="1"]'); if (d) d.click();
     }
   });
+
+  T.test('chemistry: a chemfig setting among a bond\'s TikZ options is flagged as stopping LaTeX', () => {
+    const w = TD.chem.build('\\chemfig{A<[7,0.7,,,cram width=6pt]B}').warnings.join('\n');
+    T.ok(/"cram width" is a chemfig setting, not a bond option: LaTeX stops on it/.test(w), w);
+    T.ok(w.includes('\\chemfig[cram width=6pt]{…}'), 'says where it goes: ' + w);
+    T.eq(TD.chem.build('\\chemfig[cram width=6pt]{A<[7,0.7]B}').warnings, [], 'on the molecule it is fine');
+  });
+
+  T.test('chemistry: a blank line inside a scheme or a molecule is flagged as stopping LaTeX; one between drawings is not', () => {
+    const blank = (code) => TD.chem.build(code).warnings.some((w) => w.startsWith('A blank line inside'));
+    const tex = (src) => TD.TYPES.chemfig.tikz({ type: 'chemfig', x: 0, y: 0, src }, { pkgs: new Set(), c: () => '(0,0)', col: () => 'black' });
+    T.ok(blank('\\schemestart\n\\chemfig{A}\\arrow\\chemfig{B}\n  \n\\schemestop'), 'in a scheme');
+    T.ok(blank('\\chemfig{A-\n\nB}'), 'in a molecule');
+    T.ok(!blank('\\chemfig{A}\n\n\\chemfig{B}'), 'between two molecules');
+    T.ok(!blank('\\schemestart\n\\chemfig{A}\n%\n\\schemestop'), 'a % line is no break');
+    T.ok(tex('\\schemestart\n\\chemfig{A}\\arrow\\chemfig{B}\n  \n\\schemestop').includes('\\chemfig{B}\n  %\n\\schemestop'), 'the LaTeX writes it as %');
+    T.ok(/\\chemfig\{A\}\n\n\\chemfig\{B\}/.test(tex('\\chemfig{A}\n\n\\chemfig{B}')), 'a break between drawings stays');
+    T.tex('chemfig-blank-in-scheme', '\\documentclass{standalone}\n\\usepackage{tikz,chemfig}\n\\begin{document}\n\\begin{tikzpicture}\n' + tex('\\schemestart\n\\chemfig{A-B}\n  \\arrow\n\n\\chemfig{C}\n\n\\schemestop') + '\n\\end{tikzpicture}\n\\end{document}\n');
+  });
 }

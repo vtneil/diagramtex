@@ -146,7 +146,13 @@ import { runtime as TD } from '../runtime';
       const i = pre.search(/quantikz2/);
       add('warn', Math.max(0, i), `quantikz2 changes how ${pkgs.has('zx-calculus') ? 'zx-calculus and ' : ''}tikz-cd diagrams look: export from DiagramTeX to get the lines that keep them apart`);
     }
-    for (const [re, msg] of LUA) { const m = (re as any).exec(s); if (m) add('error', m.index, msg + ' (DiagramTeX exports for pdfLaTeX)'); }
+    // Thai in code for pdfLaTeX: it is set (the TLWG Type 1 fonts, src/core/doc-fonts.ts), but XeLaTeX sets it best
+    if (opt.engine === 'pdflatex') { const th = s.search(/[\u0E01-\u0E5B]/); if (th >= 0) add('warn', th, 'Thai text: XeLaTeX sets it best (its Latin letters in a Thai font too, with fontspec); pdfLaTeX sets it in the TLWG Type 1 fonts'); }
+    // (opt.engine 'xelatex': code for XeLaTeX, where fontspec and its kind are at home; LuaLaTeX's own still aren't)
+    for (const [re, msg] of LUA) {
+      if (opt.engine === 'xelatex' && /XeLaTeX/.test(msg as string)) continue;
+      const m = (re as any).exec(s); if (m) add('error', m.index, msg + (opt.engine === 'xelatex' ? ' (this code is for XeLaTeX)' : ' (DiagramTeX exports for pdfLaTeX)'));
+    }
 
     // pgf-umlcd draws \inherit, \implement and the relations where they are written: a class they name that comes
     // later in the same picture is not there yet ("No shape named … is known")

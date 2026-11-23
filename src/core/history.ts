@@ -15,6 +15,8 @@ interface Snapshot {
   name: string;
   guides: string;
   setup?: string;
+  /** the file's named styles (page.styles), as JSON */
+  styles: string;
 }
 export function createDocumentHistory(state: HistoryState, hooks: {
   syncLinks(): void;
@@ -33,6 +35,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     guides: JSON.stringify(owner().guides || null),
     // a Page file's paper is part of its drawing: its pages stack by the paper's height
     setup: state.doc.kind === 'page' ? JSON.stringify(state.doc.page || null) : undefined,
+    styles: JSON.stringify(state.doc.page?.styles || null),
   });
   function begin() {
     if (pending) return;
@@ -69,7 +72,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     });
     for (const [id, old] of previous.json) if (!now.json.has(id)) before.push([id, old, positions.get(id)!]);
     const moved = !sameOrder(previous, now);
-    if (before.length || after.length || moved || now.pages !== previous.pages || now.vars !== previous.vars || now.name !== previous.name || now.guides !== previous.guides || now.setup !== previous.setup) {
+    if (before.length || after.length || moved || now.pages !== previous.pages || now.vars !== previous.vars || now.name !== previous.name || now.guides !== previous.guides || now.setup !== previous.setup || now.styles !== previous.styles) {
       const step: HistoryStep = { before, after, size: 64, t: stamp() };
       if (moved) { step.ib = previous.ids; step.ia = now.ids; step.size += 12 * (previous.ids.length + now.ids.length); }
       if (now.pages !== previous.pages) { step.pb = previous.pages; step.pa = now.pages; }
@@ -77,6 +80,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
       if (now.name !== previous.name) { step.nb = previous.name; step.na = now.name; step.size += previous.name.length + now.name.length; }
       if (now.guides !== previous.guides) { step.gb = previous.guides; step.ga = now.guides; step.size += previous.guides.length + now.guides.length; }
       if (now.setup !== previous.setup) { step.sb = previous.setup; step.sa = now.setup; step.size += (previous.setup || '').length + (now.setup || '').length; }
+      if (now.styles !== previous.styles) { step.yb = previous.styles; step.ya = now.styles; step.size += previous.styles.length + now.styles.length; }
       for (const entry of [...before, ...after]) step.size += entry[1].length;
       state.undo.push(step); trim(); state.redo = [];
       hooks.changed();
@@ -117,6 +121,8 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     if (guides !== undefined) { const value = JSON.parse(guides); if (value) owner().guides = value; else delete owner().guides; }
     const setup = back ? step.sb : step.sa;
     if (setup !== undefined) state.doc.page = JSON.parse(setup) || {};
+    const styles = back ? step.yb : step.ya;
+    if (styles !== undefined) { const value = JSON.parse(styles); if (value) state.doc.page.styles = value; else delete state.doc.page.styles; }
     if (base && base.owner === owner()) {
       for (const id of fromIds) if (!toMap.has(id)) base.json.delete(id);
       for (const [id, json] of toMap) base.json.set(id, json);
@@ -126,6 +132,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
       if (name !== undefined) base.name = name;
       if (guides !== undefined) base.guides = guides;
       if (setup !== undefined) base.setup = setup;
+      if (styles !== undefined) base.styles = styles;
     } else base = null;
     const ids = new Set(list.map(s => s.id));
     for (const id of state.sel) if (!ids.has(id)) state.sel.delete(id);

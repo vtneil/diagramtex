@@ -1,4 +1,5 @@
 import { previewFadeFinished } from '../platform/preview-fade';
+import { finishThai, docFont as docFontOf, DOC_FONTS, type TexEngine } from '../core/doc-fonts';
 import { updateSvg } from '../platform/update-svg';
 import { SvgLabelResources } from '../platform/svg-label-resources';
 import { wheelZoomFactor } from '../ui/wheel-zoom';
@@ -292,8 +293,9 @@ import { createDocHistory } from './doc-history';
     if (b.caption && b.caption.trim()) return [note, '\\begin{figure}[h]', '  \\centering', '  ' + g, `  \\caption{${escTex(b.caption)}}`, '\\end{figure}'].join('\n');
     return [note, '\\begin{center}', g, '\\end{center}'].join('\n');
   }
-  TD.docToLatex = function (doc: any) {
-    const X = TD.makeTikzContext();
+  // engine: the LaTeX the code is for (pdflatex or xelatex), which writes the document's font (page.family) its way
+  TD.docToLatex = function (doc: any, { engine = 'pdflatex' }: { engine?: TexEngine } = {}) {
+    const X = TD.makeTikzContext({ engine, docFont: doc.page && doc.page.family });
     X.preDefs = new Set(); // definitions kept from an imported preamble
     const P = TD.pageSize(doc.page);
     let needGraphicx = false, needBox = false;
@@ -342,7 +344,9 @@ import { createDocHistory } from './doc-history';
     const again = (l: string) => { const m = /^\\usepackage\{([^}]*)\}$/.exec(l); return !!m && m[1].split(',').every((x) => own.has(x.trim())); };
     const extra = [...pk].filter((p) => !(p as any).includes('hyperref')).map((p) => `\\usepackage${p}`).filter((l) => !again(l));
     const spread = +P.spread || 1;
-    return [
+    const fonts = TD.fontLines(X, body.join('\n')), fontNote = TD.fontNote(X);
+    const tex = [
+      ...(fontNote ? ['% Note: ' + fontNote] : []),
       `\\documentclass[${P.font}pt]{article}`,
       `\\usepackage[${geometryOpts(P)}]{geometry}`,
       '\\usepackage{amsmath, amssymb}',
@@ -351,6 +355,7 @@ import { createDocHistory } from './doc-history';
       ...(needBox ? ['\\newsavebox{\\dtxbox}'] : []),
       ...extra,
       ...pre.filter((l: string) => !again(l)),
+      ...fonts,
       ...mathStyleLines(body, X),
       ...(pk.has('{hyperref}') ? ['\\usepackage{hyperref}'] : []), // hyperref goes last
       ...defs,
@@ -365,12 +370,13 @@ import { createDocHistory } from './doc-history';
       '\\end{document}',
       '',
     ].join('\n');
+    return finishThai(tex, engine); // where Thai lines may break, and with pdfLaTeX its runs marked
   };
 
   // Page mode: every object keeps its exact place on the paper. Each page is one overlay
   // tikzpicture placed at the page's top-left corner with eso-pic (one LaTeX run).
-  TD.pageToLatex = function (doc: any, { only }: Record<string, any> = {}) {
-    const X = TD.makeTikzContext();
+  TD.pageToLatex = function (doc: any, { only, engine = 'pdflatex' }: Record<string, any> = {}) {
+    const X = TD.makeTikzContext({ engine, docFont: doc.page && doc.page.family });
     X.preDefs = new Set(); // definitions kept from an imported preamble
     const P = TD.pageSize(doc.page);
     const h = P.H * PX_PER_CM, gap = PX_PER_CM, n = Math.max(1, doc.sheet.pages | 0);
@@ -399,7 +405,7 @@ import { createDocHistory } from './doc-history';
     const pre = TD.preamble(X);
     const defs = [...X.colors].map(([hex, name]) => `\\definecolor{${name}}{HTML}{${hex.slice(1).toUpperCase()}}`);
     if (X.decls) for (const d of X.decls.values()) defs.push(d.decl);
-    return [
+    const tex = [
       `% ${leafName(doc.name) || 'Untitled'}: free-form page from DiagramTeX ${TD.VERSION}.`,
       '% Coordinates are measured from the top-left corner of the paper (x right, y up, so y is negative on the page).',
       '\\documentclass[10pt]{article}',
@@ -407,6 +413,7 @@ import { createDocHistory } from './doc-history';
       '\\usepackage{amsmath, amssymb}',
       '\\usepackage{xcolor}',
       ...pre,
+      ...TD.fontLines(X, body.join('\n')),
       '\\usepackage{eso-pic}',
       ...mathStyleLines(body, X),
       ...defs,
@@ -419,6 +426,7 @@ import { createDocHistory } from './doc-history';
       '\\end{document}',
       '',
     ].join('\n');
+    return finishThai(tex, engine);
   };
 
   // ---------- view ----------
@@ -534,7 +542,8 @@ import { createDocHistory } from './doc-history';
     for (const entry of entries) if (entry.target.isConnected) sizeSheet(entry.target as HTMLElement);
   });
   function pageStyle(P: any) {
-    return `width:${P.W}cm;min-height:${P.H}cm;padding:${P.mt}cm ${P.mr}cm ${P.mb}cm ${P.ml}cm;font-size:${P.font}pt;--spread:${+P.spread || 1}`;
+    const font = docFontOf(P.family); // the document's font (Computer Modern: the page's own, --font-tex)
+    return `width:${P.W}cm;min-height:${P.H}cm;padding:${P.mt}cm ${P.mr}cm ${P.mb}cm ${P.ml}cm;font-size:${P.font}pt;--spread:${+P.spread || 1}${font.key !== 'cm' ? `;font-family:${font.css.replace(/"/g, "'")}` : ''}`;
   }
   // forPrint: no editing chrome. ctx: { export } — used by the HTML export.
   function pageHtml(forPrint: any) {
@@ -836,7 +845,7 @@ import { createDocHistory } from './doc-history';
     const page = TD.pageSize(doc().page);
     const diagrams = doc().blocks.filter((b: any) => b.type === 'diagram' && b.shapes.length);
     const wide = diagrams.filter((b: any) => diagramWidthCm(b.shapes) > page.textW + 0.01).length;
-    renderView(el, DocumentSettings, { page, wide, papers: Object.entries<any>(TD.PAPERS).map(([key, value]) => ({ key, name: key === 'custom' ? t('page.paper.custom', 'Custom') : value.name })) });
+    renderView(el, DocumentSettings, { page, wide, fonts: DOC_FONTS.map((f) => ({ key: f.key, label: f.label, css: f.css, thai: !!f.thai })), papers: Object.entries<any>(TD.PAPERS).map(([key, value]) => ({ key, name: key === 'custom' ? t('page.paper.custom', 'Custom') : value.name })) });
   }
   function setPage(patch: any) {
     const d = doc(), next = { ...TD.PAGE_DEFAULT, ...d.page, ...patch };

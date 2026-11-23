@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const esbuild = require('esbuild');
-const { options, workerOptions, catalogOptions } = require('./compile');
+const { options, workerOptions, texWorkerOptions, catalogOptions } = require('./compile');
 (async () => {
   // version.json is written by the release build (dist/); the dev server serves public/, so write the
   // current release there too (gitignored), or the app's update check 404s on every load.
@@ -12,6 +12,9 @@ const { options, workerOptions, catalogOptions } = require('./compile');
   const worker = await esbuild.context(workerOptions());
   await worker.rebuild();
   await worker.watch();
+  const texWorker = await esbuild.context(texWorkerOptions());
+  await texWorker.rebuild();
+  await texWorker.watch();
   // the interface kit catalog at /kit.html: development only
   const catalog = await esbuild.context(catalogOptions());
   await catalog.watch();

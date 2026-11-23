@@ -422,13 +422,14 @@
   </section>
 
   <section>
-    <h2>Dialog <code>Dialog.svelte</code>, <code>TD.confirm</code> / <code>TD.prompt</code> / <code>TD.alert</code></h2>
-    <p>The title asks the question; the buttons name the action. A destructive one is red, and the focus starts on Cancel. Enter takes the default, Esc cancels, Tab stays inside.</p>
+    <h2>Dialog <code>Dialog.svelte</code>, <code>TD.confirm</code> / <code>TD.prompt</code> / <code>TD.alert</code> / <code>TD.choose</code></h2>
+    <p>The title asks the question; the buttons name the action. A destructive one is red, and the focus starts on Cancel. Enter takes the default, Esc cancels, Tab stays inside. <code>TD.choose</code> asks how: a dropdown at the left, Cancel and the action at the right.</p>
     <div class="kit-row">
       <Button onclick={async () => (dlgSaid = String(await TD.confirm('Replace the drawing with this code?', 'The drawing is redrawn from the code; anything it can’t draw is kept as written.', { ok: 'Replace' })))}>Confirm…</Button>
       <Button danger onclick={async () => (dlgSaid = String(await TD.confirm('Delete “Lecture notes”?', 'It goes to the Recycle Bin for 30 days.', { ok: 'Delete', danger: true })))}>Delete…</Button>
       <Button onclick={async () => (dlgSaid = String(await TD.prompt('Rename Diagram', 'Free-body diagram')))}>Rename…</Button>
       <Button onclick={async () => (dlgSaid = String(await TD.alert('MathLive couldn’t load', 'This edit uses LaTeX instead.')))}>Alert…</Button>
+      <Button onclick={async () => (dlgSaid = String(await TD.choose('Print', 'As shown prints what you see here. pdfLaTeX and XeLaTeX compile the file’s LaTeX and print that PDF.', ['As shown', 'pdfLaTeX', 'XeLaTeX'], { ok: 'Print', choiceLabel: 'Render with', choiceNotes: [null, 'This file has Thai: XeLaTeX sets it best, its Latin letters in the Thai font too.', null] })))}>Choose…</Button>
       {#if dlgSaid}<small class="kit-note">returned <code>{dlgSaid}</code></small>{/if}
     </div>
   </section>

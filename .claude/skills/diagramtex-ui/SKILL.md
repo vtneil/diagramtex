@@ -122,7 +122,8 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
 
 - The only interface colour is ink plus two pens: `--redpen` for selection and danger, `--bluepen` for focus
   and construction. Active states use ink. `--marker` (amber) only marks something waiting: unsaved changes
-  or a newer version. User content and the logo are the only other colour.
+  or a newer version. User content and the logo are the only other colour, besides the top bar's save status dot
+  (red / yellow / blue pens and `--okpen` green for a file saved to disk; nowhere else).
 - **Editable fields are white** (`--sheet-raised` with a `--rule-strong` border). A tinted (`--well`) box
   means read-only, so **a text field is never tinted**. The one exception is a search field (`SearchField`): tinted
   while unfocused, white once focused.
@@ -158,7 +159,7 @@ Raise the z-index of the thing the user is reaching for, and keep it clear of ro
   | tool flyout (`.popover.flyout`) | 8px | `calc(var(--r) + 8px)` = 16px |
   | Export popover (`.exp-pop`) | 12px | `calc(var(--r) + 12px)` = 20px |
   | block editor and other modals (`.modal-box`) | head buttons 12px from the right | `--r-xl` 20px |
-  | dialog (`.tdd-box`) | `--tdd-inset` 14px | `calc(var(--r) + var(--tdd-inset))` = 22px |
+  | dialog (`.tdd-box`) | `--tdd-inset` 14px, at both ends of the button row | `calc(var(--r) + var(--tdd-inset))` = 22px |
   | tooltip, swatch, kbd | none | `--r-sm` 4px |
 
 - Gaps between options equal the container's padding. Segmented tracks use 3px padding and a 3px gap: 2px

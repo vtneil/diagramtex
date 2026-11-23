@@ -11,6 +11,7 @@
   import Segmented from './kit/Segmented.svelte';
   import Spacer from './kit/Spacer.svelte';
   import Icon from './kit/Icon.svelte';
+  import EmptyState from './kit/EmptyState.svelte';
   import { onMount } from 'svelte';
   import { isMac } from './kit/keys';
   import { t, caption, message, locale, setLocale, rich, type Message } from '../i18n';
@@ -73,6 +74,34 @@
       await navigator.clipboard.writeText(url);
       shared = true; setTimeout(() => { shared = false; }, 2400);
     } catch { /* the share sheet was closed */ }
+  }
+  // Once installed, the app offers to keep both TeX engines (pdfLaTeX and XeLaTeX, src/platform/tex-engine.ts) for
+  // compiling, printing and exporting offline: shown while either isn't in this browser yet, gone once both are.
+  type TexOffline = { offlineNeed(): Promise<{ engines: string[]; size: number }>; downloadOffline(p?: (d: number, t: number) => void): Promise<void> };
+  const texOffline = () => (globalThis as { TD?: { texEngine?: TexOffline } }).TD?.texEngine;
+  let engineNeed = $state(0); // bytes still to download (0: nothing to offer)
+  let engineDone = $state<number | null>(null); // bytes downloaded so far, while downloading
+  let engineFailed = $state(false);
+  const mb = (n: number) => `${Math.max(1, Math.round(n / 1e6))} MB`;
+  async function checkEngines() {
+    if (!installed || engineDone !== null) return;
+    try { engineNeed = (await texOffline()?.offlineNeed())?.size || 0; } catch { engineNeed = 0; }
+  }
+  $effect(() => {
+    if (!installed) return;
+    const timer = setTimeout(checkEngines, 0); // the engine registers after the shell (src/main.ts)
+    const again = () => { void checkEngines(); };
+    addEventListener('tex-offline', again);
+    return () => { clearTimeout(timer); removeEventListener('tex-offline', again); };
+  });
+  async function downloadEngines() {
+    const tex = texOffline();
+    if (!tex || engineDone !== null) return;
+    engineDone = 0; engineFailed = false;
+    try { await tex.downloadOffline((d, total) => { engineDone = d; engineNeed = total; }); }
+    catch { engineFailed = true; }
+    engineDone = null;
+    await checkEngines();
   }
   async function installApp() {
     const offer = installPrompt;
@@ -148,14 +177,21 @@
   <header id="topbar">
     <div class="topbar-row doc-row">
       <div class="brand" role="img" aria-label={t("ui.diagramtex", "DiagramTeX", {}, $locale)} title={t("ui.diagramtex", "DiagramTeX", {}, $locale)}><svg class="brand-mark" viewBox="30 30 196 196" aria-hidden="true"><path class="brand-ink" d="M85.19 66.81L191.19 172.81L172.81 191.19L66.81 85.19Z"/><circle cx="76" cy="76" r="46" fill="#FF5A3C"/><rect x="138" y="138" width="88" height="88" rx="14" fill="#2F7BFF"/></svg><svg class="brand-word" viewBox="286 30 734 196" aria-hidden="true"><path class="brand-ink" d="M327.06 176C356.51 176 374.49 157.5 374.49 127.92C374.49 98.46 356.32 79.96 327.44 79.96H293.15V176ZM313.01 159.31V96.66H326.22C345.3 96.66 354.51 107.74 354.51 127.92C354.51 148.16 345.43 159.31 326.03 159.31ZM382.68 176H401.69V107.94H382.68ZM392.15 99.37C398.41 99.37 402.98 95.05 402.98 89.25C402.98 83.45 398.41 79.13 392.15 79.13C385.9 79.13 381.33 83.45 381.33 89.25C381.33 95.05 385.9 99.37 392.15 99.37ZM433.34 177.16C443.78 177.16 449.65 173.04 453.26 166.4H453.51V176H472.08V129.85C472.08 115.29 461.38 106.52 442.75 106.52C424.06 106.52 412.97 115.41 412.13 129.46H429.99C430.44 124.24 435.08 120.63 442.17 120.63C449.13 120.63 453.32 124.12 453.32 129.14V129.59C453.32 133.98 448.94 134.56 436.5 135.78C422.32 137.07 409.94 141.45 409.94 156.79C409.94 170.39 419.74 177.16 433.34 177.16ZM438.62 163.95C432.24 163.95 428.12 161.11 428.12 156.28C428.12 150.86 433.28 148.35 439.79 147.38C445.91 146.42 451.26 145.51 453.45 144.29V151.12C453.45 158.47 447.78 163.95 438.62 163.95ZM515.07 203.84C534.79 203.84 548.32 194.95 548.32 173.36V107.94H529.57V117.8H529.5C525.19 110.26 518.1 106.52 509.27 106.52C491.86 106.52 479.94 121.02 479.94 141.45C479.94 161.76 491.61 176.06 509.39 176.06C518.29 176.06 525.44 172.46 529.5 164.46H529.57V174.9C529.57 184.7 524.35 189.86 515.07 189.86C507.98 189.86 502.95 186.96 501.6 181.8H483.29C485.22 195.01 495.73 203.84 515.07 203.84ZM514.29 160.85C505.08 160.85 499.08 153.7 499.08 141.2C499.08 128.69 505.08 121.6 514.29 121.6C523.9 121.6 530.28 129.34 530.28 141.2C530.28 153.12 523.9 160.85 514.29 160.85ZM559.22 176H578.23V139.13C578.23 128.88 583.97 123.47 591.77 123.47C594.99 123.47 598.53 123.73 599.95 123.79V107.62C598.4 107.55 596.54 107.49 594.34 107.49C585.38 107.49 580.23 111.35 577.71 119.54H577.52V107.94H559.22ZM626.7 177.16C637.14 177.16 643.01 173.04 646.62 166.4H646.87V176H665.44V129.85C665.44 115.29 654.74 106.52 636.11 106.52C617.42 106.52 606.33 115.41 605.49 129.46H623.35C623.8 124.24 628.44 120.63 635.53 120.63C642.49 120.63 646.68 124.12 646.68 129.14V129.59C646.68 133.98 642.3 134.56 629.86 135.78C615.68 137.07 603.3 141.45 603.3 156.79C603.3 170.39 613.1 177.16 626.7 177.16ZM631.98 163.95C625.6 163.95 621.48 161.11 621.48 156.28C621.48 150.86 626.63 148.35 633.14 147.38C639.27 146.42 644.62 145.51 646.81 144.29V151.12C646.81 158.47 641.14 163.95 631.98 163.95ZM676.26 176H695.28V135.85C695.28 127.08 700.69 122.18 707.46 122.18C714.1 122.18 718.74 126.76 718.74 133.85V176H737.04V135.01C737.04 127.4 741.62 122.18 748.97 122.18C755.48 122.18 760.5 126.18 760.5 134.36V176H779.45V130.88C779.45 115.29 769.72 106.52 756.64 106.52C746.78 106.52 738.4 111.48 734.85 119.8C732.02 111.48 724.35 106.52 715.19 106.52C706.56 106.52 698.63 110.97 694.57 120.18V107.94H676.26ZM786.54 96.98H815.68V176H835.53V96.98H864.6V79.96H786.54ZM894.95 177.55C911.45 177.55 924.6 168.14 927.12 154.6H909.78C908.04 159.89 902.95 163.3 895.53 163.3C885.54 163.3 879.74 156.79 879.42 146.74H927.82V141.65C927.82 120.89 914.35 106.39 894.31 106.39C874.78 106.39 860.92 121.28 860.92 142.03C860.92 162.72 874.33 177.55 894.95 177.55ZM879.55 134.62C880.58 126.11 886.19 120.83 894.7 120.83C903.27 120.83 908.94 126.11 909.91 134.62ZM929.5 176H951.87L965.72 155.7C968.82 151.19 971.78 146.67 974.75 142.1C977.65 146.67 980.55 151.19 983.58 155.7L997.05 176H1019.99L986.09 126.31L1017.22 79.96H995.24L984.41 96.27C981.13 101.23 978.03 106.2 974.94 111.16C971.91 106.2 968.82 101.23 965.66 96.27L955.02 79.96H932.53L963.98 126.89Z"/></svg></div>
-      <span id="autosaveNote" class="autosave-note" title={t("ui.every.change.is.saved.in.this.browser.as.you.work", "Every change is saved in this browser as you work", {}, $locale)}>{t("save.autosaveBrowser", "Autosave is enabled (browser)", {}, $locale)}</span>
+      <!-- where the open file is kept: a status dot and what it means (showSaveState in src/application/app.ts) -->
+      <span id="saveStatus" class="save-status" data-tone="info" role="status" title={t("ui.every.change.is.saved.in.this.browser.as.you.work", "Every change is saved in this browser as you work", {}, $locale)}><span class="dot" aria-hidden="true"></span><span class="save-text">{t("save.status.browser", "Autosaved in browser only", {}, $locale)}</span></span>
       <div class="doc-name-wrap">
         <input id="docName" class="doc-name" spellcheck="false" title={t("ui.document.name", "Document name", {}, $locale)} aria-label={t("ui.document.name", "Document name", {}, $locale)}>
-        <span id="saveState" role="status" title={t("ui.every.change.is.saved.in.this.browser.as.you.work", "Every change is saved in this browser as you work", {}, $locale)}></span>
       </div>
       <div class="spacer"></div>
       {#if installPrompt && !installed}
         <Button id="btnInstall" onclick={installApp} title={t('pwa.install.tip', 'Install DiagramTeX as an app', {}, $locale)} class="pwa-install" icon="download"><span>{t('pwa.install', 'Install', {}, $locale)}</span></Button>
+      {/if}
+      {#if installed && engineNeed > 0}
+        <Button id="btnTexOffline" onclick={downloadEngines} disabled={engineDone !== null} aria-busy={engineDone !== null}
+          title={engineFailed ? t('pwa.engine.failed', 'The download stopped. Try again when you are online.', {}, $locale) : t('pwa.engine.tip', 'Keep pdfLaTeX and XeLaTeX in this app, to compile, print and export PDF through LaTeX offline', {}, $locale)}
+          class="pwa-install" icon="download"><span>{engineDone !== null
+            ? t('pwa.engine.progress', 'Downloading TeX engine… {percent}%', { percent: String(Math.min(99, Math.floor((engineDone / Math.max(1, engineNeed)) * 100))) }, $locale)
+            : t('pwa.engine', 'Download TeX engine ({size})', { size: mb(engineNeed) }, $locale)}</span></Button>
       {/if}
       <details class="language-picker" id="languagePicker">
         <summary id="languageTrigger" aria-label={`${t("ui.interface.language", 'Interface language', {}, $locale)}: ${$locale === 'th' ? 'TH' : 'EN'}`} aria-haspopup="menu" aria-expanded="false" title={`${t("ui.language", 'Language', {}, $locale)}: ${$locale === 'th' ? 'ไทย' : 'English'}`}>
@@ -396,14 +432,18 @@
       <div class="modal-head">
         <strong id="tikzTitle">{t("ui.tikz.code", "TikZ Code", {}, $locale)}</strong>
         <Select id="tikzScope" title={t("ui.what.the.code.holds", "What the code holds", {}, $locale)} aria-label={t("ui.code.for", "Code for", {}, $locale)} options={[{ value: 'pic', label: t("ui.tikz.picture", "TikZ picture", {}, $locale) }, { value: 'standalone', label: t("ui.standalone.document", "Standalone document", {}, $locale) }, { value: 'doc', label: t("ui.whole.document", "Whole document", {}, $locale) }]} />
+        <Select id="tikzEngine" title={t("ui.latex.engine.title", "The LaTeX engine the code is for: pdfLaTeX, or XeLaTeX for system-style fonts and Thai", {}, $locale)} aria-label={t("ui.latex.engine", "LaTeX engine", {}, $locale)} options={[{ value: 'pdflatex', label: 'pdfLaTeX' }, { value: 'xelatex', label: 'XeLaTeX' }]} />
         <span id="tikzSelWrap"><Checkbox id="tikzSelOnly">{t("ui.selection.only.variant1", " Selection only", {}, $locale).trim()}</Checkbox></span>
         <Spacer />
+        <Button id="tikzCompile" title={t("ui.compile.title", "Compile with pdfLaTeX here, in this browser, and see the PDF", {}, $locale)}>{t("ui.compile", "Compile", {}, $locale)}</Button>
         <Button id="tikzDownload" title={t("ui.the.latex.alone", "The LaTeX alone", {}, $locale)}>{t("ui.download.tex", "Download .tex", {}, $locale)}</Button>
         <SplitButton id="tikzZipWrap" mainId="tikzZip" moreId="tikzZipMore" hidden label={t("ui.download.zip", "Download .zip", {}, $locale)} moreTitle={t("ui.more.ways.to.download.the.zip", "More ways to download the .zip", {}, $locale)} />
         <Button id="tikzCopy" variant="primary">{t("ui.copy", "Copy", {}, $locale)}</Button>
         <IconButton id="modalClose" icon="close" title={t("ui.close", "Close", {}, $locale)} />
       </div>
-      <div id="tikzOut" class="codeview" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label={t("ui.latex.code", "LaTeX code", {}, $locale)}></div>
+      <div id="tikzBody"><div id="tikzOut" class="codeview" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label={t("ui.latex.code", "LaTeX code", {}, $locale)}></div>
+        <div id="tikzPdfPane" hidden><iframe id="tikzPdf" title={t("ui.compiled.pdf", "The compiled PDF", {}, $locale)}></iframe>
+          <div id="tikzPdfNone" hidden><EmptyState title={t("ui.pdf.not.here", "This browser doesn’t show PDFs in a page", {}, $locale)}><div class="pdf-none-acts"><Button id="tikzPdfOpen">{t("ui.open.pdf", "Open PDF", {}, $locale)}</Button><Button id="tikzPdfSave">{t("ui.download.pdf", "Download .pdf", {}, $locale)}</Button></div></EmptyState></div></div></div>
       <div id="tikzLint" class="modal-foot report"></div>
     </div>
   </div>

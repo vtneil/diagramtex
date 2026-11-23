@@ -23,3 +23,11 @@ artifacts/
 
 # CI browser-test diagnostics
 /.ci-artifacts/
+
+# In-browser pdfLaTeX: the worker (built from src/platform/tex-worker.ts) and the TeX Live bundle (scripts/tex-bundle.mjs)
+public/tex/tex-worker.js
+public/tex/bundle/
+
+# The in-browser LaTeX bundle archive (scripts/tex-bundle-pack.mjs, scripts/tex-bundle-fetch.mjs)
+.tex-bundle/
+public/tex/bundle.new/

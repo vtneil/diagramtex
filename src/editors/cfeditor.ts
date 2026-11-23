@@ -1271,7 +1271,7 @@ import { keepComments } from './keep-comments';
       if (h) { E.drag = { mode: 'mctl', i: h.i, seg: mv.seg, k: mv.k, ax: h.ax, ay: h.ay, sx, sy, moved: false }; begin(); return; }
     }
     const kb = e.target.closest('.ze-knob:not(.ze-ahead):not(.ze-mctl)');
-    if (kb && E.knobPos) { const v = findV(E.knobPos.v); E.drag = { mode: 'grow', v: E.knobPos.v, fx: v.X, fy: v.Y, tx: v.X, ty: v.Y, sx, sy, moved: false, ang: E.knobPos.ang }; E.knobAt = null; return; }
+    if (kb && E.knobPos) { const v = findV(E.knobPos.v); E.drag = { mode: 'grow', v: E.knobPos.v, sep: v.sep || SEP, fx: v.X, fy: v.Y, tx: v.X, ty: v.Y, sx, sy, moved: false, ang: E.knobPos.ang }; E.knobAt = null; return; }
     const v = vertexAt(e), mv = v ? null : moveAt(e, 5), b = v || mv ? null : bondAt(e), a = v || b || mv ? null : arrowAt(e);
     if (E.arm === 's:move') {
       const vb = !mv && v ? v : null, bb = vertexAt(e) ? null : bondAt(e);
@@ -1366,7 +1366,7 @@ import { keepComments } from './keep-comments';
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
       d.moved = true;
       d.ang = aimAt(d.fx, d.fy, e);
-      d.tx = d.fx + SEP * Math.cos((d.ang * Math.PI) / 180); d.ty = d.fy - SEP * Math.sin((d.ang * Math.PI) / 180);
+      d.tx = d.fx + d.sep * Math.cos((d.ang * Math.PI) / 180); d.ty = d.fy - d.sep * Math.sin((d.ang * Math.PI) / 180);
       setTip(`${t('editor.cf.tip.kindAt', '{kind} bond at {deg}°', { kind: bondNames()[E.bond], deg: Math.round(d.ang) })}${e.altKey ? '' : anyAngle()}`);
       draw(); return;
     }
@@ -1378,8 +1378,10 @@ import { keepComments } from './keep-comments';
       d.fx = fx; d.fy = fy;
       const [x, y] = D(sx, sy);
       d.ang = aimAt(fx, fy, e);
-      d.len = Math.max(0.25, Math.round((Math.hypot(x - fx, y - fy) / SEP) * 4) / 4);
-      d.tx = fx + d.len * SEP * Math.cos((d.ang * Math.PI) / 180); d.ty = fy - d.len * SEP * Math.sin((d.ang * Math.PI) / 180);
+      // in the molecule's own atom sep (a length set with atom sep=6em counts in 6em), as the code writes it
+      const sep = b.sep || SEP;
+      d.len = Math.max(0.25, Math.round((Math.hypot(x - fx, y - fy) / sep) * 4) / 4);
+      d.tx = fx + d.len * sep * Math.cos((d.ang * Math.PI) / 180); d.ty = fy - d.len * sep * Math.sin((d.ang * Math.PI) / 180);
       setTip(`${t('editor.cf.tip.bondAt', 'Bond at {deg}°, {n} × atom sep', { deg: Math.round(d.ang), n: num(d.len) })}${e.altKey ? '' : anyAngle()}`);
       draw();
     }

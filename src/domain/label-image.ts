@@ -26,6 +26,52 @@ for (const face of faces) {
 }
 export const labelFontsReady = Promise.all([...registered.values()].map(face => face.load()));
 
+// The text fonts served with the app (public/css/style.css: TD.FONTS' Garuda, Kinnari and Laksaman, also the Thai
+// document fonts). A label's picture is a document of its own and can't see the page's fonts, so each face a label
+// uses goes into its picture, read once from the file the page loads (fonts/tlwg-*.woff2). Until it has been read the
+// picture falls back to a system font, and it is made again once the face arrives (onLabelFontsChange).
+const WEB_FACES: [family: string, italic: boolean, bold: boolean, file: string][] = ['Garuda', 'Kinnari', 'Laksaman'].flatMap((family) => {
+  const f = 'tlwg-' + family.toLowerCase(), slant = family === 'Garuda' ? 'oblique' : 'italic';
+  return [[family, false, false, f], [family, false, true, f + '-bold'], [family, true, false, `${f}-${slant}`], [family, true, true, `${f}-bold${slant}`]] as [string, boolean, boolean, string][];
+});
+const WEB_FAMILY = /\b(Garuda|Kinnari|Laksaman)\b/;
+const webData = new Map<string, string | Promise<void>>(); // file → its data: URL ('' when it could not be read)
+const webListeners: (() => void)[] = [];
+/** Calls `listener` once a font a label picture needs has been read: the pictures made before then are made again. */
+export const onLabelFontsChange = (listener: () => void) => { webListeners.push(listener); };
+function webFace(file: string): string | null {
+  const have = webData.get(file);
+  if (typeof have === 'string') return have || null;
+  if (!have) webData.set(file, fetch(new URL(`fonts/${file}.woff2`, document.baseURI).href)
+    .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+    .then((blob) => new Promise<string>((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result)); fr.onerror = () => rej(fr.error); fr.readAsDataURL(blob); }))
+    .then((url) => {
+      webData.set(file, url);
+      cache.clear(); cachedChars = 0; // pictures made without it
+      for (const listener of webListeners) listener();
+    }, () => { webData.set(file, ''); }));
+  return null;
+}
+/** Starts reading a served font's face for label pictures, as soon as the page has loaded it for text. */
+export function prepareLabelFont(family: string, style = 'normal', weight: string | number = 400) {
+  const face = WEB_FACES.find(([f, italic, bold]) => f === family.replace(/["']/g, '') && italic === (style !== 'normal') && bold === (+weight >= 600));
+  if (face) webFace(face[3]);
+}
+// the @font-face rules for the served fonts `root`'s text is set in (each face once), of those read already
+function webFaceCss(root: Element): string[] {
+  const out = new Map<string, string>();
+  for (const node of [root, ...root.querySelectorAll('*')]) {
+    const style = getComputedStyle(node), family = style.fontFamily.replace(/["']/g, '').split(',').map((x) => x.trim()).find((x) => WEB_FAMILY.test(x));
+    if (!family) continue;
+    const italic = style.fontStyle !== 'normal', bold = parseFloat(style.fontWeight) >= 600;
+    const face = WEB_FACES.find(([f, i, b]) => f === family && i === italic && b === bold);
+    if (!face || out.has(face[3])) continue;
+    const url = webFace(face[3]);
+    if (url) out.set(face[3], `@font-face { font-family: '${face[0]}'; font-style: ${italic ? (face[0] === 'Garuda' ? 'oblique' : 'italic') : 'normal'}; font-weight: ${bold ? 700 : 400}; src: url("${url}") format("woff2"); }`);
+  }
+  return [...out.values()];
+}
+
 interface LabelImage { href: string; x: number; y: number; width: number; height: number; later?: number }
 const cache = new Map<string, LabelImage>();
 // bounded by the pictures' size rather than their count, so a large table or drawing (thousands of small
@@ -84,6 +130,7 @@ export function labelImage(engine: 'katex' | 'temml', html: string, textStyle: s
       for (const face of faces) if (families.includes(face.family)) used.add(face.css);
     }
   }
+  if (WEB_FAMILY.test(textStyle) || WEB_FAMILY.test(html)) for (const css of webFaceCss(text)) used.add(css);
   const { left, top, right, bottom } = vector;
   const paintWidth = (right - left) / scale, paintHeight = (bottom - top) / scale;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" lang="en" xml:lang="en" width="${paintWidth}" height="${paintHeight}" viewBox="${left} ${top} ${right - left} ${bottom - top}">${used.size ? `<style>${esc([...used].join('\n'))}</style>` : ''}${vector.body}</svg>`;

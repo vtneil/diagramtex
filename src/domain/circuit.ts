@@ -821,6 +821,11 @@ TD.TYPES.cz = {
     const o = [`shift={${X.c(s.x, s.y)}}`];
     if (TD.css(s.color || '#000000') !== '#000000') o.push(`color=${X.col(s.color)}`);
     o.push(...TD.textOpts({ size: s.size, font: s.font }, X)); // the labels' size, as on the canvas
+    // The circuit's own code may set a font for its nodes (\tikzstyle{every node}=[font=\fontsize…], from an
+    // import): a node's font= replaces the scope's, family and all. The block's font is then also switched to at
+    // the scope's start, as the text's surrounding font, which a font= that sets only the size keeps.
+    const fam = /\bfont\s*=/.test(body) && TD.textOpts({ font: s.font }, X).find((x: string) => x.startsWith('font='));
+    if (fam) o.push(`execute at begin scope={${fam.slice(5)}}`);
     return `\\begin{scope}[${o.join(', ')}]\n${body.split('\n').map((l) => '  ' + l).join('\n')}\n\\end{scope}`;
   },
 };

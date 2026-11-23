@@ -73,9 +73,14 @@ function workerOptions({ minify = false, write = true } = {}) {
     alias: { '#default-font/svg/default.js': path.resolve(__dirname, '../node_modules/@mathjax/mathjax-tex-font/mjs/svg/default.js') },
     legalComments: 'inline' };
 }
+// the in-browser pdfLaTeX's worker (src/platform/tex-worker.ts), beside the engine it loads in public/tex/
+function texWorkerOptions({ minify = false, write = true } = {}) {
+  return { entryPoints: [path.resolve(__dirname, '../src/platform/tex-worker.ts')], outfile: path.resolve(__dirname, '../public/tex/tex-worker.js'),
+    bundle: true, format: 'iife', platform: 'browser', target: 'es2020', minify, write, legalComments: 'inline' };
+}
 async function compileApp(settings) {
-  const [application, worker] = await Promise.all([esbuild.build(options(settings)), esbuild.build(workerOptions(settings))]);
-  if (application.outputFiles) application.outputFiles.push(...worker.outputFiles);
+  const [application, worker, texWorker] = await Promise.all([esbuild.build(options(settings)), esbuild.build(workerOptions(settings)), esbuild.build(texWorkerOptions(settings))]);
+  if (application.outputFiles) application.outputFiles.push(...worker.outputFiles, ...texWorker.outputFiles);
   return application;
 }
 // The interface kit catalog (public/kit.html): the app's compile settings with its own entry, no prerender.
@@ -84,5 +89,5 @@ function catalogOptions() {
   return { ...base, entryPoints: [path.resolve(__dirname, '../src/ui/kit/catalog/main.ts')],
     outfile: path.resolve(__dirname, '../public/js/kit.bundle.js'), plugins: base.plugins.filter(p => p.name !== 'prerender') };
 }
-module.exports = { compileApp, options, workerOptions, catalogOptions, renderIndex };
+module.exports = { compileApp, options, workerOptions, texWorkerOptions, catalogOptions, renderIndex };
 if (require.main === module) compileApp().catch(() => { process.exitCode = 1; });

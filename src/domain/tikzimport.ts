@@ -335,6 +335,7 @@ import { runtime as TD } from '../runtime';
         else if (k === 'dashed' || k === 'densely dashed' || k === 'loosely dashed') st.dash = 'dashed';
         else if (k === 'dotted' || k === 'densely dotted' || k === 'loosely dotted') st.dash = 'dotted';
         else if (k === 'dash dot' || k === 'dashdotted') st.dash = 'dashdot';
+        else if (k === 'solid') st.dash = 'solid'; // undoes a dash set before it (a style's)
         else if (k === 'help lines') { colorAll = '#808080'; st.width = 0.2 / K; }
         else if (k === 'rounded corners') st.radius = 4 / K; // (TikZ's default radius)
         else if (k === 'sharp corners') st.radius = 0;

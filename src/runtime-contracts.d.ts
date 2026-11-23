@@ -12,7 +12,10 @@ export interface Runtime {
   [registration: string]: any;
   docStore: import('./platform/browser-store').DocumentStore & {
     ready: Promise<boolean>; flush(): void;
-    on(hooks: { write?: (ok: boolean, error?: unknown) => void; remote?: (key: string) => void }): void;
+    /** each file's earlier versions, one record per copy (src/core/recovery.ts) */
+    copies: import('./core/recovery').CopyStore;
+    upgradeSchema(db: IDBDatabase, tx: IDBTransaction, oldVersion: number): void;
+    on(hooks: { write?: (ok: boolean, error?: unknown) => void; remote?: (key: string) => void; older?: () => void }): void;
   };
   blocks: ReturnType<typeof createBlocks>;
   TYPES: Record<string, any>;

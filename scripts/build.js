@@ -71,7 +71,8 @@ async function main() {
       if (r === DEV_ONLY) continue;
       if ((joined.has(r) && !linked.has(r)) || r.startsWith('js/') || r === 'index.html' || r === 'sw.js') continue; // written below
       const ext = path.extname(ent.name);
-      if ((ext === '.js' || ext === '.css') && !ent.name.includes('.min.')) {
+      // the in-browser pdfLaTeX (tex/) is copied as it is: the engine's own build, and the worker written below
+      if ((ext === '.js' || ext === '.css') && !ent.name.includes('.min.') && !r.startsWith('tex/')) {
         const code = read(r), out = minify(code, ext.slice(1), r);
         write(r, out);
         before += Buffer.byteLength(code); after += Buffer.byteLength(out); count++;
@@ -104,6 +105,7 @@ async function main() {
   scriptName = named('js', 'bundle', 'js', appCode);
   write(scriptName, appCode);
   write('math-render-worker.js', application.outputFiles.find(file => file.path.endsWith('math-render-worker.js')).text);
+  write('tex/tex-worker.js', application.outputFiles.find(file => file.path.endsWith('tex-worker.js')).text);
   styleName = bundle(styles.files, 'css', 'css/app', '\n');
   linkAssets();
   write('index.html', html);
@@ -121,6 +123,9 @@ async function main() {
     '/vendor/*', '  Cache-Control: public, max-age=31536000',
     '/icons/*', '  Cache-Control: public, max-age=604800',
     '/guide/img/*', '  Cache-Control: public, max-age=604800',
+    '# The TeX Live bundle\'s chunks, and the fonts fetched as needed, are named after their contents.',
+    ...['pdftex', 'xetex'].flatMap((e) => [`/tex/bundle/${e}/tex-*`, '  Cache-Control: public, max-age=31536000, immutable']),
+    '/tex/bundle/fonts/*', '  Cache-Control: public, max-age=31536000, immutable',
     '',
   ].join('\n'));
 
@@ -130,7 +135,8 @@ async function main() {
   write('version.json', JSON.stringify({ version: VERSION }) + '\n');
 
   // ---- sw.js: precache every file the app can load, as it is in dist/ (not version.json: it must come from the network)
-  const SKIP = /^(index\.html|sw\.js|version\.json|robots\.txt|sitemap\.xml|404\.html|_headers)$|LICENSE|\.txt$|^icons\/og-image\./;
+  // (not the in-browser pdfLaTeX, tex/: it is downloaded the first time someone compiles, and kept in its own cache)
+  const SKIP = /^(index\.html|sw\.js|version\.json|robots\.txt|sitemap\.xml|404\.html|_headers)$|LICENSE|\.txt$|^icons\/og-image\.|^tex\//;
   const files = [];
   (function list(rel) {
     for (const ent of fs.readdirSync(path.join(OUT, rel), { withFileTypes: true })) {

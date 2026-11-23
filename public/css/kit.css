@@ -461,16 +461,22 @@ button.tile.soon, button.tile.soon:hover { border-style: dashed; border-color: v
 /* ---------- Dialog (Dialog.svelte, src/ui/services/dialog.ts: TD.confirm / TD.prompt / TD.alert): a small sheet over the
    scrim, title + message, buttons right-aligned with the default action last; destructive actions use the red pen ---------- */
 .td-dialog, .td-dialog-leaving { position: fixed; inset: 0; z-index: 2000; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 16px; animation: tdd-fade .14s var(--ease); }
-.tdd-box { --tdd-inset: 14px; /* buttons sit this far from the right and bottom edges; the corner is concentric with theirs */
-  width: min(400px, 100%); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: calc(var(--r) + var(--tdd-inset)); box-shadow: var(--shadow-modal); padding: 20px 20px var(--tdd-inset); animation: pop-in .16s var(--ease); }
+.tdd-box { --tdd-inset: 14px; --tdd-pad: 20px; /* the text's padding; the button row's controls sit --tdd-inset from the sides and bottom, so the corners are concentric with theirs */
+  width: min(400px, 100%); background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: calc(var(--r) + var(--tdd-inset)); box-shadow: var(--shadow-modal); padding: var(--tdd-pad) var(--tdd-pad) var(--tdd-inset); animation: pop-in .16s var(--ease); }
 .tdd-box h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
 .tdd-box p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: var(--graphite); }
 .tdd-in { display: block; width: 100%; margin-top: 12px; height: var(--ctl); padding: 0 8px; background: var(--sheet-raised); border: 1px solid var(--rule-strong); }
 textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); resize: vertical; }
 .tdd-in:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
 .tdd-pv { margin-top: 8px; padding: 10px 12px; min-height: 44px; background: var(--well); border-radius: var(--r); color: var(--ink); font: 18px/1.35 var(--font-tex); text-align: center; text-wrap: balance; overflow-wrap: anywhere; } /* read-only: how the typed title reads on the page */
-.tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; margin-right: calc(var(--tdd-inset) - 20px); }
+.tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; margin-inline: calc(var(--tdd-inset) - var(--tdd-pad)); } /* both ends: a control at the left (TD.choose's dropdown) nests in that corner too */
 .tdd-btns button { min-width: 80px; }
+/* TD.choose: how to do the action, a dropdown at the left; Cancel and the action stay at the right */
+.tdd-btns .tdd-pick { margin-right: auto; min-width: 140px; }
+/* a warning for the choice made (TD.choose's choiceNotes): red pen, like the LaTeX window's */
+.tdd-box p.tdd-warn { color: var(--redpen); }
+/* a choice among several (TD.choose): the row wraps rather than run past the box's edge */
+.tdd-btns { flex-wrap: wrap; }
 .tdd-btns button.danger { background: var(--redpen); border-color: var(--redpen); color: #fff; font-weight: 500; }
 .tdd-btns button.danger:hover { filter: brightness(1.08); }
 @keyframes tdd-fade { from { opacity: 0; } }

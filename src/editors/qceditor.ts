@@ -14,6 +14,7 @@ import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow,
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
+import { onLabelFontsChange } from '../domain/label-image';
 // Quantum circuit editor: the overlay that opens on a Quantum block. A palette of quantikz elements,
 // the circuit drawn by the canvas renderer over a grid of cells (wires × steps) where elements are
 // dropped, moved and linked, the selected cell's properties, and beside them the quantikz code, live
@@ -288,6 +289,8 @@ import { keepComments } from './keep-comments';
   // ---------------------------------------------------------------- state
   // { M, sel: {r1, c1, r2, c2} | null, arm, view: {ox, oy, k}, undo, redo, pending, start, done, drag, hover, st, codeAt, codeTimer, clip }
   let E: any = null, lastDown = { t: 0, x: 0, y: 0 };
+  // a served font read for the label pictures (src/domain/label-image.ts): an open editor draws its labels again in it
+  onLabelFontsChange(() => { if (E) draw(); });
   const snap = () => (E.typed = keepComments(E.typed, codeOf(E.M))); // the drawing's code, keeping the comments last written
   const history = TD.editorSession.history({
     state: () => E, snapshot: () => snap(), restore: (v: string) => restore(v), updateTools: () => updateTools(), changed: () => dock.changed(),

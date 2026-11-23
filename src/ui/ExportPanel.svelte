@@ -9,7 +9,7 @@
     | { kind: 'check'; label: string; checked: boolean; id?: string; onchange(on: boolean): void }
     | { kind: 'meta'; text: string; aside?: string }
     /** `bold` is set in bold where the text has \u0000 */
-    | { kind: 'note'; text: string; bold?: string }
+    | { kind: 'note'; text: string; bold?: string; /** a warning: in red pen, announced */ warn?: boolean }
     /** what stops the export (a size the browser can't draw), in red pen */
     | { kind: 'error'; text: string }
     | { kind: 'dir'; label: string; folder: string; title: string; onpick(): void; clear?: { title: string; onclick(): void } };
@@ -57,7 +57,7 @@
     <div class="exp-meta">{r.text}{#if r.aside}<span>{r.aside}</span>{/if}</div>
   {:else if r.kind === 'note'}
     {@const [before, after] = r.text.split('\u0000')}
-    <div class="exp-note">{before}{#if after !== undefined}<b>{r.bold}</b>{after}{/if}</div>
+    <div class={['exp-note', r.warn && 'err']} role={r.warn ? 'status' : undefined}>{before}{#if after !== undefined}<b>{r.bold}</b>{after}{/if}</div>
   {:else if r.kind === 'error'}
     <Help kind="error" class="exp-note">{r.text}</Help>
   {:else if r.kind === 'dir'}

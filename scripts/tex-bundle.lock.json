@@ -1,0 +1,12 @@
+{
+  "repo": "vtneil/diagramtex",
+  "tag": "tex-2026-cca1ac83f7c4",
+  "file": "diagramtex-tex-2026-cca1ac83f7c4.tar",
+  "size": 126824960,
+  "sha256": "4e023133c59947722014fe3384e2fbf345186ae5f08ca542c220b1c8dbc4775d",
+  "texlive": "2026",
+  "versions": {
+    "pdftex": "2026-0db4a35deee2",
+    "xetex": "2026-a6e3227dfab7"
+  }
+}

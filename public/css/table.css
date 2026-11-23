@@ -9,7 +9,7 @@ body.mode-table #layersWin,
 body.mode-table #topbar .group:not(.files-grp),
 body.mode-table #blockSel, body.mode-table #classicSeg { display: none !important; }
 /* hidden but keeping their room, so the mode switch and the sidebar's engine box stay where they are */
-body.mode-table #docName, body.mode-table #saveState, body.mode-table #topbar .files-grp, body.mode-table #files .panel-head, body.mode-table #docList, body.mode-table #binRow, body.mode-table #gridFlags { visibility: hidden; }
+body.mode-table #docName, body.mode-table #saveStatus, body.mode-table #topbar .files-grp, body.mode-table #files .panel-head, body.mode-table #docList, body.mode-table #binRow, body.mode-table #gridFlags { visibility: hidden; }
 body.mode-table #rightCol { top: 8px; height: calc(100% - 16px); }
 
 .tbw {

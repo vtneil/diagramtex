@@ -59,6 +59,7 @@ export const ICONS = {
   undo: { d: '<path transform="translate(0 -2)" d="M7 5L3 9l4 4"/><path transform="translate(0 -2)" d="M3 9h9a4.5 4.5 0 010 9H9"/>' },
   redo: { d: '<path transform="translate(0 -2)" d="M13 5l4 4-4 4"/><path transform="translate(0 -2)" d="M17 9H8a4.5 4.5 0 000 9h3"/>' },
   edit: { d: '<path d="M4 16l1-4 8-8 3 3-8 8z"/>' },
+  more: { d: '<path d="M5 10h.01M10 10h.01M15 10h.01" stroke-width="2.4"/>' }, // more actions (a named style's)
   copy: { d: '<path d="M7 7h9v10H7z"/><path d="M4 13V3h9"/>' },
   cut: { d: '<circle cx="5.5" cy="15" r="2.5"/><circle cx="14.5" cy="15" r="2.5"/><path d="M7 13.2L15 3M13 13.2L5 3"/>' },
   paste: { d: '<path d="M6 4H4v14h12V4h-2"/><path d="M7 2.5h6v3H7z"/>' },

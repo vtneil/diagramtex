@@ -1,6 +1,7 @@
 import { measurementElement } from './measurement';
-import { labelImage } from './label-image';
+import { labelImage, onLabelFontsChange, prepareLabelFont } from './label-image';
 import { runtime as TD } from '../runtime';
+import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai, THAI_BREAK_DEF, THAI_PDF, type TexEngine } from '../core/doc-fonts';
 // Shape definitions: geometry, handles, SVG rendering and TikZ export.
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
@@ -382,11 +383,16 @@ import { runtime as TD } from '../runtime';
   const metricsChanged = () => { for (const listener of metricsListeners) listener(); };
   TD.clearTextCache = () => { htmlCache.clear(); sizeCache.clear(); metricsChanged(); };
   if (typeof document !== 'undefined' && document.fonts) {
+    const redraw = () => { if (TD.app?.state?.mode === 'document') TD.docview?.render?.(); else TD.app?.render?.(); };
     document.fonts.addEventListener('loadingdone', (e: any) => {
-      if (!(e.fontfaces || []).some((f: FontFace) => WEB_FONTS.has(f.family.replace(/["']/g, '')))) return;
+      const web = (e.fontfaces || []).filter((f: FontFace) => WEB_FONTS.has(f.family.replace(/["']/g, '')));
+      if (!web.length) return;
+      for (const f of web) prepareLabelFont(f.family, f.style, f.weight); // for label pictures (src/domain/label-image.ts)
       TD.clearTextCache();
-      if (TD.app?.state?.mode === 'document') TD.docview?.render?.(); else TD.app?.render?.();
+      redraw();
     });
+    // a served font read for label pictures: the pictures made without it, and the shapes drawn with them, are made again
+    onLabelFontsChange(() => { TD.clearTextCache(); redraw(); });
   }
   TD.clearPendingTextCache = (ids?: number[]) => {
     let changed = false;
@@ -572,7 +578,8 @@ import { runtime as TD } from '../runtime';
   // st: { size, font, bold, italic } (any object carrying those keys, e.g. the shape)
   function textStyle(st: any) {
     const px = TD.sizePx(st && st.size != null ? st.size : 'normalsize');
-    const fam = fontOf(st && st.font)[2];
+    // the font default: the document's font (a Classic Document's page.family), Computer Modern unless one is set
+    const df = docFont(TD.docFontKey()), fam = (!st || !st.font || st.font === 'default') && df.key !== 'cm' ? df.css : fontOf(st && st.font)[2];
     return { px, css: `font-size:${r2(px)}px;font-family:${fam.replace(/"/g, "'")};${st && st.bold ? 'font-weight:bold;' : ''}${st && st.italic ? 'font-style:italic;' : ''}` };
   }
   TD.textStyle = textStyle;
@@ -732,10 +739,17 @@ import { runtime as TD } from '../runtime';
 
   // ---------- TikZ helpers ----------
   const f = (n: any) => { const stable = Math.round(n * 1e9) / 1e9; const v = Math.round(stable * 100) / 100; return Object.is(v, -0) ? '0' : String(v); };
-  function makeX() : any {
+  // The open file's document font (a Classic Document's page.family, src/core/doc-fonts.ts): what LaTeX's text is set
+  // in, and what an object's own font is written against
+  TD.docFontKey = () => docFont(TD.state && TD.state.doc && TD.state.doc.page && TD.state.doc.page.family).key;
+  function makeX({ engine = 'pdflatex' as TexEngine, docFont: font = undefined as string | undefined } = {}) : any {
     const colors = new Map();
     const X: Record<string, any> = {
       colors, libs: new Set(), pkgs: new Set(), n: 0,
+      // the LaTeX engine the code is for, the document font, and the preamble lines objects' own fonts need
+      engine, docFont: font || TD.docFontKey(), fontPre: new Set<string>(),
+      // the open file's named styles (src/core/named-styles.ts), written as \tikzset once and named on each shape
+      namedStyles: TD.namedStyles ? TD.namedStyles() : [],
       uid() { return 'td' + ++this.n; },
       // a point a named point stands at is written by its name (X.refs, set per shape by TD.tikzLines)
       c: (x: any, y: any) => { const v = `(${f(x / PX)},${f(-y / PX)})`; return (X.refs && X.refs.get(v)) || v; },
@@ -808,8 +822,10 @@ import { runtime as TD } from '../runtime';
     const o = [], fo = [];
     if (typeof s.size === 'number') { const p = f(s.size * K); fo.push(`\\fontsize{${p}pt}{${f(s.size * K * 1.2)}pt}\\selectfont`); }
     else if (s.size && s.size !== 'normalsize') fo.push('\\' + s.size);
-    const fam = fontOf(s.font)[3];
-    if (fam) fo.push(fam);
+    // the object's own font, written for the engine and against the document's font (src/core/doc-fonts.ts)
+    const fam = objectFont(s.font, X.engine || 'pdflatex', X.docFont || 'cm');
+    if (fam.code) fo.push(fam.code);
+    if (X.fontPre) for (const l of fam.pre) X.fontPre.add(l);
     if (s.bold) fo.push('\\bfseries');
     if (s.italic) fo.push('\\itshape');
     if (fo.length) o.push(`font=${fo.join('')}`);
@@ -1906,6 +1922,57 @@ import { runtime as TD } from '../runtime';
     }
     return null;
   }
+  // A shape linked to one of the file's named styles: \draw[block, …] with only what it sets differently, and the
+  // style defined once (\tikzset{block/.style={…}}, X.decls). Kept only when reading it back, with the style written
+  // out, gives the shape again; otherwise the shape is written in full.
+  const RESET: [RegExp, string][] = [[/^(dashed|dotted|dash dot|dash pattern=)/, 'solid'], [/^(\{[^}]*\}|[^=,{}]*)-(\{[^}]*\}|[^=,{}]*)$/, '-'],
+    [/^fill=/, 'fill=none'], [/^draw=/, 'draw=black'], [/^opacity=/, 'opacity=1'], [/^draw opacity=/, 'draw opacity=1'],
+    [/^fill opacity=/, 'fill opacity=1'], [/^text=/, 'text=black'], [/^text opacity=/, 'text opacity=1']];
+  /** a named style's own options (one list for every kind of shape) */
+  function namedOpts(st: any, X: any) {
+    const k = st.keys || {}, syn = { type: 'rect', ...k };
+    return [...styleOpts(syn, X, { fill: 'fill' in k, arrows: 'startTip' in k || 'endTip' in k }), ...textOpts(syn, X)];
+  }
+  function namedCode(s: any, X: any) {
+    const st = s.style && (X.namedStyles || []).find((q: any) => q.id === s.style);
+    if (!st) return null;
+    const keep = new Map(X.colors), refs = X.refs;
+    let code, plain, def: string[];
+    try { def = namedOpts(st, X); code = shapeCode(s, X); X.refs = null; plain = shapeCode(s, X); }
+    finally { X.refs = refs; }
+    const RE = /^\\(draw|fill|filldraw|path|node|shade|shadedraw)\b(?:\[((?:[^\[\]]|\[[^\]]*\])*)\])?/;
+    const m = RE.exec(code || ''), mp = RE.exec(plain || '');
+    const undo = () => { X.colors.clear(); for (const [a, b] of keep) X.colors.set(a, b); };
+    if (!m || !mp || stmtCount(code) !== 1) { undo(); return null; }
+    const cur = splitOpts(m[2] || ''), key = (o: string) => o.split('=')[0].trim();
+    const own = cur.filter((o) => !def.includes(o));
+    // what the style sets that the shape does not have: set back (a style's dashes on a solid shape: solid)
+    const resets = [];
+    for (const d of def) {
+      if (cur.includes(d)) continue;
+      const r = RESET.find(([re]) => re.test(d));
+      if (r && !own.some((o) => key(o) === key(d) || r[0].test(o))) resets.push(r[1]);
+    }
+    const opts = [...own, ...resets];
+    if (!drawsSame(s, X, plain!.replace(mp[0], `\\${m[1]}[${[st.name, ...opts].join(', ')}]`), st.name, def, plain!)) { undo(); return null; }
+    const id = 'style:' + st.id;
+    if (!X.decls) X.decls = new Map();
+    if (!X.decls.has(id)) X.decls.set(id, { name: st.name, decl: `\\tikzset{${st.name}/.style={${def.join(', ')}}}` });
+    return code!.replace(m[0], `\\${m[1]}[${[st.name, ...opts].join(', ')}]`);
+  }
+  TD.namedStyleDef = (st: any) => namedOpts(st, makeX()).join(', ');
+  // `code` (naming style `name`, defined as `def`) read back, with the picture's colours, writes the same TikZ as the
+  // shape does (`plain`): the same drawing, whatever defaults the reader fills in
+  function drawsSame(s: any, X: any, code: string, name: string, def: string[], plain: string) {
+    const R = TD.importInternals && TD.importInternals.preview;
+    if (!R) return false;
+    const colours = [...X.colors].map(([hex, nm]: any) => `\\definecolor{${nm}}{HTML}{${hex.slice(1).toUpperCase()}}`).join('\n');
+    let r;
+    try { r = R(colours + '\n' + code, [], {}, {}, { [name]: def.join(', ') }).shapes; } catch (e: any) { return false; }
+    if (!r || r.length !== 1 || r[0].type !== s.type) return false;
+    const refs = X.refs;
+    try { X.refs = null; return shapeCode({ ...r[0], id: s.id }, X) === plain; } catch (e: any) { return false; } finally { X.refs = refs; }
+  }
   // code read back (styles written out) gives the shape again: the fields the same, numbers to rounding
   function readsBack(s: any, code: any) : any {
     const R = TD.importInternals && TD.importInternals.preview;
@@ -1913,7 +1980,7 @@ import { runtime as TD } from '../runtime';
     let r;
     try { r = R(code, [], {}).shapes; } catch (e: any) { return false; }
     if (!r || r.length !== 1 || r[0].type !== s.type) return false;
-    const skip = new Set(['id', 'tex', 'tkStyle', 'refs', 'link1', 'link2', 'g', 'gname', 'name', 'pos', 'locked', 'hidden', 'ex']);
+    const skip = new Set(['id', 'tex', 'tkStyle', 'style', 'so', 'refs', 'link1', 'link2', 'g', 'gname', 'name', 'pos', 'locked', 'hidden', 'ex']);
     const near = (a: any, b: any): boolean => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 0.25
       : Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((v, i) => near(v, b[i]))
       : a && b && typeof a === 'object' && typeof b === 'object' ? [...new Set([...Object.keys(a), ...Object.keys(b)])].every((k) => near(a[k], b[k]))
@@ -2059,7 +2126,7 @@ import { runtime as TD } from '../runtime';
       X.refs = refMap(s, shapes, n, X);
       let code, placed = null;
       try {
-        code = styledCode(s, X) || shapeCode(s, X);
+        code = namedCode(s, X) || styledCode(s, X) || shapeCode(s, X);
         placed = posCode(s, code, shapes, n);
         if (placed) code = placed;
       } finally { X.refs = null; }
@@ -2166,8 +2233,23 @@ import { runtime as TD } from '../runtime';
     const dx = -Math.round(B.x / PX) * PX, dy = -Math.round(B.y / PX) * PX;
     return { shapes: shapes.map((s: any) => { const c = JSON.parse(JSON.stringify(s)); TD.translate(c, dx, dy); return c; }), note: null };
   };
-  TD.toTikz = function (shapes: any, { standalone = false } = {}) {
-    const X = makeX();
+  /**
+   * The preamble lines for the text's fonts: the document font (`doc`: false for a snippet, which goes into someone's own
+   * document), the fonts objects ask for, and for Thai text its fonts and the \tdbr its line breaks use.
+   */
+  TD.fontLines = (X: any, body: string, { doc = true } = {}) => {
+    const engine: TexEngine = X.engine || 'pdflatex', main = doc ? docFontPreamble(X.docFont, engine) : [];
+    // Thai: with XeLaTeX a Thai font for Thai in a Latin one; with pdfLaTeX the TLWG fonts' LTH faces (src/core/doc-fonts.ts)
+    const thai = !hasThai(body) ? [] : engine === 'xelatex' ? [...(docFont(X.docFont).thai ? [] : thaiFallback()), THAI_BREAK_DEF] : [...THAI_PDF, THAI_BREAK_DEF];
+    // fontspec once: as the document loads it (with no-math), or plainly
+    const spec = main.find((l) => /^\\usepackage(\[[^\]]*\])?\{fontspec\}$/.test(l));
+    return [...new Set([...main, ...(X.fontPre || []), ...thai])].filter((l) => !(spec && l !== spec && l === '\\usepackage{fontspec}'));
+  };
+  /** A Thai document font with pdfLaTeX, which sets only its Thai in it: said in the code. */
+  TD.fontNote = (X: any) => X.engine !== 'xelatex' && docFont(X.docFont).thai
+    ? `The document font ${docFont(X.docFont).label}: pdfLaTeX sets its Thai in it and the rest in Computer Modern; XeLaTeX sets all of it.` : null;
+  TD.toTikz = function (shapes: any, { standalone = false, engine = 'pdflatex' as TexEngine, docFont: font = undefined as string | undefined } = {}) {
+    const X = makeX({ engine, docFont: font });
     if (standalone) X.preDefs = new Set();
     const reach = TD.texReach(shapes);
     shapes = reach.shapes;
@@ -2176,7 +2258,10 @@ import { runtime as TD } from '../runtime';
     // the maths and text styles in labels: their packages, and definitions for \mathbfit and \mathsfit
     const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(pic) : { pkgs: [], defs: [] };
     for (const p of need.pkgs) X.pkgs.add(p);
-    const pre = [...TD.preamble(X), ...need.defs, ...(X.preDefs ? X.preDefs : [])];
+    const pre = [...TD.preamble(X), ...need.defs, ...(X.preDefs ? X.preDefs : []), ...TD.fontLines(X, pic, { doc: standalone })];
+    const fontNote = TD.fontNote(X);
+    if (fontNote && standalone) (X.notes = X.notes || new Set()).add(fontNote);
+    const done = (tex: string) => finishThai(tex, X.engine || 'pdflatex');
     if (!standalone) {
       // a snippet: the packages on one comment line, and any compatibility lines (each its own line) to copy
       const c = TD.preambleCompat(X), extra = [...c.before, ...c.after, ...need.defs];
@@ -2184,9 +2269,9 @@ import { runtime as TD } from '../runtime';
       const alt = pre.includes('\\usetikzlibrary{quantikz2}') ? ['% (or \\usepackage{quantikz} in place of \\usetikzlibrary{quantikz2})'] : [];
       const note = c.before.length ? ['% and, in the preamble, these lines (the first block before \\usetikzlibrary{quantikz2}):', ...extra.map((l) => '%   ' + l)]
         : extra.length ? ['% and, in the preamble, these lines:', ...extra.map((l) => '%   ' + l)] : [];
-      return [head, ...alt, ...note, ...notesOf(X), pic, ''].join('\n');
+      return done([head, ...alt, ...note, ...notesOf(X), pic, ''].join('\n'));
     }
-    return [
+    return done([
       ...notesOf(X),
       // standalone's tikz option breaks zx-calculus (an error at \begin{document}); one picture needs no option
       pre.some((l) => l.includes('{zx-calculus}')) ? '\\documentclass[border=4pt]{standalone}' : '\\documentclass[tikz, border=4pt]{standalone}',
@@ -2195,6 +2280,6 @@ import { runtime as TD } from '../runtime';
       pic,
       '\\end{document}',
       '',
-    ].join('\n');
+    ].join('\n'));
   };
 })();

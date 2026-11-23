@@ -25,6 +25,15 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           save-cache: "true"
+      # The in-browser LaTeX's TeX Live bundles stay out of the repository: the archive pinned in
+      # scripts/tex-bundle.lock.json comes from its GitHub release (checked against the lock's SHA-256)
+      # and goes into dist/ with the rest, so the Preview and production serve it themselves.
+      - name: Restore the TeX Live bundle archive
+        uses: actions/cache@v6
+        with:
+          path: .tex-bundle
+          key: tex-bundle-${{ hashFiles('scripts/tex-bundle.lock.json') }}
+      - run: node scripts/tex-bundle-fetch.mjs
       - run: npm run build
       - uses: actions/upload-artifact@v7
         with:
