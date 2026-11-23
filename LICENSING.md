@@ -16,7 +16,7 @@ Third-party assets or content incorporated into an output may remain subject to 
 
 ### Third-party software and assets
 
-Bundled third-party software and fonts retain their own licencss and copyright notices, shipped beside them in `public/vendor/`, `public/fonts/` and `public/tex/` (or `vendor/`, `fonts/` and `tex/` in the built distribution). All are compatible with AGPL-3.0-or-later.
+Bundled third-party software and fonts retain their own licenses and copyright notices, shipped beside them in `public/vendor/`, `public/fonts/` and `public/tex/` (or `vendor/`, `fonts/` and `tex/` in the built distribution). All are compatible with AGPL-3.0-or-later.
 
 | Component | Where | License | License file |
 |---|---|---|---|
