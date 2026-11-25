@@ -45,12 +45,15 @@ const TREES = ['tikz.sty', 'pgf.revision.tex', 'pgfplots.sty', 'pgfplots.revisio
   'array.sty', 'colortbl.sty', 'multirow.sty', 'standalone.cls', 'svg.sty', 'eso-pic.sty', 'mathrsfs.sty', 'dsfont.sty', 'physics.sty',
   'braket.sty', 'cancel.sty', 'xparse.sty', 'etoolbox.sty', 'pgfopts.sty', 'trimspaces.sty', 'environ.sty', 'tcolorbox.sty', 'enumitem.sty',
   'caption.sty', 'subcaption.sty', 'float.sty', 'hyperref.sty', 'url.sty', 'microtype.sty', 'lmodern.sty', 'fontenc.sty', 'textcomp.sty',
-  'times.sty', 'bm.sty', 'newtxtext.sty', 'newpxtext.sty', 'tgheros.sty'];
+  'times.sty', 'bm.sty', 'newtxtext.sty', 'newpxtext.sty', 'tgheros.sty',
+  // what labels' maths may need (TD.lint.mathNeeds: the commands the maths engines draw)
+  'mhchem.sty', 'nicefrac.sty', 'xfrac.sty', 'tensor.sty', 'slashed.sty', 'centernot.sty', 'upgreek.sty', 'euscript.sty'];
 const TREES_XE = ['fontspec.sty', 'xunicode.sty']; // XeLaTeX only
 // A document that loads them, so what they load in turn is recorded too (step 2).
 const EXTRA = String.raw`\documentclass{article}
 \usepackage[T1]{fontenc}\usepackage{lmodern}\usepackage{amsmath,amssymb,mathtools,siunitx,geometry,xcolor,graphicx}
 \usepackage{array,booktabs,colortbl,multirow,longtable,tabularx,hhline,bm,mathrsfs,dsfont,physics,braket,cancel}
+\usepackage[version=4]{mhchem}\usepackage{nicefrac,xfrac,tensor,slashed,centernot,upgreek,euscript}
 \usepackage{enumitem,caption,subcaption,float,eso-pic,microtype,url,hyperref}
 \usepackage{tikz,pgfplots,circuitikz,tikz-cd,forest,zx-calculus,tikz-3dplot,tikz-timing,karnaugh-map,bytefield,chemfig,blochsphere}
 \usepackage{pgf-umlcd}\usepackage{pgf-umlsd}\usepackage{tcolorbox}\usepackage[all]{xy}

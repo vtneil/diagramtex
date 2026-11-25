@@ -79,3 +79,20 @@ T.test('paragraph box: made narrower, it grows to take in the text it now wraps 
   T0.setHandle(s, 's', { x: 50, y: top + 10 }, {}, o2);
   T.ok(Math.abs(s.th - o2.th) < 0.01, 'and it cannot be dragged shorter than its text');
 });
+
+T.test('text styles: \\text, \\mbox and the kerns \\, and \\! in prose draw as LaTeX does and write back as typed', () => {
+  T.eq(TD.prose.html(TD.prose.parse('\\text{...} \\mbox{a b}')), '... a b', 'their argument as it is');
+  const w = (t) => TD.textBox(t, { size: 10 }).w, em = 10;
+  T.ok(Math.abs(w('Q5') - w('Q\\!5') - em / 6) < 0.05, `\\! is -1/6 em: ${w('Q5')} ${w('Q\\!5')}`);
+  T.ok(Math.abs(w('Q\\,5') - w('Q5') - em / 6) < 0.05, `\\, is 1/6 em: ${w('Q\\,5')}`);
+  T.eq(TD.proseUnheld('Q\\!5\\,x'), null, 'held');
+  T.eq(TD.prose.source(TD.prose.parse('Q\\!5\\,x'), (x) => x), 'Q\\!5\\,x', 'written back');
+});
+
+T.test('text styles: a group or command round a formula in text holds it ({$x$}, \\textbf{a $x$ b}), with no brace left over', () => {
+  const plain = TD.textBox('{$x$}', { size: 10 }).html.replace(/<[^>]*>/g, '');
+  T.ok(!/\}/.test(plain), 'no stray brace: ' + plain);
+  const b = TD.textBox('\\textbf{a $x$ b}', { size: 10 }).html;
+  T.ok(/font-weight:bold'>a <span[^>]*katex[\s\S]* b<\/span>/.test(b), 'the bold runs round the formula: ' + b.slice(0, 200));
+  T.eq(TD.importLatex('\\begin{tikzpicture}\\node {\\small{$S$}};\\end{tikzpicture}').blocks.flatMap((x) => x.shapes)[0].text, '$S$', '\\small{…}: the size, and the text without its group');
+});

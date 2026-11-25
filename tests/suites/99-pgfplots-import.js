@@ -114,7 +114,9 @@ T.test('pgfplots import: what the plot does not hold keeps the code, previewed b
   T.eq(sh.map((s) => s.type), ['tikz']);
   T.eq(sh[0].prev.map((s) => s.type), ['plot'], 'the plot previews the code');
   const iss = sh[0].issues.join('; ');
-  T.ok(/xticklabels/.test(iss) && /const plot/.test(iss) && /\\node/.test(iss), iss);
+  T.ok(/xticklabels/.test(iss) && /const plot/.test(iss), iss);
+  // (TikZ in the axis is held and drawn by the plot: tests/suites/99-pgfplots-parity.js)
+  T.eq(sh[0].prev[0].annot.map((a) => a.code), ['\\node at (axis cs:1,1) {top};'], 'the node held');
   T.ok(sh[0].code.includes('\\begin{axis}'), 'code kept as written');
 });
 
@@ -126,4 +128,21 @@ T.test('pgfplots import: styles that fan out are expanded within a budget', () =
   const r = TD.pgfplotsImport.fromAxis('axis', 's0', '\\addplot {x};', { styles });
   T.ok(performance.now() - t < 2000, `finishes promptly (${Math.round(performance.now() - t)} ms)`);
   T.ok(r && r.shape, 'the axis still imports');
+});
+
+T.test('pgfplots import: a line width on the axis is its lines\', and the plots\' and drawing\'s that give none', () => {
+  const p = pgfNative(pgfPic(String.raw`\begin{axis}[axis lines=middle, xmin=0, xmax=4, ymin=0, ymax=4, ultra thick]
+\addplot[blue, domain=0:3] {x};
+\addplot[red, domain=0:3, thick] {2*x};
+\draw (1,0) -- (1,3);
+\end{axis}`));
+  pgfNear(p.lineWidth, 1.6 * pgfPts, 'ultra thick is 1.6pt');
+  pgfNear(p.series[0].width, 1.6 * pgfPts, 'a plot without its own');
+  pgfNear(p.series[1].width, 0.8 * pgfPts, 'thick of its own');
+  T.ok(!(p.warnings || []).some((w) => /ultra thick/.test(w)), 'held: ' + p.warnings);
+  const svg = TD.TYPES.plot.svg({ ...p, id: 't' }, {});
+  const widths = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map((m) => +m[1]);
+  T.ok(widths.every((w) => w > 0.8 * pgfPts - 1e-3), 'nothing drawn at the default 0.4pt: ' + widths.join(' '));
+  T.eq(widths.filter((w) => Math.abs(w - 0.8 * pgfPts) < 1e-3).length, 1, 'only the plot with its own thick is thinner');
+  T.ok(/line width=1\.6pt/.test(TD.toTikz([{ ...p, xmax: '5' }])), 'written back');
 });

@@ -7,7 +7,7 @@ TD.panels.qc = {
     model(s) {
       const L = layout(s);
       return { kind: 'source' as const, title: "quantikz", summary: `${L.R} × ${L.C}`, src: s.src,
-        rows: 7, warnings: L.warnings, helpBefore: msg('model.help.circuit', 'Double-click the circuit to edit it visually. Exported with '), package: `\\usetikzlibrary{quantikz2}`, helpAfter: ".",
+        rows: 7, warnings: L.warnings, helpBefore: msg('model.help.circuit', 'Double-click the circuit to edit it visually. Exported with '), package: `\\usetikzlibrary{${s.lib === 'quantikz' ? 'quantikz' : 'quantikz2'}}`, helpAfter: ".",
         actions: [{"class": "wide primary", "action": "editqc", "label": msg('ui.edit.circuit', 'Edit Circuit…')}, {"class": "wide", "action": "copyqc", "label": msg('model.copy.quantikz.code', 'Copy quantikz Code')}] };
     },
     apply(s, t) { if (t.dataset.p === 'src') s.src = t.value; return false; },

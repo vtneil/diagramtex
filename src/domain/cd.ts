@@ -105,7 +105,7 @@ function label(item: any) {
     else if (c === '"' && d === 0) break;
   }
   let t = s.slice(1, j), rest = s.slice(j + 1).trim(), swap = false;
-  if (/^\{[\s\S]*\}$/.test(t)) t = t.slice(1, -1);
+  if (oneGroup(t)) t = t.slice(1, -1);
   if (rest[0] === "'") { swap = true; rest = rest.slice(1).trim(); }
   let opts = [];
   if (rest[0] === '{') { const k = Z.close(rest, 0); opts = Z.opts(rest.slice(1, k < 0 ? rest.length : k)).list; }
@@ -114,8 +114,11 @@ function label(item: any) {
   if (opts.includes('swap') || opts.includes("'")) { swap = !swap; opts = opts.filter((x: any) => x !== 'swap' && x !== "'"); }
   return { t, swap, opts };
 }
+// whether a text is one {…} group ({proj}_{\ast} is two)
+const oneGroup = (t: any) => t[0] === '{' && Z.close(t, 0) === t.length - 1;
 function labelCode(L: any) {
-  const t = /[",]|^\s|\s$/.test(L.t) && !/^\{.*\}$/.test(L.t) ? `{${L.t}}` : L.t;
+  // braced when it holds what would end the label or split the diagram's cells and rows (" , & \\) or edge spaces
+  const t = /[",&]|\\\\|^\s|\s$/.test(L.t) && !oneGroup(L.t) ? `{${L.t}}` : L.t;
   const o = L.opts.filter(Boolean);
   return `"${t}"${L.swap ? "'" : ''}${o.length ? (o.length === 1 && /^[a-z ]+$/.test(o[0]) ? ` ${o[0]}` : `{${o.join(', ')}}`) : ''}`;
 }
@@ -306,6 +309,9 @@ function style(items: any, warn: any, PR?: any) {
     if (name === '2tail reversed') { A.tail = 'implies'; continue; }
     if (name === 'no body') { A.nobody = true; continue; }
     if (name === 'loop') { A.loop = true; continue; }
+    // TikZ's loop above/below/left/right: a loop out and in at these angles
+    const LOOPS: Record<string, [number, number]> = { 'loop above': [105, 75], 'loop below': [285, 255], 'loop left': [195, 165], 'loop right': [15, -15] };
+    if (Object.prototype.hasOwnProperty.call(LOOPS, name) && arg == null) { A.loop = true; [A.outA, A.inA] = LOOPS[name]; continue; }
     if (name === 'distance') { const l = length(unbrace(arg), PX); if (l != null) { A.dist = l; continue; } }
     if (name === 'scaling nfold') { const n = parseInt(unbrace(arg), 10); if (n > 2) warn(`The ${n}-fold arrow is drawn double here (it is kept in the code)`); continue; }
     if (name === 'nfold') { const n = arg == null ? 2 : parseInt(unbrace(arg), 10); if (n === 1) A.dbl = false; else if (n > 2) warn(`The ${n}-fold arrow is drawn double here (it is kept in the code)`); continue; }
@@ -353,6 +359,9 @@ function style(items: any, warn: any, PR?: any) {
     if (k) { A.color = A.lcolor = k; continue; }
     warn(`The arrow option "${it}" isn't drawn here (it is kept in the code)`);
   }
+  // a loop with no angles of its own (TikZ's bare loop) is far wider than one with them (measured: 89pt by 51pt round
+  // an A): not drawn here
+  if (A.loop && A.outA == null && A.inA == null) warn('The arrow option "loop" without in= and out= isn\'t drawn here (it is kept in the code)');
   return A;
 }
 
@@ -365,11 +374,12 @@ const HK = 0.68;
 // axis, where tikz-cd's asymmetrical rectangle puts its centre (A: 8pt above the axis, 6.2pt below).
 const TXT_DY = 1.4, BB_DY = 0.2, LAB_PAD = 1.2; // text lower, drawing within TeX's picture box (whose label nodes keep their inner sep)
 const strutH = (b: any) => { const m = /katex-strut" style="height:([\d.]+)em/.exec(b.html || ''); return m ? +m[1] * b.px : HK * b.h; };
-const mathOf = (t: any) => { t = texColors(String(t)); return /\$/.test(t) ? t : `$${t}$`; };
+// (an end of line in maths is a space, which maths ignores)
+const mathOf = (t: any) => { t = texColors(String(t)); return /\$/.test(t) ? t : `$${t.replace(/\s*\n\s*/g, ' ')}$`; };
 const cache = new Map();
 function layout(s: any) {
   if (s.arrows) upgrade(s);
-  const key = [s.src, TD.math && TD.math.engine, s.minCell || 0].join('\u0001');
+  const key = [s.src, TD.math && TD.math.engine, s.minCell || 0, s.tex?.preamble || ''].join('\u0001');
   const hit = cache.get(key);
   if (hit) return hit;
   const L = build(s);
@@ -404,7 +414,10 @@ function build(s: any, PR?: any) {
     if (name === 'column sep') { cs = sepValue('column', arg, warn); continue; }
     if (name === 'sep') { rs = sepValue('row', arg, warn); cs = sepValue('column', arg, warn); continue; }
     if (name === 'arrows' || name === 'every arrow/.append style') { every.push(...Z.opts(String(arg || '').replace(/^\{([\s\S]*)\}$/, '$1')).list); continue; }
-    if (/^(ampersand replacement|baseline|1-row diagram|math mode|cramped|background color|execute at end picture|remember picture|nodes in empty cells)$/.test(name)) continue;
+    if (/^(ampersand replacement|baseline|1-row diagram|math mode|cramped|background color|execute at end picture|execute at begin picture|remember picture|nodes in empty cells)$/.test(name)) continue;
+    // the matrix's name (for the code those draw): every matrix/.append style={name=m}, execute at begin matrix={\tikzset{name=m}}
+    if (/^every matrix\/\.(append )?style$/.test(name) && /^\s*name\s*=\s*[^,]+$/.test(unbrace(String(arg || '')))) continue;
+    if (name === 'execute at begin matrix' && /^\s*\\tikzset\s*\{\s*name\s*=\s*[^,{}]+\}\s*$/.test(unbrace(String(arg || '')))) continue;
     if (it === 'cramped') continue;
     warn(`The diagram option "${it}" isn't drawn here (it is kept in the code)`);
   }
@@ -416,7 +429,9 @@ function build(s: any, PR?: any) {
   // axis (2.5pt above it), so a cell reaches (height + sep - axis) above the arrow line and (depth + sep + axis) below it.
   const AXIS = 2.5 * PT, ISEP = PR ? PR.margin : 0.85 * EX, XSEP = PR ? PR.margin : EX;
   const look = cells.map((r: any) => r.map((c: any) => {
-    if (!c.t) return null;
+    // xymatrix sets every entry in its \entrybox, an empty one too: 2 \objectmargin wide and tall, from objectmargin less half
+    // the axis above the arrows' line to objectmargin and half the axis below it (xymatrix.tex). tikz-cd: no node
+    if (!c.t || (PR && !c.t.replace(/[{}\s]/g, ''))) return PR ? { empty: true, w: 2 * PR.margin, up: PR.margin - AXIS / 2, down: PR.margin + AXIS / 2, h: 2 * PR.margin } : null;
     const b = TD.textBox(mathOf(c.t), NORMAL);
     const m = /katex-strut" style="height:([\d.]+)em(?:;vertical-align:(-?[\d.]+)em)?/.exec(b.html || '');
     let ht = 6.83 * PT, dp = 0;
@@ -455,7 +470,7 @@ function build(s: any, PR?: any) {
   }
   const nodeAt = (r: any, c: any) => { const m = look[r] && look[r][c]; return { x: cx[c], y: cy[r], oy: m ? (m.down - m.up) / 2 : 0, w: m ? m.w : 0, h: m ? m.h : 0 }; };
   const nodes = [];
-  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) { const m = look[r][c]; if (m) { const nc = nodeColor(cells[r][c].node); nodes.push({ x: cx[c], y: cy[r], oy: (m.down - m.up) / 2, w: m.w, h: m.h, t: mathOf(cells[r][c].t), b: m.b, cell: [r, c], color: (nc && TD.tikzColor(nc.spec)) || null }); } }
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) { const m = look[r][c]; if (m && !m.empty) { const nc = nodeColor(cells[r][c].node); nodes.push({ x: cx[c], y: cy[r], oy: (m.down - m.up) / 2, w: m.w, h: m.h, t: mathOf(cells[r][c].t), b: m.b, cell: [r, c], color: (nc && TD.tikzColor(nc.spec)) || null }); } }
 
   // a point on a node's border: from p along u (leaving the box), or in a direction (TikZ degrees)
   const exit = (n: any, p: any, u: any) => {
@@ -488,7 +503,9 @@ function build(s: any, PR?: any) {
       if (m[1] === 'from') from = e; else to = e;
     }
     if (!to) to = { cell: [r, c] };
-    if (from.cell && to.cell && from.cell[0] === to.cell[0] && from.cell[1] === to.cell[1] && !ar.items.some((x: any) => /^loop\b/.test(x.trim()))) { warn('An arrow with no direction (like \\arrow[]) is skipped'); return; }
+    // (xy: an arrow to a target named otherwise, "1";"2" or [ur]+<…>, has no direction here)
+    const xt = PR && ar.items.map((x: any) => /^xy target\s*=\s*\{([\s\S]*)\}$/.exec(x.trim())).find(Boolean);
+    if (from.cell && to.cell && from.cell[0] === to.cell[0] && from.cell[1] === to.cell[1] && !ar.items.some((x: any) => /^loop\b/.test(x.trim()))) { warn(xt ? `The arrow target ${xt[1]} isn't drawn here (it is kept in the code)` : 'An arrow with no direction (like \\arrow[]) is skipped'); return; }
     if ((from.cell && !inside(...(from.cell as [any, any]))) || (to.cell && !inside(...(to.cell as [any, any])))) { warn(`An arrow from row ${r + 1}, column ${c + 1} points outside the diagram`); return; }
     const A = style(every.concat(ar.items), warn, PR);
     void base;
@@ -565,7 +582,17 @@ function build(s: any, PR?: any) {
     const drawn = A.between && A.between[1] > A.between[0] ? sub(seg, A.between[0], A.between[1]) : seg;
     arrows.push({ seg: drawn, A, src: [r, c, ai], to: toCell });
     A.ends = { S, T };
-    A.labels.forEach((L: any, li: any) => placeLabel(L, A, seg, [r, c, ai, li]));
+    // (xy's '[d][dd]: the labels are the last segment's, from where the line leaves the passed entry to the arrow's end)
+    let lseg = seg;
+    if (A.via) {
+      const V = nodeAt(r + A.via[0], c + A.via[1]), p0 = at(seg, 0), p1 = at(seg, 1), L2 = (p1.x - p0.x) ** 2 + (p1.y - p0.y) ** 2 || 1;
+      const k = ((V.x - p0.x) * (p1.x - p0.x) + (V.y + V.oy - p0.y) * (p1.y - p0.y)) / L2;
+      const e = exit(V, { x: p0.x + k * (p1.x - p0.x), y: p0.y + k * (p1.y - p0.y) }, u);
+      const t = ((e.x - p0.x) * (p1.x - p0.x) + (e.y - p0.y) * (p1.y - p0.y)) / L2;
+      if (A.curve != null || A.bend != null || A.shift) warn('The labels of an arrow through an entry (\'[…]) are drawn along the whole arrow');
+      else if (t > 0 && t < 1) lseg = sub(seg, t, 1);
+    }
+    A.labels.forEach((L: any, li: any) => placeLabel(L, A, lseg, [r, c, ai, li]));
   }
   // labels: at the middle (or pos), on the left of the arrow (auto), ' puts them on the right; name= keeps the point
   function placeLabel(L: any, A: any, seg: any, src: any) {
@@ -731,6 +758,16 @@ function build(s: any, PR?: any) {
   const ARROW = (a: any) => {
     const pts = [];
     if (a.route) for (const e of a.route) for (let i = 0; i <= 8; i++) { const t = i / 8, v = e.v || { x: (e.p.x + e.q.x) / 2, y: (e.p.y + e.q.y) / 2 }; pts.push({ x: (1 - t) * (1 - t) * e.p.x + 2 * t * (1 - t) * v.x + t * t * e.q.x, y: (1 - t) * (1 - t) * e.p.y + 2 * t * (1 - t) * v.y + t * t * e.q.y }); }
+    else if (!PR && a.seg && a.seg.c1 && (a.A.loop || a.A.bend != null || a.A.inA != null || a.A.outA != null)) {
+      // a TikZ curve: pgf's picture size takes its control points, half a line width round (and the node's outer sep
+      // past the border), and its tips at the ends (measured: loop left/right/above/below round an A reach 14.14pt past
+      // it; bend left, bend right and out=90, in=90 between two cells as pdflatex's box)
+      // (the border the curve leaves is the node's outer sep, half a line width, further out: its controls with it)
+      const S = a.seg, H = LW / 2, far = (c: any, p: any) => { const d = Math.hypot(c.x - p.x, c.y - p.y) || 1; return { x: c.x + (H * (c.x - p.x)) / d, y: c.y + (H * (c.y - p.y)) / d }; };
+      for (const c of [S.p0, far(S.c1, S.p0), far(S.c2, S.p1), S.p1]) ext(c.x - H, c.y - H, c.x + H, c.y + H);
+      for (const t of [0, 1]) { const p = at(S, t); ext(p.x - 2 * PT, p.y - 2 * PT, p.x + 2 * PT, p.y + 2 * PT); }
+      return;
+    }
     else for (let i = 0; i <= 16; i++) pts.push(at(a.seg, i / 16));
     for (const p of pts) ext(p.x - 2 * PT, p.y - 2 * PT, p.x + 2 * PT, p.y + 2 * PT);
   };
@@ -739,13 +776,45 @@ function build(s: any, PR?: any) {
   // xymatrix's own box leaves out its curved arrows: the export centres the node on this box
   const ebox = nodes.length ? { x: x1, y: y1 - BB_DY, w: x2 - x1, h: y2 - y1 } : null;
   for (const a of arrows) if (arc(a)) ARROW(a);
+  // TikZ code in the diagram's options (execute at begin / end picture={…}): drawn with it, its cells named as tikz-cd
+  // names them (the matrix's name-row-column, |[alias=a]| and |[name=a]|), and the matrix by its cells' box; code on
+  // the background layer under the diagram, the rest over it
+  const under: any[] = [], over: any[] = [];
+  if (!PR && DRAW_DEPTH < 2 && TD.importInternals?.drawWith) {
+    const code = (k: string) => P.env.list.filter((it: any) => Z.styleOf(it).name === k).map((it: any) => unbrace(String(Z.styleOf(it).arg || ''))).join('\n').trim();
+    const before = code('execute at begin picture'), after = code('execute at end picture');
+    if (before || after) {
+      const nm = /\bname\s*=\s*([^,{}\s]+)/.exec(P.env.list.filter((it: any) => /^(every matrix|execute at begin matrix)/.test(Z.styleOf(it).name)).join(','))?.[1] || 'tikzcd-matrix';
+      const named: Record<string, any> = {};
+      for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+        const m = look[r] && look[r][c], box = { x: cx[c], y: cy[r] + (m ? (m.down - m.up) / 2 : 0), w: m ? m.w : 0, h: m ? m.h : 0, kind: 'rect' };
+        named[`${nm}-${r + 1}-${c + 1}`] = box;
+        for (const it of Z.opts(cells[r]?.[c]?.node || '').list) { const { name, arg } = Z.styleOf(it); if ((name === 'alias' || name === 'name') && arg) named[unbrace(String(arg)).trim()] = box; }
+      }
+      const mx1 = colL[0], mx2 = colL[C - 1] + colW[C - 1], my1 = rowT[0], my2 = rowT[R - 1] + rowH[R - 1];
+      named[nm] = { x: (mx1 + mx2) / 2, y: (my1 + my2) / 2, w: mx2 - mx1, h: my2 - my1, kind: 'rect' };
+      const drawCode = (src: string, into: any[]) => {
+        if (!src) return;
+        DRAW_DEPTH++;
+        try {
+          const D = TD.importInternals.drawWith(src.replace(/\\tikzcdmatrixname\b/g, nm), named, s.tex?.preamble);
+          into.push(...D.shapes);
+          for (const w of D.issues) warn(`Not drawn in the TikZ code: ${String(w).slice(0, 80)}`);
+        } finally { DRAW_DEPTH--; }
+      };
+      drawCode(before, under);
+      drawCode(after, /on background layer/.test(after) ? under : over);
+      for (const x of [...under, ...over]) { try { const b = TD.bbox(x); if (isFinite(b.x) && isFinite(b.w)) ext(b.x, b.y, b.x + b.w, b.y + b.h); } catch { /* a shape without a box */ } }
+    }
+  }
   if (!(x2 > x1)) { x1 = colL[0] - 1; x2 = colL[C - 1] + colW[C - 1] + 1; }
   if (!(y2 > y1)) { y1 = rowT[0] - 1; y2 = rowT[R - 1] + rowH[R - 1] + 1; }
   y1 -= BB_DY; y2 -= BB_DY;
   // a last row ended with \\ leaves tikz-cd an empty row: no height, but its row sep
   if (!PR) { const m = /\\\\\s*(?:\[([^\]]*)\])?\s*$/.exec(unwrap(s.src).inner); if (m) y2 += rs.px + (m[1] ? extra(m[1], 'row') : 0); }
-  return { PR, nodes, arrows, labels, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, ebox, warnings, R, C, P, geo: { colL, colW, cx, rowT, rowH, cy, cs: cs.px, rs: rs.px } };
+  return { PR, nodes, arrows, labels, under, over, bb: { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }, ebox, warnings, R, C, P, geo: { colL, colW, cx, rowT, rowH, cy, cs: cs.px, rs: rs.px } };
 }
+let DRAW_DEPTH = 0; // a diagram's TikZ code may hold a diagram of its own: drawn two deep at most
 const D8 = [[-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0]].map(([x, y]) => { const l = Math.hypot(x, y); return { x: x / l, y: y / l }; });
 const DIAG: Record<string, any> = { dl: 0, ld: 0, d: 1, dr: 2, rd: 2, r: 3, ur: 4, ru: 4, u: 5, ul: 6, lu: 6, l: 7 };
 const cross = (a: any, b: any) => a.x * b.y - a.y * b.x;
@@ -845,6 +914,8 @@ function draw(s: any, ctx: any, Lo?: any) {
     out += `<rect x="0" y="0" width="${r2(o.w)}" height="${r2(o.h)}" fill="none" stroke="${ink}" stroke-width="${r2(LW * 2)}" stroke-dasharray="${r2(3 * PT)} ${r2(2 * PT)}" rx="4"/>`;
     if (!ctx.export) out += TD.textSvg('Empty diagram', { size: 'small', font: 'default' }, '#888888', o.w / 2, o.h / 2, ctx);
   } else {
+    const shapes = (list: any[]) => (list || []).map((x: any) => { try { return TD.TYPES[x.type].svg(x, { ...ctx, export: true }); } catch { return ''; } }).join('');
+    out += shapes(Lo.under);
     for (const a of Lo.arrows) out += arrowSvg(a, ink, paper, Lo.PR);
     for (const n of Lo.nodes) out += TD.textSvg(n.t, NORMAL, n.color || s.color || '#000000', n.x, n.y + TXT_DY, ctx);
     for (const l of Lo.labels) {
@@ -853,6 +924,7 @@ function draw(s: any, ctx: any, Lo?: any) {
       // TikZ turns anticlockwise, SVG clockwise
       out += l.rot ? `<g transform="rotate(${r2(-l.rot)} ${r2(l.x)} ${r2(l.y)})">${tx}</g>` : tx;
     }
+    out += shapes(Lo.over);
   }
   const bb = Lo.bb;
   if (!ctx.export) out += `<rect class="hitfill" x="${r2(bb.x)}" y="${r2(bb.y)}" width="${r2(bb.w)}" height="${r2(bb.h)}"/>`;

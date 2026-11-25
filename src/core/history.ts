@@ -17,6 +17,8 @@ interface Snapshot {
   setup?: string;
   /** the file's named styles (page.styles), as JSON */
   styles: string;
+  /** the file's macros (page.macros), as JSON */
+  macros: string;
 }
 export function createDocumentHistory(state: HistoryState, hooks: {
   syncLinks(): void;
@@ -36,6 +38,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     // a Page file's paper is part of its drawing: its pages stack by the paper's height
     setup: state.doc.kind === 'page' ? JSON.stringify(state.doc.page || null) : undefined,
     styles: JSON.stringify(state.doc.page?.styles || null),
+    macros: JSON.stringify(state.doc.page?.macros || null),
   });
   function begin() {
     if (pending) return;
@@ -72,7 +75,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     });
     for (const [id, old] of previous.json) if (!now.json.has(id)) before.push([id, old, positions.get(id)!]);
     const moved = !sameOrder(previous, now);
-    if (before.length || after.length || moved || now.pages !== previous.pages || now.vars !== previous.vars || now.name !== previous.name || now.guides !== previous.guides || now.setup !== previous.setup || now.styles !== previous.styles) {
+    if (before.length || after.length || moved || now.pages !== previous.pages || now.vars !== previous.vars || now.name !== previous.name || now.guides !== previous.guides || now.setup !== previous.setup || now.styles !== previous.styles || now.macros !== previous.macros) {
       const step: HistoryStep = { before, after, size: 64, t: stamp() };
       if (moved) { step.ib = previous.ids; step.ia = now.ids; step.size += 12 * (previous.ids.length + now.ids.length); }
       if (now.pages !== previous.pages) { step.pb = previous.pages; step.pa = now.pages; }
@@ -81,6 +84,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
       if (now.guides !== previous.guides) { step.gb = previous.guides; step.ga = now.guides; step.size += previous.guides.length + now.guides.length; }
       if (now.setup !== previous.setup) { step.sb = previous.setup; step.sa = now.setup; step.size += (previous.setup || '').length + (now.setup || '').length; }
       if (now.styles !== previous.styles) { step.yb = previous.styles; step.ya = now.styles; step.size += previous.styles.length + now.styles.length; }
+      if (now.macros !== previous.macros) { step.mb = previous.macros; step.ma = now.macros; step.size += previous.macros.length + now.macros.length; }
       for (const entry of [...before, ...after]) step.size += entry[1].length;
       state.undo.push(step); trim(); state.redo = [];
       hooks.changed();
@@ -123,6 +127,8 @@ export function createDocumentHistory(state: HistoryState, hooks: {
     if (setup !== undefined) state.doc.page = JSON.parse(setup) || {};
     const styles = back ? step.yb : step.ya;
     if (styles !== undefined) { const value = JSON.parse(styles); if (value) state.doc.page.styles = value; else delete state.doc.page.styles; }
+    const macros = back ? step.mb : step.ma;
+    if (macros !== undefined) { const value = JSON.parse(macros); if (value) state.doc.page.macros = value; else delete state.doc.page.macros; }
     if (base && base.owner === owner()) {
       for (const id of fromIds) if (!toMap.has(id)) base.json.delete(id);
       for (const [id, json] of toMap) base.json.set(id, json);
@@ -133,6 +139,7 @@ export function createDocumentHistory(state: HistoryState, hooks: {
       if (guides !== undefined) base.guides = guides;
       if (setup !== undefined) base.setup = setup;
       if (styles !== undefined) base.styles = styles;
+      if (macros !== undefined) base.macros = macros;
     } else base = null;
     const ids = new Set(list.map(s => s.id));
     for (const id of state.sel) if (!ids.has(id)) state.sel.delete(id);

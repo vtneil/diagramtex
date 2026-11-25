@@ -40,6 +40,7 @@ import CommandSearch, { type CommandSearchModel } from '../CommandSearch.svelte'
       { label: linked ? msg('pal.saveTo', 'Save to {name}', { name: linked.name }) : can ? msg('pal.saveToFile', 'Save to File…') : msg('pal.saveDownload', 'Save (Download .diagramtex)'), words: 'save write file disk download keep', key: linked ? 'Ctrl+S' : 'Ctrl+Shift+S', icon: IC.save, run: () => C.runCmd('save') },
       ...(can ? [{ label: linked ? msg('pal.saveAnother', 'Save to Another File…') : msg('pal.saveNew', 'Save to New File…'), words: 'save as copy file', icon: IC.save, run: () => C.runCmd('saveas') }] : []),
       { label: msg('pal.shareLink', 'Copy Share Link'), words: 'share url link send copy small', icon: IC.link, run: () => C.shareLink(id) },
+      { label: msg('pal.macros', 'Macros…'), words: 'macros newcommand def define definitions preamble operator declaremathoperator commands', icon: IC.tex, when: () => !C.inTool(), run: () => { leaveQuick(); C.editMacros(); } },
       { label: msg('pal.import', 'Import LaTeX or TikZ…'), words: 'paste code tikzpicture import tex', icon: IC.imp, run: () => { leaveQuick(); C.runCmd('import'); } },
       { label: msg('pal.exportImage', 'Export Image (PNG, SVG, PDF)…'), words: 'export picture png svg pdf dpi', icon: IC.exp, when: onCanvas, run: () => C.runCmd('export') },
       { label: kind === 'page' ? msg('pal.latexCode', 'LaTeX Code…') : msg('pal.tikzCode', 'TikZ Code…'), words: 'latex tikz code copy export', key: 'Ctrl+E', icon: IC.tex, when: () => !C.inTool(), run: () => C.runCmd('tikz') },

@@ -34,6 +34,15 @@ jobs:
           path: .tex-bundle
           key: tex-bundle-${{ hashFiles('scripts/tex-bundle.lock.json') }}
       - run: node scripts/tex-bundle-fetch.mjs
+      # Only a vX.Y.Z tag builds as its release number. Every other build (the main Preview among them)
+      # is versioned by its commit: the short hash replaces TD.VERSION in this checkout only, so the app's
+      # footer, version.json and exports name the commit. The repository keeps the release number.
+      - name: Version a non-release build by its commit
+        if: github.ref_type != 'tag'
+        shell: bash
+        run: |
+          sed -i -E "s/(TD\.VERSION = ')[^']+'/\1${GITHUB_SHA::7}'/" src/domain/shapes.ts
+          grep -q "TD.VERSION = '${GITHUB_SHA::7}'" src/domain/shapes.ts
       - run: npm run build
       - uses: actions/upload-artifact@v7
         with:
@@ -63,6 +72,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - run: node scripts/generate-label-glyphs.js --check
+      - run: node scripts/patch-katex.js --check
 
   # Every test uses the same production build. A failing suite doesn't stop the others.
   functional:

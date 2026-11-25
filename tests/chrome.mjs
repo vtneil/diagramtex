@@ -60,8 +60,6 @@ export async function launch(url) {
   await send('Network.enable');
   await send('Network.setBypassServiceWorker', { bypass: true });
   await send('Page.enable');
-  // the welcome tour would cover the app on this fresh profile: mark it seen (its own test opens it)
-  await send('Page.addScriptToEvaluateOnNewDocument', { source: "try { localStorage.setItem('diagramtex.tour', 'seen') } catch (e) {}" });
   await send('Page.navigate', { url });
   const ev = async (body, ms = 600000) => {
     const r = await send('Runtime.evaluate', { expression: `(async()=>{${body}})()`, awaitPromise: true, returnByValue: true }, ms);

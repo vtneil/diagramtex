@@ -27,7 +27,9 @@ export interface BlockDefinition {
   fixed: boolean;
   geometry?: string[][];
   refreshOnDoubleClick?: boolean;
-  nodeImport?: { order: number; re: RegExp; bb?(shape: PositionedShape): Box; opts?: unknown; dedent?: boolean; place?(...args: any[]): any };
+  nodeImport?: { order: number; re: RegExp; bb?(shape: PositionedShape): Box; opts?: unknown; dedent?: boolean; place?(...args: any[]): any; context?(shape: any, C: any): void;
+    /** the document preamble (comments blanked) and the block's code → the code with the setup the preamble gives it */
+    preamble?(pre: string, code: string): string };
   editor?: BlockEditor;
 }
 export function createBlocks(types: Record<string, unknown>, alias: (name: string, open: (id: string) => unknown) => void) {

@@ -1,0 +1,31 @@
+/* TeX's script sizes for KaTeX (DiagramTeX). LaTeX at 10pt sets first-order scripts in the 7pt fonts and second-order
+   ones in the 5pt fonts (\DeclareMathSizes{10}{10}{7}{5}); KaTeX shrinks its 10pt fonts. KaTeX marks every change of
+   size with katex-sizing and the absolute size (size3 = 7pt, size1 = 5pt), so each picks the faces of its size: copies
+   of KaTeX's made from cmr7/cmmi7/cmsy7/cmbx7 … and cmr5/cmmi5/cmsy5/cmbx5 … (scripts/generate-script-fonts.py).
+   Italic text, bold italic and bold calligraphic letters keep KaTeX's 10pt files, and \mathbb its own face.
+   A changed file must be given a new name (vendor files are cached for good). */
+@font-face{font-family:TDScript_Main7;src:url(fonts/TDScript_Main7-Regular.woff2) format("woff2");font-weight:400;font-style:normal}
+@font-face{font-family:TDScript_Main7;src:url(fonts/TDScript_Main7-Bold.woff2) format("woff2");font-weight:700;font-style:normal}
+@font-face{font-family:TDScript_Main7;src:url(fonts/KaTeX_Main-Italic.woff2) format("woff2");font-weight:400;font-style:italic}
+@font-face{font-family:TDScript_Main7;src:url(fonts/KaTeX_Main-BoldItalic.woff2) format("woff2");font-weight:700;font-style:italic}
+@font-face{font-family:TDScript_Math7;src:url(fonts/TDScript_Math7-Italic.woff2) format("woff2");font-weight:400;font-style:italic}
+@font-face{font-family:TDScript_Math7;src:url(fonts/KaTeX_Math-BoldItalic.woff2) format("woff2");font-weight:700;font-style:italic}
+@font-face{font-family:TDScript_Caligraphic7;src:url(fonts/TDScript_Caligraphic7-Regular.woff2) format("woff2");font-weight:400;font-style:normal}
+@font-face{font-family:TDScript_Caligraphic7;src:url(fonts/KaTeX_Caligraphic-Bold.woff2) format("woff2");font-weight:700;font-style:normal}
+@font-face{font-family:TDScript_Main5;src:url(fonts/TDScript_Main5-Regular.woff2) format("woff2");font-weight:400;font-style:normal}
+@font-face{font-family:TDScript_Main5;src:url(fonts/TDScript_Main5-Bold.woff2) format("woff2");font-weight:700;font-style:normal}
+@font-face{font-family:TDScript_Main5;src:url(fonts/KaTeX_Main-Italic.woff2) format("woff2");font-weight:400;font-style:italic}
+@font-face{font-family:TDScript_Main5;src:url(fonts/KaTeX_Main-BoldItalic.woff2) format("woff2");font-weight:700;font-style:italic}
+@font-face{font-family:TDScript_Math5;src:url(fonts/TDScript_Math5-Italic.woff2) format("woff2");font-weight:400;font-style:italic}
+@font-face{font-family:TDScript_Math5;src:url(fonts/KaTeX_Math-BoldItalic.woff2) format("woff2");font-weight:700;font-style:italic}
+@font-face{font-family:TDScript_Caligraphic5;src:url(fonts/TDScript_Caligraphic5-Regular.woff2) format("woff2");font-weight:400;font-style:normal}
+@font-face{font-family:TDScript_Caligraphic5;src:url(fonts/KaTeX_Caligraphic-Bold.woff2) format("woff2");font-weight:700;font-style:normal}
+.katex .katex-sizing{--td-main:KaTeX_Main;--td-math:KaTeX_Math;--td-cal:KaTeX_Caligraphic;font-family:var(--td-main)}
+.katex .katex-sizing.size3{--td-main:TDScript_Main7;--td-math:TDScript_Math7;--td-cal:TDScript_Caligraphic7}
+.katex .katex-sizing.size1{--td-main:TDScript_Main5;--td-math:TDScript_Math5;--td-cal:TDScript_Caligraphic5}
+.katex .textrm,.katex .mathit,.katex .mathbf,.katex .mainrm{font-family:var(--td-main,KaTeX_Main)}
+.katex .mathnormal,.katex .boldsymbol{font-family:var(--td-math,KaTeX_Math)}
+.katex .mathcal{font-family:var(--td-cal,KaTeX_Caligraphic)}
+/* A formula's box starts where its pen starts. WebKit makes a box as wide as the furthest thing in it, past where a
+   negative kern brings the pen back (an array's @{…}), and would centre the formula in the slack */
+.katex .katex-base{text-align:left}

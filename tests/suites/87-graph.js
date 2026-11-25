@@ -22,6 +22,49 @@ T.test('graph: chains, groups and -!- in the graphs syntax', () => {
   T.ok(L.nodes.get('b').x > L.nodes.get('a').x, 'a chain grows right');
 });
 
+// node centres (cm) pdflatex gives these graphs (graphs library placement, \pgfpointanchor{…}{center})
+T.test("graph: nodes are where TikZ's placement puts them (Cartesian, sep, circular, groups and their options)", () => {
+  const cases = [
+    ['', 'a -> {b -> c, d -> {e, f}} -> g', { a: [0, 0], b: [1, 0], c: [2, 0], d: [1, -1], e: [2, -1], f: [2, -2], g: [3, 0] }],
+    ['', 'a -> {b, a, c}; d', { a: [0, 0], b: [1, 0], c: [1, -1], d: [0, -2] }],
+    ['', 'a -> {b -> c -> d, e} -> f; g', { d: [3, 0], e: [1, -1], f: [4, 0], g: [0, -2] }],
+    ['grow down, branch right', 'a -> {b, c} -> d', { b: [0, -1], c: [1, -1], d: [0, -2] }],
+    ['grow right=2cm, branch down=1.5cm', 'a -> {b,c}', { b: [2, 0], c: [2, -1.5] }],
+    ['', 'a -> { [grow down] b -> c } -> d', { b: [1, 0], c: [1, -1], d: [1, 0] }],
+    ['grow up, branch left=2', 'a -> {b -> c, d}', { b: [0, 1], c: [0, 2], d: [-2, 1] }],
+    ['clockwise=4, radius=1.5cm', 'a, b, c, d', { a: [0, 1.5], b: [1.5, 0], c: [0, -1.5], d: [-1.5, 0] }],
+    ['counterclockwise=3, phase=0', 'a -> b, c', { a: [1, 0], b: [2, 0], c: [-0.5, 0.86603] }],
+    ['', 'a -> b[at={(5,5)}] -> c', { b: [6, 5], c: [2, 0] }],
+    ['grow right sep, branch down sep', 'a -> {b, c}', { a: [0.21204, -0.19983], b: [0.99733, -0.2462], c: [0.9778, -1.0437] }],
+    ['nodes={circle,draw}, grow right sep=7.5mm', 'a -> bb -> c', { a: [0.28767, 0], bb: [1.7244, 0], c: [3.15509, 0] }],
+    // graphs.standard's subgraphs: a node per value of V, a bare clockwise turning by 360/(their number)
+    ['clockwise, radius=2cm', 'subgraph C_n [n=5,name=A]', { 'A 1': [0, 2], 'A 2': [1.90213, 0.61804], 'A 4': [-1.17557, -1.61804] }],
+    ['clockwise, radius=1cm, n=4', 'subgraph C_n [name=inner] -- subgraph C_n [name=outer]', { 'inner 2': [1, 0], 'outer 1': [0, 2], 'outer 4': [-2, 0] }],
+    ['radius=1.5cm, counterclockwise, phase=60', 'subgraph C_n[n=6]', { 1: [0.75, 1.29904], 3: [-1.5, 0], 6: [1.5, 0] }],
+    ['clockwise, n=3, V={i, j, k}', 'subgraph C_n', { i: [0, 1], j: [0.86603, -0.5], k: [-0.86603, -0.5] }],
+    ['', 'a -> subgraph P_n [n=3] -> b', { 1: [1, 0], 3: [1, -2], b: [2, 0] }],
+    // I_nm and K_nm: the shores side by side (measured), named plainly from V= and W=, as V 1 … and W 1 … from n= and m=
+    ['', 'subgraph I_nm [V={a, b}, W={1,2}]', { a: [0, 0], b: [0, -1], 1: [1, 0], 2: [1, -1] }],
+    ['nodes={draw, circle}, empty nodes, branch down=1 cm, grow right sep=4cm', 'subgraph I_nm [V={a, b, c, d, e}, W={1,...,4}]; a -- {1}; b -- {1, 2}',
+      { a: [0.1727, 0], e: [0.1727, -4], 1: [4.5181, 0], 4: [4.5181, -3] }],
+    ['', 'subgraph K_nm [n=2, m=2]', { 'V 1': [0, 0], 'V 2': [0, -1], 'W 1': [1, 0], 'W 2': [1, -1] }],
+  ];
+  for (const [go, body, want] of cases) {
+    const L = G.layout(gb(`\\begin{tikzpicture}\\graph[${go}]{${body}};\\end{tikzpicture}`));
+    T.eq(L.warnings.length, 0, `[${go}] ${body}: no warnings (${L.warnings.join(' | ')})`);
+    for (const [n, [x, y]] of Object.entries(want)) {
+      const q = L.nodes.get(n);
+      T.ok(Math.abs(q.x / TD.PX_PER_CM - x) < 0.006 && Math.abs(-q.y / TD.PX_PER_CM - y) < 0.006, `[${go}] ${body}: ${n} at (${x}, ${y}), drawn at (${(q.x / TD.PX_PER_CM).toFixed(3)}, ${(-q.y / TD.PX_PER_CM).toFixed(3)})`);
+    }
+  }
+  const edges = (go, body) => G.parse(`\\begin{tikzpicture}\\graph[${go}]{${body}};\\end{tikzpicture}`).edges.length;
+  T.eq(edges('', 'subgraph C_n [n=5, ->]'), 5, 'a cycle'); T.eq(edges('', 'subgraph K_n [n=4]'), 6, 'a clique');
+  T.eq(edges('n=4', 'subgraph C_n [name=inner] -- subgraph C_n [name=outer]'), 24, 'two cycles and every edge between them');
+  T.eq(edges('', 'subgraph K_nm [V={a,b}, W={1,2,3}]'), 6, 'complete bipartite'); T.eq(edges('', 'subgraph I_nm [V={a,b}, W={1,2}]; a -- 1'), 1, 'no edges of its own');
+  // a picture with its own x and y units is placed by them: drawn roughly, and said
+  T.ok(G.layout(gb('\\begin{tikzpicture}[x=15mm]\\graph{a -> b};\\end{tikzpicture}')).warnings.some((w) => /x and y units/.test(w)), 'x and y units warn');
+});
+
 T.test('graph: readers for common formats', () => {
   const m = G.fromText('0 1 1\n1 0 1\n1 1 0');
   T.eq(m.kind, 'matrix'); T.eq(m.nodes, 3); T.eq(m.edges, 3); T.eq(m.directed, false);

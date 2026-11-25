@@ -428,6 +428,7 @@
       <Button onclick={async () => (dlgSaid = String(await TD.confirm('Replace the drawing with this code?', 'The drawing is redrawn from the code; anything it can’t draw is kept as written.', { ok: 'Replace' })))}>Confirm…</Button>
       <Button danger onclick={async () => (dlgSaid = String(await TD.confirm('Delete “Lecture notes”?', 'It goes to the Recycle Bin for 30 days.', { ok: 'Delete', danger: true })))}>Delete…</Button>
       <Button onclick={async () => (dlgSaid = String(await TD.prompt('Rename Diagram', 'Free-body diagram')))}>Rename…</Button>
+      <Button onclick={async () => (dlgSaid = String(await TD.prompt('Macros', '\\newcommand{\\R}{\\mathbb{R}}', { multiline: true, ok: 'Save', notes: true, preview: (v: string) => `<p>${(v.match(/\\(newcommand|def)/g) || []).length} macros</p>` })))}>Notes preview…</Button>
       <Button onclick={async () => (dlgSaid = String(await TD.alert('MathLive couldn’t load', 'This edit uses LaTeX instead.')))}>Alert…</Button>
       <Button onclick={async () => (dlgSaid = String(await TD.choose('Print', 'As shown prints what you see here. pdfLaTeX and XeLaTeX compile the file’s LaTeX and print that PDF.', ['As shown', 'pdfLaTeX', 'XeLaTeX'], { ok: 'Print', choiceLabel: 'Render with', choiceNotes: [null, 'This file has Thai: XeLaTeX sets it best, its Latin letters in the Thai font too.', null] })))}>Choose…</Button>
       {#if dlgSaid}<small class="kit-note">returned <code>{dlgSaid}</code></small>{/if}

@@ -10,6 +10,13 @@ http://scripts.sil.org/OFL
 
 The files are shipped unmodified, as published with KaTeX.
 
+The TDScript_*.woff2 files are a Modified Version (DiagramTeX, scripts/generate-script-fonts.py): copies of KaTeX_Main,
+KaTeX_Math and KaTeX_Caligraphic with glyphs replaced by those of the AMS Type 1 Computer Modern fonts at 7pt and 5pt
+(cmr7, cmmi7, cmsy7, cmbx7, cmmib7, cmbsy7, msam7, msbm7 and their 5pt designs), from TeX Live. They carry none of the
+Reserved Font Names, and are licensed under the same SIL Open Font License, Version 1.1. The AMS fonts are
+Copyright (c) 1997, 2009, American Mathematical Society (<http://www.ams.org>), licensed under the SIL Open Font
+License, Version 1.1.
+
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 -----------------------------------------------------------

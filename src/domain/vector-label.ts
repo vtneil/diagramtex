@@ -140,6 +140,12 @@ export function vectorLabel(root: HTMLElement, origin: DOMRect, width: number, h
       clone.setAttribute('x', String(rect.left - origin.left)); clone.setAttribute('y', String(rect.top - origin.top));
       clone.setAttribute('width', String(rect.width)); clone.setAttribute('height', String(rect.height));
       clone.setAttribute('style', `overflow:visible;color:${style.color};font-size:${style.fontSize}`);
+      // KaTeX's stylesheet paints its pictures (.katex svg: filled and stroked in the text's colour, paths unstroked),
+      // and a label's picture has no stylesheet: \cancel's line and a coloured radical or brace need it on them
+      if (element.closest('.katex')) {
+        for (const [name, value] of [['fill', 'currentColor'], ['stroke', 'currentColor'], ['stroke-width', '1']]) if (!clone.hasAttribute(name)) clone.setAttribute(name, value);
+        for (const path of clone.querySelectorAll('path')) if (!path.hasAttribute('stroke')) path.setAttribute('stroke', 'none');
+      }
       if (element.closest('.accent-body')) clone.setAttribute('data-label-accent', 'true');
       if (element.closest('.td-math')) {
         const box = element.getAttribute('viewBox')?.split(/\s+/).map(Number);

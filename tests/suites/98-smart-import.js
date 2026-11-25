@@ -138,3 +138,57 @@ T.test('smart import: dialog updates when optional definitions change', async ()
     document.querySelector('#impClose').click();
   }
 });
+
+// Measured in TeX Live (\pgfgetlastxy after \path): the options are a transformation in the picture's coordinates,
+// the last applied first; a shifted node name is still cut at the node's border, unshifted, so it stays code.
+T.test('smart import: ([xshift=…]a.north) and the other option-prefixed coordinates are where TikZ puts them', () => {
+  const K = TD.PT_PER_PX;
+  const cases = [
+    ['', '(a.north) -- ([xshift=1cm]a.north)', [28.45274, 0]],
+    ['scale=2', '(a.north) -- ([shift={(1,2)}]a.north)', [56.90549, 113.81097]],
+    ['rotate=90', '(a.north) -- ([xshift=1cm]a.north)', [0, 28.45275]],
+    ['', '(0,0) -- ([rotate=90]a.north)', [-35.40237, 28.45274]],
+    ['', '(0,0) -- ([scale=2]a.north)', [56.90549, 70.80475]],
+    ['', '(0,0) -- ([xshift=1cm,yshift=2mm]a.east)', [64.18846, 34.14328]],
+    ['', '(0,0) -- ([shift={(a.east)}]1,0)', [64.18846, 28.45274]],
+    ['scale=2', '(0,0) -- ([xshift=1cm]1,1)', [113.81097, 56.90549]],
+  ];
+  for (const [po, path, want] of cases) {
+    const sh = TD.importLatex(`\\begin{tikzpicture}[${po}]\\node[draw] (a) at (1,1) {A};\\draw ${path};\\end{tikzpicture}`).blocks.flatMap((b) => b.shapes);
+    const L = sh.find((s) => s.type === 'line');
+    T.ok(L, `${po} ${path}: a line, not code (${sh.map((s) => s.type)})`);
+    const dx = (L.x2 - L.x1) * K, dy = -(L.y2 - L.y1) * K;
+    T.ok(Math.abs(dx - want[0]) < 0.12 && Math.abs(dy - want[1]) < 0.12, `${po} ${path}: ${dx.toFixed(3)},${dy.toFixed(3)} vs ${want}`);
+  }
+  const sh = TD.importLatex('\\begin{tikzpicture}\\node[draw] (a) {A};\\draw ([xshift=1mm]a) -- (3,0);\\end{tikzpicture}').blocks.flatMap((b) => b.shapes);
+  T.eq(sh.map((s) => s.type).join(','), 'rect,tikz', 'a shifted node name stays code');
+  // an angle anchor below zero or with a fraction is the same angle's
+  const end = (a) => TD.importLatex(`\\begin{tikzpicture}\\node[draw, minimum width=2cm] (a) {A};\\draw (0,0) -- (a.${a});\\end{tikzpicture}`).blocks.flatMap((b) => b.shapes).find((s) => s.type === 'line');
+  const p = end('-20'), q = end('340');
+  T.ok(p && q && Math.abs(p.x2 - q.x2) < 1e-6 && Math.abs(p.y2 - q.y2) < 1e-6, 'a.-20 is a.340');
+  T.ok(end('12.5'), 'a.12.5 is read');
+});
+
+// Measured in TeX Live (\sbox round the picture, line width 0): a radius without a unit is along the x and y vectors
+T.test('smart import: a circle\'s radius in x/y units is an ellipse as wide and high as TikZ draws it', () => {
+  const K = TD.PT_PER_PX;
+  for (const [po, path, w, h] of [['x=2cm,y=1cm', '(0,0) circle (1)', 113.811, 56.90549], ['x=2cm,y=1cm', '(0,0) circle[radius=1]', 113.811, 56.90549],
+    ['x=2cm,y=1cm', '(0,0) ellipse (1 and 2)', 113.811, 113.81097], ['x=2cm,y=1cm', '(0,0) circle (5mm)', 28.45273, 28.45273],
+    ['x=2cm,y=-1cm', '(0,0) circle (1)', 113.811, 56.90549], ['x=0.5cm,y=0.5cm', '(0,0) circle (1) (3,0) circle[x radius=1, y radius=2]', 71.13182, 56.90546]]) {
+    const sh = TD.importLatex(`\\begin{tikzpicture}[${po}]\\draw ${path};\\end{tikzpicture}`).blocks.flatMap((b) => b.shapes);
+    T.ok(sh.length && sh.every((s) => s.type === 'ellipse'), `${po} ${path}: ellipses (${sh.map((s) => s.type)})`);
+    const x1 = Math.min(...sh.map((s) => s.cx - s.rx)), x2 = Math.max(...sh.map((s) => s.cx + s.rx));
+    const y1 = Math.min(...sh.map((s) => s.cy - s.ry)), y2 = Math.max(...sh.map((s) => s.cy + s.ry));
+    T.ok(Math.abs((x2 - x1) * K - w) < 0.01 && Math.abs((y2 - y1) * K - h) < 0.01, `${po} ${path}: ${((x2 - x1) * K).toFixed(3)} x ${((y2 - y1) * K).toFixed(3)} vs ${w} x ${h}`);
+  }
+});
+T.test('smart import: an arc\'s radius in x/y units follows them when they point right and up; flipped ones stay code', () => {
+  const K = TD.PT_PER_PX, one = (po, path) => TD.importLatex(`\\begin{tikzpicture}[${po}, line width=0pt]\\draw ${path};\\end{tikzpicture}`).blocks.flatMap((b) => b.shapes);
+  for (const [po, path, w, h] of [['x=2cm,y=1cm', '(0,0) arc (0:180:1)', 113.811, 28.45274], ['x=2cm,y=1cm', '(0,0) arc[start angle=0, end angle=90, radius=1]', 56.9055, 28.45274],
+    ['x=2cm,y=1cm', '(0,0) arc (0:90:1cm)', 28.45274, 28.45274]]) {
+    const sh = one(po, path), b = TD.bbox(sh[0]);
+    T.eq(sh.map((s) => s.type).join(','), 'arc', `${po} ${path}`);
+    T.ok(Math.abs(b.w * K - w) < 0.01 && Math.abs(b.h * K - h) < 0.01, `${po} ${path}: ${(b.w * K).toFixed(3)} x ${(b.h * K).toFixed(3)} vs ${w} x ${h}`);
+  }
+  T.eq(one('x=2cm,y=-1cm', '(0,0) arc (0:90:1)').map((s) => s.type).join(','), 'tikz', 'flipped y: code');
+});

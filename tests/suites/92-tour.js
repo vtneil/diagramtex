@@ -1,8 +1,9 @@
-// The welcome tour: five cards (Welcome, left, top, right, keep a copy), Previous / Next / I’m All Good, once.
+// The welcome tour: five cards (Welcome, left, top, right, keep a copy), Previous / Next / I’m All Good. It opens
+// from the command search only, never on a first visit.
 const tourKey = (k) => new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
 
 T.test('tour: steps, buttons and keys; the card never moves', async () => {
-  T.ok(localStorage.getItem(TD.tour.KEY), 'the test profile has it marked seen, so it never covers the app');
+  T.ok(!TD.tour.open && !document.querySelector('.td-dialog.tour'), 'not open on its own');
   try {
     TD.tour.show();
     const root = document.querySelector('.td-dialog.tour'), box = root.querySelector('.tour-box');
@@ -40,15 +41,8 @@ T.test('tour: steps, buttons and keys; the card never moves', async () => {
   }
 });
 
-T.test('tour: shown once, on the first visit only', async () => {
-  const was = localStorage.getItem(TD.tour.KEY);
-  try {
-    TD.tour.firstRun(); await new Promise((r) => setTimeout(r, 500));
-    T.ok(!TD.tour.open, 'not again once seen');
-    localStorage.removeItem(TD.tour.KEY);
-    TD.tour.firstRun(); await new Promise((r) => setTimeout(r, 500));
-    T.ok(TD.tour.open, 'shown on a first visit');
-    T.ok(localStorage.getItem(TD.tour.KEY), 'and remembered at once');
-    TD.tour.close();
-  } finally { if (was) localStorage.setItem(TD.tour.KEY, was); TD.tour.close(); }
+T.test('tour: never opens on its own; the command search opens it', async () => {
+  // this profile starts as a first visit does (the runner no longer marks anything seen)
+  T.ok(!TD.tour.open && !('firstRun' in TD.tour), 'no first-visit opening');
+  T.ok(typeof TD.tour.show === 'function', 'Welcome Tour (command search) still opens it');
 });

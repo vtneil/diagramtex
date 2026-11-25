@@ -83,7 +83,7 @@ function lineHD(t: string, em: number): { ht: number; dp: number } | null {
     for (const s of sub) dp = Math.max(dp, (sup.length ? 0.247 : 0.15) * em + S(s).dp);
     return { ht, dp };
   }
-  const p = t.replace(/\\(?:textbf|textit|textrm|textsf|texttt|emph|mathrm|mathbf|mathit|mathsf|text|bfseries|itshape|small|large|Large|footnotesize|scriptsize|tiny|huge)\b/g, '').replace(/[${}~]/g, '');
+  const p = t.replace(/\\(?:textbf|textit|textrm|textsf|texttt|emph|mathrm|mathbf|mathit|mathsf|text|bfseries|itshape|small|large|Large|footnotesize|scriptsize|tiny|huge)\b/g, '').replace(/\\[()]/g, '').replace(/[${}~]/g, '');
   const greek = /\\[A-Za-z]+/.test(p), bare = p.replace(/\\[A-Za-z]+/g, '');
   const ht = /[()[\]|/]/.test(bare) ? 0.75 : /[A-Z0-9bdfhkl!?'"`&%#@]/.test(bare) || /\\(?:[A-Z][a-z]+|beta|delta|zeta|theta|lambda|xi|phi|psi|ell|partial|infty|nabla)\b/.test(p) ? 0.694
     : /[ijt]/.test(bare) ? 0.669 : /\S/.test(bare) || greek ? 0.431 : 0;

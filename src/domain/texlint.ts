@@ -1,4 +1,5 @@
 import { runtime as TD } from '../runtime';
+import { REWRITTEN } from './math-rewrite';
 // LaTeX diagnostics shared by Import, the Code dialog and the TikZ code panel: TD.lint(src) lists what would stop
 // pdflatex or change the output, each with its line. It reads the text only (no TeX run), so it errs on the side
 // of saying nothing: a check reports only what it can see for certain.
@@ -60,13 +61,19 @@ import { runtime as TD } from '../runtime';
     ['pgf-umlsd', /\\begin\{sequencediagram\}/],
     ['tikz-chemlab', /\\(?:tkz(?:TestTube|HeatTube|RoundFlask|HeatFlask|Funnel|GraduatedCylinder|Pipette|LargePipette|Titration|Distillation|SeparatoryFunnel)|chemlabset)\b/],
     ['amssymb', /\\(?:mathbb|mathfrak|Bbb|frak|bold|varnothing|leqslant|geqslant|square|blacksquare|checkmark)\b/],
-    ['amsmath', /\\(?:text|dfrac|tfrac|binom|operatorname|xrightarrow|xleftarrow|boldsymbol)\b|\\begin\{(?:align|aligned|pmatrix|bmatrix|vmatrix|cases|gather|multline)\*?\}/],
+    ['amsmath', /\\(?:text|dfrac|tfrac|binom|operatorname|xrightarrow|xleftarrow|boldsymbol|[lr]vert|[lr]Vert|overset|underset|i{2,3}nt|iiiint|idotsint|genfrac|cfrac|dbinom|tbinom|boxed|sideset|implies|impliedby|eqref|dddot|ddddot|var(?:Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega)|dots[bcimo]|Hat|Tilde|Vec|Bar|Dot|Ddot|Check|Acute|Grave|Breve)\b|\\begin\{(?:align|aligned|pmatrix|bmatrix|vmatrix|cases|gather|multline)\*?\}/],
     ['siunitx', /\\(?:SI|si|qty|unit|num|ang)\s*[[{]/],
     ['mathrsfs', /\\mathscr\b/],
     ['dsfont', /\\mathds\b/],
     ['bbm', /\\mathbbm\b/],
     ['bm', /\\bm\b/],
     ['physics', /\\(?:ket|bra|braket|dv|pdv|abs|norm)\{/],
+    ['ifthen', /\\ifthenelse\b/],
+    ['tipa', /\\textipa\b/],
+    ['tikz-qtree', /\\Tree\s*\[/],
+    ['tikz-qtree-compat', /\\qroof\b/],
+    // a table's column types from array: >{…} <{…} before or after a column, m{…} b{…}
+    ['array', /\\begin\{(?:tabular|array)\*?\}\s*(?:\[[^\]]*\]\s*)?\{[^}]*(?:[><]\{|\b[mb]\{)/],
   ];
   const LOADS_TIKZ = ['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'forest', 'tikz-feynman', 'tikz-timing', 'quantikz', 'chemfig', 'tikz-3dplot', 'tkz-euclide', 'smartdiagram', 'zx-calculus', 'blochsphere', 'karnaugh-map', 'pgf-pie', 'pgf-umlcd', 'pgf-umlsd', 'tikz-chemlab'];
   const PKG_IMPLIES: Record<string, any> = { amssymb: ['amsfonts'], mathtools: ['amsmath'], physics: [], quantikz: ['tikz-cd'], 'tikz-cd': [], bm: [] };
@@ -128,7 +135,7 @@ import { runtime as TD } from '../runtime';
       for (const [p, re] of PKGS) {
         const m = (re as any).exec(body);
         // quantikz has its own \ket and \bra
-        if (p === 'physics' && m && /^\\(?:ket|bra)\{/.test(m[0]) && (pkgs.has('quantikz') || (libs && libs.has('quantikz2')) || pkgs.has('braket'))) continue;
+        if (p === 'physics' && m && /^\\(?:ket|bra)\{/.test(m[0]) && (pkgs.has('quantikz') || (libs && (libs.has('quantikz2') || libs.has('quantikz'))) || pkgs.has('braket'))) continue;
         if (m && !pkgs.has(p) && !(p === 'amssymb' && pkgs.has('amsfonts') && !/\\(?:varnothing|leqslant|geqslant|square|blacksquare|checkmark)\b/.test(body))) add('warn', base + m.index, `needs \\usepackage{${p}}`);
       }
       if (usesTikz && ![...pkgs].some((p) => LOADS_TIKZ.includes(p as string))) { const i = body.search(/\\begin\{tikzpicture\}|\\tikz\b/); add('error', base + i, 'TikZ is used but no package loads it: \\usepackage{tikz}'); }
@@ -193,7 +200,8 @@ import { runtime as TD } from '../runtime';
       const told = new Set();
       for (const m of body.matchAll(/\$([^$]+)\$/g)) for (const c of m[1].matchAll(/\\([a-zA-Z]+)/g)) {
         const n = c[1];
-        if (known.has(n) || defined.has(n) || told.has(n)) continue;
+        // the engines' own; stand-ins, siunitx and mhchem drawn for them (src/domain/mathengine.ts, math-rewrite.ts)
+        if (known.has(n) || defined.has(n) || told.has(n) || REWRITTEN.has(n) || n === 'ce' || n === 'pu' || TD.math?.drawsAs?.(n)) continue;
         told.add(n);
         add('info', base + m.index + 1 + c.index, `\\${n} is not drawn by the preview (LaTeX output is unaffected if it is defined)`);
         if (told.size >= 5) break;
@@ -222,9 +230,58 @@ import { runtime as TD } from '../runtime';
     [/\\mathbfit\b/, '\\ifdefined\\mathbfit\\else\\DeclareMathAlphabet{\\mathbfit}{OML}{cmm}{b}{it}\\fi'],
     [/\\mathsfit\b/, '\\ifdefined\\mathsfit\\else\\DeclareMathAlphabet{\\mathsfit}{OT1}{cmss}{m}{sl}\\fi'],
   ];
-  lint.mathNeeds = (code: any) => {
+  // Packages for commands the maths engines draw (natively, with mhchem, or with stand-ins: src/domain/mathengine.ts
+  // and math-rewrite.ts) that LaTeX has only with them: [package, its commands, its environments].
+  const LABEL_PKGS: [string, string[], string[]?][] = [
+    ['mhchem', ['ce', 'pu']],
+    ['siunitx', ['SI', 'si', 'num', 'ang', 'unit', 'SIrange', 'qtyrange', 'numrange', 'SIlist', 'qtylist', 'numlist', 'numproduct', 'qtyproduct', 'tablenum']],
+    ['cancel', ['cancel', 'bcancel', 'xcancel', 'cancelto']],
+    ['nicefrac', ['nicefrac']], ['xfrac', ['sfrac']], ['tensor', ['tensor', 'indices']], ['slashed', ['slashed']],
+    ['centernot', ['centernot']], ['euscript', ['EuScript']], ['booktabs', ['toprule', 'midrule', 'bottomrule', 'cmidrule']],
+    ['multirow', ['multirow']],
+    // tests and counters in a file's macros (src/domain/math-functions.ts), mleftright's pairs
+    ['ifthen', ['ifthenelse']], ['xifthen', ['isempty']], ['nomencl', ['nomenclature']], ['mleftright', ['mleft', 'mright']],
+    ['etoolbox', ['ifstrempty', 'ifstrequal', 'ifblank', 'newrobustcmd', 'renewrobustcmd', 'providerobustcmd']],
+    ['mathtools', ['prescript', 'mathclap', 'mathllap', 'mathrlap', 'coloneqq', 'Coloneqq', 'eqqcolon', 'vcentcolon', 'xmapsto',
+      'xhookrightarrow', 'xhookleftarrow', 'xLeftarrow', 'xRightarrow', 'xleftrightarrow', 'xLeftrightarrow', 'underbracket',
+      'overbracket', 'shortintertext', 'DeclarePairedDelimiter'], ['multlined', 'dcases', 'rcases', 'pmatrix*', 'bmatrix*', 'vmatrix*', 'Vmatrix*', 'Bmatrix*', 'matrix*']],
+    ['upgreek', ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'varepsilon', 'zeta', 'eta', 'theta', 'vartheta', 'iota', 'kappa', 'lambda', 'mu',
+      'nu', 'xi', 'pi', 'varpi', 'rho', 'varrho', 'sigma', 'varsigma', 'tau', 'upsilon', 'phi', 'varphi', 'chi', 'psi', 'omega'].map((g) => 'up' + g)
+      .concat(['Gamma', 'Delta', 'Theta', 'Lambda', 'Xi', 'Pi', 'Sigma', 'Upsilon', 'Phi', 'Psi', 'Omega'].map((g) => 'Up' + g.toLowerCase()))],
+    ['braket', ['ket', 'bra', 'braket', 'Ket', 'Bra', 'Braket']],
+    ['physics', ['dv', 'pdv', 'abs', 'norm', 'pqty', 'bqty', 'vqty', 'Bqty', 'dd', 'vb', 'vu', 'va', 'expval', 'mel', 'comm', 'acomm', 'order',
+      'laplacian', 'curl', 'grad', 'Tr', 'tr', 'Res', 'qty', 'ev', 'expectationvalue', 'vev', 'ketbra', 'dyad', 'op', 'outerproduct',
+      'matrixel', 'matrixelement']],
+  ];
+  // the options a package is loaded with
+  const PKG_OPTIONS: Record<string, string> = { mhchem: 'version=4' };
+  /** \usepackage{p}, with the options the app loads it with */
+  lint.packageLine = (p: string) => `\\usepackage${PKG_OPTIONS[p] ? `[${PKG_OPTIONS[p]}]` : ''}{${p}}`;
+  // commands a file's own macros define (not \renewcommand, which needs the package's): then the package isn't loaded
+  const stripTexComments = (t: string) => t.replace(/(^|[^\\])%.*$/gm, '$1');
+  const ownCommands = (macros: string) => new Set([...stripTexComments(String(macros || '')).matchAll(/\\(?:newcommand|providecommand|DeclareRobustCommand|NewDocumentCommand|DeclareDocumentCommand|DeclareMathOperator|DeclarePairedDelimiter|[gex]?def|let)\s*\*?\s*\{?\s*\\([A-Za-z]+)/g)].map((m) => m[1]));
+  /**
+   * What the maths and text styles in some code need: packages, and definitions. `macros` (the file's own,
+   * page.macros) define commands that then need no package; `pkgs` / `libs` are what the export loads already
+   * (quantikz has its own \ket and \bra).
+   */
+  lint.mathNeeds = (code: any, ctx: { macros?: string; pkgs?: Set<string>; libs?: Set<string> } = {}) => {
     const b = blank(String(code || ''));
-    return { pkgs: PKGS.filter(([p, re]) => MATH_PKGS.has(p) && (re as any).test(b)).map(([p]) => p), defs: MATH_DEFS.filter(([re]) => (re as any).test(b)).map(([, d]) => d) };
+    const pkgs = PKGS.filter(([p, re]) => MATH_PKGS.has(p) && (re as any).test(b)).map(([p]) => p);
+    const used = new Set([...b.matchAll(/\\([A-Za-z]+)/g)].map((m) => m[1]));
+    const envs = new Set([...b.matchAll(/\\begin\s*\{([^{}]*)\}/g)].map((m) => m[1].trim()));
+    const own = ownCommands(ctx.macros || '');
+    const quantikz = !!(ctx.pkgs?.has('quantikz') || ctx.libs?.has('quantikz2') || ctx.libs?.has('quantikz'));
+    for (const [p, cmds, environments = []] of LABEL_PKGS) {
+      let need = cmds.some((c) => used.has(c) && !own.has(c)) || environments.some((e) => envs.has(e));
+      // siunitx's \qty{1}{\metre} (two groups), physics' \qty(…) delimiters
+      if (p === 'siunitx' && !need && !own.has('qty')) need = /\\qty\s*(?:\[[^\]]*\]\s*)?\{[^{}]*\}\s*\{/.test(b);
+      if (p === 'physics' && need && !cmds.some((c) => c !== 'qty' && used.has(c) && !own.has(c))) need = /\\qty\s*[([|]/.test(b) && !own.has('qty');
+      if (p === 'braket' && quantikz) need = false;
+      if (need && !pkgs.includes(p)) pkgs.push(p);
+    }
+    // physics has \ket, \bra and \braket of its own
+    return { pkgs: pkgs.includes('physics') ? pkgs.filter((p) => p !== 'braket') : pkgs, defs: MATH_DEFS.filter(([re]) => (re as any).test(b)).map(([, d]) => d) };
   };
   TD.lint = lint;
 })();

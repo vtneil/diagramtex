@@ -5,12 +5,14 @@
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate. (This literal is for the
 // dev server only: scripts/build.js names dist/sw.js's cache after a hash of everything it precaches.)
-const CACHE = 'diagramtex-v128';
+const CACHE = 'diagramtex-v129';
 const SLOW_MS = 4000;
 // The in-browser pdfLaTeX (tex/: the engine and its TeX Live bundle) is not precached: it is downloaded the first time
 // someone compiles, into a cache of its own that a deploy doesn't clear. The bundle's chunks are named after their
 // contents, so they come from that cache once there; the rest of tex/ is checked with the server like the app.
 const TEX_CACHE = 'diagramtex-tex';
+// TikZ code drawn by that LaTeX (src/application/kept-preview.ts), kept by the page across visits
+const PREVIEW_CACHE = 'diagramtex-previews';
 const PRECACHE = [
     './',
     'math-render-worker.js',
@@ -81,13 +83,24 @@ const PRECACHE = [
     'vendor/katex/fonts/KaTeX_Size3-Regular.woff2',
     'vendor/katex/fonts/KaTeX_Size4-Regular.woff2',
     'vendor/katex/fonts/KaTeX_Typewriter-Regular.woff2',
+    'vendor/katex/fonts/TDScript_Caligraphic5-Regular.woff2',
+    'vendor/katex/fonts/TDScript_Caligraphic7-Regular.woff2',
+    'vendor/katex/fonts/TDScript_Main5-Bold.woff2',
+    'vendor/katex/fonts/TDScript_Main5-Regular.woff2',
+    'vendor/katex/fonts/TDScript_Main7-Bold.woff2',
+    'vendor/katex/fonts/TDScript_Main7-Regular.woff2',
+    'vendor/katex/fonts/TDScript_Math5-Italic.woff2',
+    'vendor/katex/fonts/TDScript_Math7-Italic.woff2',
     'vendor/katex/katex.min.css',
-    'vendor/katex/katex.min.js',
+    'vendor/katex/katex-scripts.css',
+    'vendor/katex/katex-td1.min.js',
+    'vendor/katex/contrib/mhchem.min.js',
     'vendor/temml/Temml-Latin-Modern.css',
     'vendor/temml/Temml.woff2',
     'vendor/temml/latinmodernmath.woff2',
     'vendor/mathlive/mathlive.min.js',
     'vendor/temml/temml.min.js',
+    'vendor/temml/contrib/mhchem.min.js',
 ];
 
 self.addEventListener('install', (e) => {
@@ -97,7 +110,7 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k.startsWith('diagramtex-') && k !== CACHE && k !== TEX_CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k.startsWith('diagramtex-') && k !== CACHE && k !== TEX_CACHE && k !== PREVIEW_CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

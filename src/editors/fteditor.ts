@@ -359,6 +359,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     const [x, y] = toL(e), p = pad / E.view.k;
     for (let i = E.L.nodes.length - 1; i >= 0; i--) {
       const g = E.L.nodes[i];
+      if (g.added) continue; // a node forest inserts (insert before={…}) is not in the code's tree
       if (Math.abs(x - g.x) <= g.w / 2 + p && Math.abs(y - g.y) <= g.h / 2 + p) return i;
     }
     return -1;

@@ -3,15 +3,21 @@ import { runtime as TD } from '../runtime';
 // (a \foreach, a pgfplots axis, a node with a shape the model has no fields for, a \tikzset …) becomes one of
 // these objects instead of being dropped or approximated. It exports its code unchanged, inside the scopes it
 // sat in, and moved by a shift scope when dragged. On the canvas it shows the importer's best approximation of
-// the code (s.prev, absolute positions before any move), in a dashed frame so it reads as "not editable here".
+// the code (s.prev, absolute positions before any move), in a dashed frame so it reads as "not editable here";
+// code outside the specialised editors is drawn by the in-browser pdfLaTeX instead, once it can be
+// (src/application/kept-preview.ts).
 //   s = { type: 'tikz', kind: 'code' | 'defs', code, x, y (move offset, px), ctx: [scope options, outer first],
 //         prev: [shapes], names: { name: {x, y} }, libs: [], pkgs: [], issues: [] }
 const PX = TD.PX_PER_CM;
 const { r2, esc } = TD.util;
 
 const prevOf = (s: any) => (Array.isArray(s.prev) ? s.prev.filter((p: any) => p && TD.TYPES[p.type] && p.type !== 'tikz') : []);
-// the frame: the preview's box, or a small box where the code sits (s.at, the first point it names)
+// the code drawn by LaTeX (src/application/kept-preview.ts), when it is: `compile` has it compiled when it isn't yet
+const drawn = (s: any, compile = false) => (TD.keptPreview ? TD.keptPreview.drawnOf(s, compile) : null);
+// the frame: LaTeX's picture, the preview's box, or a small box where the code sits (s.at, the first point it names)
 function box(s: any) {
+  const D = drawn(s);
+  if (D) return { x: D.x, y: D.y, w: D.w, h: D.h };
   const P = prevOf(s);
   if (P.length) {
     const b = TD.bboxOf(P.flatMap((p: any) => { const q = TD.bbox(p); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }), 0);
@@ -51,9 +57,13 @@ TD.TYPES.tikz = {
   anchors(s: any) { const b = box(s); return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]; },
   samples(s: any) { const b = box(s); return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]; },
   svg(s: any, ctx: any) {
-    const P = prevOf(s);
-    let inner = P.map((p: any) => TD.TYPES[p.type].svg(p, ctx)).join('');
-    if (inner && (s.x || s.y)) inner = `<g transform="translate(${r2(s.x)} ${r2(s.y)})">${inner}</g>`;
+    const D = s.kind === 'defs' ? null : drawn(s, true);
+    let inner: string;
+    if (D) inner = `<image class="rawtikz-tex" href="${D.href}" x="${r2(D.x)}" y="${r2(D.y)}" width="${r2(D.w)}" height="${r2(D.h)}" preserveAspectRatio="none"/>`;
+    else {
+      inner = prevOf(s).map((p: any) => TD.TYPES[p.type].svg(p, ctx)).join('');
+      if (inner && (s.x || s.y)) inner = `<g transform="translate(${r2(s.x)} ${r2(s.y)})">${inner}</g>`;
+    }
     if (ctx && ctx.export) return s.kind === 'defs' ? '' : inner;
     // on the canvas: a dashed frame and a tag naming the code, so a kept statement is easy to find
     // the frame and tag keep their size on screen: style.css divides by the canvas's --zoom
@@ -72,6 +82,9 @@ TD.TYPES.tikz = {
     if (TD.lint && TD.lint.uses) { const u = TD.lint.uses(code); for (const l of u.libs) X.libs.add(l); for (const p of u.pkgs) X.pkgs.add(p); }
     // definitions from the source's preamble go to the preamble when there is one (standalone, document)
     if (s.pre && X.preDefs) { X.preDefs.add(code); return ''; }
+    // definitions draw nothing: outside the scopes they were in, so they hold for the statements after them, which an
+    // export may write in scopes of their own (a scope ends what \tikzset and \def said in it)
+    if (s.kind === 'defs') return code;
     const moved = Math.abs(s.x || 0) > 1e-6 || Math.abs(s.y || 0) > 1e-6;
     return wrapCode(code, s.ctx, moved ? X.c(s.x, s.y) : null);
   },

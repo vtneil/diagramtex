@@ -1,5 +1,6 @@
 import { mathmlSvg } from './mathml-svg';
 import type { MathJob, MathResult } from './math-render-protocol';
+import { defineFunctions } from './math-functions';
 const scope = globalThis as unknown as {
   importScripts(...urls: string[]): void;
   katex: { renderToString(tex: string, options: object): string };
@@ -7,7 +8,9 @@ const scope = globalThis as unknown as {
   onmessage: (event: MessageEvent<MathJob | MathJob[]>) => void;
   postMessage(result: MathResult | MathResult[]): void;
 };
-scope.importScripts('vendor/temml/temml.min.js', 'vendor/katex/katex.min.js');
+scope.importScripts('vendor/temml/temml.min.js', 'vendor/temml/contrib/mhchem.min.js', 'vendor/katex/katex-td1.min.js', 'vendor/katex/contrib/mhchem.min.js');
+// the tests and look-aheads the page's engines have too (\ifthenelse, \nonscript …)
+defineFunctions(scope.katex); defineFunctions(scope.temml);
 function compile(job: MathJob): MathResult {
   const options = { displayMode: job.display, macros: { ...job.macros }, throwOnError: true, ...(job.engine === 'katex' ? { strict: 'ignore' } : {}) }; // as mathengine.ts
   try {

@@ -55,8 +55,9 @@ import { keepComments } from './keep-comments';
 
   // ---------------------------------------------------------------- model
   // M = TD.feyn.parse(src) plus { raw, dirty }: the code is M.raw until something is edited
-  function load(src: any) { const M = F.parse(src); M.raw = String(src || ''); M.dirty = false; return M; }
-  const codeOf = (M: any) => (M.dirty ? F.write(M) : M.raw);
+  // (with the picture's macros and options round the block, wrap: as it is drawn on the page)
+  function load(src: any) { const M = F.parse(src, E?.macros); M.raw = String(src || ''); M.dirty = false; return M; }
+  const codeOf = (M: any) => (M.dirty ? F.write(M, E?.wrap) : M.raw);
   const kv = F.kv;
   const vOf = (name: any) => E.M.vertices.find((v: any) => v.name === name) || null;
   // maths in a label: \(x\) or $x$ → x; written back as \(x\)
@@ -102,7 +103,7 @@ import { keepComments } from './keep-comments';
     else if (kind) e.o.push(kind);
   }
   const vStyle = (v: any) => F.styleOf(v);
-  function setVStyle(v: any, st: any) { v.o = v.o.filter((x: any) => !F.VERTEX_STYLES.includes(kv(x).k)); if (st) v.o.unshift(st); }
+  function setVStyle(v: any, st: any) { v.o = v.o.filter((x: any) => !F.VERTEX_STYLES.includes(kv(x).k)); if (st) { v.o.unshift(st); v.bare = false; } }
   function newName(base = 'v') { let n = 1; while (vOf(base + n)) n++; return base + n; }
   // every vertex gets its drawn place written down (before a vertex it depends on moves or goes)
   function pin(names: any) {
@@ -110,7 +111,7 @@ import { keepComments } from './keep-comments';
     for (const v of E.M.vertices) {
       if (v.x != null || (names && !names.includes(v.name))) continue;
       const n = L.nodes.get(v.name);
-      if (n) { v.x = snap(n.x / PX, true); v.y = snap(-n.y / PX, true); v.rel = null; }
+      if (n) { const [x, y] = F.envXY(L, n); v.x = snap(x, true); v.y = snap(y, true); v.rel = null; v.at = null; }
     }
   }
   const dependents = (name: any) => E.M.vertices.filter((v: any) => v.x == null && v.rel && v.rel.of === name).map((v: any) => v.name);
@@ -142,12 +143,14 @@ import { keepComments } from './keep-comments';
   }
   const selV = () => (E.sel && E.sel.v != null ? vOf(E.sel.v) : null);
   const selE = () => (E.sel && E.sel.e != null ? E.M.edges[E.sel.e] || null : null);
-  const lay = () => F.layout({ src: snapCode() });
+  const lay = () => F.layout({ src: snapCode(), wrap: E.wrap, macros: E.macros });
   const snap = (n: any, on: any) => (on ? Math.round(n / GRID) * GRID : Math.round(n * 1000) / 1000);
 
   // ---------------------------------------------------------------- editing
-  function addVertex(key: any, x: any, y: any) {
-    const st = key.slice(2);
+  // a place on the page (cm) in the environment's coordinates, as `at (x,y)` writes it (under its scale and shift)
+  const envPt = (x: number, y: number) => { const X = lay().X; return X.k === 1 && !X.ox && !X.oy ? [x, y] : [snap((x - X.ox) / X.k, false), snap((y - X.oy) / X.k, false)]; };
+  function addVertex(key: any, px: any, py: any) {
+    const st = key.slice(2), [x, y] = envPt(px, py);
     let name;
     edit(() => {
       name = newName(st === 'particle' ? 'p' : 'v');
@@ -374,8 +377,8 @@ import { keepComments } from './keep-comments';
     if (vn != null) {
       if (dbl && E.sel && E.sel.v === vn) { editLabel({ v: vn }); return; }
       E.sel = { v: vn };
-      const v = vOf(vn), n = lay().nodes.get(vn);
-      E.drag = { mode: 'move', v: vn, sx, sy, moved: false, x0: v.x != null ? v.x : n.x / PX, y0: v.y != null ? v.y : -n.y / PX };
+      const v = vOf(vn), L = lay(), n = L.nodes.get(vn);
+      E.drag = { mode: 'move', v: vn, sx, sy, moved: false, xk: L.X.k, x0: v.x != null ? v.x : F.envXY(L, n)[0], y0: v.y != null ? v.y : F.envXY(L, n)[1] };
       draw(); renderProps(); return;
     }
     if (ei != null) {
@@ -416,7 +419,7 @@ import { keepComments } from './keep-comments';
     if (d.mode === 'move') {
       if (!d.moved && Math.hypot(sx - d.sx, sy - d.sy) < 4) return;
       if (!d.moved) { begin(); pin(dependents(d.v)); d.moved = true; }
-      const v = vOf(d.v), k = E.view.k;
+      const v = vOf(d.v), k = E.view.k * d.xk; // (screen px per cm in the environment's coordinates)
       v.x = snap(d.x0 + (sx - d.sx) / k, !e.altKey); v.y = snap(d.y0 - (sy - d.sy) / k, !e.altKey); v.rel = null;
       E.M.dirty = true;
       setTip(e.altKey ? uiText('editor.fy.moveTip', '{name} at ({x}, {y})', { name: d.v, x: F.num(v.x), y: F.num(v.y) }) : uiText('editor.fy.moveTipSnap', '{name} at ({x}, {y}) · ⌥ to place freely', { name: d.v, x: F.num(v.x), y: F.num(v.y) }));
@@ -433,7 +436,7 @@ import { keepComments } from './keep-comments';
       const vn = vertexAt(e, 14);
       if (vn && vn !== d.from) addEdge(d.from, vn);
       else if (!vn && overStage(e)) {
-        const [x, y] = toCm(e, !e.altKey);
+        const [x, y] = envPt(...(toCm(e, !e.altKey) as [number, number]));
         begin();
         const name = newName();
         E.M.vertices.push({ name, o: [], x, y, rel: null, text: null, decl: true });
@@ -680,8 +683,9 @@ import { keepComments } from './keep-comments';
   const { save, finish } = dock;
   // host: embedded in a pane (Quick) instead of opening over the page; each edit is handed back to done
   function open(block: any, done: any, _options?: unknown, host?: any) {
+    E = { wrap: block.wrap || '', macros: block.macros };
     const M = load(block.src);
-    E = { M, sel: null, arm: null, prop: 'fermion', view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
+    E = { ...E, M, sel: null, arm: null, prop: 'fermion', view: { ox: 0, oy: 0, k: 60 }, undo: [], redo: [], pending: null, done, drag: null, hover: null, knobAt: null, ghost: null, codeAt: null, codeTimer: null };
     E.typed = String(block.src || ''); E.start = snapCode();
     dock.show(host);
     pal.clear();

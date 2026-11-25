@@ -125,7 +125,7 @@ import { onLabelFontsChange } from '../domain/label-image';
   const m = (x: any, y: any) => [E.view.ox + x * E.view.k, E.view.oy - y * E.view.k];
   function fit() {
     if (!E) return;
-    const r = rect(), b = C.itemsBox(E.items, { ...E.st, vstyle: C.vstyleOf(E.raw) }) || { x1: -2, y1: -1, x2: 2, y2: 1 };
+    const r = rect(), b = C.itemsBox(E.items, { ...E.st, ...C.markStyle(E.raw) }) || { x1: -2, y1: -1, x2: 2, y2: 1 };
     // at least 2 cm each way, about the circuit's centre (its y runs up, the stage's down)
     const w = Math.max(b.x2 - b.x1, 2), h = Math.max(b.y2 - b.y1, 2), cx = (b.x1 + b.x2) / 2, cy = -(b.y1 + b.y2) / 2;
     E.view = fitView(r, { x: cx - w / 2, y: cy - h / 2, w, h }, { min: 20, max: 110 });
@@ -372,7 +372,7 @@ import { onLabelFontsChange } from '../domain/label-image';
       }
       return `<g data-id="${it.id}">${s}${hit}</g>`;
     };
-    let body = C.itemsSvg(E.items, m, k, { colorOf, paper: '#fffdf8', wrap, st: { ...E.st, vstyle: C.vstyleOf(E.raw) } });
+    let body = C.itemsSvg(E.items, m, k, { colorOf, paper: '#fffdf8', wrap, st: { ...E.st, ...C.markStyle(E.raw) } });
     // pins: shown while wiring, placing or dragging an end
     let pins = '';
     const showPins = E.tool !== 'select' || (E.drag && (E.drag.mode === 'end' || E.drag.mode === 'new'));

@@ -34,7 +34,7 @@ function applyCharge(C: any, kv: any, warn: any) {
   }
   return C;
 }
-const defaults = () => ({ charge: CHARGE(), sep: 3 * EM, boff: 2 * PT, dsep: 2 * PT, cram: 1.5 * EX, dashOn: 1 * PT, dashOff: 2 * PT, inc: 45, csep: 5 * EM, aoff: 1 * EM, acoeff: 1, aangle: 0, lsep: 3 * PT, hminw: 3 * EM, lxsep: 3 * PT, hsep: 0.5 * EM, fixed: false, plusV: 0, crc: 0.75, cramRect: false, ahead: 'CF', astyle: '', bondStyle: '', plusL: 0.5 * EM, plusR: 0.5 * EM, nameSep: 1.5 * EX });
+const defaults = () => ({ charge: CHARGE(), sep: 3 * EM, boff: 2 * PT, dsep: 2 * PT, cram: 1.5 * EX, dashOn: 1 * PT, dashOff: 2 * PT, inc: 45, csep: 5 * EM, aoff: 1 * EM, acoeff: 1, aangle: 0, lsep: 3 * PT, hminw: 3 * EM, lxsep: 3 * PT, hsep: 0.5 * EM, fixed: false, plusV: 0, crc: 0.75, cramRect: false, ahead: 'CF', astyle: '', bondStyle: '', plusL: 0.5 * EM, plusR: 0.5 * EM, nameSep: 1.5 * EX, ascale: 1, acolor: null as any, cscale: 1, lw: LW });
 const DEF = defaults();
 
 TD.CHEM_DEFAULT = '\\chemfig{H_3C-C(=[1]O)-[7]OH}';
@@ -99,7 +99,7 @@ const BOND_START = '-=~<>';
 // font sizes in pt (10pt documents), and TeX's spacing commands between compounds
 const SIZES: Record<string, any> = { tiny: 5, scriptsize: 7, footnotesize: 8, small: 9, normalsize: 10, large: 12, Large: 14.4, LARGE: 17.28, huge: 20.74, Huge: 24.88 };
 const SIZE_RE = /\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)(?![A-Za-z])\s*/g;
-const SPACE_RE = /\\kern\s*(-?\s*[\d.]+\s*(?:cm|mm|pt|em|ex|in|bp)) ?|\\hspace\*?\s*\{([^}]*)\}|\\(qquad|quad|enspace|thinspace|negthinspace)(?![A-Za-z])\s*|\\([,;:!])/g;
+const SPACE_RE = /\\kern\s*(-?\s*[\d.]+\s*(?:cm|mm|pt|em|ex|in|bp)) ?|\\hspace\*?\s*\{([^}]*)\}|\\(qquad|quad|enspace|thinspace|negthinspace)(?![A-Za-z])\s*|\\([,;:!])|(?<!\\)\\( |\n)[ \t]*/g;
 // size commands outside braces ({\\tiny x} is only x's size): their names, and the text without them
 function topSizes(t: string) {
   const names: string[] = [];
@@ -122,7 +122,8 @@ function spacing(t: string) {
   while ((m = re.exec(t))) {
     if (m.index > i) out.push({ text: t.slice(i, m.index) });
     const named: Record<string, number> = { qquad: 2 * EM, quad: EM, enspace: 0.5 * EM, thinspace: EM / 6, negthinspace: -EM / 6, ',': EM / 6, ':': (2 / 9) * EM, ';': (5 / 18) * EM, '!': -EM / 6 };
-    out.push({ sp: m[1] != null ? len(m[1].replace(/\s+/g, ''), 0) : m[2] != null ? len(m[2].trim(), 0) : named[m[3] || m[4]] });
+    // \  and \<line end> (\^^M, which LaTeX makes \ ): the font's interword space; the next line's spaces are skipped
+    out.push({ sp: m[1] != null ? len(m[1].replace(/\s+/g, ''), 0) : m[2] != null ? len(m[2].trim(), 0) : m[5] != null ? 3.333 * PT : named[m[3] || m[4]] });
     i = re.lastIndex;
   }
   if (i < t.length) out.push({ text: t.slice(i) });
@@ -152,7 +153,7 @@ function parseChain(s: any, warn: any, defs?: any) {
     if (c === '%') { flush(); let e = s.indexOf('\n', i); e = e < 0 ? s.length : skipWs(s, e); chain.items.push({ t: 'ws', raw: s.slice(i, e) }); i = e; continue; }
     if (c === '{') { const e = close(s, i); if (e < 0) { warn('A { in the molecule is not closed'); atom += s.slice(i); break; } atom += s.slice(i, e + 1); i = e + 1; continue; }
     if (c === '\\') {
-      const m = /^\\([A-Za-z]+|.)/.exec(s.slice(i));
+      const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(i));
       let j = i + m![0].length;
       // a command's arguments belong to the atom
       for (;;) { const k = skipWs(s, j); if (s[k] === '{' || (s[k] === '[' && /^(charge|Charge|chemabove|chembelow|Chemabove|Chembelow)$/.test(m![1]))) { const e = close(s, k); if (e < 0) break; j = e + 1; } else break; }
@@ -193,7 +194,7 @@ function parseChain(s: any, warn: any, defs?: any) {
       flush();
       let j = i + 1, name;
       if (s[j] === '{') { const e = close(s, j); if (e < 0) { warn('The { after ! is not closed'); atom += s.slice(i); break; } name = s.slice(j + 1, e); j = e + 1; }
-      else if (s[j] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(j)); name = m![0]; j += m![0].length; }
+      else if (s[j] === '\\') { const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(j)); name = m![0]; j += m![0].length; }
       else if (j < s.length) { name = s[j]; j++; }
       else { atom += c; i++; continue; }
       const d = defs[name], args = [];
@@ -225,6 +226,7 @@ function writeChain(c: any) {
 //   { t: 'text', raw }  { t: 'mol', head: '\chemfig[…]', chain, raw }  { t: 'arrow', raw, names, type, labels: [above, below, shift], opt: [angle, coeff, style] }
 //   { t: 'plus', raw }  { t: 'name', head, inner: [segments], name, raw }  { t: 'start', raw }  { t: 'stop', raw }  { t: 'set', raw, kv }
 //   { t: 'submol', raw, name, n, alt, body }  { t: 'move', raw, opt, body }  { t: 'hstart', raw, kv }  { t: 'hstop', raw }
+//   { t: 'pdelim', raw, opt, a, b }   (\polymerdelim[keys]{bond or atom name}{bond or atom name})
 //   { t: 'harrow', raw, type, labels: [above, below] }   (\hreac … \endhreac: + and > between compounds)
 // chemfig 1.x setters (deprecated in 1.3, removed in 1.4) and the \setchemfig keys they became, read from the 1.2e
 // source: args are brace arguments in order (an empty one keeps the default), opt a leading [ ] argument, csv one
@@ -243,7 +245,7 @@ const LEGACY: Record<string, { args?: string[]; opt?: string; csv?: string[]; se
   enablebondjoin: { set: { 'bond join': 'true' } }, disablebondjoin: { set: { 'bond join': 'false' } },
 };
 // every key \setchemfig knows (chemfig 1.84, with chemfig-lewis): what tells \chemfig[keys] from the 1.x \chemfig[tikz]
-const CHEMFIG_KEYS = new Set(['atom style', 'use atom strut', 'baseline', 'chemfig style', 'bond join', 'fixed length', 'cram rectangle', 'cram width', 'cram dash width', 'cram dash sep', 'atom sep', 'bond offset', 'double bond sep', 'angle increment', 'node style', 'bond style', 'cycle radius coeff', 'stack sep', 'autoreset cntcycle', 'show cntcycle', 'debug', 'scheme debug', 'compound style', 'compound sep', 'arrow offset', 'arrow angle', 'arrow coeff', 'arrow style', 'arrow double sep', 'arrow double coeff', 'arrow double harpoon', 'arrow label sep', 'arrow head', 'init anchor', 'gchemname', 'schemestart code', 'schemestop code', 'harrow minwidth', 'hreac debug', 'label xsep', 'label align', 'name sep', 'hreac anchor', 'hreac sep', 'save', 'save name', 'lewis | width', 'lewis sep', 'lewis length', 'lewis style', 'lewis dist', 'lewis radius', 'lewis diag coeff']);
+const CHEMFIG_KEYS = new Set(['+ sep left', '+ sep right', '+ vshift', '<> join angle', '-> join angle', 'atom style', 'use atom strut', 'baseline', 'chemfig style', 'bond join', 'fixed length', 'cram rectangle', 'cram width', 'cram dash width', 'cram dash sep', 'atom sep', 'bond offset', 'double bond sep', 'angle increment', 'node style', 'bond style', 'cycle radius coeff', 'stack sep', 'autoreset cntcycle', 'show cntcycle', 'debug', 'scheme debug', 'compound style', 'compound sep', 'arrow offset', 'arrow angle', 'arrow coeff', 'arrow style', 'arrow double sep', 'arrow double coeff', 'arrow double harpoon', 'arrow label sep', 'arrow head', 'init anchor', 'gchemname', 'schemestart code', 'schemestop code', 'harrow minwidth', 'hreac debug', 'label xsep', 'label align', 'name sep', 'hreac anchor', 'hreac sep', 'save', 'save name', 'lewis | width', 'lewis sep', 'lewis length', 'lewis style', 'lewis dist', 'lewis radius', 'lewis diag coeff']);
 function parseDoc(src: any, warn: any, defsIn?: any) {
   const s = String(src || '');
   const segs: any[] = [];
@@ -258,7 +260,7 @@ function parseDoc(src: any, warn: any, defsIn?: any) {
       flush();
       let j = i + (s[i + 1] === 'r' ? 15 : 13), k = skipWs(s, j), name;
       if (s[k] === '{') { const e = close(s, k); if (e < 0) { text += s.slice(i); break; } name = s.slice(k + 1, e); j = e + 1; }
-      else if (s[k] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(k)); name = m![0]; j = k + m![0].length; }
+      else if (s[k] === '\\') { const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(k)); name = m![0]; j = k + m![0].length; }
       else { text += s.slice(i, j); i = j; continue; }
       k = skipWs(s, j);
       let n = 0, alt = null;
@@ -279,6 +281,22 @@ function parseDoc(src: any, warn: any, defsIn?: any) {
       if (e < 0) { warn('\\chemmove needs { … }'); text += s.slice(i, j); i = j; continue; }
       segs.push({ t: 'move', raw: s.slice(i, e + 1), opt, body: s.slice(k + 1, e) });
       i = e + 1; continue;
+    }
+    // \hflipnext, \vflipnext: the next molecule mirrored, which isn't drawn here (the spaces after them are TeX's to skip)
+    if (at('\\hflipnext') || at('\\vflipnext')) {
+      flush();
+      warn(`\\${s.slice(i + 1, i + 10)} (the next molecule mirrored) isn't drawn here (it is kept in the code)`);
+      const e = skipWs(s, i + 10);
+      segs.push({ t: 'flip', raw: s.slice(i, e) }); i = e; continue;
+    }
+    if (at('\\polymerdelim')) {
+      flush();
+      let j = i + 13, k = skipWs(s, j), opt = '';
+      if (s[k] === '[') { const e = close(s, k); if (e > 0) { opt = s.slice(k + 1, e); j = e + 1; k = skipWs(s, j); } }
+      const e1 = s[k] === '{' ? close(s, k) : -1, k2 = e1 > 0 ? skipWs(s, e1 + 1) : -1, e2 = k2 > 0 && s[k2] === '{' ? close(s, k2) : -1;
+      if (e2 < 0) { warn('\\polymerdelim needs {name}{name}'); text += s.slice(i, j); i = j; continue; }
+      segs.push({ t: 'pdelim', raw: s.slice(i, e2 + 1), opt, a: s.slice(k + 1, e1).trim(), b: s.slice(k2 + 1, e2).trim() });
+      i = e2 + 1; continue;
     }
     if (at('\\hreac')) {
       flush();
@@ -401,7 +419,7 @@ function parseDoc(src: any, warn: any, defsIn?: any) {
       const tok = (p: any) => {
         p = skipWs(s, p);
         if (s[p] === '{') { const e = close(s, p); return e < 0 ? null : { v: s.slice(p + 1, e).trim(), e: e + 1 }; }
-        if (s[p] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(p)); return { v: m![0], e: p + m![0].length }; }
+        if (s[p] === '\\') { const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(p)); return { v: m![0], e: p + m![0].length }; }
         return p < s.length ? { v: s[p], e: p + 1 } : null;
       };
       const L = tok(i + 9);
@@ -411,7 +429,7 @@ function parseDoc(src: any, warn: any, defsIn?: any) {
         if (c === '%') { const e = s.indexOf('\n', p); p = e < 0 ? s.length : e; continue; }
         if (c === '{') { const e = close(s, p); if (e < 0) break; p = e + 1; continue; }
         if (c === '\\') {
-          const m = /^\\([A-Za-z]+|.)/.exec(s.slice(p, p + 40));
+          const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(p, p + 40));
           if (m![1] === 'chemleft') nest++;
           else if (m![1] === 'chemright') { if (!nest) { found = p; break; } nest--; }
           p += m![0].length; continue;
@@ -451,7 +469,7 @@ function parseDoc(src: any, warn: any, defsIn?: any) {
     }
     if (at('\\chemnameinit')) { flush(); let j = i + 13; const k = skipWs(s, j); if (s[k] === '{') { const e = close(s, k); if (e > 0) j = e + 1; } segs.push({ t: 'nameinit', raw: s.slice(i, j) }); i = j; continue; }
     if (at('\\par')) { flush(); segs.push({ t: 'par', raw: '\\par' }); i += 4; continue; }
-    if (s[i] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(i)); text += m![0]; i += m![0].length; continue; }
+    if (s[i] === '\\') { const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(i)); text += m![0]; i += m![0].length; continue; }
     if (s[i] === '{') { const e = close(s, i); if (e > 0) { text += s.slice(i, e + 1); i = e + 1; continue; } }
     text += s[i]; i++;
   }
@@ -522,22 +540,23 @@ function splitAtoms(raw: any) {
     }
     if (c === '@' && s[i + 1] === '{') { const e = close(s, i + 1); name = split(s.slice(i + 2, e < 0 ? s.length : e))[0].trim(); i = e < 0 ? s.length : e + 1; continue; }
     if (c === '|') { cut = true; i++; continue; }
-    if (c === '{') { const e = close(s, i); const tok = s.slice(i, e < 0 ? s.length : e + 1); start(tok); i += tok.length; continue; }
+    if (c === '{') {
+      const e = close(s, i); const tok = s.slice(i, e < 0 ? s.length : e + 1);
+      // {\charge{…}O}: the group is only the atom's bounds; inside it TeX reads \charge's last argument as one token
+      const inner = e > 0 ? s.slice(i + 1, e) : '', cm = /^\s*\\(charge|Charge|chemabove|chembelow|Chemabove|Chembelow)(?![A-Za-z])/.exec(inner);
+      const r = cm ? markAt(inner, cm[0].length, cm[1], true) : null;
+      if (r && !inner.slice(r.end).trim()) start(tok, r.atom); else start(tok);
+      i += tok.length; continue;
+    }
     if (c === '\\') {
-      const m = /^\\([A-Za-z]+|.)/.exec(s.slice(i));
+      const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(i));
       const name = m![1];
       let j = i + m![0].length;
       if (/^(charge|Charge|chemabove|chembelow|Chemabove|Chembelow)$/.test(name)) {
-        let o = '';
-        let k = skipWs(s, j);
-        if (s[k] === '[') { const e = close(s, k); o = s.slice(k + 1, e); k = skipWs(s, e + 1); }
-        const e1 = s[k] === '{' ? close(s, k) : -1, k2 = e1 > 0 ? skipWs(s, e1 + 1) : -1, e2 = k2 > 0 && s[k2] === '{' ? close(s, k2) : -1;
-        if (e2 < 0) { add(m![0]); i = j; continue; }
-        const a = s.slice(k + 1, e1), b = s.slice(k2 + 1, e2);
-        const tok = s.slice(i, e2 + 1);
-        if (/charge/i.test(name)) { const cl = leadOpts(a); start(tok, { tex: b, charges: readCharges(cl.rest), cmd: name, copt: joinOpts(o, cl.opts), inner: b }); }
-        else start(tok, { tex: a, stack: { text: b, dir: /below/i.test(name) ? 1 : -1 }, cmd: name, inner: a });
-        i = e2 + 1; continue;
+        const r = markAt(s, j, name, false);
+        if (!r) { add(m![0]); i = j; continue; }
+        start(s.slice(i, r.end), r.atom);
+        i = r.end; continue;
       }
       let tok = m![0];
       for (;;) { const k = skipWs(s, j); if (s[k] === '{') { const e = close(s, k); if (e < 0) break; tok += s.slice(j, e + 1); j = e + 1; } else break; }
@@ -546,7 +565,7 @@ function splitAtoms(raw: any) {
     if (c === '_' || c === '^') {
       let j = skipWs(s, i + 1), tok;
       if (s[j] === '{') { const e = close(s, j); tok = s.slice(i, e < 0 ? s.length : e + 1); }
-      else if (s[j] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(j)); tok = s.slice(i, j + m![0].length); }
+      else if (s[j] === '\\') { const m = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(j)); tok = s.slice(i, j + m![0].length); }
       else tok = s.slice(i, j + 1);
       add(tok); i += tok.length; continue;
     }
@@ -555,6 +574,20 @@ function splitAtoms(raw: any) {
   }
   // @{name} with no atom after it (Cl-@{a}(=O)…): it names the empty atom, for \chemmove
   return { atoms, hooks, tail: atoms.length ? null : name };
+}
+// \charge[opts]{list}{atom} or \chemabove{atom}{text} from j (just after the name): the atom it makes and where it
+// ends. one: the last argument may be a single token (a letter or a command), as TeX reads an undelimited argument
+function markAt(s: string, j: number, name: string, one: boolean) {
+  let o = '', k = skipWs(s, j);
+  if (s[k] === '[') { const e = close(s, k); if (e < 0) return null; o = s.slice(k + 1, e); k = skipWs(s, e + 1); }
+  const e1 = s[k] === '{' ? close(s, k) : -1, k2 = e1 > 0 ? skipWs(s, e1 + 1) : -1;
+  let b: string, end: number;
+  if (k2 > 0 && s[k2] === '{') { const e2 = close(s, k2); if (e2 < 0) return null; b = s.slice(k2 + 1, e2); end = e2 + 1; }
+  else if (one && k2 > 0 && k2 < s.length && s[k2] !== '}') { const t = /^\\([A-Za-z]+|[\s\S])?/.exec(s.slice(k2)); b = s[k2] === '\\' ? t![0] : s[k2]; end = k2 + b.length; }
+  else return null;
+  const a = s.slice(k + 1, e1);
+  if (/charge/i.test(name)) { const cl = leadOpts(a); return { end, atom: { tex: b, charges: readCharges(cl.rest), cmd: name, copt: joinOpts(o, cl.opts), inner: b } }; }
+  return { end, atom: { tex: a, stack: { text: b, dir: /below/i.test(name) ? 1 : -1 }, cmd: name, inner: a } };
 }
 // \charge{90=\:,0:2pt[red]=$\oplus$}: position[:offset][tikz]=what
 // \charge{[settings]90=\:,…}{O}: the settings chemfig reads at the start of the list, and the list
@@ -663,12 +696,19 @@ function layMol(seg: any, P: any, warn: any) {
       mark(ch);
       out.push(...expand(ch.items, depth + 1, prevAngle));
     }
+    // chemfig puts a submolecule's code in place before reading: atoms on either side of it are one atom group
+    // (CH_3|!\I with \definesubmol\I{\vphantom{C}} is the group CH_3|\vphantom{C})
+    for (let k = out.length - 1; k > 0; k--) {
+      const a = out[k - 1], b = out[k];
+      if (a.t === 'atom' && b.t === 'atom' && (a.sub || b.sub)) out.splice(k - 1, 2, { t: 'atom', raw: a.raw + b.raw, sub: a.sub || b.sub });
+    }
     return out;
   }
   // a vertex: an atom group (or an empty one) placed with its arrival atom's centre at (x, y)
   function place(g: any, ctx: any, x: any, y: any, angle: any, arrive: any) {
     const sp = g ? splitAtoms(g.raw) : { atoms: [], hooks: [] };
-    const boxes = sp.atoms.length ? sp.atoms.map((a) => ({ ...atomBox(a.tex), src: a })) : [{ tex: '', w: 0, asc: 0, desc: 0, empty: true, ...((sp as any).tail ? { src: { name: (sp as any).tail } } : {}) }];
+    const ka = P.ascale || 1, sc = (b: any) => (ka === 1 ? b : { ...b, w: b.w * ka, asc: b.asc * ka, desc: b.desc * ka });
+    const boxes = sp.atoms.length ? sp.atoms.map((a) => ({ ...sc(atomBox(a.tex)), src: a })) : [{ tex: '', w: 0, asc: 0, desc: 0, empty: true, ...((sp as any).tail ? { src: { name: (sp as any).tail } } : {}) }];
     const n = boxes.length;
     let k = arrive != null ? arrive : angle != null && angle > 90 && angle < 270 ? n - 1 : 0;
     k = Math.max(0, Math.min(n - 1, k));
@@ -687,7 +727,8 @@ function layMol(seg: any, P: any, warn: any) {
     const v = { id: verts.length, g, boxes, sp, k, x: (boxes[k] as any).cx, y: (boxes[k] as any).cy, chain: ctx.chain, idx: ctx.idx, ring: ctx.ring || null, inRing: !!ctx.ring, label: g ? g.raw.trim() : '', seg, sub: (g && g.sub) || (ctx.chain && ctx.chain.sub) || null };
     verts.push(v);
     for (const b of boxes) if ((b as any).src && (b as any).src.name) (names.atoms as Record<string, any>)[(b as any).src.name] = b;
-    for (const b of boxes) if (!b.empty) texts.push({ t: atomTex(b.tex), box: b, v });
+    for (const b of boxes) if (!b.empty) texts.push({ t: atomTex(b.tex), box: b, v, ...(ka !== 1 ? { k: ka } : {}), ...(P.acolor ? { color: P.acolor } : {}) });
+    if (ka !== 1 && boxes.some((b: any) => b.src && (b.src.charges || b.src.stack))) warn('Charges and stacked text on atoms scaled by atom style aren\'t drawn exactly here (they are kept in the code)');
     // charges and stacked text
     for (const b of boxes) {
       const a = (b as any).src;
@@ -717,47 +758,59 @@ function layMol(seg: any, P: any, warn: any) {
     const ax = ba.cx, ay = ba.cy, bx = bb.cx, by = bb.cy;
     const L0 = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / L0, uy = (by - ay) / L0;
     const exit = (b: any, sx: any, sy: any) => (b.empty ? 0 : Math.min(Math.abs(sx) > 1e-9 ? b.w / 2 / Math.abs(sx) : Infinity, Math.abs(sy) > 1e-9 ? (b.asc + b.desc) / 2 / Math.abs(sy) : Infinity));
-    const offA = ba.empty ? 0 : P.boff, offB = bb.empty ? 0 : P.boff;
-    const ta = exit(ba, ux, uy) + offA, tb = exit(bb, ux, uy) + offB;
-    const p0 = [ax + ux * ta, ay + uy * ta], p1 = [bx - ux * tb, by - uy * tb];
-    const nx = uy, ny = -ux; // left of travel, on screen
+    // (bond offset is a coordinate's length, scaled by chemfig style; double bond sep and cram width are node shifts,
+    // scaled by atom style)
+    const as = P.ascale || 1, ds = P.dsep * as, offA = ba.empty ? 0 : P.boff * (P.cscale || 1), offB = bb.empty ? 0 : P.boff * (P.cscale || 1);
+    // TikZ's (A)--(B) runs between the borders; the offsets are taken along that, from each end (so a bond shorter
+    // than its atoms, whose borders cross, is drawn backwards, as chemfig draws it)
+    const ea = exit(ba, ux, uy), eb = exit(bb, ux, uy), qa = [ax + ux * ea, ay + uy * ea], qb = [bx - ux * eb, by - uy * eb];
+    const Lq = Math.hypot(qb[0] - qa[0], qb[1] - qa[1]), vx = Lq > 1e-9 ? (qb[0] - qa[0]) / Lq : ux, vy = Lq > 1e-9 ? (qb[1] - qa[1]) / Lq : uy;
+    const p0 = [qa[0] + vx * offA, qa[1] + vy * offA], p1 = [qb[0] - vx * offB, qb[1] - vy * offB];
+    const nx = vy, ny = -vx; // left of travel, on screen
     const tikz = (item.arg && item.arg[4]) || '';
-    const own = bondStyle(tikz, warn), all = P.bondStyle ? bondStyle(P.bondStyle, null) : null;
-    const sty = all ? { color: own.color || all.color, width: own.width || all.width, dash: own.dash || all.dash, none: own.none || (all.none && !own.color) } : own;
-    const sw = sty.width || LW, col = sty.color;
-    const seg = (q0: any, q1: any, sh0 = 0, sh1 = 0) => `M${r2(q0[0] + ux * sh0)},${r2(q0[1] + uy * sh0)}L${r2(q1[0] - ux * sh1)},${r2(q1[1] - uy * sh1)}`;
+    const own = bondStyle(tikz, warn, true), all = P.bondStyle ? bondStyle(P.bondStyle, null, true) : null;
+    const sty = all ? { color: own.color || all.color, width: own.width || all.width, dash: own.dash || all.dash, none: own.none || (all.none && !own.color),
+      op: own.op ?? all.op, sh0: own.sh0 ?? all.sh0, sh1: own.sh1 ?? all.sh1, snake: own.snake || all.snake } : own;
+    const sw = sty.width || P.lw || LW, col = sty.color;
+    // each line of the bond, shortened as its style says (a ring's double bond correction is a later shorten, so it wins)
+    const seg = (q0: any, q1: any, sh0 = sty.sh0 || 0, sh1 = sty.sh1 || 0) => {
+      const a = [q0[0] + vx * sh0, q0[1] + vy * sh0], b = [q1[0] - vx * sh1, q1[1] - vy * sh1];
+      return sty.snake ? snakePath(a, b, sty.snake.amp, sty.snake.sl) : `M${r2(a[0])},${r2(a[1])}L${r2(b[0])},${r2(b[1])}`;
+    };
     const off = (q: any, d: any) => [q[0] + nx * d, q[1] + ny * d];
     const sym = item.sym;
     const draw = [];
     if (!sty.none) {
       if (sym === '-') draw.push({ d: seg(p0, p1), sw, color: col, dash: sty.dash });
-      else if (sym === '~') { draw.push({ d: seg(p0, p1), sw, color: col, dash: sty.dash }, { d: seg(off(p0, P.dsep), off(p1, P.dsep)), sw, color: col, dash: sty.dash }, { d: seg(off(p0, -P.dsep), off(p1, -P.dsep)), sw, color: col, dash: sty.dash }); }
+      else if (sym === '~') { draw.push({ d: seg(p0, p1), sw, color: col, dash: sty.dash }, { d: seg(off(p0, ds), off(p1, ds)), sw, color: col, dash: sty.dash }, { d: seg(off(p0, -ds), off(p1, -ds)), sw, color: col, dash: sty.dash }); }
       else if (sym[0] === '=') {
         let typ = sym === '=^' ? 1 : sym === '=_' ? 2 : 0;
         if (ring && typ === 0) typ = 1;
-        if (typ === 0) draw.push({ d: seg(off(p0, P.dsep / 2), off(p1, P.dsep / 2)), sw, color: col, dash: sty.dash }, { d: seg(off(p0, -P.dsep / 2), off(p1, -P.dsep / 2)), sw, color: col, dash: sty.dash });
+        if (typ === 0) draw.push({ d: seg(off(p0, ds / 2), off(p1, ds / 2)), sw, color: col, dash: sty.dash }, { d: seg(off(p0, -ds / 2), off(p1, -ds / 2)), sw, color: col, dash: sty.dash });
         else {
           const corr = ring ? P.dsep * Math.tan(Math.PI / ring.n) : 0, sg = typ === 1 ? 1 : -1;
-          const s0 = ring && !offA ? sg * corr : 0, s1 = ring && !offB ? sg * corr : 0;
-          draw.push({ d: seg(p0, p1), sw, color: col, dash: sty.dash }, { d: seg(off(p0, sg * P.dsep), off(p1, sg * P.dsep), s0, s1), sw, color: col, dash: sty.dash });
+          const s0 = ring && !offA ? sg * corr : sty.sh0 || 0, s1 = ring && !offB ? sg * corr : sty.sh1 || 0;
+          draw.push({ d: seg(p0, p1), sw, color: col, dash: sty.dash }, { d: seg(off(p0, sg * ds), off(p1, sg * ds), s0, s1), sw, color: col, dash: sty.dash });
         }
       } else {
         // wedges: > and its kin are wide at the start, < at the end
         const wideStart = sym[0] === '>';
-        const W = wideStart ? p0 : p1, N = wideStart ? p1 : p0, h = P.cram / 2, hn = LW / 2;
+        const W = wideStart ? p0 : p1, N = wideStart ? p1 : p0, h = (as * P.cram) / 2, hn = (as * (P.lw || LW)) / 2;
         if (sym.length === 1) {
           const q = [off(W, h), off(W, -h), off(N, -hn), off(N, hn)];
-          draw.push({ d: `M${q.map((p) => `${r2(p[0])},${r2(p[1])}`).join('L')}Z`, sw: LW, fill: col || true, color: col });
+          // (\filldraw with the bond's style, line join=miter, miter limit=1: a bevel)
+          draw.push({ d: `M${q.map((p) => `${r2(p[0])},${r2(p[1])}`).join('L')}Z`, sw, fill: col || true, color: col, join: 'bevel' });
         } else if (sym[1] === '|') {
           const q = [off(W, h), off(W, -h), N];
-          draw.push({ d: `M${q.map((p) => `${r2(p[0])},${r2(p[1])}`).join('L')}Z`, sw: LW, color: col, join: 'bevel' });
+          draw.push({ d: `M${q.map((p) => `${r2(p[0])},${r2(p[1])}`).join('L')}Z`, sw: sw, color: col, join: 'bevel' });
         } else {
           // hashed: dashes 1pt on 2pt off along the axis from the wide end, line width cram width, clipped to the triangle
           // (cram rectangle drops the clip: every dash as wide as the wide end; solid and hollow wedges don't change)
           const Lb = Math.hypot(N[0] - W[0], N[1] - W[1]) || 1, vx = (N[0] - W[0]) / Lb, vy = (N[1] - W[1]) / Lb, mx = vy, my = -vx;
           let d = '';
           for (let s0 = 0; s0 < Lb; s0 += P.dashOn + P.dashOff) {
-            const s1 = Math.min(Lb, s0 + P.dashOn), w0 = P.cramRect ? h : h * (1 - s0 / Lb), w1 = P.cramRect ? h : h * (1 - s1 / Lb);
+            // (the dashes' line width is the cram width as written; the clip, a node shift, is scaled)
+            const s1 = Math.min(Lb, s0 + P.dashOn), w0 = P.cramRect ? P.cram / 2 : h * (1 - s0 / Lb), w1 = P.cramRect ? P.cram / 2 : h * (1 - s1 / Lb);
             const c0 = [W[0] + vx * s0, W[1] + vy * s0], c1 = [W[0] + vx * s1, W[1] + vy * s1];
             d += `M${r2(c0[0] + mx * w0)},${r2(c0[1] + my * w0)}L${r2(c1[0] + mx * w1)},${r2(c1[1] + my * w1)}L${r2(c1[0] - mx * w1)},${r2(c1[1] - my * w1)}L${r2(c0[0] - mx * w0)},${r2(c0[1] - my * w0)}Z`;
           }
@@ -765,6 +818,8 @@ function layMol(seg: any, P: any, warn: any) {
         }
       }
     }
+    if (sty.op != null && sty.op < 1) for (const p of draw) (p as any).op = sty.op;
+    if ((sty.sh0 || sty.sh1 || sty.snake) && sym !== '-' && sym !== '~' && sym[0] !== '=') warn('A wedge bond\'s shorten or decoration isn\'t drawn here (it is kept in the code)');
     for (const p of draw) paths.push(p);
     if (item.mvName) (names.bonds as Record<string, any>)[item.mvName] = [p0[0] + (p1[0] - p0[0]) * item.mvPos, p0[1] + (p1[1] - p0[1]) * item.mvPos];
     bonds.push({ id: bonds.length, item, a: A, b: B, ka, kb, p0, p1, angle, ring, hook: !!item.hook, chain: item.parent, idx: item.pidx, sub: item.sub || null });
@@ -789,20 +844,23 @@ function layMol(seg: any, P: any, warn: any) {
     }
     if (st.cycle && st.cycle.count === 0) {
       st.curAngle = st.prevAngle;
-      const c = st.cycle, n = c.n, R = (st.defLen * P.sep) / (2 * Math.sin(Math.PI / n));
+      const c = st.cycle, n = c.n, R = ((P.ascale || 1) * st.defLen * P.sep) / (2 * Math.sin(Math.PI / n));
       const a = st.curAngle + c.init + 180 / n + 90, hv = c.hook.v.boxes[c.hook.k];
       c.cx = hv.cx + R * Math.cos(rad(a)); c.cy = hv.cy - R * Math.sin(rad(a));
       rings.push({ item: c.item, cx: c.cx, cy: c.cy, n, chain: c.item.chain, hook: c.hook.v });
       if (c.item.star === '**') {
-        const r = (P.crc * st.defLen * P.sep) / (2 * Math.tan(Math.PI / n));
+        const r0 = (P.crc * st.defLen * P.sep) / (2 * Math.tan(Math.PI / n));
         let a0 = 0, a1 = 360, cs = '';
         if (c.item.arc) { const f = split(c.item.arc.slice(1, -1)).map((x) => x.trim()); if (f[0]) a0 = parseFloat(f[0]) || 0; if (f[1]) a1 = parseFloat(f[1]) || 360; cs = f.slice(2).filter(Boolean).join(','); }
+        // the arc starts at a node shifted from the centre (atom style scales it) and has the radius as a path length
+        // (chemfig style scales it): when the two differ the circle is off the ring's centre
+        const r = r0 * (P.cscale || 1), sh = r0 * ((P.ascale || 1) - (P.cscale || 1)), ccx = c.cx + sh * Math.cos(rad(a0)), ccy = c.cy - sh * Math.sin(rad(a0));
         // **[start,end,style]: the circle's TikZ style (colour, width, dashes)
-        const csy = bondStyle(cs, warn), look = { sw: csy.width || LW, ...(csy.color ? { color: csy.color } : {}), ...(csy.dash ? { dash: csy.dash } : {}) };
+        const csy = bondStyle(cs, warn), look = { sw: csy.width || P.lw || LW, ...(csy.color ? { color: csy.color } : {}), ...(csy.dash ? { dash: csy.dash } : {}) };
         if (csy.none) { /* draw=none: no circle */ }
-        else if (Math.abs(a1 - a0) >= 360) paths.push({ d: `M${r2(c.cx + r)},${r2(c.cy)}a${r2(r)},${r2(r)} 0 1,0 ${r2(-2 * r)},0a${r2(r)},${r2(r)} 0 1,0 ${r2(2 * r)},0Z`, ...look, circle: true });
+        else if (Math.abs(a1 - a0) >= 360) paths.push({ d: `M${r2(ccx + r)},${r2(ccy)}a${r2(r)},${r2(r)} 0 1,0 ${r2(-2 * r)},0a${r2(r)},${r2(r)} 0 1,0 ${r2(2 * r)},0Z`, ...look, circle: true });
         else {
-          const pa = [c.cx + r * Math.cos(rad(a0)), c.cy - r * Math.sin(rad(a0))], pb = [c.cx + r * Math.cos(rad(a1)), c.cy - r * Math.sin(rad(a1))];
+          const pa = [ccx + r * Math.cos(rad(a0)), ccy - r * Math.sin(rad(a0))], pb = [ccx + r * Math.cos(rad(a1)), ccy - r * Math.sin(rad(a1))];
           paths.push({ d: `M${r2(pa[0])},${r2(pa[1])}A${r2(r)},${r2(r)} 0 ${Math.abs(a1 - a0) > 180 ? 1 : 0},${a1 > a0 ? 0 : 1} ${r2(pb[0])},${r2(pb[1])}`, ...look });
         }
       }
@@ -835,6 +893,13 @@ function layMol(seg: any, P: any, warn: any) {
       if (it.t === 'atom') {
         if (st.lastAction === 2) { realize(it, idx); continue; }
         if (!st.group) { st.group = place(it, { chain, idx: posOf(idx), first: true, ring: st.cycle ? st.cycle.item : null }, 0, 0, st.curAngle, st.defArr); defaults(st.group); st.group.root = true; st.lastAction = 1; continue; }
+        // an atom that opens a branch, (C-…) or ([::90]C-…): centred on the last node chemfig drew (the first atom's
+        // base point, another's centre: in A(-[2]B)(C-[6]D), B's, not A's), with no bond
+        const at0 = chain.items.indexOf(it);
+        if (chain.owner && chain.owner.item.t === 'branch' && at0 >= 0 && chain.items.slice(0, at0).every((x: any) => x.t === 'ws')) {
+          const V = verts[verts.length - 1] || st.group, b = V.boxes[V.k], v: any = place(it, { chain, idx: posOf(idx), ring: null }, b.cx, V.root ? b.base : b.cy, null, st.defArr);
+          defaults(v); st.group = v; st.lastAction = 1; continue;
+        }
         warn(`"${it.raw.trim()}" follows something it can't attach to: write a bond before it`);
         continue;
       }
@@ -878,7 +943,8 @@ function layMol(seg: any, P: any, warn: any) {
         const c = V.boxes[dep];
         const fixed = P.fixed && !st.cycle;
         const [sx, sy] = fixed ? edge(c, angle) : [c.cx, c.cy];
-        st.pending = { item: it, angle, from: V, dep, arr: isFinite(arr) ? arr : null, fixed, x: sx + L * P.sep * Math.cos(rad(angle)), y: sy - L * P.sep * Math.sin(rad(angle)) };
+        const Ls = L * P.sep * (P.ascale || 1);
+        st.pending = { item: it, angle, from: V, dep, arr: isFinite(arr) ? arr : null, fixed, x: sx + Ls * Math.cos(rad(angle)), y: sy - Ls * Math.sin(rad(angle)) };
         st.prevAngle = angle; st.lastAction = 2;
         continue;
       }
@@ -923,6 +989,8 @@ function layMol(seg: any, P: any, warn: any) {
     if (p.circle) { const m = /M(-?[\d.]+),(-?[\d.]+)a(-?[\d.]+)/.exec(p.d); const r = +m![3] + LW / 2, cx = +m![1] - (m![3] as any), cy = +m![2]; ext(cx - r, cy - r, cx + r, cy + r); continue; }
     const h = p.fill && !p.sw ? 0 : (p.sw || LW) / 2;
     for (const m of p.d.matchAll(/[MLA](?:[\d.]+,[\d.]+ \d \d,\d )?(-?[\d.]+),(-?[\d.]+)/g)) ext(+m[1] - h, +m[2] - h, +m[1] + h, +m[2] + h);
+    // a curve (a snake bond): its control points count, as in TikZ's box
+    for (const m of p.d.matchAll(/C(-?[\d.]+),(-?[\d.]+) (-?[\d.]+),(-?[\d.]+) (-?[\d.]+),(-?[\d.]+)/g)) for (let j = 1; j < 7; j += 2) ext(+m[j] - h, +m[j + 1] - h, +m[j] + h, +m[j + 1] + h);
   }
   for (const t of texts) if (!t.box && !t.charge && !t.stack) ext(t.cx - (t.b.w - 2) / 2, t.ink ? t.ink[0] : t.cy - t.b.h / 2, t.cx + (t.b.w - 2) / 2, t.ink ? t.ink[1] : t.cy + t.b.h / 2);
   if (!(x2 >= x1)) { x1 = x2 = 0; y1 = y2 = 0; }
@@ -955,10 +1023,14 @@ function chargeMarks(b: any, c: any, out: any) {
     out.paths.push({ d: `M${p.join('L')}Z`, sw: LW, charge: ov });
   } else if (w) out.texts.push({ t: printable(w), cx: x, cy: y, b: TD.textBox(printable(w), TEXT), charge: ov });
 }
-function bondStyle(t: any, warn: any) {
-  const r = { color: null, width: (null as any), dash: (null as any), none: false };
+// a bond's TikZ options. full: the caller draws a bond's opacity, shorten < and >, and a snake decoration too
+function bondStyle(t: any, warn: any, full = false) {
+  const r = { color: null, width: (null as any), dash: (null as any), none: false, op: (null as any), sh0: (null as any), sh1: (null as any), snake: (null as any), decorate: false };
+  let deco: any = null;
   for (const it of split(t || '').map((x) => x.trim()).filter(Boolean)) {
-    const m = /^([^=]+?)\s*(?:=\s*(.*))?$/.exec(it), k = m![1], v = m![2];
+    const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it);
+    if (!m) { if (warn) warn(`The bond option "${it}" isn't drawn here (it is kept in the code)`); continue; }
+    const k = m[1], v = m[2];
     if (k === 'draw' && v === 'none') { r.none = true; continue; }
     if (k === 'line width' && v) { r.width = len(v, LW); continue; }
     if (k === 'thick') { r.width = 0.8 * PT; continue; }
@@ -966,14 +1038,65 @@ function bondStyle(t: any, warn: any) {
     if (k === 'dashed') { r.dash = 'dash'; continue; }
     if (k === 'dotted') { r.dash = 'dot'; continue; }
     if (k === 'solid') { r.dash = 'solid'; continue; } // a bond's own solid, over a dashed bond style
-    if (k === 'shorten <' || k === 'shorten >') continue;
+    // dash pattern=on a off b …: the lengths (pt when no unit is given); an odd list repeats, as PDF's dash array does
+    if (k === 'dash pattern' && v) { const d = [...v.matchAll(/(on|off)\s+(-?[\d.]+)\s*(cm|mm|pt|em|ex|in|bp)?/g)].map((q) => len(q[2] + (q[3] || 'pt'), 0)); if (d.length) { r.dash = d; continue; } }
+    if (full && (k === 'opacity' || k === 'draw opacity') && v && isFinite(parseFloat(v))) { r.op = Math.max(0, Math.min(1, parseFloat(v))); continue; }
+    if (full && (k === 'shorten <' || k === 'shorten >') && v && len(v, null) != null) { if (k === 'shorten <') r.sh0 = len(v, 0); else r.sh1 = len(v, 0); continue; }
+    if (full && k === 'decorate' && v == null) { r.decorate = true; continue; }
+    if (full && k === 'decoration' && v) { deco = unbrace(v); continue; }
     const col = (k === 'draw' || k === 'color') && v ? v : v == null ? k : null;
     if (col && TD.tikzColor) { const c = TD.tikzColor(col); if (c) { r.color = c; continue; } }
     // a chemfig setting among a bond's TikZ options: TikZ doesn't know it, and LaTeX stops there
     if (warn && CHEMFIG_KEYS.has(k)) { warn(`"${k}" is a chemfig setting, not a bond option: LaTeX stops on it here. Set it on the molecule, \\chemfig[${it}]{…}, or for the drawing, \\setchemfig{${it}}`); continue; }
     if (warn) warn(`The bond option "${it}" isn't drawn here (it is kept in the code)`);
   }
+  // decorate with decoration=snake (amplitude 2.5pt, segment length 10pt unless given): the snake; another
+  // decoration, or one without decorate, isn't drawn
+  if (r.decorate) {
+    const f = deco != null ? split(deco).map((x: any) => x.trim()).filter(Boolean) : [];
+    const sn = { amp: 2.5 * PT, sl: 10 * PT };
+    let ok = f.includes('snake');
+    for (const it of f) {
+      const q = /^(amplitude|segment length)\s*=\s*(.+)$/.exec(it);
+      if (q && len(q[2], null) != null) { if (q[1] === 'amplitude') sn.amp = len(q[2], 0); else sn.sl = len(q[2], 0); }
+      else if (it !== 'snake') ok = false;
+    }
+    if (ok && sn.sl > 0) r.snake = sn;
+    else if (warn) warn(`The bond decoration "${deco ?? ''}" isn't drawn here (it is kept in the code)`);
+  }
   return r;
+}
+// pgf's snake decoration along a line from a to b (pgflibrarydecorations.pathmorphing): states initial, down/up,
+// end down/up and final, with \pgfpathsine and \pgfpathcosine as pgf draws them; amplitude to the left of travel
+function snakePath(a: number[], b: number[], amp: number, sl: number) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const P2 = (q: number[]) => `${r2(q[0])},${r2(q[1])}`;
+  if (!L) return `M${P2(a)}L${P2(b)}`;
+  const tx = (b[0] - a[0]) / L, ty = (b[1] - a[1]) / L, nx = ty, ny = -tx;
+  const at = (s: number, h: number) => [a[0] + tx * s + nx * h, a[1] + ty * s + ny * h];
+  let d = `M${P2(a)}`, s = 0, st = 'initial';
+  const C = (c1: number[], c2: number[], e: number[]) => { d += `C${P2(at(c1[0], c1[1]))} ${P2(at(c2[0], c2[1]))} ${P2(at(e[0], e[1]))}`; };
+  for (let n = 0; n < 100000; n++) {
+    const rem = L - s;
+    if (st === 'initial') {
+      if (rem < 0.625 * sl) { st = 'final'; continue; }
+      C([s + 0.125 * sl, 0], [s + 0.1875 * sl, amp], [s + 0.3125 * sl, amp]); s += 0.3125 * sl; st = 'down'; continue;
+    }
+    if (st === 'down' || st === 'up') {
+      const g = st === 'down' ? -1 : 1, w = 0.25 * sl, h0 = -g * amp;
+      if (rem < 0.8125 * sl) { st = st === 'down' ? 'end down' : 'end up'; continue; }
+      // a cosine to the axis, then a sine to the other side
+      C([s + 0.362 * w, h0], [s + 0.674 * w, h0 + 0.488 * g * amp], [s + w, 0]);
+      C([s + w + 0.326 * w, 0.512 * g * amp], [s + w + 0.638 * w, g * amp], [s + 2 * w, g * amp]);
+      s += 0.5 * sl; st = st === 'down' ? 'up' : 'down'; continue;
+    }
+    if (st === 'end down' || st === 'end up') {
+      const g = st === 'end down' ? 1 : -1;
+      C([s + 0.125 * sl, g * amp], [s + 0.1875 * sl, 0], [s + 0.3125 * sl, 0]); s += 0.3125 * sl; st = 'final'; continue;
+    }
+    break;
+  }
+  return d + `L${P2(b)}`;
 }
 
 // ---------------------------------------------------------------- scheme layout
@@ -996,29 +1119,59 @@ function relBox(e: any, T: any) {
 }
 // \setchemfig keys
 function applyKV(P: any, kv: any, warn: any) {
-  const map: Record<string, any> = { 'atom sep': 'sep', 'bond offset': 'boff', 'double bond sep': 'dsep', 'cram width': 'cram', 'compound sep': 'csep', 'arrow offset': 'aoff', 'arrow label sep': 'lsep', 'name sep': 'nameSep' };
+  const map: Record<string, any> = { 'atom sep': 'sep', 'bond offset': 'boff', 'double bond sep': 'dsep', 'cram width': 'cram', 'compound sep': 'csep', 'arrow offset': 'aoff', 'arrow label sep': 'lsep', 'name sep': 'nameSep',
+    'cram dash width': 'dashOn', 'cram dash sep': 'dashOff', 'harrow minwidth': 'hminw', 'label xsep': 'lxsep', 'hreac sep': 'hsep', '+ sep left': 'plusL', '+ sep right': 'plusR', '+ vshift': 'plusV' };
   for (const [k, v] of Object.entries<any>(kv)) {
-    if (map[k]) P[map[k]] = len(v, P[map[k]]);
+    // (an empty value is chemfig's default again, as \CF_defifempty sets it)
+    if (map[k]) P[map[k]] = String(v ?? '').trim() === '' ? (defaults() as any)[map[k]] : len(v, P[map[k]]);
     else if (k === 'angle increment') P.inc = parseFloat(v) || 45;
     else if (k === 'arrow coeff') P.acoeff = parseFloat(v) || 1;
     else if (k === 'arrow angle') P.aangle = parseFloat(v) || 0;
     else if (k === 'fixed length') P.fixed = v !== 'false';
     else if (k === 'cram rectangle') P.cramRect = v !== 'false';
-    else if (k === 'cram dash width') P.dashOn = len(v, P.dashOn);
-    else if (k === 'cram dash sep') P.dashOff = len(v, P.dashOff);
     else if (k === 'cycle radius coeff') P.crc = parseFloat(v) || 0.75;
     // arrow head=-CF (chemfig's), -stealth, -latex, -> …: the tip every scheme arrow ends in
     else if (k === 'arrow head') P.ahead = headKind(v, warn);
     // \setandsign{before,after,raise} (1.x): the spacing every bare \+ takes
     else if (k === 'and sign') { const f = split(String(v || '')).map((x: any) => x.trim()); if (f[0]) P.plusL = len(f[0], P.plusL); if (f[1]) P.plusR = len(f[1], P.plusR); if (f[2]) P.plusV = len(f[2], 0); }
-    else if (k === 'scheme debug' || k === 'debug' || k === 'hreac debug' || k === 'show cntcycle' || k === 'autoreset cntcycle' || k === 'save' || k === 'save name') { /* nothing to draw */ }
+    // the debug frames, names and marks chemfig draws when asked
+    else if (k === 'scheme debug' || k === 'debug' || k === 'hreac debug' || k === 'show cntcycle') { if (String(v).trim() !== 'false') warn(`"${k}=${v}" draws chemfig's debugging marks, which aren't drawn here (it is kept in the code)`); }
+    else if (k === 'autoreset cntcycle' || k === 'save' || k === 'save name') { /* nothing to draw */ }
     else if (k === 'arrow style') { P.astyle = String(v || ''); bondStyle(P.astyle, warn); }
     // every bond's TikZ style, put before the bond's own options (which win)
     else if (k === 'bond style') { P.bondStyle = String(v || ''); bondStyle(P.bondStyle, warn); }
-    else if (k === 'harrow minwidth') P.hminw = len(v, P.hminw);
-    else if (k === 'label xsep') P.lxsep = len(v, P.lxsep);
-    else if (k === 'hreac sep') P.hsep = len(v, P.hsep);
+    else if (k === 'atom style') atomStyle(P, v, warn);
+    else if (k === 'chemfig style') chemfigStyle(P, v, warn);
+    // where the drawing sits on its line of text: the drawing itself doesn't change
+    else if (k === 'baseline') { /* nothing to draw */ }
+    else if (k === 'compound style') P.cstyle = String(v || '');
     else warn(`The setting "${k}" isn't drawn here (it is kept in the code)`);
+  }
+}
+// atom style={…}: TikZ options at the end of every node's style (each setting replaces the last). scale=k scales the
+// atoms and every node shift chemfig places with: atom sep, ring centres, the aromatic circle's start, double bond sep
+// and cram width; path lengths (bond offset, line width, the circle's radius, a ring's double bond shortening) stay.
+// A colour is the atoms' text colour.
+function atomStyle(P: any, v: any, warn: any) {
+  P.ascale = 1; P.acolor = null;
+  for (const it of split(String(v || '')).map((x) => x.trim()).filter(Boolean)) {
+    const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it), k = m ? m[1].trim() : it, w = m && m[2] != null ? unbrace(m[2]).trim() : null;
+    const c = TD.tikzColor && (w == null ? TD.tikzColor(k) : (k === 'color' || k === 'text') ? TD.tikzColor(w) : null);
+    if (k === 'scale' && w != null && parseFloat(w) > 0 && /^[\d.]+$/.test(w)) P.ascale = parseFloat(w);
+    else if (c) P.acolor = c;
+    else warn(`The atom style "${it}" isn't drawn here (it is kept in the code)`);
+  }
+}
+// chemfig style={…}: TikZ options of the molecule's picture. scale=k scales what chemfig computes as coordinates (bond
+// offset, the aromatic circle's radius), not the atoms' places; line width is every bond's
+function chemfigStyle(P: any, v: any, warn: any) {
+  P.cscale = 1; P.lw = LW;
+  for (const it of split(String(v || '')).map((x) => x.trim()).filter(Boolean)) {
+    const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it), k = m ? m[1].trim() : it, w = m && m[2] != null ? unbrace(m[2]).trim() : null;
+    if (k === 'scale' && w != null && parseFloat(w) > 0 && /^[\d.]+$/.test(w)) P.cscale = parseFloat(w);
+    else if (k === 'line width' && w != null && len(w, null) != null) P.lw = len(w, LW);
+    else if (k === 'thick' || k === 'very thick' || k === 'thin') P.lw = { thick: 0.8, 'very thick': 1.2, thin: 0.4 }[k]! * PT;
+    else warn(`The chemfig style "${it}" isn't drawn here (it is kept in the code)`);
   }
 }
 // (name.anchor[style]) → { n, a, s }
@@ -1027,8 +1180,10 @@ function endOf(t: any) {
   let s = '';
   const b = t.indexOf('[');
   if (b >= 0) { const e = close(t, b); s = t.slice(b + 1, e < 0 ? t.length : e).trim(); t = t.slice(0, b).trim(); }
-  const d = t.indexOf('.');
-  return d < 0 ? { n: t, a: '', s } : { n: t.slice(0, d).trim(), a: t.slice(d + 1).trim(), s };
+  // (a name in braces, @{a}, is that name)
+  const nm = (x: string) => x.replace(/^(@?)\{([^{}]*)\}$/, '$1$2');
+  const d = t.indexOf('.', t.lastIndexOf('}') + 1);
+  return d < 0 ? { n: nm(t), a: '', s } : { n: nm(t.slice(0, d).trim()), a: t.slice(d + 1).trim(), s };
 }
 // an arrow's (n1.a1[s1]--n2.a2[s2])
 function arrowEnds(names: any) {
@@ -1041,9 +1196,10 @@ function arrowEnds(names: any) {
   return { n1: A.n, a1: A.a, s1: A.s, n2: B.n, a2: B.a, s2: B.s };
 }
 const STY: Record<string, any> = { left: 'east', right: 'west', above: 'south', below: 'north', 'above left': 'south east', 'above right': 'south west', 'below left': 'north east', 'below right': 'north west' };
-// a compound's TikZ style: its anchor, inner sep, shift and the delimiters drawn beside it
+// a compound's TikZ style: its anchor, inner sep, shift, the delimiters drawn beside it and its frame (draw, line
+// width, rounded corners, opacity). compound style={…} comes first, then the anchor, then the arrow's own style
 function compoundStyle(style: any, dflt: any, P: any, warn: any) {
-  const o = { anchor: dflt, sep: 0, dx: 0, dy: 0, ld: '', rd: '' };
+  const o: Record<string, any> = { anchor: dflt, sep: 0, dx: 0, dy: 0, ld: '', rd: '', draw: false, color: null, lw: LW, rc: 0, op: 1, top: null };
   const read = (st: any, depth: number) => {
     for (const it of split(st || '').map((x) => x.trim()).filter(Boolean)) {
       const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it)!, k = m[1].trim(), v = m[2] == null ? null : unbrace(m[2]);
@@ -1055,12 +1211,31 @@ function compoundStyle(style: any, dflt: any, P: any, warn: any) {
       else if (k === 'yshift' && v != null) o.dy -= len(v, 0);
       else if (k === 'left delimiter' && v != null) o.ld = v;
       else if (k === 'right delimiter' && v != null) o.rd = v;
+      else if (k === 'draw' && (v == null || (TD.tikzColor && TD.tikzColor(v)))) { o.draw = true; if (v != null) o.color = TD.tikzColor(v); }
+      else if (k === 'line width' && v != null && len(v, null) != null) o.lw = len(v, LW);
+      else if (LWS[k] != null && v == null) o.lw = LWS[k] * PT;
+      else if (k === 'rounded corners') o.rc = v == null ? 4 * PT : len(v, 0);
+      else if (k === 'sharp corners' && v == null) o.rc = 0;
+      else if (k === 'semitransparent' && v == null) o.op = 0.5;
+      else if ((k === 'opacity' || k === 'draw opacity') && v != null && isFinite(parseFloat(v))) o.op = parseFloat(v);
+      else if (k === 'text opacity' && v != null && isFinite(parseFloat(v))) o.top = parseFloat(v);
       else if (/^(outer sep|minimum size|minimum width|minimum height)$/.test(k)) {}
       else warn(`The compound style "${it}" isn't drawn here (it is kept in the code)`);
     }
   };
+  if (P.cstyle) { read(P.cstyle, 0); o.anchor = dflt; }
   read(style, 0);
+  // (opacity is the text's too, unless text opacity says otherwise)
+  if (o.draw && (o.top ?? o.op) < 1) warn('A compound\'s see-through text isn\'t drawn here (it is kept in the code)');
   return o;
+}
+const LWS: Record<string, number> = { 'ultra thin': 0.1, 'very thin': 0.2, thin: 0.4, semithick: 0.6, thick: 0.8, 'very thick': 1.2, 'ultra thick': 1.6 };
+// a rectangle with rounded corners of radius rc (TikZ's rounded corners: arcs at each corner, at most half a side)
+function roundRect(x: number, y: number, w: number, h: number, rc: number) {
+  const r = Math.max(0, Math.min(rc, w / 2, h / 2));
+  if (!r) return `M${r2(x)},${r2(y)}h${r2(w)}v${r2(h)}h${r2(-w)}Z`;
+  const a = (dx: number, dy: number) => `a${r2(r)},${r2(r)} 0 0,1 ${r2(dx)},${r2(dy)}`;
+  return `M${r2(x + r)},${r2(y)}h${r2(w - 2 * r)}${a(r, r)}v${r2(h - 2 * r)}${a(-r, r)}h${r2(-(w - 2 * r))}${a(-r, -r)}v${r2(-(h - 2 * r))}${a(r, -r)}Z`;
 }
 
 // Pieces side by side on the baseline: molecules, + signs, names, text, subschemes, delimiters, charges.
@@ -1088,6 +1263,25 @@ function layPieces(segs: any, P: any, warn: any, G: any, lead0?: any) {
     const lead = /^\s/.test(t), trail = /\s$/.test(t);
     let body = t.trim();
     if ((lead || pendingSpace) && (F.pieces.length || (lead0 && g !== segs[0]))) x += 3.333 * PT;
+    // \parbox{w}{line}: a box w wide, its one line centred (\centering) or from the left, the box's middle on the maths
+    // axis (2.5pt up), as LaTeX's \parbox[c] sets it
+    const pb = /^\\parbox\s*(?:\[c\])?\s*\{([^{}]*)\}\s*\{([\s\S]*)\}$/.exec(body), pw = pb ? len(pb[1].trim(), null) : null;
+    let pbc = '', pbMid = false;
+    if (pb && pw != null && close(body, body.length - pb[2].length - 2) === body.length - 1 && !/\\\\|\\par\b|\n\s*\n/.test(pb[2])) {
+      pbc = pb[2].trim();
+      for (let q; (q = /^\{\s*([\s\S]*)\}$/.exec(pbc)) && close(pbc, 0) === pbc.length - 1 || (q = /^\\centering(?![A-Za-z])\s*([\s\S]*)$/.exec(pbc)); ) { if (/^\\centering/.test(pbc)) pbMid = true; pbc = q[1].trim(); }
+      // (a line wider than the box: TeX breaks it at its spaces into lines, which aren't set here; one word stays
+      // one line, from the box's left edge)
+      if ((TD.textBox(printable(pbc), TEXT).w - 2) > pw + 0.5 * PT && /\S\s+\S/.test(pbc.replace(/\\[A-Za-z]+\s*/g, ''))) { warn(`The \\parbox{${pb[1].trim()}} text is wider than its box: TeX breaks it into lines, which aren't drawn here (it is kept in the code)`); pbc = ''; }
+    }
+    if (pbc) {
+      const c = pbc, mid = pbMid;
+      const tt = printable(c), b = TD.textBox(tt, TEXT), m = vmetrics(c.replace(/\$/g, '').replace(/\\text\w*\s*/g, ''));
+      const hd = Math.max(m.asc, 0.683 * EM) + m.desc, top = -(hd / 2 + 2.5 * PT), base = top + Math.max(m.asc, 0.683 * EM);
+      F.texts.push({ t: tt, cx: x + (mid && b.w - 2 < pw ? pw / 2 : (b.w - 2) / 2), cy: base - bo + b.h / 2, b, seg: g });
+      put({ kind: 'text', seg: g, x, w: pw, asc: -top, desc: hd + top });
+      x += pw; pendingSpace = trail; return;
+    }
     // {\tiny text}: the text in its own size
     let st = TEXT, k = 1;
     const sz = body[0] === '{' && close(body, 0) === body.length - 1 ? /^\{\s*\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)(?![A-Za-z])\s*([\s\S]*)\}$/.exec(body) : null;
@@ -1155,7 +1349,7 @@ function layPieces(segs: any, P: any, warn: any, G: any, lead0?: any) {
     if (g.t === 'lr') { kid(layLR(g, P, warn, G), 'lr', g); continue; }
     if (g.t === 'chg') { kid(layCharge(g, P, warn, G), 'chg', g); continue; }
     // \chemmove draws once everything is placed, with the names known at this point
-    if (g.t === 'move') { G.moves.push({ seg: g, snap: { ...G.names } }); continue; }
+    if (g.t === 'move' || g.t === 'pdelim') { G.moves.push({ seg: g, snap: { ...G.names }, at: { F, pt: [x, 0] } }); continue; }
     if (g.t === 'nameinit') { G.nameDp = 0; continue; }
   }
   F.w = x; F.asc = asc; F.desc = desc;
@@ -1281,6 +1475,7 @@ function layScheme(body: any, P0: any, warn: any, G: any, opt: any) {
     attach(S, C, ox, oy);
     cur = { x: ox - is, y: oy - C.asc - is, w: C.w + 2 * is, h: C.asc + C.desc + 2 * is, base: oy };
     ext(S, cur.x, cur.y, cur.x + cur.w, cur.y + cur.h);
+    if (cs.draw) S.paths.push({ d: roundRect(cur.x, cur.y, cur.w, cur.h, cs.rc), sw: cs.lw, color: cs.color, ...(cs.op < 1 ? { op: cs.op } : {}) });
     // left/right delimiter (TikZ's matrix library): $\left[ \vcenter{node height} \right.$ against the node's side
     if (cs.ld || cs.rd) {
       const h = cur.h, H = Math.max(0.901 * h, h - 5 * PT), m = cur.y + h / 2, top = m - H / 2, bot = m + H / 2, nul = 1.2 * PT;
@@ -1320,7 +1515,7 @@ function layScheme(body: any, P0: any, warn: any, G: any, opt: any) {
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     const X = M.dir === '<' ? Math.min(...xs) - from * P.csep : Math.max(...xs) + from * P.csep;
     const Y = M.dir === '^' ? Math.min(...ys) - from * P.csep : Math.max(...ys) + from * P.csep;
-    const line = (a: any, b: any) => { S.paths.push({ d: `M${r2(a[0])},${r2(a[1])}L${r2(b[0])},${r2(b[1])}`, sw: sty.width || LW, color: sty.color }); ext(S, Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])); };
+    const line = (a: any, b: any) => { S.paths.push({ d: `M${r2(a[0])},${r2(a[1])}L${r2(b[0])},${r2(b[1])}`, sw: sty.width || LW, color: sty.color, dash: sty.dash }); ext(S, Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])); };
     for (const p of pts) line([p[0] + ux * P.aoff, p[1] + uy * P.aoff], horiz ? [X, p[1]] : [p[0], Y]);
     const lo = horiz ? Math.min(...ys) : Math.min(...xs), hi = horiz ? Math.max(...ys) : Math.max(...xs);
     line(horiz ? [X, lo] : [lo, Y], horiz ? [X, hi] : [hi, Y]);
@@ -1505,7 +1700,11 @@ function emitMol(m: any, dx: any, dy: any, K: any) {
   for (const q of L.paths) K.paths.push({ ...q, dx, dy });
   for (const d of L.dots) K.dots.push({ ...d, x: d.x + dx, y: d.y + dy });
   for (const t of L.texts) {
-    if (t.box) { const b = TD.textBox(t.t, TEXT), bo = baseOff(TEXT); K.texts.push({ t: t.t, cx: t.box.cx + dx, cy: t.box.base + dy - bo + b.h / 2, b }); }
+    if (t.box) {
+      // (an atom scaled by atom style: its text at that size)
+      const st = t.k ? { ...TEXT, size: TEXT.size * t.k } : TEXT, b = TD.textBox(t.t, st), bo = baseOff(st);
+      K.texts.push({ t: t.t, cx: t.box.cx + dx, cy: t.box.base + dy - bo + b.h / 2, b, ...(t.k ? { st } : {}), ...(t.color ? { color: t.color } : {}) });
+    }
     else K.texts.push({ t: t.t, cx: t.cx + dx, cy: t.cy + dy, b: t.b });
   }
   const map = new Map();
@@ -1515,7 +1714,9 @@ function emitMol(m: any, dx: any, dy: any, K: any) {
   for (const r of L.rings) K.rings.push({ ...r, X: r.cx + dx, Y: r.cy + dy, mol: seg });
 }
 // \printatom{X} sets X as an atom: upright maths
-const printable = (t: any) => String(t).replace(/\\printatom\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (m, a) => `$\\mathrm{${a}}$`);
+// (\textcolor{red}7: TeX's undelimited argument, one token, is \textcolor{red}{7})
+const printable = (t: any) => String(t).replace(/\\printatom\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g, (m, a) => `$\\mathrm{${a}}$`)
+  .replace(/\\textcolor\s*\{([^{}]*)\}\s*(\\[A-Za-z]+|[^\s{}\\$])/g, '\\textcolor{$1}{$2}');
 // a TikZ anchor of a node's box { x, y, w, h } whose baseline is at base: north east, mid west, base, 30…
 function anchorPt(box: any, base: any, a: any) {
   a = String(a || '').trim();
@@ -1539,17 +1740,86 @@ function tikzLen(v: any) {
   if (!m) return null;
   return parseFloat(m[1]) * { cm: PX, mm: PX / 10, pt: PT, em: EM, ex: EX, in: 2.54 * PX, bp: (2.54 * PX) / 72 }[m[2] || 'cm'];
 }
-function chemMove(seg: any, names: any, warn: any, out: any) {
+// \polymerdelim[keys]{a}{b}: chemfig's \chemmove (an overlay, outside the box) with a node at each name's centre (a
+// bond's @{name,pos} point or an atom), shifted by open xshift (close xshift, negated, for the right one) and by
+// (height − depth)/2 up: $\left<l>\vrule height h depth h\right.$ and $\left.\vrule …\right<r>_{\rlap{$\scriptstyle indice$}}$,
+// h = (height + depth)/2, \nulldelimiterspace 0pt. The keys start from their defaults in order (height=10pt, then
+// depth= takes that height, close xshift= takes −0pt), then the given ones.
+function polymerDelim(seg: any, names: any, warn: any, K: any) {
+  const o: Record<string, any> = { l: '(', r: ')', ht: 10 * PT, dp: 10 * PT, ox: 0, cx: 0, h: true, auto: false, rot: 0, ind: 'n' };
+  for (const [k, v0] of Object.entries<any>(readKV(seg.opt || ''))) {
+    const v = String(v0 ?? '').trim();
+    if (k === 'delimiters') { const t: string[] = [...(v.match(/\\[A-Za-z]+|\\.|\S/g) || [])].concat(['(', ')']); o.l = t[0]; o.r = t[1]; }
+    else if (k === 'height') o.ht = len(v, o.ht);
+    else if (k === 'depth') o.dp = v ? len(v, o.dp) : o.ht;
+    else if (k === 'open xshift') o.ox = len(v, 0);
+    else if (k === 'close xshift') o.cx = v ? -len(v, 0) : -o.ox;
+    else if (k === 'h align') o.h = v !== 'false';
+    else if (k === 'auto rotate') o.auto = v !== 'false';
+    else if (k === 'rotate') o.rot = parseFloat(v) || 0;
+    else if (k === 'indice') o.ind = v;
+    else warn(`The \\polymerdelim key "${k}" isn't drawn here (it is kept in the code)`);
+  }
+  if (!o.h && (o.auto || o.rot)) { warn('A rotated \\polymerdelim isn\'t drawn here (it is kept in the code)'); return; }
+  const at = (n: string) => {
+    const q = names.bonds[n], b = names.atoms[n];
+    if (q) return q;
+    if (b) return [b.x + b.w / 2, b.y + b.h / 2];
+    warn(`\\polymerdelim: "${n}" isn't named in a molecule (@{${n}})`);
+    return null;
+  };
+  const A = at(seg.a), B = at(seg.b);
+  if (!A || !B) return;
+  const hd = (o.ht + o.dp) / 2, vs = (o.ht - o.dp) / 2, ax = 2.5 * PT;
+  // TeX's \left…\right around a rule of height and depth h: a delimiter at least max(.901·2(h+axis), 2(h+axis) − 5pt),
+  // centred on the axis; the node's box (the rule's or the delimiter's) is centred on the point
+  // the closing one's subscript, \rlap{$\scriptstyle indice$}: its baseline the formula's depth plus cmsy7's sub drop
+  // (0.5pt) down; it adds its depth to the node's box and \scriptspace (0.5pt) to its width (measured: ) with n is
+  // 7.86pt wide, 10.5pt deep, with p 11.86pt deep)
+  const sub = (D: number) => (o.ind ? { y: D + 0.5 * PT, d: D + 0.5 * PT + 0.7 * vmetrics(o.ind).desc, w: 0.5 * PT } : null);
+  const one = (tok: string, x: number, y: number, right: boolean) => {
+    const need = 2 * (hd + ax), f = delimFit(tok, Math.max(need * 0.901, need - 5 * PT));
+    const H = Math.max(hd, ax + f.T / 2), D = Math.max(hd, f.T / 2 - ax), s = right ? sub(D) : null;
+    // (\nulldelimiterspace 0pt: a . is no width)
+    const fw = tok === '.' ? 0 : f.w, Dn = s ? Math.max(D, s.d) : D, wn = fw + (s ? s.w : 0), base = y + (H - Dn) / 2, mid = base - ax, left = x - wn / 2;
+    if (tok !== '.') { const F = frag(); delim(tok, F, left, mid - f.T / 2, mid + f.T / 2, warn, right); for (const p of F.paths) K.paths.push(p); }
+    return { base, left, w: fw, s };
+  };
+  const yA = A[1] - vs, yB = (o.h ? A[1] : B[1]) - vs;
+  one(o.l, A[0] + o.ox, yA, false);
+  const R = one(o.r, B[0] + o.cx, yB, true);
+  if (R.s) {
+    const t = `$\\scriptstyle ${o.ind}$`, b = TD.textBox(t, TEXT), y = R.base + R.s.y;
+    K.texts.push({ t, cx: R.left + R.w + (b.w - 2) / 2, cy: y - baseOff(TEXT) + b.h / 2, b });
+  }
+}
+// org: where the \chemmove stands (its picture's origin, which a point written (x,y) counts from); K: the texts drawn
+function chemMove(seg: any, names: any, warn: any, out: any, org: number[] = [0, 0], K?: any) {
   const body = seg.body.replace(/%[^\n]*/g, '');
   const re = /\\(draw|path)\s*(\[[^\]]*\])?([^;]*);/g;
   let m, any = false, k = -1;
-  const rest = body.replace(re, '').trim();
+  // \node[] at (x,y) {text};: the text centred on the point (anchor=center)
+  const NODE = /\\node\s*(?:\[([^\]]*)\])?\s*at\s*(\((?:[^()]|\([^()]*\))*\))\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}\s*;/g;
+  let rest = body.replace(re, '');
+  if (K) rest = rest.replace(NODE, (all: string, o: string, at: string, t: string) => {
+    const col = (o || '').trim() && TD.tikzColor ? TD.tikzColor((o || '').trim()) : null;
+    if ((o || '').trim() && !col) return all;
+    const P0 = readPath(at, names, () => {}, org, true);
+    if (!P0) return all;
+    // (\footnotesize … in it: the text at that size)
+    const ts = topSizes(t), st = ts.names.length ? { ...TEXT, size: SIZES[ts.names[ts.names.length - 1]] * PT } : TEXT;
+    const tt = printable(ts.rest.trim()), b = TD.textBox(tt, st);
+    K.texts.push({ t: tt, cx: P0.pts[0][0], cy: P0.pts[0][1], b, ...(st !== TEXT ? { st } : {}), ...(col ? { color: col } : {}) });
+    any = true;
+    return '';
+  });
+  rest = rest.trim();
   if (rest) warn(`In \\chemmove, "${rest.slice(0, 40)}" isn't drawn here (it is kept in the code)`);
   while ((m = re.exec(body))) {
     any = true; k++;
     if (m[1] === 'path') continue;
     const opts = [seg.opt, m[2] ? m[2].slice(1, -1) : ''].join(',').split(',').map((o) => o.trim()).filter(Boolean);
-    const st = { tipS: false, tipE: true, sh1: 0, sh2: 0, dash: (null as any), sw: LW, color: null };
+    const st = { tipS: false, tipE: true, sh1: 0, sh2: 0, dash: (null as any), sw: LW, color: null, fill: (null as any), fop: 1, op: 1 };
     for (const o of opts) {
       let q;
       if ((q = /^([<>]?|CF|stealth|latex|to)?-([<>]?|CF|stealth|latex|to)?$/.exec(o))) { st.tipS = !!q[1]; st.tipE = !!q[2]; }
@@ -1561,16 +1831,19 @@ function chemMove(seg: any, names: any, warn: any, out: any) {
       else if ((q = /^line width\s*=\s*(.+)$/.exec(o))) st.sw = len(q[1], LW);
       else if (o === 'thin') st.sw = LW; else if (o === 'semithick') st.sw = 0.6 * PT; else if (o === 'thick') st.sw = 0.8 * PT; else if (o === 'very thick') st.sw = 1.2 * PT; else if (o === 'ultra thick') st.sw = 1.6 * PT;
       else if ((q = /^(?:color\s*=\s*|draw\s*=\s*)?([a-zA-Z]+(?:![\d.]+(?:![a-zA-Z]+)?)?)$/.exec(o)) && TD.tikzColor && TD.tikzColor(q[1])) st.color = TD.tikzColor(q[1]);
+      else if ((q = /^fill\s*=\s*(.+)$/.exec(o)) && TD.tikzColor && TD.tikzColor(q[1].trim())) st.fill = TD.tikzColor(q[1].trim());
+      else if ((q = /^(fill opacity|draw opacity|opacity)\s*=\s*([\d.]+)$/.exec(o))) { const v = Math.max(0, Math.min(1, parseFloat(q[2]))); if (q[1] !== 'draw opacity') st.fop = v; if (q[1] !== 'fill opacity') st.op = v; }
       else if (/^(?:->|overlay|remember picture)$/.test(o)) {}
       else warn(`The \\chemmove option "${o}" isn't drawn here (it is kept in the code)`);
     }
-    const segs = readPath(m[3], names, warn);
+    const segs = readPath(m[3], names, warn, org);
     // seg and k (the k-th \draw or \path in its body): what the editor rewrites
     if (segs) out.push({ ...st, segs, seg, k });
   }
   if (!any && body.trim()) warn('\\chemmove has no \\draw to show here (it is kept in the code)');
 }
-function readPath(p: any, names: any, warn: any) {
+// one: a single point is enough (a node's place)
+function readPath(p: any, names: any, warn: any, org: number[] = [0, 0], one = false) {
   let i = 0;
   const ws = () => { while (/\s/.test(p[i] || '')) i++; };
   const unit = (v: any) => tikzLen(v);
@@ -1591,7 +1864,10 @@ function readPath(p: any, names: any, warn: any) {
     if (t[0] === '[') {
       const e = close(t, 0);
       if (e < 0) { warn(`The coordinate (${t}) isn't read here`); return null; }
-      for (const o of t.slice(1, e).split(',').map((x: any) => x.trim()).filter(Boolean)) {
+      for (const o of split(t.slice(1, e)).map((x: any) => x.trim()).filter(Boolean)) {
+        // shift={(x,y)}: both at once
+        const sh = /^shift\s*=\s*\{?\s*\(([^(),]+),([^(),]+)\)\s*\}?$/.exec(o), sv = sh ? [unit(sh[1]), unit(sh[2])] : null;
+        if (sv && sv[0] != null && sv[1] != null) { sx += sv[0]; sy -= sv[1]; shifted = true; continue; }
         const kv = /^([xy])shift\s*=\s*(.+)$/.exec(o), v = kv ? unit(kv[2]) : null;
         if (v == null) { warn(`\\chemmove: the coordinate option "${o}" isn't drawn here`); continue; }
         if (kv![1] === 'x') sx += v; else sy -= v;
@@ -1626,12 +1902,14 @@ function readPath(p: any, names: any, warn: any) {
   };
   const pts: any[] = []; // [{ pt, node }] and ops between
   const ops: any[] = [];
-  let last = null;
-  const take = (c: any, base: any) => (c.v ? { pt: [base[0] + c.v[0], base[1] + c.v[1]] } : c);
+  let last = null, closed = false;
+  // (x,y) counts from the picture's origin, +(x,y) and ++(x,y) from the point before
+  const take = (c: any, base: any) => (c.v ? { pt: c.rel ? [base[0] + c.v[0], base[1] + c.v[1]] : [org[0] + c.v[0], org[1] + c.v[1]] } : c);
   ws();
   const c0 = coord();
   if (!c0 || c0.rel) return null;
   pts.push(take(c0, [0, 0])); last = pts[0].pt;
+  if (one) { ws(); return i >= p.length ? { pts: [pts[0].pt], ops: [], closed: false } : null; }
   while (i < p.length) {
     ws();
     if (i >= p.length) break;
@@ -1643,7 +1921,10 @@ function readPath(p: any, names: any, warn: any) {
       pts.push({ pt: vf ? [last[0], q.pt[1]] : [q.pt[0], last[1]] }); ops.push({ k: 'line' });
       pts.push(q); ops.push({ k: 'line' }); if (c.rel !== 1) last = q.pt;
     } else if (p.startsWith('--', i)) {
-      i += 2; const c = coord(); if (!c) return null;
+      i += 2; ws();
+      // -- cycle: back to the start, a closed path (TikZ puts no arrow tips on it)
+      if (/^cycle(?![A-Za-z])/.test(p.slice(i))) { i += 5; pts.push({ pt: pts[0].pt.slice() }); ops.push({ k: 'line' }); closed = true; last = pts[0].pt; continue; }
+      const c = coord(); if (!c) return null;
       const q = take(c, last); pts.push(q); ops.push({ k: 'line' }); if (c.rel !== 1) last = q.pt;
     } else if (p.startsWith('..', i)) {
       i += 2; ws();
@@ -1659,7 +1940,7 @@ function readPath(p: any, names: any, warn: any) {
       const c = coord(); if (!c) return null;
       const end = take(c, last);
       const ca = take(a, last).pt;
-      const cb = b ? (b.v ? [end.pt[0] + b.v[0], end.pt[1] + b.v[1]] : b.pt) : ca;
+      const cb = b ? (b.v ? (b.rel ? [end.pt[0] + b.v[0], end.pt[1] + b.v[1]] : [org[0] + b.v[0], org[1] + b.v[1]]) : b.pt) : ca;
       pts.push(end); ops.push({ k: 'curve', c1: ca, c2: cb }); last = end.pt;
     } else if (p.startsWith('to', i)) {
       i += 2; ws();
@@ -1694,7 +1975,7 @@ function readPath(p: any, names: any, warn: any) {
     const nb = [toward(k), from(k)].filter(Boolean);
     if (nb.length && x.node.w + x.node.h > 0) P2[k] = clip(x.node, x.pt, nb[0]);
   });
-  return { pts: P2, ops };
+  return { pts: P2, ops, closed };
 }
 function border(box: any, ang: any) {
   // the point where a ray from the box's centre at ang leaves it
@@ -1738,7 +2019,7 @@ function build(src: any, segsIn?: any) {
   gather(segs);
   // \tikzset{name/.style={…}}: styles compounds use
   P.styles = {};
-  const shows = (g: any) => (g.t === 'text' ? !!g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move', 'nameinit'].includes(g.t));
+  const shows = (g: any) => (g.t === 'text' ? !!g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move', 'pdelim', 'flip', 'nameinit'].includes(g.t));
   const lastReset = (charge: boolean) => { for (let i = segs.length - 1; i >= 0; i--) if (segs[i].t === 'reset' && !!segs[i].charge === charge && segs.slice(i + 1).some(shows)) return i; return -1; };
   const rs = lastReset(false), rc = lastReset(true);
   // what the drawing starts with: each \setchemfig takes effect where it is written (layPieces)
@@ -1766,12 +2047,12 @@ function build(src: any, segsIn?: any) {
   if (hreac) {
     applyKV(P, segs[hi].kv, warn);
     if (ho < 0) warn('\\endhreac is missing');
-    for (const g of segs.slice(0, hi).concat(ho >= 0 ? segs.slice(ho + 1) : [])) if (g.t === 'text' ? g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move'].includes(g.t)) warn('Only \\hreac … \\endhreac is drawn: what is outside it is kept in the code');
+    for (const g of segs.slice(0, hi).concat(ho >= 0 ? segs.slice(ho + 1) : [])) if (g.t === 'text' ? g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move', 'pdelim', 'flip'].includes(g.t)) warn('Only \\hreac … \\endhreac is drawn: what is outside it is kept in the code');
     // the spaces TeX sets before the row: one per line break after a \definesubmol, \setchemfig…
     let lead = 0;
     for (let k = 1; k < hi; k++) if (segs[k].t === 'text' && /\s/.test(segs[k].raw.replace(/%[^\n]*(\n[ \t]*)?/g, ''))) lead += 3.333 * PT;
     attach(root, layHreac(segs.slice(hi + 1, ho < 0 ? segs.length : ho), lead, P, warn, G), 0, 0);
-    for (const g of segs.slice(0, hi).concat(ho >= 0 ? segs.slice(ho + 1) : [])) if (g.t === 'move') G.moves.push({ seg: g, snap: { ...G.names } });
+    for (const g of segs.slice(0, hi).concat(ho >= 0 ? segs.slice(ho + 1) : [])) if (g.t === 'move' || g.t === 'pdelim') G.moves.push({ seg: g, snap: { ...G.names } });
   } else {
     // \schemestart … \schemestop as one piece; lines split at \par and blank lines
     const items = [];
@@ -1814,10 +2095,11 @@ function build(src: any, segsIn?: any) {
   emit(root, 0, 0, K);
   // \chemmove: curved arrows between named atoms, bonds and compounds, drawn over everything (overlay: not in the box)
   const moves: any[] = [];
-  for (const { seg, snap } of G.moves) {
+  for (const { seg, snap, at } of G.moves) {
     const names = { atoms: {}, bonds: {} };
     for (const [n, e] of Object.entries<any>(snap)) { const b = relBox(e, null); if (e.pt) (names.bonds as Record<string, any>)[n] = [b.x, b.y]; else (names.atoms as Record<string, any>)[n] = b; }
-    chemMove(seg, names, warn, moves);
+    const o = at ? relBox(at, null) : null;
+    if (seg.t === 'pdelim') polymerDelim(seg, names, warn, K); else chemMove(seg, names, warn, moves, o ? [o.x, o.y] : [0, 0], K);
   }
   const empty = !K.mols.length && !K.texts.length && !K.arrows.length && !K.paths.length;
   let b: any = root.bb;
@@ -1940,11 +2222,12 @@ function moveSvg(mv: any, ink: any) {
     pts[k] = [pts[k][0] - ux * d, pts[k][1] - uy * d];
     return { tipAt, ux, uy };
   };
-  pull(true, mv.sh2); pull(false, mv.sh1);
+  const closed = !!mv.segs.closed;
+  if (!closed) { pull(true, mv.sh2); pull(false, mv.sh1); }
   const col = mv.color ? TD.css(mv.color) : ink;
   let tips = '';
   for (const end of [true, false]) {
-    if (!(end ? mv.tipE : mv.tipS)) continue;
+    if (closed || !(end ? mv.tipE : mv.tipS)) continue;
     const t = pull(end, 2.5 * PT);
     if (!t) continue;
     const e = tip([t.tipAt[0] - t.ux * 10, t.tipAt[1] - t.uy * 10], t.tipAt, false);
@@ -1953,7 +2236,9 @@ function moveSvg(mv: any, ink: any) {
   let d = `M${r2(pts[0][0])},${r2(pts[0][1])}`;
   ops.forEach((o: any, k: any) => { const q = pts[k + 1]; d += o.k === 'curve' ? `C${r2(o.c1[0])},${r2(o.c1[1])} ${r2(o.c2[0])},${r2(o.c2[1])} ${r2(q[0])},${r2(q[1])}` : `L${r2(q[0])},${r2(q[1])}`; });
   const dash = dashAttr(mv.dash);
-  return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${r2(mv.sw)}"${dash}/>${tips}`;
+  // (fill=…: the fill first, then the line, as TikZ paints them; a fill colour is the path's, the line its own)
+  const fill = mv.fill ? `fill="${TD.css(mv.fill)}"${mv.fop < 1 ? ` fill-opacity="${mv.fop}"` : ''}` : 'fill="none"';
+  return `<path d="${d}${closed ? 'Z' : ''}" ${fill} stroke="${col}" stroke-width="${r2(mv.sw)}"${mv.op < 1 ? ` stroke-opacity="${mv.op}"` : ''}${dash}/>${tips}`;
 }
 // an arrow tip from tip(): filled, or (to) stroked like the shaft
 const headSvg = (e: any, col: any, sw: any) => (e.open ? `<path d="${e.d}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>` : `<path d="${e.d}" fill="${col}" stroke="${col}" stroke-width="${r2(LW)}" stroke-linejoin="round"/>`);
@@ -1965,8 +2250,8 @@ function drawSink(Lo: any, ink: any, color: any, ctx: any) {
   const T = (p: any) => (p.dx || p.dy ? ` transform="translate(${r2(p.dx)},${r2(p.dy)})"` : '');
   for (const p of Lo.paths) {
     const col = p.color ? TD.css(p.color) : ink;
-    if (p.fill) out += `<path d="${p.d}"${T(p)} fill="${col}" stroke="${p.sw ? col : 'none'}"${p.sw ? ` stroke-width="${r2(p.sw)}" stroke-linejoin="round"` : ''}/>`;
-    else out += `<path d="${p.d}"${T(p)} fill="none" stroke="${col}" stroke-width="${r2(p.sw)}" stroke-linejoin="${p.join || 'round'}"${dashAttr(p.dash)}/>`;
+    if (p.fill) out += `<path d="${p.d}"${T(p)} fill="${col}" stroke="${p.sw ? col : 'none'}"${p.sw ? ` stroke-width="${r2(p.sw)}" stroke-linejoin="${p.join || 'round'}"` : ''}${p.op != null ? ` opacity="${p.op}"` : ''}/>`;
+    else out += `<path d="${p.d}"${T(p)} fill="none" stroke="${col}" stroke-width="${r2(p.sw)}" stroke-linejoin="${p.join || 'round'}"${dashAttr(p.dash)}${p.op != null ? ` stroke-opacity="${p.op}"` : ''}/>`;
   }
   for (const d of Lo.dots) out += `<circle cx="${r2(d.x)}" cy="${r2(d.y)}" r="${r2(d.r)}" fill="${ink}"/>`;
   for (const a of Lo.arrows) {
@@ -1992,7 +2277,7 @@ function drawSink(Lo: any, ink: any, color: any, ctx: any) {
       out += Math.abs(l.rot) > 1e-6 ? `<g transform="rotate(${r2(-l.rot)} ${r2(l.cx)} ${r2(l.cy)})">${t}</g>` : t;
     }
   }
-  for (const t of Lo.texts) out += TD.textSvg(t.t, t.st || TEXT, color, t.cx, t.cy, ctx);
+  for (const t of Lo.texts) out += TD.textSvg(t.t, t.st || TEXT, t.color || color, t.cx, t.cy, ctx);
   return out;
 }
 function draw(s: any, ctx: any, given?: any) {
@@ -2093,14 +2378,34 @@ function modernize(src: any) {
   return { code: writeDoc(segs), changes: [...new Set(changes)] };
 }
 
+// The document preamble's chemfig setup (\\setchemfig, \\setcharge, \\definesubmol, their resets, 1.x setters, and the
+// \\tikzset styles the code names): set there, they hold for every molecule, so they go at the head of the block's code,
+// where TeX applies them the same way. Each line ends in % (a line break there would be a space before the drawing).
+function withPreamble(pre: string, code: string) {
+  const segs = parseDoc(String(pre || ''), () => {}), keep: string[] = [];
+  for (const g of segs) {
+    // (already in the code: a block written out and read back, its setup now in both)
+    if (code.includes(g.raw.trim())) continue;
+    if (g.t === 'submol' || g.t === 'reset' || (g.t === 'set' && !g.tikz)) keep.push(g.raw.trim());
+    else if (g.t === 'set' && g.tikz) {
+      const ks = Object.keys(g.kv), names = ks.map((k) => (/^(.+?)\s*\/\.style$/.exec(k) || [])[1]);
+      // (named as a key in the code's options: [name, …] or …, name] or {name})
+      const used = (n: string) => new RegExp(`[[,{]\\s*${n.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[,\\]}=]`).test(code);
+      if (ks.length && names.every(Boolean) && names.some((n) => used(n!))) keep.push(g.raw.trim());
+    }
+  }
+  return keep.length ? keep.join('%\n') + '%\n' + code : code;
+}
+
 // for the visual editor (js/cfeditor.ts)
 TD.chem = { build, modernize, parseDoc, writeDoc, parseChain, writeChain, splitAtoms, layout, draw, angleOf, norm360, split, unbrace, labelLines, stackLines, close, markDirty, counts, TEXT, DEF, PT, EM };
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("chemfig", {
   menu: { order: 12, group: 'chemistry', label: "Chemistry", title: "Chemistry: structural formulas and reaction schemes, written for chemfig", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M9 4.5l6 3.5v7l-6 3.5-6-3.5V8z\"/><path d=\"M11 7.4l2.4 1.4M5 9.5v4.2\"/><path d=\"M15 15l5 3\"/><path d=\"M21 12h8M26 9.5l3 2.5-3 2.5\"/></svg>" },
-  // a block brought in from code (a .tex file, a paste): the chemfig commands written before its first \\chemfig come
-  // with it, and chemfig 1.x code comes in today's form
-  nodeImport: { re: /(?:\\(?:setchemfig|resetchemfig|setcharge|resetcharge|definesubmol|redefinesubmol|schemestart|chemnameinit|chemname|setatomsep|setcrambond|setbondoffset|setdoublesep|setangleincrement|setbondstyle|setnodestyle|setcompoundstyle|setcompoundsep|setarrowoffset|setarrowlabelsep|setstacksep|setlewis|setlewisdist|schemedebug|setarrowdefault|setandsign|enablefixedbondlength|disablefixedbondlength|enablebondjoin|disablebondjoin)(?![A-Za-z])[\s\S]*?)?\\chemfig[\s\S]*/, order: 9, place: (q: any, at: any) => { q.src = modernize(q.src).code; q.x = at.x; q.y = at.y; }, opts: ['anchor', 'inner sep', 'text'] },
+  // a block brought in from code (a .tex file, a paste): the chemfig commands written before its first \\chemfig (or
+  // a scheme of text compounds) come with it, with the preamble's chemfig settings, and chemfig 1.x code comes in
+  // today's form
+  nodeImport: { re: /(?:\\(?:tikzset|setchemfig|resetchemfig|setcharge|resetcharge|definesubmol|redefinesubmol|schemestart|chemnameinit|chemname|setatomsep|setcrambond|setbondoffset|setdoublesep|setangleincrement|setbondstyle|setnodestyle|setcompoundstyle|setcompoundsep|setarrowoffset|setarrowlabelsep|setstacksep|setlewis|setlewisdist|schemedebug|setarrowdefault|setandsign|enablefixedbondlength|disablefixedbondlength|enablebondjoin|disablebondjoin)(?![A-Za-z])[\s\S]*?)?\\(?:chemfig|schemestart)(?![A-Za-z])[\s\S]*/, order: 9, place: (q: any, at: any) => { q.src = modernize(q.src).code; q.x = at.x; q.y = at.y; }, opts: ['anchor', 'inner sep', 'text'], preamble: withPreamble },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   editor: { get: () => TD.chemEditor, alias: "chemOpen", layout: (s) => TD.chem.layout(s) }

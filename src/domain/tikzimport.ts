@@ -1,4 +1,6 @@
 import { runtime as TD } from '../runtime';
+import { macrosOfPreamble } from '../core/doc-macros';
+import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
 // Import from LaTeX / TikZ: parses the common TikZ subset (and everything DiagramTeX exports)
 // into shapes; a full document is split into text and diagram blocks.
 (function () {
@@ -9,7 +11,8 @@ import { runtime as TD } from '../runtime';
     yellow: '#ffff00', gray: '#808080', grey: '#808080', darkgray: '#404040', lightgray: '#bfbfbf', brown: '#bf8040', lime: '#bfff00',
     olive: '#808000', orange: '#ff8000', pink: '#ffbfbf', purple: '#bf0040', teal: '#008080', violet: '#800080',
   };
-  const TIP_NAMES: Record<string, any> = { stealth: 'stealth', latex: 'latex', to: 'to', '>': 'to', bar: 'bar', '|': 'bar', circle: 'circle', 'circle[open]': 'ocircle', o: 'ocircle', '<': 'to' };
+  // (the arrows library's stealth' and latex' are what arrows.meta's Stealth and Latex redraw)
+  const TIP_NAMES: Record<string, any> = { stealth: 'stealth', latex: 'latex', to: 'to', '>': 'to', bar: 'bar', '|': 'bar', circle: 'circle', 'circle[open]': 'ocircle', o: 'ocircle', '<': 'to', "stealth'": 'stealth', "latex'": 'latex' };
   // exact arrows.meta specs written by the exporter (TD.TIKZ_TIP), compared without spaces
   const TIP_EXACT = () => Object.fromEntries<any>(Object.entries<any>(TD.TIKZ_TIP || {}).map(([k, v]) => [v.toLowerCase().replace(/\s+/g, ''), k]));
 
@@ -58,14 +61,20 @@ import { runtime as TD } from '../runtime';
       }
     };
     const add = (): number => { let a = mul(); for (;;) { if (eat('+')) a += mul(); else if (peek('-')) { i++; a -= mul(); } else return a; } };
-    const mul = (): number => { let a = unary(); for (;;) { if (eat('*')) a *= unary(); else if (eat('/')) a /= unary(); else return a; } };
+    // (pgfmath's `r` postfix turns the whole multiplicative term so far into degrees: 2*3 r = 343.77)
+    const mul = (): number => {
+      let a = unary();
+      for (;;) {
+        if (eat('*')) a *= unary(); else if (eat('/')) a /= unary();
+        else { ws(); if (s[i] === 'r' && !/\w/.test(s[i + 1] || '')) { i++; a = a / PGF_D; } else return a; }
+      }
+    };
     const unary = (): number => { if (eat('-')) return -unary(); if (eat('+')) return unary(); if (peek('!') && !peek('!=')) { i++; return +!unary(); } return power(); };
     const power = (): number => { const a = postfix(); if (eat('^')) return Math.pow(a, unary()); return a; };
     const postfix = (): number => {
       let a = atom();
       for (;;) {
         ws();
-        if (s[i] === 'r' && !/\w/.test(s[i + 1] || '')) { i++; a = a / PGF_D; continue; }
         if (s[i] === '!' && s[i + 1] !== '=') { i++; a = PGF_FN.factorial(a); continue; }
         return a;
       }
@@ -152,7 +161,8 @@ import { runtime as TD } from '../runtime';
     if (!MAC || !MAC.size || !v.includes('\\')) return v;
     const t = v.trim(), whole = /^\\([A-Za-z@]+)$/.exec(t);
     if (whole && MAC.has(whole[1])) return MAC.get(whole[1]);
-    return v.replace(/\\([A-Za-z@]+)/g, (m: any, n: any) => (MAC.has(n) ? `(${MAC.get(n)})` : m));
+    // (right after a digit the macro's text joins the number, as TeX reads it: 0.2\s with \s 4pt is 0.24pt)
+    return v.replace(/\\([A-Za-z@]+)/g, (m: any, n: any, at: number, all: string) => (MAC.has(n) ? (/[\d.]$/.test(all.slice(0, at)) ? MAC.get(n) : `(${MAC.get(n)})`) : m));
   }
   // a macro definition's name and value, when it takes no arguments
   function macroDef(name: any, args: any) {
@@ -182,12 +192,43 @@ import { runtime as TD } from '../runtime';
   // the xyz coordinate system's unit vectors, in px with y up (TikZ's own orientation): x=1cm, y=1cm and
   // z=(-3.85mm,-3.85mm) unless the picture or a scope sets them
   const unitVectors = () => ({ vx: [PX, 0], vy: [0, PX], vz: [-0.385 * PX, -0.385 * PX] });
+  // the x and y units are TikZ's default (1cm each way)
+  const defaultUnits = (C: any) => { const near = (v: any, d: number[]) => !v || (Math.abs(v[0] - d[0]) < 1e-6 && Math.abs(v[1] - d[1]) < 1e-6); return near(C.vx, [PX, 0]) && near(C.vy, [0, PX]); };
+  // in a scope that is a canvas is … plane (its points are along the plane's axes)
+  const inPlane = (C: any) => (C.scopes || []).some((L: any) => L.plane);
+  // a radius with no unit is along the x and y vectors: a circle the shapes draw only under the default units
+  // x and y vectors along the axes (x=2cm, y=-1cm): their lengths, else null (measured: under them circle (1) and
+  // circle[radius=1] are ellipses 1 x-unit by 1 y-unit, ellipse (1 and 2) 1 x-unit by 2 y-units; 5mm stays 5mm)
+  const axisUnits = (C: any): number[] | null => {
+    if (inPlane(C)) return null;
+    const vx = C.vx || [PX, 0], vy = C.vy || [0, PX];
+    return Math.abs(vx[1]) < 1e-9 && Math.abs(vy[0]) < 1e-9 && vx[0] && vy[1] ? [Math.abs(vx[0]), Math.abs(vy[1])] : null;
+  };
+  // a radius along axis 0 (x) or 1 (y), px: a length as it is, a number in that axis' unit
+  const radiusLen = (C: any, v: any, axis: number) => {
+    const e = expandMac(String(v ?? '')), u = axisUnits(C);
+    if (UNIT.test(e) || defaultUnits(C) || !u) return len(v);
+    const n = pgfNum(e, NaN);
+    return Number.isFinite(n) ? n * u[axis] : len(v);
+  };
+  const radiusUnits = (C: any, vals: any[]) => {
+    if (defaultUnits(C) && !inPlane(C)) return;
+    if (axisUnits(C)) return; // (radiusLen reads them)
+    for (const v of vals) if (v != null && String(v).trim() && !UNIT.test(expandMac(v))) { C.warnings.push('a radius in the picture\'s x/y units'); return; }
+  };
+  // circle[radius=…] / [x radius=…, y radius=…] (the last given of each) along the picture's x and y vectors
+  const unitRadii = (C: any, po: any[], rx: number, ry: number) => {
+    let X: any = null, Y: any = null;
+    for (const o of po) { if (o.k === 'radius') X = Y = o.v; else if (o.k === 'x radius') X = o.v; else if (o.k === 'y radius') Y = o.v; }
+    return [X != null ? radiusLen(C, X, 0) : rx, Y != null ? radiusLen(C, Y, 1) : ry];
+  };
   // a coordinate part: a length when it carries a unit, else a number of unit vectors
   const UNIT = /(?:^|[^A-Za-z@\\])(?:\d|\.)\s*(?:cm|mm|pt|in|em|ex|bp|sp)\b|\\(?:pgflinewidth|textwidth|linewidth|baselineskip)\b/;
   function part(v: any): { n?: number, d?: number } {
     // (braces group in pgfmath as parentheses do: 3*0+{-1/3}, from a loop's values)
     let e = expandMac(v);
-    if (/[{}]/.test(e) && !/\\/.test(e)) e = e.replace(/\{/g, '(').replace(/\}/g, ')');
+    // (but not a function's argument: pgfmath reads sqrt{…} as sqrt applied to nothing, so it stays unevaluated)
+    if (/[{}]/.test(e) && !/\\/.test(e) && !/[A-Za-z]\s*\{/.test(e)) e = e.replace(/\{/g, '(').replace(/\}/g, ')');
     if (UNIT.test(e)) { const d = len(e, 'pt'); return Number.isFinite(d) ? { d: d as number } : {}; }
     const n = pgfNum(String(e), NaN);
     return Number.isFinite(n) ? { n } : {};
@@ -199,10 +240,12 @@ import { runtime as TD } from '../runtime';
       const q = coord({ ...C, ...unitVectors() }, t);
       return q ? [q.x, -q.y] : null;
     }
-    const d = len(t, 'cm');
+    // a length: x=d is (d,0), y=d is (0,d), z=d is (d,d); a plain number is in pt (measured with pdflatex: z=-5.5
+    // puts (0,0,1) at (-5.5pt,-5.5pt), z=1cm at (1cm,1cm), x=2 puts (1,0) at 2pt)
+    const d = len(t, 'pt');
     if (!Number.isFinite(d)) return null;
     const D = d as number;
-    return axis === 'x' ? [D, 0] : axis === 'y' ? [0, D] : [-D * 0.385, -D * 0.385];
+    return axis === 'x' ? [D, 0] : axis === 'y' ? [0, D] : [D, D];
   }
   function makeCtx() {
     return { colors: { ...NAMED }, macros: new Map(), names: {}, ...unitVectors(), warnings: [], styles: new Map(), boxes: {} };
@@ -243,12 +286,131 @@ import { runtime as TD } from '../runtime';
     }
     return c;
   }
+  // the side a label on a path takes: auto (auto=left) or auto=right puts it beside the line, swap (or ') on the other
+  // side, auto=false back on it; TikZ centres it on the line otherwise
+  function autoSide(list: any[], side: string) {
+    for (const o of list) {
+      if (o.k === 'auto') side = o.v === 'right' ? 'right' : o.v === 'false' ? 'on' : 'left';
+      else if (o.k === 'swap' || o.k === "'") side = side === 'right' ? 'left' : 'right';
+    }
+    return side;
+  }
+  const LOOPS: Record<string, [number, number]> = { 'loop right': [15, -15], 'loop above': [105, 75], 'loop left': [195, 165], 'loop below': [285, 255] };
+  // a double line's fields: the shaft, and the gap (TikZ's double distance, .6pt unless given)
+  const doubled = (st: any) => (st.double ? { shaft: 'double', ddist: Number.isFinite(st.ddist) && st.ddist > 0 ? st.ddist : 0.6 / K } : {});
+  // every number in a shape's geometry is finite (pts: [x, y] pairs)
+  const GEO_KEYS = ['x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'rx', 'ry', 'w', 'h', 'r', 'cx1', 'cy1', 'cx2', 'cy2'];
+  const finiteShape = (x: any) => GEO_KEYS.every((k) => typeof x[k] !== 'number' || Number.isFinite(x[k])) && (!Array.isArray(x.pts) || x.pts.every((q: any) => !Array.isArray(q) || q.every((v: any) => typeof v !== 'number' || Number.isFinite(v))));
+  // tikz-3dplot (tikz-3dplot.sty, its formulas): \tdplotsetmaincoords{θ}{φ} sets the macros it sets (\raarot …) and the
+  // tdplot_main_coords style (the x, y, z unit vectors on the page); \tdplotsetrotatedcoords{α}{β}{γ} the Euler-rotated
+  // frame in it, tdplot_rotated_coords (with \tdplotsetrotatedcoordsorigin's shift); \tdplotsetcoord{P}{r}{θ}{φ} the
+  // named points P, Pxy, Pxz, Pyz, Px, Py, Pz (returned: the names it gives)
+  const TDPLOT = ['tdplotsetmaincoords', 'tdplotsetrotatedcoords', 'tdplotsetrotatedcoordsorigin', 'tdplotresetrotatedcoordsorigin', 'tdplotsetcoord', 'tdplotsimplesetcoord'];
+  function tdplot(C: any, name: string, args0: string): string[] {
+    const args: string[] = [];
+    for (let q = 0; q < args0.length && args.length < 4;) { while (/\s/.test(args0[q])) q++; if (args0[q] !== '{') break; const e = shut(args0, q, '{', '}'); args.push(args0.slice(q + 1, e)); q = e + 1; }
+    const num = (x: any) => pgfNum(expandMac(String(x ?? '')), NaN), D = Math.PI / 180;
+    const mac = (k: string, v: number) => C.macros?.set(k, String(+v.toFixed(8)));
+    const got = (k: string, d: number) => { const v = num(C.macros?.has(k) ? C.macros.get(k) : NaN); return Number.isFinite(v) ? v : d; };
+    const cm = (a: number, b: number) => `{(${+a.toFixed(8)}cm,${+b.toFixed(8)}cm)}`;
+    const rotated = () => {
+      const o = C.macros?.get('\u0000tdplotorigin');
+      const v = ['aa', 'ba', 'ab', 'bb', 'ac', 'bc'].map((k) => got(`r${k}rc`, NaN));
+      if (v.some((x) => !Number.isFinite(x))) return;
+      C.styles?.set('tdplot_rotated_coords', `x=${cm(v[0], v[1])}, y=${cm(v[2], v[3])}, z=${cm(v[4], v[5])}${o ? `, shift={${o}}` : ''}`);
+    };
+    if (name === 'tdplotsetmaincoords') {
+      const th = num(args[0]), ph = num(args[1]);
+      if (!Number.isFinite(th) || !Number.isFinite(ph)) return [];
+      const st = Math.sin(th * D), ct = Math.cos(th * D), sp = Math.sin(ph * D), cp = Math.cos(ph * D);
+      const R: Record<string, number> = { aa: cp, ab: sp, ac: 0, ba: -ct * sp, bb: ct * cp, bc: st, ca: st * sp, cb: -st * cp, cc: ct };
+      mac('tdplotmaintheta', th); mac('tdplotmainphi', ph);
+      for (const k in R) mac(`r${k}rot`, R[k]);
+      C.styles?.set('tdplot_main_coords', `x=${cm(R.aa, R.ba)}, y=${cm(R.ab, R.bb)}, z=${cm(R.ac, R.bc)}`);
+      return [];
+    }
+    if (name === 'tdplotsetrotatedcoords') {
+      const al = num(args[0]), be = num(args[1]), ga = num(args[2]);
+      if (![al, be, ga].every(Number.isFinite)) return [];
+      const sa = Math.sin(al * D), ca = Math.cos(al * D), sb = Math.sin(be * D), cb = Math.cos(be * D), sg = Math.sin(ga * D), cg = Math.cos(ga * D);
+      const E: Record<string, number> = { aa: ca * cb * cg - sa * sg, ab: -ca * cb * sg - sa * cg, ac: ca * sb, ba: sa * cb * cg + ca * sg, bb: -sa * cb * sg + ca * cg, bc: sa * sb, ca: -sb * cg, cb: sb * sg, cc: cb };
+      // (the main frame as \tdplotsetmaincoords left it: θ = φ = 0 when it was not set)
+      const M = (k: string) => got(`r${k}rot`, ({ aa: 1, ab: 0, ac: 0, ba: 0, bb: 1, bc: 0 } as Record<string, number>)[k]);
+      mac('tdplotalpha', al); mac('tdplotbeta', be); mac('tdplotgamma', ga);
+      for (const r of ['a', 'b']) for (const c of ['a', 'b', 'c']) mac(`r${r}${c}rc`, M(`${r}a`) * E[`a${c}`] + M(`${r}b`) * E[`b${c}`] + M(`${r}c`) * E[`c${c}`]);
+      rotated();
+      return [];
+    }
+    if (name === 'tdplotsetrotatedcoordsorigin' || name === 'tdplotresetrotatedcoordsorigin') {
+      if (name === 'tdplotsetrotatedcoordsorigin' && args[0]) C.macros?.set('\u0000tdplotorigin', args[0].trim()); else C.macros?.delete('\u0000tdplotorigin');
+      rotated();
+      return [];
+    }
+    // \tdplotsetcoord{P}{r}{θ}{φ}: points in the frame of where it is (the picture's or the scope's x, y, z)
+    const P = (args[0] || '').trim(), r = num(args[1]), th = num(args[2]), ph = num(args[3]);
+    if (!P || ![r, th, ph].every(Number.isFinite)) return [];
+    const x = r * Math.sin(th * D) * Math.cos(ph * D), y = r * Math.sin(th * D) * Math.sin(ph * D), z = r * Math.cos(th * D);
+    const pts: [string, number, number, number][] = name === 'tdplotsimplesetcoord' ? [[P, x, y, z]]
+      : [[P, x, y, z], [P + 'xy', x, y, 0], [P + 'xz', x, 0, z], [P + 'yz', 0, y, z], [P + 'x', x, 0, 0], [P + 'y', 0, y, 0], [P + 'z', 0, 0, z]];
+    const out: string[] = [];
+    for (const [nm, a, b, c] of pts) {
+      const q = coord(C, `${+a.toFixed(8)},${+b.toFixed(8)},${+c.toFixed(8)}`);
+      if (!q) continue;
+      C.names[nm] = toAbs(C, q); (C.kinds ||= {})[nm] = 'coordinate'; if (C.boxes) C.boxes[nm] = { w: 0, h: 0, pt: true }; if (C.geo) delete C.geo[nm];
+      out.push(nm);
+    }
+    return out;
+  }
+  // a function plot's points: the variable (\x unless variable=\t) at each sample, written into the point as TeX
+  // would expand it (domain -5:5 and 25 samples unless given, on the plot or its path; samples at={…} instead)
+  const PLOT_KEYS = ['domain', 'samples', 'variable', 'samples at'];
+  function plotSamples(list: any[], fn: string) {
+    const get = (k: string) => [...list].reverse().find((o: any) => o.k === k)?.v;
+    const name = String(get('variable') ?? '\\x').trim().replace(/^\\/, '');
+    let vals: number[] | null;
+    const at = get('samples at');
+    if (at != null) vals = (foreachValues(expandMac(String(at))) || []).map((x: any) => pgfNum(expandMac(String(x)), NaN));
+    else {
+      const d = String(get('domain') ?? '-5:5').split(':'), n = Math.round(pgfNum(expandMac(String(get('samples') ?? '25')), NaN));
+      const a = pgfNum(expandMac(d[0] ?? ''), NaN), b = pgfNum(expandMac(d[1] ?? ''), NaN);
+      if (d.length !== 2 || !Number.isFinite(a) || !Number.isFinite(b) || !(n >= 2) || n > 2000) return null;
+      vals = Array.from({ length: n }, (_, k) => a + (b - a) * k / (n - 1));
+    }
+    if (!vals.length || vals.some((v) => !Number.isFinite(v))) return null;
+    const re = new RegExp(`\\\\${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z@])`, 'g');
+    return vals.map((v) => fn.replace(re, String(+v.toFixed(10))));
+  }
+  // a loop's own options: the picture's every loop, or TikZ's (->, shorten >=1pt)
+  const everyLoop = (C: any) => {
+    if (!C.styles?.has('every loop')) return [{ k: '->', v: null }, { k: 'shorten >', v: '1pt' }];
+    const su = styUsed;
+    try { return parseOpts('every loop'); } catch { return []; } finally { styUsed = su; }
+  };
+  // the styles a TikZ library defines, under the document's own (which may redefine them): automata's states
+  // (tikzlibraryautomata.code.tex; accepting by double's outer sep is .5\pgflinewidth+.3pt at the default width)
+  const LIB_STYLES: Record<string, [string, string][]> = {
+    automata: [['every state', ''], ['state without output', 'circle, draw, minimum size=2.5em, every state'], ['state', 'state without output'],
+      ['accepting by double', 'double, outer sep=0.5pt'], ['accepting', 'accepting by double'], ['initial', 'initial by arrow'],
+      ['every initial by arrow', ''], ['every accepting by arrow', ''],
+      ...['above', 'below', 'left', 'right'].flatMap((w): [string, string][] => [[`initial ${w}`, `initial by arrow, initial where=${w}`], [`accepting ${w}`, `accepting by arrow, accepting where=${w}`]])],
+  };
+  function libraryStyles(C: any) {
+    for (const [lib, list] of Object.entries(LIB_STYLES)) {
+      // (a picture with no \usetikzlibrary seen is taken to have it)
+      if (C.libs && !C.libs.includes(lib)) continue;
+      for (const [k, v] of list) if (!C.styles.has(k)) C.styles.set(k, v);
+    }
+  }
   // styles named in an option list (\tikzset{name/.style={…}}) stand for their keys; styUsed collects the names
   // a statement used, and styOff reads them as nothing (the statement without its styles: what the styles add)
   let STY: any = null, styUsed: any = null, styOff = false;
   const PIC_CODE = '\u0000pic:';
   let PIC_PASSES = 0;
   const STYLE_DEFAULT = '\u0000default:';
+  // settings a picture or \tikzset gives for every node (on grid, initial text=…): kept among the styles, scoped as they are
+  const SETTING = '\u0000set:';
+  const SETTINGS = /^(on grid|(initial|accepting) (text|where|distance))$/;
+  const setting = (C: any, k: string) => C?.styles?.get(SETTING + k);
   let styleBudget = 0;
   function parseOpts(str: any, depth = 0, raw = false) : any {
     if (!str) return [];
@@ -256,7 +418,8 @@ import { runtime as TD } from '../runtime';
     const out = [];
     for (const x of splitTop(str, ',').map((q) => q.trim()).filter(Boolean)) {
       const eq = splitTop(x, '=');
-      const o = eq.length > 1 ? { k: eq[0].trim(), v: eq.slice(1).join('=').trim().replace(/^\{([\s\S]*)\}$/, '$1') } : { k: x, v: null };
+      // (pgfkeys reads a key's spaces as one: above  of=A is above of)
+      const o = eq.length > 1 ? { k: eq[0].trim().replace(/\s+/g, ' '), v: eq.slice(1).join('=').trim().replace(/^\{([\s\S]*)\}$/, '$1') } : { k: x.replace(/\s+/g, ' '), v: null };
       if (!raw && STY && STY.has(o.k)) {
         const body = STY.get(o.k), arg = o.v ?? STY.get(STYLE_DEFAULT + o.k);
         // Only single-argument styles are evaluated. Leave unsupported handlers visible to diagnostics.
@@ -275,18 +438,21 @@ import { runtime as TD } from '../runtime';
   // Fixed and single-argument styles, default values, and append/prefix handlers.
   function addStyle(C: any, nm: any, body: any) {
     // of the `every …` styles, only the ones the importer applies are read (others would change what is drawn)
-    if (/#(?:[2-9]|1\d)/.test(body) || (/^every /.test(nm) && !/^every (node|(rectangle|circle|ellipse) node|edge|join|matrix)$/.test(nm))) { C.styles.delete(nm); return; }
+    if (/#(?:[2-9]|1\d)/.test(body) || (/^every /.test(nm) && !/^every (node|(rectangle|circle|ellipse) node|edge|join|matrix|loop|state|initial by arrow|accepting by arrow)$/.test(nm))) { C.styles.delete(nm); return; }
     C.styles.set(nm, body);
   }
   function defineStyles(C: any, cmd: any, args: any) {
-    if (cmd === 'tikzstyle') { const m = /^\s*\{([^}]*)\}\s*=?\s*\[([\s\S]*)\]/.exec(args); if (m) addStyle(C, m[1].trim(), m[2]); return; }
+    // what each \tikzset says, in order, for tikz-qtree trees (forest-qtree.ts reads level distance, every tree node …)
+    if (cmd === 'tikzstyle') { const m = /^\s*\{([^}]*)\}\s*=?\s*\[([\s\S]*)\]/.exec(args); if (m) { addStyle(C, m[1].trim(), m[2]); (C.qtSets ||= []).push(`${m[1].trim()}/.style={${m[2]}}`); } return; }
     const m = /^\s*\{([\s\S]*)\}/.exec(args);
     if (!m) return;
+    (C.qtSets ||= []).push(m[1]);
     let directory = '';
     for (const { k, v } of parseOpts(m[1], 0, true)) {
       if (k.endsWith('/.cd')) { directory = k.slice(0,-4).replace(/^\/tikz\/?/, '').replace(/^\//,''); continue; }
       const path = k.startsWith('/') ? k.replace(/^\/(?:tikz\/)?/,'') : directory ? directory + '/' + k : k;
-      const pic = /^pics\/(.+?)\/\.(style|pic)$/.exec(path);
+      // (name/.pic={…} defines pics/name too: the .pic handler puts it there)
+      const pic = /^pics\/(.+?)\/\.(style|pic)$/.exec(path) || /^(?!pics\/)(.+?)\/\.(pic)$/.exec(path);
       if (pic && v != null) {
         const code = pic[2] === 'pic' ? v : parseOpts(v,0,true).find((o: any) => o.k === 'code')?.v;
         if (code != null && !/#\d/.test(code)) C.styles.set(PIC_CODE + pic[1],code);
@@ -294,7 +460,24 @@ import { runtime as TD } from '../runtime';
         continue;
       }
       const sm = /^(.+?)\/\.(style|append style|prefix style|style \d+ args|style n args|default)$/.exec(k);
-      if (!sm) continue;
+      if (!sm) {
+        if (SETTINGS.test(path)) { C.styles.set(SETTING + path, v ?? 'true'); continue; }
+        // (a handler, /.style args, /.code, /.is choice …, or a key in another directory is not a picture option)
+        if ((directory && directory !== 'tikz') || /\/\./.test(k) || /^\//.test(k)) continue;
+        // a plain key (auto, font=\small, >=Stealth, thick, node distance=…): before a picture, read as the first of
+        // the picture's own options; inside one, auto and swap are held and anything else keeps what follows as code
+        const raw = v == null ? k : `${k}={${v}}`;
+        if (C.scopes?.length) {
+          if (k === 'auto' || k === 'swap') (C.picAuto ||= []).push({ k, v: v ?? null });
+          else {
+            // (a key for one feature, a tree's level distance, holds back only the statements using it)
+            const f = PIC_FEATURE.find(([kr]) => kr.test(k));
+            if (f) (C.picFeat ||= []).push({ k, re: f[1] });
+            else { const L = innermost(C); if (L) L.issue = [L.issue, 'a \\tikzset key the shapes do not hold: ' + k].filter(Boolean).join('; '); }
+          }
+        } else { const old = C.styles.get(SETTING + '\u0000opts'); C.styles.set(SETTING + '\u0000opts', old ? `${old}, ${raw}` : raw); }
+        continue;
+      }
       const nm = sm[1].trim();
       if (sm[2] === 'default' && v != null) C.styles.set(STYLE_DEFAULT + nm, v);
       else if (sm[2] === 'style' && v != null) addStyle(C, nm, v);
@@ -328,6 +511,12 @@ import { runtime as TD } from '../runtime';
     opts = [...(C.base || []), ...(inherited ? [{ k: 'font', v: inherited }] : []), ...opts]; // the picture's own line width, dash and colour come first
     const st: Record<string, any> = { stroke: cmd === 'fill' || cmd === 'shade' || cmd === 'path' ? null : '#000000', fill: cmd === 'fill' || cmd === 'filldraw' ? '#000000' : null, width: 0.4 / K, dash: 'solid', opacity: 1, startTip: 'none', endTip: 'none' };
     let strokeOpacity = 1, fillOpacity = 1, colorAll = null;
+    const unloop = () => { if (!st.loop) return; st.loop = false; if (st.place && LOOPS['loop ' + st.place]) delete st.place; };
+    // >=tip among the options: what > stands for in every arrow of them, wherever it is in the list (TikZ reads > when
+    // it draws the tips); the picture's own >= is restored after
+    const gt = opts.filter((o: any) => o.k === '>' && o.v != null && exactTip(o.v)).pop(), gtSaved = gtTip;
+    if (gt) gtTip = arrowSpec('-' + gt.v)!.end;
+    try {
     const W: Record<string, any> = { 'ultra thin': 0.1, 'very thin': 0.2, thin: 0.4, semithick: 0.6, thick: 0.8, 'very thick': 1.2, 'ultra thick': 1.6 };
     for (const { k, v } of opts) {
       if (v === null) {
@@ -338,6 +527,10 @@ import { runtime as TD } from '../runtime';
         else if (k === 'solid') st.dash = 'solid'; // undoes a dash set before it (a style's)
         else if (k === 'help lines') { colorAll = '#808080'; st.width = 0.2 / K; }
         else if (k === 'rounded corners') st.radius = 4 / K; // (TikZ's default radius)
+        else if (k === 'double') st.double = true;
+        // a loop (TikZ's own loop styles): the edge back to where it starts, out and in at these angles, looseness 8,
+        // at least 5mm out; loop above also puts its label above
+        else if (k === 'loop' || LOOPS[k]) { st.loop = true; if (LOOPS[k]) { [st.out, st.in] = LOOPS[k]; st.place = k.slice(5); } }
         else if (k === 'sharp corners') st.radius = 0;
         else if (k.includes('-') && arrowSpec(k)) { const a = arrowSpec(k); st.startTip = a!.start; st.endTip = a!.end; }
         else { const c = color(C, k); if (c !== undefined) colorAll = c; }
@@ -348,6 +541,9 @@ import { runtime as TD } from '../runtime';
         case 'fill': st.fill = color(C, v) ?? null; break;
         case 'color': colorAll = color(C, v) ?? null; break;
         case 'line width': st.width = len(v, 'pt'); break;
+        // line cap (cap is TikZ's alias) and line join: butt and miter unless set
+        case 'line cap': case 'cap': if (/^(round|rect|butt)$/.test(v.trim())) st.cap = v.trim(); break;
+        case 'line join': if (/^(round|bevel|miter)$/.test(v.trim())) st.join = v.trim(); break;
         case 'shorten >': st.shEnd = len(v, 'pt'); break;
         case 'shorten <': st.shStart = len(v, 'pt'); break;
         case 'opacity': st.opacity = pgfNum(expandMac(v), NaN); break;
@@ -366,9 +562,15 @@ import { runtime as TD } from '../runtime';
         }
         case 'decoration': st.decoration = v; break;
         case 'pos': st.pos = parseFloat(v); break;
-        case 'out': st.out = pgfNum(expandMac(v), NaN); break;
-        case 'in': st.in = pgfNum(expandMac(v), NaN); break;
+        // (in=, out= and bend switch the to path to a curve, which replaces a loop given before them)
+        case 'out': unloop(); st.out = pgfNum(expandMac(v), NaN); break;
+        case 'in': unloop(); st.in = pgfNum(expandMac(v), NaN); break;
         case 'looseness': st.looseness = pgfNum(expandMac(v), NaN); break;
+        case 'min distance': st.minDist = len(v, 'pt'); break;
+        case 'max distance': st.maxDist = len(v, 'pt'); break;
+        // double: a double line, white in the middle (double=red is not held: unknownKeys), double distance apart
+        case 'double': st.double = v !== 'none'; break;
+        case 'double distance': st.ddist = len(v, 'pt'); break;
         case 'step': st.step = len(v); break;
         case 'xstep': st.xstep = len(v); break;
         case 'ystep': st.ystep = len(v); break;
@@ -381,13 +583,18 @@ import { runtime as TD } from '../runtime';
         case 'end angle': st.a2 = pgfNum(expandMac(v),NaN); break;
         case 'delta angle': st.da = pgfNum(expandMac(v),NaN); break;
         // bend left=0 is a straight bend, not the default 30°
-        case 'bend left': { const b = parseFloat(v); st.bend = isFinite(b) ? b : 30; break; }
-        case 'bend right': { const b = parseFloat(v); st.bend = -(isFinite(b) ? b : 30); break; }
+        case 'bend left': { unloop(); const b = parseFloat(v); st.bend = isFinite(b) ? b : 30; break; }
+        case 'bend right': { unloop(); const b = parseFloat(v); st.bend = -(isFinite(b) ? b : 30); break; }
         case 'above': case 'below': case 'left': case 'right': st.place = k; break;
         default: break;
       }
     }
     for (const { k } of opts) if (['above', 'below', 'left', 'right', 'above left', 'above right', 'below left', 'below right', 'auto', 'swap', "'", 'sloped', 'midway', 'near start', 'near end', 'decorate', 'bend left', 'bend right'].includes(k)) st[k] = true;
+    for (const { k } of opts) if (LOOPS[k]) st[k.slice(5)] = true;
+    { // (a bend after a loop replaces it)
+      let bi = -1, li = -1; opts.forEach((o: any, n: number) => { if ((o.k === 'bend left' || o.k === 'bend right') && o.v === null) bi = n; if (o.v === null && (o.k === 'loop' || LOOPS[o.k])) li = n; });
+      if (li >= 0 && bi > li) unloop();
+    }
     if (opts.some((o: any) => o.k === 'bend left' && o.v === null)) st.bend = 30;
     if (opts.some((o: any) => o.k === 'bend right' && o.v === null)) st.bend = -30;
     if (colorAll) {
@@ -408,6 +615,7 @@ import { runtime as TD } from '../runtime';
     st.stroke = withA(st.stroke, strokeOpacity);
     st.fill = withA(st.fill, fillOpacity);
     return st;
+    } finally { gtTip = gtSaved; }
   }
   function fontStyle(fontStr: any) {
     const o: { size: string | number; font: string; bold: boolean; italic: boolean } = { size: 'normalsize', font: 'default', bold: false, italic: false };
@@ -419,6 +627,147 @@ import { runtime as TD } from '../runtime';
     if (/\\itshape|\\textit/.test(fontStr)) o.italic = true;
     for (const fnt of TD.FONTS) if (fnt[3] && fontStr.includes(fnt[3])) o.font = fnt[0];
     return o;
+  }
+
+  // ---------- pgf-pie ----------
+  const PIE_W: Record<string, number> = { 'ultra thin': 0.1, 'very thin': 0.2, thin: 0.4, semithick: 0.6, thick: 0.8, 'very thick': 1.2, 'ultra thick': 1.6 };
+  // pgf-pie's style= (on every slice's \draw and legend box): its outline, or the keys the pie can't draw
+  function pieStyle(C: any, str: string) {
+    const out: any = { lw: 0.4, stroke: '#000000', dash: 'solid', tinted: false }, bad: string[] = [], canon: string[] = [];
+    // (the document's styles stand for their keys: lines/.style={draw=white}; `canon` is what is written back)
+    for (const { k, v } of parseOpts(str)) {
+      if (v == null && PIE_W[k] != null) { out.lw = PIE_W[k]; canon.push(k); }
+      else if (k === 'line width' && v != null) { const d = len(v, 'pt'); if (Number.isFinite(d)) { out.lw = (d as number) * K; canon.push(`${k}=${v}`); } else bad.push(`${k}=${v}`); }
+      else if (v == null && (k === 'dashed' || k === 'dotted' || k === 'solid')) { out.dash = k; canon.push(k); }
+      else if (k === 'line join' && v === 'round') { /* as the slices are */ }
+      else if (k === 'draw' && v != null) { const c = v === 'none' ? null : color(C, v); if (c === undefined) bad.push(`${k}=${v}`); else { out.stroke = c; canon.push(`draw=${v}`); } }
+      // a bare colour: the outline (the fill is the slice's own); on a legend box its label's text too
+      else if (v == null && color(C, k)) { out.stroke = color(C, k); out.tinted = true; canon.push(`draw=${k}`); }
+      else bad.push(v == null ? k : `${k}=${v}`);
+    }
+    return { ...out, bad, canon: canon.join(', ') };
+  }
+  // a style a \pie's nodes or slices take (TikZ's every node, label, pin …, pgf-pie's every pie): only align is held
+  const PIE_STYLES = /^(?:\/(?:tikz|pgfpie)\/)?(every (?:pie|node|label|pin|pin edge|edge|path|rectangle node|shape))\/\.(?:append |prefix )?style$/;
+  // \pie[opts]{data} at s[bs] (j just past \pie): the Pie chart, with why it stays code if it does; null when it
+  // isn't one at all. held: the picture keys it reads itself (pin distance, every node={align=…} …)
+  function pieStatement(C: any, s: string, o: string, bs: number, j: number) {
+    let q = j;
+    const ws = () => { while (q < s.length && /\s/.test(s[q])) q++; };
+    ws();
+    let optStr = '';
+    if (s[q] === '[') { const e = matchClose(s, q, '[', ']'); if (e < 0) return null; optStr = o.slice(q + 1, e); q = e + 1; ws(); }
+    if (s[q] !== '{') return null;
+    const e = matchClose(s, q, '{', '}');
+    if (e < 0) return null;
+    const body = o.slice(q + 1, e);
+    let end = e + 1;
+    const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
+    const why: string[] = [], held = new Set<string>(), pgf: any = TD.pgfPie.defaults();
+    const unbrace = (v: string) => v.trim().replace(/^\{([\s\S]*)\}$/, '$1').trim();
+    const num = (v: any) => pgfNum(expandMac(String(v ?? '')), NaN);
+    const fs = fontStyle(innermost(C)?.fonts);
+    let size: any = fs.size, x = 0, y = 0, radius = 3, legendTint = false, late = true, after = '';
+    if (fs.bold || fs.italic || fs.font !== 'default') why.push('the picture\'s font: only its size is held');
+    // what the picture's options say to every node (align alone), and its pin distance
+    const style = (k: string, v: string | null) => {
+      const m = PIE_STYLES.exec(k);
+      if (!m) return false;
+      const a = /^\s*align\s*=\s*(left|right|center|flush left|flush right|flush center)\s*$/.exec(v || '');
+      if (a && !/pie|edge|path/.test(m[1])) pgf.align = a[1]; else why.push(`${k}=${v}`);
+      return true;
+    };
+    for (const { k, v } of parseOpts(C.picOptStr || '', 0, true)) {
+      if (k === 'pin distance' && v != null) { const d = len(v, 'pt'); if (Number.isFinite(d)) { pgf.pinDistance = (d as number) * K; held.add(k); } }
+      else if (PIE_STYLES.test(k)) { style(k, v); held.add(k); }
+    }
+    if (C.styles?.has('every node')) style('every node/.style', C.styles.get('every node'));
+    for (const b of C.base || []) if (!(b.v == null ? PIE_W[b.k] != null : b.k === 'line width')) why.push(`the picture's ${b.v == null ? b.k : `${b.k}=${b.v}`}`);
+    const unitOK = (v: any, d: number[]) => !v || (Math.abs(v[0] - d[0]) < 1e-6 && Math.abs(v[1] - d[1]) < 1e-6);
+    if (!unitOK(C.vx, [PX, 0]) || !unitOK(C.vy, [0, PX])) why.push('the picture\'s own x and y units');
+    // a size command in the picture before it (\tiny) changes the em and ex its nodes are measured in
+    if (/(?:^|[;\]}\s])\\(tiny|scriptsize|footnotesize|small|large|Large|LARGE|huge|Huge)\b/.test(o.slice(0, bs))) why.push('a font size set in the picture before it');
+    for (const { k, v } of parseOpts(optStr, 0, true)) {
+      const val = v == null ? null : unbrace(v), flag = val == null || val === 'true';
+      switch (k) {
+        case 'pos': {
+          const pp = splitTop(val || '', ',').map((t: string) => part(t.trim()));
+          const px = pp.length === 2 ? (pp[0].n !== undefined ? pp[0].n * PX : pp[0].d) : NaN, py = pp.length === 2 ? (pp[1].n !== undefined ? pp[1].n * PX : pp[1].d) : NaN;
+          if (Number.isFinite(px) && Number.isFinite(py)) { x = px as number; y = -(py as number); } else why.push(`pos=${v}`);
+          break;
+        }
+        case 'radius': { const r = num(val); if (r > 0) radius = r; else why.push(`radius=${v}`); break; }
+        case 'explode': { const xs = splitTop(val || '', ',').map((t: string) => num(t.trim())); if (xs.length && xs.every(Number.isFinite)) pgf.explode = xs; else why.push(`explode=${v}`); break; }
+        case 'color': {
+          // (xcolor reads blue!40! as blue!40)
+          const cs = splitTop(val || '', ',').map((t: string) => t.trim()).filter(Boolean), hx = cs.map((c: string) => color(C, c.replace(/!+$/, '')));
+          if (cs.length && hx.every((h: any) => h)) pgf.colors = cs.map((c: string, n: number) => [c, hx[n]]); else why.push(`color=${v}`);
+          break;
+        }
+        case 'rotate': { const r = num(val); if (Number.isFinite(r)) pgf.rotate = r; else why.push(`rotate=${v}`); break; }
+        // sum=100 (as written) puts % after each number once the keys are read, over an after number set before it;
+        // after number takes that back
+        case 'sum': { const t = (val || '').trim(); if (t === 'auto' || num(t) > 0) { pgf.sum = t === 'auto' ? 'auto' : num(t); late = t === '100'; } else why.push(`sum=${v}`); break; }
+        case 'before number': case 'after number': {
+          const t = val ?? '';
+          // text, maths and \% only: a command there (\phantom, \pgfmathprintnumber) does what the pie can't show
+          if (/\\(?![%$&#_ ,;:!])/.test(t.replace(/\$[^$]*\$/g, ''))) why.push(`${k}=${v}`);
+          else if (k === 'before number') pgf.before = t;
+          else { after = t; late = false; }
+          break;
+        }
+        case 'text': {
+          const t = (val || '').trim();
+          if (!t) pgf.text = 'none'; else if (TD.pgfPie.TEXT.includes(t) && t !== 'none') pgf.text = t; else why.push(`text=${v}`);
+          break;
+        }
+        case 'hide number': pgf.hideNumber = flag; break;
+        case 'hide label': pgf.hideLabel = flag; break;
+        case 'polar': pgf.polar = flag; break;
+        case 'change direction': pgf.changeDirection = flag; break;
+        case 'scale font': pgf.scaleFont = flag; break;
+        case 'style': {
+          const st = pieStyle(C, val || '');
+          if (st.bad.length) why.push(`style: ${st.bad.join(', ')}`);
+          else Object.assign(pgf, { style: st.canon, lw: st.lw, stroke: st.stroke, dash: st.dash });
+          legendTint = st.tinted;
+          break;
+        }
+        case 'font': { const f2 = fontStyle(val); if (f2.bold || f2.italic || f2.font !== 'default') why.push(`font=${v}`); else size = f2.size; break; }
+        case 'pin distance': { const d = len(val, 'pt'); if (Number.isFinite(d)) pgf.pinDistance = (d as number) * K; else why.push(`pin distance=${v}`); break; }
+        default:
+          if (style(k, val)) break;
+          // a style defined and never used here (pgf-pie's old every only number node, /text/every inside): nothing changes
+          if (/\/\.(append |prefix )?style$/.test(k)) break;
+          why.push(v == null ? k : `${k}=${v}`);
+      }
+    }
+    pgf.after = late ? '\\%' : after;
+    if (pgf.text === 'legend' && legendTint) why.push('a colour in style= tints the legend\'s labels');
+    // the rows: value/label, the label as \foreach hands it over (one pair of braces off)
+    const lines: string[] = [];
+    for (const it of splitTop(body, ',').map((t: string) => t.trim()).filter(Boolean)) {
+      const sl = splitTop(it, '/'), v = sl[0].trim(), lab = unbrace(sl.slice(1).join('/')).replace(/\s+/g, ' ').trim();
+      if (!/^-?(?:\d+\.?\d*|\.\d+)$/.test(v)) { why.push(`a value that is not a number: ${v}`); continue; }
+      lines.push(lab ? `${lab} ${v}` : v);
+    }
+    if (!lines.length) return null;
+    // its place and size under the scopes round it: shifts and scales (text keeps its size); a turn or slant is code
+    let k = 1;
+    for (const L of C.scopes || []) {
+      if (L.shape) why.push('transform shape');
+      for (const t of L.xf || []) { if (t.rot !== undefined || t.sx !== undefined) why.push('a turn or slant round it'); else if (t.scale !== undefined) k *= t.scale; }
+    }
+    // the legend stands right of the picture's bounding box so far: only a pie drawn first knows where that is
+    if ((pgf.text === 'legend' && !pgf.hideLabel) && C.stmts.some((st: any) => st.shapes.some((x: any) => !(x.type === 'tikz' && x.kind === 'defs')))) why.push('a legend placed beside what the picture drew before it');
+    const pie: any = { ...TD.TYPES.pie.create({ x, y }), r: radius * PX, size, data: lines.join('\n'), pgf };
+    delete pie.showPercent; delete pie.labelPos; delete pie.startAngle;
+    pgf.explode = pgf.explode.map((v: number) => v * k);
+    const made = applyXf([pie], C.scopes || []);
+    // picture keys for labels and pins (pin distance, every pin …) the pie doesn't read stay a reason
+    const stmt = o.slice(bs, end), feat = (C.picFeat || []).filter((f: any) => f.re.test(stmt) && !held.has(f.k)).map((f: any) => f.k);
+    if (feat.length) why.push('picture options the shapes do not hold: ' + feat.join(', '));
+    return { end, made, issues: why, held };
   }
 
   // ---------- path tokenizer ----------
@@ -444,7 +793,24 @@ import { runtime as TD } from '../runtime';
         toks.push({ t: 'coord', raw: s.slice(i + 1, e), rel: 0 });
         i = e + 1; continue;
       }
-      if (rest[0] === '[') { const e = shut(s, i, '[', ']'); toks.push({ t: 'opts', v: s.slice(i + 1, e) }); i = e + 1; continue; }
+      if (rest[0] === '[') {
+        const e = shut(s, i, '[', ']'), v = s.slice(i + 1, e);
+        i = e + 1;
+        // the quotes library on to and edge: "text"'opts is edge node={node [every edge quotes, ', opts] {text}}
+        // (every edge quotes is auto), a node on the edge after its options
+        const back = toks.length && toks[toks.length - 1].t === 'opts' ? toks.length - 2 : toks.length - 1;
+        if (back >= 0 && toks[back].t === 'op' && (toks[back].v === 'to' || toks[back].v === 'edge') && /(^|,)\s*"/.test(v)) {
+          const q = edgeQuotes(v);
+          if (q) {
+            toks.push({ t: 'opts', v: q.rest });
+            const every = C?.styles?.get('every edge quotes') ?? 'auto';
+            for (const n of q.quotes) toks.push({ t: 'node', opts: [every, n.swap ? 'swap' : '', n.opts].filter(Boolean).join(', '), text: n.text, textStart: -1, textEnd: -1, name: '', coordinate: false });
+            continue;
+          }
+        }
+        toks.push({ t: 'opts', v });
+        continue;
+      }
       if ((m = rest.match(/^(--|\.\.|\|-|-\|)/))) { toks.push({ t: 'op', v: m[1] }); i += m[1].length; continue; }
       if ((m = rest.match(/^pic\b\s*/))) {
         i += m[0].length; let opts = '';
@@ -460,7 +826,8 @@ import { runtime as TD } from '../runtime';
         for (;;) {
           ws();
           if (s[i] === '[') { const e = shut(s, i, '[', ']'); opts += (opts ? ',' : '') + s.slice(i + 1, e); i = e + 1; continue; }
-          if (s[i] === '(') { const e = shut(s, i, '(', ')'); name = s.slice(i + 1, e); i = e + 1; continue; }
+          // (a coordinate takes one name: a second (…) is the path's next point)
+          if (s[i] === '(') { if (m[1] === 'coordinate' && name) break; const e = shut(s, i, '(', ')'); name = s.slice(i + 1, e); i = e + 1; continue; }
           if (s.slice(i, i + 2) === 'at') { i += 2; ws(); const e = shut(s, i, '(', ')'); toks.push({ t: 'at', raw: s.slice(i + 1, e) }); i = e + 1; continue; }
           break;
         }
@@ -476,12 +843,48 @@ import { runtime as TD } from '../runtime';
         toks.push({ t: 'plot', opts: m[1] ? m[1].slice(1, -1) : '', raws });
         i = e + 1; continue;
       }
+      // plot[domain=0:2] (\x, {\x^2}): a function plot, one point with the variable in it (sampled where it is drawn)
+      if ((m = rest.match(/^plot\s*((?:\[[^\]]*\]\s*)*)\(/))) {
+        const q = i + m[0].length - 1, e = shut(s, q, '(', ')');
+        if (e > q) {
+          const o = [...m[1].matchAll(/\[([^\]]*)\]/g)].map((x) => x[1]).join(',');
+          toks.push({ t: 'plot', opts: o, fn: s.slice(q + 1, e) });
+          i = e + 1; continue;
+        }
+      }
       if ((m = rest.match(/^(controls|and|rectangle|circle|ellipse|arc|cycle|to|grid|edge|let|in|plot|sin|cos|parabola)\b/))) { toks.push({ t: 'op', v: m[1] }); i += m[1].length; continue; }
       if (rest[0] === '{') { const e = shut(s, i, '{', '}'); toks.push({ t: 'brace', v: s.slice(i + 1, e) }); i = e + 1; continue; }
       warn && warn(`Unknown path text “${rest.slice(0, 12)}”`);
       i++;
     }
     return toks;
+  }
+  // an option list's "text"'opts items (quotes library) and the rest, or null if a quote isn't closed
+  function edgeQuotes(v: string) {
+    const items: string[] = [];
+    let from = 0, depth = 0, quoted = false;
+    for (let k = 0; k < v.length; k++) {
+      const ch = v[k];
+      if (ch === '\\') { k++; continue; }
+      if (ch === '"' && !depth) { quoted = !quoted; continue; }
+      if (quoted) continue;
+      if (ch === '{' || ch === '[' || ch === '(') depth++;
+      else if (ch === '}' || ch === ']' || ch === ')') depth--;
+      else if (ch === ',' && !depth) { items.push(v.slice(from, k)); from = k + 1; }
+    }
+    if (quoted) return null;
+    items.push(v.slice(from));
+    const rest: string[] = [], quotes: { text: string; swap: boolean; opts: string }[] = [];
+    for (const raw of items) {
+      const it = raw.trim();
+      if (it[0] !== '"') { if (it) rest.push(it); continue; }
+      const e = it.indexOf('"', 1);
+      let after = it.slice(e + 1).trim(), swap = false;
+      if (after[0] === "'") { swap = true; after = after.slice(1).trim(); }
+      if (after[0] === '{' && after[after.length - 1] === '}') after = after.slice(1, -1).trim();
+      quotes.push({ text: it.slice(1, e), swap, opts: after });
+    }
+    return { rest: rest.join(', '), quotes };
   }
   // calc's sums: `(a)+(b)-2*(c)`, `sqrt(14)*(0,3/14)`, `{1+2}*(a)`: the terms with their sign and factor, or null
   // when `raw` is not one (a single term without a factor is read as it is)
@@ -530,6 +933,41 @@ import { runtime as TD } from '../runtime';
     while ((raw[0] === '{' && matchClose(raw, 0, '{', '}') === raw.length - 1)
       || (raw[0] === '(' && matchClose(raw, 0, '(', ')') === raw.length - 1)
       || (raw[0] === '$' && raw[raw.length - 1] === '$')) raw = raw.slice(1, -1).trim();
+    // ([options]point): the options' shifts, turns and scalings applied to the point in the picture's own coordinates,
+    // the last given first (measured: ([xshift=1cm]a.north) is 1cm to the right of a.north, that 1cm scaled and turned
+    // with the picture). A node's own name after them is not held: TikZ still stops the line at its border, unshifted.
+    if (raw[0] === '[') {
+      const e = matchClose(raw, 0, '[', ']');
+      if (e < 0) return null;
+      const rest = raw.slice(e + 1).trim();
+      if (C.names[rest] && (C.kinds || {})[rest] !== 'coordinate') return null;
+      const p = read(rest);
+      if (!p) return null;
+      const q = { x: p.x, y: p.y }, O = parseOpts(raw.slice(1, e), 0, true);
+      for (let k = O.length - 1; k >= 0; k--) {
+        const { k: key, v } = O[k];
+        if ((key === 'xshift' || key === 'yshift') && v != null) {
+          const d = len(v, 'pt') as number;
+          if (!Number.isFinite(d)) return null;
+          if (key === 'xshift') q.x += d; else q.y -= d;
+        } else if (key === 'shift' && v != null) {
+          const t = read(v);
+          if (!t) return null;
+          q.x += t.x; q.y += t.y;
+        } else if (key === 'rotate' && v != null) {
+          const a = pgfNum(expandMac(v), NaN) * Math.PI / 180;
+          if (!Number.isFinite(a)) return null;
+          const c = Math.cos(a), sn = Math.sin(a), x = q.x, y = q.y; // (y down: TikZ's counter-clockwise)
+          q.x = x * c + y * sn; q.y = -x * sn + y * c;
+        } else if ((key === 'scale' || key === 'xscale' || key === 'yscale') && v != null) {
+          const f = pgfNum(expandMac(v), NaN);
+          if (!Number.isFinite(f)) return null;
+          if (key !== 'yscale') q.x *= f;
+          if (key !== 'xscale') q.y *= f;
+        } else return null;
+      }
+      return q;
+    }
     let level = 0;
     for (let i = 0; i < raw.length - 1; i++) {
       if ('({'.includes(raw[i])) level++;
@@ -579,6 +1017,7 @@ import { runtime as TD } from '../runtime';
       const a = ((dirs[m[1].trim()] ?? pgfNum(expandMac(m[1]), NaN)) * Math.PI) / 180, radii = m[2].split(/\s+and\s+/);
       const rx = part(radii[0]), ry = radii[1] != null ? part(radii[1]) : rx;
       if (!Number.isFinite(a) || (rx.n == null && rx.d == null) || (ry.n == null && ry.d == null)) return null;
+      if (inPlane(C) && (rx.d != null || ry.d != null)) C.warnings.push('canvas is … plane: a point with units or in 3D');
       const c = Math.cos(a), s = Math.sin(a);
       const X = rx.d != null ? [c * rx.d, 0] : [c * rx.n! * vx[0], c * rx.n! * vx[1]];
       const Y = ry.d != null ? [0, s * ry.d] : [s * ry.n! * vy[0], s * ry.n! * vy[1]];
@@ -588,6 +1027,8 @@ import { runtime as TD } from '../runtime';
     if (parts.length === 2 || parts.length === 3) {
       // each part: a length along its axis, or that many unit vectors
       const P = parts.map(part), V = [vx, vy, vz];
+      // (on a canvas is … plane, a length or a third part is transformed by the plane too: not held)
+      if (inPlane(C) && (parts.length === 3 || P.some((q) => q.d != null))) C.warnings.push('canvas is … plane: a point with units or in 3D');
       if (P.every((q) => q.n != null || q.d != null)) {
         let X = 0, Y = 0;
         P.forEach((q, i) => {
@@ -598,7 +1039,7 @@ import { runtime as TD } from '../runtime';
       }
       if (parts.length === 3) return null;
     }
-    const nm = raw.replace(/\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|\d+)$/, '').trim();
+    const nm = raw.replace(/\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|-?\d+(?:\.\d+)?)$/, '').trim();
     if (C.unresolved?.has(nm)) return null;
     if (C.names[nm]) {
       const g = C.geo?.[nm], an = raw.slice(nm.length + 1).trim();
@@ -614,6 +1055,40 @@ import { runtime as TD } from '../runtime';
     return null;
   }
 
+  // what tkz-euclide's reader (src/domain/tkzeuclide.ts) asks of the picture: points by name (local px, y down),
+  // numbers and lengths as TikZ reads them, and a name set where a command puts a coordinate
+  const tkzApi = (C: any) => ({
+    coord: (raw: string) => coord(C, raw), num: (v: string) => pgfNum(expandMac(v), NaN), len: (v: string, u?: string) => len(v, u), expand: expandMac,
+    matchClose, splitTop, parseOpts, toAbs: (p: any) => toAbs(C, p), color: (k: string) => color(C, k),
+    setName(nm: string, p: any) {
+      C.names[nm] = toAbs(C, p); (C.kinds ||= {})[nm] = 'coordinate'; C.boxes[nm] = { w: 0, h: 0, pt: true };
+      if (C.geo) delete C.geo[nm];
+      C.unresolved?.delete(nm); C.approx?.delete(nm);
+    },
+    dropName(nm: string) { delete C.names[nm]; },
+    style: (nm: string, body: string) => addStyle(C, nm, body),
+  });
+  // the statements a package's command stands for, written as plain TikZ: read as statements of their own, then held
+  // as that one command's (its shapes when all are exact, else their previews and why)
+  function subStatements(C: any, code: string) {
+    const keep = { stmts: C.stmts, struct: C.struct }, w0 = C.warnings.length;
+    let made: any[] = [], st: any[] = [];
+    C.stmts = []; C.struct = null;
+    try { made = parseStatements(C, code); }
+    finally { st = C.stmts; C.stmts = keep.stmts; C.struct = keep.struct; if (!C.preview) C.warnings.length = w0; }
+    if (C.preview) return { made, issues: [], names: undefined, raw: false };
+    const issues: string[] = [], names: string[] = [], out: any[] = [];
+    let raw = false;
+    for (const x of st) {
+      for (const nm of x.names || []) names.push(nm);
+      if (x.raw && x.shapes[0]?.kind === 'defs') continue;
+      if (x.raw) { raw = true; issues.push(...(x.shapes[0]?.issues || [])); pushAll(out, x.shapes[0]?.prev || []); }
+      else pushAll(out, x.shapes);
+    }
+    return { made: out, issues, names: names.length ? names : undefined, raw };
+  }
+  // a path's line cap and line join when set (the shapes draw butt caps and round joins unless told)
+  const capJoin = (st: any) => ({ ...(st.cap && st.cap !== 'butt' ? { cap: st.cap } : {}), ...(st.join ? { join: st.join } : {}) });
   // ---------- shapes from a path command ----------
   function pathToShapes(C: any, cmd: any, optStr: any, body: any) {
     const opts = parseOpts(optStr);
@@ -621,14 +1096,14 @@ import { runtime as TD } from '../runtime';
     const toks = tokenizePath(C, body, (w: any) => C.warnings.push(w));
     const out: any[] = [], post: any[] = [];
     const L = { label: '', labelPos: 0.5, labelSide: 'left', size: 'normalsize', font: 'default', bold: false, italic: false, color: '#000000' };
-    let lineStyle = { stroke: st.stroke, width: st.width, dash: st.dash, opacity: st.opacity };
+    let lineStyle: Record<string, any> = { stroke: st.stroke, width: st.width, dash: st.dash, opacity: st.opacity, ...doubled(st), ...capJoin(st) };
     // a bare node name stands for the node's border: where a ray from its centre towards `toward` leaves it
     const geoAt = (p: any) => p && p.bare && C.geo?.[p.node];
     const clip = (p: any, toward: any) => { const g = geoAt(p); return g ? toLocal(C, { ...borderToward(g, toAbs(C, toward)), node: p.node, border: true }) : p; };
     // a `to` (or edge) between a and b: straight, or the curve out=/in=/bend give (controls 0.3915 × the distance
     // between its ends, times looseness; ends on the nodes' borders in those directions)
     const toSeg = (a0: any, b0: any, o: any) => {
-      const bend = o.bend, curved = Number.isFinite(o.out) || Number.isFinite(o.in) || (bend != null && bend !== 0);
+      const bend = o.bend, curved = Number.isFinite(o.out) || Number.isFinite(o.in) || (bend != null && bend !== 0) || o.loop;
       if (!curved) { const a = clip(a0, b0), b = clip(b0, a0); return { k: 'L', pts: [a, b] }; }
       const ang = Math.atan2(-(b0.y - a0.y), b0.x - a0.x) * 180 / Math.PI;
       const outA = Number.isFinite(o.out) || Number.isFinite(o.in) ? (Number.isFinite(o.out) ? o.out : ang) : ang + bend;
@@ -636,7 +1111,9 @@ import { runtime as TD } from '../runtime';
       const dir = (t: number) => ({ x: Math.cos(t * Math.PI / 180), y: -Math.sin(t * Math.PI / 180) });
       const da = dir(outA), db = dir(inA);
       const a = clip(a0, { x: a0.x + da.x, y: a0.y + da.y }), b = clip(b0, { x: b0.x + db.x, y: b0.y + db.y });
-      const L = Math.hypot(b.x - a.x, b.y - a.y) * 0.3915 * (Number.isFinite(o.looseness) ? o.looseness : 1);
+      const L0 = Math.hypot(b.x - a.x, b.y - a.y) * 0.3915 * (Number.isFinite(o.looseness) ? o.looseness : o.loop ? 8 : 1);
+      const lo = Number.isFinite(o.minDist) ? o.minDist : o.loop ? 5 * PX / 10 : 0, hi = Number.isFinite(o.maxDist) ? o.maxDist : Infinity;
+      const L = Math.min(hi, Math.max(lo, L0));
       return { k: 'C', pts: [a, { x: a.x + da.x * L, y: a.y + da.y * L }, { x: b.x + db.x * L, y: b.y + db.y * L }, b] };
     };
     // Walk the path building "subpaths" of segments.
@@ -645,8 +1122,11 @@ import { runtime as TD } from '../runtime';
     let cur: any = null, start = null, base: any = null;
     let segs: any[] = []; // {k:'L'|'C', pts:[...], label}
     let closed = false;
+    // a \path that neither draws nor fills: its lines are not drawn (only the nodes on it are)
+    const invisible = () => cmd === 'path' && !st.stroke && !st.fill && !opts.some((o: any) => ((o.k === 'draw' || o.k === 'fill') && o.v !== 'none') || /pattern|shad|^(left|right|top|bottom|inner|outer|middle|ball) color$/.test(o.k));
     const flush = () => {
       if (!segs.length) return;
+      if (invisible()) { if (segs.some((g: any) => g.label)) C.warnings.push('a label on an undrawn path'); segs = []; closed = false; return; }
       emitSegs(segs, closed);
       segs = []; closed = false;
     };
@@ -701,6 +1181,7 @@ import { runtime as TD } from '../runtime';
       out.push({ type: 'poly', pts: pts.map((p) => [p.x, p.y]), closed: cl, ...lineStyle, fill: cl ? st.fill : null, startTip: cl ? 'none' : tipStart, endTip: cl ? 'none' : tipEnd });
     };
     const resolve = (tk: any) => {
+      if (!String(tk.raw).trim() && cur && !tk.rel) return { ...cur }; // () : where the path is (edge[loop above] ())
       const p = coord(C, tk.raw, cur);
       if (!p) { C.warnings.push(`Unsupported coordinate (${tk.raw})`); return null; }
       const b = base || cur;
@@ -717,7 +1198,8 @@ import { runtime as TD } from '../runtime';
         const t = n.t, q = g.pts, P = g.k === 'C'
           ? { x: (1 - t) ** 3 * q[0].x + 3 * (1 - t) ** 2 * t * q[1].x + 3 * (1 - t) * t * t * q[2].x + t ** 3 * q[3].x, y: (1 - t) ** 3 * q[0].y + 3 * (1 - t) ** 2 * t * q[1].y + 3 * (1 - t) * t * t * q[2].y + t ** 3 * q[3].y }
           : { x: q[0].x + (q[1].x - q[0].x) * t, y: q[0].y + (q[1].y - q[0].y) * t };
-        const sh = textShape(C, n.text, n.no, P, st.color); delete sh._box; post.push(sh);
+        // (the point it hangs from: a scale moves that point, not the text's offset from it)
+        const sh = textShape(C, n.text, n.no, P, st.color); delete sh._box; sh._importNodeAt = { ...P }; post.push(sh);
       }
       onSeg = [];
     };
@@ -730,15 +1212,14 @@ import { runtime as TD } from '../runtime';
       if (at && shp && NODE_SHAPES[shp] && (border || pno.some((o: any) => /^minimum /.test(o.k)))) {
         const pl = placeOf(pno, at, C), B = boxNode(C, lineBreaks(tk.text!), pno, pl.at, pl.anchor, shp), made = B.shape;
         if (tk.name) made.nodeName = tk.name;
-        delete made._importNodeAt;
-        post.push(made);
+        post.push(made, ...B.labels);
         // named, untransformed: its border, so the paths after it stop there as TikZ does
         const fr = tk.name && !(C.scopes || []).some((L: any) => L.xf && L.xf.length) && !opts.some((o: any) => XF_KEYS.has(o.k)) && TD.rotFrame(made);
         if (fr) { const g = geoOf(B.kind, fr, B.os); (C.geo ||= {})[tk.name] = g; C.names[tk.name] = { ...g!.c }; (C.kinds ||= {})[tk.name] = 'node'; return; }
-      } else if (at && tk.text!.trim()) { const t = textShape(C, tk.text, pno, at, st.color); delete t._box; post.push(t); }
+      } else if (at && tk.text!.trim()) { const t = textShape(C, tk.text, pno, at, st.color); delete t._box; t._importNodeAt = { ...at }; post.push(t); }
       if (tk.name && at) { C.names[tk.name] = toAbs(C, at); if (C.geo) delete C.geo[tk.name]; }
     };
-    const pathTo = () => ({ bend: st.bend, out: st.out, in: st.in, looseness: st.looseness });
+    const pathTo = () => ({ bend: st.bend, out: st.out, in: st.in, looseness: st.looseness, minDist: st.minDist, maxDist: st.maxDist, loop: st.loop });
     for (let i = 0; i < toks.length; i++) {
       const tk = toks[i];
       if (tk.t === 'pic') {
@@ -760,8 +1241,19 @@ import { runtime as TD } from '../runtime';
       }
       if (tk.t === 'plot') {
         const po = parseOpts(tk.opts), has = (k: string) => po.some((o: any) => o.k === k);
-        const raws: string[] = tk.raws || [], P = raws.map((r: any) => coord(C, r, cur)).filter(Boolean);
+        const raws: string[] = tk.fn != null ? plotSamples([...opts, ...po], tk.fn) || [] : tk.raws || [], P = raws.map((r: any) => coord(C, r, cur)).filter(Boolean);
+        if (tk.fn != null && !raws.length) C.warnings.push('plot: its domain or samples not understood');
         if (P.length !== raws.length) C.warnings.push('Unsupported coordinate in a plot');
+        // a sharp plot joined to the path (-- plot …, or more path after it): its points are the subpath's, a line-to
+        // its first point after --, else a move-to (filled and closed with the rest, as TikZ does)
+        const sharpOpen = !(has('smooth') || has('smooth cycle') || has('sharp cycle'));
+        const joined = (pendingOp === '--' && cur) || (toks[i + 1] && toks[i + 1].t !== 'node');
+        if (sharpOpen && joined && P.length >= 1) {
+          if (pendingOp === '--' && cur) segs.push({ k: 'L', pts: [cur, P[0]] }); else { flush(); start = P[0]; }
+          for (let k = 1; k < P.length; k++) segs.push({ k: 'L', pts: [P[k - 1], P[k]] });
+          cur = base = P[P.length - 1]; pendingOp = null;
+          continue;
+        }
         flush();
         if (P.length >= 2) {
           const smooth = has('smooth') || has('smooth cycle'), cl = has('smooth cycle') || has('sharp cycle');
@@ -784,17 +1276,24 @@ import { runtime as TD } from '../runtime';
           if (pendingOp === '|-') segs.push({ k: 'L', pts: [cur, { x: cur.x, y: p.y }] }, { k: 'L', pts: [{ x: cur.x, y: p.y }, p] });
           else if (pendingOp === '-|') segs.push({ k: 'L', pts: [cur, { x: p.x, y: cur.y }] }, { k: 'L', pts: [{ x: p.x, y: cur.y }, p] });
           else {
-            const o = pendingOp === 'to' ? { ...pathTo(), ...(toOpts.length ? (({ bend, out, in: inn, looseness }: any) => ({ ...(bend != null ? { bend } : {}), ...(Number.isFinite(out) ? { out } : {}), ...(Number.isFinite(inn) ? { in: inn } : {}), ...(Number.isFinite(looseness) ? { looseness } : {}) }))(style(C, toOpts, cmd)) : {}) } : {};
+            // (to[loop]: every loop as an edge's loop takes it)
+            const toSt = () => { const t = style(C, toOpts, cmd); return t.loop ? style(C, [...toOpts, ...everyLoop(C)], cmd) : t; };
+            const o = pendingOp === 'to' ? { ...pathTo(), ...(toOpts.length ? (({ bend, out, in: inn, looseness, minDist, maxDist, loop }: any) => ({ ...(bend != null ? { bend } : {}), ...(Number.isFinite(out) ? { out } : {}), ...(Number.isFinite(inn) ? { in: inn } : {}), ...(Number.isFinite(looseness) ? { looseness } : {}), ...(Number.isFinite(minDist) ? { minDist } : {}), ...(Number.isFinite(maxDist) ? { maxDist } : {}), ...(loop ? { loop } : {}) }))(toSt()) : {}) } : {};
             const g = toSeg(cur, p, o);
-            // TikZ starts a new piece where the path leaves a node's border
-            if (g.pts[0].border && segs.length) flush();
+            // TikZ starts a new piece where a line leaves a node's border; a curve goes on from where the path is (its
+            // controls from there), and a fill fills each piece on its own: neither drawn here
+            if (g.pts[0].border && segs.length) {
+              if (g.k === 'C') C.warnings.push('a curve going on from a node in the middle of the path');
+              if (st.fill) C.warnings.push('a filled path broken where it leaves a node');
+              flush();
+            }
             segs.push({ ...g, label: lastSegLabel });
             placeOnSeg(g);
           }
           if (pendingOp === '|-' || pendingOp === '-|') {
             const sg = segs.slice(-2);
             sg[0].pts[0] = clip(sg[0].pts[0], sg[0].pts[1]); sg[1].pts[1] = clip(sg[1].pts[1], sg[1].pts[0]);
-            if (sg[0].pts[0].border && segs.length > 2) { const keep = segs.splice(-2); flush(); segs.push(...keep); }
+            if (sg[0].pts[0].border && segs.length > 2) { if (st.fill) C.warnings.push('a filled path broken where it leaves a node'); const keep = segs.splice(-2); flush(); segs.push(...keep); }
           }
           lastSegLabel = null; toOpts = [];
         } else if (pendingOp === '..') {
@@ -805,6 +1304,8 @@ import { runtime as TD } from '../runtime';
           ctrl = [];
         } else if (pendingOp === 'rectangle') {
           flush();
+          // (in slanted units a rectangle is still along the page between its corners; a plane turns it)
+          if (inPlane(C)) C.warnings.push('canvas is … plane: a rectangle');
           const x = Math.min(cur.x, p.x), y = Math.min(cur.y, p.y);
           out.push({ type: 'rect', x, y, w: Math.abs(p.x - cur.x), h: Math.abs(p.y - cur.y), radius: st.radius || 0, ...lineStyle, fill: st.fill });
           lastRect = { a: cur, b: p };
@@ -813,6 +1314,7 @@ import { runtime as TD } from '../runtime';
         } else if (pendingOp === 'grid') {
           flush();
           // lines at the multiples of the step (TikZ's grid is aligned to the origin) inside the rectangle
+          if (inPlane(C) || (C.vx && Math.abs(C.vx[1]) > 1e-9) || (C.vy && Math.abs(C.vy[0]) > 1e-9)) C.warnings.push('a grid in slanted x/y units');
           const gs = toOpts.length ? style(C, toOpts, cmd) : st;
           const xs = gs.xstep ?? gs.step ?? st.xstep ?? st.step ?? PX, ys = gs.ystep ?? gs.step ?? st.ystep ?? st.step ?? PX;
           const x0 = Math.min(cur.x, p.x), x1 = Math.max(cur.x, p.x), y0 = Math.min(cur.y, p.y), y1 = Math.max(cur.y, p.y);
@@ -829,12 +1331,21 @@ import { runtime as TD } from '../runtime';
           let ee: any[] = [];
           if (C.styles?.has('every edge')) { const su = styUsed; try { ee = parseOpts('every edge'); } catch { ee = []; } styUsed = su; }
           const drawn = cmd !== 'path' || !C.styles?.has('every edge') || [...ee, ...toOpts].some((o: any) => o.k === 'draw' && o.v !== 'none');
-          const eo = [...ee, ...toOpts], es = style(C, [...opts, ...eo], cmd === 'path' ? 'draw' : cmd);
-          if (!drawn) { lastSegLabel = null; toOpts = []; pendingOp = null; continue; }
-          const g = toSeg(cur, p, { bend: es.bend, out: es.out, in: es.in, looseness: es.looseness });
+          let eo = [...ee, ...toOpts], es = style(C, [...opts, ...eo], cmd === 'path' ? 'draw' : cmd);
+          if (es.loop) { eo = [...eo, ...everyLoop(C)]; es = style(C, [...opts, ...eo], cmd === 'path' ? 'draw' : cmd); }
+          const g = toSeg(cur, p, { bend: es.bend, out: es.out, in: es.in, looseness: es.looseness, minDist: es.minDist, maxDist: es.maxDist, loop: es.loop });
           const keep: any[] = [st, lineStyle];
-          st = es; lineStyle = { stroke: es.stroke, width: es.width, dash: es.dash, opacity: es.opacity };
-          try { emitSegs([{ ...g, label: lastSegLabel }], false); } finally { [st, lineStyle] = keep; }
+          st = es; lineStyle = { stroke: es.stroke, width: es.width, dash: es.dash, opacity: es.opacity, ...doubled(es), ...capJoin(es) };
+          // (an undrawn \path edge still typesets its nodes; a label kept on the line has nothing to sit on)
+          try {
+            const n0 = out.length;
+            if (drawn) emitSegs([{ ...g, label: lastSegLabel }], false);
+            else if (lastSegLabel) C.warnings.push('a label on an undrawn edge');
+            // (the edge's own shorten: applied with the path's, below)
+            out.slice(n0).forEach((x: any) => { x._edge = true; });
+            if ((es.shStart || es.shEnd) && out.length > n0) { out[n0]._sh0 = es.shStart; out[out.length - 1]._sh1 = es.shEnd; }
+            placeOnSeg(g);
+          } finally { [st, lineStyle] = keep; }
           lastSegLabel = null; toOpts = []; pendingOp = null;
           continue;
         } else { // move-to
@@ -860,10 +1371,13 @@ import { runtime as TD } from '../runtime';
             const nx = toks[i + 1];
             if (nx && nx.t === 'coord') { // (r) or (rx and ry)
               const a = nx.raw.split(/\s+and\s+/);
-              rx = len(a[0]); ry = a[1] ? len(a[1]) : rx; i++;
+              radiusUnits(C, a);
+              rx = radiusLen(C, a[0], 0); ry = radiusLen(C, a[1] ?? a[0], 1); i++;
             } else if (nx && nx.t === 'opts') {
-              const so = style(C, parseOpts(nx.v), cmd); rx = so.rx ?? so.r; ry = so.ry ?? so.r; i++;
-            } else { rx = st.rx ?? st.r; ry = st.ry ?? st.r; }
+              const po = parseOpts(nx.v); radiusUnits(C, po.filter((o: any) => /radius$/.test(o.k)).map((o: any) => o.v));
+              const so = style(C, po, cmd); rx = so.rx ?? so.r; ry = so.ry ?? so.r; i++;
+              if (!defaultUnits(C)) [rx, ry] = unitRadii(C, po, rx, ry);
+            } else { radiusUnits(C, opts.filter((o: any) => /radius$/.test(o.k)).map((o: any) => o.v)); rx = st.rx ?? st.r; ry = st.ry ?? st.r; if (!defaultUnits(C)) [rx, ry] = unitRadii(C, opts, rx, ry); }
             if (!cur || !isFinite(rx)) { C.warnings.push('circle without radius'); break; }
             flush();
             if (cmd === 'shade' || st.ballColor) out.push({ type: 'ball', cx: cur.x, cy: cur.y, r: rx, ballColor: st.ballColor || '#a05a5a', opacity: st.opacity });
@@ -874,8 +1388,22 @@ import { runtime as TD } from '../runtime';
           case 'arc': {
             const nx = toks[i + 1];
             let a1, a2, r, ry;
-            if (nx && nx.t === 'opts') { const so = style(C, parseOpts(nx.v), cmd); a1 = so.a1; a2 = so.a2 ?? (so.da != null ? a1 + so.da : undefined); r = so.r ?? so.rx; ry = so.r != null ? r : so.ry ?? r; i++; }
-            else if (nx && nx.t === 'coord') { const q = nx.raw.split(':'); a1 = pgfNum(expandMac(q[0]), NaN); a2 = pgfNum(expandMac(q[1]), NaN); const rr = (q[2] || '').split(/\s+and\s+/); r = len(rr[0]); ry = rr[1] != null ? len(rr[1]) : r; i++; }
+            // (a radius without a unit: along the x and y vectors when they point right and up, measured; flipped
+            // ones are not held)
+            const upright = () => { const u = axisUnits(C); return !defaultUnits(C) && u && (C.vx || [PX])[0] > 0 && (C.vy || [0, PX])[1] > 0; };
+            const unheld = (vals: any[]) => { if ((!defaultUnits(C) || inPlane(C)) && vals.some((v) => v != null && String(v).trim() && !UNIT.test(expandMac(v)))) C.warnings.push('a radius in the picture\'s x/y units'); };
+            if (nx && nx.t === 'opts') {
+              const po = parseOpts(nx.v), rv = po.filter((o: any) => /radius$/.test(o.k)).map((o: any) => o.v);
+              if (!upright()) unheld(rv);
+              const so = style(C, po, cmd); a1 = so.a1; a2 = so.a2 ?? (so.da != null ? a1 + so.da : undefined); r = so.r ?? so.rx; ry = so.r != null ? r : so.ry ?? r; i++;
+              if (upright()) [r, ry] = unitRadii(C, po, r, ry);
+            }
+            else if (nx && nx.t === 'coord') {
+              const q = nx.raw.split(':'); a1 = pgfNum(expandMac(q[0]), NaN); a2 = pgfNum(expandMac(q[1]), NaN); const rr = (q[2] || '').split(/\s+and\s+/);
+              if (upright()) { r = radiusLen(C, rr[0], 0); ry = radiusLen(C, rr[1] ?? rr[0], 1); }
+              else { unheld(rr); r = len(rr[0]); ry = rr[1] != null ? len(rr[1]) : r; }
+              i++;
+            }
             if (![a1, a2, r].every(isFinite) || !cur) { C.warnings.push('arc not understood'); break; }
             if (!isFinite(ry) || !(ry > 0)) ry = r;
             const c = { x: cur.x - r * Math.cos((a1 * Math.PI) / 180), y: cur.y + ry * Math.sin((a1 * Math.PI) / 180) };
@@ -913,15 +1441,28 @@ import { runtime as TD } from '../runtime';
       }
       if (tk.t === 'node') {
         const toPos = pendingOp === 'to' ? lastOpt(toOpts, 'pos') : null;
-        const no = [...(toPos && !no0(tk.opts).some((o: any) => ['pos', 'midway', 'near start', 'near end', 'at start', 'at end'].includes(o.k)) ? [toPos] : []), ...no0(tk.opts)], ns = style(C, no, 'node');
+        const no = [...(toPos && !no0(tk.opts).some((o: any) => ['pos', 'midway', 'near start', 'near end', 'at start', 'at end'].includes(o.k)) ? [toPos] : []), ...no0(tk.opts)], pno = [...everyNode(C), ...no], ns = style(C, pno, 'node');
+        // (TikZ places a node on a -| or |- path at pos along both legs: not held)
+        if (pendingOp === '-|' || pendingOp === '|-') C.warnings.push('a node on a -| or |- path');
         const fs = fontStyle(ns.font);
-        const lab = { label: tk.text, labelSide: no.some((o: any) => o.k === 'swap' || o.k === "'") ? 'right' : no.some((o: any) => o.k === 'fill') ? 'on' : 'left', labelPos: isFinite(ns.pos) ? ns.pos : no.some((o: any) => o.k === 'near start') ? 0.25 : no.some((o: any) => o.k === 'near end') ? 0.75 : 0.5, ...fs, color: ns.color || st.color || '#000000' };
-        const placed = no.some((o: any) => PLACE_ANCHOR[o.k] || o.k === 'anchor') && !no.some((o: any) => ['sloped', 'auto', 'swap', "'", 'draw', 'fill'].includes(o.k)) && !tk.name;
-        if ((pendingOp === '--' || pendingOp === 'to') && placed && tk.text!.trim()) { onSeg.push({ text: tk.text, no, t: lab.labelPos }); continue; }
+        const loopy = (pendingOp === 'edge' || pendingOp === 'to') && [...opts, ...toOpts].some((o: any) => LOOPS[o.k]); // loop above: its label above the loop
+        const lab = { label: tk.text, labelSide: autoSide([...(C.picAuto || []), ...opts, ...toOpts, ...no], loopy ? 'left' : 'on'), labelPos: isFinite(ns.pos) ? ns.pos : no.some((o: any) => o.k === 'near start') ? 0.25 : no.some((o: any) => o.k === 'near end') ? 0.75 : 0.5, ...fs, color: ns.color || st.color || '#000000' };
+        // a node with a placement of its own (above, anchor=…), or one centred on the line with nothing round it (TikZ
+        // centres its text on the point, no box): text at that point along the line. A line label stays for what
+        // the label draws exactly: beside the line (auto, swap), or on it in a white box (fill=white)
+        const boxed = pno.some((o: any) => ['sloped', 'draw', 'fill'].includes(o.k) && o.v !== 'none');
+        const onLine = lab.labelSide === 'on' && !boxed;
+        // (a line label on the line is drawn in a white box: exact only for fill=white with no border)
+        const inexactOn = () => { if (lab.labelSide === 'on' && !pno.some((o: any) => o.k === 'sloped') && (pno.some((o: any) => o.k === 'draw' && o.v !== 'none') || !pno.some((o: any) => o.k === 'fill' && /^white$/i.test(String(o.v || ''))))) C.warnings.push('a node with a border or fill on a path'); };
+        const placed = ((no.some((o: any) => PLACE_ANCHOR[o.k] || o.k === 'anchor') && !no.some((o: any) => ['sloped', 'auto', 'swap', "'", 'draw', 'fill'].includes(o.k))) || onLine) && !tk.name;
+        if ((pendingOp === '--' || pendingOp === 'to' || pendingOp === 'edge') && placed && tk.text!.trim()) { onSeg.push({ text: tk.text, no, t: lab.labelPos }); continue; }
         if (pendingOp === 'rectangle') { rectNodes.push({ tk, no, t: lab.labelPos }); continue; }
-        if (pendingOp === '--' || pendingOp === 'to' || pendingOp === 'edge') { lastSegLabel = lab; continue; }
+        // (a piece of line holds one label: a second is not drawn, so the statement stays code)
+        if (pendingOp === '--' || pendingOp === 'to' || pendingOp === 'edge') { inexactOn(); if (lastSegLabel) C.warnings.push('several labels on one piece of the path'); lastSegLabel = lab; continue; }
         const along = no.some((o: any) => ['midway', 'near start', 'near end', 'pos', 'sloped', 'auto', 'swap'].includes(o.k));
-        if (along && segs.length && segs[segs.length - 1].k === 'L' && segs.length === 1) { segs[0].label = lab; continue; }
+        // (after the operation's end: at pos along the last piece)
+        if (along && placed && tk.text!.trim() && segs.length && ['L', 'C'].includes(segs[segs.length - 1].k)) { onSeg.push({ text: tk.text, no, t: lab.labelPos }); placeOnSeg(segs[segs.length - 1]); continue; }
+        if (along && segs.length && segs[segs.length - 1].k === 'L' && segs.length === 1 && !segs[0].label) { inexactOn(); segs[0].label = lab; continue; }
         // midway (or pos=) on the arc just drawn: the point that far round it
         if (along && lastArc && lastArc.end === cur) {
           const A = lastArc, a = ((A.a1 + (A.a2 - A.a1) * lab.labelPos) * Math.PI) / 180;
@@ -937,16 +1478,47 @@ import { runtime as TD } from '../runtime';
     }
     flush();
     // shorten < and > pull the path's first and last ends in (a line by its length, an arc round its circle)
-    const ends = out.filter((x) => x.type === 'line' || x.type === 'arc');
-    const pull = (x: any, atStart: any, d: any) => {
-      if (!(d > 0)) return;
-      if (x.type === 'arc') { const da = (d / x.r) * (180 / Math.PI); if (atStart !== x._rev) x.a1 += da; else x.a2 -= da; return; }
+    // (TikZ shortens on the page: a uniform scale round the path divides it; a negative one lengthens a line)
+    // (pgf moves an end straight towards the next point on the path, a curve's end towards its control point, and
+    // leaves the rest: \pgf@prep@straightend; only flex tips, the bending library's, shorten along the curve)
+    const ends = out.filter((x) => x.type === 'line' || x.type === 'arc' || x.type === 'curve');
+    let shK = 1;
+    // (an edge's shapes: the edge's own shorten, not the path's ends)
+    if ((Number.isFinite(st.shStart) && st.shStart) || (Number.isFinite(st.shEnd) && st.shEnd) || out.some((x: any) => x._sh0 || x._sh1)) {
+      for (const t of (C.scopes || []).flatMap((L: any) => L.xf || [])) { if (t.scale !== undefined) shK *= t.scale; else if (t.sx !== undefined && t.sx !== t.sy) C.warnings.push('shorten in a picture scaled along one axis'); }
+      for (const o of opts) { if (o.k === 'scale') shK *= pgfNum(expandMac(o.v), NaN); else if (o.k === 'xscale' || o.k === 'yscale') C.warnings.push('shorten in a picture scaled along one axis'); }
+      const drawnEnds = out.filter((x) => !x._edge && ['line', 'arc', 'curve', 'poly'].includes(x.type));
+      if ((st.shStart && drawnEnds[0] && !ends.includes(drawnEnds[0])) || (st.shEnd && drawnEnds.length && !ends.includes(drawnEnds[drawnEnds.length - 1]))) C.warnings.push('shorten at a curved end');
+      if (!(shK > 0)) { C.warnings.push('shorten not understood'); shK = 1; }
+      if ((C.libs || []).includes('bending') && out.some((x: any) => x.type === 'curve' || x.type === 'arc')) C.warnings.push('shorten with flexed tips');
+    }
+    const pull = (x: any, atStart: any, d0: any) => {
+      if (!d0 || !Number.isFinite(d0)) return;
+      const d = d0 / shK;
+      if (x.type === 'curve') {
+        const [ex, ey, cx, cy, ox, oy] = atStart ? [x.x1, x.y1, x.cx1, x.cy1, x.cx2, x.cy2] : [x.x2, x.y2, x.cx2, x.cy2, x.cx1, x.cy1];
+        const [rx, ry] = Math.hypot(cx - ex, cy - ey) > 1e-9 ? [cx, cy] : [ox, oy], L = Math.hypot(rx - ex, ry - ey);
+        if (!(L > 0)) return;
+        const nx = ex + ((rx - ex) * d) / L, ny = ey + ((ry - ey) * d) / L;
+        if (atStart) { x.x1 = nx; x.y1 = ny; } else { x.x2 = nx; x.y2 = ny; }
+        return;
+      }
+      if (x.type === 'arc') {
+        // (along the circle, where pgf goes along the tangent: the same to within d²/2r, held up to half a point)
+        if (d < 0 || (d * d) / (2 * x.r) > 0.5 / K || (x.ry != null && Math.abs(x.ry - x.r) > 1e-6)) { C.warnings.push('shorten on an arc'); return; }
+        const da = (d / x.r) * (180 / Math.PI); if (atStart !== x._rev) x.a1 += da; else x.a2 -= da; return;
+      }
       const [ax, ay, bx, by] = atStart ? [x.x1, x.y1, x.x2, x.y2] : [x.x2, x.y2, x.x1, x.y1], L = Math.hypot(bx - ax, by - ay);
-      if (!(L > d)) return;
+      if (!(L > 0)) return;
       const nx = ax + ((bx - ax) * d) / L, ny = ay + ((by - ay) * d) / L;
       if (atStart) { x.x1 = nx; x.y1 = ny; } else { x.x2 = nx; x.y2 = ny; }
     };
-    if (ends.length) { pull(ends[0], true, st.shStart); pull(ends[ends.length - 1], false, st.shEnd); }
+    const own = ends.filter((x: any) => !x._edge);
+    if (own.length) { pull(own[0], true, st.shStart); pull(own[own.length - 1], false, st.shEnd); }
+    for (const x of out) if (x._edge) {
+      if (x._sh0 || x._sh1) { if (!['line', 'arc', 'curve'].includes(x.type)) C.warnings.push('shorten at a curved end'); else { pull(x, true, x._sh0); pull(x, false, x._sh1); } }
+      delete x._edge; delete x._sh0; delete x._sh1;
+    }
     for (const x of out) delete x._rev;
     pushAll(out, post);
     if (st.bend) for (const s of out) if (s.type === 'line') {
@@ -972,7 +1544,9 @@ import { runtime as TD } from '../runtime';
   }
   // the node shapes the model holds: rectangle (rect), circle and ellipse (ellipse)
   const NODE_SHAPES: Record<string, string> = { rectangle: 'rect', circle: 'ellipse', ellipse: 'ellipse' };
-  const NODE_BOX_KEYS = new Set(['inner sep', 'inner xsep', 'inner ysep', 'minimum size', 'minimum width', 'minimum height', 'outer sep', 'outer xsep', 'outer ysep', 'text width', 'align', 'text centered', 'rectangle', 'circle', 'ellipse', 'shape', 'rounded corners', 'node distance', 'on grid']);
+  const NODE_BOX_KEYS = new Set(['inner sep', 'inner xsep', 'inner ysep', 'minimum size', 'minimum width', 'minimum height', 'outer sep', 'outer xsep', 'outer ysep', 'text width', 'align', 'text centered', 'rectangle', 'circle', 'ellipse', 'shape', 'rounded corners', 'node distance', 'on grid',
+    // automata's arrows into an initial state and out of an accepting one (drawn beside the node: automataArrows)
+    ...['initial', 'accepting'].flatMap((w) => [`${w} by arrow`, `${w} where`, `${w} text`, `${w} distance`]), 'fit']);
   // the shape a node's options ask for: null for a node without a border (text), undefined for a shape the model
   // does not hold
   function nodeShapeName(nopts: any[]) {
@@ -989,13 +1563,14 @@ import { runtime as TD } from '../runtime';
     }
     return { sep, sx, sy };
   }
-  function nodeSize(C: any, nopts: any[], text: string, fs: any, shapeName: string) {
+  // fit: the box the node's content is (fit=…: the box round what it fits), in place of its text's
+  function nodeSize(C: any, nopts: any[], text: string, fs: any, shapeName: string, fit?: { w: number; h: number } | null) {
     const kind = NODE_SHAPES[shapeName];
     const get = (k: string) => { const o = [...nopts].reverse().find((q: any) => q.k === k); return o ? len(o.v, 'pt') : undefined; };
     const { sep, sx, sy } = innerSeps(nopts);
     const ms = get('minimum size'), mw = get('minimum width') ?? ms, mh = get('minimum height') ?? ms;
     const tb = texBox(text, fs), tw = get('text width');
-    const bw = (Number.isFinite(tw) ? (tw as number) : tb.w), bh = tb.ht + tb.dp;
+    const bw = fit ? fit.w : (Number.isFinite(tw) ? (tw as number) : tb.w), bh = fit ? fit.h : tb.ht + tb.dp;
     let w = bw + 2 * sx, h = bh + 2 * sy;
     if (shapeName === 'circle') { const d = 2 * Math.hypot(w / 2, h / 2); w = h = Math.max(d, Number.isFinite(ms) ? ms as number : 0, Number.isFinite(mw) ? mw as number : 0, Number.isFinite(mh) ? mh as number : 0); }
     else {
@@ -1069,10 +1644,12 @@ import { runtime as TD } from '../runtime';
   }
   // a node with a border (rectangle, circle, ellipse) as a rect or ellipse holding its text; `at` is where its
   // `anchor` goes. Returns the shape (before transforms), its size and the options it does not hold.
-  function boxNode(C: any, text: string, nopts: any[], at: any, anchor: string | null, shapeName: string) {
+  function boxNode(C: any, text: string, nopts: any[], at: any, anchor: string | null, shapeName: string, fit?: { w: number; h: number } | null) {
+    const lift = liftSize(text);
+    if (lift) { text = lift.text; nopts = [...nopts, { k: 'font', v: '\\' + lift.size }]; }
     const st = style(C, nopts, 'node'), decoration = nodeDecorations(nopts), fs = fontStyle(st.font);
     if (!nopts.some((o: any) => o.k === 'draw' && o.v !== 'none')) st.stroke = null;
-    const sz = nodeSize(C, nopts, text, fs, shapeName), bad: string[] = [];
+    const sz = nodeSize(C, nopts, text, fs, shapeName, fit), bad: string[] = [];
     const os = outerSep(nopts, st.width);
     const g0 = { kind: sz.kind, c: { x: 0, y: 0 }, U: { x: sz.w / 2 + os, y: 0 }, V: { x: 0, y: sz.h / 2 + os } };
     // base: the text's baseline ((height − depth)/2 below the centre); mid: half an ex above it
@@ -1084,8 +1661,12 @@ import { runtime as TD } from '../runtime';
     const c = { x: at.x - (off ? off.x : 0), y: at.y - (off ? off.y : 0) };
     const made = TD.TYPES[sz.kind].create(c, st);
     made.stroke = st.stroke ?? null; // (create gives a border by default: a node without draw has none)
+    // (opacity= fades the node, not its label or pin: a translucent node with them stays code)
+    made.opacity = Number.isFinite(st.opacity) ? st.opacity : 1;
+    if (made.opacity < 1 && nopts.some((o: any) => o.k === 'label' || o.k === 'pin')) bad.push('a label on a translucent node');
     Object.assign(made, sz.kind === 'rect' ? { x: c.x - sz.w / 2, y: c.y - sz.h / 2, w: sz.w, h: sz.h, radius: st.radius || 0 } : { cx: c.x, cy: c.y, rx: sz.w / 2, ry: sz.h / 2 }, fs, { color: st.color || '#000000' }, decoration.fields);
     if (text) made.nodeText = text;
+    if (made.stroke) Object.assign(made, doubled(st));
     made._importNodeAt = { ...at };
     const al = lastOpt(nopts, 'align')?.v?.trim(), centred = al === 'center' || nopts.some((o: any) => o.k === 'text centered');
     if (al && !/^(center|left|right|flush center|flush left|flush right)$/.test(al)) bad.push('align=' + al);
@@ -1100,8 +1681,60 @@ import { runtime as TD } from '../runtime';
       const L = labelShapes(C, nopts, { ...g0, c }, st.color);
       if (L) { labels = L; dIss = dIss.filter((w: string) => !/label/.test(w)); delete made.nodeLabel; delete made.nodeLabelPosition; }
     }
-    bad.push(...unknownKeys(C, nopts, allowed), ...dIss);
+    const arrows = automataArrows(C, nopts, { ...g0, c }, st.color);
+    labels.push(...arrows.shapes);
+    bad.push(...unknownKeys(C, nopts, allowed), ...dIss, ...arrows.bad);
     return { shape: made, kind: sz.kind, w: sz.w, h: sz.h, os, bad, labels };
+  }
+  // the box fit=… asks for (tikzlibraryfit.code.tex): round its points, and each node's west, east, north and south
+  // (on its outer border); null when one can't be read
+  function fitBounds(C: any, v: string) {
+    const items = [...String(v).matchAll(/\(((?:[^()]|\([^()]*\))*)\)/g)].map((m) => m[1].trim()).filter(Boolean);
+    if (!items.length) return null;
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    const ext = (p: any) => { x1 = Math.min(x1, p.x); y1 = Math.min(y1, p.y); x2 = Math.max(x2, p.x); y2 = Math.max(y2, p.y); };
+    for (const it of items) {
+      if (C.unresolved?.has(it.replace(/\.[^.]*$/, '')) || C.unresolved?.has(it)) return null;
+      // (only names placed exactly: not a node kept as code or placed approximately, nor a node with no known box)
+      const base = it.replace(/\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|-?\d+(?:\.\d+)?)$/, '').trim();
+      if (OWN.call(C.names, base)) {
+        if (C.approx?.has(base) || C.kept?.has(base) || C.unresolved?.has(base)) return null;
+        if ((C.kinds || {})[base] === 'node' && !C.geo?.[base] && !(C.boxes?.[base] && !C.boxes[base].pt)) return null;
+      }
+      const g = C.geo?.[it], bx = C.boxes?.[it];
+      if (g) { for (const a of ['west', 'east', 'north', 'south']) { const q = anchorOf(g, a); if (!q) return null; ext(toLocal(C, q)); } continue; }
+      const p = coord(C, it);
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+      // a text node: its box (and inner sep, unless the box holds it)
+      if (bx && !bx.pt && p.bare) { const sep = bx.native ? 0 : 3.33 / K; ext({ x: p.x - bx.w / 2 - sep, y: p.y - bx.h / 2 - sep }); ext({ x: p.x + bx.w / 2 + sep, y: p.y + bx.h / 2 + sep }); continue; }
+      ext(p);
+    }
+    return { c: { x: (x1 + x2) / 2, y: (y1 + y2) / 2 }, w: x2 - x1, h: y2 - y1 };
+  }
+  // automata's initial by arrow and accepting by arrow (tikzlibraryautomata.code.tex): a line from `initial distance`
+  // (3ex) out at `initial where` (left: 180°) into the node's border there, its tip by the picture's ->, with `initial
+  // text` (start) by its far end on the other side; an accepting one leaves the border (at the right, with no text).
+  // g: the node's border with its outer sep
+  function automataArrows(C: any, nopts: any[], g: any, ink: any) {
+    const shapes: any[] = [], bad: string[] = [];
+    for (const which of ['initial', 'accepting']) {
+      if (!nopts.some((o: any) => o.k === `${which} by arrow`)) continue;
+      const own = (k: string) => lastOpt(nopts, k)?.v ?? setting(C, k);
+      const where = String(own(`${which} where`) ?? (which === 'initial' ? 'left' : 'right')).trim();
+      const th = ({ right: 0, above: 90, left: 180, below: 270 } as Record<string, number>)[where];
+      const d = len(String(own(`${which} distance`) ?? '3ex'), 'pt') as number;
+      const B = th == null ? null : anchorOf(g, String(th));
+      if (!B || !Number.isFinite(d)) { bad.push(`${which} where=${where}`); continue; }
+      const u = { x: Math.cos(th * Math.PI / 180), y: -Math.sin(th * Math.PI / 180) }, far = { x: B.x + d * u.x, y: B.y + d * u.y };
+      let every: any[] = [];
+      if (C.styles?.has(`every ${which} by arrow`)) { const su = styUsed; try { every = parseOpts(`every ${which} by arrow`); } catch { every = []; } finally { styUsed = su; } }
+      const ast = style(C, [{ k: '->', v: null }, ...every], 'draw');
+      const [a, b] = which === 'initial' ? [far, B] : [B, far];
+      shapes.push({ ...TD.TYPES.line.create(a, { stroke: ast.stroke || '#000000', width: ast.width, dash: ast.dash }), x2: b.x, y2: b.y, startTip: ast.startTip, endTip: ast.endTip, opacity: ast.opacity ?? 1 });
+      const txt = String(own(`${which} text`) ?? (which === 'initial' ? 'start' : '')).trim().replace(/^\{([\s\S]*)\}$/, '$1');
+      if (txt) { const T = textShape(C, txt, [], far, ink, ({ 0: 'west', 90: 'south', 180: 'east', 270: 'north' } as Record<number, string>)[th]); delete T._box; shapes.push(T); }
+    }
+    return { shapes, bad };
   }
   function nodeDecorations(opts: any[]) {
     const fields: Record<string, any> = {}, issues: string[] = [];
@@ -1146,7 +1779,7 @@ import { runtime as TD } from '../runtime';
       let at = { x: B.x + d * dir.x, y: B.y + d * dir.y };
       for (const x of settings) {
         if (x.k === 'shift') { const q = coord(C, String(x.v).trim().replace(/^\{([\s\S]*)\}$/, '$1')); if (!q) return null; at = { x: at.x + q.x, y: at.y + q.y }; }
-        else if (x.k === 'xshift' || x.k === 'yshift') { const q = len(x.v) as number; if (!Number.isFinite(q)) return null; at = x.k === 'xshift' ? { x: at.x + q, y: at.y } : { x: at.x, y: at.y - q }; }
+        else if (x.k === 'xshift' || x.k === 'yshift') { const q = len(x.v, 'pt') as number; if (!Number.isFinite(q)) return null; at = x.k === 'xshift' ? { x: at.x + q, y: at.y } : { x: at.x, y: at.y - q }; }
       }
       const h = Math.abs(dir.x) > 1e-3 ? (dir.x > 0 ? 'west' : 'east') : '', v = Math.abs(dir.y) > 1e-3 ? (dir.y < 0 ? 'south' : 'north') : '';
       const own = lastOpt(settings, 'anchor')?.v?.trim();
@@ -1155,7 +1788,28 @@ import { runtime as TD } from '../runtime';
     }
     return out;
   }
+  // a size switch that covers a node's whole text (\small x, {\small x}): the node's font size, as the canvas
+  // cannot draw the switch in the text (the inner sep stays the document's, as it is in TeX)
+  const SIZE_SW = /^\s*(\{\s*)?\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)(?![A-Za-z])\s*/;
+  function liftSize(text: string): { size: string, text: string } | null {
+    const m = SIZE_SW.exec(String(text || ''));
+    if (!m) return null;
+    let rest = String(text).slice(m[0].length);
+    if (m[1]) {
+      let d = 1, j = 0;
+      for (; j < rest.length; j++) { const c = rest[j]; if (c === '\\') { j++; continue; } if (c === '{') d++; else if (c === '}' && --d === 0) break; }
+      if (d !== 0 || rest.slice(j + 1).trim()) return null;
+      rest = rest.slice(0, j);
+    }
+    // \small{x}: the switch, then a group round the rest (only that group: its braces go)
+    rest = rest.trim();
+    if (rest[0] === '{' && matchClose(rest, 0, '{', '}') === rest.length - 1) rest = rest.slice(1, -1);
+    if (SIZE_SW.test(rest) || !rest.trim()) return null;
+    return { size: m[2], text: rest.trimEnd() };
+  }
   function textShape(C: any, text: any, opts: any, P: any, inherit?: any, anchor?: string | null) {
+    const lift = liftSize(text);
+    if (lift) { text = lift.text; opts = [...opts, { k: 'font', v: '\\' + lift.size }]; }
     const st = style(C, opts, 'node');
     const fs = fontStyle(st.font);
     text = text.replace(/\$\s*\\displaystyle\b\s*([^$]*)\$/g, (m: any, x: any) => `$$${x.trim()}$$`);
@@ -1188,8 +1842,9 @@ import { runtime as TD } from '../runtime';
     for (const { k, v } of list) {
       const before = xf.length;
       if (k === 'shift' && v) { const c = coord(C, String(v).trim().replace(/^\{|\}$/g, '').trim().replace(/^\(|\)$/g, '')); if (c) xf.push({ dx: c.x, dy: c.y }); }
-      else if (k === 'xshift' && v) { const d = len(v); if (isFinite(d!)) xf.push({ dx: d, dy: 0 }); }
-      else if (k === 'yshift' && v) { const d = len(v); if (isFinite(d!)) xf.push({ dx: 0, dy: -d! }); }
+      // (a shift without a unit is in pt: \pgftransformxshift sets a length)
+      else if (k === 'xshift' && v) { const d = len(v, 'pt'); if (isFinite(d!)) xf.push({ dx: d, dy: 0 }); }
+      else if (k === 'yshift' && v) { const d = len(v, 'pt'); if (isFinite(d!)) xf.push({ dx: 0, dy: -d! }); }
       else if (k === 'scale' && v) { const k = pgfNum(expandMac(v), NaN); if (isFinite(k) && k > 0) xf.push({ scale: k, px: 0, py: 0 }); }
       else if ((k === 'xscale' || k === 'yscale') && v) {
         // one axis only (a negative factor mirrors): applied to coordinates, not to nodes' own size
@@ -1266,6 +1921,53 @@ import { runtime as TD } from '../runtime';
     const [ox, oy] = f(0, 0), [ax, ay] = f(1, 0), [bx, by] = f(0, 1);
     return { ox, oy, a: ax - ox, b: bx - ox, c: ay - oy, d: by - oy };
   }
+  // a tikz-feynman diagram's surroundings: the scopes' origin (px), and as options its scale, transform shape, the
+  // widths and colour every path takes and the font (null when the scopes turn, slant or scale x and y apart)
+  // (the app's own copy with a scale, a scale-around scope with transform shape, stays the block's objectScale)
+  function feynWrap(C: any) {
+    if ((C.scopes || []).some((l: any) => /scale around/.test(l.opts || ''))) return null;
+    const M = scopeMap(C), k = M ? M.a : 1;
+    if (M && (Math.abs(M.b) > 1e-9 || Math.abs(M.c) > 1e-9 || Math.abs(M.a - M.d) > 1e-9 || !(k > 0))) return null;
+    const o: string[] = [];
+    if (Math.abs(k - 1) > 1e-9) o.push(`scale=${Math.round(k * 1e6) / 1e6}`);
+    if ((C.scopes || []).some((l: any) => l.shape)) o.push('transform shape');
+    for (const x of C.base || []) o.push(x.v == null ? x.k : `${x.k}=${x.v}`);
+    const font = innermost(C)?.fonts, every = C.styles?.get('every node');
+    if (font) o.push(`font=${font}`);
+    if (every) o.push(`every node/.style={${every}}`);
+    return { ox: M ? M.ox : 0, oy: M ? M.oy : 0, wrap: o.join(', ') };
+  }
+  // the picture's and preamble's macros a Feynman block's code uses, for its drawing (\def\leglength{1} …)
+  function feynMacros(C: any, q: any) {
+    const used = [...(C.macros?.keys() || [])].filter((nm: string) => new RegExp(`\\\\${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z@])`).test(q.src));
+    if (used.length) q.macros = Object.fromEntries(used.map((nm: string) => [nm, C.macros.get(nm)]));
+  }
+  // a placed Feynman block's vertices as named nodes (into T: C or a trial copy), for the code that names them
+  function feynNames(T: any, q: any) {
+    const L = TD.feyn.layout(q), names: string[] = [];
+    for (const [nm, n] of L.nodes as Map<string, any>) {
+      if (nm[0] === '\u0001' || L.M.loose?.has(nm)) continue; // a vertex with no name, or none the code places
+      const c = { x: q.x - L.bb.x + n.x, y: q.y - L.bb.y + n.y };
+      T.names[nm] = c; names.push(nm);
+      if (n.kind === 'coord') { (T.kinds ||= {})[nm] = 'coordinate'; (T.boxes ||= {})[nm] = { w: 0, h: 0, pt: true }; if (T.geo) delete T.geo[nm]; continue; }
+      (T.kinds ||= {})[nm] = 'node';
+      (T.geo ||= {})[nm] = { kind: n.kind === 'circle' ? 'ellipse' : 'rect', c, U: { x: n.r || n.hw, y: 0 }, V: { x: 0, y: n.r || n.hh } };
+      (T.boxes ||= {})[nm] = { w: 2 * (n.r || n.hw), h: 2 * (n.r || n.hh), native: true };
+    }
+    return names;
+  }
+  // the drawing statements of a feynman environment as the picture's own shapes, drawn after the diagram, when every
+  // one is held exactly (else null: they stay in the block's code)
+  function feynMore(C: any, q: any, moved: string[]) {
+    const Q: any = { ...C, preview: false, stmts: [], struct: null, warnings: [], names: { ...C.names }, kinds: { ...(C.kinds || {}) }, boxes: { ...(C.boxes || {}) }, geo: { ...(C.geo || {}) }, styles: new Map(C.styles), macros: new Map(C.macros), chainPending: null };
+    feynNames(Q, q);
+    let shapes: any[] = [];
+    try { shapes = parseStatements(Q, moved.map((x) => blankComments(x)).join('\n'), moved.join('\n')); } catch { return null; } finally { STY = C.styles; MAC = C.macros; }
+    if (Q.warnings.length || !Q.stmts.length || Q.stmts.some((st: any) => st.raw) || !shapes.every(finiteShape)) return null;
+    for (const t of ['names', 'kinds', 'boxes', 'geo']) Object.assign(C[t] ||= {}, Q[t]);
+    if (Q.libs !== C.libs) C.libs = Q.libs;
+    return shapes;
+  }
   function toAbs(C: any, p: any) {
     const M = scopeMap(C);
     return M ? { ...p, x: M.ox + M.a * p.x + M.b * p.y, y: M.oy + M.c * p.x + M.d * p.y } : { ...p };
@@ -1310,6 +2012,13 @@ import { runtime as TD } from '../runtime';
           if (t.rot === undefined) { TD.translate(s, t.dx, t.dy); if (s._importNodeAt) { s._importNodeAt.x += t.dx; s._importNodeAt.y += t.dy; } continue; }
           // a node turns with the picture only under transform shape: otherwise just its position moves
           const upright = !transformShape && (s.type === 'text' || s.nodeText != null), keep = upright ? s.angle : null;
+          // (an upright node with the point it hangs from: that point turns, the node keeps its offset from it)
+          if (upright && s._importNodeAt) {
+            const a = -t.rot * Math.PI / 180, dx = s._importNodeAt.x - t.px, dy = s._importNodeAt.y - t.py;
+            const q = { x: t.px + Math.cos(a) * dx - Math.sin(a) * dy, y: t.py + Math.sin(a) * dx + Math.cos(a) * dy };
+            TD.translate(s, q.x - s._importNodeAt.x, q.y - s._importNodeAt.y); s._importNodeAt = q;
+            continue;
+          }
           TD.rotateShape(s, t.px, t.py, -t.rot);
           if (s._importNodeAt) {
             const a = -t.rot * Math.PI / 180, dx = s._importNodeAt.x - t.px, dy = s._importNodeAt.y - t.py;
@@ -1335,13 +2044,20 @@ import { runtime as TD } from '../runtime';
   // ---------- what the model holds exactly ----------
   // A statement becomes shapes only when every option and coordinate in it is one the shapes hold exactly;
   // anything else stays TikZ code (src/domain/rawtikz.ts), with the shapes as its preview.
-  const W_KEYS = ['ultra thin', 'very thin', 'thin', 'semithick', 'thick', 'very thick', 'ultra thick', 'dashed', 'densely dashed', 'loosely dashed', 'dotted', 'densely dotted', 'loosely dotted', 'dash dot', 'dashdotted'];
-  const PATH_KEYS = new Set([...W_KEYS, 'draw', 'fill', 'color', 'line width', 'opacity', 'draw opacity', 'fill opacity', 'rounded corners', 'sharp corners', 'ball color', 'left color', 'right color', 'middle color', 'top color', 'bottom color', 'dash pattern',
-    'radius', 'x radius', 'y radius', 'start angle', 'end angle', 'delta angle', 'bend left', 'bend right', 'even odd rule', 'out', 'in', 'looseness', 'help lines', 'step', 'xstep', 'ystep', 'shift', 'xshift', 'yshift', 'rotate', 'rotate around', 'scale', 'scale around', 'transform shape']);
+  const W_KEYS = ['ultra thin', 'very thin', 'thin', 'semithick', 'thick', 'very thick', 'ultra thick', 'dashed', 'densely dashed', 'loosely dashed', 'dotted', 'densely dotted', 'loosely dotted', 'dash dot', 'dashdotted', 'solid'];
+  const PATH_KEYS = new Set([...W_KEYS, 'draw', 'fill', 'color', 'line width', 'line cap', 'cap', 'line join', 'opacity', 'draw opacity', 'fill opacity', 'rounded corners', 'sharp corners', 'ball color', 'left color', 'right color', 'middle color', 'top color', 'bottom color', 'dash pattern',
+    'radius', 'x radius', 'y radius', 'start angle', 'end angle', 'delta angle', 'bend left', 'bend right', 'even odd rule', 'out', 'in', 'looseness', 'min distance', 'max distance',
+    ...PLOT_KEYS, 'double', 'double distance', 'loop', 'loop above', 'loop below', 'loop left', 'loop right', 'shorten >', 'shorten <', 'auto', 'swap', "'", 'help lines', 'step', 'xstep', 'ystep', 'shift', 'xshift', 'yshift', 'rotate', 'rotate around', 'scale', 'scale around', 'transform shape']);
   const NODE_KEYS = new Set(['name', 'on chain', 'join', 'label', 'pin', 'outer sep', 'font', 'text', 'color', 'opacity', 'anchor', 'rotate', 'above', 'below', 'left', 'right', 'above left', 'above right', 'below left', 'below right', 'shift', 'xshift', 'yshift', 'scale', 'scale around', 'transform shape']);
   const TEXT_KEYS = new Set([...NODE_KEYS, 'inner sep', 'inner xsep', 'inner ysep', 'align', 'text centered', 'node distance', 'on grid', 'above left of', 'above right of', 'below left of', 'below right of', 'above of', 'below of', 'left of', 'right of']);
   const LABEL_KEYS = new Set(['above', 'below', 'left', 'right', 'midway', 'pos', 'near start', 'near end', 'swap', "'", 'auto', 'font', 'text', 'color', 'fill']);
   const COLOR_KEYS = new Set(['draw', 'fill', 'color', 'text', 'ball color', 'left color', 'right color', 'middle color', 'top color', 'bottom color']);
+  function pathNameUnused(C: any, v: string) {
+    const nm = String(v).trim().replace(/^\{|\}$/g, '').trim(), body = String(C.picBody || '');
+    if (!nm || !body) return false;
+    const esc = nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return (body.match(new RegExp(`(^|[^\\w])${esc}(?![\\w])`, 'g')) || []).length <= 1;
+  }
   function exactTip(t: any) {
     t = t.trim().replace(/^\{|\}$/g, '').trim();
     if (!t) return true;
@@ -1357,22 +2073,36 @@ import { runtime as TD } from '../runtime';
         if (color(C, k) !== undefined) continue;
         bad.push(k); continue;
       }
+      // >=tip: what > in this statement's arrows stands for (style() reads it), when that tip is one drawn exactly
+      if (k === '>' && v != null && exactTip(v)) continue;
+      // name path=N draws nothing: held when no other statement names N (an edited shape would not write it, and
+      // name intersections={of=N and …} would lose it)
+      if ((k === 'name path' || k === 'name path global') && v != null && pathNameUnused(C, v)) continue;
       if (!allowed.has(k)) { bad.push(k); continue; }
       if (v !== null && COLOR_KEYS.has(k) && v !== 'none' && color(C, v) === undefined) bad.push(`${k}=${v}`);
       if (k === 'decoration' && !/^zigzag\b/.test(v)) bad.push('decoration=' + v);
+      // (a font= that also typesets something, font=\sffamily$\bullet$, puts it before every node's text)
+      if (k === 'font' && v && /\S/.test(String(v).replace(/\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|bfseries|mdseries|itshape|upshape|slshape|scshape|sffamily|rmfamily|ttfamily|normalfont|selectfont|boldmath|bf|it|sf|tt|rm)(?![A-Za-z])|\\fontsize\{[^}]*\}\{[^}]*\}|\\fontfamily\{[^}]*\}|[{}\s]/g, ''))) bad.push('font=' + v);
       if (k === 'dash pattern' && !/^(\s*(on|off)\s*[\d.]+\s*pt)+\s*$/.test(v)) bad.push('dash pattern=' + v);
+      if ((k === 'line cap' || k === 'cap') && !/^\s*(round|rect|butt)\s*$/.test(v)) bad.push(`${k}=${v}`);
+      if (k === 'line join' && !/^\s*(round|bevel|miter)\s*$/.test(v)) bad.push(`${k}=${v}`);
+      // a double line's middle is white in the model (double=red is not held)
+      if (k === 'double' && v !== null && !/^\s*(white|none)\s*$/.test(v)) bad.push('double=' + v);
     }
     return bad;
   }
   // option lists of a path statement: its own, each to[…]/circle[…]/arc[…], and the nodes on it
   // a point given by name that the shapes cannot hold exactly: a node (TikZ starts and ends lines at its border,
   // and its anchors depend on its size) or a point the importer only placed approximately
-  function nameIssue(C: any, raw: any) {
-    const r = String(raw || '').trim();
+  function nameIssue(C: any, raw: any): string | null {
+    const r = String(raw || '').trim().replace(/^\{([^{}]*)\}$/, '$1').trim(); // ({A}: a loop's value, braced)
+    // ([options]point): the point after them (coord() says which are held)
+    if (r.startsWith('[')) { const e = matchClose(r, 0, '[', ']'); return e < 0 ? null : nameIssue(C, r.slice(e + 1)); }
     if (r.startsWith('\\') && Number.isFinite(len(r))) return null;
-    if (!r || r.includes('|-') || r.includes('-|') || /^[-+\d.\s]/.test(r) || r.includes(',') || r.includes(':') || r.includes('$')) return null;
-    const anchor = /\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|\d+)$/.test(r);
-    const nm = r.replace(/\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|\d+)$/, '').trim();
+    const anchor = /\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|-?\d+(?:\.\d+)?)$/.test(r);
+    const nm = r.replace(/\.(north|south|east|west|center|north east|north west|south east|south west|base|mid|-?\d+(?:\.\d+)?)$/, '').trim();
+    // (a parenthesised point without a comma or colon is always a name in TikZ, even (1) or (001))
+    if (!r || r.includes('|-') || r.includes('-|') || r.includes(',') || r.includes(':') || r.includes('$') || (/^[-+\d.\s]/.test(r) && !Object.prototype.hasOwnProperty.call(C.names, nm))) return null;
     if (!C.names[nm]) return `Unresolved node or coordinate (${nm})`;
     if (C.unresolved?.has(nm)) return `Unresolved layout dependency (${nm})`;
     if (C.approx && C.approx.has(nm)) return `(${nm}) is placed approximately`;
@@ -1387,11 +2117,18 @@ import { runtime as TD } from '../runtime';
     const own = parseOpts(optStr);
     const keys = new Set(PATH_KEYS);
     if (own.some((o: any) => o.k === 'decorate') && own.some((o: any) => o.k === 'decoration')) { keys.add('decorate'); keys.add('decoration'); }
+    // x=, y=, z= the path's own units (tdplot_rotated_coords on one \draw): read as a scope's are
+    for (const o of own) if ((o.k === 'x' || o.k === 'y' || o.k === 'z') && o.v && unitVector(C, o.k, o.v)) keys.add(o.k);
     const bad = unknownKeys(C, own, keys), pts = [];
     for (let ti = 0; ti < toks.length; ti++) {
       const t = toks[ti];
       // to[pos=…] node {…}: the nodes on that to are put at pos (the to's options are around them)
-      if (t.t === 'opts') bad.push(...unknownKeys(C, parseOpts(t.v), toks[ti - 1]?.t === 'op' && toks[ti - 1].v === 'to' && toks[ti + 1]?.t === 'node' ? new Set([...PATH_KEYS, 'pos']) : PATH_KEYS));
+      if (t.t === 'opts') {
+        bad.push(...unknownKeys(C, parseOpts(t.v), toks[ti - 1]?.t === 'op' && toks[ti - 1].v === 'to' && toks[ti + 1]?.t === 'node' ? new Set([...PATH_KEYS, 'pos']) : PATH_KEYS));
+        // (options in the middle of the path, not an operation's (to, edge, circle, arc …): only a bend is held there)
+        const ofOp = !toks[ti - 1] || toks[ti - 1].t === 'op' || toks[ti - 1].t === 'opts';
+        if (!ofOp) for (const o of parseOpts(t.v)) if (!['bend left', 'bend right'].includes(o.k)) bad.push('options in the middle of the path: ' + o.k);
+      }
       // a coordinate with labels only (see pathToShapes)
       if (t.t === 'node' && t.coordinate) {
         const co = parseOpts(t.opts);
@@ -1414,7 +2151,9 @@ import { runtime as TD } from '../runtime';
       }
       if (t.t === 'plot') {
         const po = parseOpts(t.opts);
-        if (po.some((o: any) => !['smooth', 'smooth cycle', 'sharp plot', 'sharp cycle', 'tension'].includes(o.k))) bad.push('plot');
+        if (po.some((o: any) => !['smooth', 'smooth cycle', 'sharp plot', 'sharp cycle', 'tension', ...PLOT_KEYS].includes(o.k))) bad.push('plot');
+        // (a smooth or closed plot is its own shape: not joined to the path round it)
+        if (po.some((o: any) => ['smooth', 'smooth cycle', 'sharp cycle'].includes(o.k)) && ((toks[ti - 1]?.t === 'op' && toks[ti - 1].v === '--') || (toks[ti + 1] && toks[ti + 1].t !== 'node'))) bad.push('plot joined to the path');
         for (const r of t.raws || []) { const w = nameIssue(C, r); if (w) pts.push(w); }
       }
       if (t.t === 'op' && ['let', 'plot', 'sin', 'cos', 'parabola', 'in'].includes(t.v)) bad.push(t.v);
@@ -1527,6 +2266,50 @@ import { runtime as TD } from '../runtime';
     for (const [o, m] of before) for (const [key, was] of m) if (was && !OWN.call(o, key)) o[key] = was.old;
     return { made, names: [...new Set(Q.stmts.flatMap((st: any) => st.names || []))] };
   }
+  // statements of code standing in for one the picture has (a \graph's edges): their shapes when every one is held
+  // exactly (the picture's name tables as they leave them), else null (the tables as they were)
+  function exactCode(C: any, code: string) {
+    for (const k of ['kinds', 'boxes', 'geo']) C[k] ||= {};
+    const Q = { ...C, preview: false, stmts: [], struct: null, warnings: [] };
+    let made: any, log: any[] = [];
+    try { const run = recordTables(Q, ['names', 'kinds', 'boxes', 'geo'], () => parseStatements(Q, code)); made = run.result; log = run.log; }
+    catch { return null; }
+    if (!made.length || Q.warnings.length || !Q.stmts.length || Q.stmts.some((st: any) => st.raw)) { undoLog(log); return null; }
+    return { made };
+  }
+  // the edges a \graph draws between nodes the picture already has, as TikZ statements, or null when it makes nodes
+  // of its own or uses what this doesn't write out
+  function graphEdgeCode(C: any, code: string) {
+    let M: any = null;
+    try { M = TD.graph.parse(`\\begin{tikzpicture}\n${code}\n\\end{tikzpicture}`); } catch { return null; }
+    if (!M || !M.found || !M.edges.length || M.warnings.length || M.pre.length || M.post.length) return null;
+    const existing = M.gopts.some((g: string) => /^use existing nodes\s*(=\s*true)?$/.test(g.trim())) || /use existing nodes/.test(C.picOptStr || '');
+    const edgeDef: string[] = [];
+    for (const g of M.gopts) {
+      const t = g.trim(), m = /^edges\s*=\s*\{([\s\S]*)\}$/.exec(t) || /^edges\s*=\s*([^{][\s\S]*)$/.exec(t);
+      if (m) { edgeDef.push(m[1].trim()); continue; }
+      if (/^use existing nodes\s*(=\s*true)?$/.test(t)) continue;
+      return null;
+    }
+    const ref = new Map<string, string>();
+    for (const n of M.nodes) {
+      const nm = String(n.name).trim(), paren = /^\((.+)\)$/.exec(nm);
+      if (!paren && !existing) return null;
+      if (n.o.length || n.lab || (n.text != null && n.text !== n.name) || n.x != null) return null;
+      const target = (paren ? paren[1] : nm).trim(), base = target.replace(/\.[^.]*$/, '');
+      if (!(target in C.names) && !(base in C.names)) return null;
+      ref.set(n.name, target);
+    }
+    const TIP: Record<string, string> = { '->': '->', '--': '-', '<-': '<-', '<->': '<->' };
+    const out: string[] = [];
+    for (const e of M.edges) {
+      if (!TIP[e.op]) return null;
+      const lab = e.t == null ? '' : ` node[${['auto', e.sw ? 'swap' : '', ...(e.lo || [])].filter(Boolean).join(', ')}] {${e.t}}`;
+      const eo = [...edgeDef, ...e.o].filter(Boolean).join(', ');
+      out.push(`\\path[${TIP[e.op]}] (${ref.get(e.a)}) edge${eo ? `[${eo}]` : ''}${lab} (${ref.get(e.b)});`);
+    }
+    return out.join('\n');
+  }
   // ---------- \matrix ----------
   // \matrix [opts] (name) at (x,y) {cells}: what TikZ draws for each cell (\node … ;, \draw … ;, or with `matrix of
   // nodes` a node per cell), where pgf's matrix puts it (pgfmodulematrix.code.tex, measured with pdflatex):
@@ -1607,6 +2390,8 @@ import { runtime as TD } from '../runtime';
     const xf = readXf(C, opts.filter((o: any) => XF_KEYS.has(o.k)));
     if (xf.xf.some((t: any) => t.dx === undefined)) issues.push('matrix rotated or scaled');
     const cellStyle: Record<string, string> = {};
+    // (row and column styles the picture or a \tikzset defined: the matrix's own append to them)
+    for (const [k, v] of C.styles || []) if (typeof k === 'string' && /^(row \d+|column \d+|row \d+ column \d+|every (?:odd|even) (?:row|column))$/.test(k)) cellStyle[k] = v;
     const inherit: any[] = [], frame: any[] = [];
     // placed like a node (below=1cm of a, right of=b …): with the positioning library's rules, by the node code
     const placeKey = (o: any) => !!PLACE_ANCHOR[o.k] || OLD_OF.includes(o.k) || o.k === 'on grid' || o.k === 'node distance';
@@ -1765,7 +2550,8 @@ import { runtime as TD } from '../runtime';
     const ob = s[q] === '[' ? matchClose(s, q, '[', ']') : -1;
     const opt = ob > 0 ? s.slice(q + 1, ob) : '', body = s.slice(ob > 0 ? ob + 1 : e + 1, stop - env.length - 6);
     try {
-      return TD.pgfplotsImport.fromAxis(env, opt, body, { color: (v: any) => color(C, v), len: (v: any, u: any) => len(v, u), expand: expandMac, coord: (v: any) => coord(C, v), styles: C.styles });
+      const H = { color: (v: any) => color(C, v), len: (v: any, u: any) => len(v, u), expand: expandMac, coord: (v: any) => coord(C, v), styles: C.styles, ctx: { colors: C.colors, styles: C.styles, macros: C.macros } };
+      return env === 'groupplot' ? TD.pgfplotsImport.fromGroup(opt, body, H) : TD.pgfplotsImport.fromAxis(env, opt, body, H);
     } catch (err: any) { return null; }
   }
 
@@ -1778,6 +2564,18 @@ import { runtime as TD } from '../runtime';
   // keeps the comments written in its code
   function nodeBlock(C: any, node: any, at: any, raw = '', plain = '') {
     const text = node.text.replace(/^\s*\\pgfinterruptpicture%?\s*|\s*%?\s*\\endpgfinterruptpicture\s*$/g, '').replace(/^\$\s*([\s\S]*?)\s*\$$/, '$1').trim();
+    // a tikz-qtree tree in a node: the Tree block (forest), centred where the node is
+    if (/^\\Tree\s*\[/.test(text) && TD.ft?.qtree && TD.TYPES.forest) {
+      const q0 = text.indexOf('['), e = TD.ft.qtree.end(text, q0);
+      const T = e > 0 ? TD.ft.qtree.toForest(text.slice(q0, e), C.qtSets || [], { compat: (C.pkgs || []).includes('tikz-qtree-compat') }) : null;
+      if (T) {
+        const q: any = { ...TD.TYPES.forest.create(at, {}), src: T.src, size: 'normalsize' }, b = TD.ftLayout(q).bb;
+        q.x = at.x - b.w / 2; q.y = at.y - b.h / 2;
+        const extra = text.slice(e).trim();
+        const bad = unknownKeys(C, parseOpts(node.opts), new Set(['inner sep', 'anchor', 'align', 'transform shape', ...XF_KEYS]));
+        return { shape: q, issues: [...T.issues, ...(extra ? ['text beside the tree'] : []), ...(bad.length ? [`node options the tree does not hold: ${bad.join(', ')}`] : [])] };
+      }
+    }
     for (const B of TD.blocks.nodeImports()) {
       if (!TD.TYPES[B.type]) continue;
       const m = B.re.exec(text);
@@ -1789,6 +2587,10 @@ import { runtime as TD } from '../runtime';
       const i = raw.length === plain.length ? plain.indexOf(m[0]) : -1;
       const code = i >= 0 ? raw.slice(i, i + m[0].length) : m[0];
       q.src = B.dedent ? dedentLines(code) : code;
+      // settings the document's preamble gives every such block (chemfig's \setchemfig, \definesubmol …)
+      if (B.preamble && C.preSrc) q.src = B.preamble(C.preSrc, q.src);
+      // what the block takes from the document (the libraries and packages it loads)
+      if ((B as any).context) (B as any).context(q, C);
       // place() may answer false: the code as written can't stay in a node (a table float), so it is written from the shape
       if ((B as any).place) { if ((B as any).place(q, at) === false) q._fromShape = true; } else { const b = B.bb!(q); q.x = at.x - b.w / 2; q.y = at.y - b.h / 2; }
       const extra = text.replace(m[0], '').replace(/\\color\{[^}]*\}/g, '').trim();
@@ -1847,7 +2649,7 @@ import { runtime as TD } from '../runtime';
   const PATHS: Record<string, any> = { pic: 'path', draw: 'draw', fill: 'fill', filldraw: 'filldraw', path: 'path', shade: 'shade', shadedraw: 'shade', clip: null, useasboundingbox: null };
   const SEMI = new Set(['pic', 'matrix', 'graph', 'datavisualization', 'calendar', 'spy', 'pattern', 'shadedraw']);
   const DEFS = new Set(['tikzset', 'tikzstyle', 'def', 'gdef', 'edef', 'xdef', 'let', 'newcommand', 'renewcommand', 'providecommand', 'definecolor', 'colorlet', 'pgfmathsetmacro', 'pgfmathtruncatemacro',
-    'pgfmathparse', 'pgfplotsset', 'pgfdeclarelayer', 'pgfsetlayers', 'usetikzlibrary', 'tikzmath', 'pgfkeys', 'newlength', 'setlength', 'pgfmathsetlengthmacro', 'tikzcdset', 'ctikzset', 'pgfdeclarepatternformonly', 'pgfdeclarepattern', 'pgfdeclarehorizontalshading', 'pgfdeclareverticalshading', 'pgfdeclareradialshading', 'pgfdeclarefunctionalshading', 'pgfdeclareplotmark', 'pgfdeclarearrow',
+    'pgfmathparse', 'pgfplotsset', 'pgfdeclarelayer', 'pgfsetlayers', 'usetikzlibrary', 'tikzmath', 'pgfkeys', 'newlength', 'setlength', 'pgfmathsetlengthmacro', 'tikzcdset', 'ctikzset', 'pgfdeclarepatternformonly', 'pgfdeclarepattern', 'pgfdeclarehorizontalshading', 'pgfdeclareverticalshading', 'pgfdeclareradialshading', 'pgfdeclarefunctionalshading', 'pgfdeclareplotmark', 'pgfdeclarearrow', 'forestset', 'useforestlibrary', 'newcounter', 'setcounter', ...TDPLOT,
     'centering', 'small', 'footnotesize', 'scriptsize', 'tiny', 'normalsize', 'large', 'Large', 'LARGE', 'huge', 'Huge', 'bfseries', 'itshape', 'sffamily', 'ttfamily', 'rmfamily', 'color', 'selectfont', 'fontsize']);
   // nesting (environments, loops in loops) past 64 levels is not read: hostile input would overflow the stack.
   // FOREACH_PASSES bounds the passes of nested loops (400 × 400 × 400 … would never finish).
@@ -1864,6 +2666,12 @@ import { runtime as TD } from '../runtime';
     if (!C.macros) C.macros = new Map();
     MAC = C.macros;
     const shapes: any[] = [];
+    // (what is drawn on the background layer goes below everything on the main layer, after what went there before)
+    let bgAt = 0;
+    const place = (list: any[]) => {
+      if ((C.scopes || []).some((L: any) => L.layer === 'background')) { shapes.splice(bgAt, 0, ...list); bgAt += list.length; }
+      else pushAll(shapes, list);
+    };
     const preview = !!C.preview;
     let i = 0;
     // pgf-umlcd classes somewhere in this code: a shifted scope may hold a class diagram
@@ -1888,16 +2696,44 @@ import { runtime as TD } from '../runtime';
         made = [...made, ...lines];
         if (!preview) for (const x of made) if (x.nodeName === P.name || (x.type === 'text' && extra.names?.includes(P.name))) x.chain = { name: P.chain };
       }
-      const feat = (C.picFeat || []).filter((f: any) => f.re.test(s.slice(start, end))).map((f: any) => f.k);
-      issues = [...issues, ...scopeIssue(), ...(C.picIssue ? [C.picIssue] : []), ...(feat.length ? ['picture options the shapes do not hold: ' + feat.join(', ')] : [])];
+      // (a tikz-qtree tree reads the tree keys of the picture itself: only the others are left over)
+      // (>=… also reaches tips a style draws: any shape with a tip)
+      const tipped = () => made.some((x: any) => [x.startTip, x.endTip, x.midTip].some((t) => t && t !== 'none'));
+      const feat = extra.treeKeys ? [] : (C.picFeat || []).filter((f: any) => f.re.test(s.slice(start, end)) || (f.k === '>' && tipped())).map((f: any) => f.k);
+      const picLeft = extra.treeKeys ? (C.picOdd || []).filter((k: string) => !extra.treeKeys.has(k)) : null;
+      const picIssue = !picLeft || C.picXf ? C.picIssue : picLeft.length ? 'picture options the shapes do not hold: ' + picLeft.join(', ') : null;
+      issues = [...issues, ...scopeIssue(), ...(picIssue ? [picIssue] : []), ...(feat.length ? ['picture options the shapes do not hold: ' + feat.join(', ')] : [])];
+      // a size or place that is not a number (inner xsep=\w where \w could not be worked out, a node placed from one)
+      // (only a size that is not a number, inner xsep=\w: the place is known, so names stay usable as approximate)
+      if (made.some((x: any) => !finiteShape(x))) {
+        const placed = (x: any) => ['x', 'y', 'cx', 'cy', 'x1', 'y1', 'x2', 'y2'].every((k) => typeof x[k] !== 'number' || Number.isFinite(x[k]));
+        if (made.every(placed)) {
+          issues = [...issues, 'a size is not a number'];
+          made = made.filter((x: any) => finiteShape(x));
+          for (const nm of extra.names || []) (C.approx ||= new Set()).add(nm);
+        } else issues = [...issues, 'Unresolved geometry: a size or position is not a number'];
+      }
+      // (text with a command the canvas shows as typed is not drawn as LaTeX draws it)
+      if (!preview && TD.proseUnheld) for (const x of made) for (const f of ['text', 'nodeText', 'label', 'nodeLabel']) {
+        const w = typeof x[f] === 'string' && x.type !== 'tikz' && !TD.blocks?.get?.(x.type) ? TD.proseUnheld(x[f]) : null;
+        if (w) { issues = [...issues, 'text the canvas shows as typed: ' + w]; break; }
+      }
       const unresolved = issues.some((w: string) => /Unresolved|Unsupported coordinate|layout not evaluated/.test(w));
       if (extra.why?.length) issues = [...issues, ...extra.why.map((w: string) => 'in the loop: ' + w)];
       if (unresolved) {
         for (const nm of extra.names || []) (C.unresolved ||= new Set()).add(nm);
         made = []; // Never present invented positions as a usable approximation.
       }
-      if (preview) { pushAll(shapes, made); return; }
+      if (preview) { place(made); return; }
       const exact = !extra.raw && !issues.length && made.length > 0;
+      if (!exact && !unresolved) {
+        // names a kept statement sets: approximate under a transform the shapes do not draw, unknown when a path
+        // operation was not read
+        if ((C.scopes || []).some((L: any) => L.inexactXf)) for (const nm of extra.names || []) (C.approx ||= new Set()).add(nm);
+        if (issues.some((w: string) => /Path operation “|Unknown path text/.test(w))) for (const nm of extra.names || []) (C.unresolved ||= new Set()).add(nm);
+        // (and fit= does not trust any of them: their boxes are the shapes' guess)
+        for (const nm of extra.names || []) (C.kept ||= new Set()).add(nm);
+      }
       let list = made;
       if (!exact) {
         const r: Record<string, any> = { type: 'tikz', kind: extra.kind || 'code', code: '', x: 0, y: 0, ctx: [], prev: made.filter((p: any) => p.type !== 'tikz'), issues: [...new Set(issues)], ...(unresolved ? { unresolved: true } : {}) };
@@ -1908,8 +2744,8 @@ import { runtime as TD } from '../runtime';
         list = [r];
       }
       if (exact && extra.group && list.length > 1) { const g = uid8(); for (const x of list) { x.g = g; x.gname = extra.group; } }
-      C.stmts.push({ start, end, shapes: list, raw: !exact, ctx: scopeCtx(), names: extra.names });
-      pushAll(shapes, list);
+      C.stmts.push({ start, end, shapes: list, raw: !exact, ctx: scopeCtx(), names: extra.names, ...(extra.tree ? { tree: extra.tree } : {}) });
+      place(list);
     };
     let last = -1;
     while (i < s.length) {
@@ -1955,7 +2791,21 @@ import { runtime as TD } from '../runtime';
             // what the scope sets for what is inside it: styles, unit vectors, node distance and how paths look
             // (restored at \end{scope})
             const saved = { vx: C.vx, vy: C.vy, vz: C.vz, base: C.base, nodeDist: C.nodeDist, nodeDistH: C.nodeDistH, styles: new Map(C.styles) };
+            // canvas is xy plane at z=v (the 3d library): the scope's points along the plane's two axes, from the
+            // point v along the third (so the x and y units become those axes, and the origin moves there)
+            let plane = false, background = false;
             const read = (x: any) => {
+              // on background layer (the backgrounds library): drawn below the main layer
+              if (x.k === 'on background layer' && x.v == null) { background = true; return true; }
+              const pm = /^canvas is (xy|yx|xz|zx|yz|zy) plane at ([xyz])$/.exec(x.k);
+              if (pm && x.v != null) {
+                const V: Record<string, number[]> = { x: C.vx || [PX, 0], y: C.vy || [0, PX], z: C.vz || [-0.385 * PX, -0.385 * PX] };
+                const at = pgfNum(expandMac(String(x.v).trim()), NaN), [a, b] = pm[1].split('');
+                if (!Number.isFinite(at) || pm[1].includes(pm[2]) || xf.length) return false;
+                xf.push({ dx: at * V[pm[2]][0], dy: -at * V[pm[2]][1] });
+                C.vx = V[a]; C.vy = V[b]; plane = true;
+                return true;
+              }
               const sm = /^(.+?)\/\.(style|append style)$/.exec(x.k);
               if (sm && x.v != null) { const nm = sm[1].trim(), old = C.styles.get(nm); addStyle(C, nm, sm[2] === 'append style' && old ? `${old},${x.v}` : x.v); return C.styles.has(nm); }
               if ((x.k === 'x' || x.k === 'y' || x.k === 'z') && x.v) { const u = unitVector(C, x.k, x.v); if (u) { C['v' + x.k] = u; return true; } return false; }
@@ -1976,10 +2826,20 @@ import { runtime as TD } from '../runtime';
             };
             const rawRest = parseOpts(str, 0, true).filter((x: any) => !XF_KEYS.has(x.k));
             const handled = new Set(rawRest.filter(read).map((x: any) => x.k));
+            // (a style standing for x=, y=, z=, tdplot_rotated_coords: its units, unless it also shifts or turns,
+            // which TikZ does in the new units and readXf did in the old)
+            for (const x of rawRest) if (STY?.has(x.k)) {
+              let ex: any[] = [];
+              const su = styUsed; try { ex = parseOpts(x.v == null ? x.k : `${x.k}={${x.v}}`); } catch { ex = []; } finally { styUsed = su; }
+              if (ex.some((y: any) => XF_KEYS.has(y.k))) continue;
+              for (const y of ex) if (['x', 'y', 'z'].includes(y.k) && read(y)) handled.add(y.k);
+            }
             const other = rest.filter((x) => x.k !== 'transform shape' && x.k !== 'transparency group' && x.k !== 'opacity' && x.k !== 'font' && !handled.has(x.k) && !(x.v === null && W_KEYS.includes(x.k)) && !(x.v === null && color(C, x.k) !== undefined));
-            L = { saved, xf, shape, font: rest.filter((x: any) => x.k === 'font').map((x: any) => x.v).join(' '), ...(opv >= 0 && opv < 1 ? { opacity: opv } : {}), opts: str.replace(/\s+/g, ' ').trim() };
+            L = { saved, xf, shape, ...(plane ? { plane: true } : {}), ...(background ? { layer: 'background' } : {}), font: rest.filter((x: any) => x.k === 'font').map((x: any) => x.v).join(' '), ...(opv >= 0 && opv < 1 ? { opacity: opv } : {}), opts: str.replace(/\s+/g, ' ').trim() };
             const scopeIssues = [...unresolved, ...(other.length ? ['scope options not drawn: ' + other.map((x) => x.k).join(', ')] : [])];
             if (scopeIssues.length) L.issue = scopeIssues.join('; ');
+            // (a transform the shapes cannot draw: names set inside are not where the code puts them)
+            L.inexactXf = other.some((x: any) => /slant|^cm$|^[xyz]$|canvas is|rotate around|transform canvas/.test(x.k));
             i = e2 + 1;
           } else i = e + 1;
           L.styles = new Map(C.styles); L.macros = new Map(C.macros);
@@ -1994,17 +2854,36 @@ import { runtime as TD } from '../runtime';
           // a tikz-feynman diagram: one Feynman object, its origin where the picture's is
           const q = TD.TYPES.feynman.create({ x: 0, y: 0 }, {});
           q.src = o.slice(bs, stop).trim();
-          const b = TD.feyn.layout(q).bb;
-          q.x = b.x; q.y = b.y;
-          done(bs, stop, applyXf([q], C.scopes || []), issues());
+          // under a scale (no turn): the block draws the picture's and scopes' options as TikZ does (src/domain/feynman.ts)
+          const fw = feynWrap(C);
+          if (fw) q.wrap = fw.wrap;
+          if (!q.wrap) delete q.wrap;
+          // (a scope's opacity, as applyXf gives it)
+          const op = fw ? (C.scopes || []).reduce((k: number, l: any) => (l.opacity != null ? k * l.opacity : k), 1) : 1;
+          if (op !== 1) q.opacity = op;
+          feynMacros(C, q);
+          const put = () => { const b = TD.feyn.layout(q).bb; q.x = (fw ? fw.ox : 0) + b.x; q.y = (fw ? fw.oy : 0) + b.y; };
+          put();
+          // its \draw, \node … statements that use the vertices: the picture's own shapes after it, when held exactly
+          const mv = fw && !preview ? TD.feyn.movable(q.src) : null;
+          let more: any[] = [];
+          if (mv) { const q2 = { ...q, src: mv.src }, r = feynMore(C, q2, mv.moved); if (r) { q.src = mv.src; put(); more = r; } }
+          // its vertices are named nodes for the code after it
+          const names = !preview && fw ? feynNames(C, q) : [];
+          done(bs, stop, fw ? [q, ...more] : applyXf([q], C.scopes || []), issues(), { names: names.length ? names : undefined });
           i = stop; continue;
         }
         // any other environment (pgfonlayer, axis, …) is kept whole; its drawing statements preview it
         i = stop;
         // a pgfplots axis: the app's own plot, native when it holds the axis as written (src/domain/pgfplots-import.ts)
-        const PA = /^(axis|semilogxaxis|semilogyaxis|loglogaxis)$/.test(env) ? pgfAxis(C, s, e, stop, env) : null;
-        if (PA && preview) { pushAll(shapes, applyXf([PA.shape], C.scopes || [])); continue; }
-        if (PA) { done(bs, stop, applyXf([PA.shape], C.scopes || []), PA.issues.length ? [`\\begin{${env}} is kept as code`, ...PA.issues] : []); continue; }
+        const PA = /^(axis|semilogxaxis|semilogyaxis|loglogaxis|groupplot)$/.test(env) ? pgfAxis(C, s, e, stop, env) : null;
+        const PM = PA ? applyXf(PA.shapes || [PA.shape], C.scopes || []) : [];
+        // the axes' names (name=, a group's cells) and `current axis` (the last) are their boxes, for the statements after
+        PM.forEach((q: any, k: number) => {
+          for (const nm of [q.name, k === PM.length - 1 ? 'current axis' : null]) if (nm) { const c = { x: q.x + q.w / 2, y: q.y + q.h / 2 }; C.names[nm] = c; (C.geo ||= {})[nm] = { kind: 'rect', c, U: { x: q.w / 2, y: 0 }, V: { x: 0, y: q.h / 2 } }; (C.boxes ||= {})[nm] = { w: q.w, h: q.h }; }
+        });
+        if (PA && preview) { pushAll(shapes, PM); continue; }
+        if (PA) { done(bs, stop, PM, PA.issues.length ? [`\\begin{${env}} is kept as code`, ...PA.issues] : []); continue; }
         if (preview) { if (!/axis$/.test(env)) pushAll(shapes, parseStatements(C, s.slice(e + 1, stop - env.length - 6))); continue; }
         const P = { ...C, preview: true, warnings: [], struct: null };
         const inner = /axis$|^tikzcd$/.test(env) ? [] : parseStatements(P, s.slice(e + 1, stop - env.length - 6));
@@ -2035,12 +2914,22 @@ import { runtime as TD } from '../runtime';
         let end = argsEnd(s, j);
         const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
         i = end;
+        // (a size, series or family switch lasts to the end of its scope, as a TeX group does: the nodes after it
+        // are typeset in it, and a node's own font= comes after it)
+        if (/^(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge|bfseries|mdseries|itshape|upshape|sffamily|ttfamily|rmfamily|normalfont)$/.test(name) && /^\s*;?\s*$/.test(s.slice(j, end))) {
+          const L = innermost(C); if (L) L.fonts = [L.fonts, '\\' + name].filter(Boolean).join(' ');
+        }
         // Definitions are local to their scope; the enclosing maps are restored at its end.
         if (/^(g|e|x)?def$|^(re|provide|new)command$|^pgfmathsetmacro$|^pgfmathtruncatemacro$/.test(name)) {
           const d = macroDef(name, s.slice(j, end));
           if (d) C.macros.set(d.nm, name === 'pgfmathtruncatemacro' ? String(Math.trunc(+d.v)) : d.v);
         }
         if ((name === 'tikzset' || name === 'tikzstyle') && C.styles) defineStyles(C, name, s.slice(j, end));
+        if (name === 'pgfplotsset' && C.styles) TD.pgfplotsImport?.pgfplotsset(C.styles, s.slice(j, end));
+        if (TDPLOT.includes(name)) {
+          const nm = tdplot(C, name, s.slice(j, end));
+          if (nm.length && !preview) { done(bs, end, [], [], { raw: true, kind: 'defs', names: nm }); continue; }
+        }
         if (name === 'definecolor' || name === 'colorlet') {
           const args = []; let q = j;
           while (args.length < (name === 'definecolor' ? 3 : 2)) { while (/\s/.test(s[q])) q++; if (s[q] === '[') { q = shut(s, q, '[', ']') + 1; continue; } if (s[q] !== '{') break; const e = shut(s, q, '{', '}'); args.push(s.slice(q + 1, e)); q = e + 1; }
@@ -2055,16 +2944,63 @@ import { runtime as TD } from '../runtime';
         if (!preview && name !== 'usetikzlibrary') done(bs, end, [], [], { raw: true, kind: 'defs' });
         continue;
       }
+      // a \graph { … }; in a picture with more in it: a Graph block of its own (the picture's options round it), where
+      // the picture's origin is, its node names for the code after it (a picture that is one \graph is a Graph block
+      // whole: graphBlock). Only under shifts: a scale moves a graph's nodes without sizing them
+      // a \graph that only joins nodes the picture has ((a) -> (b), or use existing nodes): its edges, as TikZ draws
+      // them (graphs library: \path [->, every new ->] (a) edge [the graph's edges=, the edge's options] (b), a quote
+      // or edge label an edge node [auto]), when every one of them is held exactly; written as the \graph
+      if (name === 'graph' && TD.graph && o.slice(j - 6, j) === '\\graph' && !preview) {
+        const end = semiEnd(s, j), code = graphEdgeCode(C, o.slice(j - 6, end).trim());
+        const E: any = code ? exactCode(C, code) : null;
+        if (E && E.made) { i = end; done(bs, end, E.made, [], { group: 'graph' }); continue; }
+      }
+      if (name === 'graph' && TD.graph && TD.TYPES.graph && o.slice(j - 6, j) === '\\graph' && (C.scopes || []).every((Lr: any) => (Lr.xf || []).every((x: any) => x.dx !== undefined && Object.keys(x).every((k) => k === 'dx' || k === 'dy')))) {
+        const end = semiEnd(s, j), code = o.slice(j - 6, end).trim();
+        const src = `\\begin{tikzpicture}${C.picOptStr ? `[${C.picOptStr}]` : ''}\n  ${code}\n\\end{tikzpicture}`;
+        let M: any = null;
+        try { M = TD.graph.parse(src); } catch { M = null; }
+        // (only a graph that makes its own nodes: one that names the picture's nodes, (a) or a.north, or uses
+        // existing nodes stays code, as does one whose layout warns)
+        const ownNodes = M && !M.nodes.some((n: any) => /^\(.*\)$/.test(String(n.name).trim()) || /\./.test(String(n.name)))
+          && !M.gopts.some((g: string) => /^use existing nodes\b/.test(String(g).trim())) && !/use existing nodes/.test(C.picOptStr || '');
+        const q: any = ownNodes && M.found && M.nodes.length && !M.warnings.length && !M.pre.length && !M.post.length ? { ...TD.TYPES.graph.create({ x: 0, y: 0 }), src, id: uid8() } : null;
+        let L: any = null;
+        if (q) { try { L = TD.graph.layout(q); } catch { L = null; } }
+        if (q && L && !L.warnings.length) {
+          i = end;
+          q.x = L.bb.x; q.y = L.bb.y;
+          const made = applyXf([q], C.scopes || []), names: string[] = [];
+          if (!preview) for (const [nm, n] of L.nodes as Map<string, any>) {
+            const c = { x: made[0].x - L.bb.x + n.x, y: made[0].y - L.bb.y + n.y };
+            C.names[nm] = c; names.push(nm);
+            if (n.shape === 'coordinate') { (C.kinds ||= {})[nm] = 'coordinate'; C.boxes[nm] = { w: 0, h: 0, pt: true }; if (C.geo) delete C.geo[nm]; continue; }
+            (C.kinds ||= {})[nm] = 'node';
+            (C.geo ||= {})[nm] = { kind: n.shape === 'circle' || n.shape === 'ellipse' ? 'ellipse' : 'rect', c, U: { x: n.hw + n.osep, y: 0 }, V: { x: 0, y: n.hh + n.osep } };
+            C.boxes[nm] = { w: 2 * n.hw, h: 2 * n.hh, native: true };
+          }
+          done(bs, end, made, issues(), { names: names.length ? names : undefined });
+          continue;
+        }
+      }
       if (name in PATHS || name === 'node' || name === 'coordinate' || SEMI.has(name)) {
         const k = semiEnd(s, j);
         const stmt = s.slice(j, k - 1);
         i = k;
         if (name in PATHS) {
-          if (!PATHS[name]) { if (!preview) done(bs, k, [], [], { raw: true }); continue; }
+          // (a \clip clips everything after it to the end of its scope: kept as code, and so is what it clips)
+          const clipScope = () => { const L = innermost(C); if (L && !/\\clip/.test(L.issue || '')) L.issue = [L.issue, 'drawn under a \\clip kept as code'].filter(Boolean).join('; '); };
+          if (!PATHS[name]) { if (!preview) done(bs, k, [], [], { raw: true }); if (name === 'clip') clipScope(); continue; }
           let body = stmt.trim(), optStr = '';
-          if (body[0] === '[') { const e = matchClose(body, 0, '[', ']'); optStr = body.slice(1, e); body = body.slice(e + 1); }
+          // (every option group before the first point is the path's: \draw[a][b])
+          body = body.trimStart();
+          while (body[0] === '[') { const e = matchClose(body, 0, '[', ']'); if (e < 0) break; optStr += (optStr ? ', ' : '') + body.slice(1, e); body = body.slice(e + 1).trimStart(); }
           if (name === 'pic') { body = `pic${optStr ? '['+optStr+']' : ''} ${body}`; optStr = ''; }
           let made = [];
+          // the path's own x=, y=, z= (a style such as tdplot_rotated_coords): its coordinates in those units
+          const units = parseOpts(optStr).filter((x: any) => (x.k === 'x' || x.k === 'y' || x.k === 'z') && x.v).map((x: any) => [x.k, unitVector(C, x.k, x.v)]).filter((x: any) => x[1]);
+          const savedUnits = { vx: C.vx, vy: C.vy, vz: C.vz };
+          for (const [ax, u] of units) C['v' + ax] = u;
           const su = styUsed = new Set();
           const lossy = preview ? [] : pathIssues(C, optStr, body);
           const build = () => {
@@ -2072,7 +3008,8 @@ import { runtime as TD } from '../runtime';
             const po = parseOpts(optStr);
             if (po.some((x: any) => x.k === 'even odd rule')) L = evenOdd(L);
             const own = readXf(C, po);
-            return applyXf(L, [...(C.scopes || []), { xf: own.xf, shape: true }]);
+            // (a path's own scale moves its nodes but sizes them only under transform shape)
+            return applyXf(L, [...(C.scopes || []), { xf: own.xf, shape: po.some((x: any) => x.k === 'transform shape' && x.v !== 'false') }]);
           };
           // the names this statement set, in the order the names table holds them
           const run = recordTables(C, ['names'], () => { try { return build(); } catch (err: any) { C.warnings.push(`\\${name}: ${err.message}`); return []; } });
@@ -2089,8 +3026,10 @@ import { runtime as TD } from '../runtime';
             const refs = [...new Set(tokenizePath(C, body).filter((t) => t.t === 'coord').map((t) => t.raw.trim()).filter((nm) => (C.kinds || {})[nm] === 'coordinate' && C.names[nm]))];
             if (refs.length) for (const x of made) x.refs = refs;
           }
+          if (units.length) Object.assign(C, savedUnits);
           const viaSty = su.size && lossy.length ? [`styles used: ${[...su].join(', ')}`] : [];
           done(bs, k, made, [...issues(), ...lossy, ...viaSty], { names: names.length ? names : undefined });
+          if (/(?:^|,)\s*clip\s*(?:,|$)/.test(optStr)) clipScope();
           continue;
         }
         if (name === 'matrix') {
@@ -2148,11 +3087,17 @@ import { runtime as TD } from '../runtime';
         const hasBorder = !node.coordinate && nopts.some((o: any) => (o.k === 'draw' || o.k === 'fill') && o.v !== 'none');
         const explicitShape = !node.coordinate && !!nodeShapeName(nopts);
         if (!node.coordinate) shapeName = nodeShapeName(nopts) || (hasBorder ? 'rectangle' : null);
-        const layoutKeys = nopts.filter((o: any) => /^(fit|span|Minimum Width|Minimum Height|append after command|to path|east above|west above|north left|north right|east below|west below|south left|south right)$/.test(o.k));
+        // fit=(a) (b) (c.north): the box round them (a node by its outer border), the node at its centre
+        const fitO = node.coordinate ? null : lastOpt(nopts, 'fit'), fitBox = fitO ? fitBounds(C, String(fitO.v || '')) : null;
+        const layoutKeys = nopts.filter((o: any) => /^(fit|span|Minimum Width|Minimum Height|append after command|to path|east above|west above|north left|north right|east below|west below|south left|south right)$/.test(o.k) && !(o.k === 'fit' && fitBox));
         if (layoutKeys.length) placeIss.push('layout not evaluated: ' + layoutKeys.map((o: any) => o.k).join(', '));
         // where the node goes: `at` is where its anchor is (center unless anchor=…, above, right=of a, …)
         let myAnchor: string | null = null;
-        const dist = C.nodeDist ?? PX, transformed = (C.scopes || []).some((L: any) => L.xf && L.xf.length);
+        // (the node's own node distance=, from its options or style, wins over the picture's or scope's)
+        const ndO = lastOpt(nopts, 'node distance'), ndV = ndO?.v != null ? String(ndO.v).split(/\s+and\s+/).map((q: any) => len(q)) : null;
+        const ownDist = !!ndV && Number.isFinite(ndV[0]);
+        if (ndO && !ownDist) placeIss.push('node distance=' + ndO.v);
+        const dist = ownDist ? ndV![0] : (C.nodeDist ?? PX), distH = ownDist ? (Number.isFinite(ndV![1]) ? ndV![1] : ndV![0]) : C.nodeDistH, transformed = (C.scopes || []).some((L: any) => L.xf && L.xf.length);
         const OTHER: Record<string, string> = { above: 'north', below: 'south', left: 'west', right: 'east', 'above left': 'north west', 'above right': 'north east', 'below left': 'south west', 'below right': 'south east' };
         for (const { k: pk, v } of nopts) {
           const dx = /left/.test(pk) ? -1 : /right/.test(pk) ? 1 : 0, dy = /above/.test(pk) ? -1 : /below/.test(pk) ? 1 : 0;
@@ -2162,6 +3107,7 @@ import { runtime as TD } from '../runtime';
             const of = v.trim(), ref = coord(C, of);
             if (!ref || C.unresolved?.has(of)) { placeIss.push(`Unresolved layout dependency (${of})`); continue; }
             if (transformed || (C.approx && C.approx.has(of))) placeIss.push(`placed ${pk}=${of} in a transformed scope`);
+            if (ownDist && ndV!.length > 1) placeIss.push(`${pk}= with node distance=${ndO.v}`);
             const f = dx && dy ? Math.SQRT1_2 : 1;
             at = { x: ref.x + dx * dist * f, y: ref.y + dy * dist * f }; myAnchor = 'center';
             continue;
@@ -2176,8 +3122,8 @@ import { runtime as TD } from '../runtime';
           const diag = / /.test(pk);
           // a diagonal moves the node distance along each axis (measured with pdflatex)
           // (node distance=a and b: a vertically, b horizontally; one value both ways)
-          const dy0 = isFinite(dd[0]) ? dd[0] : dist, dx0 = isFinite(dd[1]) ? dd[1] : isFinite(dd[0]) ? dd[0] : (C.nodeDistH ?? dist);
-          const onGrid = nopts.some((o: any) => o.k === 'on grid' && o.v !== 'false');
+          const dy0 = isFinite(dd[0]) ? dd[0] : dist, dx0 = isFinite(dd[1]) ? dd[1] : isFinite(dd[0]) ? dd[0] : (distH ?? dist);
+          const og = lastOpt(nopts, 'on grid'), onGrid = og ? og.v !== 'false' : (setting(C, 'on grid') ?? 'false') !== 'false';
           // from the other node's border (its anchor on this side; a coordinate is its own point) to this one's
           const g = resolved && resolved.bare && C.geo?.[of], bx = C.boxes[of];
           let base = ref;
@@ -2186,13 +3132,15 @@ import { runtime as TD } from '../runtime';
           at = { x: base.x + dx * dx0, y: base.y + dy * dy0 };
           myAnchor = onGrid ? 'center' : PLACE_ANCHOR[pk];
           const plain = !transformed && bx && !(C.approx && C.approx.has(of)) && /^[^().,:$\\]+$/.test(of);
-          if (plain && !pos && !nopts.some((o: any) => o.k === 'anchor')) pos = { k: pk, v: v.trim(), of };
+          // (a distance of the node's own: written as the point, so the export keeps it)
+          if (plain && !pos && !ownDist && !nopts.some((o: any) => o.k === 'anchor')) pos = { k: pk, v: v.trim(), of };
           // of a point (B.south, a |- b, a coordinate): placed from that point, written back at where it lands
           else if (transformed || !resolved || (C.approx && C.approx.has(of)) || (resolved.node && (C.kinds || {})[resolved.node] !== 'coordinate' && !C.geo?.[resolved.node])) { placeIss.push(`placed ${pk} of (${of}) with the positioning library`); pos = null; }
           else pos = null;
         }
+        if (fitBox) { at = fitBox.c; myAnchor = 'center'; }
         // an anchor=… after the placement wins over the anchor the placement set (right=of a, anchor=base)
-        if (myAnchor) {
+        if (myAnchor && !fitBox) {
           const ks = nopts.map((o: any) => o.k), ai = ks.lastIndexOf('anchor');
           const pi = Math.max(...ks.map((k: string, n: number) => (PLACE_ANCHOR[k] || /^(above|below|left|right|above left|above right|below left|below right) of$/.test(k)) ? n : -1));
           if (ai > pi && nopts[ai].v) myAnchor = String(nopts[ai].v).trim();
@@ -2231,14 +3179,16 @@ import { runtime as TD } from '../runtime';
         const sizeAsked = nopts.some((o: any) => /^minimum (size|width|height)$/.test(o.k));
         // an empty node that only carries a label or pin: an undrawn box (inner sep round nothing) holding it
         const labelOnly = !text && nopts.some((o: any) => o.k === 'label' || o.k === 'pin');
-        if (labelOnly && !shapeName) shapeName = 'rectangle';
-        if (shapeName && NODE_SHAPES[shapeName] && (hasBorder || sizeAsked || explicitShape || labelOnly)) {
-          const made0 = boxNode(C, text, nopts, at, myAnchor, shapeName);
+        if ((labelOnly || fitBox) && !shapeName) shapeName = 'rectangle';
+        if (shapeName && NODE_SHAPES[shapeName] && (hasBorder || sizeAsked || explicitShape || labelOnly || fitBox)) {
+          const made0 = boxNode(C, text, nopts, at, myAnchor, shapeName, fitBox);
           const made = made0.shape;
           if (node.name) made.nodeName = node.name;
           const xf = readXf(C, nopts);
           // a node's own rotate and scale turn it about its own position (the point its anchor is at)
-          if (made0.labels.length && (xf.xf.length || (C.scopes || []).some((L: any) => L.xf && L.xf.length))) made0.bad.push('labels on a transformed node');
+          // (a shift moves the labels with the node: only a turn or a scale leaves them where TikZ would not put them)
+          const turns = (list: any[]) => (list || []).some((t: any) => t.dx === undefined || Object.keys(t).some((k) => k !== 'dx' && k !== 'dy'));
+          if (made0.labels.length && (turns(xf.xf) || (C.scopes || []).some((L: any) => turns(L.xf)))) made0.bad.push('labels on a transformed node');
           const absolute = applyXf([made, ...made0.labels], [...(C.scopes || []), { xf: xf.xf.map((t: any) => (t.rot !== undefined || t.scale !== undefined) ? { ...t, px: at.x, py: at.y } : t), shape: true }]);
           // (a matrix cell's box: the border without outer sep)
           if (C.cellBoxes) { const a = absolute[0], c = a.type === 'rect' ? { x: a.x + a.w / 2, y: a.y + a.h / 2 } : { x: a.cx, y: a.cy }; C.cellBoxes.push({ s: a, c, hw: made0.w / 2, hh: made0.h / 2 }); }
@@ -2306,6 +3256,64 @@ import { runtime as TD } from '../runtime';
         }
         continue;
       }
+      // a tikz-qtree tree: a Tree block (forest), its root's anchor where the picture's origin is; its named nodes
+      // are places later statements can use
+      if (name === 'Tree' && TD.ft?.qtree && TD.TYPES.forest) {
+        let q = j; while (q < s.length && /\s/.test(s[q])) q++;
+        const e = s[q] === '[' ? TD.ft.qtree.end(s, q) : -1;
+        const T = e > 0 ? TD.ft.qtree.toForest(o.slice(q, e), C.qtSets || [], { compat: (C.pkgs || []).includes('tikz-qtree-compat') }) : null;
+        if (T) {
+          i = e;
+          // the document's text size (a picture's font= reaches every node through for tree)
+          const sh: any = { ...TD.TYPES.forest.create({ x: 0, y: 0 }, {}), src: T.src, size: 'normalsize' };
+          const L = TD.ftLayout(sh);
+          sh.x = L.bb.x; sh.y = L.bb.y;
+          const scopes = C.scopes || [], moved = scopes.some((Lr: any) => Lr.xf && Lr.xf.length);
+          // a scale without transform shape moves tikz-qtree's nodes closer but leaves their text as it is, which
+          // forest can't do: the tree stays as code, previewed scaled whole (its nodes where LaTeX puts them)
+          let shaped = false;
+          const coordsOnly = scopes.some((Lr: any) => { shaped = shaped || !!Lr.shape; return !shaped && (Lr.xf || []).some((x: any) => x.sx !== undefined || (x.scale !== undefined && x.scale !== 1)); });
+          const made = applyXf([sh], coordsOnly ? scopes.map((Lr: any) => ({ ...Lr, shape: true })) : scopes);
+          if (coordsOnly) T.issues.push('scale without transform shape: tikz-qtree moves the nodes closer, forest would shrink their text too');
+          const names = T.names.map((x: any) => x.name);
+          if (!preview) for (const { name: nm, i: k } of T.names) {
+            const n = L.nodes[k];
+            if (!n) continue;
+            const c = { x: made[0].x - L.bb.x + n.x, y: made[0].y - L.bb.y + n.y };
+            C.names[nm] = c;
+            (C.geo ||= {})[nm] = { kind: n.st.shape === 'rect' ? 'rect' : 'ellipse', c, U: { x: n.w / 2, y: 0 }, V: { x: 0, y: n.h / 2 } };
+            C.boxes[nm] = { w: n.w, h: n.h };
+            // under a scope's shift, scale or turn the tree's nodes are only near where they are drawn
+            if (moved) (C.approx ||= new Set()).add(nm);
+          }
+          done(bs, e, made, [...issues(), ...T.issues], { names: names.length ? names : undefined, treeKeys: T.used, tree: names });
+          continue;
+        }
+      }
+      // pgf-pie's \pie[…]{value/label, …}: a Pie chart that draws and writes back as pgf-pie does (src/domain/pgfpie.ts)
+      if (name === 'pie' && TD.pgfPie && (C.pkgs || []).includes('pgf-pie')) {
+        const P = pieStatement(C, s, o, bs, j);
+        if (P) {
+          i = P.end;
+          done(bs, P.end, P.made, [...issues(), ...P.issues], { treeKeys: P.held });
+          continue;
+        }
+      }
+      // tkz-euclide's commands (src/domain/tkzeuclide.ts): each one the TikZ it stands for (points are coordinates,
+      // drawings paths and nodes), read as statements and held as the command's one; else kept as code, its own
+      // arguments only (tkz commands end without a ;)
+      if (TD.tkz && /^tkz[A-Z]/.test(name) && !(TD.chemlab && TD.chemlab.USES.test('\\' + name))) {
+        const R = TD.tkz.statement(tkzApi(C), C, s, o, j, name);
+        i = R.end;
+        if (R.tikz) {
+          const S = subStatements(C, R.tikz);
+          if (preview) { pushAll(shapes, S.made); continue; }
+          done(bs, R.end, S.made, [...issues(), ...R.issues, ...S.issues], { names: S.names, ...(S.raw ? { raw: true } : {}) });
+          if (R.clip) (C.tkzClips ||= []).push(C.stmts[C.stmts.length - 1]);
+        } else if (preview) { if (R.issues.length) C.warnings.push(`\\${name} not drawn`); }
+        else done(bs, R.end, [], [...issues(), ...R.issues], R.issues.length ? { raw: true } : { raw: true, kind: 'defs' });
+        continue;
+      }
       // anything else: its arguments (and a ; right after them) are one statement, kept as code
       let end = argsEnd(s, j);
       const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
@@ -2318,7 +3326,7 @@ import { runtime as TD } from '../runtime';
     return shapes;
   }
   // options of a picture or scope that set how every path in it looks (very thick, dashed, DarkBlue, line width=…)
-  const baseOpt = (C: any, o: any) => (o.v === null ? W_KEYS.includes(o.k) || color(C, o.k) !== undefined : ['line width', 'color'].includes(o.k));
+  const baseOpt = (C: any, o: any) => (o.v === null ? W_KEYS.includes(o.k) || color(C, o.k) !== undefined || (o.k.includes('-') && !!arrowSpec(o.k)) : ['line width', 'color', 'shorten >', 'shorten <', 'line cap', 'cap', 'line join'].includes(o.k));
   function pictureOpts(C: any, o: any) {
     C.base = [...(C.base || []), ...parseOpts(o).filter((x: any) => baseOpt(C, x))];
     for (const { k, v } of parseOpts(o)) {
@@ -2339,9 +3347,14 @@ import { runtime as TD } from '../runtime';
     [/^(angle radius|angle eccentricity|every angle|pic text|pic text options)$/, /\bpic\b/],
     [/^(every edge|every edge quotes|every loop)$/, /\bedge\b|\bloop\b/],
     [/^(start chain|every on chain|every join|continue chain|on chain)$/, /\bon chain\b|\bjoin\b|\\chainin/],
-    [/^(auto|swap|sloped|every to|every edge node)$/, /(--|\bto\b|\bedge\b|\.\.|\|-|-\||\bcurve\b|\barc\b)[\s\S]*\bnode\b|"|\bedge\b/],
+    [/^(sloped|every to|every edge node)$/, /(--|\bto\b|\bedge\b|\.\.|\|-|-\||\bcurve\b|\barc\b)[\s\S]*\bnode\b|"|\bedge\b/],
     [/^(level distance|sibling distance|level \d+|level|every child|every child node|edge from parent|grow|grow')$/, /\bchild\b/],
+    // tikz-qtree's own (a \Tree reads them itself)
+    [/^(every tree node|every leaf node|every internal node|every level \d+ node|frontier|interior|edge from parent path|level \d+\+)$/, /\\Tree\b/],
     [/^(declare function)$/, /[\s\S]/],
+    // what a plot reads (domain, samples, variable), and >=… (what the tip names > and < mean)
+    [/^(domain|samples|samples at|variable)$/, /\bplot\b/],
+    [/^>$/, /[<>]-|-[<>]/],
   ];
   const uid8 = () => Math.random().toString(36).slice(2, 10);
   // One picture: `s` its body with comments blanked, `o` as written, `open` the \begin{tikzpicture}[…] as written.
@@ -2351,10 +3364,17 @@ import { runtime as TD } from '../runtime';
   // nm (names it defines). The picture's first statement holds open and N (statements), the last one tail.
   function importPicture(C: any, s: any, o: any, open: any) {
     STY = C.styles;
-    Object.assign(C, unitVectors()); C.scopes = []; C.stmts = []; C.struct = []; C.kinds = {}; C.approx = null; C.unresolved = new Set(); C.picIssue = null; C.base = []; C.nodeDist = undefined; C.nodeDistH = undefined; C.chains = {}; C.chainCur = null; C.chainPending = null; C.labelDist = undefined; C.boxes = {}; C.geo = {}; gtTip = null;
+    // (C.pointKinds: points known before the picture is read, a circuit's anchors)
+    Object.assign(C, unitVectors()); C.picAuto = []; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = { ...(C.pointKinds || {}) }; C.approx = null; C.kept = null; C.unresolved = new Set(); C.picIssue = null; C.base = []; C.nodeDist = undefined; C.nodeDistH = undefined; C.chains = {}; C.chainCur = null; C.chainPending = null; C.labelDist = undefined; C.boxes = {}; C.geo = {}; C.tkz = null; C.tkzClips = []; gtTip = null;
     const optM = open && /^\\begin\{tikzpicture\}\s*\[([\s\S]*)\]\s*$/.exec(blankComments(open));
-    const optStr = optM ? optM[1] : '';
+    const optStr0 = optM ? optM[1] : '';
+    C.picOptStr = optStr0; // (a \graph in the picture is a Graph block with them)
+    C.picBody = s; // (a path's name path= is held only when nothing in the picture uses that name)
+    // (the plain keys a \tikzset before the picture set come first: held like the picture's own, or reported)
+    const setOpts = C.styles?.get(SETTING + '\u0000opts') || '';
+    const optStr = [setOpts, optStr0].filter(Boolean).join(', ');
     if (optStr) pictureOpts(C, optStr);
+    C.qtSets = [...(C.qtPre || []), ...(optStr0 ? [optStr0] : [])];
     const items = splitTop(optStr, ',').map((x) => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
     const keyOf = (x: any) => splitTop(x, '=')[0].trim();
     const neutral = (x: any) => /^(x|y)\s*=\s*\{?1\s*cm\}?$/.test(x);
@@ -2372,6 +3392,9 @@ import { runtime as TD } from '../runtime';
         return C.styles.has('every node');
       }
       if (k === 'start chain') return startChain(C, x.includes('=') ? v : '', false);
+      if (SETTINGS.test(k) && C.styles) { C.styles.set(SETTING + k, x.includes('=') ? v : 'true'); return true; }
+      // auto, swap: the side every label on a path takes (autoSide)
+      if (k === 'auto' || k === 'swap') { (C.picAuto ||= []).push({ k, v: x.includes('=') ? v : null }); return true; }
       // node distance=5mm and 3mm: vertical, then horizontal (the old `right of=` syntax takes the first for both)
       if (k === 'node distance') {
         const [a, b] = v.split(/\s+and\s+/).map((q: any) => len(q));
@@ -2386,7 +3409,9 @@ import { runtime as TD } from '../runtime';
     openScope(C, { xf: pictureXf.xf, shape: pictureXf.rest.some((o: any) => o.k === 'transform shape' && o.v !== 'false'), font: pictureXf.rest.filter((o: any) => o.k === 'font').map((o: any) => o.v).join(' '), opts: '' });
     // widths and colours the picture sets are in C.base: every shape made here takes them
     const baseKeys = new Set(parseOpts(optStr).filter((x: any) => baseOpt(C, x)).map((x: any) => x.k));
-    const odd0 = rest.map(keyOf).filter((k) => !['x', 'y', 'z', 'font', 'transform shape', ...XF_KEYS].includes(k) && !baseKeys.has(k));
+    // (a style the picture uses stands for its keys: tdplot_main_coords is x=, y= and z=)
+    const keysOf = (x: string): string[] => { const k = keyOf(x); if (!STY?.has(k)) return [k]; const su = styUsed; try { return parseOpts(x).map((o: any) => o.k); } catch { return [k]; } finally { styUsed = su; } };
+    const odd0 = [...new Set(rest.flatMap(keysOf))].filter((k) => !['x', 'y', 'z', 'font', 'transform shape', ...XF_KEYS].includes(k) && !baseKeys.has(k));
     // keys for one feature (labels, edges, chains, trees, angle pics…) only hold back the statements using it
     C.picFeat = [];
     const odd = odd0.filter((k) => {
@@ -2394,10 +3419,29 @@ import { runtime as TD } from '../runtime';
       if (f) C.picFeat.push({ k, re: f[1] });
       return !f;
     });
+    C.picOdd = odd;
     if (odd.length) C.picIssue = 'picture options the shapes do not hold: ' + odd.join(', ');
+    C.picXf = pictureXf.unresolved.length > 0;
     if (pictureXf.unresolved.length) C.picIssue = pictureXf.unresolved.join('; ');
     const picCtx = rest.length ? [rest.join(', ')] : [];
-    const shapes = parseStatements(C, s, o).map((x: any) => ({ ...x, id: uid8() }));
+    const read = parseStatements(C, s, o);
+    // a tkz clip held as its region stays so only while nothing after it crosses that (src/domain/tkzeuclide.ts)
+    if (C.tkzClips?.length) TD.tkz?.checkClips(C, read);
+    // A tikz-qtree tree whose node names code kept as code uses stays as code too: written in the forest block's own
+    // picture, the tree's nodes would not be where that code looks for them
+    // (a name used as a point, (n) (n.north) ([xshift=1ex]n.south), or placed from, left of=n, below=1cm of n)
+    const usesName = (code: string, nm: string) => new RegExp(`(?:[(\\]]|\\bof\\s*=?\\s*\\{?)\\s*${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(?:[.)}\\],;]|$)`, 'm').test(code);
+    for (const st of C.stmts) if (st.tree?.length && !st.raw) {
+      const users = C.stmts.filter((u: any) => u.raw && u !== st && st.tree.some((nm: string) => usesName(s.slice(u.start, u.end), nm)));
+      if (!users.length) continue;
+      const blk = st.shapes[0], at = read.indexOf(blk);
+      const kept = { type: 'tikz', kind: 'code', code: '', x: 0, y: 0, ctx: [], prev: [blk], issues: ['\\Tree is kept as code: code kept as code names its nodes'], ...(C.libs?.length ? { libs: C.libs.slice() } : {}), ...(C.pkgs?.length ? { pkgs: C.pkgs.slice() } : {}) };
+      st.shapes = [kept]; st.raw = true;
+      if (at >= 0) read[at] = kept;
+    }
+    const shapes = read.map((x: any) => ({ ...x, id: uid8() }));
+    // (each copy by the shape it was made from: what the background layer drew sits earlier in `shapes` than its statement)
+    const copyOf = new Map<any, any>(read.map((x: any, n: number) => [x, shapes[n]]));
     const byShape = new Map();
     const p = uid8(), N = C.stmts.length;
     let prevEnd = 0;
@@ -2437,15 +3481,15 @@ import { runtime as TD } from '../runtime';
     const tl = pts.length ? TD.bboxOf(pts, 0) : { x: 0, y: 0 };
     let row = 0;
     for (const x of shapes) if (x.type === 'tikz' && !(x.prev && x.prev.length) && !x.at) x.at = { x: tl.x, y: tl.y - 6 - 20 * row++ };
-    // the shapes (new objects from the map above) take their records by position
+    // the shapes (new objects from the map above) take their records from the shapes they were made from
     const flat = C.stmts.flatMap((st: any) => st.shapes);
-    shapes.forEach((x: any, n: any) => {
-      const t = byShape.get(flat[n]);
-      if (!t) return;
+    flat.forEach((orig: any) => {
+      const x = copyOf.get(orig), t = byShape.get(orig);
+      if (!x || !t) return;
       if (t.k === 0 && t.i === 0) { t.open = open || null; t.N = N; if (drop.length) t.drop = drop; if (safe.length) t.po = safe.join(', '); }
       if (t.k === N - 1 && t.i === t.n - 1) t.tail = tail;
       x.tex = t;
-      if (x.type === 'tikz' && t.i === 0) { x.code = flat[n].code; x.ctx = flat[n].ctx; if (flat[n].names) x.names = flat[n].names; if (flat[n].macros) x.macros = flat[n].macros; if (flat[n].definitions) x.definitions = flat[n].definitions; }
+      if (x.type === 'tikz' && t.i === 0) { x.code = orig.code; x.ctx = orig.ctx; if (orig.names) x.names = orig.names; if (orig.macros) x.macros = orig.macros; if (orig.definitions) x.definitions = orig.definitions; }
     });
     // lines that start or end on a named point stay attached to it (src/application/app.ts links), so they follow it
     const pt = new Map();
@@ -2616,7 +3660,14 @@ import { runtime as TD } from '../runtime';
     return pg;
   }
 
+  // the file's own macros are the maths engine's while its pictures are read (node boxes are measured with them),
+  // and the engine's own are back afterwards
   TD.importLatex = function (src: any, opt: Record<string, any> = {}) {
+    const prev = TD.math?.macroText ?? '';
+    try { return importLatexIn(src, opt); }
+    finally { if (TD.math?.useMacros && (TD.math.macroText ?? '') !== prev) TD.math.useMacros(prev); }
+  };
+  const importLatexIn = function (src: any, opt: Record<string, any> = {}) {
     const C: any = makeCtx();
     const o = (opt.definitions ? String(opt.definitions) + '\n' : '') + String(src);
     // positions in s are positions in o: comments and the wrappers round wide pictures become spaces
@@ -2630,24 +3681,43 @@ import { runtime as TD } from '../runtime';
     const tm = s.match(/\\title\{([^}]*)\}/);
     if (tm) title = tm[1];
     const page = parsePage(s);
+    TD.pgfplotsImport?.documentStart(C.styles, s); // pgfplots' compat and \textwidth in this document
     // the preamble: colours and definitions the pictures use, and the libraries and packages they load
     const docM = s.match(/\\begin\{document\}([\s\S]*?)(\\end\{document\}|$)/);
-    let preDefs = '';
+    let preDefs = '', macroDefs: string[] = [];
     const preEnd = docM ? docM.index! : s.indexOf('\\begin{tikzpicture}');
     if (preEnd >= 0) {
       const ps = s.slice(0, preEnd), po = o.slice(0, preEnd);
       for (const m of ps.matchAll(/\\usetikzlibrary\{([^}]*)\}/g)) C.libs = [...new Set([...(C.libs || []), ...m[1].split(',').map((x: any) => x.trim()).filter(Boolean)])];
-      for (const m of ps.matchAll(/\\usepackage(?:\[[^\]]*\])?\{([^}]*)\}/g)) for (const p of m[1].split(',').map((x: any) => x.trim())) if (DRAW_PKGS.has(p) && p !== 'tikz') C.pkgs = [...new Set([...(C.pkgs || []), p])];
+      for (const m of ps.matchAll(/\\usepackage(?:\[([^\]]*)\])?\{([^}]*)\}/g)) for (const p of m[2].split(',').map((x: any) => x.trim())) if (DRAW_PKGS.has(p) && p !== 'tikz') {
+        // forest's libraries given as its options (their defaults apply to every tree): forest[linguistics] …
+        const lib = p === 'forest' ? (m[1] || '').split(',').map((x: string) => x.trim()).filter((x: string) => /^(linguistics|edges)$/.test(x)).map((x: string) => `forest[${x}]`) : [];
+        C.pkgs = [...new Set([...(C.pkgs || []), p, ...lib])];
+      }
+      libraryStyles(C);
       const P = { ...C, warnings: [], scopes: [], stmts: [], struct: null };
       parseStatements(P, ps, po);
       Object.assign(C.colors, P.colors);
-      preDefs = P.stmts.filter((st: any) => st.raw && st.shapes[0] && st.shapes[0].kind === 'defs' && !/^\s*\\(centering|small|large|normalsize|footnotesize|color)\b/.test(po.slice(st.start, st.end)))
-        .map((st: any) => po.slice(st.start, st.end).trim())
+      C.qtPre = P.qtSets || [];
+      C.preSrc = ps;
+      // a definition read with @ a letter (after \makeatletter, as in \renewcommand{\small}{\@setfontsize…}) keeps it:
+      // written alone, \@setfontsize would be \@ and letters (and \small would call itself without end)
+      const atLetter = (i: number) => { const a = ps.lastIndexOf('\\makeatletter', i), b = ps.lastIndexOf('\\makeatother', i); return a >= 0 && a > b; }; // (comments blanked)
+      const defStmts: string[] = P.stmts.filter((st: any) => st.raw && st.shapes[0] && st.shapes[0].kind === 'defs' && !/^\s*\\(centering|small|large|normalsize|footnotesize|color)\b/.test(po.slice(st.start, st.end)))
+        .map((st: any) => { const t = po.slice(st.start, st.end).trim(); return atLetter(st.start) && /\\[A-Za-z]*@/.test(t) ? `\\makeatletter\n${t}\n\\makeatother` : t; })
         // not the lines DiagramTeX's own preamble adds (quantikz compatibility, pgfplots compat)
-        .filter((t: any) => !/^\\pgfplotsset\{compat=[^}]*\}$/.test(t)).join('\n');
+        .filter((t: any) => !/^\\pgfplotsset\{compat=[^}]*\}$/.test(t));
+      preDefs = defStmts.join('\n');
+      // the preamble's macro definitions (\newcommand, \def, \DeclareMathOperator …) also come back as `macros`, for
+      // the file's own (page.macros, src/core/doc-macros.ts): its formulas are drawn with them. The picture keeps its
+      // copy, so it stays whole when copied elsewhere; the export writes each command once (the file's definition).
+      const mac = macrosOfPreamble(po);
+      if (mac) macroDefs = [mac];
+      if (mac && TD.math?.useMacros) TD.math.useMacros([TD.math.macroText, mac].filter(Boolean).join('\n'));
     }
     const base = docM ? docM.index + docM[0].indexOf(docM[1]) : 0;
     const bodyS = docM ? docM[1] : s, bodyO = o.slice(base, base + bodyS.length);
+    const czDoc = czDocOf(preEnd >= 0 ? s.slice(0, preEnd) : ''); // circuitikz's package options
     // pictures, and bare quantikz / forest / ZX / tikz-timing / bytefield environments (each becomes a picture holding the block)
     const found: any[] = [];
     // \begin{tikzpicture}[options] … \end{tikzpicture}, scanned by hand (a regex over nested brackets backtracks
@@ -2681,29 +3751,63 @@ import { runtime as TD } from '../runtime';
     // circuitikz environments: a Circuit block each
     for (const b of bodyS.matchAll(/\\begin\{circuitikz\}[\s\S]*?\\end\{circuitikz\}/g))
       if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, cz: bodyO.slice(b.index, b.index + b[0].length) });
-    for (const b of bodyS.matchAll(/\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|\\begin\{sequencediagram\}[\s\S]*?\\end\{sequencediagram\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
-      if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, bare: bodyO.slice(b.index, b.index + b[0].length) });
+    // (a tikz-cd diagram too, whose options may hold TikZ code of their own: execute at end picture={\draw …})
+    for (const b of bodyS.matchAll(/\\begin\{tikzcd\}[\s\S]*?\\end\{tikzcd\}|\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|\\begin\{sequencediagram\}[\s\S]*?\\end\{sequencediagram\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
+      // (a tikzpicture inside a tikzcd cell is read as that picture, so the tikzcd is not taken whole)
+      if (!inPic(b.index) && !found.some((f: any) => f.at > b.index! && f.at < b.index! + b[0].length)) found.push({ at: b.index, end: b.index + b[0].length, bare: bodyO.slice(b.index, b.index + b[0].length) });
+    // a body that is chemfig code (\chemfig, a \schemestart scheme), its TikZ only inside \chemmove{…} or a bond's […]:
+    // the Chemistry block, as a paste of it would be (a body with sections stays the document's text)
+    if (!found.length && TD.pasteIn && TD.pasteIn.blockOf(bodyS.trim()) === 'chemfig' && TD.pasteIn.kind(bodyS) === 'block' && !/\\(?:part|chapter|(?:sub)*section|paragraph|maketitle)(?![A-Za-z])/.test(bodyS)) {
+      const a = bodyS.search(/\S/), e = bodyS.trimEnd().length;
+      found.push({ at: a, end: bodyS.length, bare: bodyO.slice(a, e), plain: bodyS.slice(a, e) });
+    }
+    // \feynmandiagram (a \tikz picture of its own): a picture holding the Feynman block, its code as written
+    if (TD.feyn) for (const b of bodyS.matchAll(/\\feynmandiagram(?![A-Za-z@])/g)) {
+      const F = inPic(b.index) ? null : TD.feyn.fdParts(bodyS.slice(b.index));
+      if (F) found.push({ at: b.index, end: b.index + F.end, feyn: bodyO.slice(b.index, b.index + F.end).trim() });
+    }
     found.sort((a, b) => a.at - b.at);
     const blocks = [];
     let last = 0;
     const preStyles = new Map(C.styles), preMacros = new Map(C.macros);
+    let outside = ''; // the document's text before the picture, outside pictures (\tdplotsetmaincoords{60}{110} is written there)
     for (const f of found) {
       C.styles = new Map(preStyles); C.macros = new Map(preMacros); C.names = {};
+      outside += bodyS.slice(last, f.at) + '\n';
+      const tdp = [...outside.matchAll(new RegExp(`\\\\(?:${TDPLOT.join('|')})(?![A-Za-z@])(?:\\s*\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\})+`, 'g'))].map((m) => m[0]).join('\n');
+      if (tdp) { const P = { ...C, preview: true, warnings: [], scopes: [], stmts: [], struct: null }; try { parseStatements(P, tdp, tdp); } catch { /* read what can be */ } }
+      // (and tkz-euclide's \tkzSetUp… there: they restyle what its commands draw, src/domain/tkzeuclide.ts)
+      const tkzSet = TD.tkz ? [...outside.matchAll(/\\tkzSetUp[A-Za-z]+(?![A-Za-z@])(?:\s*\[[^\]]*\])?(?:\s*\{[^{}]*\})?/g)].map((m) => m[0]).join('\n') : '';
+      if (tkzSet) { const P = { ...C, preview: true, warnings: [], scopes: [], stmts: [], struct: null }; try { parseStatements(P, tkzSet, tkzSet); } catch { /* read what can be */ } }
       const before = latexToText(bodyS.slice(last, f.at));
       if (before && docM) blocks.push(...textBlocks(before));
       last = f.end;
       if (f.cz) {
-        const q = circuitBlock(f.cz, false);
-        if (q) { blocks.push({ type: 'diagram', shapes: withDefs([q], preDefs, C) }); continue; }
+        const sp = !circuitBlock(f.cz, true, czDoc) && circuitSplit(C, bodyS.slice(f.at, f.end), f.cz, czDoc);
+        if (sp) { blocks.push({ type: 'diagram', shapes: withDefs(sp, preDefs, C) }); continue; }
+        // (wires and text alone, with plain TikZ it can't read, are a picture's: TikZ drawn in a circuitikz environment)
+        const q = circuitBlock(f.cz, false, czDoc), kept = String(q?.raw || '').split('\n').filter((l: string) => l.trim() && !/^\s*%/.test(l.trim()) && !czDrawsNothing(l));
+        if (q && !q.items.some((it: any) => !TD.cz.isWire(it) && it.part !== 'text') && kept.length && !kept.some((l: string) => /\bto\s*\[/.test(l))) q.items = [];
+        if (q && q.items.length) { blocks.push({ type: 'diagram', shapes: withDefs([q], preDefs, C) }); continue; }
         const shapes = importPicture(C, bodyS.slice(f.at, f.end).replace(/\\(begin|end)\{circuitikz\}(\[[^\]]*\])?/g, (m: any) => ' '.repeat(m.length)), bodyO.slice(f.at, f.end), '');
         blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
         continue;
       }
+      if (f.feyn) {
+        const q = TD.TYPES.feynman.create({ x: 0, y: 0 }, {});
+        q.src = f.feyn;
+        feynMacros(C, q);
+        const b = TD.feyn.layout(q).bb;
+        q.x = b.x; q.y = b.y;
+        blocks.push({ type: 'diagram', shapes: withDefs([q], preDefs, C) });
+        continue;
+      }
       if (f.bare) {
         const q = `\\node at (0,0) {${f.bare}};`;
-        const shapes = importPicture(C, q, q, '');
+        const shapes = importPicture(C, f.plain ? `\\node at (0,0) {${f.plain}};` : q, q, '');
         for (const x of shapes) delete x.tex;
-        blocks.push({ type: 'diagram', shapes });
+        // with the preamble's definitions (a forest tree's \forestset styles, its macros …), as a picture's
+        blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
         continue;
       }
       const picO = bodyO.slice(f.at, f.end);
@@ -2718,12 +3822,15 @@ import { runtime as TD } from '../runtime';
       const lab = rescaled(TD.chemlab && TD.chemlab.fromPicture(pic1), sc);
       if (lab) { blocks.push({ type: 'diagram', shapes: withDefs([lab], preDefs, C) }); continue; }
       // a picture drawn wholly with circuitikz parts: a Circuit block
-      const czq = rescaled(circuitBlock(pic1, true) || automataBlock(pic1) || graphBlock(pic1), sc);
+      const czq = rescaled(circuitBlock(pic1, true, czDoc) || automataBlock(pic1) || graphBlock(pic1), sc);
       if (czq) { blocks.push({ type: 'diagram', shapes: withDefs([czq], preDefs, C) }); continue; }
+      // circuitikz parts among other TikZ: a Circuit block and the rest as shapes
+      const sp = !peeled && (C.pkgs || []).includes('circuitikz') && circuitSplit(C, bodyS.slice(f.at, f.end), picO, czDoc);
+      if (sp) { blocks.push({ type: 'diagram', shapes: withDefs(sp, preDefs, C) }); continue; }
       const shapes = importPicture(C, bodyS.slice(f.inner, f.inner + f.len), bodyO.slice(f.inner, f.inner + f.len), bodyO.slice(f.open, f.inner));
       blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
     }
-    const bareCz = !found.length && (circuitBlock(bodyO, true) || (/^\s*\\(node|path|draw|tikzset)\b/.test(bodyS) && automataBlock(bodyO)));
+    const bareCz = !found.length && (circuitBlock(bodyO, true, czDoc) || (/^\s*\\(node|path|draw|tikzset)\b/.test(bodyS) && automataBlock(bodyO)));
     if (bareCz) blocks.push({ type: 'diagram', shapes: withDefs([bareCz], preDefs, C) });
     else if (!found.length) {
       if (/\\(?:(?:draw|fill|filldraw|node|shade|path|coordinate|foreach|tikzset)\b|begin\{(?:axis|semilog[xy]axis|loglogaxis)\})/.test(bodyS)) {
@@ -2760,7 +3867,7 @@ import { runtime as TD } from '../runtime';
     };
     const report = blocks.filter((b) => b.type === 'diagram').flatMap((b) => b.shapes).filter((x) => x.type === 'tikz' && x.kind !== 'defs' && x.tex)
       .map((x) => ({ code: x.code, line: lineAt(x.code), issues: x.issues || [], preview: (x.prev || []).length }));
-    return { blocks, warnings: [...new Set(C.warnings)], kept: report, analysis, title, page };
+    return { blocks, warnings: [...new Set(C.warnings)], kept: report, analysis, title, page, macros: macroDefs.join('\n') };
   };
   // top-level comma-separated items (commas inside {} [] () stay)
   function splitList(t: string) {
@@ -2833,7 +3940,7 @@ import { runtime as TD } from '../runtime';
   // Circuitikz code as a Circuit block. `whole`: only when every statement is a circuitikz part or wire (with at
   // least one part) and nothing is left over but settings, so a plain TikZ picture stays a picture. Otherwise (a
   // circuitikz environment) what can't be read is kept as code in the block.
-  function circuitBlock(code: string, whole: boolean) {
+  function circuitBlock(code: string, whole: boolean, czDoc?: { pre: string; si: boolean }) {
     if (!TD.cz || !TD.TYPES.cz) return null;
     // the environment's own scale: kept as the object's scale with transform shape; any other change of
     // coordinates the block can't draw, so the picture is read some other way
@@ -2860,13 +3967,15 @@ import { runtime as TD } from '../runtime';
       });
       code = (rest.length ? `\\tikzset{${rest.join(', ')}}\n` : '') + u.body;
     }
-    const { items, raw } = TD.cz.parse(code);
+    const { items, raw } = TD.cz.parse(code, { pre: czDoc?.pre });
     if (!items.length) return null;
     // a picture is a circuit only with a circuitikz part in it: wires and text alone are plain TikZ
-    if (whole && (!items.some((it: any) => !TD.cz.isWire(it) && it.part !== 'text') || String(raw).split('\n').some((l: string) => l.trim() && !/^\\(ctikzset|tikzset|tikzstyle)\b/.test(l.trim())))) return null;
+    if (whole && (!items.some((it: any) => !TD.cz.isWire(it) && it.part !== 'text') || String(raw).split('\n').some((l: string) => l.trim() && !czDrawsNothing(l)))) return null;
+    if (czDoc?.si) czSiLabels(items, TD.cz.splitTop);
     const q = { ...TD.TYPES.cz.create({ x: 0, y: 0 }, {}), items, raw, x: 0, y: 0, id: uid8() };
     if (u && u.at) { q.x = u.at[0] * TD.PX_PER_CM; q.y = -u.at[1] * TD.PX_PER_CM; }
-    if (size) q.size = size;
+    // circuitikz sets its labels in the surrounding font: the document's \normalsize, unless the picture says
+    q.size = size || czFontSize(raw) || 'normalsize';
     if (col) q.color = col;
     if (envScale !== 1 && coordsOnly) {
       // scale without transform shape: the wires' coordinates scale, the parts keep their size (as in circuitikz).
@@ -2877,6 +3986,41 @@ import { runtime as TD } from '../runtime';
       for (const it of q.items) for (const key of ['a', 'b', 'p']) if (it[key] === undefined) delete it[key];
     } else if (envScale !== 1) rescaled(q, { k: envScale, px: 0, py: 0 });
     return q;
+  }
+  // A picture with circuitikz parts among other TikZ (s: comments blanked, o: as written, both the whole environment):
+  // the statements the Circuit block reads become one block, drawn where the first of them is, and the rest is read
+  // as any picture is, knowing the parts' anchors (Q.B, opamp.out) and the circuit's coordinates. Only for a picture
+  // that moves nothing (no scale or shift: the block's parts don't turn or scale with coordinates); null otherwise.
+  function circuitSplit(C: any, s: string, o: string, czDoc: { pre: string; si: boolean }) {
+    if (!TD.cz || !TD.TYPES.cz) return null;
+    const bm = /^\\begin\{(circuitikz|tikzpicture)\}\s*/.exec(s);
+    if (!bm) return null;
+    let e = bm[0].length;
+    const list: string[] = [];
+    if (s[e] === '[') { const j = matchClose(s, e, '[', ']'); if (j < 0) return null; list.push(...splitList(o.slice(e + 1, j))); e = j + 1; }
+    const end = s.lastIndexOf(`\\end{${bm[1]}}`);
+    const own = ownScale(list);
+    if (end < e || !own || own.k !== 1) return null;
+    const P = TD.cz.parse(o, { pre: czDoc.pre });
+    if (!P.items.some((it: any) => !TD.cz.isWire(it) && it.part !== 'text')) return null;
+    if (czDoc.si) czSiLabels(P.items, TD.cz.splitTop);
+    // what the block read is left out of what the picture reads (as spaces), but for the pieces of a path it kept
+    const blank = (t: string) => [...P.spans].reverse().reduce((r: string, [a, b, k]: any[]) => {
+      const sp = r.slice(a, b).replace(/[^\n]/g, ' ');
+      return r.slice(0, a) + (k ? k + sp.slice(Math.min(k.length, sp.length)) : sp) + r.slice(b);
+    }, t);
+    const s2 = blank(s), o2 = blank(o);
+    // the parts' anchors and the points the circuit's paths name (not a part's bare name: a path ends at its border)
+    C.pointKinds = {};
+    for (const [nm, q] of P.names) if (nm.includes('.') ? !/\.center$/.test(nm) : P.coords.has(nm)) { C.names[nm] = { x: q[0] * PX, y: -q[1] * PX }; C.pointKinds[nm] = 'coordinate'; }
+    const rest = list.filter((x) => !TD.cz.styleOpt(x));
+    let shapes;
+    try { shapes = importPicture(C, s2.slice(e, end), o2.slice(e, end), `\\begin{tikzpicture}${rest.length ? `[${rest.join(', ')}]` : ''}`); } finally { delete C.pointKinds; }
+    const q = { ...TD.TYPES.cz.create({ x: 0, y: 0 }, {}), items: P.items, raw: P.set, x: 0, y: 0, size: czFontSize(P.set) || 'normalsize', id: uid8() };
+    const first = P.spans[0][0] - e, stmts = C.stmts || [];
+    let at = shapes.findIndex((x: any) => x.tex && stmts[x.tex.k] && stmts[x.tex.k].start >= first);
+    if (at < 0) at = shapes.length;
+    return [...shapes.slice(0, at), q, ...shapes.slice(at)];
   }
   // A block's picture options and what they do to the whole: `scale=k` is taken out of the options (k), with
   // `shape` when transform shape scales the nodes too, as an object's scale does; without it only coordinates
@@ -2935,8 +4079,8 @@ import { runtime as TD } from '../runtime';
   }
   // packages a picture's code may need (others in a preamble are the document's own)
   const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'pgf-umlcd', 'pgf-umlsd', 'tikz-chemlab', 'blochsphere',
-    'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',
-    'amsmath', 'amssymb', 'amsfonts', 'mathrsfs', 'stmaryrd', 'upgreek', 'esint', 'dsfont', 'bbm']);
+    'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-qtree-compat', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',
+    'amsmath', 'amssymb', 'amsfonts', 'mathrsfs', 'stmaryrd', 'upgreek', 'esint', 'dsfont', 'bbm', 'tipa']);
   // the preamble's definitions go with each picture, as a code object that exports them to the preamble
   function withDefs(shapes: any, defs: any, C: any) {
     // Definitions are source metadata when the whole figure is native, not drawing objects.
@@ -2954,7 +4098,31 @@ import { runtime as TD } from '../runtime';
     const tl = shapes.length ? TD.bboxOf(shapes.flatMap((x: any) => { const b = TD.bbox(x); return [{ x: b.x, y: b.y }, { x: b.x + b.w, y: b.y + b.h }]; }), 0) : { x: 0, y: 0 };
     return [{ type: 'tikz', kind: 'defs', pre: true, code: defs || '', x: 0, y: 0, at: { x: tl.x, y: tl.y - 26 }, ctx: [], prev: [], issues: [], ...(C.libs ? { libs: C.libs.slice() } : {}), ...(C.pkgs ? { pkgs: C.pkgs.slice() } : {}), id: uid8() }, ...shapes];
   }
-  TD.importInternals = { parseOpts, arrowSpec, len, tokenizePath, preview, blankComments };
+  // TikZ code drawn inside a block (forest's edge paths, tikz={…} and the code after its tree): its shapes, what
+  // it could not draw left out. `named`: name → { x, y, w, h, kind } boxes (canvas px) the code may use. The reader's
+  // state is kept for the import that may be under way (a block laid out while a picture is read).
+  function drawWith(code: string, named: Record<string, any>, preamble?: string) {
+    const keep = { STY, MAC, styUsed, styOff, styleBudget, gtTip };
+    const C: any = makeCtx();
+    try {
+      STY = C.styles; styUsed = null; styOff = false; gtTip = null;
+      Object.assign(C, { scopes: [], stmts: [], struct: [], kinds: {}, approx: null, kept: null, unresolved: new Set(), picIssue: null, base: [], chains: {}, boxes: {}, geo: {}, picFeat: [], tkz: null, tkzClips: [] });
+      for (const [nm, g] of Object.entries<any>(named || {})) {
+        C.names[nm] = { x: g.x, y: g.y };
+        C.geo[nm] = { kind: g.kind === 'ellipse' ? 'ellipse' : 'rect', c: { x: g.x, y: g.y }, U: { x: g.w / 2, y: 0 }, V: { x: 0, y: g.h / 2 } };
+        C.boxes[nm] = { w: g.w, h: g.h };
+      }
+      // the document's definitions first: the styles and colours the code may use
+      if (preamble) { parseStatements(C, blankComments(String(preamble)), String(preamble)); C.stmts = []; C.warnings = []; }
+      const read = parseStatements(C, blankComments(String(code || '')), String(code || ''));
+      if (C.tkzClips?.length) TD.tkz?.checkClips(C, read);
+      const shapes = read.flatMap((x: any) => (x.type === 'tikz' ? (x.prev || []) : [x]));
+      const issues = [...new Set([...C.warnings, ...read.filter((x: any) => x.type === 'tikz' && x.kind !== 'defs').flatMap((x: any) => x.issues || [])])];
+      return { shapes, issues };
+    } catch (e: any) { return { shapes: [], issues: [String(e?.message || e)] }; }
+    finally { ({ STY, MAC, styUsed, styOff, styleBudget, gtTip } = keep); }
+  }
+  TD.importInternals = { parseOpts, arrowSpec, len, tokenizePath, preview, blankComments, drawWith };
   // a TikZ colour (red, blue!20, red!30!black) → '#rrggbb', or null / undefined (none / unknown)
   let colorCtx: any = null;
   TD.svgColor = svgName;

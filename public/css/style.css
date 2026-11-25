@@ -1594,6 +1594,10 @@ html:lang(th) #topbar button, html:lang(th) .panel-head, html:lang(th) .sec-titl
 
 /* Measurement layouts are independent of the visible scene and cannot resize it. */
 #measureHost { position: fixed; left: 0; top: 0; width: 0; height: 0; contain: strict; visibility: hidden; pointer-events: none; }
+/* text measurement (src/domain/shapes.ts): the probe for the size glyphs still scale at, and the marks at a text's ends */
+.measure-probe { position: absolute; white-space: pre; font-size: 10000px; }
+.measure-probe.small { font-size: 1000px; }
+.measure-mark { display: inline-block; width: 0; height: 0; }
 
 #printBlocked { display: none; }
 @media print {

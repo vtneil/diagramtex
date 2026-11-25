@@ -86,7 +86,7 @@ import { keepComments } from './keep-comments';
     if (n.k === 'H') return `\\zxH${o}{}`;
     if (n.k === 'N') return `\\${n.cmd || 'zxN'}${n.v || ''}${o}{}`;
     if (n.k === 'E') return '\\zxEmptyDiagram{}';
-    return n.t || '';
+    return n.src || n.t || ''; // a circuit command, as written
   }
   function edgeCode(e: any) {
     if (e.loop) {

@@ -4,11 +4,12 @@ import { vectorLabel } from './vector-label';
 // SVG geometry. Font outlines preserve advances and baselines under scene transforms;
 // native SVG text remains available for unsupported scripts and system fonts.
 import katexCss from '../../public/vendor/katex/katex.min.css';
+import scriptsCss from '../../public/vendor/katex/katex-scripts.css';
 import { fontData } from './label-fonts';
 import { svgToSrc } from '../platform/images';
 
 const esc = (value: string) => value.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const styles = { katex: katexCss, temml: '' };
+const styles = { katex: katexCss + scriptsCss, temml: '' };
 const faces = Object.values(styles).flatMap(css => [...css.matchAll(/@font-face\s*\{[^}]*\}/g)].map(match => {
   const css = match[0], property = (name: string) => new RegExp(name + '\\s*:\\s*([^;}]*)').exec(css)?.[1].trim().replace(/["']/g, '') || '';
   const file = /url\(['"]?([^'")]+\.woff2)['"]?\)/.exec(css)?.[1].split('/').pop();

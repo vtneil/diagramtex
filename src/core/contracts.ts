@@ -49,6 +49,9 @@ export interface HistoryStep {
   /** the file's named styles, as JSON */
   yb?: string;
   ya?: string;
+  /** the file's macros (page.macros), as JSON */
+  mb?: string;
+  ma?: string;
   /** when it was done (or redone), and when it was last undone: `stamp()` order across every file */
   t?: number;
   r?: number;

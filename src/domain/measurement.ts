@@ -1,4 +1,5 @@
 import katexCss from '../../public/vendor/katex/katex.min.css';
+import scriptsCss from '../../public/vendor/katex/katex-scripts.css';
 let root: ShadowRoot | undefined;
 let measure: HTMLDivElement;
 
@@ -11,7 +12,7 @@ export function measurementRoot(): ShadowRoot {
   host.lang = 'en';
   root = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
-  style.textContent = katexCss.replace(/@font-face\s*\{[^}]*\}/g, '') + `
+  style.textContent = (katexCss + scriptsCss).replace(/@font-face\s*\{[^}]*\}/g, '') + `
     *{box-sizing:border-box}
     .tx{font-family:var(--font-tex);line-height:1.2;white-space:pre;text-align:center;display:inline-block;pointer-events:none}
     .tx .katex{font-size:1em}

@@ -190,6 +190,37 @@ export async function runBrowserUI(page, filter = '') {
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.querySelector('#docview .blk-ie'));
   });
+  await test('Document: $$ typed, then maths typed between the dollars, becomes a formula when the caret leaves', async () => {
+    const SRC = 'Price \\$x\\$ here.';
+    await page.evaluate((text) => {
+      TD.app.newDoc('Dollars', null, null, [{ type: 'text', text }, { type: 'diagram', shapes: [] }], null, 'classic');
+      TD.app.cmd.setMode('document');
+    }, SRC);
+    const editor = page.locator('#docview .blk-ie'), text = () => page.evaluate(() => TD.state.doc.blocks[0].text);
+    await page.locator('#docview .blk-text p').first().click();
+    await editor.waitFor();
+    await editor.evaluate(ed => { const p = ed.querySelector(':scope > p'); const n = p.lastChild; const r = document.createRange(); r.setStart(n, n.nodeValue.length); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); });
+    await page.keyboard.type(' Then $$');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.type('\\alpha^2');
+    assert.equal(await editor.locator('.ie-m').count(), 0, 'still text while the caret is between the dollars');
+    await page.keyboard.press('ArrowRight');
+    // selectionchange comes as a task of its own after the key
+    await page.waitForFunction(() => document.querySelectorAll('#docview .blk-ie .ie-m').length === 1, null, { timeout: 2000 }).catch(() => {});
+    assert.equal(await editor.locator('.ie-m').count(), 1, 'leaving the closing $ makes the formula: ' + await editor.innerHTML());
+    assert((await text()).endsWith('Then $\\alpha^2$'), await text());
+    await page.keyboard.type(' ok');
+    assert((await text()).endsWith('Then $\\alpha^2$ ok'), 'the caret stays after the formula');
+    assert((await text()).startsWith('Price \\$x\\$ here.'), 'dollars the source escapes stay text');
+    // a $ typed before maths that ends in one, then a click away
+    await page.keyboard.type(' b$');
+    await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
+    await page.keyboard.type('$');
+    assert.equal(await editor.locator('.ie-m').count(), 1, 'not yet: the caret is inside');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('#docview .blk-ie'));
+    assert((await text()).endsWith('ok $b$'), 'leaving the block writes it as maths: ' + await text());
+  });
   await test('Page: a new paper or orientation keeps every object on its page, and is one undo step', async () => {
     await page.evaluate(() => {
       const P = TD.PX_PER_CM, top2 = (29.7 + 1) * P; // page 2 of A4 starts a page and a 1 cm gap down
@@ -1143,7 +1174,6 @@ export async function runBrowserUI(page, filter = '') {
       const context = await page.context().browser().newContext({ serviceWorkers: 'block' });
       try {
         await context.addInitScript(legacy => {
-          localStorage.setItem('diagramtex.tour', 'seen');
           if (legacy) Object.defineProperty(navigator, 'standalone', { value: true });
           else {
             const original = window.matchMedia.bind(window);

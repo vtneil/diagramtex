@@ -13,17 +13,34 @@ import { runtime as TD } from '../runtime';
 
   /** the block a bare environment opens, by the same patterns the importer uses for node text */
   function blockOf(t: string) {
+    // a tikz-qtree tree: read as a Tree block (forest-qtree.ts)
+    if (/^\\Tree\s*\[/.test(t) && TD.ft?.qtree && TD.TYPES.forest) return 'forest';
     for (const B of TD.blocks.nodeImports()) {
       const m = B.re.exec(t);
       if (m && m.index === 0 && TD.TYPES[B.type]) return B.type;
     }
     return null;
   }
+  /** the text with every {…} and […] group blanked (what is written outside arguments) */
+  function outsideGroups(t: string) {
+    let out = '', d = 0;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (c === '\\') { const two = t.slice(i, i + 2); out += d ? '  '.slice(0, two.length) : two; i++; continue; }
+      if (c === '{' || c === '[') d++;
+      else if ((c === '}' || c === ']') && d > 0) { d--; out += ' '; continue; }
+      out += d ? ' ' : c;
+    }
+    return out;
+  }
   function kind(text: string): string {
     const t = String(text || '').trim();
     if (!t) return 'empty';
     if (/^data:image\/[\w.+-]+(;[\w=-]+)*,\S+$/.test(t)) return 'image';
     if (/^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE svg[^>]*>\s*)?<svg\b[\s\S]*<\/svg>$/i.test(t)) return 'svg';
+    // chemfig code whose TikZ is only in arguments (\chemmove{\draw …}, a bond's [, , , , decoration=…{\fill …}]): the block
+    // (a \tikzset before it too: the block reads the styles its code names)
+    if (PICTURE.test(t) && blockOf(t) === 'chemfig' && !PICTURE.test(outsideGroups(t).replace(/\\tikzset(?![A-Za-z])/g, ''))) return 'block';
     if (PICTURE.test(t)) return 'tex';
     if (blockOf(t)) return 'block';
     if (/^(\$\$?)[\s\S]+\1$|^\\\[[\s\S]+\\\]$|^\\\([\s\S]+\\\)$/.test(t) || /^\\begin\{(equation|align|gather|multline)\*?\}/.test(t)) return 'math';

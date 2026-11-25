@@ -1,5 +1,7 @@
 import { runtime as TD } from '../runtime';
-// Plots (2D + 3D, exported as pgfplots) and pie charts (exported as plain TikZ).
+import { pgfPieSvg, pgfPieSamples, pgfPieTikz } from './pgfpie';
+import { annotShapes, shapesSvg } from './pgfplots-annot';
+// Plots (2D + 3D, exported as pgfplots) and pie charts (exported as plain TikZ, or as pgf-pie's \pie: src/domain/pgfpie.ts).
 const T = TD.TYPES;
 const { r2, esc } = TD.util;
 const PX = TD.PX_PER_CM, K = TD.PT_PER_PX;
@@ -178,6 +180,8 @@ function axisTicks(s: any, a: any, min: any, max: any, lenPx: any, n: any) {
   return s.pgfAuto ? pgfTicks(min, max, lenPx * K) : ticks(min, max, n);
 }
 const tickTex = (v: any) => `$${+v.toPrecision(6)}$`;
+// a tick's label: the number, or the symbol at that place (pgfplots' symbolic x coords)
+const tickLabel = (s: any, a: string, v: any) => { const L = s[a + 'sym']; return L ? (Number.isInteger(+(+v).toFixed(9)) ? L[Math.round(v)] ?? '' : '') : tickTex(v); };
 
 const CMAPS: Record<string, any> = {
   hot: [[0, 0, 255], [255, 255, 0], [255, 165, 0], [255, 0, 0]],
@@ -267,6 +271,7 @@ function domainOf(ser: any, k: any) {
 function evalSeriesRaw(ser: any) {
   const k = ser.kind;
   const N = Math.max(2, Math.min(k === 'heatmap' || k === 'contour' ? 120 : 400, Math.round(ser.samples || 25)));
+  if (k === 'fill') return {}; // pgfplots' fill between: drawn from the paths it names (fillBetween)
   if (k === 'scatter3d') return { pts3: parseData(ser.data, 3) };
   if (k === 'vectors') { // "x y" = from the origin, "x y u v" = from (x, y)
     const vecs = [];
@@ -498,9 +503,12 @@ function limits(s: any) {
     const lo = Math.floor(r[0] / g + 1e-9) * g, hi = Math.ceil(r[1] / g - 1e-9) * g;
     return [r[0] - lo < near ? +lo.toPrecision(12) : r[0], hi - r[1] < near ? +hi.toPrecision(12) : r[1]];
   };
-  x = round(fix(x)); y = round(fix(y)); z = round(fix(z));
   const pick = (src: any, auto: any) => { const v = String(src ?? '').trim() === '' ? NaN : num(src, NaN); return isFinite(v) ? v : auto; };
-  const L: Record<string, any> = {
+  // pgfplots with no data and a limit not given: the axis is cleared to [0,1] × [0,1] with automatic ticks, and what
+  // was drawn in it goes (pgfplots.code.tex, \pgfplots@handle@invalid@range)
+  const cleared = s.pgfAuto && !s.pgfUnread && s.dim !== 3 && ['x', 'y'].some((a) => { const r = a === 'x' ? x : y; return (!isFinite(r[0]) && !isFinite(pick(s[a + 'min'], NaN))) || (!isFinite(r[1]) && !isFinite(pick(s[a + 'max'], NaN))); });
+  x = round(fix(x)); y = round(fix(y)); z = round(fix(z));
+  const L: Record<string, any> = cleared ? { xmin: 0, xmax: 1, ymin: 0, ymax: 1, zmin: z[0], zmax: z[1], cleared } : {
     xmin: pick(s.xmin, x[0]), xmax: pick(s.xmax, x[1]), ymin: pick(s.ymin, y[0]), ymax: pick(s.ymax, y[1]),
     zmin: pick(s.zmin, z[0]), zmax: pick(s.zmax, z[1]),
   };
@@ -597,6 +605,44 @@ function colorbarSvg(s: any, L: any, ctx: any, right = s.x + s.w + 2) {
 }
 
 // =====================================================================
+// pgfplots' fill between (pgflibraryfillbetween.code.tex): the region between two named paths, [x, y] in axis units
+// =====================================================================
+// each path soft-clipped to soft clip={domain=a:b} (x) / domain y (y), then the first followed by the second, the
+// second reversed when both run the same way (reverse=auto: each path's way from its first segment, before clipping:
+// + when x grows, or x stays and y grows)
+function fillBetween(s: any, L: any, ser: any) {
+  const path = (ref: any) => {
+    if (Array.isArray(ref)) return ref;
+    const i = s.series.findIndex((q: any) => q.kind !== 'fill' && q.namePath === ref);
+    const r = i >= 0 ? L.ev[i] : null;
+    return r && !r.error && r.pts ? r.pts.filter((p: any) => isFinite(p[0]) && isFinite(p[1])) : null;
+  };
+  const A = path(ser.of?.[0]), B = path(ser.of?.[1]);
+  if (!A || !B || A.length < 2 || B.length < 2) return null;
+  const way = (P: any) => (P[0][0] < P[1][0] || (P[0][0] === P[1][0] && P[0][1] < P[1][1]) ? '+' : '-');
+  const rev = ser.reverse === 'true' || (ser.reverse !== 'false' && way(A) === way(B));
+  const clip = (P: any) => {
+    let out = P;
+    for (const [k, r] of [[0, ser.clip], [1, ser.clipY]] as [number, any][]) {
+      if (!r) continue;
+      const [lo, hi] = [Math.min(r[0], r[1]), Math.max(r[0], r[1])], inn = (p: any) => p[k] >= lo && p[k] <= hi, q: any[] = [];
+      for (let j = 0; j < out.length; j++) {
+        const p = out[j], o = out[j - 1];
+        if (o && inn(p) !== inn(o) || (o && !inn(p) && !inn(o) && (Math.min(p[k], o[k]) < lo && Math.max(p[k], o[k]) > hi))) {
+          // where the segment crosses the bounds
+          for (const b of (p[k] > o[k] ? [lo, hi] : [hi, lo])) if ((b - o[k]) * (b - p[k]) < 0) { const t = (b - o[k]) / (p[k] - o[k]); q.push([o[0] + t * (p[0] - o[0]), o[1] + t * (p[1] - o[1])]); }
+        }
+        if (inn(p)) q.push(p);
+      }
+      out = q;
+    }
+    return out;
+  };
+  const a = clip(A), b = clip(B);
+  return [...a, ...(rev ? [...b].reverse() : b)];
+}
+
+// =====================================================================
 // 2D rendering
 // =====================================================================
 // arrow from (x1,y1) to (x2,y2) in px; headsOnly draws just the head pointing that way
@@ -612,7 +658,12 @@ function render2d(s: any, ctx: any) {
   const L = limits(s);
   const mx = (v: any) => s.x + ((v - L.xmin) / (L.xmax - L.xmin)) * s.w;
   const my = (v: any) => s.y + s.h - ((v - L.ymin) / (L.ymax - L.ymin)) * s.h;
-  const xt = axisTicks(s, 'x', L.xmin, L.xmax, s.w, Math.max(2, Math.round(s.w / 70))), yt = axisTicks(s, 'y', L.ymin, L.ymax, s.h, Math.max(2, Math.round(s.h / 50)));
+  // a hidden axis has no ticks (so no grid, tick labels or label); a cleared one has automatic ticks
+  const sT = L.cleared ? { ...s, xtick: undefined, ytick: undefined } : s;
+  const xt = s.hideX ? [] : axisTicks(sT, 'x', L.xmin, L.xmax, s.w, Math.max(2, Math.round(s.w / 70))), yt = s.hideY ? [] : axisTicks(sT, 'y', L.ymin, L.ymax, s.h, Math.max(2, Math.round(s.h / 50)));
+  // TikZ drawn in the axis (src/domain/pgfplots-annot.ts), in order with the plots, cut at the box unless clip=false
+  const annot = s.annot?.length && !L.cleared ? annotShapes(s, L).groups : [];
+  const annotAt = (i: number, last = false) => annot.filter((g: any) => (last ? g.at >= i : g.at === i)).map((g: any) => shapesSvg(g.shapes, ctx)).join('');
   const cid = 'clip-' + s.id + (ctx.export ? 'x' : '');
   let back = '', body = '', front = '', free = '';
   if (s.grid) {
@@ -621,9 +672,19 @@ function render2d(s: any, ctx: any) {
   }
   const entries: any[] = [];
   const bars = s.series.filter((q: any) => q.kind === 'bar');
+  const unclipped = s.annotClip === false;
+  // fill between: on pgfplots' pre main layer, under the plots
+  for (const ser of s.series) if (ser.kind === 'fill') {
+    const P = fillBetween(s, L, ser);
+    if (!P || P.length < 3) continue;
+    const d = P.map((p: any, k: any) => (k ? 'L' : 'M') + r2(mx(p[0])) + ',' + r2(my(p[1]))).join('') + 'Z';
+    const st = ser.stroke ? `stroke="${TD.css(ser.color)}" stroke-width="${ser.width ?? 1}"` : 'stroke="none"';
+    body += `<path d="${d}" fill="${TD.css(ser.fill || ser.color)}"${ser.fillOpacity != null ? ` fill-opacity="${ser.fillOpacity}"` : ''}${(ser.opacity ?? 1) < 1 ? ` opacity="${ser.opacity}"` : ''} ${st}/>`;
+  }
   s.series.forEach((ser: any, i: any) => {
+    if (annot.length) { const a = annotAt(i); if (unclipped) free += a; else body += a; }
     const r = L.ev[i];
-    if (r.error) return;
+    if (r.error || ser.kind === 'fill') return;
     const col = TD.css(ser.color), w = ser.width ?? 1, op = ser.opacity ?? 1;
     let g = '';
     if (ser.kind === 'heatmap') {
@@ -674,7 +735,7 @@ function render2d(s: any, ctx: any) {
         const a = `M${r2(mx(good[0][0]))},${y0}` + good.map((p: any) => 'L' + r2(mx(p[0])) + ',' + r2(my(p[1]))).join('') + `L${r2(mx(good[good.length - 1][0]))},${y0}Z`;
         g += `<path d="${a}" fill="${ser.fill ? TD.css(ser.fill) : col}" fill-opacity="${ser.fillOpacity ?? (ser.fill ? 1 : 0.3)}"/>`;
       }
-      if (ser.kind !== 'scatter') g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" ${dashOf(ser.dash, w)}/>`;
+      if (ser.kind !== 'scatter' && !ser.drawNone) g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" ${dashOf(ser.dash, w)}/>`;
       const mk = ser.kind === 'scatter' ? (ser.mark === 'none' ? '*' : ser.mark) : ser.mark;
       // pgfplots leaves markers unclipped (clip marker paths=false): one on the axis edge is drawn whole
       const ex = (L.xmax - L.xmin) * 1e-6, ey = (L.ymax - L.ymin) * 1e-6;
@@ -686,9 +747,10 @@ function render2d(s: any, ctx: any) {
     body += op < 1 ? `<g opacity="${op}">${g}</g>` : g;
     if (ser.legend) entries.push({ text: ser.legend, color: ser.color, fill: ser.fill, kind: ser.kind, width: w, dash: ser.dash, mark: ser.mark });
   });
+  if (annot.length) { const a = annotAt(s.series.length, true); if (unclipped) free += a; else body += a; }
 
   // axes
-  const aw = r2(AXIS_W);
+  const aw = r2(s.lineWidth ?? AXIS_W);
   const tk = 4;
   const lines = s.axisLines || 'box';
   let xAxisY = s.y + s.h, yAxisX = s.x;
@@ -696,10 +758,14 @@ function render2d(s: any, ctx: any) {
     xAxisY = my(Math.max(L.ymin, Math.min(L.ymax, 0)));
     yAxisX = mx(Math.max(L.xmin, Math.min(L.xmax, 0)));
   }
-  if (lines === 'box') front += `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="none" stroke="#000" stroke-width="${aw}"/>`;
-  else {
-    const ah = TD.TYPES.line.svg({ x1: s.x, y1: xAxisY, x2: s.x + s.w, y2: xAxisY, stroke: '#000000', width: AXIS_W, dash: 'solid', startTip: 'none', endTip: 'stealth', opacity: 1 }, { export: true });
-    const av = TD.TYPES.line.svg({ x1: yAxisX, y1: s.y + s.h, x2: yAxisX, y2: s.y, stroke: '#000000', width: AXIS_W, dash: 'solid', startTip: 'none', endTip: 'stealth', opacity: 1 }, { export: true });
+  if (s.axisLineNone) { /* axis line style={draw=none} */ } else if (lines === 'box') {
+    // the box's top and bottom are the x axis', its sides the y axis'
+    if (!s.hideX && !s.hideY) front += `<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="none" stroke="#000" stroke-width="${aw}"/>`;
+    else if (!s.hideX) front += `<path d="M${s.x},${s.y}h${s.w}M${s.x},${s.y + s.h}h${s.w}" fill="none" stroke="#000" stroke-width="${aw}"/>`;
+    else if (!s.hideY) front += `<path d="M${s.x},${s.y}v${s.h}M${s.x + s.w},${s.y}v${s.h}" fill="none" stroke="#000" stroke-width="${aw}"/>`;
+  } else {
+    const ah = s.hideX ? '' : TD.TYPES.line.svg({ x1: s.x, y1: xAxisY, x2: s.x + s.w, y2: xAxisY, stroke: '#000000', width: s.lineWidth ?? AXIS_W, dash: 'solid', startTip: 'none', endTip: 'stealth', opacity: 1 }, { export: true });
+    const av = s.hideY ? '' : TD.TYPES.line.svg({ x1: yAxisX, y1: s.y + s.h, x2: yAxisX, y2: s.y, stroke: '#000000', width: s.lineWidth ?? AXIS_W, dash: 'solid', startTip: 'none', endTip: 'stealth', opacity: 1 }, { export: true });
     front += ah + av;
   }
   const skip0 = lines === 'middle';
@@ -709,9 +775,9 @@ function render2d(s: any, ctx: any) {
     if (lines === 'middle' && Math.abs(v) < 1e-12) continue;
     front += `<path d="M${r2(X)},${r2(xAxisY)}v${lines === 'middle' ? -tk / 2 : -tk}${lines === 'middle' ? 'v' + tk : ''}" stroke="#000" stroke-width="${aw}"/>`;
     if (lines === 'box') front += `<path d="M${r2(X)},${s.y}v${tk}" stroke="#000" stroke-width="${aw}"/>`;
-    if (!(skip0 && Math.abs(v) < 1e-12)) {
-      front += txt(tickTex(v), X, xAxisY + (lines === 'middle' ? 7.5 : 2), ctx, NORMAL, 'north');
-      right = Math.max(right, X + TD.textBox(tickTex(v), NORMAL).w / 2 + 4); // with the node's inner sep
+    if (!(skip0 && Math.abs(v) < 1e-12) && !s.xticklabelsNone) {
+      front += txt(tickLabel(s, 'x', v), X, xAxisY + (lines === 'middle' ? 7.5 : 2), ctx, NORMAL, 'north');
+      right = Math.max(right, X + TD.textBox(tickLabel(s, 'x', v), NORMAL).w / 2 + 4); // with the node's inner sep
     }
   }
   let maxYW = 0;
@@ -720,20 +786,31 @@ function render2d(s: any, ctx: any) {
     if (lines === 'middle' && Math.abs(v) < 1e-12) continue;
     front += `<path d="M${r2(yAxisX)},${r2(Y)}h${lines === 'middle' ? -tk / 2 : tk}${lines === 'middle' ? 'h' + tk : ''}" stroke="#000" stroke-width="${aw}"/>`;
     if (lines === 'box') front += `<path d="M${s.x + s.w},${r2(Y)}h${-tk}" stroke="#000" stroke-width="${aw}"/>`;
-    maxYW = Math.max(maxYW, TD.textBox(tickTex(v), NORMAL).w);
-    front += txt(tickTex(v), yAxisX - (lines === 'middle' ? 8 : 4), Y + 0.4, ctx, NORMAL, 'east');
+    if (s.yticklabelsNone) continue;
+    maxYW = Math.max(maxYW, TD.textBox(tickLabel(s, 'y', v), NORMAL).w);
+    front += txt(tickLabel(s, 'y', v), yAxisX - (lines === 'middle' ? 8 : 4), Y + 0.4, ctx, NORMAL, 'east');
   }
   let titleY = s.y - 6;
-  if (lines === 'middle') {
-    front += txt(s.xlabel, s.x + s.w + 4, xAxisY, ctx, NORMAL, 'west');
-    front += txt(s.ylabel, yAxisX, s.y - 1.2, ctx, NORMAL, 'south');
-    if (s.xlabel) right = Math.max(right, s.x + s.w + 4 + TD.textBox(s.xlabel, NORMAL).w + 4);
+  const xlabel = s.hideX ? '' : s.xlabel, ylabel = s.hideY ? '' : s.ylabel;
+  const IS = 10 / 3 / K; // a node's inner sep (.3333em)
+  if (lines === 'middle' && s.labelCompat) {
+    // before compat 1.8: x label at the right of the origin, anchor south east; y label above it, anchor north west
+    front += txt(xlabel, s.x + s.w - IS, xAxisY - IS, ctx, NORMAL, 'south east');
+    front += txt(ylabel, yAxisX + IS, s.y + IS, ctx, NORMAL, 'north west');
+  } else if (s.labelCompat === 'pre1.3') {
+    // before compat 1.3: xlabel absolute (at (0.5,0), below, yshift=-15pt), ylabel absolute (at (0,0.5), xshift=-35pt, rotate=90)
+    front += txt(xlabel, s.x + s.w / 2, s.y + s.h + 15 / K + IS, ctx, NORMAL, 'north');
+    if (ylabel) { const cx = s.x - 35 / K, cy = s.y + s.h / 2; front += `<g transform="rotate(-90 ${r2(cx)} ${r2(cy)})">${txt(ylabel, cx, cy, ctx, NORMAL)}</g>`; }
+  } else if (lines === 'middle') {
+    front += txt(xlabel, s.x + s.w + 4, xAxisY, ctx, NORMAL, 'west');
+    front += txt(ylabel, yAxisX, s.y - 1.2, ctx, NORMAL, 'south');
+    if (xlabel) right = Math.max(right, s.x + s.w + 4 + TD.textBox(xlabel, NORMAL).w + 4);
     // the y label sits on top of the axis, where the title goes: the title moves up over it (as the export says)
-    if (s.ylabel) titleY = Math.min(titleY, s.y - 1.2 - TD.textBox(s.ylabel, NORMAL).h);
+    if (ylabel) titleY = Math.min(titleY, s.y - 1.2 - TD.textBox(ylabel, NORMAL).h);
   } else {
     const th = TD.textBox('$0$', NORMAL).h;
-    front += txt(s.xlabel, s.x + s.w / 2, s.y + s.h + 4 + th + 1.4, ctx, NORMAL, 'north');
-    if (s.ylabel) {
+    front += txt(xlabel, s.x + s.w / 2, s.y + s.h + 4 + th + 1.4, ctx, NORMAL, 'north');
+    if (ylabel) {
       const b = TD.textBox(s.ylabel, NORMAL);
       const cx = s.x - 4 - maxYW - 6 - b.h / 2, cy = s.y + s.h / 2;
       front += `<g transform="rotate(-90 ${r2(cx)} ${r2(cy)})">${txt(s.ylabel, cx, cy, ctx, NORMAL)}</g>`;
@@ -769,13 +846,14 @@ function proj3(s: any, L: any) {
 function render3d(s: any, ctx: any) {
   const L = limits(s);
   const { P, Pn, dv } = proj3(s, L);
-  const aw = r2(AXIS_W);
+  const aw = r2(s.lineWidth ?? AXIS_W);
   const ln = (a: any, b: any, col = '#000', w = aw) => `<path d="M${r2(a.x)},${r2(a.y)}L${r2(b.x)},${r2(b.y)}" stroke="${col}" stroke-width="${w}"/>`;
   let back = '', body = '', front = '';
   // back faces: for each axis choose the side facing away from the viewer
   const bu = dv[0] > 0 ? 0 : 1, bw = dv[1] > 0 ? 0 : 1, bt = 0;
   const axLen = (a: any, b: any) => Math.hypot(a.x - b.x, a.y - b.y);
-  const xt = axisTicks(s, 'x', L.xmin, L.xmax, axLen(Pn(0, 0, 0), Pn(1, 0, 0)), 5), yt = axisTicks(s, 'y', L.ymin, L.ymax, axLen(Pn(0, 0, 0), Pn(0, 1, 0)), 5), zt = axisTicks(s, 'z', L.zmin, L.zmax, axLen(Pn(0, 0, 0), Pn(0, 0, 1)), 5);
+  // a hidden axis: no edges, ticks, grid, tick labels or label of its own
+  const xt = s.hideX ? [] : axisTicks(s, 'x', L.xmin, L.xmax, axLen(Pn(0, 0, 0), Pn(1, 0, 0)), 5), yt = s.hideY ? [] : axisTicks(s, 'y', L.ymin, L.ymax, axLen(Pn(0, 0, 0), Pn(0, 1, 0)), 5), zt = s.hideZ ? [] : axisTicks(s, 'z', L.zmin, L.zmax, axLen(Pn(0, 0, 0), Pn(0, 0, 1)), 5);
   const nu = (v: any) => (v - L.xmin) / (L.xmax - L.xmin), nw = (v: any) => (v - L.ymin) / (L.ymax - L.ymin), nt = (v: any) => (v - L.zmin) / (L.zmax - L.zmin);
   if (s.grid) {
     const gc = '#bfbfbf', gw = r2(0.5 / K); // pgfplots' major grid: gray!50
@@ -791,6 +869,7 @@ function render3d(s: any, ctx: any) {
   for (const [a, b] of edges) {
     const onBack = (a[0] === bu && b[0] === bu) || (a[1] === bw && b[1] === bw) || (a[2] === bt && b[2] === bt);
     if (!onBack) continue;
+    if ((a[0] !== b[0] && s.hideX) || (a[1] !== b[1] && s.hideY) || (a[2] !== b[2] && s.hideZ)) continue;
     // pgfplots draws the hidden edges (the floor's back edges, the far vertical) grey, the visible frame black
     const floorBack = a[2] === 0 && b[2] === 0 && ((a[1] === b[1] && a[1] === bw) || (a[0] === b[0] && a[0] === bu));
     const zEdge = a[0] === b[0] && a[1] === b[1];
@@ -869,12 +948,12 @@ function render3d(s: any, ctx: any) {
     return o;
   };
   const fw = 1 - bw, fu = 1 - bu;
-  front += lab(Pn(0, fw, 0), Pn(1, fw, 0), xt, nu, (n: any) => Pn(n, fw, 0), s.xlabel, [0, -2], [-3.2, 3.4]); // shifts measured against pgfplots (view 25/30)
-  front += lab(Pn(fu, 0, 0), Pn(fu, 1, 0), yt, nw, (n: any) => Pn(fu, n, 0), s.ylabel, [-2.1, 3.1], [6, 16]);
+  front += lab(Pn(0, fw, 0), Pn(1, fw, 0), xt, nu, (n: any) => Pn(n, fw, 0), s.hideX ? '' : s.xlabel, [0, -2], [-3.2, 3.4]); // shifts measured against pgfplots (view 25/30)
+  front += lab(Pn(fu, 0, 0), Pn(fu, 1, 0), yt, nw, (n: any) => Pn(fu, n, 0), s.hideY ? '' : s.ylabel, [-2.1, 3.1], [6, 16]);
   // z axis: the vertical edge furthest left on screen
   let best: any = null;
   for (const u of [0, 1]) for (const w of [0, 1]) { const p = Pn(u, w, 0); if (!best || p.x < best.p.x) best = { u, w, p }; }
-  front += lab(Pn(best.u, best.w, 0), Pn(best.u, best.w, 1), zt, nt, (n: any) => Pn(best.u, best.w, n), s.zlabel, [0, 0], [-1.6, 2.4]);
+  front += lab(Pn(best.u, best.w, 0), Pn(best.u, best.w, 1), zt, nt, (n: any) => Pn(best.u, best.w, n), s.hideZ ? '' : s.zlabel, [0, 0], [-1.6, 2.4]);
   front += txt(s.title, s.x + s.w / 2, s.y - 6, ctx, NORMAL, 'south');
   front += legendSvg(s, ctx, entries);
   if (s.colorbar) front += colorbarSvg(s, L, ctx);
@@ -887,9 +966,11 @@ function render3d(s: any, ctx: any) {
 // pgfplots export
 // =====================================================================
 const texArg = (t: any) => `{${TD.tikzText(t)}}`;
-function plotTikz(s: any, X: any) {
+function plotTikz(s0: any, X: any) {
   X.pkgs.add('pgfplots');
-  const L = limits(s);
+  const L = limits(s0);
+  // a cleared axis (no data) has automatic ticks, written as such
+  const s = L.cleared ? { ...s0, xtick: undefined, ytick: undefined } : s0;
   const o = [
     // explicit cm: a bare (x,y) here is read in the axis' own units, not the picture's
     `at={(${f(s.x / PX)}cm,${f(-(s.y + s.h) / PX)}cm)}`, 'anchor=south west', 'scale only axis',
@@ -912,7 +993,19 @@ function plotTikz(s: any, X: any) {
       if (s.ylabel && s.title) o.push('every axis title shift=0pt', 'title style={at={(ylabel.north -| current axis.north)}}');
     }
   }
+  // a line width for the whole axis: its lines, and drawing in it that sets none (its plots each say theirs)
+  if (s.lineWidth != null) o.push(`line width=${X.pt(s.lineWidth)}`);
   if (s.grid) o.push('grid=major');
+  for (const a of ['x', 'y', ...(s.dim === 3 ? ['z'] : [])]) if (s['hide' + a.toUpperCase()]) o.push(`hide ${a} axis`);
+  if (s.axisLineNone) o.push('axis line style={draw=none}');
+  for (const a of ['x', 'y']) if (s[a + 'ticklabelsNone']) o.push(`${a}ticklabels={}`);
+  // symbolic coords: the symbols as the labels of the ticks at their places
+  if (s.dim !== 3) for (const a of ['x', 'y']) if (s[a + 'sym'] && !s[a + 'ticklabelsNone']) {
+    const t = axisTicks(s, a, L[a + 'min'], L[a + 'max'], a === 'x' ? s.w : s.h, a === 'x' ? Math.max(2, Math.round(s.w / 70)) : Math.max(2, Math.round(s.h / 50)));
+    o.push(`${a}ticklabels={${t.map((v: any) => `{${tickLabel(s, a, v)}}`).join(',')}}`);
+  }
+  if (s.name) o.push(`name={${s.name}}`);
+  if (s.annot?.length && s.annotClip === false) o.push('clip=false');
   if (s.title) o.push(`title=${texArg(s.title)}`);
   if (s.xlabel) o.push(`xlabel=${texArg(s.xlabel)}`);
   if (s.ylabel) o.push(`ylabel=${texArg(s.ylabel)}`);
@@ -926,7 +1019,19 @@ function plotTikz(s: any, X: any) {
   }
   const lines = [`\\begin{axis}[`, ...o.map((x, i) => '  ' + x + (i < o.length - 1 ? ',' : '')), ']'];
   const bars = s.series.filter((q: any) => q.kind === 'bar');
+  // fill between, first (pgfplots draws it under the plots): the region as a filled polygon
+  for (const ser of s.series) if (ser.kind === 'fill') {
+    const P = fillBetween(s, L, ser);
+    if (!P || P.length < 3) continue;
+    const po = [`fill=${X.col(ser.fill || ser.color)}`, ser.stroke ? `draw=${X.col(ser.color)}, line width=${X.pt(ser.width ?? 1)}` : 'draw=none', 'forget plot'];
+    if (ser.fillOpacity != null) po.push(`fill opacity=${f(ser.fillOpacity)}`);
+    if ((ser.opacity ?? 1) < 1) po.push(`opacity=${f(ser.opacity)}`);
+    lines.push(`  \\addplot[${po.join(', ')}] coordinates {${P.map((p: any) => `(${f4(p[0])},${f4(p[1])})`).join(' ')}} --cycle;`);
+  }
+  // TikZ in the axis, as written, in its place among the plots
+  const annot = (i: number, last = false) => { for (const a of s.annot || []) if (last ? a.at >= i : a.at === i) lines.push(...String(a.code).split('\n').map((l) => '  ' + l.trim())); };
   s.series.forEach((ser: any, i: any) => {
+    annot(i);
     const r = L.ev[i];
     if (r.error) return;
     const col = X.col(ser.color), w = ser.width ?? 1;
@@ -956,6 +1061,7 @@ function plotTikz(s: any, X: any) {
     switch (ser.kind) {
       case 'line': case 'scatter': case 'area': {
         style();
+        if (ser.drawNone) po.push('draw=none');
         if (ser.kind === 'scatter') po.push('only marks', mark(ser.mark === 'none' ? '*' : ser.mark));
         else po.push(mark(ser.mark));
         if (ser.kind === 'area') po.push(`fill=${ser.fill ? X.col(ser.fill) : col}`, `fill opacity=${f(ser.fillOpacity ?? (ser.fill ? 1 : 0.3))}`);
@@ -1047,6 +1153,7 @@ function plotTikz(s: any, X: any) {
       if (legend) lines.push(`  \\addlegendentry${texArg(ser.legend)}`);
     }
   });
+  annot(s.series.length, true);
   lines.push('\\end{axis}');
   return lines.join('\n');
 }
@@ -1059,6 +1166,8 @@ const newSeries = (o: any) => ({
   color: SERIES_COLORS[0], width: 1, dash: 'solid', mark: 'none', legend: '', levels: 8, barWidth: 12, opacity: 1, ...o,
 });
 TD.newSeries = newSeries;
+TD.plotLimits = limits; // the axis' limits as drawn (pgfplots' enlargement, axis equal …)
+TD.fillBetween = fillBetween;
 const PRESETS: Record<string, any> = {
   function: { w: 280, h: 200, axisLines: 'middle', xlabel: '$x$', ylabel: '$y$', series: [newSeries({ expr: 'sin(x)', domain: ['-2*pi', '2*pi'], samples: 100 }), newSeries({ expr: 'cos(x)', domain: ['-2*pi', '2*pi'], samples: 100, color: SERIES_COLORS[1], dash: 'dashed' })] },
   line: { w: 280, h: 200, grid: true, xlabel: '$t$ (s)', ylabel: '$v$ (m/s)', series: [newSeries({ kind: 'line', source: 'data', mark: '*', data: '0 0\n1 1.8\n2 3.1\n3 3.9\n4 4.6\n5 4.9', legend: 'measured' })] },
@@ -1154,6 +1263,7 @@ T.pie = {
   setHandle(s: any, k: any, q: any) { s.r = Math.max(10, Math.hypot(q.x - s.cx, q.y - s.cy)); },
   anchors: (s: any) => [{ x: s.cx, y: s.cy }],
   samples: (s: any) => {
+    if (s.pgf) return pgfPieSamples(s);
     const pts = [{ x: s.cx - s.r, y: s.cy - s.r }, { x: s.cx + s.r, y: s.cy + s.r }];
     if (s.labelPos === 'outside') for (const r of pieSlices(s)) {
       const lab = pieLabel(s, r);
@@ -1162,6 +1272,7 @@ T.pie = {
     return pts;
   },
   svg(s: any, ctx: any) {
+    if (s.pgf) return pgfPieSvg(s, ctx) + (ctx.export ? '' : `<circle class="hitfill" cx="${s.cx}" cy="${s.cy}" r="${s.r}"/>`);
     const rows = pieSlices(s);
     const P = (a: any, rr: any) => ({ x: s.cx + rr * Math.cos((a * Math.PI) / 180), y: s.cy - rr * Math.sin((a * Math.PI) / 180) });
     let out = '';
@@ -1186,6 +1297,7 @@ T.pie = {
     return out;
   },
   tikz(s: any, X: any) {
+    if (s.pgf) return pgfPieTikz(s, X);
     const rows = pieSlices(s), out = [];
     const pc = (a: any, rr: any) => X.c(s.cx + rr * Math.cos((a * Math.PI) / 180), s.cy - rr * Math.sin((a * Math.PI) / 180));
     for (const r of rows) {

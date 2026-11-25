@@ -23,6 +23,7 @@ import { createEditorState, SNAP_MODES, type SnapMode } from '../core/state';
 import { downloadBlob, downloadImage, createExportWriter } from '../platform/download';
 import { readPicture, svgFilePdf, texBundle, texFiles, type Picture } from '../platform/images';
 import { texEngine, type TexSupport } from '../platform/tex-engine';
+import { keptPreview } from './kept-preview';
 import { docFont, hasThai, type TexEngine } from '../core/doc-fonts';
 import { svgVectorPdf } from '../platform/svgpdf';
 import { createBrowserStore } from '../platform/browser-store';
@@ -32,6 +33,7 @@ import type { HistoryStep } from '../core/contracts';
 import { arrayCopies, createRecovery, type CopyStore, RECOVERY_DEFAULTS, RECOVERY_EVERY, RECOVERY_KEEP, RECOVERY_KEY, RECOVERY_QUICK, type RecoveryCopy, type RecoverySettings } from '../core/recovery';
 import { createDocumentFactory } from '../core/document';
 import { keysFrom, link, markOverrides, nameProblem, reset as resetStyle, styleable, stylesOf, sync as syncStyles, unlink, type NamedStyle } from '../core/named-styles';
+import { mergeMacros, parseMacros } from '../core/doc-macros';
 import { conformShape } from '../core/conform';
 import { createDocumentHistory, stamp } from '../core/history';
 import MainProperties from '../ui/MainProperties.svelte';
@@ -67,17 +69,22 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const { TYPES, util } = TD;
   // the version link's tip follows the interface language, as the rest of the shell does (newer: a release to reload into)
   let newerVersion = '';
+  // a release is X.Y.Z; any other build (the Preview) is versioned by its commit's short hash, stamped in by CI
+  const release = /^\d+\.\d+\.\d+$/.test(TD.VERSION);
+  const shown = (ver: string) => (/^\d+\.\d+\.\d+$/.test(ver) ? 'v' : '') + ver;
   const versionTip = () => {
     const v = document.getElementById('appVer');
     if (v) v.title = newerVersion ? uiText('app.version.update', 'DiagramTeX {version} is out (this is {current}): click to reload', { version: newerVersion, current: TD.VERSION })
       : uiText('app.version.title', 'DiagramTeX {version}: this release on GitHub', { version: TD.VERSION });
   };
-  { const v = document.getElementById('appVer'); if (v) { v.textContent = 'v' + TD.VERSION; versionTip(); (v as HTMLAnchorElement).href = `https://github.com/vtneil/diagramtex/releases/tag/v${TD.VERSION}`; } }
+  { const v = document.getElementById('appVer'); if (v) { v.textContent = shown(TD.VERSION); versionTip(); (v as HTMLAnchorElement).href = release ? `https://github.com/vtneil/diagramtex/releases/tag/v${TD.VERSION}` : `https://github.com/vtneil/diagramtex/commit/${TD.VERSION}`; } }
   onLocale(versionTip);
   // a newer release on this host (dist/version.json, written by the build): a marker dot by the version, and
   // a click reloads into it. Asked once per load, past every cache; no answer (dev, offline) changes nothing.
+  // A commit build has no order to compare: any other version there is a newer deploy.
   {
-    const newer = (a: any, b: any) => { const p = (x: any) => String(x).split('.').map((n) => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+    const semverNewer = (a: any, b: any) => { const p = (x: any) => String(x).split('.').map((n) => parseInt(n, 10) || 0); const x = p(a), y = p(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+    const newer = (a: any, b: any) => (release ? semverNewer(a, b) : String(a) !== String(b));
     fetch('version.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
       const v = document.getElementById('appVer'), n = j && j.version;
       if (!v || !n || !newer(n, TD.VERSION)) return;
@@ -214,6 +221,49 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   // is copied onto every diagram's linked shapes at once, so the table and the shapes never disagree.
   const namedStyles = () => stylesOf(state.doc.page);
   TD.namedStyles = namedStyles; // for the export (src/domain/shapes.ts)
+  // ---------------- the file's macros (src/core/doc-macros.ts) ----------------
+  // \newcommand-style definitions kept in the file's settings (page.macros): formulas are drawn with them (render()
+  // hands them to the maths engine) and every export writes them into the preamble. An import brings its preamble's.
+  TD.docMacros = () => String(state.doc.page.macros || '');
+  /** The file's macros become `text`, as one undo step. */
+  function setMacros(text: string) {
+    const t = String(text || '').trim();
+    if (t === TD.docMacros().trim()) return;
+    const put = () => { if (t) state.doc.page.macros = t; else delete state.doc.page.macros; };
+    // the Document's page settings are one undo step of the document (src/application/docview.ts setPage)
+    if (state.mode === 'document') { put(); TD.docview?.changed?.(); TD.docview?.render(); }
+    else { begin(); put(); commit(); render(); }
+    renderProps();
+  }
+  /**
+   * An import's macro definitions (res.macros) join the file's, inside the caller's undo step; a command the file
+   * already defines keeps the file's definition.
+   */
+  function takeMacros(res: any) {
+    if (!res || !String(res.macros || '').trim()) return;
+    const m = mergeMacros(TD.docMacros(), res.macros);
+    if (m.added.length) state.doc.page.macros = m.text;
+    if (m.kept.length) showHint(uiText('hint.macros.kept', 'This file already defines {names}: it keeps its own definition.', { names: m.kept.join(', ') }), 4000);
+  }
+  async function editMacros() {
+    const describe = (v: string) => {
+      const p = parseMacros(v), n = p.statements.length;
+      const why: Record<string, string> = {
+        optional: uiText('macros.why.optional', 'its optional argument is always its default here'),
+        delimited: uiText('macros.why.delimited', 'its arguments are delimited, which formulas here can’t read'),
+        at: uiText('macros.why.at', 'a name with @ needs \\makeatletter, so it isn’t used here'),
+        unreadable: uiText('macros.why.unreadable', 'this definition couldn’t be read'),
+      };
+      const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+      const head = n === 1 ? uiText('macros.count.one', '1 macro') : uiText('macros.count.many', '{n} macros', { n });
+      return `<p>${esc(head)}</p>` + p.problems.map((q) => `<p><code>${esc(q.name)}</code>: ${esc(why[q.reason])}</p>`).join('');
+    };
+    const v = await TD.prompt(uiText('macros.title', 'Macros'), TD.docMacros(), {
+      multiline: true, ok: uiText('ui.save', 'Save'), placeholder: '\\newcommand{\\R}{\\mathbb{R}}', preview: describe, notes: true,
+      message: uiText('macros.help', 'This file’s own commands, as a preamble defines them (\\newcommand, \\DeclareMathOperator, \\def). Formulas are drawn with them, and every export writes them into its preamble.'),
+    });
+    if (v != null) setMacros(String(v));
+  }
   const styleOwners = () => (state.doc.kind === 'page' ? [state.doc.sheet] : state.doc.blocks.filter((b: any) => b.type === 'diagram'));
   function syncNamed() { syncStyles(styleOwners(), namedStyles()); }
   function setStyles(list: NamedStyle[]) { if (list.length) state.doc.page.styles = list; else delete state.doc.page.styles; syncNamed(); }
@@ -1818,6 +1868,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
 
   // ---------------- rendering ----------------
   function render(): void {
+    // the open file's macros, before anything is drawn (a change clears the drawn formulas: src/domain/mathengine.ts)
+    TD.math.useMacros(state.doc.page.macros);
     if (!TD.math.previewing) return TD.math.preview(render);
     if (!viewGeometry) return withViewGeometry(render);
     if (formatPreview && !renderScene) {
@@ -3335,6 +3387,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     { key: 'valign', label: message('prop.valign', 'Vertical'), type: 'valign' },
     { key: 'color', label: message('prop.color', 'Text colour'), type: 'color' },
     { key: 'ballColor', label: message('prop.ballColor', 'Ball colour'), type: 'color' },
+    { key: 'border', label: message('prop.border', 'Border'), type: 'number', min: 0, step: 1, unit: 'px', hint: message('prop.border.hint', 'Space round the picture, like the white edge of a photo print') },
+    { key: 'borderColor', label: message('prop.borderColor', 'Border colour'), type: 'color', needs: 'border' },
     { key: 'stroke', label: message('prop.stroke', 'Stroke'), type: 'color', nullable: true },
     { key: 'fill', label: message('prop.fill', 'Fill'), type: 'color', nullable: true, fills: true },
     { key: 'width', label: message('prop.width', 'Line width'), type: 'width', min: 0.25, step: 0.25, unit: 'px' },
@@ -3376,6 +3430,9 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     { key: 'angle', label: message('prop.angle', 'Rotation'), type: 'number', step: 1, unit: '°' },
     { key: 'skew', label: message('prop.skew', 'Skew X'), type: 'number', min: -75, step: 1, unit: '°' },
     { key: 'opacity', label: message('prop.opacity', 'Opacity'), type: 'range', min: 0.05, max: 1, step: 0.05 },
+    { key: 'shadow', label: message('prop.shadow', 'Shadow'), type: 'checkbox' },
+    { key: 'shadowOffset', label: message('prop.shadowOffset', 'Shadow offset'), type: 'number', step: 1, unit: 'px', needs: 'shadow', hint: message('prop.shadowOffset.hint', 'How far right and down the shadow falls; below 0 it falls up and left') },
+    { key: 'shadowOpacity', label: message('prop.shadowOpacity', 'Shadow alpha'), type: 'range', min: 0.05, max: 1, step: 0.05, needs: 'shadow' },
   ];
   const GEOM: Record<string, any> = {
     line: [['x1', 'x'], ['y1', 'y'], ['x2', 'x'], ['y2', 'y']],
@@ -3415,7 +3472,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const MIXABLE = new Set(['color', 'width', 'number', 'select', 'size', 'tip', 'shaft', 'dash']);
   function fieldModel(p: any, v: any, labelOverride?: any, others?: any[]): StyleModel {
     const model = {
-      sliderDefault: p.type === 'range' ? (p.key === 'labelPos' ? 0.5 : p.key === 'opacity' ? 1 : symParams(selected()[0] || {})?.[p.key] ?? ({ phase: 0, duty: 50, fire: 60 } as Record<string, number>)[p.key]) : undefined,
+      sliderDefault: p.type === 'range' ? (p.key === 'labelPos' ? 0.5 : p.key === 'opacity' ? 1 : p.key === 'shadowOpacity' ? TD.SHADOW.opacity : symParams(selected()[0] || {})?.[p.key] ?? ({ phase: 0, duty: 50, fire: 60 } as Record<string, number>)[p.key]) : undefined,
       type: p.type, key: p.key, id: 'f-' + p.key, label: caption(labelOverride || p.label),
       value: p.type === 'size' && typeof v === 'number' ? 'custom' : p.type === 'number' && typeof v === 'number' ? +v.toFixed(3) : p.type === 'width' ? (typeof v === 'number' ? +v.toFixed(3) : '') : v ?? '',
       min: p.min ?? '', max: p.max ?? '', step: p.step ?? 1, unit: p.unit, hint: p.hint && caption(p.hint),
@@ -3454,13 +3511,17 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     return `<svg class="dprev sprev" viewBox="0 0 60 14">${TD.TYPES.line.svg(s, { export: true })}</svg>`;
   }
   // keys a shape has, counting the line extras older files lack
+  // rectangles and ellipses have an outline, single or double (an automaton's accepting state), not a line's shaft
+  const CLOSED_SHAFT = new Set(['rect', 'ellipse']);
   const SYM_XF = new Set(['angle', 'skew']), TICK_KEYS: Record<string, any> = { tick: 6 / TD.PT_PER_PX, ticksz: 6 / TD.PT_PER_PX };
   const symParams = (s: any) => (s.type === 'sym' && TD.SYMS[s.kind] && TD.SYMS[s.kind].params) || null;
   const hasTips = (s: any) => TD.LINEISH.has(s.type) && !(s.type === 'poly' && s.closed);
-  const hasKey = (s: any, k: any) => (!TIP_KEYS.includes(k) || hasTips(s)) && ((s.type === 'line' && (k === 'route' || (k === 'dir' && TD.routeOf(s) !== 'straight'))) || s[k] !== undefined || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (k === 'angle' && (TD.ROT_TYPES.has(s.type) || s.type === 'arc')) ||
+  const hasKey = (s: any, k: any) => (!TIP_KEYS.includes(k) || hasTips(s)) && ((s.type === 'line' && (k === 'route' || (k === 'dir' && TD.routeOf(s) !== 'straight'))) || s[k] !== undefined || (k === 'shaft' && CLOSED_SHAFT.has(s.type)) || (TD.LINEISH.has(s.type) && (k in TD.LINE_EXTRA || (k === 'bpTip' && s.type === 'poly'))) || (s.type === 'text' && (k === 'boxed' || k === 'align' || k === 'valign')) || (TD.SHADOW_KEYS.includes(k) && TD.canShadow(s)) || (s.type === 'image' && k in TD.IMAGE_FRAME) || (k === 'angle' && (TD.ROT_TYPES.has(s.type) || s.type === 'arc')) ||
     (s.type === 'sym' && (SYM_XF.has(k) || !!(symParams(s) && k in symParams(s)))) || (TD.LINEISH.has(s.type) && k in TICK_KEYS && keyVal(s, 'shaft') === 'ticks'));
   // text with no alignment set: centred lines, or left in a wrapping box
-  const keyVal = (s: any, k: any) => (s.type === 'line' && k === 'route' ? TD.routeOf(s) : s.type === 'line' && k === 'dir' ? TD.routeDir(s) : undefined) ?? s[k] ?? (k === 'hatchWidth' && symParams(s)?.hatchWidth != null ? s.width ?? 1 : undefined) ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
+  // what a shape without the key shows: a shadow's and an image frame's defaults (src/domain/shadow.ts, symbols.ts)
+  const keyVal = (s: any, k: any) => keyVal0(s, k) ?? (k === 'shadowOffset' ? TD.SHADOW.offset : k === 'shadowOpacity' ? TD.SHADOW.opacity : k === 'shadow' ? false : s.type === 'image' && k in TD.IMAGE_FRAME ? TD.IMAGE_FRAME[k] : undefined);
+  const keyVal0 = (s: any, k: any) => (s.type === 'line' && k === 'route' ? TD.routeOf(s) : s.type === 'line' && k === 'dir' ? TD.routeDir(s) : undefined) ?? s[k] ?? (k === 'hatchWidth' && symParams(s)?.hatchWidth != null ? s.width ?? 1 : undefined) ?? (k === 'align' && s.type === 'text' ? (s.tw > 0 ? 'left' : 'center') : k === 'valign' && s.type === 'text' ? (TD.isParaText(s) ? 'top' : 'middle') : undefined) ?? TD.LINE_EXTRA[k] ?? (k === 'bpTip' ? 'none' : SYM_XF.has(k) ? 0 : symParams(s) && k in symParams(s) ? symParams(s)[k] : k in TICK_KEYS && TD.LINEISH.has(s.type) ? TICK_KEYS[k] : undefined);
   function dashPreview(v: any, w: any) {
     const da = TD.dashArray(v, w);
     return `<svg class="dprev" viewBox="0 0 48 8" preserveAspectRatio="none"><path d="M1 4H47" stroke="currentColor" stroke-width="${w}"${da ? ` stroke-dasharray="${da}"` : ''}/></svg>`;
@@ -3483,7 +3544,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   function drawnPicker(type: string, key: string, v: any): StyleModel['drawn'] {
     if (type === 'tip') return { title: uiText('dd.tip.title', 'Arrow tip'), columns: 3,
       options: TD.TIPS.map(([k, n]: any) => ({ value: k, label: tipName(k, n), svg: k === 'none' ? `<span class="none">${esc(caption(captions['ui.none']))}</span>` : tipPreview(k) })) };
-    if (type === 'shaft') return { title: uiText('style.shaft', 'Shaft'), options: TD.SHAFTS.map(([k, n]: any) => ({ value: k, label: shaftName(k, n), svg: shaftPreview(k) })) };
+    if (type === 'shaft') {
+      const sel = selected(), closed = sel.length > 0 && sel.every((x: any) => CLOSED_SHAFT.has(x.type));
+      return { title: closed ? uiText('prop.outline', 'Outline') : uiText('style.shaft', 'Shaft'),
+        options: TD.SHAFTS.filter(([k]: any) => !closed || k === 'single' || k === 'double').map(([k, n]: any) => ({ value: k, label: shaftName(k, n), svg: shaftPreview(k) })) };
+    }
     if (type === 'width') return { title: uiText('ui.line.width.presets', 'Line width presets'),
       options: TD.WIDTHS.map((w: any) => ({ value: String(w), label: `${w} px`, note: `${r2(w * TD.PT_PER_PX)}pt`, svg: `<svg viewBox="0 0 60 10"><path d="M2 5H58" stroke="currentColor" stroke-width="${w}"/></svg>` })) };
     if (type !== 'dash') return undefined;
@@ -3541,11 +3606,12 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         fields.push(fieldModel({ ...p, icons: TD.routeOf(ln) === 'curved' ? DIR_CURVED : DIR_ELBOW }, TD.routeDir(ln)));
         continue;
       }
-      if (['stroke', 'fill', 'width', 'dash', 'radius'].includes(p.key) && sel.every(s => s.type === 'text' && !s.boxed)) continue;
+      if (['stroke', 'fill', 'width', 'dash', 'radius', ...TD.SHADOW_KEYS].includes(p.key) && sel.every(s => s.type === 'text' && !s.boxed)) continue;
       let label = p.label;
       if (!isText && p.key === 'size') label = uiText('prop.labelSize', 'Label size');
       if (!isText && p.key === 'color' && !types.includes('dot')) label = uiText('prop.labelColor', 'Label colour');
       if (types.length === 1 && types[0] === 'dot' && p.key === 'color') label = caption(captions["ui.color"]);
+      if (p.key === 'shaft' && types.every((x: any) => CLOSED_SHAFT.has(x))) label = uiText('prop.outline', 'Outline');
       if (p.type === 'bi') fields.push(fieldModel({ ...p, italic: first('italic') }, first('bold')));
       else if (p.type === 'align') fields.push(fieldModel({ ...p, wraps: sel.some(s => s.tw > 0) }, first('align')));
       else fields.push(fieldModel(p, first(p.key), label, sel.length > 1 ? sel.filter((s: any) => hasKey(s, p.key)).map((s: any) => keyVal(s, p.key)) : undefined));
@@ -6327,7 +6393,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   // Imported code into this file: in Document view as new blocks (after the active one, or at docAt), else as
   // shapes centred on `at` (the middle of the visible canvas), moved by whole grid steps so they stay on the grid.
   function placeImported(res: any, at: any, docAt?: number) {
-    if (state.mode === 'document') { insertBlocks(res.blocks.filter((b: any) => b.type !== 'diagram' || b.shapes.length), docAt); return; }
+    // (in the Document, the insert below is the undo step that also holds the macros)
+    if (state.mode === 'document') { takeMacros(res); insertBlocks(res.blocks.filter((b: any) => b.type !== 'diagram' || b.shapes.length), docAt); return; }
     const list = res.blocks.flatMap((b: any) => (b.type === 'diagram' ? b.shapes : []));
     const c = at || viewCentre(), G = TD.GRID;
     const bb = list.length ? TD.bboxOf(list.flatMap((x: any) => { const q = TD.bbox(x); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; })) : null;
@@ -6337,6 +6404,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     const idmap = new Map();
     for (const sh of list) { const oldId = sh.id; sh.id = uid(); idmap.set(oldId, sh.id); if (dx || dy) TD.translate(sh, dx, dy); addShape(sh); state.sel.add(sh.id); }
     remapLinks(list, idmap);
+    takeMacros(res);
     commit();
     render(); renderProps();
   }
@@ -6351,9 +6419,11 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     if (!nShapes && !res.blocks.some((b: any) => b.type === 'text')) { impSay(uiText('imp.nothing', 'Nothing recognised in this code.') + (res.warnings.length ? ' ' + res.warnings.join(' ') : '')); return; }
     // a new document is named after its \title, else the file it came from, else "Imported"; never an existing name
     const newName = () => { const n = String(res.title || importFrom || uiText('imp.defaultName', 'Imported')).trim() || uiText('imp.defaultName', 'Imported'); return index().some((x) => (x as any).name === n) ? copyName(n) : n; };
-    if (asNew && state.doc.kind === 'board') { newDoc(newName(), null, null, res.blocks, res.page, 'board'); zoomFit(); }
+    // a new file takes the import's macros with its page settings
+    const page = String(res.macros || '').trim() ? { ...(res.page || {}), macros: res.macros } : res.page;
+    if (asNew && state.doc.kind === 'board') { newDoc(newName(), null, null, res.blocks, page, 'board'); zoomFit(); }
     else if (asNew) {
-      newDoc(newName(), null, null, res.blocks, res.page);
+      newDoc(newName(), null, null, res.blocks, page);
       if (res.blocks.filter((b: any) => b.type === 'diagram').length > 1 || res.blocks.some((b: any) => b.type === 'text')) setMode('document');
       else zoomFit();
     } else {
@@ -7010,7 +7080,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       }
       renderDocList();
     }
-    else if (!shared) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); if (TD.tour) TD.tour.firstRun(); } // the very first visit
+    else if (!shared) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); } // the very first visit
     if (shared) await openShared();
     if (!state.docId) { newDoc('Welcome to DiagramTeX', null, null, sampleBlocks()); zoomFit(); } // a broken link and no files
     setTool('select');
@@ -7137,6 +7207,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     parseProject, projectJson, // project files, for the tests
     recovery, restoreRecovery, openRecoveryCopy, saveVersion, openRecovery, // version history, for the tests
     namedSync: syncNamed, styleNameProblem: nameProblem, // named styles, for the tests
+    setMacros, takeMacros, // the file's macros (page.macros), for the tests and scripts/snippets/compare.mjs
     showHint, takeIn, takeText, texBundle, texFiles, svgFilePdf, svgVectorPdf, // pictures, code and text from outside (pasted or dropped); LaTeX with its pictures (an SVG as vector PDF)
     setBucketFill: (v: any) => { bucketFill = v; }, // tests
     clearAllHistory: () => { histories.clear(); fileUndo.length = fileRedo.length = 0; state.undo = []; state.redo = []; documentHistory.reset(); updateTopbar(); }, // tests
@@ -7161,7 +7232,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, ctxAct, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
       toggleSnap: cycleSnapMode, unsavedToDisk, showSaveState, diskChanged, diskWritten,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
-      docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac,
+      docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac, editMacros,
       canUndo: () => state.undo.length > 0 || canUndoFile(), canRedo: () => state.redo.length > 0 || canRedoFile(),
     },
   };

@@ -2,6 +2,9 @@ import { measurementElement } from './measurement';
 import { labelImage, onLabelFontsChange, prepareLabelFont } from './label-image';
 import { runtime as TD } from '../runtime';
 import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai, THAI_BREAK_DEF, THAI_PDF, type TexEngine } from '../core/doc-fonts';
+import { definedNames, preambleLines, withoutDefinitions } from '../core/doc-macros';
+import { closesAt } from '../core/tex-scan';
+import { textModeMath } from './math-rewrite';
 // Shape definitions: geometry, handles, SVG rendering and TikZ export.
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
@@ -119,12 +122,27 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       a.push(`stroke="${css(s.stroke)}" stroke-width="${s.width}"`);
       const da = dashArray(s.dash, s.width);
       if (da) a.push(`stroke-dasharray="${da}"`);
+      // TikZ's line cap (butt unless the shape says round or rect)
+      if (s.cap === 'round' || s.cap === 'rect') a.push(`stroke-linecap="${s.cap === 'rect' ? 'square' : 'round'}"`);
     } else a.push('stroke="none"');
     a.push(`fill="${fillable && s.fill ? css(s.fill) : 'none'}"`);
     return a.join(' ');
   }
 
   const wrap = (s: any, inner: any) => (s.opacity != null && s.opacity < 1 ? `<g opacity="${s.opacity}">${inner}</g>` : inner);
+  // the white gap of a double line or outline: ddist (TikZ's double distance, as imported), else the line's width
+  const doubleGap = (s: any) => (s.ddist > 0 ? s.ddist : s.width);
+  // a closed shape's outline: single, or double (TikZ's double, an automaton's accepting state: drawn two widths and
+  // the gap wide in its colour, then the gap in white along the middle, as a line's double shaft is). `open`: the
+  // element's tag and geometry, without its closing
+  function outline(s: any, open: string) {
+    // (a rectangle's corners: TikZ's line join, miter unless set)
+    if (s.join === 'round' || s.join === 'bevel') open += ` stroke-linejoin="${s.join}"`;
+    if (s.shaft !== 'double' || !s.stroke) return `${open} ${strokeAttrs(s, true)}/>`;
+    const da = dashArray(s.dash, s.width), dash = da ? ` stroke-dasharray="${da}"` : '', gap = doubleGap(s);
+    return `${open} fill="${s.fill ? css(s.fill) : 'none'}" stroke="${css(s.stroke)}" stroke-width="${r2(2 * s.width + gap)}"${dash}/>` +
+      `${open} fill="none" stroke="#fff" stroke-width="${r2(gap)}"${dash}/>`;
+  }
   const hit = (d: any, ctx: any) => (ctx.export ? '' : `<path class="hit" d="${d}" stroke-width="${ctx.hit}"/>`);
 
   // Computer Modern Rightarrow (arrows.meta To, tikz-cd's cm to): width 2.097 x length, two curves from the back
@@ -289,9 +307,10 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     if (ext(s, 'cross') === 'gap') out += `<path d="${dd}" fill="none" stroke="#fff" stroke-width="${r2(s.width + 6)}" stroke-linecap="butt"/>`;
     if (fillable && s.fill && shaft !== 'single') out += `<path d="${d}" stroke="none" fill="${css(s.fill)}"/>`;
     if (shaft === 'double') {
-      out += `<path d="${dd}" fill="none" stroke="${col}" stroke-width="${r2(3 * s.width)}"${dash}/>` +
-        `<path d="${dd}" fill="none" stroke="#fff" stroke-width="${r2(s.width)}"${dash}/>`;
-    } else out += `<path d="${dd}" ${strokeAttrs(s, fillable && shaft === 'single')} stroke-linejoin="round"/>`;
+      const gap = doubleGap(s);
+      out += `<path d="${dd}" fill="none" stroke="${col}" stroke-width="${r2(2 * s.width + gap)}"${dash}/>` +
+        `<path d="${dd}" fill="none" stroke="#fff" stroke-width="${r2(gap)}"${dash}/>`;
+    } else out += `<path d="${dd}" ${strokeAttrs(s, fillable && shaft === 'single')} stroke-linejoin="${s.join === 'miter' || s.join === 'bevel' ? s.join : 'round'}"/>`;
     if (shaft === 'ticks') out += `<path d="${tickPath(full || d, s)}" fill="none" stroke="${col}" stroke-width="${s.width}"/>`;
     const mt = ext(s, 'midTip');
     if (mt !== 'none' && full) {
@@ -306,7 +325,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     const o: any[] = [], shaft = ext(s, 'shaft');
     if (!s.stroke) return o;
     if (ext(s, 'cross') === 'gap') o.push(`preaction={draw=white, line width=${X.pt(s.width + 6)}, -}`);
-    if (shaft === 'double') o.push(`double, double distance=${X.pt(s.width)}`);
+    if (shaft === 'double') o.push(`double, double distance=${X.pt(doubleGap(s))}`);
     if (shaft === 'wave') { o.push('decorate', 'decoration={snake, amplitude=2.5pt, segment length=10pt}'); X.libs.add('decorations.pathmorphing'); }
     if (shaft === 'ticks') { o.push(`postaction={draw, -, solid, decorate, decoration={ticks, segment length=${s.tick > 0 ? X.pt(s.tick) : '6pt'}, amplitude=${s.ticksz > 0 ? X.pt(s.ticksz / 2) : '3pt'}}}`); X.libs.add('decorations.pathreplacing'); }
     const marks = [];
@@ -402,16 +421,27 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
   };
 
   // Split a line into text / math segments: $…$ is inline math; $$…$$ and \[…\] are display
-  // math ({ math: true, display: true }), rendered and exported as \displaystyle.
+  // math ({ math: true, display: true }), rendered and exported as \displaystyle. Inside maths a $ within braces
+  // (\text{if $x > 0$}) is maths in the text, part of the formula, as LaTeX reads it.
   function segments(line: any) {
     const out = [];
-    let buf = '', math = false, display = false;
-    const flush = (m: any, d?: any) => { out.push({ math: m, display: !!(m && d), s: buf }); buf = ''; };
+    let buf = '', math = false, display = false, depth = 0, paren = false;
+    const flush = (m: any, d?: any) => { out.push({ math: m, display: !!(m && d), s: buf }); buf = ''; depth = 0; };
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
+      // \(…\) is inline maths as $…$ is (a $ inside it does not close it)
+      if (c === '\\' && !math && line[i + 1] === '(' && line.indexOf('\\)', i + 2) > 0) { flush(false); math = paren = true; i++; continue; }
+      if (paren) {
+        if (c === '\\' && line[i + 1] === ')' && depth === 0) { flush(true, false); math = paren = false; i++; continue; }
+        if (c === '\\' && i + 1 < line.length) { buf += c + line[i + 1]; i++; continue; }
+        if (c === '{' || c === '}') depth = Math.max(0, depth + (c === '{' ? 1 : -1));
+        buf += c; continue;
+      }
       if (c === '\\' && !math && line[i + 1] === '[' && line.indexOf('\\]', i + 2) > 0) { flush(false); math = display = true; i++; continue; }
       if (c === '\\' && math && display && line[i + 1] === ']') { flush(true, true); math = display = false; i++; continue; }
       if (c === '\\' && i + 1 < line.length) { buf += c + line[i + 1]; i++; continue; }
+      if (math && (c === '{' || c === '}')) depth = Math.max(0, depth + (c === '{' ? 1 : -1));
+      if (c === '$' && math && depth > 0 && closesAt(line, i + 1, depth)) { buf += c; continue; }
       if (c === '$') {
         if (!math && line[i + 1] === '$' && line.indexOf('$$', i + 2) > 0) { flush(false); math = display = true; i++; continue; }
         if (math && display && line[i + 1] === '$') { flush(true, true); math = display = false; i++; continue; }
@@ -434,6 +464,8 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     textbf: 'font-weight:bold', textit: 'font-style:italic', emph: 'font-style:italic', textsl: 'font-style:oblique',
     underline: 'text-decoration:underline', texttt: 'font-family:"Courier New",Courier,monospace', textsf: 'font-family:Helvetica,Arial,sans-serif',
     textrm: '', textsc: 'font-variant:small-caps', textup: 'font-style:normal', textmd: 'font-weight:normal', textnormal: 'font-weight:normal;font-style:normal',
+    // amsmath's \text and the boxes: their argument as it is, in the text round them
+    text: '', mbox: '', hbox: '',
   };
   // Declarations switch the style for the rest of their group, {\bfseries bold} or {\em stressed}: drawn as the
   // command with the same effect, written back as typed.
@@ -475,9 +507,10 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
         if (c !== '\\') { buf += c; i++; continue; }
         const m = /^\\([A-Za-z]+)|^\\(.?)/.exec(src.slice(i));
         i += m![0].length;
-        if (m![1] === undefined) { // \% \$ \_ \{ \} \& \# → the character; \  \, \; \: → a space
+        if (m![1] === undefined) { // \% \$ \_ \{ \} \& \# → the character; \  \; \: → a space; \, and \! kern
           if (m![2] && '%$_{}&#'.includes(m![2])) buf += m![2];
-          else if (m![2] && ' ,;:'.includes(m![2])) buf += ' ';
+          else if (m![2] === ',' || m![2] === '!') push({ kern: m![2] });
+          else if (m![2] && ' ;:'.includes(m![2])) buf += ' ';
           else push({ raw: m![0] });
           continue;
         }
@@ -491,6 +524,16 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
         if (PROSE_CMDS[name] !== undefined && /^\s*\{/.test(src.slice(i))) {
           while (src[i] !== '{') i++;
           i++; push({ cmd: name, kids: group(true) }); continue;
+        }
+        // \textcolor{red}{…} and \color{red} (the rest of the group): in that colour, written back as typed
+        if ((name === 'textcolor' || name === 'color') && /^\{[^{}]*\}/.test(src.slice(i)) && (name === 'color' || /^\{[^{}]*\}\s*\{/.test(src.slice(i)))) {
+          const spec = (/^\{([^{}]*)\}/.exec(src.slice(i)))![1];
+          i += spec.length + 2;
+          if (name === 'textcolor') { while (src[i] !== '{') i++; i++; push({ cmd: 'textcolor', spec, kids: group(true) }); continue; }
+          const sp = (/^\s*/.exec(src.slice(i)))![0];
+          i += sp.length;
+          push({ cmd: 'color', spec, decl: 'color', sp, kids: group(inner) });
+          return out;
         }
         if (PROSE_SYMS[name] !== undefined && name !== 'nbsp') {
           if (src.startsWith('{}', i)) i += 2; else while (src[i] === ' ') i++; // a control word eats the space after it
@@ -536,8 +579,11 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     return nodes.map((n: any) => {
       if (typeof n === 'string') return ligatures(esc(n));
       if (n.sym) return PROSE_SYMS[n.sym];
+      // LaTeX's text \, and \!: \kern±.16667em
+      if (n.kern) return `<span style="margin-left:${n.kern === '!' ? '-' : ''}0.16667em"></span>`;
       if (n.raw !== undefined) return rawHtml(n.raw);
       if (n.cmd === 'emph') return `<span style='font-style:${it ? 'normal' : 'italic'}'>${proseHtml(n.kids, !it)}</span>`;
+      if (n.spec !== undefined) { const c = TD.tikzColor?.(n.spec); return c ? `<span style='color:${c}'>${proseHtml(n.kids, it)}</span>` : proseHtml(n.kids, it); }
       const kit = /^(textit|textsl)$/.test(n.cmd) ? true : /^(textup|textnormal)$/.test(n.cmd) ? false : it;
       return n.cmd && PROSE_CMDS[n.cmd] ? `<span style='${PROSE_CMDS[n.cmd]}'>${proseHtml(n.kids, kit)}</span>` : proseHtml(n.kids, kit);
     }).join('');
@@ -545,14 +591,37 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
   // nodes → source, with `escStr` deciding how plain characters are written
   function proseSource(nodes: any, escStr: any) {
     return nodes.map((n: any) => (typeof n === 'string' ? escStr(n)
+      : n.kern ? `\\${n.kern}`
       : n.sym ? (n.sym === 'nbsp' ? '~' : `\\${n.sym}{}`)
         : n.raw !== undefined ? n.raw
-          : n.decl ? `\\${n.decl}${n.sp}${proseSource(n.kids, escStr)}`
-            : `${n.cmd ? '\\' + n.cmd : ''}{${proseSource(n.kids, escStr)}}`)).join('');
+          : n.decl ? `\\${n.decl}${n.spec !== undefined ? `{${n.spec}}` : ''}${n.sp}${proseSource(n.kids, escStr)}`
+            : `${n.cmd ? '\\' + n.cmd : ''}${n.spec !== undefined ? `{${n.spec}}` : ''}{${proseSource(n.kids, escStr)}}`)).join('');
   }
   // Commands that work in prose (outside $…$): the ones the prose renderer knows, \text… and the usual text-mode commands.
   const textOk = (name: any) => PROSE_CMDS[name] !== undefined || PROSE_DECLS[name] !== undefined || (PROSE_SYMS[name] !== undefined && name !== 'nbsp') || TEXT_OK.has(name) || name.startsWith('text');
   TD.prose = { parse: parseProse, html: proseHtml, source: proseSource, CMDS: PROSE_CMDS, textOk };
+  // the first command in a text's prose that the canvas shows as typed (\hspace{1em}, \small, \ref{x}), or null:
+  // an imported text with one is not drawn as LaTeX draws it
+  const SIZE_DECL = /\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)(?![A-Za-z])/;
+  const firstRaw = (nodes: any[]): string | null => {
+    for (const n of nodes) {
+      if (typeof n === 'string' || !n) continue;
+      if (n.raw !== undefined && String(n.raw).startsWith('\\')) return n.raw;
+      if (n.kids) { const r = firstRaw(n.kids); if (r) return r; }
+    }
+    return null;
+  };
+  TD.proseUnheld = (text: any): string | null => {
+    for (const line of String(text ?? '').split('\n')) for (const seg of segments(line)) {
+      if (seg.math) continue;
+      for (const p of textModeMath(seg.s, (n) => TD.math?.ownMacro?.(n))) {
+        if (p.math) continue;
+        const sz = SIZE_DECL.exec(p.s); if (sz) return sz[0];
+        const r = firstRaw(parseProse(p.s)); if (r) return r;
+      }
+    }
+    return null;
+  };
 
   // TeX for one math segment
   const mathTex = (seg: any) => (seg.display ? `\\displaystyle ${seg.s.trim()}` : seg.s);
@@ -561,13 +630,19 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
 
   function textHtml(text: any) {
     if (htmlCache.has(text)) return htmlCache.get(text);
-    const lines = String(text).split('\n').map((line) =>
-      segments(line).map((seg) => {
-        if (seg.math && TD.math) return TD.math.render(mathTex(seg));
-        if (seg.math) return `<i>${esc(seg.s)}</i>`;
-        return proseHtml(parseProse(seg.s));
-      }).join('') || '&#8203;'
-    );
+    // The text round the formulas is read as one (\textbf{a $x$ b}, {$x$}: a group or command may hold formulas), each
+    // formula held by a mark in it and put back once the text is drawn
+    const lines = String(text).split('\n').map((line) => {
+      const maths: string[] = [];
+      const hold = (html: string) => { maths.push(html); return `\uE100${maths.length - 1}\uE101`; };
+      const prose = segments(line).map((seg) => {
+        if (seg.math && TD.math) return hold(TD.math.render(mathTex(seg)));
+        if (seg.math) return hold(`<i>${esc(seg.s)}</i>`);
+        // siunitx's and mhchem's commands in text (\SI{10}{\kilo\ohm} with no $) are drawn as the formulas they make
+        return textModeMath(seg.s, (n) => TD.math?.ownMacro?.(n)).map((p) => (p.math && TD.math ? hold(TD.math.render(p.s)) : p.s.replace(/[\uE100\uE101]/g, ''))).join('');
+      }).join('');
+      return proseHtml(parseProse(prose)).replace(/\uE100(\d+)\uE101/g, (_: string, n: string) => maths[+n] ?? '') || '&#8203;';
+    });
     const html = lines.map((l) => `<div>${l}</div>`).join('');
     if (!TD.math.isPending(html)) htmlCache.set(text, html);
     return html;
@@ -589,21 +664,65 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
   // Measure in font-design space, then convert back to CSS pixels once. At screen
   // sizes, browser font hinting and per-line pixel quantisation can change a box
   // by a pixel. A shared em scale retains fractional metrics across browsers.
+  // Texts are laid out at a 10000px font, where a font unit (1/1000 em), KaTeX's 0.0001em lengths and the script
+  // sizes' advances are all whole pixels, so Chromium's and WebKit's 1/64px layout units hold them exactly (at
+  // 1000px they rounded each script-size piece and a formula drifted by a unit). Firefox draws no glyph larger than
+  // 2000px; there it measures at 2000px, where its 1/60px units hold those lengths (multiples of 0.2px) exactly.
+  let MEASURE_PX = 0;
+  function measureSize() {
+    if (MEASURE_PX) return MEASURE_PX;
+    const host = measurementElement().parentNode!;
+    // (.measure-probe in style.css: at 10000px, or 1000px with .small)
+    const probe = (px: number) => {
+      const s = document.createElement('span');
+      s.className = px === 10000 ? 'measure-probe' : 'measure-probe small';
+      s.textContent = 'MMMM';
+      host.appendChild(s);
+      const w = s.getBoundingClientRect().width / px;
+      s.remove();
+      return w;
+    };
+    const big = probe(10000), small = probe(1000);
+    return (MEASURE_PX = small > 0 && Math.abs(big / small - 1) < 1e-3 ? 10000 : 2000);
+  }
   function measureStyle(element: HTMLElement, css: string) {
+    const size = measureSize();
     element.style.cssText = css;
-    const px = parseFloat(element.style.fontSize), scale = 1000 / px;
+    const px = parseFloat(element.style.fontSize), scale = size / px;
     const width = parseFloat(element.style.width);
-    element.style.fontSize = '1000px';
+    element.style.fontSize = size + 'px';
     element.style.width = Number.isFinite(width) ? `${width * scale}px` : 'max-content';
     return scale;
   }
-  function measuredBox(element: HTMLElement, scale: number) {
+  function measuredBox(element: HTMLElement, scale: number, wraps = false) {
     const rect = element.getBoundingClientRect();
-    // The bundled TeX faces use 1000 font units per em. Quantise in that
-    // design space before conversion, rather than preserving platform hinting.
-    const cssPx = 1000 / scale;
-    const length = (value: number) => Math.round(Math.round(value) / 1000 * cssPx * 100) / 100;
-    return { w: length(rect.width), h: length(rect.height) };
+    // The bundled TeX faces use 1000 font units per em, and KaTeX's lengths are 0.0001em: every true length is a
+    // multiple of 0.1 unit. Snapping to that grid takes off each browser's own layout error (a few thousandths of a
+    // unit) without ever meeting a tie, so every browser gives the same size.
+    const cssPx = MEASURE_PX / scale, unit = MEASURE_PX / 10000;
+    const length = (value: number) => Math.round(Math.round(value / unit) / 10000 * cssPx * 100) / 100;
+    return { w: length(wraps ? rect.width : advanceWidth(element, rect.width)), h: length(rect.height) };
+  }
+  // The width TeX gives a line is where its pen ends, not how far its ink reaches: a negative space (\mspace{-12mu},
+  // an array's @{}) pulls what follows back over what came before. WebKit sizes a max-content box by the furthest
+  // glyph instead, so each line is measured between zero-width marks at its start and end (the widest line wins);
+  // a line that breaks (display maths) keeps the box's width
+  // (a formula's own box, .katex-base, is an inline-block: WebKit widens it the same way, so what it adds there is
+  // taken off the line)
+  function advanceWidth(element: HTMLElement, fallback: number) {
+    const lines = [...element.children].filter((c) => c.tagName === 'DIV') as HTMLElement[];
+    if (!lines.length) return fallback;
+    const mark = (into: Element) => { const a = document.createElement('span'), b = document.createElement('span'); a.className = b.className = 'measure-mark'; into.prepend(a); into.append(b); return [a, b]; };
+    const marks = lines.map((l) => ({ line: mark(l), bases: [...l.querySelectorAll('.katex-base')].map((k) => ({ k, m: mark(k) })) }));
+    let w = 0, ok = true;
+    const span = ([a, b]: HTMLElement[]) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); if (Math.abs(ra.top - rb.top) > 0.5) ok = false; return rb.left - ra.left; };
+    for (const L of marks) {
+      let extra = 0;
+      for (const B of L.bases) extra += Math.max(0, B.k.getBoundingClientRect().width - span(B.m));
+      w = Math.max(w, span(L.line) - extra);
+    }
+    for (const L of marks) for (const x of [L.line, ...L.bases.map((B) => B.m)]) for (const e of x) e.remove();
+    return ok && w > 0 && w <= fallback + MEASURE_PX / 2000 ? w : fallback;
   }
   function textBox(text: any, st: any): any {
     if (!TD.math.previewing && !TD.math.finalizing && TD.math.pending) return TD.math.preview(() => textBox(text, st));
@@ -629,7 +748,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       const m = measurementElement();
       const scale = measureStyle(m!, ts.css);
       m!.innerHTML = textHtml(text);
-      const measured = measuredBox(m!, scale);
+      const measured = measuredBox(m!, scale, st.tw > 0);
       box = { w: boxW(st, measured.w), h: measured.h, pending: TD.math.isPending(textHtml(text)), html: textHtml(text) };
       sizeCache.set(key, box);
     }
@@ -661,7 +780,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     }
     host!.appendChild(frag);
     for (const [key, d, scale] of els) {
-      const measured = measuredBox(d, scale);
+      const measured = measuredBox(d, scale, miss.get(key).tw > 0);
       sizeCache.set(key, { w: boxW(miss.get(key), measured.w), h: measured.h, pending: TD.math.isPending(d.innerHTML), html: textHtml(miss.get(key).text) });
     }
     for (const [, d] of els) d.remove();
@@ -714,9 +833,16 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     let n = { x: u.y, y: -u.x }; // left of direction (in TikZ y-up sense)
     if (s.labelSide === 'right') n = { x: -n.x, y: -n.y };
     // TikZ's `auto` anchors the node by a side or a corner (\tikz@auto@anchor): a corner unless the
-    // tangent is within 0.05 of an axis, so the label's box sits diagonally off the point.
-    const ox = Math.abs(u.y) > 0.05 ? Math.sign(n.x) * (b.w / 2 + 3) : 0;
-    const oy = Math.abs(u.x) > 0.05 ? Math.sign(n.y) * (b.h / 2 + 3) : 0;
+    // tangent is within 0.05 of an axis, so the label's box sits diagonally off the point. The node's box is TeX's:
+    // the text's width (the measured box has 2px of slack), height and depth, then inner sep (3.333pt) and outer sep
+    // (half the node's 0.4pt line); the text is drawn centred on it, as a text shape is
+    const K = TD.PT_PER_PX, pt = typeof s.size === 'number' ? s.size * K : ((TD.SIZES || []).find((q: any) => q[0] === (s.size || 'normalsize'))?.[1] ?? 10);
+    const em = pt / K, lines = String(s.label).split('\n'), hd = (t: string) => TD.texLineHD?.(t, em);
+    const first = hd(lines[0]), last = hd(lines[lines.length - 1]), skip = 1.2 * em * (lines.length - 1);
+    const th = first && last && lines.every((l) => hd(l)) ? first.ht + last.dp + skip : b.h;
+    const sep = (3.333 + 0.2) / K, hw = Math.max(0, b.w - 2) / 2 + sep, hh = th / 2 + sep;
+    const ox = Math.abs(u.y) > 0.05 ? Math.sign(n.x) * hw : 0;
+    const oy = Math.abs(u.x) > 0.05 ? Math.sign(n.y) * hh : 0;
     return { x: P.x + ox, y: P.y + oy, b };
   }
   function labelSvg(s: any, P: any, u: any, ctx: any) {
@@ -742,7 +868,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
   // The open file's document font (a Classic Document's page.family, src/core/doc-fonts.ts): what LaTeX's text is set
   // in, and what an object's own font is written against
   TD.docFontKey = () => docFont(TD.state && TD.state.doc && TD.state.doc.page && TD.state.doc.page.family).key;
-  function makeX({ engine = 'pdflatex' as TexEngine, docFont: font = undefined as string | undefined } = {}) : any {
+  function makeX({ engine = 'pdflatex' as TexEngine, docFont: font = undefined as string | undefined, macros = undefined as string | undefined } = {}) : any {
     const colors = new Map();
     const X: Record<string, any> = {
       colors, libs: new Set(), pkgs: new Set(), n: 0,
@@ -750,6 +876,8 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       engine, docFont: font || TD.docFontKey(), fontPre: new Set<string>(),
       // the open file's named styles (src/core/named-styles.ts), written as \tikzset once and named on each shape
       namedStyles: TD.namedStyles ? TD.namedStyles() : [],
+      // the file's macros (page.macros, src/core/doc-macros.ts), written into the preamble: TD.macroPreamble
+      macros: macros ?? (TD.docMacros ? TD.docMacros() : ''),
       uid() { return 'td' + ++this.n; },
       // a point a named point stands at is written by its name (X.refs, set per shape by TD.tikzLines)
       c: (x: any, y: any) => { const v = `(${f(x / PX)},${f(-y / PX)})`; return (X.refs && X.refs.get(v)) || v; },
@@ -771,6 +899,25 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     return X;
   }
   TD.makeTikzContext = makeX;
+  /**
+   * The file's macros for a preamble: the packages their definitions use (as labels' maths is scanned, plus amsmath
+   * for \DeclareMathOperator and mathtools for \DeclarePairedDelimiter), definitions such as \mathbfit's, and the
+   * macro definitions themselves, without those the preamble (`have`) already holds.
+   */
+  /** The pictures' preamble definitions (X.preDefs) without those of commands the file's macros define. */
+  TD.preDefsWithout = (X: any): string[] => {
+    const names = definedNames(String(X.macros || ''));
+    return [...(X.preDefs || [])].map((t: string) => withoutDefinitions(t, names)).filter((t: string) => t.trim());
+  };
+  TD.macroPreamble = (X: any, have: string[] = []) => {
+    const text = String(X.macros || '');
+    if (!text.trim()) return { pkgs: [] as string[], defs: [] as string[], lines: [] as string[] };
+    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(text, { macros: text, pkgs: X.pkgs, libs: X.libs }) : { pkgs: [], defs: [] };
+    const pkgs = new Set<string>(need.pkgs);
+    if (/\\DeclareMathOperator/.test(text)) pkgs.add('amsmath');
+    if (/\\DeclarePairedDelimiter/.test(text)) pkgs.add('mathtools');
+    return { pkgs: [...pkgs], defs: need.defs as string[], lines: preambleLines(text, have) };
+  };
   TD.tikzText = tikzText;
 
   function styleOpts(s: any, X: any, { fill = false, arrows = false, bends = null as number[] | null } = {}) {
@@ -780,6 +927,8 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       const sa = TD.parseColor(s.stroke).a;
       if (sa < 1) o.push(`draw opacity=${f(sa)}`);
       o.push(`line width=${X.pt(s.width)}`);
+      if (s.cap === 'round' || s.cap === 'rect') o.push(`line cap=${s.cap}`);
+      if (s.join === 'round' || s.join === 'bevel') o.push(`line join=${s.join}`);
       if (s.dash === 'dashed') o.push('dashed');
       else if (s.dash === 'dotted') o.push('dotted');
       else if (s.dash === 'dashdot') o.push('dash dot');
@@ -803,6 +952,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       if (a || b) { o.push(`${a}-${b}`); X.libs.add('arrows.meta'); }
     }
     if (TD.LINEISH.has(s.type)) o.push(...decoOpts(s, X, bends));
+    else if (s.stroke && s.shaft === 'double') o.push(`double, double distance=${X.pt(doubleGap(s))}`); // a closed shape's double outline
     if (s.opacity != null && s.opacity < 1 && !X.groupOpacity) o.push(`opacity=${f(s.opacity)}`);
     return o;
   }
@@ -1198,6 +1348,10 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     return out;
   }
 
+  // a polyline's path through points A (straight, or smooth through them), closed with Z when the shape is
+  const polyD = (s: any, A: any) => (s.smooth && A.length > 2
+    ? 'M' + pt(A[0]) + polySegs(A, s).map(([a, b, c]) => `C${pt(a)} ${pt(b)} ${pt(c)}`).join('')
+    : A.map((p: any, i: any) => (i ? 'L' : 'M') + pt(p)).join('')) + (s.closed ? 'Z' : '');
   T.poly = {
     name: 'Polyline',
     create: (p: any, d: any) => ({ type: 'poly', pts: [[p.x, p.y], [p.x, p.y]], closed: false, ...lineStyle(d), fill: d.fill || null, startTip: 'none', endTip: 'none', ...TD.LINE_EXTRA, bpTip: 'none' }),
@@ -1235,25 +1389,27 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
         Q[0] = { x: P[0].x - us.x * ts.back, y: P[0].y - us.y * ts.back };
         tips = ts.svg + te.svg;
       }
-      const dOf = (A: any) => (s.smooth && A.length > 2
-        ? 'M' + pt(A[0]) + polySegs(A, s).map(([a, b, c]) => `C${pt(a)} ${pt(b)} ${pt(c)}`).join('')
-        : A.map((p: any, i: any) => (i ? 'L' : 'M') + pt(p)).join('')) + (s.closed ? 'Z' : '');
+      const dOf = (A: any) => polyD(s, A);
       const fillHit = s.closed && s.fill;
       const H = !s.smooth && hopsFor(s, s.closed ? [...Q, Q[0]] : Q, ctx.scene);
       const dQ = H ? hopPaths(s.closed ? [...Q, Q[0]] : Q, H).d + (s.closed ? 'Z' : '') : dOf(Q);
       return wrap(s, strokeSvg(s, dQ, dOf(P), polyBends(s, P), s.closed) + tips) + hit(dOf(P), ctx) +
         (fillHit && !ctx.export ? `<path class="hitfill" d="${dOf(P)}"/>` : '');
     },
+    // a closed one casts a shadow (src/domain/shadow.ts)
+    shadowShape: (s: any) => (s.closed ? `<path d="${polyD(s, s.pts.map((p: any) => ({ x: p[0], y: p[1] })))}"/>` : ''),
     tikz(s: any, X: any) {
-      const c = cmd(s, s.closed);
+      const sh = TD.shadowTikz?.(s, X) ?? [];
+      const c = cmd(s, s.closed) || (sh.length ? '\\path' : null);
       if (!c) return '';
+      const style = () => [...styleOpts(s, X, { fill: s.closed, arrows: !s.closed, bends: polyBendFractions(s) }), ...sh];
       let path;
       if (s.smooth && s.pts.length > 2) {
         const P = s.pts.map((p: any) => ({ x: p[0], y: p[1] }));
         const n = P.length, straight = (i: number) => s.curv && s.corner && (s.corner[i] || (!s.closed && i === 0)) && (s.corner[(i + 1) % n] || (!s.closed && i + 1 === n - 1));
         if (s.tension != null && !s.curv) {
           const t = +s.tension, o = (s.closed ? 'smooth cycle' : 'smooth') + (Math.abs(t - 0.5) > 1e-9 ? `, tension=${+t.toFixed(3)}` : '');
-          return `${c}${opts(styleOpts(s, X, { fill: s.closed, arrows: !s.closed, bends: polyBendFractions(s) }))} plot[${o}] coordinates {${s.pts.map((p: any) => X.c(p[0], p[1])).join(' ')}};`;
+          return `${c}${opts(style())} plot[${o}] coordinates {${s.pts.map((p: any) => X.c(p[0], p[1])).join(' ')}};`;
         }
         const segs = polySegs(P, s);
         // a closed path's last segment ends where it starts: `cycle` closes it, curved or straight
@@ -1265,7 +1421,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
         path = H ? hopPaths(s.closed ? [...P, P[0]] : P, H, X).tz + (s.closed ? ' -- cycle' : '')
           : s.pts.map((p: any) => X.c(p[0], p[1])).join(' -- ') + (s.closed ? ' -- cycle' : '');
       }
-      return `${c}${opts(styleOpts(s, X, { fill: s.closed, arrows: !s.closed, bends: polyBendFractions(s) }))} ${path};`;
+      return `${c}${opts(style())} ${path};`;
     },
   };
 
@@ -1290,12 +1446,14 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       return wrap(s, `<path d="${d}" fill-rule="evenodd" stroke-linejoin="round" ${strokeAttrs(s, true)}/>`) +
         hit(d, ctx) + (s.fill && !ctx.export ? `<path class="hitfill" fill-rule="evenodd" d="${d}"/>` : '');
     },
+    shadowShape: (s: any) => `<path d="${ringsD(s)}" fill-rule="evenodd"/>`,
     tikz(s: any, X: any) {
-      const c = cmd(s, true);
+      const sh = TD.shadowTikz?.(s, X, s.rings.length > 1) ?? [];
+      const c = cmd(s, true) || (sh.length ? '\\path' : null);
       if (!c) return '';
       const o = styleOpts(s, X, { fill: true });
       if (s.rings.length > 1) o.push('even odd rule');
-      o.push('line join=round');
+      o.push('line join=round', ...sh);
       const path = s.rings.map((r: any) => r.map((p: any) => X.c(p[0], p[1])).join(' -- ') + ' -- cycle').join(' ');
       return `${c}${opts(o)} ${path};`;
     },
@@ -1314,14 +1472,18 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     samples: (s: any) => [{ x: s.x, y: s.y }, { x: s.x + s.w, y: s.y + s.h }],
     svg(s: any, ctx: any) {
       const d = `M${r2(s.x)},${r2(s.y)}h${r2(s.w)}v${r2(s.h)}h${r2(-s.w)}Z`;
-      return wrap(s, `<rect x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" rx="${s.radius || 0}" ${strokeAttrs(s, true)}/>`) +
+      return wrap(s, outline(s, `<rect x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" rx="${s.radius || 0}"`)) +
         hit(d, ctx) + (s.fill && !ctx.export ? `<path class="hitfill" d="${d}"/>` : '');
     },
+    // what casts its shadow (src/domain/shadow.ts)
+    shadowShape: (s: any) => `<rect x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" rx="${s.radius || 0}"/>`,
     tikz(s: any, X: any) {
-      const c = cmd(s, true);
+      const sh = TD.shadowTikz?.(s, X) ?? [];
+      const c = cmd(s, true) || (sh.length ? '\\path' : null);
       if (!c) return '';
       const o = styleOpts(s, X, { fill: true });
       if (s.radius) o.push(`rounded corners=${X.pt(s.radius)}`);
+      o.push(...sh);
       return `${c}${opts(o)} ${X.c(s.x, s.y + s.h)} rectangle ${X.c(s.x + s.w, s.y)};`;
     },
   };
@@ -1347,14 +1509,16 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     samples: (s: any) => [{ x: s.cx - s.rx, y: s.cy - s.ry }, { x: s.cx + s.rx, y: s.cy + s.ry }],
     svg(s: any, ctx: any) {
       const d = `M${r2(s.cx - s.rx)},${r2(s.cy)}a${r2(s.rx)},${r2(s.ry)} 0 1,0 ${r2(2 * s.rx)},0a${r2(s.rx)},${r2(s.ry)} 0 1,0 ${r2(-2 * s.rx)},0`;
-      return wrap(s, `<ellipse cx="${r2(s.cx)}" cy="${r2(s.cy)}" rx="${r2(s.rx)}" ry="${r2(s.ry)}" ${strokeAttrs(s, true)}/>`) +
+      return wrap(s, outline(s, `<ellipse cx="${r2(s.cx)}" cy="${r2(s.cy)}" rx="${r2(s.rx)}" ry="${r2(s.ry)}"`)) +
         hit(d, ctx) + (s.fill && !ctx.export ? `<path class="hitfill" d="${d}"/>` : '');
     },
+    shadowShape: (s: any) => `<ellipse cx="${r2(s.cx)}" cy="${r2(s.cy)}" rx="${r2(s.rx)}" ry="${r2(s.ry)}"/>`,
     tikz(s: any, X: any) {
-      const c = cmd(s, true);
+      const sh = TD.shadowTikz?.(s, X) ?? [];
+      const c = cmd(s, true) || (sh.length ? '\\path' : null);
       if (!c) return '';
       const shape = Math.abs(s.rx - s.ry) < 0.01 ? `circle (${X.len(s.rx)})` : `ellipse (${X.len(s.rx)} and ${X.len(s.ry)})`;
-      return `${c}${opts(styleOpts(s, X, { fill: true }))} ${X.c(s.cx, s.cy)} ${shape};`;
+      return `${c}${opts([...styleOpts(s, X, { fill: true }), ...sh])} ${X.c(s.cx, s.cy)} ${shape};`;
     },
   };
 
@@ -1668,6 +1832,14 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       }
       return box + textSvg(s.text || ' ', s, s.color, s.x, s.y, ctx, op);
     },
+    // a boxed text's frame casts its shadow (src/domain/shadow.ts)
+    shadowShape(s: any) {
+      if (!s.boxed) return '';
+      let b;
+      if (isPara(s)) b = paraLayout(s).f;
+      else { const t = textBox(s.text || ' ', s), p = textPad(s); b = { x: s.x - t.w / 2 - p, y: s.y - t.h / 2 - p, w: t.w + 2 * p, h: t.h + 2 * p }; }
+      return `<rect x="${r2(b.x)}" y="${r2(b.y)}" width="${r2(b.w)}" height="${r2(b.h)}" rx="${s.radius || 0}"/>`;
+    },
     tikz(s: any, X: any) {
       if (!s.text.trim()) return '';
       const o = textOpts(s, X);
@@ -1676,6 +1848,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
         const so = styleOpts({ stroke: s.stroke, width: s.width ?? 1, dash: s.dash, fill: s.fill }, X, { fill: true });
         if (s.stroke && !so.some((x) => x.startsWith('draw='))) so.unshift('draw');
         if (s.radius) so.push(`rounded corners=${X.pt(s.radius)}`);
+        so.push(...(TD.shadowTikz?.(s, X) ?? []));
         return so;
       };
       if (isPara(s)) {
@@ -1789,18 +1962,20 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
     '\\makeatother',
   ];
   TD.preambleCompat = (X: any) => {
-    const qk = X.libs.has('quantikz2'), zx = X.pkgs.has('zx-calculus');
+    const qk = X.libs.has('quantikz2') || X.libs.has('quantikz'), zx = X.pkgs.has('zx-calculus');
     return { before: qk && (zx || X.pkgs.has('tikz-cd')) ? QK_CD : [], after: [...(qk && zx ? QK_ZX : []), ...(X.pkgs.has('xy') && X.pkgs.has('pgf-umlcd') ? XY_UML : [])] };
   };
   TD.preamble = function (X: any) {
     const pre = ['\\usepackage{tikz}'];
+    // the old quantikz library and quantikz2 both define the quantikz environment: one of them
+    if (X.libs.has('quantikz2')) X.libs.delete('quantikz');
     const libs = [...X.libs], compat = TD.preambleCompat(X);
     pre.push(...compat.before);
     if (libs.length) pre.push(`\\usetikzlibrary{${libs.join(', ')}}`);
     if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
     // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
     const forest = [...X.pkgs].filter((p) => /^forest\b/.test(p));
-    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p) && !p.startsWith('svgcolor:')) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : p === 'svg' ? TD.texImages.SVG_PKG : `\\usepackage{${p}}`);
+    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p) && !p.startsWith('svgcolor:')) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : p === 'svg' ? TD.texImages.SVG_PKG : TD.lint ? TD.lint.packageLine(p) : `\\usepackage{${p}}`);
     if (forest.length) {
       const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
       pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);
@@ -2003,6 +2178,17 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
   // round the statements kept as written, which rely on them; code written from a shape already says all of it, and a
   // shape added here must not take them (a text would be boxed by every node/.style={draw}). Named styles and >=Tip
   // stay on the picture.
+  // X.only (TD.toTikz `only`, for src/application/kept-preview.ts): \TDoff and \TDon between statements draw the ones
+  // around a statement invisibly, so its picture shows its ink alone. pgf's opacities are switched (not a scope round
+  // the others, which would end the \def and \tikzset among them there). While off, the opacity setters every TikZ key
+  // goes through (opacity=, fill opacity=, text opacity=) do nothing, so a statement's own opacity doesn't show it.
+  // What goes on a layer (pgfonlayer, on background layer) is set down apart from where it was written, each layer in
+  // a scope of its own: entering one sets the state of the moment.
+  const ONLY_SWITCHES = '\\let\\TDstrokeop\\pgfsetstrokeopacity\\let\\TDfillop\\pgfsetfillopacity\\expandafter\\let\\expandafter\\TDgobble\\csname @gobble\\endcsname\\def\\TDstate{1}\n'
+    + '\\def\\TDoff{\\TDstrokeop{0}\\TDfillop{0}\\let\\pgfsetstrokeopacity\\TDgobble\\let\\pgfsetfillopacity\\TDgobble\\def\\TDstate{0}}\n'
+    + '\\def\\TDon{\\let\\pgfsetstrokeopacity\\TDstrokeop\\let\\pgfsetfillopacity\\TDfillop\\TDstrokeop{1}\\TDfillop{1}\\def\\TDstate{1}}\n'
+    + '\\let\\TDonlayer\\pgfonlayer\\def\\pgfonlayer#1{\\TDonlayer{#1}\\TDstrokeop{\\TDstate}\\TDfillop{\\TDstate}}';
+  const onLayer = (o: string) => /(^|,)\s*on background layer\s*(,|$)/.test(o);
   const EVERY = /^\s*(every\b[^=]*\/\.(?:append )?style|nodes|(?:inner|outer) [xy]?sep|minimum (?:size|width|height)|align|text (?:width|centered|height|depth))\s*(?:=|$)/;
   function pictureOpts(shapes: any) {
     const own: string[] = [], every = new Map<string, string>(); // picture → its every-node options
@@ -2085,6 +2271,8 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       }
     }
     for (const preamble of new Set(shapes.map((s: any) => s.tex?.preamble).filter(Boolean))) {
+      // what the definitions use needs its package too (a tabular's >{…} columns: array)
+      if (TD.lint?.uses) { const u = TD.lint.uses(preamble); for (const p of u.pkgs) X.pkgs.add(p); for (const l of u.libs) X.libs.add(l); }
       if (X.preDefs) X.preDefs.add(preamble);
       else items.push({code:preamble,ctx:[],group:null});
     }
@@ -2117,8 +2305,10 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
           const own = TD.rawTikz.dedent((patched ?? t.src).slice(t.cut));
           // only moved: as written, in a shift scope outside its own scopes
           const ids = run.map((r: any) => r.id);
-          const ctx = [...(every.has(t.p) ? [every.get(t.p)] : []), ...(t.ctx || [])];
-          if (own.trim()) items.push(d ? { code: mark(ids, TD.rawTikz.wrapCode(own, ctx, X.c(d.dx, d.dy))), ctx: [], group: exportGroup(s) } : { code: mark(ids, own), ctx, group: exportGroup(s) });
+          // definitions outside their scopes (src/domain/rawtikz.ts says why)
+          const defs = run.every((r: any) => r.type === 'tikz' && r.kind === 'defs');
+          const ctx = defs ? [] : [...(every.has(t.p) ? [every.get(t.p)] : []), ...(t.ctx || [])];
+          if (own.trim()) items.push(d && !defs ? { code: mark(ids, TD.rawTikz.wrapCode(own, ctx, X.c(d.dx, d.dy))), ctx: [], group: exportGroup(s), ids, at: [t.p, t.k], layer: (t.ctx || []).some(onLayer) } : { code: mark(ids, own), ctx, group: exportGroup(s), ids, at: [t.p, t.k], layer: (t.ctx || []).some(onLayer) });
           if (t.drop) (X.notes = X.notes || new Set()).add(`Picture options left out (they belong to the whole picture): ${t.drop.join(', ')}`);
           n += t.n; continue;
         }
@@ -2143,21 +2333,66 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       }
       if (code && old.length && !placed && !chainNm && !nativeChanged(s) && (s.type === 'text' || s.type === 'coord')) code += '\n' + old.map((nm: any) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
       if (code && chainNm) code += `\n\\chainin (${chainNm})${s.chain.name && s.chain.name !== 'chain' ? ` [on chain=${s.chain.name}]` : ''};`;
-      if (code) items.push({ code: mark([s.id], code), ctx: [], group: exportGroup(s) });
+      if (code) items.push({ code: mark([s.id], code), ctx: [], group: exportGroup(s), ids: [s.id] });
       n++;
     }
-    // consecutive statements from the same scopes share them
-    const out = [];
+    // What an imported picture drew on the background layer comes first among its shapes (it lies under the rest), but
+    // its code may name nodes made after it: written back where it stood among the picture's statements (the layer
+    // puts it underneath wherever it is written).
+    if (items.some((it: any) => it.layer)) {
+      const rest = items.filter((it: any) => !it.layer);
+      for (const it of items.filter((it: any) => it.layer)) {
+        const q = rest.findIndex((r: any) => r.at && r.at[0] === it.at[0] && r.at[1] > it.at[1]);
+        rest.splice(q < 0 ? rest.length : q, 0, it);
+      }
+      items.splice(0, items.length, ...rest);
+    }
+    // X.only: the other statements drawn invisibly, by the switches (ONLY_SWITCHES) between statements; a definition
+    // leaves them as they are.
+    const byId = new Map<any, any>(shapes.map((s: any) => [s.id, s]));
+    const shows = (it: any) => !X.only || !it.ids ? null
+      : it.ids.some((id: any) => X.only.has(id)) ? true
+      : it.ids.every((id: any) => { const s = byId.get(id); return s && s.type === 'tikz' && (s.kind === 'defs' || s.pre); }) ? null : false;
+    const OPACITY = (v: number) => (v ? '\\TDon' : '\\TDoff');
+    let shown = true, hidden = false; // (pgf's own, at the picture's top)
+    // the statements of a run with the switches between them, from the state `from`
+    const switched = (run: any[], from: boolean) => {
+      let cur = from;
+      const lines: string[] = [];
+      for (const it of run) {
+        const vis = shows(it);
+        if (vis !== null && vis !== cur) { lines.push(OPACITY(vis ? 1 : 0)); cur = vis; if (!vis) hidden = true; }
+        lines.push(it.code);
+      }
+      return { lines, cur };
+    };
+    // consecutive statements from the same scopes share them, as any export writes them (a \clip or a definition in a
+    // scope holds for the statements after it there); switches inside a scope end with it (TeX's group, pgf's state)
+    const out: string[] = [];
     for (let a = 0; a < items.length;) {
       const key = JSON.stringify([items[a].ctx, items[a].group]);
       let b = a + 1;
       while (b < items.length && JSON.stringify([items[b].ctx, items[b].group]) === key) b++;
-      const code = items.slice(a, b).map(x => x.code).join('\n');
-      if (items[a].group) out.push('\\begin{scope}\n  ' + TD.rawTikz.wrapCode(code, items[a].ctx).replace(/\n/g, '\n  ') + '\n\\end{scope}');
-      else if (!items[a].ctx.length) out.push(...items.slice(a, b).map(x => x.code));
-      else out.push(TD.rawTikz.wrapCode(code, items[a].ctx));
+      const run = items.slice(a, b);
+      if (!items[a].group && !items[a].ctx.length) { const r = switched(run, shown); out.push(...r.lines); shown = r.cur; }
+      else {
+        // round the scope: on when a statement shown is in it (a transparency group is painted where it ends, with
+        // the state round it), then switched inside, statement by statement
+        const vis = run.map(shows).filter((v: any) => v !== null);
+        if (vis.length && vis.some(Boolean) !== shown) { shown = vis.some(Boolean); out.push(OPACITY(shown ? 1 : 0)); if (!shown) hidden = true; }
+        const code = switched(run, shown).lines.join('\n');
+        if (items[a].group) out.push('\\begin{scope}\n  ' + TD.rawTikz.wrapCode(code, items[a].ctx).replace(/\n/g, '\n  ') + '\n\\end{scope}');
+        else out.push(TD.rawTikz.wrapCode(code, items[a].ctx));
+      }
       a = b;
     }
+    // what the picture draws as it ends (show background rectangle, framed, a background grid, spy) goes with its first
+    // statement that draws, when that one is shown: its picture is the lowest, so that lies under the rest, once
+    if (X.only) {
+      const first = items.map(shows).find((v: any) => v !== null), end = first === true;
+      if (end !== shown) { out.push(OPACITY(end ? 1 : 0)); if (!end) hidden = true; }
+    }
+    if (hidden) out.unshift(ONLY_SWITCHES);
     return out;
   };
   // the whole picture as written, when every statement of one imported picture is there, in order and unchanged
@@ -2174,12 +2409,26 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
       if (++i === t.n) { k++; i = 0; }
     }
     if (k !== t0.N || i !== 0) return null;
+    // X.only: a transparency group is painted as its scope ends, with the state round it, which the switches at each
+    // statement can't set as written; statement by statement (TD.tikzLines) sets it round each scope
+    if (X.only && L.some((s: any) => s.tex.i === 0 && /transparency group/.test(s.tex.src))) return null;
     needs(L, X);
     // definitions from the source's preamble: to the preamble, or (a snippet) first in the picture
     const pre = shapes.filter((s: any) => !s.hidden && s.type === 'tikz' && s.pre).map((s: any) => mark([s.id], T.tikz.tikz(s, X))).filter(Boolean);
     if (!X.preDefs) for (const preamble of new Set(L.map((s: any) => s.tex?.preamble).filter(Boolean))) pre.push(preamble);
     const runIds = (s: any) => L.filter((r: any) => r.tex.k === s.tex.k).map((r: any) => r.id);
-    return { open: t0.open, pre, body: L.filter((s: any) => s.tex.i === 0).map((s: any) => mark(runIds(s), s.tex.src)).join('') + L[L.length - 1].tex.tail, close: '\\end{tikzpicture}' };
+    // X.only: each statement switched on or off where its own text starts (a definition left as it is), so each is
+    // drawn as it should be whatever scopes are open there; the picture otherwise exactly as written
+    const switchOf = (s: any) => {
+      const run = L.filter((r: any) => r.tex.k === s.tex.k);
+      return run.some((r: any) => X.only.has(r.id)) ? '\\TDon ' : run.every((r: any) => r.type === 'tikz' && r.kind === 'defs') ? '' : '\\TDoff ';
+    };
+    const src = (s: any) => { const t = s.tex, c = Math.max(0, Math.min(t.src.length, t.cut || 0)); return X.only ? t.src.slice(0, c) + switchOf(s) + t.src.slice(c) : t.src; };
+    const firsts = L.filter((s: any) => s.tex.i === 0);
+    const body = firsts.map((s: any) => mark(runIds(s), src(s))).join('') + L[L.length - 1].tex.tail;
+    // what the picture draws as it ends goes with its first statement that draws (as TD.tikzLines says)
+    const end = X.only && firsts.map(switchOf).find((w: string) => w) === '\\TDon ' ? '\\TDon\n' : '\\TDoff\n';
+    return { open: t0.open, pre, body: X.only ? '\n' + ONLY_SWITCHES + body + end : body, close: '\\end{tikzpicture}' };
   };
   // Body lines (definecolors + shapes) for a list of shapes.
   TD.tikzBody = function (shapes: any, X: any) {
@@ -2248,23 +2497,32 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
   /** A Thai document font with pdfLaTeX, which sets only its Thai in it: said in the code. */
   TD.fontNote = (X: any) => X.engine !== 'xelatex' && docFont(X.docFont).thai
     ? `The document font ${docFont(X.docFont).label}: pdfLaTeX sets its Thai in it and the rest in Computer Modern; XeLaTeX sets all of it.` : null;
-  TD.toTikz = function (shapes: any, { standalone = false, engine = 'pdflatex' as TexEngine, docFont: font = undefined as string | undefined } = {}) {
+  // `only`: the ids of the shapes to show; every other one is written as well (its names, styles and room are the
+  // picture's) but drawn invisibly. A kept fragment's compiled preview is drawn so (src/application/kept-preview.ts).
+  TD.toTikz = function (shapes: any, { standalone = false, engine = 'pdflatex' as TexEngine, docFont: font = undefined as string | undefined, only = undefined as string[] | undefined } = {}) {
     const X = makeX({ engine, docFont: font });
+    if (only) X.only = new Set(only);
     if (standalone) X.preDefs = new Set();
     const reach = TD.texReach(shapes);
     shapes = reach.shapes;
     if (reach.note) (X.notes = X.notes || new Set()).add(reach.note);
     const pic = TD.tikzPicture(shapes, X);
     // the maths and text styles in labels: their packages, and definitions for \mathbfit and \mathsfit
-    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(pic) : { pkgs: [], defs: [] };
+    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(pic, { macros: X.macros, pkgs: X.pkgs, libs: X.libs }) : { pkgs: [], defs: [] };
     for (const p of need.pkgs) X.pkgs.add(p);
-    const pre = [...TD.preamble(X), ...need.defs, ...(X.preDefs ? X.preDefs : []), ...TD.fontLines(X, pic, { doc: standalone })];
+    // the file's macros: their packages with the rest, and their definitions before the pictures' own (which leave
+    // out any command the file defines: TD.preDefsWithout)
+    const mac = TD.macroPreamble(X);
+    for (const p of mac.pkgs) X.pkgs.add(p);
+    const head = [...TD.preamble(X), ...new Set([...need.defs, ...mac.defs])];
+    const macroLines = preambleLines(X.macros || '', head);
+    const pre = [...head, ...macroLines, ...TD.preDefsWithout(X), ...TD.fontLines(X, pic, { doc: standalone })];
     const fontNote = TD.fontNote(X);
     if (fontNote && standalone) (X.notes = X.notes || new Set()).add(fontNote);
     const done = (tex: string) => finishThai(tex, X.engine || 'pdflatex');
     if (!standalone) {
       // a snippet: the packages on one comment line, and any compatibility lines (each its own line) to copy
-      const c = TD.preambleCompat(X), extra = [...c.before, ...c.after, ...need.defs];
+      const c = TD.preambleCompat(X), extra = [...c.before, ...c.after, ...need.defs, ...mac.defs, ...macroLines];
       const head = '% Requires: ' + pre.filter((l) => !extra.includes(l)).join(' ');
       const alt = pre.includes('\\usetikzlibrary{quantikz2}') ? ['% (or \\usepackage{quantikz} in place of \\usetikzlibrary{quantikz2})'] : [];
       const note = c.before.length ? ['% and, in the preamble, these lines (the first block before \\usetikzlibrary{quantikz2}):', ...extra.map((l) => '%   ' + l)]

@@ -3,6 +3,8 @@ import { finishThai, docFont as docFontOf, DOC_FONTS, type TexEngine } from '../
 import { updateSvg } from '../platform/update-svg';
 import { SvgLabelResources } from '../platform/svg-label-resources';
 import { wheelZoomFactor } from '../ui/wheel-zoom';
+import { parseMacros } from '../core/doc-macros';
+import { closingDollar } from '../core/tex-scan';
 import DocumentSettings from '../ui/DocumentSettings.svelte';
 import { renderView, destroyView } from '../ui/render-view.svelte';
 import DocumentView, { type DocumentViewModel } from '../ui/DocumentView.svelte';
@@ -103,9 +105,8 @@ import { createDocHistory } from './doc-history';
     while (i < n) {
       const c = src[i];
       if (c === '$') {
-        let k = i + 1;
-        while (k < n && !(src[k] === '$' && src[k - 1] !== '\\')) k++;
-        if (k < n && k > i + 1) { out += katex(src.slice(i + 1, k), false); i = k + 1; continue; }
+        const k = closingDollar(src, i + 1);
+        if (k > i + 1) { out += katex(src.slice(i + 1, k), false); i = k + 1; continue; }
       }
       if (c === '\\') {
         const nx = src[i + 1] || '';
@@ -243,10 +244,15 @@ import { createDocHistory } from './doc-history';
   }
   // the maths and text styles a document's body uses, beyond the amsmath and amssymb every document loads:
   // \usepackage lines, then the definitions of \mathbfit and \mathsfit (TD.lint.mathNeeds)
+  // the packages and definitions the text's maths and the file's macros need (src/core/doc-macros.ts)
   function mathStyleLines(body: any, X: any) {
-    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(body.join('\n')) : { pkgs: [], defs: [] };
-    return [...need.pkgs.filter((p: any) => p !== 'amsmath' && p !== 'amssymb' && !X.pkgs.has(p)).map((p: any) => `\\usepackage{${p}}`), ...need.defs];
+    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(body.join('\n'), { macros: X.macros, pkgs: X.pkgs, libs: X.libs }) : { pkgs: [], defs: [] };
+    const mac = TD.macroPreamble(X);
+    const pkgs = [...new Set([...need.pkgs, ...mac.pkgs])], defs = [...new Set([...need.defs, ...mac.defs])];
+    return [...pkgs.filter((p: any) => p !== 'amsmath' && p !== 'amssymb' && !X.pkgs.has(p)).map((p: any) => TD.lint.packageLine(p)), ...defs];
   }
+  /** The file's macro definitions, last in the preamble (those it already holds left out). */
+  const macroLines = (X: any, have: string[]) => TD.macroPreamble(X, have).lines;
   // packages the inline commands in a text need
   function textPkgs(text: any, set: any) {
     if (/\\(sout|uline|uwave|xout)\b/.test(text)) set.add('[normalem]{ulem}');
@@ -295,7 +301,7 @@ import { createDocHistory } from './doc-history';
   }
   // engine: the LaTeX the code is for (pdflatex or xelatex), which writes the document's font (page.family) its way
   TD.docToLatex = function (doc: any, { engine = 'pdflatex' }: { engine?: TexEngine } = {}) {
-    const X = TD.makeTikzContext({ engine, docFont: doc.page && doc.page.family });
+    const X = TD.makeTikzContext({ engine, docFont: doc.page && doc.page.family, macros: (doc.page && doc.page.macros) || '' });
     X.preDefs = new Set(); // definitions kept from an imported preamble
     const P = TD.pageSize(doc.page);
     let needGraphicx = false, needBox = false;
@@ -359,7 +365,8 @@ import { createDocHistory } from './doc-history';
       ...mathStyleLines(body, X),
       ...(pk.has('{hyperref}') ? ['\\usepackage{hyperref}'] : []), // hyperref goes last
       ...defs,
-      ...X.preDefs,
+      ...macroLines(X, [...pre, ...defs]),
+      ...TD.preDefsWithout(X),
       ...(spread !== 1 ? [`\\linespread{${spread}}`] : []),
       '',
       ...(P.title ? [`\\title{${titleTex(leafName(doc.name) || 'Untitled')}}`, ...(String(P.author || '').trim() ? [`\\author{${titleTex(P.author.trim())}}`] : []), '\\date{}', ''] : []),
@@ -376,7 +383,7 @@ import { createDocHistory } from './doc-history';
   // Page mode: every object keeps its exact place on the paper. Each page is one overlay
   // tikzpicture placed at the page's top-left corner with eso-pic (one LaTeX run).
   TD.pageToLatex = function (doc: any, { only, engine = 'pdflatex' }: Record<string, any> = {}) {
-    const X = TD.makeTikzContext({ engine, docFont: doc.page && doc.page.family });
+    const X = TD.makeTikzContext({ engine, docFont: doc.page && doc.page.family, macros: (doc.page && doc.page.macros) || '' });
     X.preDefs = new Set(); // definitions kept from an imported preamble
     const P = TD.pageSize(doc.page);
     const h = P.H * PX_PER_CM, gap = PX_PER_CM, n = Math.max(1, doc.sheet.pages | 0);
@@ -417,7 +424,8 @@ import { createDocHistory } from './doc-history';
       '\\usepackage{eso-pic}',
       ...mathStyleLines(body, X),
       ...defs,
-      ...X.preDefs,
+      ...macroLines(X, [...pre, ...defs]),
+      ...TD.preDefsWithout(X),
       '\\newsavebox{\\tdpage}',
       '\\pagestyle{empty}',
       '',
@@ -680,6 +688,8 @@ import { createDocHistory } from './doc-history';
   }
 
   function render(forPrint?: any): void {
+    // the open file's macros, before anything is drawn (src/domain/mathengine.ts)
+    TD.math.useMacros(TD.state?.doc?.page?.macros);
     if (!forPrint && !TD.math.previewing) return TD.math.preview(() => render());
     if (forPrint && !TD.math.finalizing) return TD.math.synchronous(() => render(true));
     // an editor drawn again (a setting changed while typing) keeps its caret
@@ -714,6 +724,12 @@ import { createDocHistory } from './doc-history';
   let lastPt: any = null;
   root!.addEventListener('pointerdown', (e) => { lastPt = { x: e.clientX, y: e.clientY }; }, true);
   function renderKeep(prev: any, fromKey?: any) {
+    // a formula still being typed (doc-inline's $…$, see iePend) is written to its block before the page is drawn
+    if (iePend && ieFor >= 0 && doc().blocks[ieFor]?.type === 'text') {
+      const ed = root!.querySelector<HTMLElement>(`.blk[data-i="${ieFor}"] .blk-ie`);
+      if (ed && iePendFlush()) { doc().blocks[ieFor].text = IE.serialise(ed, ieOrig); changed([ieFor]); }
+    }
+    iePend = null;
     const el = !fromKey && lastPt && document.elementFromPoint(lastPt.x, lastPt.y);
     const hit = el && el.closest && el.closest('#docview .blk');
     const i = hit ? +hit.dataset.i : prev;
@@ -845,7 +861,7 @@ import { createDocHistory } from './doc-history';
     const page = TD.pageSize(doc().page);
     const diagrams = doc().blocks.filter((b: any) => b.type === 'diagram' && b.shapes.length);
     const wide = diagrams.filter((b: any) => diagramWidthCm(b.shapes) > page.textW + 0.01).length;
-    renderView(el, DocumentSettings, { page, wide, fonts: DOC_FONTS.map((f) => ({ key: f.key, label: f.label, css: f.css, thai: !!f.thai })), papers: Object.entries<any>(TD.PAPERS).map(([key, value]) => ({ key, name: key === 'custom' ? t('page.paper.custom', 'Custom') : value.name })) });
+    renderView(el, DocumentSettings, { page, wide, macros: parseMacros(doc().page.macros || '').statements.length, fonts: DOC_FONTS.map((f) => ({ key: f.key, label: f.label, css: f.css, thai: !!f.thai })), papers: Object.entries<any>(TD.PAPERS).map(([key, value]) => ({ key, name: key === 'custom' ? t('page.paper.custom', 'Custom') : value.name })) });
   }
   function setPage(patch: any) {
     const d = doc(), next = { ...TD.PAGE_DEFAULT, ...d.page, ...patch };
@@ -870,6 +886,7 @@ import { createDocHistory } from './doc-history';
     if (o) setPage({ orient: (o as HTMLElement).dataset.pgo });
     const m = (e.target! as Element).closest('[data-pgm]');
     if (m) { const v = +(m as HTMLElement).dataset.pgm!; setPage({ mt: v, mb: v, ml: v, mr: v }); }
+    if ((e.target! as Element).closest('[data-pgmacros]')) app.cmd.editMacros();
   });
 
   const autosize = (ta: any) => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 4 + 'px'; };
@@ -1106,10 +1123,62 @@ import { createDocHistory } from './doc-history';
   }
   document.addEventListener('selectionchange', () => {
     const ed = editor(), sel = getSelection();
-    if (!ed || !sel || !sel.rangeCount || !ed.contains(sel.getRangeAt(0).startContainer)) return;
-    ieRange = sel.getRangeAt(0).cloneRange();
+    if (!ed || !sel || !sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    if (iePend && !ieComposing && !iePop) iePendMoved(r.collapsed ? [r.startContainer, r.startOffset] : null);
+    if (!ed.contains(r.startContainer)) return;
+    ieRange = r.cloneRange();
     ieState();
   });
+  // A formula typed out of order: $$, the caret back between them, then the maths (or a $ typed before maths that
+  // ends in one). The pair being typed in stays text while the caret is inside it, so a command such as \alpha is
+  // typed whole, and becomes a formula once the caret leaves it (arrow keys, a click, leaving the block). Only a pair
+  // typed in turns: dollars the source escapes (\$x\$, shown as $x$) stay text. Typing the closing $ makes the
+  // formula at once (ieTyped).
+  const INLINE_MATH = /(^|[^\\$])\$([^$\s](?:[^$]*[^$\s\\])?)\$(?!\$)/g;
+  let iePend: { node: Text; at: number } | null = null, ieComposing = false;
+  // the complete $…$ in text node n that offset c is inside (after its opening $, up to its closing one)
+  function iePairAt(n: Node, c: number) {
+    if (n.nodeType !== 3) return null;
+    for (const m of n.nodeValue!.matchAll(INLINE_MATH)) {
+      const open = m.index! + m[1].length, close = m.index! + m[0].length - 1;
+      if (c > open && c <= close) return { open, close, tex: m[2] };
+    }
+    return null;
+  }
+  // after typing: is the caret in a complete pair? (then it is the one being typed)
+  function iePendTyped() {
+    const sel = getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+    const r = sel.getRangeAt(0);
+    iePend = iePairAt(r.startContainer, r.startOffset) ? { node: r.startContainer as Text, at: r.startOffset } : null;
+  }
+  // the pair being typed in, as a formula; true when it was there to turn
+  function iePendFlush(): boolean {
+    const p = iePend;
+    iePend = null;
+    if (!p || !p.node.isConnected) return false;
+    const pair = iePairAt(p.node, p.at);
+    if (!pair) return false;
+    const sel = getSelection(), after = !!sel && sel.rangeCount > 0 && sel.isCollapsed && sel.anchorNode === p.node && sel.anchorOffset === pair.close + 1;
+    const r = document.createRange(); r.setStart(p.node, pair.open); r.setEnd(p.node, pair.close + 1);
+    const chip = chipFrom(IE.mathChip(pair.tex, IED));
+    r.deleteContents(); r.insertNode(chip);
+    // arrowed out past the closing $: the caret stays after the formula
+    if (after) { const a = document.createRange(); a.setStartAfter(chip); a.collapse(true); sel!.removeAllRanges(); sel!.addRange(a); }
+    return true;
+  }
+  // the caret moved: still in the pair, it follows; out of it, the pair turns
+  function iePendMoved(caret: [Node, number] | null) {
+    const p = iePend!;
+    if (caret && caret[0] === p.node) {
+      const now = iePairAt(p.node, caret[1]), was = iePairAt(p.node, p.at);
+      if (now && was && now.open === was.open) { p.at = caret[1]; return; }
+    }
+    if (iePendFlush() && editingIdx === ieFor) ieSync();
+  }
+  root!.addEventListener('compositionstart', () => { ieComposing = true; });
+  root!.addEventListener('compositionend', () => { ieComposing = false; });
   const chipFrom = (html: string) => { const t = document.createElement('template'); t.innerHTML = html; return t.content.firstChild as HTMLElement; };
   // put a node where the selection is, the caret after it
   function ieInsert(r: Range, node: Node) {
@@ -1510,7 +1579,7 @@ import { createDocHistory } from './doc-history';
     const t = e.target, b = doc().blocks[editingIdx];
     if (!b) return;
     if ((t! as Element).classList.contains('blk-ed')) { b.text = (t! as HTMLInputElement).value; autosize(t); changed([editingIdx], { index: editingIdx, typing: true }); relayout(); return; }
-    if ((t! as Element).classList.contains('blk-ie')) { ieSync(true); if ((e as InputEvent).inputType === 'insertText') ieTyped(e as InputEvent); return; }
+    if ((t! as Element).classList.contains('blk-ie')) { ieSync(true); if ((e as InputEvent).inputType === 'insertText') { ieTyped(e as InputEvent); iePendTyped(); } return; }
     if ((t! as Element).classList.contains('cell')) { const r = +(t! as HTMLElement).dataset.r!, c = +(t! as HTMLElement).dataset.c!; while (b.rows[r].length <= c) b.rows[r].push(''); b.rows[r][c] = (t! as HTMLInputElement).value; changed([editingIdx], { index: editingIdx, typing: true, cell: [r, c] }); return; }
     if ((t! as HTMLElement).dataset.im === 'width') {
       b.width = +(t! as HTMLInputElement).value;
@@ -1575,8 +1644,9 @@ import { createDocHistory } from './doc-history';
     for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000) as unknown as number[]);
     return `data:${type};base64,${btoa(s)}`;
   };
-  // Where each maths stylesheet lives (vendor/). Fonts are only ever embedded from these local copies.
-  const MATH_CSS = 'vendor/katex/katex.min.css';
+  // Where each maths stylesheet lives (vendor/). Fonts are only ever embedded from these local copies. KaTeX's own,
+  // then TeX's script-size faces over it (katex-scripts.css).
+  const MATH_CSS = ['vendor/katex/katex.min.css', 'vendor/katex/katex-scripts.css'];
   const fetchOk = async (url: any) => {
     for (let k = 0; k < 2; k++) { // one retry: a dev server mid-restart usually answers the second time
       try { const r = await fetch(url); if (r.ok) return r; } catch (e: any) { /* retry */ }
@@ -1598,21 +1668,23 @@ import { createDocHistory } from './doc-history';
   // Fonts that could not be embedded in the last export (left out; nothing is fetched from another site).
   TD.mathFontsLinked = 0;
   async function inlineFonts() {
-    const cssUrl = MATH_CSS;
-    let css = await mathCssText(cssUrl);
-    if (!css) { TD.mathFontsLinked = -1; return ''; }
-    const base = cssUrl.slice(0, cssUrl.lastIndexOf('/') + 1);
-    const urls = [...new Set([...css.matchAll(/url\(['"]?([^'")]+\.woff2)['"]?\)/g)].map((m) => m[1]))];
-    let linked = 0;
-    for (const u of urls) {
-      const rel = u.replace(/^\.\//, '');
-      let src;
-      try { src = await dataUrl(base + rel, 'font/woff2'); } catch (e: any) { src = rel; linked++; }
-      css = css.split(u).join(src);
+    let all = '', linked = 0;
+    for (const cssUrl of MATH_CSS) {
+      let css = await mathCssText(cssUrl);
+      if (!css) { if (!all) { TD.mathFontsLinked = -1; return ''; } continue; }
+      const base = cssUrl.slice(0, cssUrl.lastIndexOf('/') + 1);
+      const urls = [...new Set([...css.matchAll(/url\(['"]?([^'")]+\.woff2)['"]?\)/g)].map((m) => m[1]))];
+      for (const u of urls) {
+        const rel = u.replace(/^\.\//, '');
+        let src;
+        try { src = await dataUrl(base + rel, 'font/woff2'); } catch (e: any) { src = rel; linked++; }
+        css = css.split(u).join(src);
+      }
+      all += css;
     }
     TD.mathFontsLinked = linked;
     // keep only the woff2 sources
-    return css.replace(/,\s*url\([^)]*\.(woff|ttf)\)\s*format\(["'](woff|truetype)["']\)/g, '');
+    return all.replace(/,\s*url\([^)]*\.(woff|ttf)\)\s*format\(["'](woff|truetype)["']\)/g, '');
   }
   // the maths stylesheet with its fonts embedded (for PNG / PDF export)
   TD.inlineMathCss = inlineFonts;

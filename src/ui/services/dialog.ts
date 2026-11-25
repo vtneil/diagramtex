@@ -16,13 +16,14 @@ import { runtime as TD } from '../../runtime';
   const esc = (t: any) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
   let open: any = null; // { finish } of the dialog on screen; a new one cancels it
 
-  // preview: (value) => HTML shown under the field as it is typed (a title with maths, say)
-  function dialog({ title, message = '', input = null, multiline = false, ok = msg("ui.ok", 'OK'), cancel = msg("ui.cancel", 'Cancel'), danger = false, readonly = false, placeholder = '', preview = null, choices = undefined, choiceLabel = undefined, choiceNotes = undefined }: any) {
+  // preview: (value) => HTML shown under the field as it is typed (a title with maths, say); with notes: true it is
+  // interface text about what is typed (what was understood, what can't be used) rather than how it reads
+  function dialog({ title, message = '', input = null, multiline = false, ok = msg("ui.ok", 'OK'), cancel = msg("ui.cancel", 'Cancel'), danger = false, readonly = false, placeholder = '', preview = null, notes = false, choices = undefined, choiceLabel = undefined, choiceNotes = undefined }: any) {
     if (open) open.finish(false);
     const prev = document.activeElement;
     const root = document.createElement('div');
     root.className = 'td-dialog';
-    const component = mountFrame(root, Dialog, { title, message, input, multiline, ok, cancel, danger, readonly, placeholder, preview: !!preview, choices, choiceLabel, choiceNotes });
+    const component = mountFrame(root, Dialog, { title, message, input, multiline, ok, cancel, danger, readonly, placeholder, preview: !!preview, notes, choices, choiceLabel, choiceNotes });
     document.body.appendChild(root);
     const box = root.firstElementChild, inp = root.querySelector('.tdd-in'), pv = root.querySelector('.tdd-pv');
     if (preview && inp && pv) {

@@ -3,15 +3,12 @@ import { runtime as TD } from '../../runtime';
 import { t } from '../../i18n';
 import { mountFrame } from '../mount-frame';
 import Tour, { type TourModel, type TourStep } from '../Tour.svelte';
-// The welcome tour: a few cards shown once, on the very first visit (no files yet), and again from the command
-// search (Welcome Tour). Each card (src/ui/Tour.svelte) has a small map of the window with the part it talks about
+// The welcome tour: a few cards, opened from the command search (Welcome Tour); never on its own. Each card
+// (src/ui/Tour.svelte) has a small map of the window with the part it talks about
 // marked in blue pen, so nothing on the page itself moves or is covered. Previous / Next (← →), "I’m All Good" skips
 // (Esc too). It opens and closes as the kit's dialog does.
 (function () {
   'use strict';
-  const KEY = 'diagramtex.tour';
-  const seen = () => { try { return !!localStorage.getItem(KEY); } catch (e: any) { return true; } };
-  const markSeen = () => { try { localStorage.setItem(KEY, 'seen'); } catch (e: any) { /* storage blocked */ } };
   const kb = (k: string) => (TD.app && TD.app.cmd ? TD.app.cmd.kb(k) : k);
   const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
   // translated text, escaped, with {name} slots filled by markup built here (the text itself never holds markup)
@@ -49,7 +46,7 @@ import Tour, { type TourModel, type TourStep } from '../Tour.svelte';
     const shown = () => [...root.querySelectorAll<HTMLElement>('button')].filter((b) => getComputedStyle(b).visibility !== 'hidden');
     function close() {
       if (open !== close) return;
-      markSeen(); open = null;
+      open = null;
       if (prev && prev.isConnected && prev.focus) prev.focus({ preventScroll: true });
       // it fades out as the kit's dialog does (kit.css, .td-dialog-leaving), then goes
       const go = () => { if (root.isConnected) { void unmount(view); root.remove(); } };
@@ -94,8 +91,5 @@ import Tour, { type TourModel, type TourStep } from '../Tour.svelte';
     show,
     close: () => open && open(),
     get open() { return !!open; },
-    // the first visit: only when nothing is stored yet, so people with files are never shown it
-    firstRun() { if (!seen()) { markSeen(); setTimeout(show, 400); } },
-    KEY,
   };
 })();

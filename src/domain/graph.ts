@@ -32,7 +32,8 @@ TD.GRAPH_DEFAULT = [
 // ---------------------------------------------------------------- reading the code
 // The model: { env (picture options, or null), gopts: [graph option], nodes, edges, pre, post, warnings, found }
 // node: { name, text (as written after the slash, or null: the name), o: [option], x, y (cm, or null),
-//         lab: { t, side } | null (label=side:text), est: [x, y] (TikZ's own placement, cm) }
+//         lab: { t, side } | null (label=side:text) }
+// tree: the graph's groups, chains and nodes as written, for TikZ's placement (place())
 // edge: { a, b, op ('->' '--' '<-' '<->'), o: [option], t (label) | null, sw (label swapped), lo: [label option] }
 const isQuote = (it: string) => /^\s*"/.test(it);
 function readQuote(it: string) {
@@ -95,56 +96,139 @@ function readGraph(st: string, M: any, warn: any) {
   return true;
 }
 
+// a key that sets what a group's (or the graph's) inside makes: true when read, 'op' for an operator run after the
+// group (clique, cycle, path), false otherwise
+function envKey(env: any, it: string): boolean | 'op' {
+  const { k, v } = kv(it);
+  // (n= and m= also name their shore's nodes V 1 …, W 1 …: graphs' n/.style and m/.style)
+  if ((k === 'n' || k === 'V') && v != null) { const L = k === 'n' ? valueList(`1,...,${unbrace(v)}`) : valueList(unbrace(v)); if (!L) return false; env.V = L; if (k === 'n') env.shoreV = 'V'; return true; }
+  if ((k === 'm' || k === 'W') && v != null) { const L = k === 'm' ? valueList(`1,...,${unbrace(v)}`) : valueList(unbrace(v)); if (!L) return false; env.W = L; if (k === 'm') env.shoreW = 'W'; return true; }
+  if (k === 'p' && v != null) return true; // (G_np's p: not drawn)
+  if (k === 'name' && v != null) { env.prefix += unbrace(v).trim() + ' '; return true; }
+  if (v == null && ['->', '--', '<-', '<->', '-!-'].includes(k)) { env.kind = k; return true; }
+  if ((k === 'edges' || k === 'edge') && v != null) { env.edges.push(...opts(unbrace(v))); return true; }
+  if (v == null && ['clique', 'cycle', 'path'].includes(k)) return 'op';
+  if (v == null && k === 'complete bipartite') return true;
+  return false;
+}
+// a \foreach list: a, b, c with 1,...,9 and a,...,f ranges
+function valueList(t: string): string[] | null {
+  const items = split(t, ',').map((x: string) => x.trim()).filter((x: string) => x !== '');
+  const out: string[] = [];
+  for (let k = 0; k < items.length; k++) {
+    if (items[k] === '...' && k > 0 && k + 1 < items.length) {
+      const a = out[out.length - 1], b = items[k + 1], prev = out.length > 1 ? out[out.length - 2] : null;
+      if (/^-?\d+$/.test(a) && /^-?\d+$/.test(b)) {
+        const step = prev != null && /^-?\d+$/.test(prev) ? +a - +prev : +b >= +a ? 1 : -1;
+        if (!step || out.length > 1000) return null;
+        for (let x = +a + step; step > 0 ? x <= +b : x >= +b; x += step) out.push(String(x));
+        k++; continue;
+      }
+      if (/^[a-zA-Z]$/.test(a) && /^[a-zA-Z]$/.test(b)) { for (let c = a.charCodeAt(0) + 1; c <= b.charCodeAt(0); c++) out.push(String.fromCharCode(c)); k++; continue; }
+      return null;
+    }
+    out.push(unbrace(items[k]));
+  }
+  return out;
+}
 function readBody(s: string, M: any, warn: any) {
   let i = 0;
   const byName = new Map<string, any>();
   const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
   const opAt = () => OPS.find((o) => s.startsWith(o, i)) || null;
   const bracket = () => { ws(); if (s[i] !== '[') return null; const e = close(s, i); if (e < 0) throw new Error('['); const r = s.slice(i + 1, e); i = e + 1; return r; };
-  // each statement, chain and group returns its entries and exits (what an edge into or out of it joins)
-  // and the cells it takes in TikZ's default placement (a chain grows right, a group grows down)
-  function statements(c: number, r: number, stop: string) {
-    let rows = 0, w = 0;
-    const ins: string[] = [], outs: string[] = [];
+  // each statement, chain and group returns its entries and exits (what an edge into or out of it joins), the nodes
+  // it names in order (what a group's operators join) and its shape for TikZ's placement (place()): a group is
+  // chains, a chain elements, an element a node or a group. `env` is what the graph's and groups' options set for
+  // what is inside: V (the node set a subgraph makes), the name prefix (name=), the edge kind operators make (->),
+  // and the groups' own edge styles (edges=, edge=)
+  function statements(stop: string, env: any) {
+    const ins: string[] = [], outs: string[] = [], chains: any[] = [], names: string[] = [];
     for (;;) {
       ws();
       if (i >= s.length || s[i] === stop) break;
       if (s[i] === ',' || s[i] === ';') { i++; continue; }
-      const at = i, ch = chain(c, r + rows);
+      const at = i, ch = chain(env);
       if (i === at) throw new Error('stuck');
-      ins.push(...ch.ins); outs.push(...ch.outs);
-      rows += Math.max(1, ch.h); w = Math.max(w, ch.w);
+      ins.push(...ch.ins); outs.push(...ch.outs); chains.push(ch.els); names.push(...ch.names);
     }
-    return { ins, outs, w, h: rows };
+    return { ins, outs, chains, names };
   }
-  function chain(c: number, r: number) {
-    const first = elem(c, r);
-    let cur = first, w = first.w, h = first.h;
+  function chain(env: any) {
+    const first = elem(env), els = [first.tree], names = [...first.names];
+    let cur = first;
     for (;;) {
       ws();
       const op = opAt();
       if (!op) break;
       i += op.length;
       const eo = bracket();
-      const next = elem(c + w, r);
-      w += next.w; h = Math.max(h, next.h);
-      join(cur.outs, next.ins, op, eo);
+      const next = elem(env);
+      els.push(next.tree); names.push(...next.names);
+      join(cur.outs, next.ins, op, eo, env);
       cur = next;
     }
-    return { ins: first.ins, outs: cur.outs, w, h };
+    return { ins: first.ins, outs: cur.outs, els, names };
   }
-  function elem(c: number, r: number): any {
+  // a group { [options] … } or a subgraph: its options read into a new env, its operators run on its nodes after it
+  function group(opts0: string[], env0: any, body: (env: any) => any) {
+    const env = { ...env0, edges: env0.edges.slice() }, ops: string[] = [], keep: string[] = [], bad: string[] = [];
+    for (const it of opts0) {
+      const r = envKey(env, it);
+      if (r === 'op') ops.push(kv(it).k);
+      else if (r === true) keep.push(it);
+      else if (placeKey(placeStart(), zeroCounts(), it, () => {}) === true) keep.push(it);
+      else bad.push(it);
+    }
+    if (bad.length) warn(`The group options [${bad.join(', ')}] aren't drawn here; editing writes the edges out one by one`);
+    const g = body(env);
+    // cycle, path and clique join the group's nodes in the order named, with the edges it makes (graphs library)
+    const list = g.names;
+    for (const k of ops) {
+      const pairs: [string, string][] = [];
+      if (k === 'path' || k === 'cycle') { for (let q = 1; q < list.length; q++) pairs.push([list[q - 1], list[q]]); if (k === 'cycle' && list.length > 1) pairs.push([list[list.length - 1], list[0]]); }
+      if (k === 'clique') for (let a = list.length - 1; a >= 1; a--) for (let b = a - 1; b >= 0; b--) pairs.push([list[b], list[a]]);
+      for (const [a, b] of pairs) join([a], [b], env.kind, null, env);
+    }
+    return { ins: g.ins, outs: g.outs, names: g.names, tree: { k: 'group', opts: keep, chains: g.chains } };
+  }
+  function elem(env: any): any {
     ws();
     if (s[i] === '{') {
       i++;
       const go = bracket();
-      if (go != null && go.trim()) warn(`The group options [${go.trim()}] aren't drawn here; editing writes the edges out one by one`);
-      const g = statements(c, r, '}');
+      const r = group(go != null ? opts(go) : [], env, (e) => statements('}', e));
       if (s[i] !== '}') throw new Error('}');
       i++;
-      return { ins: g.ins, outs: g.outs, w: Math.max(1, g.w), h: Math.max(1, g.h) };
+      return r;
     }
-    return node(c, r);
+    // subgraph X [options] (graphs.standard): I_n is a node for each of V, named with the prefix, its text the
+    // value; K_n, C_n and P_n are I_n in a group whose clique, cycle or path joins them
+    const sg = /^subgraph\s+([A-Za-z_]+)/.exec(s.slice(i));
+    if (sg) {
+      const kind = sg[1];
+      if (!['I_n', 'K_n', 'C_n', 'P_n', 'I_nm', 'K_nm'].includes(kind)) { warn(`The subgraph ${kind} isn't drawn here (it is kept in the code)`); throw new Error('subgraph'); }
+      i += sg[0].length;
+      const so = bracket(), user = so != null ? opts(so) : [];
+      const In = (e: any) => {
+        const chains: any[] = [], names: string[] = [];
+        for (const v of e.V) { const n = node(e, { name: e.prefix + v, text: v }); chains.push([n.tree]); names.push(n.names[0]); }
+        return { ins: names, outs: names, chains, names };
+      };
+      if (kind === 'I_n') return group(user, env, In);
+      // I_nm: subgraph I_n [name shore V] -- [no edges] subgraph I_n [name shore W, V=W]; K_nm joins every V to every W
+      // (graphs.standard; measured: the shores side by side, each down its group)
+      if (kind === 'I_nm' || kind === 'K_nm') return group(user, env, (e) => {
+        if (!e.W) { warn(`The subgraph ${kind} without W or m isn't drawn here (it is kept in the code)`); throw new Error('subgraph'); }
+        const shore = (V: string[], nm: string | undefined) => group([], { ...e, V, prefix: e.prefix + (nm ? nm + ' ' : '') }, In);
+        const a = shore(e.V, e.shoreV), b = shore(e.W, e.shoreW);
+        if (kind === 'K_nm') for (const x of a.names) for (const y of b.names) join([x], [y], e.kind, null, e);
+        return { ins: a.ins, outs: b.outs, names: [...a.names, ...b.names], chains: [[a.tree, b.tree]] };
+      });
+      const op = kind === 'K_n' ? 'clique' : kind === 'C_n' ? 'cycle' : 'path';
+      return group([...user, op], env, (e) => { const inner = group([], e, In); return { ins: inner.ins, outs: inner.outs, names: inner.names, chains: [[inner.tree]] }; });
+    }
+    return node(env);
   }
   // the text after a slash: braced, quoted, or up to the options, a separator or an edge
   function slashText() {
@@ -163,24 +247,33 @@ function readBody(s: string, M: any, warn: any) {
     }
     return s.slice(at, i).trim();
   }
-  function node(c: number, r: number) {
+  function node(env: any, made?: { name: string; text: string }) {
     ws();
     let name: string, text: string | null = null;
-    if (s[i] === '"') {
+    if (made) { name = made.name; text = made.text; }
+    else if (s[i] === '"') {
       const e = s.indexOf('"', i + 1);
       if (e < 0) throw new Error('"');
       name = s.slice(i + 1, e); text = name; i = e + 1;
+    } else if (s[i] === '(') {
+      // (name): a node the picture already has, its name as written (v-1-1, a.north)
+      const e = close(s, i);
+      if (e < 0) throw new Error('(');
+      name = s.slice(i, e + 1); i = e + 1;
     } else {
       const m = /^[^\s,;[\]{}/"<>!=-]+(?:[ \t]+[^\s,;[\]{}/"<>!=-]+)*/.exec(s.slice(i));
       if (!m) throw new Error('name');
       name = m[0]; i += m[0].length;
+      // (name= on the graph or a group puts its prefix before the name; the text is the name as written)
+      if (env.prefix) { text = name; name = env.prefix + name; }
     }
     ws();
-    if (s[i] === '/') { i++; text = slashText(); }
-    const o = bracket();
+    if (!made && s[i] === '/') { i++; text = slashText(); }
+    const o = made ? null : bracket();
     let n = byName.get(name);
+    const fresh = !n;
     if (!n) {
-      n = { name, text, o: [], x: null, y: null, lab: null, est: [c, -r] };
+      n = { name, text, o: [], x: null, y: null, lab: null };
       byName.set(name, n); M.nodes.push(n);
     } else if (text != null) n.text = text;
     if (o != null) for (const it of opts(o)) {
@@ -198,10 +291,11 @@ function readBody(s: string, M: any, warn: any) {
       }
       n.o.push(it);
     }
-    return { ins: [name], outs: [name], w: 1, h: 1 };
+    return { ins: [name], outs: [name], names: [name], tree: { k: 'node', name, made: fresh } };
   }
-  function join(outs: string[], ins: string[], op: string, eo: string | null) {
-    const list = eo == null ? [] : opts(eo);
+  function join(outs: string[], ins: string[], op: string, eo: string | null, env: any) {
+    // (complete bipartite is how a join joins anyway)
+    const list = [...env.edges, ...(eo == null ? [] : opts(eo))].filter((it) => !/^complete bipartite\s*$/.test(it.trim()));
     for (const a of outs) for (const b of ins) {
       if (op === '-!-') { M.edges = M.edges.filter((e: any) => !((e.a === a && e.b === b) || (e.a === b && e.b === a))); continue; }
       const e: any = { a, b, op, o: [], t: null, sw: false, lo: [] };
@@ -214,7 +308,10 @@ function readBody(s: string, M: any, warn: any) {
       M.edges.push(e);
     }
   }
-  statements(0, 0, '');
+  const env: any = { V: ['1'], prefix: '', kind: '--', edges: [] };
+  for (const it of M.gopts) envKey(env, it);
+  env.edges = [];
+  M.tree = { k: 'group', opts: [], chains: statements('', env).chains };
   if (i < s.length) throw new Error('rest');
 }
 
@@ -300,9 +397,9 @@ function nodeOpts(N: any, list: string[], unknown: string[] | null) {
   return N;
 }
 // the text a node shows
-function shownText(n: any, G: any) {
+function shownText(n: any, G: any, text?: string) {
   if (G.empty) return '';
-  let t = n.text == null ? n.name : n.text;
+  let t = text ?? (n.text == null ? n.name : n.text);
   if (G.math && t && !/\$|\\\(/.test(t)) t = `$${t}$`;
   return lines(shown(t));
 }
@@ -336,7 +433,7 @@ function graphOpts(M: any) {
   for (const it of M.gopts) {
     const { k, v } = kv(it);
     if (k === 'nodes' && v != null) G.nodeDef.push(...opts(unbrace(v)));
-    else if (k === 'edges' && v != null) G.edgeDef.push(...opts(unbrace(v)));
+    else if ((k === 'edges' || k === 'edge') && v != null) G.edgeDef.push(...opts(unbrace(v)));
     else if (k === 'math nodes' || k === 'math nodes=true') G.math = true;
     else if (k === 'empty nodes') G.empty = true;
     else if (k === 'no placement') G.noPlace = true;
@@ -344,6 +441,139 @@ function graphOpts(M: any) {
   }
   return G;
 }
+// ---------------------------------------------------------------- TikZ's placement
+// Where TikZ puts the nodes a \graph makes (graphs library: \tikz@lib@graph@linear@pos, @circular@pos and the
+// placement counters), measured against pdflatex. Each new node goes where the counters are as it is made:
+// chain shift × width + group shift × depth (Cartesian), or at the angle and radius they add up to (circular).
+// A new node adds its logical width (1, or its size and a sep) to the width and makes the chain at least its
+// logical depth deep; a name met again adds nothing. A group is as wide as its widest chain and as deep as its
+// chains together; after each chain the depth grows by the chain's. A placement key (grow …, branch …, clockwise …)
+// first moves what follows to where the counters are and starts them afresh; in a group's options it also makes
+// the group take no room in its chain (pgf clears its totals after it).
+const PT_CM = 1 / 28.4527559;
+const ANCHOR_DIR: Record<string, [number, number]> = { center: [0, 0], east: [1, 0], west: [-1, 0], north: [0, 1], south: [0, -1], 'north east': [1, 1], 'north west': [-1, 1], 'south east': [1, -1], 'south west': [-1, -1] };
+const AUTO_ANCHOR: Record<string, string> = { 'center center': 'center', 'west center': 'west', 'east center': 'east', 'center north': 'north', 'west north': 'north west', 'east north': 'north east', 'center south': 'south', 'west south': 'south west', 'east south': 'south east' };
+function placeStart() {
+  return { comp: 'lin', cs: [1, 0], gs: [0, -1], cps: [0, 1], gps: [60, 0], gpsPer: 0, vnum: 1, radius: 1, phase: 90, lw: null as any, ld: null as any, ah: 'center', av: 'center', anchor: null as string | null, base: [0, 0] };
+}
+const zeroCounts = () => ({ width: 0, depth: 0, lwidth: 0, ldepth: 0 });
+function placeAt(S: any, C: any) {
+  if (S.comp === 'none') return [0, 0];
+  if (S.comp === 'circ') {
+    // (a bare clockwise turns by 360/\tikzgraphVnum, the node set's size where the node is made)
+    const ga = S.gpsPer ? S.gpsPer * 360 / S.vnum : S.gps[0];
+    const a = ((S.cps[0] * C.width + ga * C.depth + S.phase) * Math.PI) / 180, r = S.cps[1] * C.width + S.gps[1] * C.depth + S.radius;
+    return [r * Math.cos(a), r * Math.sin(a)];
+  }
+  return [S.cs[0] * C.width + S.gs[0] * C.depth, S.cs[1] * C.width + S.gs[1] * C.depth];
+}
+// a length (cm) or a plain number (the picture's x vector, 1cm: pictures with other vectors are not placed here)
+const lenOr = (v: string | null | undefined, d: number) => { if (v == null) return d; const t = unbrace(v).trim(); if (/^-?[\d.]+$/.test(t)) return parseFloat(t); const n = cm(t); return isFinite(n) ? n : NaN; };
+const ptOf = (v: string | null | undefined, d: number) => { if (v == null) return d; const n = cm(unbrace(v).trim()); return isFinite(n) ? n / PT_CM : NaN; };
+const polar = (v: string) => { const m = /^\(\s*(-?[\d.]+(?:\s*\/\s*-?[\d.]+)?|-?360\s*\/\s*[\d.]+)\s*:\s*([^()]+?)\s*\)$/.exec(unbrace(v).trim()); if (!m) return null; const a = m[1].includes('/') ? m[1].split('/').map(parseFloat).reduce((x, y) => x / y) : parseFloat(m[1]); const r = lenOr(m[2], 0); return isFinite(a) && isFinite(r) ? [a, r] : null; };
+const pair = (v: string) => { const pl = /^\(\s*(-?[\d.]+)\s*:\s*([^,()]+?)\s*\)$/.exec(unbrace(v).trim()); if (pl) { const a = (parseFloat(pl[1]) * Math.PI) / 180, r = lenOr(pl[2], NaN); return isFinite(r) ? [r * Math.cos(a), r * Math.sin(a)] : null; } const m = /^\(\s*([^,()]+?)\s*,\s*([^,()]+?)\s*\)$/.exec(unbrace(v).trim()); if (!m) return null; const x = lenOr(m[1], 0), y = lenOr(m[2], 0); return isFinite(x) && isFinite(y) ? [x, y] : null; };
+// one placement key on the strategy S (copied by the caller): true when read, false when it is not a placement key,
+// null when it is one this can't place exactly
+function placeKey(S: any, C: any, it: string, place: () => void): boolean | null {
+  const { k, v } = kv(it);
+  const dir = /^(grow|branch) (right|left|up|down)( sep)?$/.exec(k);
+  if (dir) {
+    const [, kind, side, sep] = dir, sx = side === 'right' ? 1 : side === 'left' ? -1 : 0, sy = side === 'up' ? 1 : side === 'down' ? -1 : 0;
+    if (sep) {
+      const gap = ptOf(v, 10); // 1em
+      if (!isFinite(gap)) return null;
+      place(); S.comp = 'lin';
+      const step = [sx * PT_CM, sy * PT_CM], logical = { sep: gap, axis: sx ? 'x' : 'y' };
+      if (kind === 'grow') { S.cs = step; S.lw = logical; } else { S.gs = step; S.ld = logical; }
+      if (sx) S.ah = sx > 0 ? 'west' : 'east'; else S.av = sy > 0 ? 'south' : 'north';
+    } else {
+      const d = lenOr(v, 1);
+      if (!isFinite(d)) return null;
+      place();
+      if (kind === 'grow') { S.cs = [sx * d, sy * d]; S.lw = null; } else { S.gs = [sx * d, sy * d]; S.ld = null; }
+      // (pgf's grow up and branch right set the horizontal anchor, grow down and branch up the vertical one)
+      if ((kind === 'grow' && side !== 'down') || (kind === 'branch' && (side === 'right' || side === 'left'))) S.ah = 'center'; else S.av = 'center';
+    }
+    S.anchor = 'auto';
+    return true;
+  }
+  if (k === 'Cartesian placement' && v == null) { place(); S.comp = 'lin'; return true; }
+  if (k === 'circular placement' && v == null) { place(); S.comp = 'circ'; S.lw = S.ld = null; return true; }
+  if ((k === 'clockwise' || k === 'counterclockwise')) {
+    const sign = k === 'clockwise' ? -1 : 1, n = v == null ? NaN : parseFloat(unbrace(v));
+    if (v != null && !(n > 0)) return null;
+    place(); S.comp = 'circ'; S.lw = S.ld = null;
+    if (v == null) { S.gps = [0, 0]; S.gpsPer = sign; } else { S.gps = [(sign * 360) / n, 0]; S.gpsPer = 0; }
+    return true;
+  }
+  if ((k === 'n' || k === 'V') && v != null) { const L = k === 'n' ? valueList(`1,...,${unbrace(v)}`) : valueList(unbrace(v)); if (!L) return null; S.vnum = L.length; return false; }
+  if (k === 'no placement' && v == null) { place(); S.comp = 'none'; return true; }
+  if (k === 'chain shift' || k === 'group shift') { const p = v == null ? null : pair(v); if (!p) return null; if (k === 'chain shift') S.cs = p; else S.gs = p; return true; }
+  if (k === 'chain polar shift' || k === 'group polar shift') { const p = v == null ? null : polar(v); if (!p) return null; if (k === 'chain polar shift') S.cps = p; else { S.gps = p; S.gpsPer = 0; } return true; }
+  if (k === 'radius') { const r = lenOr(v, NaN); if (!isFinite(r)) return null; S.radius = r; return true; }
+  if (k === 'phase') { const a = v == null ? NaN : parseFloat(unbrace(v)); if (!isFinite(a)) return null; S.phase = a; return true; }
+  if (/^(placement\/|level |level$|@auto anchor)/.test(k)) return null;
+  if (k === 'nodes' && v != null) { for (const o of opts(unbrace(v))) { const a = kv(o); if (a.k === 'anchor' && a.v != null) S.anchor = unbrace(a.v).trim(); } return false; }
+  return false;
+}
+// each node's centre (cm) as TikZ places it, or null with why not: box(name) gives its half width and height to
+// its outer border (cm), anchor(name) its own anchor= or null
+function place(M: any, box: (name: string) => { hw: number; hh: number; shape: string }, ownAnchor: (name: string) => string | null): { at: Map<string, number[]>; off: Map<string, number[]>; why: string | null } {
+  const at = new Map<string, number[]>(), off = new Map<string, number[]>();
+  let why: string | null = null;
+  const offset = (S: any, name: string) => {
+    let a = ownAnchor(name) ?? (S.anchor === 'auto' ? AUTO_ANCHOR[`${S.ah} ${S.av}`] : S.anchor) ?? 'center';
+    a = a.trim();
+    const d = ANCHOR_DIR[a];
+    if (!d) { why = `the anchor ${a}`; return [0, 0]; }
+    if (!d[0] && !d[1]) return [0, 0];
+    const b = box(name);
+    if (b.shape === 'circle') { const L = Math.hypot(d[0], d[1]); return [(-d[0] / L) * b.hw, (-d[1] / L) * b.hh]; }
+    if (b.shape !== 'rectangle' && b.shape !== 'coordinate' && d[0] && d[1]) { why = `the anchor ${a} of a ${b.shape}`; return [0, 0]; }
+    return [-d[0] * b.hw, -d[1] * b.hh];
+  };
+  const logical = (f: any, name: string) => {
+    if (!f) return 1;
+    const b = box(name);
+    return 2 * (f.axis === 'x' ? b.hw : b.hh) / PT_CM + f.sep;
+  };
+  const keys = (S: any, C: any, list: string[]) => {
+    let placed = false;
+    for (const it of list) {
+      if (/ layout$/.test(kv(it).k)) why = `the ${kv(it).k} (graph drawing)`;
+      const r = placeKey(S, C, it, () => { const p = placeAt(S, C); S.base = [S.base[0] + p[0], S.base[1] + p[1]]; Object.assign(C, zeroCounts()); placed = true; });
+      if (r === null) why = `the placement option ${it}`;
+    }
+    return placed;
+  };
+  // a group: its chains one after another; returns its width and depth
+  const group = (g: any, S0: any, C: any) => {
+    for (const els of g.chains) {
+      const Cc = { ...C, lwidth: 0, ldepth: 0 };
+      for (const e of els) {
+        if (e.k === 'node') {
+          if (!e.made) continue;
+          const p = placeAt(S0, Cc), o = offset(S0, e.name);
+          at.set(e.name, [S0.base[0] + p[0] + o[0], S0.base[1] + p[1] + o[1]]); off.set(e.name, o);
+          const w = logical(S0.lw, e.name), d = logical(S0.ld, e.name);
+          Cc.width += w; Cc.lwidth += w; Cc.ldepth = Math.max(d, Cc.ldepth);
+        } else {
+          const S = { ...S0, base: S0.base.slice() }, Cg = { ...Cc, lwidth: 0, ldepth: 0 };
+          const fresh = keys(S, Cg, e.opts);
+          const r = group(e, S, Cg), gw = fresh ? 0 : r.w, gd = fresh ? 0 : r.d;
+          Cc.width += gw; Cc.lwidth += gw; Cc.ldepth = Math.max(gd, Cc.ldepth);
+        }
+      }
+      C.depth += Cc.ldepth; C.ldepth += Cc.ldepth; C.lwidth = Math.max(Cc.lwidth, C.lwidth);
+    }
+    return { w: C.lwidth, d: C.ldepth };
+  };
+  const S = placeStart(), C = zeroCounts();
+  keys(S, C, M.gopts);
+  if (M.tree) group(M.tree, S, C);
+  return { at, off, why };
+}
+
 // the side a label sits at, as an angle
 const sideAngle = (side: string) => (DIRS[side] != null ? DIRS[side] : isFinite(parseFloat(side)) ? parseFloat(side) : 90);
 // how far a box's centre sits from the point it is anchored to, beside it in the direction (ux, uy)
@@ -356,21 +586,21 @@ function build(src: any) {
   const G = graphOpts(M);
   const ru: string[] = [];
   applyOpts({ ...P0, arrow: { ...P0.arrow } }, G.rest, ru);
-  for (const u of ru) if (!/^(simple|multi|grow|branch|level|chain|clique|layered layout|spring layout|tree layout|circular|nodes|edges|quotes mean label|use existing nodes|fresh nodes|number nodes|name|operator)/.test(u)) warn(`The graph option "${u}" isn't drawn here (it is kept in the code)`);
+  for (const u of ru) if (placeKey(placeStart(), zeroCounts(), u, () => {}) === false && envKey({ V: [], prefix: '', kind: '--', edges: [] }, u) === false && !/^(simple|multi|level|clique|layered layout|spring layout|tree layout|nodes|edges|quotes mean label|use existing nodes|fresh nodes|number nodes|name|operator)/.test(u)) warn(`The graph option "${u}" isn't drawn here (it is kept in the code)`);
   const nodes = new Map(), texts: any[] = [], paths: any[] = [], tips: any[] = [], shapes: any[] = [], edges: any[] = [];
   const unplaced = M.nodes.filter((n: any) => n.x == null);
   if (unplaced.length && G.noPlace && unplaced.length > 1) warn(`${unplaced.length} nodes have no position and sit on top of each other at (0,0). Give them at={(x,y)}, or use Auto layout in the editor`);
-  else if (unplaced.length && !G.noPlace) warn(unplaced.length === M.nodes.length ? 'The nodes have no positions: they are drawn roughly where TikZ places them. Moving one or Auto layout in the editor writes positions' : `${unplaced.length} nodes have no position: they are drawn roughly where TikZ places them`);
-  const step = 1; // TikZ's default placement: a chain grows 1cm right, a group 1cm down
   for (const n of M.nodes) {
     const unknown: string[] = [];
     const N = nodeOpts(nodeOpts(nodeBase(), G.nodeDef, null), n.o, unknown);
     for (const u of unknown) warn(`The node option "${u}" isn't drawn here (it is kept in the code)`);
-    const t = shownText(n, G), style = { size: N.size, font: 'default', bold: N.bold };
+    // a size switch the text starts with ({\Large A}) sizes the text; the node's inner sep stays in its own font
+    const raw = n.text == null ? n.name : n.text, ls = /^\\(tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge)(?![a-zA-Z])\s*/.exec(raw);
+    if (ls) N.size = SIZES[ls[1]] * PT;
+    const t = shownText(n, G, ls ? raw.slice(ls[0].length) : raw), style = { size: N.size, font: 'default', bold: N.bold };
     const b = t ? TD.textBox(t, style) : { w: 2, h: 0 };
     const tw = (b.w - 2) / 2 + N.inner, th = halfH(t, b, typeof N.size === 'number' ? N.size : EM) + N.inner;
-    const p = n.x != null ? [n.x, n.y] : G.noPlace ? [0, 0] : [n.est[0] * step, n.est[1] * step];
-    const L: any = { name: n.name, N, t, b, style, x: p[0] * PX, y: -p[1] * PX, shape: N.shape, r: 0, hw: 0, hh: 0, osep: N.lw / 2 + (N.dbl ? DBL / 2 + N.lw / 2 : 0) };
+    const L: any = { name: n.name, N, t, b, style, x: 0, y: 0, shape: N.shape, r: 0, hw: 0, hh: 0, osep: N.lw / 2 + (N.dbl ? DBL / 2 + N.lw / 2 : 0) };
     if (N.shape === 'circle') { L.r = Math.max(Math.max(N.minW, N.minH) / 2, Math.hypot(tw, th)); L.hw = L.hh = L.r; }
     else if (N.shape === 'ellipse') { L.hw = Math.max(N.minW / 2, tw * Math.SQRT2); L.hh = Math.max(N.minH / 2, th * Math.SQRT2); }
     else if (N.shape === 'diamond') { L.hw = Math.max(N.minW / 2, tw + th); L.hh = Math.max(N.minH / 2, tw + th); }
@@ -378,6 +608,19 @@ function build(src: any) {
     else { L.hw = Math.max(N.minW / 2, tw); L.hh = Math.max(N.minH / 2, th); }
     if (!N.draw) L.osep = N.lw / 2;
     nodes.set(n.name, L);
+  }
+  // where TikZ places them (at= is added to that): a picture with other x and y vectors, or a placement read only
+  // roughly, is drawn roughly
+  const vectors = opts(M.env || '').some((it: string) => /^(x|y|z)$/.test(kv(it).k));
+  const P = place(M, (name) => { const L = nodes.get(name); return { hw: (L.hw + L.osep) / PX, hh: (L.hh + L.osep) / PX, shape: L.shape }; },
+    (name) => { const n = M.nodes.find((q: any) => q.name === name), a = n && n.o.map((it: string) => kv(it)).filter((o: any) => o.k === 'anchor' && o.v != null).pop(); return a ? unbrace(a.v).trim() : null; });
+  const why = vectors && (!G.noPlace || M.nodes.some((n: any) => n.x != null)) ? "the picture's own x and y units" : P.why;
+  if (why) warn(unplaced.length === M.nodes.length ? `The nodes are placed by ${why}, which isn't drawn exactly: they are drawn roughly where TikZ places them. Moving one or Auto layout in the editor writes positions` : `Some nodes are placed by ${why}, which isn't drawn exactly: they are drawn roughly where TikZ places them`);
+  for (const n of M.nodes) {
+    const L = nodes.get(n.name), q = P.at.get(n.name) || [0, 0], o = P.off.get(n.name) || [0, 0];
+    L.x = ((n.x ?? 0) + q[0]) * PX; L.y = -((n.y ?? 0) + q[1]) * PX;
+    // at= for this place under no placement (the node's anchor= still moves it off that point)
+    L.pin = [L.x / PX - o[0], -L.y / PX - o[1]];
   }
   // nodes: outline, text and label
   for (const L of nodes.values()) {

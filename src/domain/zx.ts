@@ -66,11 +66,13 @@ function unwrap(src: any) {
 }
 // rows (split at \\) of cells (split at &). Each cell keeps its raw text; `&[len]` and `\\[len]`
 // are kept per cell (colSep: the sep before that cell) and per row (rowSep: after that row).
-function grid(inner: any, amp: any) {
+// noSep: there are no such separations (xymatrix), so a [ after & or \\ is the entry's text
+function grid(inner: any, amp: any, noSep = false) {
   const rows = [{ cells: [{ text: '', colSep: '' }], rowSep: '' }];
   let cur = rows[0].cells[0];
   const nextCell = (sep: any) => { cur = { text: '', colSep: sep }; rows[rows.length - 1].cells.push(cur); };
   const sepAfter = (i: any) => {
+    if (noSep) return ['', i];
     const k = skipWs(inner, i);
     if (inner[k] === '[') { const j = close(inner, k); if (j > 0) return [inner.slice(k + 1, j), j + 1]; }
     return ['', i];
@@ -101,9 +103,12 @@ const expandShortcuts = (t: any) => t.replace(/\\zxNL\b\s*/g, '\\zxN{} \\rar &[\
 const NODE_CMDS = new Set(['zxZ', 'zxX', 'zxFracZ', 'zxFracX', 'zxH', 'zxN', 'zxNone', 'zxNoneDouble', 'zxEmptyDiagram']);
 const ARROWS: Record<string, any> = { ar: '', arrow: '', rar: 'r', lar: 'l', uar: 'u', dar: 'd', urar: 'ur', ular: 'ul', drar: 'dr', dlar: 'dl' };
 Object.setPrototypeOf(ARROWS, null); // `name in ARROWS` for any command typed (\constructor)
+// circuit commands not drawn here, with their mandatory arguments
+const CIRCUIT_KEPT = new Map<string, number>([['zxSlice', 1], ['zxVSlice', 1], ['zxInputMulti', 2], ['zxOutputMulti', 2], ['zxGateInputMulti', 2], ['zxGateOutputMulti', 2], ['zxGateInput', 1], ['zxGateOutput', 1], ['zxGround', 1], ['zxDivider', 1]]);
 // one cell's contents: its node (or none), its wires, and anything not understood
 function cell(text: any, warn: any) {
   const out = { node: (null as any), edges: ([] as any[]), rest: '' };
+  let keep = ''; // commands drawn by LaTeX only: kept with the cell's code
   let i = 0;
   const optArg = () => { const k = skipWs(text, i); if (text[k] !== '[') return null; const j = close(text, k); if (j < 0) return null; i = j + 1; return text.slice(k + 1, j); };
   const arg = () => { const k = skipWs(text, i); if (text[k] !== '{') return null; const j = close(text, k); if (j < 0) return null; i = j + 1; return text.slice(k + 1, j); };
@@ -131,11 +136,47 @@ function cell(text: any, warn: any) {
         const o = optArg() || ''; arg();
         setNode({ k: 'N', v, dbl: name === 'zxNoneDouble', cmd: name, o });
       } else if (name === 'zxEmptyDiagram') { arg(); setNode({ k: 'E', o: '' }); }
+      // circuits: \zxGate (\zxBox) [opts]{maths}, \zxGateMulti[opts][multi opts]{rows}{cols}{maths}, controls, NOT, swap
+      // crosses, and the inputs and outputs written at the cell
+      else if (name === 'zxGate' || name === 'zxBox') { const o = optArg() || '', a = arg(); setNode({ k: 'G', o, t: a ?? '', src: text.slice(at, i) }); }
+      else if (name === 'zxGateMulti') {
+        const o = optArg() || '', o2 = optArg() || '', nr = parseInt(arg() || '', 10), nc = parseInt(arg() || '', 10), a = arg();
+        // the multi options read here: main={…} (the box's fill and draw colours) and main text={colour}
+        const mo: any = {};
+        const plainMulti = opts(o2).list.every((it: any) => {
+          const { name: k, arg: v } = styleOf(it), body = String(v || '').replace(/^\{([\s\S]*)\}$/, '$1');
+          if (k === 'main') return opts(body).list.every((q: any) => { const r = styleOf(q), c = TD.tikzColor && TD.tikzColor(r.arg); if ((r.name === 'fill' || r.name === 'draw') && c) { mo[r.name] = c; return true; } return false; });
+          if (k === 'main text') { const c = TD.tikzColor && TD.tikzColor(body.replace(/^(text|color)\s*=\s*/, '').trim()); if (c) { mo.text = c; return true; } }
+          return false;
+        });
+        if (nr >= 1 && nc >= 1 && plainMulti) setNode({ k: 'GM', o, rows: nr, cols: nc, t: a ?? '', mo, src: text.slice(at, i) });
+        else { keep += ' ' + text.slice(at, i); warn(`\\zxGateMulti${o2.trim() ? `[…][${o2.trim().slice(0, 60)}]` : ''} isn't drawn here (it is kept in the code)`); }
+      } else if (name === 'zxMatrix') {
+        // \zxMatrix[opts]<modifiers>{label}: * transposes (the point turns west), - puts the label below; the rotations
+        // (' and .), / (an overlay label) and _{matrix} are kept as code
+        const o = optArg() || '';
+        let mods = '';
+        for (;;) { const k = skipWs(text, i), ch = text[k]; if (ch && "*-'./".includes(ch)) { mods += ch; i = k + 1; } else if (ch === '_') { mods += '_'; i = k + 1; arg(); } else break; }
+        const a = arg(), src = text.slice(at, i);
+        const odd = opts(o).list.find((it: any) => !/^(a|alias)$/.test(styleOf(it).name));
+        if (/['./_]/.test(mods) || odd) { keep += ' ' + src; warn(`\\zxMatrix${odd ? `[${odd}]` : ` with ${mods.replace(/[*-]/g, '')}`} isn't drawn here (it is kept in the code)`); }
+        else setNode({ k: 'M', o, star: mods.includes('*'), minus: mods.includes('-'), t: a ?? '', src });
+      } else if (/^zx(Ctrl|OCtrl|Not|Cross)$/.test(name)) { const o = optArg() || ''; arg(); setNode({ k: name.slice(2), o, src: text.slice(at, i) }); }
+      else if (name === 'zxInput' || name === 'zxOutput') { const o = optArg() || '', a = arg(); setNode({ k: name === 'zxInput' ? 'In' : 'Out', o, t: a ?? '', src: text.slice(at, i) }); }
+      else if (CIRCUIT_KEPT.has(name)) {
+        // a slice, a brace of inputs or outputs, ground, divider: drawn by LaTeX only
+        while (optArg() != null);
+        for (let n = CIRCUIT_KEPT.get(name)!; n > 0; n--) arg();
+        keep += ' ' + text.slice(at, i);
+        warn(`\\${name} isn't drawn here (it is kept in the code)`);
+      }
       else if (name in ARROWS) {
         let o = optArg();
         if (o == null && !ARROWS[name]) { const a = arg(); if (a != null) o = a; } // \ar{r}: tikz-cd's old syntax
-        const list = opts(o || '').list;
-        const dirs = ARROWS[name] || (list.length && /^[rlud]+$/.test(list[0]) ? list.shift() : '');
+        // tikz-cd: a direction word anywhere in the options sets the target from this cell, the last one winning
+        // (\rar[rd] goes down and right)
+        const all = opts(o || '').list, list = all.filter((x: any) => !/^[rlud]+$/.test(x));
+        const dirs = [ARROWS[name] || '', ...all.filter((x: any) => /^[rlud]+$/.test(x))].pop();
         out.edges.push({ dirs, styles: list, cmd: name });
       } else if (name === 'zxLoop') {
         const dir = optArg(), open = optArg(), o = optArg() || ''; arg();
@@ -158,6 +199,7 @@ function cell(text: any, warn: any) {
   out.rest = out.rest.trim();
   if (out.rest && !out.node) { out.node = { k: 'T', t: out.rest, o: '' }; out.rest = ''; }
   else if (out.rest) warn(`"${out.rest.slice(0, 24)}" next to a node isn't drawn`);
+  if (keep) out.rest = (out.rest + keep).trim();
   return out;
 }
 function parse(src: any) {
@@ -248,7 +290,8 @@ TD.ZX_WIRES = STYLE_NAMES;
 
 // a style item → { name, arg }: "o'", "C=.5" (C with its argument), "(=40"
 function styleOf(item: any) {
-  const m = /^([^=]+?)\s*(?:=\s*(.*))?$/.exec(item.trim());
+  // (a value may run over several lines: execute at end picture={…})
+  const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(item.trim());
   return m ? { name: m[1].trim(), arg: m[2] } : { name: item.trim() };
 }
 
@@ -267,7 +310,7 @@ function layout(s: any) {
 TD.onTextMetricsChange(() => { cache.clear(); });
 
 // phases are set at 8pt and the node scaled by 0.8: 6.4pt on the page
-const PHASE = { size: 6.4 * PT, font: 'default' }, LABEL = { size: 8 * PT, font: 'default' }, NORMAL = { size: 10 * PT, font: 'default' };
+const PHASE = { size: 6.4 * PT, font: 'default' }, LABEL = { size: 8 * PT, font: 'default' }, NORMAL = { size: 10 * PT, font: 'default' }, TINY = { size: 6 * PT, font: 'default' };
 // node phase → the maths drawn in it
 const bold = (t: any) => `$\\boldsymbol{${t}}$`;
 const SHORT_MINUS = '{\\scriptscriptstyle -}';
@@ -295,12 +338,35 @@ function labelPos(o: any) {
   }
   return '';
 }
+// circuit boxes (zx every box): inner sep 1.3mm, minimum width and height 1.83em
+const BOX_SEP = 1.3 * MM, BOX_MIN = 18.3 * PT;
+// a box's content, maths at 10pt as TeX sets it (px): width, height + depth, and how far above the box's middle the
+// drawing of it goes; \zxMeter{} is the package's meter, 11.78pt × 10.78pt (measured)
+function contentBox(t: any) {
+  t = String(t || '').trim();
+  if (/^\\zxMeter\s*(\[\s*1?\s*\])?\s*\{\s*\}$/.test(t)) return { meter: true, w: 11.781 * PT, h: 10.781 * PT, lift: 0 };
+  if (!t) return { w: 0, h: 0, lift: 0 };
+  const m = `$${t}$`, b = TD.textBox(m, NORMAL), hd = (TD.texLineHD && TD.texLineHD(m, 10)) || { ht: 0.75 * 10, dp: 0.25 * 10 };
+  return { t: m, b, w: (b.w - 2), h: (hd.ht + hd.dp) * PT, lift: ((hd.dp - hd.ht) / 2 + 0.347 * 10) * PT };
+}
+// add label={pos:text}: a label at 6pt (baselines 6pt apart), inner sep 1.8pt, above unless a side is given; a box's
+// label is in maths (the box is set in the matrix's math mode), a \zxGateMulti's in text, its lines centred (its box is
+// made after the matrix). Drawn lines are centred on their middle baseline, as TeX's are
+function boxLabel(v: any, multi: any) {
+  if (v == null) return null;
+  const m = /^\s*(above|below|left|right)\s*:([\s\S]*)$/.exec(v), t = (m ? m[2] : v).trim().replace(/\s*\\\\\s*/g, '\n');
+  const ls = t.split('\n'), shown = ls.map((l: any) => (multi ? l : `$${l}$`)).join('\n'), b = TD.textBox(shown, TINY);
+  const f = (TD.texLineHD && TD.texLineHD(ls[0], 6)) || { ht: 0.694 * 6, dp: 0 }, l = (TD.texLineHD && TD.texLineHD(ls[ls.length - 1], 6)) || { ht: 0, dp: 0 };
+  const ht = f.ht + 6 * (ls.length - 1), dp = l.dp;
+  return { t: shown, b, pos: m ? m[1] : 'above', w: (b.w - 2) + 3.6 * PT, h: (ht + dp + 3.6) * PT, lift: ((dp - f.ht) / 2 + 0.347 * 6) * PT, multi };
+}
 // a node's size and look
-function measure(n: any, warn: any) {
+function measure(n: any, warn: any, D: any = {}): any {
   const o = opts(n.o || '');
   for (const it of o.list) {
     const nm = styleOf(it).name;
     if (/^(a|alias|pil|pila|pilb|pilr|pill|phase in label( above| below| right| left)?|phase in content|fill|draw)$/.test(nm)) continue;
+    if (nm === 'add label' && /^(G|GM)$/.test(n.k)) continue;
     warn(`The node option "${it}" isn't drawn here (it is kept in the code)`);
   }
   const fillOpt = o.map.fill ? TD.tikzColor && TD.tikzColor(o.map.fill) : null;
@@ -312,7 +378,15 @@ function measure(n: any, warn: any) {
     if (lab) return { shape: 'circle', w: 2 * MM, h: 2 * MM, fill, label: { t: phaseText({ ...n, label: true }), pos: lab, fill: FILL['L' + n.k] } };
     const b = TD.textBox(t, PHASE);
     const short = n.minus || n.star;
-    // zxLong: 1.2mm a side (scaled 0.8); zxShort: no inner sep, the rounded ends only
+    // shapes.misc's rounded rectangle, then scaled 0.8 (zxShort, zxLong): its ends are arcs of radius
+    // r = max(half the text's height + depth, minimum height 5mm / 2), and each end adds the arc's chord
+    // r - sqrt(r² - (th/2)²) beyond the text; zxLong has inner xsep 1.2mm, zxShort none; minimum width 5mm
+    const hd = TD.texLineHD ? TD.texLineHD(t, 8) : null;
+    if (hd) {
+      const th = (hd.ht + hd.dp) * PT, r = Math.max(th / 2, 2.5 * MM), chord = r - Math.sqrt(r * r - (th / 2) * (th / 2));
+      const tw = (b.w - 2) / 0.8, w = 0.8 * Math.max(5 * MM, tw + 2 * (short ? 0 : 1.2 * MM) + 2 * chord);
+      return { shape: 'pill', w, h: 0.8 * 2 * r, fill, text: t, b, dy: -0.12 * PHASE.size };
+    }
     const h = Math.max(4 * MM, b.h + 0.4 * MM);
     return { shape: 'pill', w: Math.max(h, b.w - 2 + (short ? 0.8 : 1.92) * MM), h, fill, text: t, b, dy: -0.12 * PHASE.size };
   }
@@ -324,6 +398,34 @@ function measure(n: any, warn: any) {
     return { shape: 'pill', w: Math.max(h, b.w - 2 + 0.8 * MM), h, fill, text: t, b };
   }
   if (n.k === 'H') return { shape: 'rect', w: 1.5 * MM, h: 1.5 * MM, fill: fillOpt || FILL.H };
+  // circuits (zx every box: rectangle, inner sep 1.3mm, minimum size 1.83em, white, maths at 10pt; lines
+  // 0.4pt, or thick with 'thick lines'); a box's cell is its size and line wide
+  const lw = D.thick ? 0.8 * PT : 0.4 * PT;
+  if (n.k === 'G' || n.k === 'GM') {
+    const c = contentBox(n.t), label = boxLabel(o.map['add label'], n.k === 'GM');
+    const w = Math.max(BOX_MIN, c.w + 2 * BOX_SEP), h = Math.max(BOX_MIN, c.h + 2 * BOX_SEP);
+    if (n.k === 'GM') { const mo = n.mo || {}; return { shape: 'multi', rows: n.rows, cols: n.cols, W: w + lw, H: h + lw, w: 0, h: 0, fill: mo.fill || fillOpt || '#ffffff', stroke: mo.draw, tcol: mo.text, c, label, lw }; }
+    return { shape: 'rect', w, h, fill: fillOpt || '#ffffff', c, label, lw };
+  }
+  // \zxCtrl: a black dot, \zxOCtrl a white one, \zxNot ⊕ (circles, inner sep 2pt and 2.5pt); \zxCross: the cell is a
+  // point, crossed by the diagonals of a 6pt square
+  if (n.k === 'Ctrl') return { shape: 'circle', w: 4 * Math.SQRT1_2 * 2 * PT, h: 4 * Math.SQRT1_2 * 2 * PT, fill: fillOpt || '#000000', nostroke: true };
+  if (n.k === 'OCtrl') return { shape: 'circle', w: 4 * Math.SQRT1_2 * 2 * PT, h: 4 * Math.SQRT1_2 * 2 * PT, fill: fillOpt || '#ffffff', lw };
+  if (n.k === 'Not') return { shape: 'circle', w: 5 * Math.SQRT2 * PT, h: 5 * Math.SQRT2 * PT, fill: fillOpt || '#ffffff', plus: true, lw };
+  if (n.k === 'Cross') return { shape: 'cross', w: 6 * PT, h: 6 * PT, lw };
+  // \zxMatrix: pgf's signal shape round empty text (inner sep 1pt, minimum height 6pt, pointer 90°): a chevron 8pt
+  // wide about its centre (its anchors: the notch 1pt behind, the point 4pt ahead), grey (200,200,200); its label
+  // above (below with -) in maths at 8pt, inner sep 2pt. Its cell reaches over the label: as wide as either, and up
+  // (down) to the label's far side
+  if (n.k === 'M') {
+    const t = String(n.t || '').trim(), m = t ? `$${t}$` : '', b = m ? TD.textBox(m, LABEL) : { w: 2, h: 0 };
+    const hd = (m && TD.texLineHD && TD.texLineHD(m, 8)) || { ht: m ? 0.683 * 8 : 0, dp: 0 };
+    const lh = (hd.ht + hd.dp + 4) * PT, half = Math.max(4.2 * PT, (b.w - 2) / 2 + 2.2 * PT), far = 3 * PT + lh, near = 3.2 * PT;
+    return { shape: 'zxmatrix', w: 8 * PT, h: 6 * PT, cw: 2 * half, up: n.minus ? near : far, dn: n.minus ? far : near, star: n.star, fill: fillOpt || '#c8c8c8',
+      label: m ? { t: m, b, y: (n.minus ? 1 : -1) * (3 * PT + lh / 2), lift: ((hd.dp - hd.ht) / 2 + 0.347 * 8) * PT } : null };
+  }
+  // \zxInput, \zxOutput: maths at 10pt, inner sep 2pt, ending (starting) at the cell, drawn after the matrix
+  if (n.k === 'In' || n.k === 'Out') return { shape: 'coord', w: 0, h: 0, io: { c: contentBox(n.t), side: n.k === 'In' ? -1 : 1 } };
   if (n.k === 'N') {
     const a = n.dbl ? 12 * PT : 2 * MM;
     if (!n.v) return { shape: 'coord', w: 0, h: 0 };
@@ -405,17 +507,36 @@ function build(s: any) {
   if (!R || !C || cells.every((r) => r.every((c) => !c.node && !c.edges.length))) {
     return { ops: [{ k: 'empty', w: 4 * PX, h: 1.5 * PX }], bb: { x: 0, y: 0, w: 4 * PX, h: 1.5 * PX }, warnings, R: 0, C: 0, P };
   }
-  const look = cells.map((r) => r.map((c) => (c.node ? measure(c.node, warn) : null)));
-  const colW = Array(C).fill(0), rowH = Array(R).fill(0);
+  const D = { thick: E.list.includes('thick lines') };
+  const look = cells.map((r) => r.map((c) => (c.node ? measure(c.node, warn, D) : null)));
+  // \zxGateMulti: each cell it covers holds a block as wide as the box (drawn, with its line) shared out over its
+  // columns less the separations, at least a box's minimum, and drawn with its line too; the box is fitted round them
   for (let r = 0; r < R; r++) for (let c = 0; c < cells[r].length; c++) {
+    const m = look[r][c];
+    if (!m || m.shape !== 'multi') continue;
+    m.bw = Math.max(BOX_MIN, (m.W - (m.cols - 1) * ctx.cs) / m.cols) + m.lw; m.bh = Math.max(BOX_MIN, (m.H - (m.rows - 1) * ctx.rs) / m.rows) + m.lw;
+    if (r + m.rows > R || c + m.cols > C) warn('A \\zxGateMulti reaches past the diagram');
+    for (let i = 0; i < Math.min(m.rows, R - r); i++) for (let j = 0; j < Math.min(m.cols, C - c); j++) {
+      if (!i && !j) continue;
+      if (look[r + i][c + j]) warn(`The cell in row ${r + i + 1}, column ${c + j + 1} is under a \\zxGateMulti`);
+      else look[r + i][c + j] = { shape: 'block', w: m.bw, h: m.bh };
+    }
+  }
+  const colW = Array(C).fill(0), rowH = Array(R).fill(0), rowUp = Array(R).fill(0), rowDn = Array(R).fill(0);
+  for (let r = 0; r < R; r++) for (let c = 0; c < look[r].length; c++) {
     const m = look[r][c];
     if (!m) continue;
     // a drawn node's anchors sit on the outside of its line (TikZ's outer sep)
-    const o = /circle|pill|rect|dash/.test(m.shape) ? 0.4 * PT : 0;
-    colW[c] = Math.max(colW[c], m.w + o); rowH[r] = Math.max(rowH[r], m.h + o);
+    if (m.shape === 'multi') { colW[c] = Math.max(colW[c], m.bw); rowH[r] = Math.max(rowH[r], m.bh); rowUp[r] = Math.max(rowUp[r], m.bh / 2); rowDn[r] = Math.max(rowDn[r], m.bh / 2); continue; }
+    const o = m.nostroke ? 0 : m.lw != null ? m.lw : /circle|pill|rect|dash/.test(m.shape) ? 0.4 * PT : 0;
+    colW[c] = Math.max(colW[c], m.cw ?? m.w + o); rowH[r] = Math.max(rowH[r], m.h + o);
+    // a cell reaching further up than down (or the other way): the row's line sits that far from its top
+    if (m.up != null) { rowUp[r] = Math.max(rowUp[r], m.up); rowDn[r] = Math.max(rowDn[r], m.dn); }
+    else { rowUp[r] = Math.max(rowUp[r], (m.h + o) / 2); rowDn[r] = Math.max(rowDn[r], (m.h + o) / 2); }
   }
   // the visual editor spreads points and empty cells a little, so they can be picked
   if (s.minCell) { for (let c = 0; c < C; c++) colW[c] = Math.max(colW[c], s.minCell); for (let r = 0; r < R; r++) rowH[r] = Math.max(rowH[r], s.minCell); }
+  for (let r = 0; r < R; r++) { const more = rowH[r] - rowUp[r] - rowDn[r]; if (more > 0) { rowUp[r] += more / 2; rowDn[r] += more / 2; } rowH[r] = rowUp[r] + rowDn[r]; }
   // extra separations: the largest one given for a column, in any row
   const colX = Array(C).fill(null), rowX = Array(R).fill(null);
   P.rows.forEach((row, r) => {
@@ -433,8 +554,8 @@ function build(s: any) {
   let y = 0;
   for (let r = 0; r < R; r++) {
     const ex = rowX[r];
-    if (r && ex && ex.origins) { cy[r] = cy[r - 1] + ex.px; rowT[r] = cy[r] - rowH[r] / 2; }
-    else { if (r) y += ctx.rs + (ex ? ex.px : 0); rowT[r] = y; cy[r] = y + rowH[r] / 2; }
+    if (r && ex && ex.origins) { cy[r] = cy[r - 1] + ex.px; rowT[r] = cy[r] - rowUp[r]; }
+    else { if (r) y += ctx.rs + (ex ? ex.px : 0); rowT[r] = y; cy[r] = y + rowUp[r]; }
     y = rowT[r] + rowH[r];
   }
 
@@ -443,6 +564,21 @@ function build(s: any) {
     const m = look[r] && look[r][c];
     return { x: cx[c], y: cy[r], w: m ? m.w : 0, h: m ? m.h : 0, shape: m ? m.shape : 'coord', m };
   };
+  // a \zxGateMulti's box: fitted round the blocks of the cells it covers
+  const multiBox = (r: any, c: any, m: any) => {
+    const xa = cx[c] - m.bw / 2, xb = cx[Math.min(C - 1, c + m.cols - 1)] + m.bw / 2, ya = cy[r] - m.bh / 2, yb = cy[Math.min(R - 1, r + m.rows - 1)] + m.bh / 2;
+    return { x: (xa + xb) / 2, y: (ya + yb) / 2, w: xb - xa, h: yb - ya, shape: 'rect', m };
+  };
+  // the names a= and alias= give (a gate's names the whole box): what to= and from= reach
+  const named: Record<string, any> = Object.create(null);
+  for (let r = 0; r < R; r++) for (let c = 0; c < cells[r].length; c++) {
+    const nd = cells[r][c].node, m = look[r][c];
+    if (!nd || !m) continue;
+    for (const it of opts(nd.o || '').list) {
+      const { name, arg } = styleOf(it);
+      if ((name === 'a' || name === 'alias') && arg) named[arg.trim().replace(/^\{([\s\S]*)\}$/, '$1').trim()] = m.shape === 'multi' ? multiBox(r, c, m) : nodeAt(r, c);
+    }
+  }
   const anchor = (n: any, a: any) => {
     if (!a || n.shape === 'coord') return { x: n.x, y: n.y };
     if (a === 'east') return { x: n.x + n.w / 2, y: n.y };
@@ -463,12 +599,13 @@ function build(s: any) {
   const wires: any[] = [], nodes = [], marks: any[] = [], texts = [];
   // ---- wires
   for (let r = 0; r < R; r++) for (let c = 0; c < cells[r].length; c++) cells[r][c].edges.forEach((e, ei) => {
-    const S = nodeAt(r, c);
+    let S = nodeAt(r, c);
     let segs = null, color = null, dash: any = false, cl = false, B = boldAll, mark = null, sa = null, ea = null, hidden = false;
     let shape = null, shapeArg;
-    let bendIn = null, bendOut = null, loose = 1, bendRel = null;
+    let bendIn = null, bendOut = null, loose = 1, bendRel = null, elbow = '', toName = null, fromName = null;
     for (const it of e.styles) {
       const { name, arg } = styleOf(it);
+      if ((name === 'to' || name === 'from') && arg) { const v = arg.trim().replace(/^\{([\s\S]*)\}$/, '$1').trim(); if (name === 'to') toName = v; else fromName = v; continue; }
       if (BZ[name] || ARC[name] || name in BEND) { shape = name; shapeArg = arg; continue; }
       if (name === 'H' || name === 'Z' || name === 'X') { mark = name; continue; }
       if (name === 'cl' || name === 'classical') { cl = true; continue; }
@@ -482,6 +619,8 @@ function build(s: any) {
       if (name === 'out') { bendOut = parseFloat(arg!); continue; }
       if (name === 'looseness') { loose = parseFloat(arg!) || 1; continue; }
       if (name === 'loop' || name === 'min distance' || name === 'IO' || name === '-' || name === 'no head') continue;
+      // tikz-cd's --| and |-- (connect -|, connect |-): along one axis, then the other (a bare -| is an arrow tip)
+      if (/^(--\||\|--|connect (-\||\|-))$/.test(name)) { elbow = /^(connect )?\|/.test(name) ? 'v' : 'h'; continue; }
       if (name === 'color' || name === 'draw') { const k = TD.tikzColor && TD.tikzColor(arg); if (k) { color = k; continue; } }
       const k = !arg && TD.tikzColor && TD.tikzColor(name);
       if (k) { color = k; continue; }
@@ -495,11 +634,19 @@ function build(s: any) {
     } else {
       let dr = 0, dc = 0;
       for (const ch of e.dirs) { if (ch === 'r') dc++; else if (ch === 'l') dc--; else if (ch === 'd') dr++; else if (ch === 'u') dr--; }
-      if (!e.dirs) { warn('A wire with no direction (like \\ar[]) is skipped'); return; }
-      const r2_ = r + dr, c2 = c + dc;
-      if (r2_ < 0 || r2_ >= R || c2 < 0 || c2 >= C) { warn(`A wire from row ${r + 1}, column ${c + 1} points outside the diagram`); return; }
-      if (!look[r2_][c2]) warn(`A wire from row ${r + 1}, column ${c + 1} ends on an empty cell: LaTeX stops there (put \\zxN{} in it)`);
-      const T = nodeAt(r2_, c2);
+      // to=name and from=name: the wire runs to (from) the node named so; from alone runs to this cell
+      for (const nm of [toName, fromName]) if (nm != null && !named[nm]) { warn(`A wire to "${nm}" isn't drawn here: no node of the diagram is named so (it is kept in the code)`); return; }
+      if (fromName != null) S = named[fromName];
+      let T;
+      if (toName != null) T = named[toName];
+      else if (!e.dirs && fromName != null) T = nodeAt(r, c);
+      else {
+        if (!e.dirs) { warn('A wire with no direction (like \\ar[]) is skipped'); return; }
+        const r2_ = r + dr, c2 = c + dc;
+        if (r2_ < 0 || r2_ >= R || c2 < 0 || c2 >= C) { warn(`A wire from row ${r + 1}, column ${c + 1} points outside the diagram`); return; }
+        if (!look[r2_][c2]) warn(`A wire from row ${r + 1}, column ${c + 1} ends on an empty cell: LaTeX stops there (put \\zxN{} in it)`);
+        T = nodeAt(r2_, c2);
+      }
       const bz = shape && BZ[shape], arcA = shape && ARC[shape];
       if (arcA) {
         const f = shapeArg ? parseFloat(shapeArg) || 1 : 1;
@@ -539,7 +686,7 @@ function build(s: any) {
           const phi = (Math.atan2(-(q.y - p.y), q.x - p.x) * 180) / Math.PI;
           const outA = bendOut != null ? bendOut : phi + (rel || 0), inA = bendIn != null ? bendIn : phi + 180 - (rel || 0);
           segs = inout(p, q, outA, inA, loose);
-        } else segs = [line(p, q)];
+        } else if (elbow) { const k = elbow === 'h' ? { x: q.x, y: p.y } : { x: p.x, y: q.y }; segs = [line(p, k), line(k, q)]; } else segs = [line(p, q)];
       }
     }
     wires.push({ segs, color, dash, cl, B, hidden, src: [r, c, ei] });
@@ -549,12 +696,37 @@ function build(s: any) {
     }
   });
   // ---- nodes
+  // a circuit box (its content, the meter, its label), a control, a NOT, a swap cross
+  const gate = (m: any, X: any, Y: any, r: any, c: any) => {
+    nodes.push({ shape: m.shape === 'multi' ? 'rect' : m.shape, x: X, y: Y, w: m.w, h: m.h, fill: m.fill, stroke: m.stroke, cell: [r, c], nostroke: m.nostroke, plus: m.plus, sw: m.lw });
+    if (m.c && m.c.meter) nodes.push({ shape: 'meter', x: X, y: Y, w: 0, h: 0 });
+    else if (m.c && m.c.t) texts.push({ t: m.c.t, x: X, y: Y - m.c.lift, b: m.c.b, st: NORMAL, color: m.tcol });
+    const L = m.label;
+    if (L) {
+      const lx = L.pos === 'right' ? X + m.w / 2 + L.w / 2 : L.pos === 'left' ? X - m.w / 2 - L.w / 2 : X;
+      const ly = L.pos === 'above' ? Y - m.h / 2 - L.h / 2 : L.pos === 'below' ? Y + m.h / 2 + L.h / 2 : Y;
+      texts.push({ t: L.t, x: lx, y: ly - L.lift, b: L.b, st: TINY });
+    }
+  };
   for (let r = 0; r < R; r++) for (let c = 0; c < cells[r].length; c++) {
     const m = look[r][c];
     if (!m) continue;
     const X = cx[c], Y = cy[r];
+    if (m.shape === 'multi') {
+      // the box fitted round its blocks, its content in the middle
+      const bx = multiBox(r, c, m);
+      gate({ ...m, w: bx.w, h: bx.h }, bx.x, bx.y, r, c);
+      continue;
+    }
+    if (m.c || m.lw != null || m.nostroke) { gate(m, X, Y, r, c); continue; }
+    if (m.shape === 'zxmatrix') {
+      nodes.push({ shape: 'zxmatrix', x: X, y: Y, w: m.w, h: m.h, fill: m.fill, star: m.star, cell: [r, c] });
+      if (m.label) texts.push({ t: m.label.t, x: X, y: Y + m.label.y - m.label.lift, b: m.label.b, st: LABEL });
+      continue;
+    }
     if (m.shape === 'circle' || m.shape === 'pill' || m.shape === 'rect' || m.shape === 'dash') nodes.push({ shape: m.shape, x: X, y: Y, w: m.w, h: m.h, fill: m.fill, cell: [r, c], B: boldAll });
     else nodes.push({ shape: m.shape, x: X, y: Y, w: m.w, h: m.h, cell: [r, c] });
+    if (m.io) { const io = m.io.c; texts.push({ t: io.t, x: X + m.io.side * (2 * PT + io.w / 2), y: Y - io.lift, b: io.b, st: NORMAL }); }
     if (m.text) texts.push({ t: m.text, x: X, y: Y + (m.dy || 0), b: m.b, st: m.shape === 'text' ? NORMAL : PHASE });
     if (m.label) {
       const lb = labelBox(m.label), pos = m.label.pos;
@@ -578,6 +750,19 @@ function build(s: any) {
 }
 
 // ---------------------------------------------------------------- drawing
+// \zxMeter: the package's picture (scale .5, line width .5) scaled by .8: the arc (0,0) to[bend left=50] (1,0) and the
+// arrow (.5,-.15) to (.9,.75) with a Stealth tip 6pt long, set as a box 11.78pt × 10.78pt centred at (x, y)
+function meterSvg(x: any, y: any, ink: any) {
+  const u = 0.4 * 28.4528 * PT, w = 0.4 * PT, x0 = x - 11.781 * PT / 2 + 0.0176 * u, y0 = y + 10.781 * PT / 2 - 0.1676 * u;
+  const P = (a: any, b: any) => [x0 + a * u, y0 - b * u];
+  const d = 0.3915, c1 = P(d * Math.cos(50 * Math.PI / 180), d * Math.sin(50 * Math.PI / 180)), c2 = P(1 + d * Math.cos(130 * Math.PI / 180), d * Math.sin(130 * Math.PI / 180));
+  const [ax, ay] = P(0, 0), [bx, by] = P(1, 0), [sx, sy] = P(0.5, -0.15), [ex, ey] = P(0.9, 0.75);
+  // the tip: 4.8pt long, 3.6pt wide, its back cut in by 1.56pt; the line ends at the inset
+  const L = 4.8 * PT, hw = 1.8 * PT, ins = 1.56 * PT, l = Math.hypot(ex - sx, ey - sy), ux = (ex - sx) / l, uy = (ey - sy) / l;
+  const back = (k: any, s_: any) => `${r2(ex - ux * k - uy * s_)},${r2(ey - uy * k + ux * s_)}`;
+  return `<path d="M${r2(ax)},${r2(ay)}C${r2(c1[0])},${r2(c1[1])} ${r2(c2[0])},${r2(c2[1])} ${r2(bx)},${r2(by)}M${r2(sx)},${r2(sy)}L${back(L - ins, 0)}" fill="none" stroke="${ink}" stroke-width="${r2(w)}" stroke-linecap="round"/>` +
+    `<path d="M${r2(ex)},${r2(ey)}L${back(L, hw)}L${back(L - ins, 0)}L${back(L, -hw)}Z" fill="${ink}" stroke="${ink}" stroke-width="${r2(w)}" stroke-linejoin="round"/>`;
+}
 function draw(s: any, ctx: any) {
   const Lo = layout(s);
   const ink = TD.css(s.color || '#000000');
@@ -597,7 +782,14 @@ function draw(s: any, ctx: any) {
       else out += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${r2(sw)}"${dash}/>`;
     }
     const shape = (n: any) => {
-      const sw = n.B ? 1.2 * PT : lw, stroke = n.nostroke ? 'none' : ink, fill = n.shape === 'dash' ? 'none' : TD.css(n.fill || '#ffffff');
+      const sw = n.sw || (n.B ? 1.2 * PT : lw), stroke = n.nostroke ? 'none' : n.stroke ? TD.css(n.stroke) : ink, fill = n.shape === 'dash' ? 'none' : TD.css(n.fill || '#ffffff');
+      if (n.shape === 'meter') return meterSvg(n.x, n.y, ink);
+      // the chevron: its body 1pt either side of the centre, the point 3pt ahead, the tail 3pt behind cut in by the notch
+      if (n.shape === 'zxmatrix') { const k = n.star ? -PT : PT, p = (a: any, b: any) => `${r2(n.x + a * k)},${r2(n.y - b * PT)}`; return `<path d="M${p(-4, 3)}L${p(1, 3)}L${p(4, 0)}L${p(1, -3)}L${p(-4, -3)}L${p(-1, 0)}Z" fill="${fill}" stroke="${stroke}" stroke-width="${r2(sw)}"/>`; }
+      // the swap cross: the diagonals of a 6pt square, round caps
+      if (n.shape === 'cross') return `<path d="M${r2(n.x - n.w / 2)},${r2(n.y - n.h / 2)}L${r2(n.x + n.w / 2)},${r2(n.y + n.h / 2)}M${r2(n.x - n.w / 2)},${r2(n.y + n.h / 2)}L${r2(n.x + n.w / 2)},${r2(n.y - n.h / 2)}" fill="none" stroke="${ink}" stroke-width="${r2(sw)}" stroke-linecap="round"/>`;
+      // ⊕: the circle and its two diameters
+      if (n.plus) return `<ellipse cx="${r2(n.x)}" cy="${r2(n.y)}" rx="${r2(n.w / 2)}" ry="${r2(n.h / 2)}" fill="${fill}" stroke="${stroke}" stroke-width="${r2(sw)}"/><path d="M${r2(n.x)},${r2(n.y - n.h / 2)}V${r2(n.y + n.h / 2)}M${r2(n.x - n.w / 2)},${r2(n.y)}H${r2(n.x + n.w / 2)}" stroke="${ink}" stroke-width="${r2(sw)}"/>`;
       const dash = n.shape === 'dash' ? ` stroke-dasharray="${r2(3 * PT)} ${r2(3 * PT)}"` : '';
       if (n.shape === 'circle') return `<ellipse cx="${r2(n.x)}" cy="${r2(n.y)}" rx="${r2(n.w / 2)}" ry="${r2(n.h / 2)}" fill="${fill}" stroke="${stroke}" stroke-width="${r2(sw)}"/>`;
       if (n.shape === 'pill' || n.shape === 'rect' || n.shape === 'dash') {
@@ -608,7 +800,7 @@ function draw(s: any, ctx: any) {
     };
     for (const m of Lo.marks) out += shape(m);
     for (const n of Lo.nodes) out += shape(n);
-    for (const t of Lo.texts) out += TD.textSvg(t.t, t.st, s.color || '#000000', t.x, t.y, ctx);
+    for (const t of Lo.texts) out += TD.textSvg(t.t, t.st, t.color || s.color || '#000000', t.x, t.y, ctx);
   }
   const bb = Lo.bb;
   if (!ctx.export) out += `<rect class="hitfill" x="${r2(bb.x)}" y="${r2(bb.y)}" width="${r2(bb.w)}" height="${r2(bb.h)}"/>`;

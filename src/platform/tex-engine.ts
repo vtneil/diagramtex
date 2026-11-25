@@ -163,11 +163,13 @@ function compile(src: string, files: Record<string, string | Uint8Array> = {}, {
 
 // ---- offline: both engines kept in this browser ahead of time (the installed app's Download TeX engine button)
 const ENGINES: TexEngine[] = ['pdflatex', 'xelatex'];
-// the engine's own files beside the bundle (tex/): the worker, and SwiftLaTeX's scripts and WebAssembly
-const ENGINE_FILES: Record<TexEngine, string[]> = { pdflatex: ['tex-worker.js', 'swiftlatexpdftex.js', 'swiftlatexpdftex.wasm'], xelatex: ['tex-worker.js', 'swiftlatexxetex.js', 'swiftlatexxetex.wasm', 'swiftlatexdvipdfm.js', 'swiftlatexdvipdfm.wasm'] };
+// the engine's own files beside the bundle (tex/): the worker, and SwiftLaTeX's scripts and WebAssembly; with pdfLaTeX,
+// pdf.js too, which draws the TikZ code it compiles on the canvas (src/platform/pdf-image.ts)
+const ENGINE_FILES: Record<TexEngine, string[]> = { pdflatex: ['tex-worker.js', 'swiftlatexpdftex.js', 'swiftlatexpdftex.wasm', 'pdfjs/pdf.min.mjs', 'pdfjs/pdf.worker.min.mjs'], xelatex: ['tex-worker.js', 'swiftlatexxetex.js', 'swiftlatexxetex.wasm', 'swiftlatexdvipdfm.js', 'swiftlatexdvipdfm.wasm'] };
 const files = (e: TexEngine, m: Manifest) => [...ENGINE_FILES[e].map((f) => base() + f), dir(e) + 'manifest.json', ...m.chunks.map((k) => dir(e) + k.file)];
-// the WebAssembly's sizes (SwiftLaTeX v20022022, vendored in public/tex: they never change), for the size shown
-const WASM_BYTES: Record<string, number> = { 'swiftlatexpdftex.wasm': 1782913, 'swiftlatexxetex.wasm': 3073718, 'swiftlatexdvipdfm.wasm': 700674 };
+// the WebAssembly's sizes (SwiftLaTeX v20022022, vendored in public/tex: they never change), and pdf.js's (5.7.284),
+// for the size shown
+const WASM_BYTES: Record<string, number> = { 'swiftlatexpdftex.wasm': 1782913, 'swiftlatexxetex.wasm': 3073718, 'swiftlatexdvipdfm.wasm': 700674, 'pdf.min.mjs': 496989, 'pdf.worker.min.mjs': 1286284 };
 /** The engines this site has that this browser doesn't keep yet, and what downloading them takes. */
 async function offlineNeed(): Promise<{ engines: TexEngine[]; size: number }> {
   if (typeof caches === 'undefined') return { engines: [], size: 0 };
@@ -183,7 +185,7 @@ async function offlineNeed(): Promise<{ engines: TexEngine[]; size: number }> {
     if (have.every(Boolean)) continue;
     out.push(e);
     size += m.chunks.reduce((n, k, i) => n + (have[i + ENGINE_FILES[e].length + 1] ? 0 : k.size), 0);
-    for (const [i, f] of ENGINE_FILES[e].entries()) if (!have[i]) size += WASM_BYTES[f] || 0;
+    for (const [i, f] of ENGINE_FILES[e].entries()) if (!have[i]) size += WASM_BYTES[f.slice(f.lastIndexOf('/') + 1)] || 0;
   }
   return { engines: out, size };
 }
@@ -206,7 +208,7 @@ async function downloadOffline(onProgress?: Progress) {
       if (!r.ok) throw new Error(`${url}: ${r.status}`);
       const body = await r.clone().arrayBuffer();
       await c.put(url, r);
-      done += url.endsWith('.wasm') ? WASM_BYTES[url.slice(url.lastIndexOf('/') + 1)] || 0 : /\.gz$/.test(url) ? body.byteLength : 0;
+      done += /\.(?:wasm|mjs)$/.test(url) ? WASM_BYTES[url.slice(url.lastIndexOf('/') + 1)] || 0 : /\.gz$/.test(url) ? body.byteLength : 0;
       onProgress?.(done, need.size);
     }
     delete supportP[e];

@@ -19,6 +19,15 @@ import font16 from '../../public/vendor/katex/fonts/KaTeX_Main-Italic.woff2';
 import font17 from '../../public/vendor/katex/fonts/KaTeX_Size1-Regular.woff2';
 import font18 from '../../public/vendor/katex/fonts/KaTeX_Size2-Regular.woff2';
 import font19 from '../../public/vendor/katex/fonts/KaTeX_Caligraphic-Regular.woff2';
+// TeX's script sizes (public/vendor/katex/katex-scripts.css)
+import font20 from '../../public/vendor/katex/fonts/TDScript_Caligraphic5-Regular.woff2';
+import font21 from '../../public/vendor/katex/fonts/TDScript_Caligraphic7-Regular.woff2';
+import font22 from '../../public/vendor/katex/fonts/TDScript_Main5-Bold.woff2';
+import font23 from '../../public/vendor/katex/fonts/TDScript_Main5-Regular.woff2';
+import font24 from '../../public/vendor/katex/fonts/TDScript_Main7-Bold.woff2';
+import font25 from '../../public/vendor/katex/fonts/TDScript_Main7-Regular.woff2';
+import font26 from '../../public/vendor/katex/fonts/TDScript_Math5-Italic.woff2';
+import font27 from '../../public/vendor/katex/fonts/TDScript_Math7-Italic.woff2';
 export const fontData: Record<string, string> = {
   'KaTeX_Typewriter-Regular.woff2': font0,
   'KaTeX_AMS-Regular.woff2': font1,
@@ -40,4 +49,12 @@ export const fontData: Record<string, string> = {
   'KaTeX_Size1-Regular.woff2': font17,
   'KaTeX_Size2-Regular.woff2': font18,
   'KaTeX_Caligraphic-Regular.woff2': font19,
+  'TDScript_Caligraphic5-Regular.woff2': font20,
+  'TDScript_Caligraphic7-Regular.woff2': font21,
+  'TDScript_Main5-Bold.woff2': font22,
+  'TDScript_Main5-Regular.woff2': font23,
+  'TDScript_Main7-Bold.woff2': font24,
+  'TDScript_Main7-Regular.woff2': font25,
+  'TDScript_Math5-Italic.woff2': font26,
+  'TDScript_Math7-Italic.woff2': font27,
 };

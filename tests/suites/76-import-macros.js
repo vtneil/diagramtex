@@ -31,10 +31,15 @@ T.test('import macros: \\def values place circles, nodes, arcs and lines', () =>
   T.ok(q, 'the arc\'s midway label sits at its middle (x = 0)');
   T.ok(prev.some((p) => p.type === 'line' && near(p.x1, -2 * 1.5 * CM) && near(p.x2, -1.5 * CM)), 'the left line from -2\\radius');
   T.ok(prev.some((p) => p.stroke && p.stroke.toLowerCase() === '#00008b'), 'DarkBlue (svgnames) read');
-  // an edit of kept code previews with the macro it uses
-  // (very thick is the picture's: the circle is a shape, the q0 arc with its shorten keys is kept)
+  // (very thick is the picture's: the circle is a shape, and so is the q0 arc, its ends pulled in by its shorten keys)
   T.ok(sh.some((s) => s.type === 'ellipse' && near(s.rx, 1.5 * CM)), 'the circle (\\radius) is a shape');
-  const c = sh.find((s) => s.type === 'tikz' && /arc \(140:40:0\.75\*\\radius\)/.test(s.code || ''));
+  T.ok(sh.some((s) => s.type === 'arc' && near(s.r, 0.75 * 1.5 * CM) && s.a1 > 40 && s.a2 < 140), 'the shortened arc is a shape');
+  // an edit of kept code (a sloped label keeps it) previews with the macro it uses
+  const kept = TD.importLatex(String.raw`\begin{tikzpicture}
+  \def\radius{1.5}
+  \draw (140:0.75*\radius) arc (140:40:0.75*\radius) node[midway, sloped, above] {$q_0$};
+\end{tikzpicture}`).blocks[0].shapes;
+  const c = kept.find((s) => s.type === 'tikz' && /arc \(140:40:0\.75\*\\radius\)/.test(s.code || ''));
   T.ok(c && c.macros && c.macros.radius === '1.5', 'the code object carries \\radius');
   const r = TD.importInternals.preview('\\draw (0,0) circle (2*\\radius);', c.ctx, c.names, c.macros);
   T.ok(r.shapes.some((p) => p.type === 'ellipse' && near(p.rx, 3 * CM)), 'edited code previews with \\radius');
@@ -71,7 +76,7 @@ T.test('import editable: kept code becomes shapes, written from the shapes, and 
   const sh = TD.importLatex(LOOP, { editable: true }).blocks[0].shapes;
   T.ok(!sh.some((x) => x.type === 'tikz'), 'no code objects: ' + sh.map((x) => x.type).join(','));
   T.ok(!sh.some((x) => x.tex), 'no source records');
-  T.ok(sh.some((x) => x.type === 'ellipse') && sh.filter((x) => x.type === 'text').length === 3 && sh.filter((x) => x.label === '$q_0$').length === 2 && sh.some((x) => x.type === 'arc'), 'loop, three labels, two labelled lines, arc');
+  T.ok(sh.some((x) => x.type === 'ellipse') && sh.filter((x) => x.type === 'text').length === 5 && sh.filter((x) => x.type === 'text' && x.text === '$q_0$').length === 3 && sh.some((x) => x.type === 'arc'), 'loop, three labels and the lines\' two (midway, above: text there), arc');
   const tex = TD.toTikz(sh, { standalone: true });
   T.ok(!/\\radius/.test(tex), 'written from shapes, not the source');
   T.tex('import editable loop', tex);

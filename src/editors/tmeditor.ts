@@ -235,7 +235,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
   const selAnn = () => (E.sel && E.sel.x != null && E.sel.j == null && E.M.ext[E.sel.x] && E.M.ext[E.sel.x].k === 'annot' ? E.M.ext[E.sel.x] : null);
   const selBrk = () => (E.sel && E.sel.x != null && E.sel.j == null && E.M.ext[E.sel.x] && E.M.ext[E.sel.x].k === 'brk' ? E.M.ext[E.sel.x] : null);
   const selMark = () => (E.sel && E.sel.x != null && E.sel.j != null ? E.M.ext[E.sel.x] : null);
-  const lay = () => T.layout({ src: snapCode() });
+  const lay = () => T.layout({ src: snapCode(), plain: true }); // drawn in the stock units, whatever the table's options
   const snapT = (t: any, on: any) => (on ? Math.round(t / STEP) * STEP : Math.round(t * 20) / 20);
   // painting covers whole periods, so a drag doesn't leave half-period slivers; ⌥ paints freely
   const paintT = (t: any, alt: any) => (alt ? snapT(t, false) : Math.round(t));
@@ -577,7 +577,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
       const dd = x.k === 'annot' ? `M${r2(x.Xa)},${r2(x.Ya)}L${r2(x.Xb)},${r2(x.Yb)}` : x.d;
       out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})"><path class="ze-wsel" d="${dd}" stroke-width="${r2(10 / kk)}"/></g>`;
     }
-    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${T.draw({ type: 'timing', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK }, { paper: PAPER, export: true })}</g>`;
+    if (!L.empty) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})">${T.draw({ type: 'timing', x: L.bb.x, y: L.bb.y, src: snapCode(), color: INK, plain: true }, { paper: PAPER, export: true })}</g>`;
     // under the last row: buttons that add a row there
     E.adds = [];
     {

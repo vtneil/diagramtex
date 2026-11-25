@@ -99,8 +99,46 @@ TD.panels.plot = {
     color(s: any, i: any) { return { get: () => s.series[i].color, set: (v: any) => { s.series[i].color = v || '#000000'; }, nullable: false }; },
   };
 
+// a pgf-pie \pie (s.pgf): its own options, written back as \pie[…]
+function pgfPieModel(s: any) {
+  const P = { ...TD.pgfPie.defaults(), ...s.pgf };
+  const I = (key: string, value: any, attrs = {}, type = 'text', caps: Record<string, any> = {}) => captioned({ kind: 'input' as const, value: value ?? '', attrs: txAttrs({ type, 'data-p': key, ...attrs }) }, caps);
+  const C = (key: string, on: boolean) => ({ kind: 'input' as const, value: '', checked: !!on, attrs: { type: 'checkbox', 'data-p': key } });
+  return { sections: [
+    section(msg('plot.pieData', 'Pie data'), [
+      { kind: 'column' as const, label: [msg('plot.slices', 'One slice per line: '), { code: 'label value [#color]' }], value: s.data, attrs: { 'data-p': 'data', spellcheck: 'false' } },
+    ], 'sec'),
+    section(msg('plot.pgfpie', 'pgf-pie'), [
+      row(captions['ui.labels'], { kind: 'select' as const, value: P.text, options: [['label', msg('plot.pie.label', 'Beside')], ['pin', msg('plot.pie.pin', 'Pins')], ['inside', msg('plot.inside', 'Inside')], ['legend', msg('plot.pie.legend', 'Legend')], ['none', msg('plot.pie.none', 'None')]], attrs: { 'data-p': 'pgf.text' } }),
+      row(msg('plot.pie.sum', 'Sum'), I('pgf.sum', String(P.sum), { placeholder: '100' }, 'text', { title: msg('plot.pie.sumHelp', 'What the values add up to: a number, or auto for their total') })),
+      row(msg('plot.pie.rotate', 'Rotate'), I('pgf.rotate', P.rotate, { step: '15' }, 'number'), { kind: 'text' as const, text: '°', class: 'val' }),
+      row(msg('plot.pie.explode', 'Explode'), I('pgf.explode', P.explode.join(', '), { placeholder: '0' }, 'text', { title: msg('plot.pie.explodeHelp', 'How far each slice moves out, in turn: one number for all, or a list') }), { kind: 'text' as const, text: 'cm', class: 'val' }),
+      row(msg('plot.pie.before', 'Before number'), I('pgf.before', P.before, { 'data-tx': 'text' })),
+      row(msg('plot.pie.after', 'After number'), I('pgf.after', P.after, { 'data-tx': 'text' })),
+      row(msg('plot.pie.hideNumber', 'Hide numbers'), C('pgf.hideNumber', P.hideNumber)),
+      row(msg('plot.pie.polar', 'Polar area'), C('pgf.polar', P.polar)),
+    ], 'sec'),
+  ] };
+}
+function applyPgfPie(s: any, k: string, t: any) {
+  const P = (s.pgf ||= {});
+  const v = t.type === 'checkbox' ? t.checked : String(t.value);
+  if (k === 'sum') {
+    const w = v.trim(), n = parseFloat(w);
+    if (w !== 'auto' && !(n > 0)) return;
+    // the number after each value follows the sum while it is the one the old sum gave (% for 100)
+    if ((P.after ?? '\\%') === TD.pgfPie.after(P.sum ?? 100)) P.after = TD.pgfPie.after(w === 'auto' ? 'auto' : n);
+    P.sum = w === 'auto' ? 'auto' : n;
+  } else if (k === 'rotate') P.rotate = parseFloat(v) || 0;
+  else if (k === 'explode') { const xs = v.split(',').map((x: string) => parseFloat(x)).filter(Number.isFinite); P.explode = xs.length ? xs : [0]; }
+  else if (k === 'text' && TD.pgfPie.TEXT.includes(v)) P.text = v;
+  else if (k === 'before' || k === 'after') P[k] = v;
+  else if (k === 'hideNumber' || k === 'polar') P[k] = !!v;
+}
+
 TD.panels.pie = {
     model(s) {
+      if (s.pgf) return pgfPieModel(s);
       return { sections: [section(msg('plot.pieData', 'Pie data'), [
         { kind: 'column' as const, label: [msg('plot.slices', 'One slice per line: '), { code: 'label value [#color]' }], value: s.data, attrs: { 'data-p': 'data', spellcheck: 'false' } },
         row(msg('plot.showPercent', 'Show %'), { kind: 'input' as const, value: '', checked: !!s.showPercent, attrs: { type: 'checkbox', 'data-p': 'showPercent' } }),
@@ -111,6 +149,7 @@ TD.panels.pie = {
     apply(s, t) {
       const k = t.dataset.p;
       if (!k) return false;
+      if (k.startsWith('pgf.')) { applyPgfPie(s, k.slice(4), t); return false; }
       s[k] = t.type === 'checkbox' ? t.checked : k === 'startAngle' ? parseFloat(t.value) || 0 : t.value;
       return false;
     },

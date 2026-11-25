@@ -80,11 +80,26 @@ function readAr(s: any, i: any) {
   // turns: `diag[pos] with labels for the straight piece before each turn
   const t0 = skipWs(s, i), tn = readTurns(s, t0);
   if (tn.list.length) { out.turns = tn.list; out.turnsRaw = s.slice(t0, tn.end).trim(); i = tn.end; }
+  // '[d][dd]: a segment through [d] that does not stop there; along the arrow's own line it is the straight arrow
+  const v0 = skipWs(s, i), via = s[v0] === "'" ? delim(s, skipWs(s, v0 + 1), '[', ']') : null;
+  if (via) i = via.end;
   const t = delim(s, skipWs(s, i), '[', ']');
   if (t) { if (/^[udlr]*$/.test(t.v.trim())) out.dirs = t.v.trim(); else out.target = `[${t.v}]`; i = t.end; }
+  if (via) {
+    const raw = s.slice(v0, via.end), a = D.delta(via.v.trim()), b = t && out.dirs ? D.delta(out.dirs) : null;
+    const k = b && /^[udlr]+$/.test(via.v.trim()) ? (a[0] ? b[0] / a[0] : b[1] / a[1]) : 0;
+    if (b && k >= 1 && a[0] * k === b[0] && a[1] * k === b[1]) out.via = raw;
+    else { out.target = raw + (t ? s.slice(skipWs(s, via.end), t.end) : ''); out.dirs = ''; }
+  }
   const L = readLabels(s, i);
   out.labels = L.list;
   out.end = L.end;
+  // a target named by its labels ("1";"2", a 2-cell between two arrows' labels) after the labels, then more labels
+  const n0 = skipWs(s, out.end);
+  if (!out.dirs && !out.target && s[n0] === '"') {
+    const m = /^"[^"]*"(?:\s*;\s*"[^"]*")*/.exec(s.slice(n0));
+    if (m) { out.target = m[0]; const L2 = readLabels(s, n0 + m[0].length); out.labels.push(...L2.list); out.end = L2.end; }
+  }
   return out;
 }
 // labels: ^ _ | with a place (< > - (x) /d/) and an argument
@@ -94,12 +109,36 @@ function readLabels(s: any, i: any) {
     const k = skipWs(s, i);
     if (!/[\^_|]/.test(s[k] || '')) { i = k; break; }
     let j = k + 1;
-    const pm = /^([<>]*)(\([^)]*\))?(-)?(\/[^/]*\/)?/.exec(s.slice(j));
+    // (- is <>(.5), so a factor may follow it: |-(.35))
+    const pm = /^([<>]*)(-)?(\([^)]*\))?(-)?(\/[^/]*\/)?/.exec(s.slice(j));
     j += pm![0].length;
-    const a = argAt(s, j);
+    // a label that is an xy object (*+[F]{…}), a break (!{…}\hole) or is named (="1"): kept as written, not drawn here
+    let q = skipWs(s, j), kept = false;
+    if (s[q] === '!' && s[q + 1] === '{') { const e = Z.close(s, q + 1); if (e > 0) { kept = true; q = skipWs(s, e + 1); } }
+    if (s[q] === '*') {
+      kept = true; q++;
+      for (;;) {
+        q = skipWs(s, q);
+        if (/[+\-!=]/.test(s[q] || '')) { q++; continue; }
+        const d = s[q] === '[' ? delim(s, q, '[', ']') : s[q] === '<' ? delim(s, q, '<', '>') : null;
+        if (d) { q = d.end; continue; }
+        break;
+      }
+    }
+    const a = argAt(s, q);
     if (!a) { i = j; break; }
-    list.push({ side: s[k], place: pm![0], t: a.v.trim(), raw: s.slice(k, a.end) });
-    i = a.end;
+    if (/^\\(hole|txt|save|restore)$/.test(a.v)) kept = true;
+    let end = a.end;
+    // \txt<width>{…}: its text is the label's
+    if (a.v === '\\txt') {
+      const w = s[skipWs(s, end)] === '<' ? delim(s, skipWs(s, end), '<', '>') : null;
+      const k = skipWs(s, w ? w.end : end);
+      if (s[k] === '{') { const e = Z.close(s, k); if (e > 0) end = e + 1; }
+    }
+    const nm = /^\s*="[^"]*"/.exec(s.slice(end));
+    if (nm) { kept = true; end += nm[0].length; }
+    list.push({ side: s[k], place: pm![0], t: trimTex(a.v), raw: s.slice(k, end), ...(kept ? { kept: true } : {}) });
+    i = end;
   }
   return { list, end: i };
 }
@@ -119,6 +158,8 @@ function readTurns(s: any, i: any) {
   }
   return { list, end };
 }
+// spaces trimmed, but not the space of a closing control space '\ '
+const trimTex = (t: any) => String(t).replace(/^\s+/, '').replace(/(^|[^\\])\s+$/, '$1');
 // one entry: its maths and its arrows
 function cell(text: any) {
   const out = { t: '', arrows: ([] as any[]), obj: null };
@@ -142,12 +183,24 @@ function cell(text: any) {
     if (c === '{') { const j = Z.close(text, i); const k = j < 0 ? text.length : j + 1; t += text.slice(i, k); i = k; continue; }
     if (c === '\\') {
       const m = /^\\([A-Za-z]+|.)/.exec(text.slice(i));
-      if (m![1] === 'ar') { const a = readAr(text, i + 3); out.arrows.push(a); i = a.end; continue; }
+      if (m![1] === 'ar') {
+        const a = readAr(text, i + 3);
+        out.arrows.push(a); i = a.end;
+        // xy's position language after an \ar (. - < ; = " ! * + or \save): read by xy, drawn as nothing here; kept as
+        // written up to the next \ar (letters after an \ar are the entry's text, as in xy)
+        const k = skipWs(text, i);
+        if (/^(?:[.;!*"=]|[-+]\s*[<{(]|\\save\b)/.test(text.slice(k))) {
+          let e = k;
+          while (e < text.length && !/^\\ar(?![A-Za-z])/.test(text.slice(e))) { if (text[e] === '{') { const j = Z.close(text, e); e = j < 0 ? text.length : j + 1; } else e += text[e] === '\\' ? 2 : 1; }
+          a.tail = text.slice(k, e).trim(); i = e;
+        }
+        continue;
+      }
       t += m![0]; i += m![0].length; continue;
     }
     t += c; i++;
   }
-  out.t = t.trim();
+  out.t = trimTex(t);
   return out;
 }
 
@@ -205,7 +258,7 @@ function labelItem(L: any) {
   const opts = [];
   const m = /\(([^)]*)\)/.exec(L.place), rest = L.place.replace(/\([^)]*\)/, '');
   // <>(f) is tikz-cd's pos=f (along the arrow); a bare (f) counts from the entries' centres, so it stays xy's
-  if (m && rest === '<>') { const v = parseFloat(m[1]); if (!isFinite(v)) opts.push(`xy at={${L.place}}`); else if (NAMED[v] != null) { if (NAMED[v]) opts.push(NAMED[v]); } else opts.push(`pos=${f(v)}`); }
+  if (m && (rest === '<>' || rest === '-')) { const v = parseFloat(m[1]); if (!isFinite(v)) opts.push(`xy at={${L.place}}`); else if (NAMED[v] != null) { if (NAMED[v]) opts.push(NAMED[v]); } else opts.push(`pos=${f(v)}`); }
   else if (m) opts.push(`xy at={${L.place}}`);
   else if (rest && rest !== '-') opts.push(`xy at={${rest}}`);
   if (L.side === '|') opts.push('description');
@@ -242,13 +295,17 @@ function arrowItems(a: any) {
     }
   }
   if (a.turns) items.push(`xy turns={${a.turnsRaw}}`);
+  if (a.via) items.push(`xy via={${a.via}}`);
   if (a.target) items.push(`xy target={${a.target}}`);
-  for (const L of a.labels) items.push(labelItem(L));
+  for (const L of a.labels) if (!L.kept) items.push(labelItem(L));
+  const tail = [...a.labels.filter((L: any) => L.kept).map((L: any) => L.raw), ...(a.tail ? [a.tail] : [])];
+  if (tail.length) items.push(`xy tail={${tail.join(' ')}}`);
   return items;
 }
+// an entry starting with [ gets {} before it, which tikz-cd would read as &[length] (an empty Ord before an Open adds no space)
 const cellToCd = (text: any) => {
   const c = cell(text);
-  return [c.obj != null ? `|[xy object={${c.obj}}]|` : '', c.t, ...c.arrows.map((a) => `\\arrow[${[a.dirs, ...arrowItems(a)].join(', ')}]`)].filter(Boolean).join(' ');
+  return [c.obj != null ? `|[xy object={${c.obj}}]|` : '', /^\[/.test(c.t) ? '{}' + c.t : c.t, ...c.arrows.map((a) => `\\arrow[${[a.dirs, ...arrowItems(a)].join(', ')}]`)].filter(Boolean).join(' ');
 };
 // the diagram's options: @R=, @C=, @= become tikz-cd's seps (lengths); the rest is kept for xy
 function envToCd(env: any) {
@@ -264,7 +321,7 @@ function envToCd(env: any) {
 function toCd(src: any) {
   const { env, inner, wrapped } = unwrap(src);
   if (!wrapped && !String(src || '').trim()) return '\\begin{tikzcd}\n\\end{tikzcd}';
-  const rows = Z.grid(inner, false);
+  const rows = Z.grid(inner, false, true);
   const body = rows.map((r: any) => '  ' + r.cells.map((c: any) => cellToCd(c.text)).join(' & ')).join(' \\\\\n');
   const e = envToCd(env);
   return `\\begin{tikzcd}${e ? `[${e}]` : ''}\n${body}\n\\end{tikzcd}`;
@@ -287,6 +344,8 @@ function arrowXy(a: any) {
     else if (name === 'xy') mods.push(unbrace(arg));
     else if (name === 'xy target') target = unbrace(arg);
     else if (name === 'xy turns') turns = unbrace(arg);
+    else if (name === 'xy tail') every.tail = unbrace(arg);
+    else if (name === 'xy via') every.via = unbrace(arg);
     else if (name === 'description') every.desc = true;
     else if (name === 'swap' || name === "'") every.swap = true;
     else if (name in POS) every.pos = POS[name];
@@ -301,7 +360,7 @@ function arrowXy(a: any) {
   }
   let style = every.raw || '';
   if (!style && styleIt.length) { const sp = specOf(styleIt); if (sp !== '->') style = `@{${sp}}`; }
-  const head = `\\ar${style}${curve ? `@/${curve}${amt}/` : ''}${mods.join('')}${turns ? ` ${turns} ` : ''}${target || `[${a.dirs}]`}`;
+  const head = `\\ar${style}${curve ? `@/${curve}${amt}/` : ''}${mods.join('')}${turns ? ` ${turns} ` : ''}${every.via || ''}${target || `[${a.dirs}]`}`;
   const lab = labs.map((L) => {
     let side = L.swap !== !!every.swap ? '_' : '^', place = '', pos = every.pos, lcol = every.lcol || null;
     for (const o of L.opts) {
@@ -316,13 +375,13 @@ function arrowXy(a: any) {
     if (!place && pos != null && isFinite(pos) && pos !== 0.5) place = pos === 0 ? '<' : pos === 1 ? '>' : `<>(${f(pos).replace(/^0\./, '.')})`;
     return `${side}${place}{${D.joinColor(lcol, L.t)}}`;
   }).join('');
-  return head + lab;
+  return head + lab + (every.tail ? ' ' + every.tail : '');
 }
 function cellFromCd(text: any) {
   const c = D.cell(text);
   const m = c.node != null && /^\s*xy object=\{([\s\S]*)\}\s*$/.exec(c.node);
   // an object keeps its modifiers and braces: *{…}, *+[F]{…}
-  const t = m ? `${m[1]}{${c.t}}` : c.t;
+  const t = m ? `${m[1]}{${c.t}}` : c.t.replace(/^\{\}(?=\[)/, '');
   return [t, ...c.arrows.map(arrowXy)].filter(Boolean).join(' ');
 }
 function envFromCd(list: any) {
@@ -405,6 +464,9 @@ function profile(cdEnv: any) {
       if (name === 'xy style') { warn(`The arrow style @${unbrace(arg)} isn't drawn here (it is kept in the code)`); return true; }
       if (name === 'xy') { warn(`The arrow part ${unbrace(arg)} isn't drawn here (it is kept in the code)`); return true; }
       if (name === 'xy turns') { const T = readTurns(unbrace(arg), 0); A.turns = T.list; return true; }
+      if (name === 'xy tail') { warn(`${unbrace(arg)} after an \\ar isn't drawn here (it is kept in the code)`); return true; }
+      // '[d]: along the arrow's own line, the straight arrow; its labels go on the last segment, from where the line leaves [d]
+      if (name === 'xy via') { const v = /^'\[([udlr]+)\]$/.exec(unbrace(arg).trim()); if (v) A.via = D.delta(v[1]); return true; }
       if (name === 'xy target') { warn(`The arrow target ${unbrace(arg)} isn't drawn here (it is kept in the code)`); A.phantom = true; return true; }
       return false;
     },
@@ -596,6 +658,8 @@ function toTikzcd(src: any) {
         if (name === 'xy style') { warn(`The arrow style @${unbrace(arg)} has no tikz-cd counterpart; it is drawn as ->`); continue; }
         if ((name === 'shift left' || name === 'shift right') && /^\.56ex$/.test(unbrace(arg))) { out.push(name); continue; }
         if (name === 'xy target') { warn(`The arrow target ${unbrace(arg)} has no tikz-cd counterpart; the arrow is left out`); drop = true; continue; }
+        if (name === 'xy tail') { warn(`${unbrace(arg)} after an \\ar has no tikz-cd counterpart; it is left out`); continue; }
+        if (name === 'xy via') continue;
         out.push(it);
       }
       if (drop) return;

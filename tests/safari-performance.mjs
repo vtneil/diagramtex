@@ -46,19 +46,9 @@ try {
   await command('POST', '/timeouts', { script: 60000, pageLoad: 60000, implicit: 0 });
   await command('POST', '/window/rect', { x: 0, y: 0, width: 1600, height: 1000 });
   await command('POST', '/url', { url: `http://127.0.0.1:${server.port}/` });
-  // Set the first-visit preference before the measured page starts. Closing a
-  // not-yet-visible tour would leave its delayed opening callback queued.
-  await evaluate(async () => {
-    for (let i = 0; i < 300 && !window.TD?.ready; i++) await new Promise(r => setTimeout(r, 50));
-    await TD.ready;
-    localStorage.setItem('diagramtex.tour', 'seen');
-  });
-  await command('POST', '/refresh');
   const environment = await evaluate(async () => {
     for (let i = 0; i < 300 && !window.TD?.ready; i++) await new Promise(r => setTimeout(r, 50));
     await TD.ready; await document.fonts.ready;
-    TD.tour?.close();
-    localStorage.setItem('diagramtex.tour', 'seen');
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     if (document.querySelector('.td-dialog')) throw new Error('Dismiss the dialog before profiling the canvas');
     return { userAgent: navigator.userAgent, width: innerWidth, height: innerHeight, dpr: devicePixelRatio };

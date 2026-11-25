@@ -469,6 +469,10 @@ button.tile.soon, button.tile.soon:hover { border-style: dashed; border-color: v
 textarea.tdd-in { height: auto; padding: 8px; font: 12px/1.5 var(--font-mono); resize: vertical; }
 .tdd-in:focus { outline: none; border-color: var(--bluepen); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bluepen) 18%, transparent); }
 .tdd-pv { margin-top: 8px; padding: 10px 12px; min-height: 44px; background: var(--well); border-radius: var(--r); color: var(--ink); font: 18px/1.35 var(--font-tex); text-align: center; text-wrap: balance; overflow-wrap: anywhere; } /* read-only: how the typed title reads on the page */
+.tdd-pv.notes { font: 12px/1.45 var(--font-ui); color: var(--graphite); text-align: left; text-wrap: pretty; } /* notes about what is typed: interface text */
+.tdd-pv.notes p { margin: 0; }
+.tdd-pv.notes p + p { margin-top: 4px; }
+.tdd-pv.notes code { font-family: var(--font-mono); color: var(--ink); }
 .tdd-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; margin-inline: calc(var(--tdd-inset) - var(--tdd-pad)); } /* both ends: a control at the left (TD.choose's dropdown) nests in that corner too */
 .tdd-btns button { min-width: 80px; }
 /* TD.choose: how to do the action, a dropdown at the left; Cancel and the action stay at the right */

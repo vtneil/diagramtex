@@ -522,7 +522,7 @@ import { keepComments } from './keep-comments';
     let a = i;
     while (a > 0 && blank(Ls[a - 1])) a--;
     const gone = Ls.splice(a, j - a);
-    Ls.splice(a, 0, ...gone.filter((g: any) => ['move', 'set', 'submol', 'nameinit'].includes(g.t)));
+    Ls.splice(a, 0, ...gone.filter((g: any) => ['move', 'pdelim', 'flip', 'set', 'submol', 'nameinit'].includes(g.t)));
     E.M.dirty = true;
   }
   // \merge from the last two compounds to a new one
@@ -729,7 +729,7 @@ import { keepComments } from './keep-comments';
   // \setchemfig{…} at the top of the code: the drawing's settings, read in order (a later one wins) and written into
   // the last one that has the key, else the first, else a new one in front
   // the settings that count: \setchemfig (and 1.x setters) after the last \resetchemfig that has drawing after it
-  const shows = (g: any) => (g.t === 'text' ? !!g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move', 'nameinit'].includes(g.t));
+  const shows = (g: any) => (g.t === 'text' ? !!g.raw.replace(/%.*$/gm, '').trim() : !['set', 'reset', 'submol', 'move', 'pdelim', 'flip', 'nameinit'].includes(g.t));
   const resetAt = () => { const Ls = E.M.segs; for (let i = Ls.length - 1; i >= 0; i--) if (Ls[i].t === 'reset' && !Ls[i].charge && Ls.slice(i + 1).some(shows)) return i; return -1; };
   const topSets = () => { const r = resetAt(); return E.M.segs.filter((g: any, i: number) => i > r && g.t === 'set' && !g.tikz && !g.charge); };
   const settings = (): Record<string, string> => Object.assign({}, ...topSets().map((g: any) => g.kv));

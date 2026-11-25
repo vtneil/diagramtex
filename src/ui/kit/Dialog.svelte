@@ -1,6 +1,8 @@
 <script lang="ts" module>
   import type { Message } from '../../i18n';
   export interface DialogModel { title: string | Message; message: string | Message; input: string | null; multiline: boolean; ok: string | Message; cancel: string | Message | null; danger: boolean; readonly: boolean; placeholder: string; preview: boolean;
+    /** the preview shows notes about what is typed (interface text), not how it reads on the page */
+    notes?: boolean;
     /** a choice of how to do the action (TD.choose): a dropdown at the left, the first chosen at first; OK does it */
     choices?: (string | Message)[];
     /** the dropdown's name, for screen readers */
@@ -25,6 +27,6 @@
 <div class="tdd-box" role={model.danger ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby="tddTitle" aria-describedby={model.message ? 'tddMsg' : undefined}>
   <h2 id="tddTitle">{caption(model.title, $locale)}</h2>{#if model.message}<p id="tddMsg">{caption(model.message, $locale)}</p>{/if}
   {#if model.choiceNotes?.[+picked]}<p class="tdd-warn" role="status">{caption(model.choiceNotes[+picked]!, $locale)}</p>{/if}
-  {#if model.input !== null}{#if model.multiline}<textarea class="tdd-in" rows="8" spellcheck="false" aria-labelledby="tddTitle" readonly={model.readonly} {@attach initial(model.input)}></textarea>{:else}<input class="tdd-in" type="text" aria-labelledby="tddTitle" {@attach initial(model.input)} spellcheck="false" autocomplete="off" readonly={model.readonly} placeholder={model.placeholder || undefined}>{/if}{#if model.preview}<div class="tdd-pv" aria-live="polite"></div>{/if}{/if}
+  {#if model.input !== null}{#if model.multiline}<textarea class="tdd-in" rows="8" spellcheck="false" aria-labelledby="tddTitle" readonly={model.readonly} {@attach initial(model.input)}></textarea>{:else}<input class="tdd-in" type="text" aria-labelledby="tddTitle" {@attach initial(model.input)} spellcheck="false" autocomplete="off" readonly={model.readonly} placeholder={model.placeholder || undefined}>{/if}{#if model.preview}<div class={['tdd-pv', model.notes && 'notes']} aria-live="polite"></div>{/if}{/if}
   <div class="tdd-btns">{#if model.choices}<Select class="tdd-pick" options={model.choices.map((c, i) => ({ value: String(i), label: caption(c, $locale) }))} value={picked} onchange={(e) => (picked = (e.currentTarget as HTMLSelectElement).value)} aria-label={model.choiceLabel ? caption(model.choiceLabel, $locale) : undefined} />{/if}{#if model.cancel}<Button data-r="0">{caption(model.cancel, $locale)}</Button>{/if}<Button data-r="1" variant={model.danger ? 'default' : 'primary'} danger={model.danger}>{caption(model.ok, $locale)}</Button></div>
 </div>

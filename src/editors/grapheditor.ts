@@ -120,7 +120,8 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
   function pinAll() {
     if (!E.M.gopts.some((it: string) => kv(it).k === 'no placement')) {
       const L = lay();
-      for (const n of E.M.nodes) if (n.x == null) { const q = L.nodes.get(n.name); if (q) { n.x = snap(q.x / PX, true); n.y = snap(-q.y / PX, true); } }
+      // (where TikZ placed each one, at= added in: exactly, so nothing moves; to the anchor an anchor= names)
+      for (const n of E.M.nodes) { const q = L.nodes.get(n.name); if (q) { n.x = snap(q.pin[0], false); n.y = snap(q.pin[1], false); } }
       E.M.gopts.unshift('no placement');
     }
     if (E.M.env == null) E.M.env = '>=Stealth';

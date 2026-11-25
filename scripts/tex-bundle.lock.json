@@ -1,12 +1,12 @@
 {
   "repo": "vtneil/diagramtex",
-  "tag": "tex-2026-cca1ac83f7c4",
-  "file": "diagramtex-tex-2026-cca1ac83f7c4.tar",
-  "size": 126824960,
-  "sha256": "4e023133c59947722014fe3384e2fbf345186ae5f08ca542c220b1c8dbc4775d",
+  "tag": "tex-2026-f42d1c35f257",
+  "file": "diagramtex-tex-2026-f42d1c35f257.tar",
+  "size": 129544192,
+  "sha256": "550c903c3df1f18773d26a1ad6597e6b0bb612cd215251257ed7911f39da51f5",
   "texlive": "2026",
   "versions": {
-    "pdftex": "2026-0db4a35deee2",
-    "xetex": "2026-a6e3227dfab7"
+    "pdftex": "2026-b4f27cb63168",
+    "xetex": "2026-765256013584"
   }
 }

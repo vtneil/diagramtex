@@ -162,6 +162,8 @@ import { onLabelFontsChange } from '../domain/label-image';
   function parseCell(text: any) {
     let unknown = false;
     const items = Q.cell(text, () => (unknown = true)), broken = Q.braceFault(text) !== 0;
+    // (a macro of the file's own read as the commands it stands for is kept as written)
+    if (items.expanded) unknown = true;
     return { text: text.trim(), items: exclusiveWires(items), opaque: unknown || broken, dirty: !unknown && !broken && items.filter(verticalWire).length > 1, ...(broken ? { broken } : {}) };
   }
   const emptyCell = () => ({ text: '', items: [], opaque: false, dirty: false });

@@ -6,6 +6,8 @@
     papers: { key: string; name: string }[]; wide: number;
     /** the document fonts (src/core/doc-fonts.ts); with a Thai one, pdfLaTeX sets only the Thai in it */
     fonts: { key: string; label: string; css: string; thai: boolean }[];
+    /** how many macros the file defines (page.macros, src/core/doc-macros.ts) */
+    macros: number;
   }
   let { model }: { model: Model } = $props();
   let page = $derived(model.page);
@@ -33,4 +35,7 @@
   <FormRow label={t("ui.author", "Author", {}, $locale)}><TextField data-pg="author" value={page.author || ''} disabled={!page.title} placeholder={t("page.authorNone", "None (under the title)", {}, $locale)} aria-label={t("ui.author", "Author", {}, $locale)} /></FormRow>
   <FormRow label={t("ui.line.spacing", "Line spacing", {}, $locale)}><Select data-pg="spread" aria-label={t("ui.line.spacing", "Line spacing", {}, $locale)} value={String(+page.spread || 1)} options={([[1, msg('page.single', 'Single')], [1.15, '1.15'], [1.3, msg('page.oneHalf', 'One and a half')], [1.6, msg('page.double', 'Double')]] as const).map(([value, name]) => ({ value: String(value), label: caption(name, $locale) }))} /></FormRow>
   <FormRow label={t("ui.sections", "Sections", {}, $locale)}><Checkbox data-pg="numbered" checked={page.numbered}>{t("ui.number.headings.1.1.1.1.1.1.variant1", " Number headings (1, 1.1, 1.1.1)", {}, $locale)}</Checkbox></FormRow></PanelSection>
+<PanelSection title={t("macros.title", "Macros", {}, $locale)}>
+  <Help kind="hint">{model.macros ? (model.macros === 1 ? t("macros.count.one", "1 macro", {}, $locale) : t("macros.count.many", "{n} macros", { n: model.macros }, $locale)) : t("macros.none", "None yet. Formulas can use the file’s own commands, as \\newcommand defines them.", {}, $locale)}</Help>
+  <div class="row presets"><Button data-pgmacros title={t("macros.edit.title", "The file’s own commands: formulas are drawn with them, and the LaTeX defines them in its preamble", {}, $locale)}>{t("macros.edit", "Edit Macros…", {}, $locale)}</Button></div></PanelSection>
 <PanelSection><Help>{exportedWith[0]}<code>\usepackage&#123;geometry&#125;</code>{exportedWith[1]} {t("page.printSameSize", "Print uses the same page size.", {}, $locale)}</Help></PanelSection>

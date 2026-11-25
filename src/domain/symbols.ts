@@ -688,6 +688,8 @@ import { runtime as TD } from '../runtime';
     },
     anchors: (s: any) => TYPE_SYM.handles(s).map((h: any) => ({ x: h.x, y: h.y })).concat([{ x: s.x + s.w / 2, y: s.y + s.h / 2 }]),
     samples(s: any) { const t = symXf(s); return [[s.x, s.y], [s.x + s.w, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]].map(([x, y]) => { const [X, Y] = t(x, y); return { x: X, y: Y }; }); },
+    // what casts its shadow (src/domain/shadow.ts): the outline, already turned and skewed
+    shadowShape: (s: any) => { const d = dOf(geom(s).filter((p: any) => !p.solid && p.hatchWidth == null)); return d ? `<path d="${d}" fill-rule="evenodd"/>` : ''; },
     svg(s: any, ctx: any) {
       const def = (LIB as Record<string, any>)[s.kind] || LIB.rect;
       const subs: any = geom(s), main = subs.filter((p: any) => !p.solid && p.hatchWidth == null), solid = subs.filter((p: any) => p.solid);
@@ -721,12 +723,12 @@ import { runtime as TD } from '../runtime';
       }).join(' ');
       const lines = [];
       const main = subs.filter((p: any) => !p.solid && p.hatchWidth == null), solid = subs.filter((p: any) => p.solid);
-      const fill = def.fill && s.fill;
-      if (main.length && (s.stroke || fill)) {
+      const fill = def.fill && s.fill, shadow = TD.shadowTikz?.(s, X, main.length > 1) ?? [];
+      if (main.length && (s.stroke || fill || shadow.length)) {
         const o = TD.styleOpts(s, X, { fill: !!fill });
-        if (fill && main.length > 1) o.push('even odd rule');
-        o.push('line join=round');
-        lines.push(`${s.stroke ? '\\draw' : typeof fill === 'object' ? '\\path' : '\\fill'}${TD.tikzOpts(o)} ${path(main)};`);
+        if ((fill || shadow.length) && main.length > 1) o.push('even odd rule');
+        o.push('line join=round', ...shadow);
+        lines.push(`${s.stroke ? '\\draw' : fill && typeof fill !== 'object' ? '\\fill' : '\\path'}${TD.tikzOpts(o)} ${path(main)};`);
       }
       for (const sp of subs.filter((p: any) => p.hatchWidth != null)) if (s.stroke) {
         const o = TD.styleOpts({ ...s, width: sp.hatchWidth }, X, { fill: false });
@@ -749,16 +751,27 @@ import { runtime as TD } from '../runtime';
   });
 
   // ---------- image ----------
+  // A picture (x, y, w, h: the picture itself) in an optional frame: a border of `border` px round it in
+  // `borderColor` (white by default, like a photo print), an outline (stroke, width, dash), corners rounded by
+  // `radius` (the picture's own corners by what the border leaves: radius − border) and a drop shadow
+  // (src/domain/shadow.ts). The frame is the object's box: its handles, its snapping and its rotation.
+  const IMAGE_FRAME: Record<string, any> = { border: 0, borderColor: '#ffffff', stroke: null, width: 1, dash: 'solid', radius: 0 };
+  TD.IMAGE_FRAME = IMAGE_FRAME;
+  const imgBorder = (s: any) => Math.max(0, +s.border || 0);
+  const imgFrame = (s: any) => { const B = imgBorder(s); return { x: s.x - B, y: s.y - B, w: s.w + 2 * B, h: s.h + 2 * B }; };
+  const imgRadius = (s: any) => Math.max(0, +s.radius || 0);
   TD.TYPES.image = {
     name: 'Image',
     pts: [['x', 'y']],
-    create: (p: any) => ({ type: 'image', x: p.x, y: p.y, w: 0, h: 0, src: '', file: '', opacity: 1 }),
+    create: (p: any) => ({ type: 'image', x: p.x, y: p.y, w: 0, h: 0, src: '', file: '', opacity: 1, ...IMAGE_FRAME }),
     drag(s: any, a: any, q: any, e: any) { Object.assign(s, TD.box.drag(a, q, e)); },
     valid: (s: any) => !!s.src && s.w > 2 && s.h > 2,
-    handles: (s: any) => TD.box.handles(s),
+    handles: (s: any) => TD.box.handles(imgFrame(s)),
+    // the frame is resized; the picture inside it keeps its aspect ratio at the corners (Alt to stretch)
     setHandle(s: any, k: any, q: any, e: any, o: any) {
-      const b = TD.box.resize(o, k, q, e);
-      if (k.length === 2 && !e.altKey) { // corners keep the aspect ratio (Alt to stretch)
+      const B = imgBorder(o), F = TD.box.resize(imgFrame(o), k, q, e);
+      const b = { x: F.x + B, y: F.y + B, w: F.w - 2 * B, h: F.h - 2 * B };
+      if (k.length === 2 && !e.altKey) {
         const r = o.w / o.h;
         if (b.w / b.h > r) b.w = b.h * r; else b.h = b.w / r;
         if (k.includes('w')) b.x = o.x + o.w - b.w;
@@ -766,19 +779,55 @@ import { runtime as TD } from '../runtime';
       }
       if (b.w > 4 && b.h > 4) Object.assign(s, b);
     },
-    anchors: (s: any) => TD.box.handles(s).map((h: any) => ({ x: h.x, y: h.y })),
-    samples: (s: any) => [{ x: s.x, y: s.y }, { x: s.x + s.w, y: s.y + s.h }],
+    anchors: (s: any) => TD.box.handles(imgFrame(s)).map((h: any) => ({ x: h.x, y: h.y })),
+    samples: (s: any) => { const F = imgFrame(s); return [{ x: F.x, y: F.y }, { x: F.x + F.w, y: F.y + F.h }]; },
     fileName: (s: any) => TD.texImages.fileName(s.file || s.id || 'image', s.src),
+    shadowShape: (s: any) => { const F = imgFrame(s); return `<rect x="${r2(F.x)}" y="${r2(F.y)}" width="${r2(F.w)}" height="${r2(F.h)}" rx="${r2(imgRadius(s))}"/>`; },
     svg(s: any, ctx: any) {
+      const B = imgBorder(s), R = imgRadius(s), ri = Math.max(0, R - B), F = imgFrame(s);
+      const box = (b: any, rx: number, paint: string) => `<rect x="${r2(b.x)}" y="${r2(b.y)}" width="${r2(b.w)}" height="${r2(b.h)}"${rx ? ` rx="${r2(rx)}"` : ''} ${paint}/>`;
+      let out = B ? box(F, R, `fill="${esc(TD.css(s.borderColor || '#ffffff'))}"`) : '';
+      let clip = '';
+      if (ri) {
+        // named by its geometry, so the same id twice (the canvas and a thumbnail) is the same clip
+        const id = `tdimgclip-${[s.x, s.y, s.w, s.h, ri].map((v) => r2(v)).join('_').replace(/[^\w-]/g, 'x')}`;
+        out += `<clipPath id="${id}">${box(s, ri, '')}</clipPath>`;
+        clip = ` clip-path="url(#${id})"`;
+      }
+      out += `<image href="${esc(s.src)}" x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" preserveAspectRatio="none"${clip}/>`;
+      if (s.stroke) {
+        const da = TD.dashArray(s.dash, s.width ?? 1);
+        out += box(F, R, `fill="none" stroke="${esc(TD.css(s.stroke))}" stroke-width="${s.width ?? 1}"${da ? ` stroke-dasharray="${da}"` : ''}`);
+      }
       const op = s.opacity != null && s.opacity < 1 ? ` opacity="${s.opacity}"` : '';
-      return `<image href="${esc(s.src)}" x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" preserveAspectRatio="none"${op}/>` +
-        (ctx.export ? '' : `<rect class="hitfill" x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}"/>`);
+      return (op ? `<g${op}>${out}</g>` : out) +
+        (ctx.export ? '' : `<rect class="hitfill" x="${r2(F.x)}" y="${r2(F.y)}" width="${r2(F.w)}" height="${r2(F.h)}"/>`);
     },
     tikz(s: any, X: any) {
       const name = TD.texImages.use(X, this.fileName(s), s.src);
-      const o = ['anchor=north west', 'inner sep=0pt'];
-      if (s.opacity != null && s.opacity < 1) o.push(`opacity=${f(s.opacity)}`);
-      return `% image file: ${name} (Image panel → Download, or download the LaTeX as a .zip)\n\\node[${o.join(', ')}] at ${X.c(s.x, s.y)} {${TD.texImages.include(X, name, `width=${X.len(s.w)}cm, height=${X.len(s.h)}cm`)}};`;
+      const B = imgBorder(s), R = imgRadius(s), ri = Math.max(0, R - B), F = imgFrame(s), w = s.width ?? 1;
+      const pic = TD.texImages.include(X, name, `width=${X.len(s.w)}cm, height=${X.len(s.h)}cm`);
+      const head = `% image file: ${name} (Image panel → Download, or download the LaTeX as a .zip)\n`;
+      const fade = s.opacity != null && s.opacity < 1 ? [`opacity=${f(s.opacity)}`] : [];
+      const shadow = TD.shadowTikz?.(s, X) ?? [];
+      const round = R ? [`rounded corners=${X.pt(R)}`] : [];
+      // the outline: drawn as the frame's path (draw=black is TikZ's default, written as plain draw)
+      const outline = () => { const o = TD.styleOpts({ stroke: s.stroke, width: w, dash: s.dash }, X); if (!o.some((x: string) => x.startsWith('draw='))) o.unshift('draw'); return o; };
+      const mat = B ? TD.styleOpts({ fill: s.borderColor || '#ffffff' }, X, { fill: true }) : [];
+      // one node when the picture needs no clipping and the outline stays clear of it: the border is its inner sep
+      if (!ri && (!s.stroke || B >= w / 2)) {
+        const o = ['anchor=north west', `inner sep=${B ? X.pt(B) : '0pt'}`, ...mat, ...(s.stroke ? outline() : []), ...round, ...shadow, ...fade];
+        return `${head}\\node[${o.join(', ')}] at ${X.c(F.x, F.y)} {${pic}};`;
+      }
+      // otherwise the frame, the picture (clipped to its rounded corners) and then the outline over it
+      const rect = (b: any) => `${X.c(b.x, b.y + b.h)} rectangle ${X.c(b.x + b.w, b.y)}`;
+      const lines = [];
+      if (B || shadow.length) lines.push(`\\path${TD.tikzOpts([...mat, ...round, ...shadow, ...fade])} ${rect(F)};`);
+      const node = `\\node[${['anchor=north west', 'inner sep=0pt', ...fade].join(', ')}] at ${X.c(s.x, s.y)} {${pic}};`;
+      if (ri) lines.push('\\begin{scope}', `  \\clip[rounded corners=${X.pt(ri)}] ${rect(s)};`, `  ${node}`, '\\end{scope}');
+      else lines.push(node);
+      if (s.stroke) lines.push(`\\draw${TD.tikzOpts([...outline().filter((x: string) => x !== 'draw'), ...round, ...fade])} ${rect(F)};`);
+      return head + lines.join('\n');
     },
   };
   

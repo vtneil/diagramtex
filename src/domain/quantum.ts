@@ -1,6 +1,8 @@
 import { runtime as TD } from '../runtime';
+import { parseMacros } from '../core/doc-macros';
 // Quantum circuits written in quantikz. The source is the object: it is drawn here as vectors
-// (an approximation of quantikz2's layout) and exported unchanged inside \begin{quantikz}.
+// (an approximation of quantikz2's layout, or of the old library's when its document loaded that: s.lib) and exported
+// unchanged inside \begin{quantikz}.
 // One-way: the drawing is not edited on the canvas, only the code.
 const { r2, esc } = TD.util;
 const PX = TD.PX_PER_CM, K = TD.PT_PER_PX;
@@ -22,9 +24,18 @@ const ARGS: Record<string, any> = {
   meter: 1, metercw: 1, meterD: 1, inputD: 1, measuretab: 1, measure: 1, lstick: 1, rstick: 1, midstick: 1, push: 1,
   qw: 0, cw: 0, qwbundle: 1, cwbend: 1, vqw: 1, vcw: 1, wire: 1, setwiretype: 1, wireoverride: 1,
   slice: 1, gategroup: 1, ghost: 1, ground: 1, trash: 1, makeebit: 1, wave: 0, permute: 1,
-  linethrough: 0, phantomgate: 1, hphantomgate: 1, gateinput: 1, gateoutput: 1,
+  linethrough: 0, phantomgate: 1, hphantomgate: 1, gateinput: 1, gateoutput: 1, vqwexplicit: 2,
 };
 const IGNORED = new Set();
+// the libraries' other commands, not drawn here: reported and skipped with their {…} arguments, never set as text
+const KEPT: Record<string, number> = {
+  alias: 1, ctrlbundle: 1, multimeter: 1, multimeterD: 1, pswap: 2, vcwexplicit: 2, vcwhexplicit: 2, vqbundleexplicit: 2,
+  vqwexplicitc: 4, vqwexplicitcenter: 2, setmiddle: 1, fullwire: 4, expandedwire: 4, importwiretypes: 1, resetwiretypes: 0, forceredefine: 0,
+};
+// what the old quantikz library (0.9.8, \usetikzlibrary{quantikz}) does not define: quantikz2's own commands
+const NOT_OLD = new Set(['metercw', 'inputD', 'wire', 'setwiretype', 'wireoverride', 'ground']);
+// old quantikz: the commands that end with \qw, so draw the wire into their cell from the one on the left
+const OLD_QW = new Set(['qw', 'ctrl', 'octrl', 'control', 'ocontrol', 'phase', 'targ', 'targX', 'swap', 'meter', 'meterD', 'measure', 'measuretab', 'trash', 'push', 'phantomgate', 'hphantomgate']);
 
 // index of the bracket closing the one at s[i] ({ or [), skipping escapes and nested groups
 function close(s: any, i: any) {
@@ -70,10 +81,25 @@ function unwrap(src: any) {
   const e = src.indexOf('\\end{quantikz}', i);
   return { env, inner: src.slice(i, e < 0 ? src.length : e) };
 }
-// rows (split at \\) of cells (split at &), groups and escapes kept whole
-function grid(inner: any) {
+// the cells' separator: \& with ampersand replacement=\& (the environment's, or a \tikzcdset in the preamble, which a
+// circuit that has only \& between its cells must have, or LaTeX would set them as one cell)
+function ampersand(inner: any, env = '') {
+  if (/ampersand replacement/.test(env)) return true;
+  let d = 0, bare = false, esc = false;
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (c === '\\') { if (inner[i + 1] === '&' && !d) esc = true; i++; }
+    else if (c === '{') d++;
+    else if (c === '}') d--;
+    else if (c === '&' && !d) bare = true;
+  }
+  return esc && !bare;
+}
+// rows (split at \\) of cells (split at &, or \& with ampersand replacement), groups and escapes kept whole
+function grid(inner: any, env = '') {
   const rows: any = [[]];
   rows.seps = [];
+  rows.amp = ampersand(inner, env);
   let buf = '';
   for (let i = 0; i < inner.length; i++) {
     const c = inner[i];
@@ -85,6 +111,7 @@ function grid(inner: any) {
         if (inner[k] === '[') { const j = close(inner, k); if (j > 0) { rows.seps[rows.length - 2] = inner.slice(k, j + 1); i = j; continue; } }
         i++; continue;
       }
+      if (rows.amp && inner[i + 1] === '&') { rows[rows.length - 1].push(buf); buf = ''; i++; continue; }
       buf += c + (inner[i + 1] || ''); i++; continue;
     }
     if (c === '&') { rows[rows.length - 1].push(buf); buf = ''; continue; }
@@ -95,34 +122,70 @@ function grid(inner: any) {
   while (rows.length && rows[rows.length - 1].length === 1 && !rows[rows.length - 1][0].trim()) rows.pop();
   return rows;
 }
-function cell(text: any, warn: any) {
+// the file's own macros (its preamble's \newcommand and \def): name → replacement text, read once per text
+let macroText: any = null, macroMap: Record<string, string> = {};
+function fileMacros() {
+  const t = TD.docMacros ? String(TD.docMacros() || '') : '';
+  if (t !== macroText) { macroText = t; macroMap = t ? parseMacros(t).macros : {}; }
+  return macroMap;
+}
+// a definition holding quantikz commands, an \arrow, & or \\ is cell content, not text
+const QK_CMD = new RegExp(`\\\\(?:${Object.keys(ARGS).join('|')}|arrow|ar)(?![A-Za-z])|&|\\\\\\\\`);
+function cell(text: any, warn: any, depth = 0) {
   const items: any[] = [];
-  let i = 0;
+  let i = 0, run = '';
   // a leading [length] widens the gap before this column (&[1cm])
   const sp = /^\s*\[\s*(-?[\d.]+\s*(?:cm|mm|pt|em|ex|in))\s*\]/.exec(text);
   if (sp) { (items as any).sep = sp[1]; i = sp[0].length; }
+  // the cell's text (anything that is not a quantikz command: letters, \cdots, \ket{0}, \phantom{…}, '\ ') is typeset as
+  // the cell's content, as \push{…} is (quantikz2.code.tex: \newcommand{\push}[1]{#1}): one text item per run
+  // (spaces trimmed, but not the space of a closing control space '\ ')
+  const flush = () => { const t = run.replace(/^\s+/, '').replace(/(^|[^\\])\s+$/, '$1'); run = ''; if (t.replace(/[{}\s]/g, '')) items.push({ name: 'push', o: [], a: [t], plain: true }); };
   while (i < text.length) {
     const c = text[i];
-    if (/\s/.test(c)) { i++; continue; }
     if (c === '\\') {
       const m = /^\\([A-Za-z]+)\*?/.exec(text.slice(i));
-      if (!m) { i += 2; continue; }
-      const name = m[1], n = ARGS[name];
+      if (!m) { run += text.slice(i, i + 2); i += 2; continue; }
+      // tikz-cd's \arrow[arrows]{dirs}: a wire, as quantikz draws its own
+      const wa = /^\\ar(?:row)?\s*\[\s*arrows\s*\]\s*\{\s*([udlr]+)\s*\}/.exec(text.slice(i));
+      if (wa) { flush(); items.push({ name: 'arrow', o: ['arrows'], a: [wa[1]] }); i += wa[0].length; continue; }
+      const name = m[1], n = ARGS[name] ?? KEPT[name];
+      // (its arguments are every #n, the unused ones named on a comment line; the comment lines are nothing)
+      const def = n === undefined ? fileMacros()['\\' + name] : undefined, mac = def?.replace(/(^|[^\\])%[^\n]*\n?/g, '$1');
+      if (n === undefined && name !== 'arrow' && name !== 'ar' && !(mac !== undefined && QK_CMD.test(mac) && depth < 4)) { run += m[0]; i += m[0].length; continue; }
+      flush();
       i += m[0].length;
-      const o = [], a = [];
-      for (;;) { const k = skipWs(text, i); if (text[k] !== '[') break; const j = close(text, k); if (j < 0) break; o.push(text.slice(k + 1, j)); i = j + 1; }
-      while (a.length < (n ?? 1)) { const k = skipWs(text, i); if (text[k] !== '{') break; const j = close(text, k); if (j < 0) break; a.push(text.slice(k + 1, j)); i = j + 1; }
-      if (n === undefined) warn(`\\${name} isn't drawn here (it is kept in the code)`);
+      const o: any[] = [], a: any[] = [];
+      // a macro of the file's own that holds quantikz commands: its replacement, read as cell content
+      const need = def !== undefined ? Math.max(0, ...[...def.matchAll(/#(\d)/g)].map((q) => +q[1])) : n ?? 1;
+      for (;;) { if (mac !== undefined) break; const k = skipWs(text, i); if (text[k] !== '[') break; const j = close(text, k); if (j < 0) break; o.push(text.slice(k + 1, j)); i = j + 1; }
+      while (a.length < need) { const k = skipWs(text, i); if (text[k] !== '{') break; const j = close(text, k); if (j < 0) break; a.push(text.slice(k + 1, j)); i = j + 1; }
+      // tikz-cd's \arrow[…]{dir}[label options]{label} …: all of it is the arrow's
+      if (name === 'arrow' || name === 'ar') for (;;) { const k = skipWs(text, i); if (text[k] !== '[' && text[k] !== '{') break; const j = close(text, k); if (j < 0) break; i = j + 1; }
+      // (one that holds & or \\ makes cells and rows of its own: the circuit's grid is not drawn as LaTeX sets it)
+      if (mac !== undefined && /(^|[^\\])&|\\\\/.test(mac)) warn(`\\${name} holds & or \\\\: the cells it makes aren't drawn here (it is kept in the code)`);
+      else if (mac !== undefined) {
+        const sub = cell(mac.replace(/#(\d)/g, (_, d) => a[+d - 1] ?? ''), warn, depth + 1);
+        items.push(...sub);
+        (items as any).expanded = true;
+      } else if (n === undefined || ARGS[name] === undefined) warn(`\\${name} isn't drawn here (it is kept in the code)`);
       else if (!IGNORED.has(name)) items.push({ name, o, a });
       continue;
     }
-    if (c === '{') { const j = close(text, i); i = j < 0 ? text.length : j + 1; continue; }
-    let j = i;
-    while (j < text.length && text[j] !== '\\' && text[j] !== '{') j++;
-    const t = text.slice(i, j).trim();
-    if (t) items.push({ name: 'push', o: [], a: [t], plain: true });
-    i = j;
+    // tikz-cd's |[style]| before a cell's content: |[meter]| on an empty cell is quantikz's meter node (2em by 1.5em,
+    // drawn as \meter{}'s box is); any other style is not drawn
+    if (c === '|' && text[i + 1] === '[' && !run.trim()) {
+      const j = close(text, i + 1);
+      if (j > 0 && text[j + 1] === '|') {
+        // (kept as written in the editor: \meter{} would add old quantikz's \qw)
+        if (/^\s*meter\s*$/.test(text.slice(i + 2, j)) && !text.slice(j + 2).replace(/[{}\s]/g, '')) { flush(); items.push({ name: 'meter', o: [], a: [''] }); (items as any).expanded = true; return items; }
+        warn('a cell style |[…]| isn\'t drawn here (it is kept in the code)'); i = j + 2; continue;
+      }
+    }
+    if (c === '{') { const j = close(text, i); const k = j < 0 ? text.length : j + 1; run += text.slice(i, k); i = k; continue; }
+    run += c; i++;
   }
+  flush();
   return items;
 }
 // A measurement's classical output starts at its right border. Quantikz applies
@@ -163,7 +226,7 @@ function parse(src: any) {
   if (fault > 0) warnings.push('A { in the circuit is not closed: everything after it is read as one cell, and LaTeX stops with "Missing } inserted"');
   else if (fault < 0) warnings.push('A } in the circuit has no { before it: LaTeX stops with "Too many }\'s"');
   const { env, inner } = unwrap(src);
-  const raw: any = grid(inner);
+  const raw: any = grid(inner, env);
   measurementOutputs(raw);
   const rows = raw.map((r: any, ri: any) => r.map((t: any, ci: any) => cell(t, (w: any) => { if (!warnings.includes(w)) warnings.push(w); void ri; void ci; })));
   return { env: opts(env), rows, seps: raw.seps, warnings };
@@ -183,10 +246,14 @@ function length(v: any, E: any) {
 // ---------------------------------------------------------------- layout
 // Ops in local coordinates; the object's (x, y) is the top-left of their bounding box.
 const plain = (t: any) => String(t || '').trim(); // slice and group labels are text, as in quantikz
-const math = (t: any) => { t = String(t || '').trim(); return !t ? '' : t.includes('$') ? t : `$${t}$`; };
+// (a line break in maths is a space, which maths ignores)
+const math = (t: any) => { t = String(t || '').replace(/^\s+/, '').replace(/(^|[^\\])\s+$/, '$1'); return !t ? '' : t.includes('$') ? t : `$${t.replace(/\s*\n\s*/g, ' ')}$`; };
 // stick labels are text in quantikz; a bare command such as \ket{0} still comes out as maths there
 const stickText = (t: any) => { t = String(t || '').trim(); return !t || t.includes('$') || !/\\[A-Za-z]/.test(t) ? t : `$${t}$`; };
 const intArg = (v: any, d: any) => { const n = parseInt(v, 10); return isFinite(n) ? n : d; };
+// old quantikz's \qwbundle[alternate=n] (alternate alone: 1): 1 three wires, 3 two at ±0.05cm, any other n > 0 two at
+// ±0.1cm; 0 the slash and \qw
+const alternate = (it: any) => { const o = opts(it.o[0] || ''), v = o.map.alternate ?? (o.list.includes('alternate') ? '1' : ''); return v === '' ? 0 : intArg(v, 0); };
 function wiresOf(it: any) {
   const o = it.o.length ? opts(it.o[0]) : { list: [], map: {} };
   if (o.map.wires) return Math.max(1, intArg(o.map.wires, 1));
@@ -196,7 +263,7 @@ function wiresOf(it: any) {
 
 const cache = new Map();
 function layout(s: any) {
-  const key = [s.src, s.size, s.font, TD.math && TD.math.engine].join('\u0001');
+  const key = [s.src, s.size, s.font, s.lib, TD.math && TD.math.engine, TD.docMacros ? TD.docMacros() : ''].join('\u0001');
   const hit = cache.get(key);
   if (hit) return hit;
   const L = build(s);
@@ -224,6 +291,9 @@ function build(s: any) {
   // height + depth of a text box as TeX sets it (KaTeX's strut), rather than the line the canvas reserves for it
   const inkH = (b: any) => { const m = /katex-strut" style="height:([\d.]+)em/.exec(b.html || ''); return m ? +m[1] * b.px : b.h * 0.8; };
   const P = parse(s.src);
+  // a circuit written for the old quantikz library is built by its rules (tikzlibraryquantikz.code.tex 0.9.8): a wire
+  // only where a command draws one, controls and swaps as cells of their own size, classical wires 0.1cm apart
+  const old = s.lib === 'quantikz';
   const env = P.env, envHas = (k: any) => env.list.includes(k);
   const ops = [], back: any[] = [], front: any[] = [], groups = [], warnings = P.warnings.slice();
   const warn = (w: any) => { if (!warnings.includes(w)) warnings.push(w); };
@@ -262,11 +332,14 @@ function build(s: any) {
   // sizes follow quantikz2: gates are their text plus 4pt a side, meters 2em x 1.5em, control dots 0.12cm,
   // the target 0.3cm across. Text boxes are measured a little wider than the ink, and a line high.
   const thin = envHas('thin lines'), clear = envHas('transparent');
-  const GAP = (length((env.map as Record<string, any>)['classical gap'], E) || { px: 0.03 * PX }).px; // half the spacing of a classical double wire
+  const GAP = old ? 0.05 * PX : (length((env.map as Record<string, any>)['classical gap'], E) || { px: 0.03 * PX }).px; // half the spacing of a classical double wire (old quantikz: \cw's yshift=±0.05cm)
   const G = 1.5 * Q;             // a meter's height (1.5em)
   const gw = (b: any) => b.w + 0.55 * E, gh = (b: any) => inkH(b) + 8 / K; // text height + depth, and 4pt inner sep a side
   const LW = (thin ? 0.4 : 0.8) / K;
   const DOT = thin ? 1.5 / K : 0.06 * PX; // thin lines shrink the control dots to 3pt
+  // old quantikz: a control is a filled circle node of minimum size 4pt (3pt with thin lines), undrawn: its dot is drawn
+  // a half line inside, so the ink is the node; an open one (ophase) is drawn on it
+  const ODOT = (thin ? 1.5 : 2) / K;
   const TARG = 3 * Math.SQRT2 / K, SW = 0.35 * Q; // the target is a circle of an empty node with 3pt inner sep: radius 3pt*sqrt 2
   const LGAP = E / 3;            // a label's inner sep (TikZ's 1/3em)
   const box = (t: any, small?: any) => TD.textBox(t, small === 'script' ? stScript : small ? stSmall : st);
@@ -323,6 +396,10 @@ function build(s: any) {
       for (let q = r; q < Math.min(R, r + g.n); q++) if (!at(q, c).some((x: any) => x.name === 'linethrough') || q === r) holeAt(q, c, hw);
     } else if (SHAPES.has(k)) { const d = shapeDim(it); w = d.w; h = d.h; holeAt(r, c, w / 2); }
     // drawn nodes count half a line width more on every side (TikZ's outer sep); a swap's crosses add nothing to the cell
+    else if (old && (k === 'ctrl' || k === 'octrl' || k === 'control' || k === 'ocontrol' || k === 'phase')) {
+      w = h = 2 * ODOT;
+      if (k === 'octrl' || k === 'ocontrol') holeAt(r, c, ODOT);
+    } else if (old && (k === 'targX' || k === 'swap')) { w = h = Q; holeAt(r, c, Q / 2); } // crossx2: an undrawn circle of minimum size 1em
     else if (k === 'ctrl' || k === 'octrl' || k === 'control' || k === 'ocontrol' || k === 'phase') {
       w = h = 2 * DOT + LW;
       if (k === 'octrl' || k === 'ocontrol' || O(it).list.includes('open')) holeAt(r, c, DOT);
@@ -368,7 +445,40 @@ function build(s: any) {
   // ---- horizontal wires (quantikz2: every row runs the full width unless told otherwise; wires end at nodes' borders)
   const types = ((env.map as Record<string, any>)['wire types'] || '').split(',').map((t: any) => t.trim());
   const typeAt = Array.from<any, any>({ length: R }, () => Array(C).fill('q'));
-  for (let r = 0; r < R; r++) {
+  if (old) {
+    // old quantikz: \qw is \arrow[arrows]{l} (from this cell's border to the left one's, not in the first column), and
+    // each command listed in OLD_QW ends with one. \cw is two of them at yshift ±0.05cm; \qwbundle[alternate] three at
+    // 0 and ±0.1cm (alternate=2: the outer two; 3: two at ±0.05cm). A gate over several wires draws its first wire's
+    // as \qw, \cw, none or an alternate bundle (cwires, nwires, bundle lists), and every other one the same way
+    // with \vqwexplicit{i-m}{i-(m-1)}. A cell with no such command has no wire into it.
+    const inc = Array.from<any, any>({ length: R }, () => Array.from({ length: C }, () => new Set()));
+    const add = (r: any, c: any, t: any) => { if (c > 0 && r < R) inc[r][c].add(t); };
+    const inList = (v: any, n: any) => String(v ?? '').split(',').some((x) => parseInt(x, 10) === n);
+    for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) for (const it of at(r, c)) {
+      const k = it.name;
+      if (NOT_OLD.has(k)) warn(`\\${k} is quantikz2's: the old quantikz library this circuit loads doesn't define it (LaTeX stops with "Undefined control sequence")`);
+      if (OLD_QW.has(k) && !it.plain) add(r, c, 'q');
+      else if (k === 'cw' || k === 'cwbend') add(r, c, 'c');
+      else if (k === 'qwbundle') { const n = alternate(it); add(r, c, n > 0 ? 'a' + (n === 1 ? 1 : n === 3 ? 3 : 2) : 'q'); }
+      // \permute: \vqwexplicit into its cell on each wire it permutes
+      else if (k === 'permute') { const n = permList(it).length; for (let v = 0; v < n; v++) add(r + v, c, 'q'); }
+      else if (k === 'gate') {
+        const o = O(it).map, n = Math.min(gdim(it).n, R - r);
+        for (let v = 1; v <= n; v++) add(r + v - 1, c, inList(o.cwires, v) ? 'c' : inList(o.nwires, v) ? 'n' : inList(o.bundle, v) ? 'a1' : 'q');
+      }
+    }
+    const SH: Record<string, number[]> = { a1: [0, 0.1, -0.1], a2: [0.1, -0.1], a3: [0.05, -0.05] };
+    for (let r = 0; r < R; r++) for (let c = 1; c < C; c++) {
+      const x1 = cx[c - 1] + hole[r][c - 1], x2 = cx[c] - hole[r][c];
+      if (!(x1 < x2)) continue;
+      for (const t of inc[r][c]) {
+        if (t === 'n') continue;
+        if (SH[t]) for (const d of SH[t]) ops.push({ k: 'wire', t: 'q', x1, y1: cy[r] - d * PX, x2, y2: cy[r] - d * PX });
+        else ops.push({ k: 'wire', t, x1, y1: cy[r], x2, y2: cy[r] });
+      }
+    }
+  }
+  for (let r = 0; r < R && !old; r++) {
     let state = types[r] || 'q';
     let prevExit = null;
     for (let c = 0; c < C; c++) {
@@ -423,6 +533,17 @@ function build(s: any) {
       }
     }
     else if (it.name === 'vqw' && n) vline(c, r, r + n, 'q');
+    else if (it.name === 'vqwexplicit' || it.name === 'arrow') {
+      // old quantikz: \vqwexplicit is \arrow[from=r-c, to=r-c, arrows]; \arrow[arrows]{dirs}: the wire's own style (dash,
+      // thick), between the two cells' borders
+      if (!old && it.name === 'vqwexplicit') { warn('\\vqwexplicit is the old quantikz library\'s: quantikz2 doesn\'t define it (LaTeX stops with "Undefined control sequence")'); continue; }
+      const dl = it.name === 'arrow' ? [...String(it.a[0] || '')] : [], dr = dl.filter((d) => d === 'd').length - dl.filter((d) => d === 'u').length, dc = dl.filter((d) => d === 'r').length - dl.filter((d) => d === 'l').length;
+      const [a, b] = it.name === 'arrow' ? [[r, c], [r + dr, c + dc]] : it.a.map((v: any) => (/^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(v) || []).slice(1).map((x) => +x - 1));
+      if ((b && (b[0] < 0 || b[1] < 0)) || (a && (a[0] < 0 || a[1] < 0))) continue;
+      if (!a || !b || a.length < 2 || b.length < 2 || a[0] >= R || b[0] >= R || a[1] >= C || b[1] >= C) continue;
+      if (a[0] === b[0]) { const [l, rr] = a[1] < b[1] ? [a[1], b[1]] : [b[1], a[1]], x1 = cx[l] + hole[a[0]][l], x2 = cx[rr] - hole[a[0]][rr]; if (x1 < x2) ops.push({ k: 'wire', t: 'q', x1, y1: cy[a[0]], x2, y2: cy[a[0]] }); }
+      else ops.push({ k: 'wire', t: 'q', x1: cx[a[1]], y1: cy[a[0]], x2: cx[b[1]], y2: cy[b[0]] });
+    }
     else if ((it.name === 'vcw' || it.name === 'cwbend') && n) vline(c, r, r + n, 'c');
     else if (it.name === 'wire' && c > 0) { // quantikz draws no \wire in the first column
       const dir = (it.o[0] || 'l').trim(), m = intArg(it.o[1], 1);
@@ -545,7 +666,15 @@ function build(s: any) {
       else { const tip = h / 2; path = `M${r2(x2)},${r2(y1)}H${r2(x1)}L${r2(x1 - tip)},${r2(Y)}L${r2(x1)},${r2(y2)}H${r2(x2)}Z`; }
       ops.push({ k: 'path', fill: true, d: path, bb: [k === 'measuretab' ? x1 - h / 2 : x1, y1, x2, y2], ...p });
       if (t) ops.push({ k: 'text', t, x: X + (k === 'meterD' ? -rr / 4 : k === 'inputD' ? rr / 4 : 0), y: Y, b: d.b, ...tc });
-    } else if (k === 'ctrl' || k === 'control') {
+    } else if (old && (k === 'ctrl' || k === 'control' || k === 'phase')) {
+      ops.push({ k: 'dot', x: X, y: Y, r: ODOT - LW / 2, ...p });
+      if (k === 'phase' && it.a[0]) { const b = box(math(it.a[0]), true), d = 0.2 * PX / Math.SQRT2; ops.push({ k: 'text', t: math(it.a[0]), small: true, x: X + ODOT + d, y: Y - ODOT - d, b, ...tc }); }
+    } else if (k === 'cwbend') {
+      // a dot where the classical wire bends: quantikz2's \phase{}; old quantikz's [phase, inner sep=2pt] node, a circle
+      // round a 4pt square (radius 2√2pt), drawn over the circuit
+      ops.push({ k: 'dot', x: X, y: Y, r: old ? 2 * Math.SQRT2 / K - LW / 2 : DOT, ...p });
+    } else if (old && (k === 'octrl' || k === 'ocontrol')) ops.push({ k: 'dot', x: X, y: Y, r: ODOT, open: true, ...p });
+    else if (k === 'ctrl' || k === 'control') {
       const open = O(it).list.includes('open');
       ops.push({ k: 'dot', x: X, y: Y, r: DOT, open, ...p });
     } else if (k === 'octrl' || k === 'ocontrol') ops.push({ k: 'dot', x: X, y: Y, r: DOT, open: true, ...p });
@@ -555,6 +684,8 @@ function build(s: any) {
       if (it.a[0]) { const b = box(math(it.a[0]), true), d = 0.2 * PX / Math.SQRT2; ops.push({ k: 'text', t: math(it.a[0]), small: true, x: X + DOT + d, y: Y - DOT - d, b, ...tc }); }
     } else if (k === 'targ') ops.push({ k: 'targ', x: X, y: Y, r: TARG, ...p });
     else if (k === 'swap' || k === 'targX') {
+      // old quantikz's crossx: the cross clipped to the 1em circle (as quantikz2's), and a line across it west to east
+      if (old) ops.push({ k: 'path', d: `M${r2(X - Q / 2)},${r2(Y)}L${r2(X + Q / 2)},${r2(Y)}`, bb: [X - Q / 2, Y, X + Q / 2, Y], ...p });
       ops.push({ k: 'path', d: `M${r2(X - SW)},${r2(Y - SW)}L${r2(X + SW)},${r2(Y + SW)}M${r2(X - SW)},${r2(Y + SW)}L${r2(X + SW)},${r2(Y - SW)}`, bb: [X - SW, Y - SW, X + SW, Y + SW], ...p });
     } else if (k === 'push') {
       const t = math(it.a[0]), b = box(t);
@@ -597,9 +728,15 @@ function build(s: any) {
       const xs = edge + (inp ? 1 : -1) * (4 / K + b.w / 2);
       if (t) ops.push({ k: 'text', t, small: 'scriptsize', x: xs, y: ym, b, ...tc });
     } else if (k === 'qwbundle') {
-      const a = 0.28 * E;
-      ops.push({ k: 'path', d: `M${r2(X - a * 0.7)},${r2(Y + a)}L${r2(X + a * 0.7)},${r2(Y - a)}`, bb: [X - a, Y - a, X + a, Y + a], ...p });
-      if (it.a[0]) { const b = box(math(it.a[0]), true); ops.push({ k: 'text', t: math(it.a[0]), small: true, x: X + a * 0.7 + b.w / 2, y: Y - a - b.h / 2 + 2, b, ...tc }); }
+      // \arrow[strike arrow, phantom]{l}: a mark halfway along the wire coming in (between the nodes' borders), from
+      // (-Strike Width, -Strike Height) to (+, +), and the number in \scriptstyle by its south west corner at the top
+      // end (old quantikz: the arrow's label, shifted the same). An alternate bundle (old quantikz) is its wires.
+      const o = O(it);
+      if (old && alternate(it) > 0) continue;
+      const sw = length(o.map['Strike Width'], E)?.px ?? 0.08 * PX, sh = length(o.map['Strike Height'], E)?.px ?? 0.12 * PX;
+      const xm = c > 0 ? (cx[c - 1] + hole[r][c - 1] + X - hole[r][c]) / 2 : X;
+      ops.push({ k: 'path', d: `M${r2(xm - sw)},${r2(Y + sh)}L${r2(xm + sw)},${r2(Y - sh)}`, bb: [xm - sw, Y - sh, xm + sw, Y + sh], ...p });
+      if (it.a[0]) { const t = math(it.a[0]), b = box(t, 'script'); ops.push({ k: 'text', t, small: 'scriptsize', x: xm + sw + b.w / 2 - 1, y: Y - sh - inkH(b) / 2, b, ...tc }); }
     } else if (k === 'ground') {
       // three bars, 8, 6 and 4 classical gaps tall, 2 gaps apart, the wire meeting the tallest; label below
       const x0 = X - 2.5 * GAP;
@@ -750,9 +887,9 @@ function fullCode(src: any) {
   let start = begin ? skipWs(t, begin.index + begin[0].length) : 0;
   if (begin && t[start] === '[') { const end = close(t, start); if (end >= 0) start = end + 1; }
   const stop = begin ? t.indexOf('\\end{quantikz}', start) : -1;
-  const end = stop < 0 ? t.length : stop, rows = grid(t.slice(start, end));
+  const end = stop < 0 ? t.length : stop, rows = grid(t.slice(start, end), begin ? t.slice(begin.index, start) : '');
   if (measurementOutputs(rows)) {
-    const body = rows.map((row: any, i: number) => row.map((value: string) => value.trim()).join(' & ') + (i < rows.length - 1 ? ' \\\\' + (rows.seps[i] || '') + '\n' : '')).join('');
+    const body = rows.map((row: any, i: number) => row.map((value: string) => value.trim()).join(rows.amp ? ' \\& ' : ' & ') + (i < rows.length - 1 ? ' \\\\' + (rows.seps[i] || '') + '\n' : '')).join('');
     t = t.slice(0, start) + '\n' + body + '\n' + t.slice(end);
   }
   return begin ? t : `\\begin{quantikz}\n${t}\n\\end{quantikz}`;
@@ -779,7 +916,9 @@ TD.TYPES.qc = {
   // circuit's nodes would inherit), centred where the drawing is, with the outer picture
   // interrupted so its shift / overlay settings don't reach the circuit.
   tikz(s: any, X: any) {
-    X.libs.add('quantikz2');
+    // the library the circuit was written for: the old one and quantikz2 both define the quantikz environment, so
+    // a document loads one of them (TD.preamble keeps quantikz2 when circuits ask for both)
+    X.libs.add(s.lib === 'quantikz' ? 'quantikz' : 'quantikz2');
     const b = layout(s).bb;
     // the block's text size and font, as the canvas lays it out (a font switch the circuit's text inherits)
     const fo = TD.textOpts({ size: s.size, font: s.font }, X);
@@ -795,7 +934,9 @@ TD.qc = { ARGS, IGNORED, unwrap, grid, cell, opts, close, braceFault, draw, layo
 // Application integration belongs to the block, alongside its model and panel.
 TD.blocks.register("qc", {
   menu: { order: 3, group: 'quantum', label: "Quantum", title: "Quantum circuit, written in quantikz", icon: "<svg viewBox=\"0 0 32 24\"><path d=\"M2 7h28M2 17h28M14 7v10\"/><rect x=\"5\" y=\"3\" width=\"7\" height=\"8\" class=\"a1\"/><circle cx=\"14\" cy=\"7\" r=\"1.6\" style=\"fill:var(--graphite)\"/><circle cx=\"14\" cy=\"17\" r=\"3.2\" fill=\"none\"/><path d=\"M14 14v6M11 17h6\"/><rect x=\"21\" y=\"13\" width=\"8\" height=\"8\" class=\"a1\"/><path d=\"M22.5 19.5a2.5 2.5 0 015 0M25 19.5l1.8-3\"/></svg>" },
-  nodeImport: { re: /\\begin\{quantikz\}[\s\S]*\\end\{quantikz\}/, order: 0, bb: (q) => TD.qcLayout(q).bb, dedent: true },
+  nodeImport: { re: /\\begin\{quantikz\}[\s\S]*\\end\{quantikz\}/, order: 0, bb: (q) => TD.qcLayout(q).bb, dedent: true,
+    // \usetikzlibrary{quantikz} alone is the old library (quantikz 0.9.8); \usepackage{quantikz} loads quantikz2
+    context: (q: any, C: any) => { const l = C.libs || []; if (l.includes('quantikz') && !l.includes('quantikz2') && !(C.pkgs || []).includes('quantikz')) q.lib = 'quantikz'; } },
   fixed: true,
   geometry: [['x', 'x'], ['y', 'y']],
   refreshOnDoubleClick: false,

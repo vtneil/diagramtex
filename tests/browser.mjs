@@ -78,7 +78,6 @@ export async function launchBrowser(name, url, contextOptions = {}, launchOption
       if (message.type() === 'error') errors.record(message.text());
       if (message.type() === 'warning') warnings.push(message.text());
     });
-    await page.addInitScript(() => localStorage.setItem('diagramtex.tour', 'seen'));
     try { await page.goto(url); }
     catch (error) { await recordStartupFailure(page, error); throw error; }
     await waitForAppReady(page);
