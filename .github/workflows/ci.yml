@@ -1,7 +1,10 @@
 name: CI
 
+# Every branch, and release tags only (vX.Y.Z): other tags (the TeX bundle's tex-…) are releases of files, not of code.
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -74,9 +77,42 @@ jobs:
       - run: node scripts/generate-label-glyphs.js --check
       - run: node scripts/patch-katex.js --check
 
-  # Every test uses the same production build. A failing suite doesn't stop the others.
+  # A release tag's commit was pushed to main with it (/release) and is tested there: the tag's run waits for that
+  # run and takes its result instead of testing the same code again. Its own build still runs (it's versioned by the
+  # release number, main's by the commit, and nothing else differs), and so do typecheck and label-glyphs, which are
+  # quick. When main failed, so does this, and nothing deploys; when main never had the commit (a tag pushed on its
+  # own), passed is false and the tag's run tests everything itself.
+  tested-on-main:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      passed: ${{ steps.main.outputs.passed }}
+    steps:
+      - id: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while :; do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=main&event=push" \
+              --jq '.workflow_runs | sort_by(.created_at) | last | if . == null then "" else "\(.id) \(.status) \(.conclusion // "")" end')
+            if [ -z "$run" ]; then echo "main has no run of $GITHUB_SHA: testing it here"; echo "passed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+            read -r id state result <<< "$run"
+            if [ "$state" = completed ]; then
+              if [ "$result" = success ]; then echo "main's run $id passed: its tests stand for this tag"; echo "passed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+              echo "::error::main's run $id of this commit ended $result: no release from it"; exit 1
+            fi
+            echo "waiting for main's run $id ($state)"; sleep 30
+          done
+
+  # Every test uses the same production build. A failing suite doesn't stop the others. (Not in a release tag's run
+  # whose commit passed on main: tested-on-main.)
   functional:
-    needs: build
+    needs: [build, tested-on-main]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.tested-on-main.result != 'failure' && needs.tested-on-main.outputs.passed != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     container:
@@ -106,7 +142,8 @@ jobs:
   # One job per specialist suite. Each runner keeps its own browser matrix,
   # including comparisons that need several engines together.
   browser-check:
-    needs: build
+    needs: [build, tested-on-main]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.tested-on-main.result != 'failure' && needs.tested-on-main.outputs.passed != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     container:
@@ -191,11 +228,16 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
   # A vX.Y.Z tag → production, only after every check above passed on that
-  # commit, then a GitHub Release for the tag with the release commit's title.
+  # commit (the tests here, or main's run of it: tested-on-main), then a GitHub
+  # Release for the tag with the release commit's title.
   # The token is handled as in preview: only the wrangler step has it.
   deploy:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, typecheck, label-glyphs, functional, browser-check]
+    needs: [build, typecheck, label-glyphs, tested-on-main, functional, browser-check]
+    if: >-
+      ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v')
+      && needs.build.result == 'success' && needs.typecheck.result == 'success' && needs.label-glyphs.result == 'success'
+      && needs.tested-on-main.result == 'success'
+      && (needs.tested-on-main.outputs.passed == 'true' || (needs.functional.result == 'success' && needs.browser-check.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:

@@ -13,6 +13,8 @@ public/version.json
 AGENT_HANDOFF.md
 graphify-out/
 
+__pycache__
+
 # Optional private performance project
 /tests/test_page.diagramtex
 
