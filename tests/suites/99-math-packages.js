@@ -12,7 +12,7 @@
     String.raw`\expval{A} + \mel{a}{H}{b} + \vb{F} + \comm{A}{B}`,
     String.raw`\cancelto{0}{x}`, String.raw`\sideset{_a}{^b}\sum`, String.raw`\prescript{14}{6}{C}`, String.raw`\Tilde{x}\Hat{y}\Vec{v}`,
     String.raw`\upphi + \Upgamma`, String.raw`\nicefrac{1}{2} + \sfrac{3}{4}`, String.raw`\tensor{T}{^a_b}`, String.raw`\slashed{p}`,
-    String.raw`a \centernot\implies b`, String.raw`\EuScript{F}`, String.raw`\hdots\strut\vspace{2pt}`, String.raw`\scalebox{2}{x}`,
+    String.raw`a \centernot\implies b`, String.raw`X \Perp Y \mid Z`, String.raw`\EuScript{F}`, String.raw`\hdots\strut\vspace{2pt}`, String.raw`\scalebox{2}{x}`,
     String.raw`\begin{array}[t]{r@{}l*{2}{c}p{2cm}}a&b&c&d&e\end{array}`, String.raw`\begin{multlined}[t] a + b \\ = c\end{multlined}`,
     String.raw`f(x) = \begin{cases} 1 & \text{if $x > 0$} \\ 0 & \text{otherwise}\end{cases}`,
     String.raw`\makebox[20pt][c]{$T$} + \framebox{a}`, String.raw`\begin{array}{cc}\multirow{2}{*}{$x$} & \multicolumn{1}{l}{y}\end{array}`, String.raw`\begin{array}{c|c}\multicolumn{2}{c}{\cfrac{t}{e \to t}} \\ \multicolumn{1}{l}{x \mid y} & \multirow[t]{2}{*}[1ex]{\neg x}\end{array}`,
@@ -42,6 +42,16 @@
   };
   // the text a piece of HTML shows (formulas without their source)
   const shown = (html) => { const d = document.createElement('div'); d.innerHTML = html; d.querySelectorAll('annotation').forEach((a) => a.remove()); return d.textContent; };
+
+  T.test('math packages: \\Perp (⫫) is Temml\'s own and, in KaTeX, two ⊥ drawn as one relation', async () => {
+    const was = TD.math.engine;
+    try {
+      TD.math.set('temml'); T.ok(!TD.math.drawsAs('Perp'), 'Temml draws its own');
+      TD.math.set('katex'); T.ok(TD.math.drawsAs('Perp'), 'KaTeX through the stand-in');
+      T.eq(drawn(String.raw`X \Perp Y`), drawn(String.raw`X \mathrel{\perp\!\!\!\perp} Y`));
+      T.ok(TD.lint.mathNeeds(String.raw`$X \Perp Y$`).pkgs.includes('cmll'), 'the export loads cmll for it');
+    } finally { TD.math.set(was); await TD.math.whenReady(); }
+  });
 
   T.test('math packages: siunitx is drawn as siunitx sets it', () => {
     T.eq(drawn(String.raw`\SI{1.5e3}{\kilo\metre\per\second}`), drawn(String.raw`{1.5\times 10^{3}\,\mathrm{k}\mathrm{m}\,\mathrm{s}^{-1}}`));

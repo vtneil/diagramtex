@@ -92,6 +92,8 @@ import { escapeHtml } from '../core/html';
     centernot: '\\mathrel{\\cancel{#1}}', midrule: '\\hline', toprule: '\\hline', bottomrule: '\\hline', multirow: LAST(3),
     EuScript: '\\mathcal{#1}', pazocal: '\\mathcal{#1}', mathpzc: '\\mathcal{#1}', mathbfcal: '\\boldsymbol{\\mathcal{#1}}',
     mathbold: '\\boldsymbol{#1}', mathbbmss: '\\mathbb{#1}', mathbbb: '\\mathbb{#1}',
+    // ⫫ (independence; cmll's and Temml's \Perp): two ⊥ drawn together as one relation, as it is written by hand
+    Perp: '\\mathrel{\\perp\\!\\!\\!\\perp}',
     // physics (its \qty(…) is rewritten: src/domain/math-rewrite.ts)
     abs: '\\left|#1\\right|', norm: '\\left\\|#1\\right\\|', dd: '\\mathrm{d}', dv: '\\frac{\\mathrm{d}#1}{\\mathrm{d}#2}',
     pdv: '\\frac{\\partial #1}{\\partial #2}', vb: '\\mathbf{#1}', vu: '\\hat{\\mathbf{#1}}', va: '\\vec{#1}',
