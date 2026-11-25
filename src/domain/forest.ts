@@ -1,5 +1,6 @@
 import { runtime as TD } from '../runtime';
 import { unbraceOnce as unbrace } from './tex-groups';
+import { layoutCache } from './layout-cache';
 // Trees written for the forest package. The source is the object: the bracket code is drawn here as
 // vectors (an approximation of forest's packing) and exported unchanged inside \begin{forest}.
 // The visual editor (js/fteditor.ts) rewrites the code from the tree it holds.
@@ -524,19 +525,8 @@ const TEXSZ: Record<string, any> = {
   huge: [19.024, 17.5, 55.358], Huge: [22.821, 21, 66.335],
 };
 const texsz = (name: any) => TEXSZ[name] || TEXSZ.normalsize;
-const cache = new Map();
 let DRAW_DEPTH = 0; // a tree's TikZ code may hold a tree of its own: drawn two deep at most
-function layout(s: any) {
-  const key = [s.src, s.size, s.font, TD.math && TD.math.engine, s.tex?.preamble || '', (s.tex?.pkgs || []).join()].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s);
-  if (TD.measuring && TD.measuring()) return L; // text sizes may be placeholders in a measuring pass: don't keep them
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => [s.src, s.size, s.font, TD.math && TD.math.engine, s.tex?.preamble || '', (s.tex?.pkgs || []).join()].join('\u0001'), (s: any) => build(s));
 
 function build(s: any) {
   const warnings: any[] = [], warn = (w: any) => { if (!warnings.includes(w)) warnings.push(w); };

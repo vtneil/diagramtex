@@ -9,7 +9,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { patchSvg } from '../ui/svg-patch';
 import { runtime as TD } from '../runtime';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { editorKeys } from './editor-keys';
+import { paletteDrag } from './palette-drag';
+import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
@@ -266,26 +269,16 @@ import { keepComments } from './keep-comments';
   // click: a state kind restyles the selected state or is armed for placing; a transition kind restyles the
   // selected transition and is the kind new ones get; a loop goes on the selected state, or is armed.
   // Drag a state kind onto the canvas.
-  let palDrag: any = null;
-  // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
-  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
-  list.addEventListener('pointerdown', (e: any) => {
-    const b = e.target.closest('.qe-item');
-    if (!b || e.button !== 0) return;
-    palDrag = { k: b.dataset.item, x: e.clientX, y: e.clientY, moved: false };
-    b.setPointerCapture(e.pointerId);
-  });
-  list.addEventListener('pointermove', (e: any) => {
-    if (!palDrag || palDrag.k[0] !== 's') return;
-    if (!palDrag.moved && Math.hypot(e.clientX - palDrag.x, e.clientY - palDrag.y) > 4) palDrag.moved = true;
-    if (palDrag.moved) { E.hover = overStage(e) ? { at: toCm(e, !e.altKey) } : null; E.ghost = palDrag.k; draw(); }
-  });
-  list.addEventListener('pointerup', (e: any) => {
-    if (!palDrag) return;
-    const d = palDrag; palDrag = null; E.ghost = null;
-    if (!d.moved) { pick(d.k); return; }
-    if (overStage(e)) { const [x, y] = toCm(e, !e.altKey); addState(d.k, x, y); }
-    E.hover = null; draw();
+  paletteDrag(list, {
+    keyboard: true,
+    drags: (k) => k[0] === 's',
+    pick,
+    move: (d, e) => { E.hover = overStage(e) ? { at: toCm(e, !e.altKey) } : null; E.ghost = d.k; draw(); },
+    drop: (d, e) => {
+      E.ghost = null;
+      if (overStage(e)) { const [x, y] = toCm(e, !e.altKey); addState(d.k, x, y); }
+      E.hover = null; draw();
+    },
   });
   function pick(k: any) {
     if (k[0] === 'e') {
@@ -701,7 +694,7 @@ import { keepComments } from './keep-comments';
     else if (a === 'sdel') { if (s) deleteState(s.name); }
     else if (a === 'edel') { if (e) deleteEdge(E.sel.e); }
     else if (a === 'label') { if (E.sel) editLabel(E.sel); }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
+    else if (a === 'copy') copyCode(b, codeTa.value);
     else if (s) {
       const f = flags(s);
       if (a === 'init') edit(() => setFlags(s, !f.initial, f.accepting));
@@ -734,31 +727,23 @@ import { keepComments } from './keep-comments';
     clampSel(); draw(); renderProps(); updateTools();
     showCodeNotes(codeMsg, F.layout({ src: codeTa.value }).warnings);
   }
-  codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
-  codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
+  wireCode(codeTa, { state: () => E, read: readCode, commit, sync: syncCode });
 
   window.addEventListener('keydown', (e) => {
-    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
-    if (pressesFocused(e)) return;
-    if (!E || root.hidden || dock.elsewhere(e)) return;
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
-    if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
-    if (document.querySelector('.td-dialog')) return;
-    const mod = e.metaKey || e.ctrlKey, inField = !!((e.target! as Element).closest && (e.target! as Element).closest('input, textarea, select'));
-    e.stopPropagation();
-    if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (editorMenuOpen()) { closeMenu(); return; }
-      if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
-      if (E.sel) { E.sel = null; draw(); renderProps(); return; }
-      finish(false); return;
-    }
-    if (inField) return;
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-    if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
+    const keys = editorKeys(e, {
+      open: () => !!E && !root.hidden && !dock.elsewhere(e),
+      save,
+      finish,
+      undo,
+      redo,
+      escape: () => {
+        if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return true; }
+        if (E.sel) { E.sel = null; draw(); renderProps(); return true; }
+        return false;
+      },
+    });
+    if (!keys) return;
+    const { mod } = keys;
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }

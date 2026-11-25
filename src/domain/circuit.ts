@@ -1,6 +1,8 @@
 import { crossingSections, isCrossing } from './circuit-crossings';
 import { runtime as TD } from '../runtime';
 import { unbraceOnce as unbrace } from './tex-groups';
+import { layoutCache } from './layout-cache';
+import { num3 } from '../core/format';
 // Circuit block: a schematic drawn with circuitikz parts (czcore.ts + czparts-*.ts) and exported as
 // circuitikz code. The block holds a list of items in its own frame (cm, y up, origin at (s.x, s.y)):
 //   bipole { id, part, a: [x, y], b: [x, y], l, ann, v, i, poles, name, opts }  → \draw (a) to[…] (b);
@@ -14,7 +16,7 @@ const { r2, esc } = TD.util;
 const PX = TD.PX_PER_CM, K = TD.PT_PER_PX;
 const RLEN = 1.4, NODE_R = 0.04 * RLEN;
 const EPS = 1e-3;
-const f = (n: any) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); }; // to the 1/8 cm grids exporters use
+const f = num3; // to the 1/8 cm grids exporters use
 const same = (p: any, q: any) => Math.abs(p[0] - q[0]) < EPS && Math.abs(p[1] - q[1]) < EPS;
 const uid = () => Math.random().toString(36).slice(2, 10);
 // where a line's comment starts: the first % that is not \%
@@ -1133,21 +1135,12 @@ function defaultItems() {
     B('short', [3, 0], [0, 0]),
   ];
 }
-const cache = new Map();
-function layout(s: any) {
-  const key = JSON.stringify([s.items, s.raw || '', s.size, s.font, TD.math && TD.math.engine]);
-  const hit = cache.get(key);
-  if (hit) return hit;
+const layout = layoutCache((s: any) => JSON.stringify([s.items, s.raw || '', s.size, s.font, TD.math && TD.math.engine]), (s: any) => {
   const b = itemsBox(s.items || [], { size: s.size, font: s.font, ...markStyle(s.raw) });
   // in canvas px, relative to (s.x, s.y)
   const bb = b ? { x: b.x1 * PX, y: -b.y2 * PX, w: (b.x2 - b.x1) * PX, h: (b.y2 - b.y1) * PX } : { x: 0, y: 0, w: 4 * PX, h: 1.5 * PX };
-  const L = { bb, empty: !b };
-  if (TD.measuring && TD.measuring()) return L; // text sizes may be placeholders in a measuring pass: don't keep them
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+  return { bb, empty: !b };
+});
 
 function draw(s: any, ctx: any) {
   const L = layout(s), col = TD.css(s.color || '#000000'), bb = L.bb;

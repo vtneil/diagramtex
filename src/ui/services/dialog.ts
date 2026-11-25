@@ -4,6 +4,7 @@ import { mountFrame } from '../mount-frame';
 import { unmount } from 'svelte';
 import { fadeOutDialog } from '../kit/modal';
 import { runtime as TD } from '../../runtime';
+import { escapeHtml } from '../../core/html';
 // In-app dialogs replacing the browser's alert / confirm / prompt, styled like the rest of the app.
 // Each returns a Promise:  TD.confirm(...) → true/false,  TD.prompt(...) → string or null,  TD.alert(...) → undefined,
 // TD.choose(...) → the index of the way chosen in its dropdown when OK is pressed, or null.
@@ -13,7 +14,7 @@ import { runtime as TD } from '../../runtime';
 // destructive action shouldn't be the one a stray Return triggers).
 (function () {
   'use strict';
-  const esc = (t: any) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+  const esc = escapeHtml;
   let open: any = null; // { finish } of the dialog on screen; a new one cancels it
 
   // preview: (value) => HTML shown under the field as it is typed (a title with maths, say); with notes: true it is

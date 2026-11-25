@@ -9,7 +9,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { editorKeys } from './editor-keys';
+import { paletteDrag, type PaletteDrag } from './palette-drag';
+import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
@@ -919,38 +922,26 @@ import { keepComments } from './keep-comments';
     })), { armed: E?.arm });
   }
   // a click picks the item (see pick); dragging it drops it onto the atom or bond under the pointer
-  let palDrag: any = null;
-  // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
-  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
-  list.addEventListener('pointerdown', (e: any) => {
-    const b = e.target.closest('.qe-item');
-    if (!b || e.button !== 0 || !E) return;
-    palDrag = { k: b.dataset.item, x: e.clientX, y: e.clientY, moved: false, btn: b };
-    try { b.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer */ }
-  });
-  list.addEventListener('pointermove', (e: any) => {
-    const d = palDrag;
-    if (!d) return;
-    if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) {
-      if (d.k === 's:move') return; // a curved arrow is drawn atom to atom: it is clicked, not dropped
-      d.moved = true; E.ghost = d.k; d.btn.classList.add('cf-dragging');
-    }
-    if (!d.moved) return;
-    const to = dropAt(e, d.k), h = to && to.v ? { v: vkey(to.v) } : to && to.b ? { b: to.b.item } : null, ht = to && to.tail ? to.tail.A : null;
-    if ((h && h.v) !== (E.hover && E.hover.v) || (h && h.b) !== (E.hover && E.hover.b) || ht !== E.hoverTail) { E.hover = h; E.hoverTail = ht; draw(); }
-    setTip(overStage(e) ? dropTip(d.k, to) : '');
-  });
-  const endPalDrag = (e: any, drop: boolean) => {
-    const d = palDrag;
-    if (!d) return;
-    palDrag = null; E.ghost = null; E.hover = null; E.hoverTail = null; d.btn.classList.remove('cf-dragging');
-    if (!d.moved) { if (drop) pick(d.k); return; }
+  const endPalDrag = (d: PaletteDrag, e: PointerEvent | null) => {
+    E.ghost = null; E.hover = null; E.hoverTail = null; d.btn.classList.remove('cf-dragging');
     setTip('');
-    const to = drop && overStage(e) ? dropAt(e, d.k) : null;
+    const to = e && overStage(e) ? dropAt(e, d.k) : null;
     if (to) drop2(d.k, to); else draw();
   };
-  list.addEventListener('pointerup', (e: any) => endPalDrag(e, true));
-  list.addEventListener('pointercancel', (e: any) => endPalDrag(e, false));
+  paletteDrag(list, {
+    keyboard: true,
+    ready: () => !!E,
+    drags: (k) => k !== 's:move', // a curved arrow is drawn atom to atom: it is clicked, not dropped
+    pick,
+    start: (d) => { E.ghost = d.k; d.btn.classList.add('cf-dragging'); },
+    move: (d, e) => {
+      const to = dropAt(e, d.k), h = to && to.v ? { v: vkey(to.v) } : to && to.b ? { b: to.b.item } : null, ht = to && to.tail ? to.tail.A : null;
+      if ((h && h.v) !== (E.hover && E.hover.v) || (h && h.b) !== (E.hover && E.hover.b) || ht !== E.hoverTail) { E.hover = h; E.hoverTail = ht; draw(); }
+      setTip(overStage(e) ? dropTip(d.k, to) : '');
+    },
+    drop: endPalDrag,
+    cancel: (d) => endPalDrag(d, null),
+  });
   // what an item dragged from the palette lands on: { v } an atom, { b } a bond, { at: true } the drawing as a whole
   function dropAt(e: any, k: any): any {
     if (!overStage(e)) return null;
@@ -1870,7 +1861,7 @@ import { keepComments } from './keep-comments';
     else if (x === 'mdel') { const mol = (v || b || {}).mol; if (mol) { edit(() => deleteMol(mol)); E.sel = null; L = null; draw(); renderProps(); } }
     else if (x === 'label') { if (v) editLabel(v); }
     else if (x === 'alabel') { if (a) editArrowLabel(a, 0); }
-    else if (x === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { btn.textContent = t('ui.copied', 'Copied'); setTimeout(() => (btn.textContent = t('ui.copy', 'Copy')), 1200); });
+    else if (x === 'copy') copyCode(btn, codeTa.value);
     else if ((x === 'bshow' || x === 'bhide') && b) edit(() => { setHidden(b.item, x === 'bhide'); touch(b.mol); });
     else if (x === 'bflip' && b) edit(() => { const s = b.item.sym; b.item.sym = (s[0] === '>' ? '<' : '>') + s.slice(1); b.item.dirty = true; touch(b.mol); });
     else if (x.startsWith('b:') && b) apply(x, { b });
@@ -1893,31 +1884,23 @@ import { keepComments } from './keep-comments';
     clampSel(); draw(); renderProps();
     showCodeNotes(codeMsg, C.layout({ src: codeTa.value }).warnings);
   }
-  codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
-  codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
+  wireCode(codeTa, { state: () => E, read: readCode, commit, sync: syncCode });
 
   window.addEventListener('keydown', (e) => {
-    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
-    if (pressesFocused(e)) return;
-    if (!E || root.hidden || dock.elsewhere(e)) return;
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
-    if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
-    if (document.querySelector('.td-dialog')) return;
-    const mod = e.metaKey || e.ctrlKey, inField = !!((e.target! as Element).closest && (e.target! as Element).closest('input, textarea, select'));
-    e.stopPropagation();
-    if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (editorMenuOpen()) { closeMenu(); return; }
-      if (E.arm) { E.arm = null; E.mvFrom = null; E.ptr = null; buildPalette(); setTip(''); draw(); return; }
-      if (E.sel) { E.sel = null; draw(); renderProps(); return; }
-      finish(false); return;
-    }
-    if (inField) return;
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-    if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
+    const keys = editorKeys(e, {
+      open: () => !!E && !root.hidden && !dock.elsewhere(e),
+      save,
+      finish,
+      undo,
+      redo,
+      escape: () => {
+        if (E.arm) { E.arm = null; E.mvFrom = null; E.ptr = null; buildPalette(); setTip(''); draw(); return true; }
+        if (E.sel) { E.sel = null; draw(); renderProps(); return true; }
+        return false;
+      },
+    });
+    if (!keys) return;
+    const { mod } = keys;
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }

@@ -35,6 +35,9 @@
   --marker: #d29a0c;
   --marker-wash: rgba(232, 180, 20, .10);
   --mathpen: #1f7a3a;        /* maths in LaTeX source fields: 5.4:1 on white */
+  --bracket1: #8a6100;       /* brackets in LaTeX source by depth (tex-brackets.ts): gold, orchid, blue, each above 5:1 on white */
+  --bracket2: #8b3aa8;
+  --bracket3: #1d5fa3;
   --okpen: #2b8a47;          /* the one green in the interface: the top bar's dot for a file saved to disk */
   --canvas: #fffdf8;         /* the drawing sheet: content, stays light in both appearances */
   --handle: #ffffff;
@@ -91,6 +94,9 @@
     --marker: #f0c53c;
     --marker-wash: rgba(240, 197, 60, .10);
     --mathpen: #7cc58f;
+    --bracket1: #e0b44a;
+    --bracket2: #d595ea;
+    --bracket3: #7fb6f2;
     --okpen: #5fbf7a;
     --canvas: #ebe9e2;
     /* Keep the engineering grid's contrast against the softened drawing sheet. */

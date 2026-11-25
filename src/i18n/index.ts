@@ -1,5 +1,6 @@
 import { get, writable } from 'svelte/store';
 import { thai } from './th';
+import { escapeHtml } from '../core/html';
 
 export type Locale = 'en' | 'th';
 export const LANGUAGE_KEY = 'diagramtex.language';
@@ -16,7 +17,7 @@ export function t(id: string, fallback: string, params: Params = {}, language: L
 /** A message with inline emphasis: everything is escaped except <kbd>, <b> and <strong> (no attributes), so a
  * translation can move key caps and bold words within its own word order. Use with {@html}. */
 export function rich(text: string): string {
-  const e = text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const e = escapeHtml(text);
   return e.replace(/&lt;(\/?)(kbd|b|strong)&gt;/g, '<$1$2>');
 }
 /** Only explicitly marked messages are translated. Ordinary strings are content. */

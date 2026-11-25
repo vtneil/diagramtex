@@ -10,6 +10,7 @@ import { t, message as msg, caption, onLocale, type Message } from '../../i18n';
 import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../domain/table/model';
 import { patchSvg } from '../svg-patch';
 import { labelBudget, laterPicture } from '../../domain/label-image';
+import { escapeHtml } from '../../core/html';
 // milliseconds of new cell pictures the preview makes a frame
 const PICTURE_MS = 10;
 // Table: a quick tool for one table, beside the files like Quick. Import (paste or drop CSV, TSV, Excel,
@@ -28,7 +29,7 @@ const PICTURE_MS = 10;
   const KEY = 'diagramtex.table', OUT_KEY = 'diagramtex.table.out';
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   const MOD = mac ? '⌘' : 'Ctrl+', SHIFT = mac ? '⇧' : 'Shift+';
-  const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const esc = escapeHtml;
   const $ = (s: string) => host.querySelector(s) as HTMLElement;
   const PX = TD.PX_PER_CM;
 

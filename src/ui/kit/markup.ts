@@ -1,10 +1,11 @@
 // The kit's pieces as HTML strings, for code that still builds its markup with innerHTML (the block editors'
 // palettes, the Table and Document toolbars): the same markup and classes as EmptyState, Badge and SplitButton, so
 // both look and read the same. `html` is already escaped by the caller.
+import { escapeHtml } from '../../core/html';
 export const emptyStateHtml = (html: string) => `<div class="empty-state" role="status">${html}</div>`;
 export const badgeHtml = (html: string, faint = false) => `<small class="badge${faint ? ' faint' : ''}">${html}</small>`;
 
-const attr = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as Record<string, string>)[c]);
+const attr = escapeHtml;
 export interface SplitButtonHtml {
   /** the main button's content (an icon's svg, or escaped text) and its tooltip */
   html: string; title: string;

@@ -11,6 +11,7 @@ import ExportPanel, { type ExportPanelModel } from '../ExportPanel.svelte';
 import QuickList, { type QuickListModel } from '../QuickList.svelte';
 import QuickFormula, { type QuickFormulaModel } from '../QuickFormula.svelte';
 import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
+import { escapeHtml } from '../../core/html';
 // Quick: one formula, typed as LaTeX or edited in MathLive, copied or downloaded as a picture (PNG or SVG).
 // It is not a file: the formula and its options are kept in this browser, and the file that was open stays
 // open underneath. The picture is the app's own export of a text box holding the formula, so it looks
@@ -42,7 +43,7 @@ import QuickBlock, { type QuickBlockModel } from '../QuickBlock.svelte';
   if (opts.v !== 2) { opts.v = 2; opts.scale = 8; delete opts.dpi; } // earlier versions chose DPI, then defaulted to 4×
   if (!SCALES.includes(+opts.scale)) opts.scale = 8;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(opts)); } catch (e: any) { /* storage blocked */ } };
-  const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const esc = escapeHtml;
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   const canCopy = !!(navigator.clipboard && (navigator.clipboard as { write?: unknown }).write && window.ClipboardItem);
 

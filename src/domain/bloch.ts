@@ -1,5 +1,6 @@
 import { runtime as TD } from '../runtime';
 import { unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
 // Bloch sphere block: the code of a blochsphere environment is the object. It is read here and drawn
 // with the package's own geometry (its projection, its circle planes and how each splits into a back
 // and a front half, its shaded ball, its dotted state vectors), and exported as written.
@@ -214,17 +215,7 @@ function arcPath(J: any, c: any, t0: any, t1: any) {
 // ---------------------------------------------------------------- layout
 const SIZES: Record<string, any> = { tiny: 5, scriptsize: 7, footnotesize: 8, small: 9, normalsize: 10, large: 12, Large: 14.4, LARGE: 17.28, huge: 20.74, Huge: 24.88 };
 const HK = 0.74;
-const cache = new Map();
-TD.onTextMetricsChange(() => { cache.clear(); });
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s);
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s), { whileMeasuring: true });
 function build(s: any) {
   const warnings: any[] = [];
   const warn = (w: any) => { if (!warnings.includes(w)) warnings.push(w); };

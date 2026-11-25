@@ -1,5 +1,8 @@
 import { runtime as TD } from '../runtime';
 import { parseMacros } from '../core/doc-macros';
+import { layoutCache, srcKey } from './layout-cache';
+import { num3 } from '../core/format';
+import { groupEnd as close, skipSpace as skip } from '../core/tex-scan';
 // Timing diagrams written with the tikz-timing package. The source is the object: a tikztimingtable whose
 // rows are "name & characters \\" and whose \extracode holds annotations (arrows between edges, marker
 // lines, grids). It is drawn here at the package's own sizes, measured against pdflatex: one period is
@@ -87,18 +90,6 @@ const VALUES = ['H', 'L', 'Z', 'X', 'D', 'U', 'M', 'G', 'S', 'C', 'T'];
 const VALUE_NAMES = { H: 'High', L: 'Low', Z: 'High impedance', X: 'Unknown', D: 'Data', U: 'Unknown data', M: 'Metastable', G: 'Glitch', S: 'Gap', C: 'Clock', T: 'Toggle' };
 
 // ---------------------------------------------------------------- reading the code
-function close(s: any, i: any) {
-  const open = s[i], shut = ({ '{': '}', '[': ']', '(': ')' } as Record<string, any>)[open];
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (c === '{' && open !== '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
 function split(s: any, sep = ',', braces = false) {
   const out = [];
   let d = 0, cur = '';
@@ -117,8 +108,7 @@ function split(s: any, sep = ',', braces = false) {
 const opts = (s: any) => split(s || '').map((x) => x.trim()).filter(Boolean);
 const kv = (it: any) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null }; };
 const stripComments = (s: any) => s.replace(/(^|[^\\])%.*$/gm, '$1');
-const skip = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
-const num = (n: any) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); };
+const num = num3;
 // \(…\) as $…$ for drawing
 const shown = (t: any) => String(t || '').replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
 
@@ -812,19 +802,11 @@ function tipsOf(o: any) {
 }
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const pre = s.plain ? '' : String(s.tex?.preamble || ''), mac = s.plain ? '' : (TD.docMacros ? TD.docMacros() : '');
-  const key = [s.src, TD.math && TD.math.engine, s.plain ? 1 : 0, pre, mac].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src, s.plain, pre || mac ? preambleOf(pre, mac) : null);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const preOf = (s: any) => (s.plain ? '' : String(s.tex?.preamble || '')), macOf = (s: any) => (s.plain ? '' : (TD.docMacros ? TD.docMacros() : ''));
+const layout = layoutCache((s: any) => srcKey(s, s.plain ? 1 : 0, preOf(s), macOf(s)), (s: any) => {
+  const pre = preOf(s), mac = macOf(s);
+  return build(s.src, s.plain, pre || mac ? preambleOf(pre, mac) : null);
+});
 
 const LEVEL: Record<string, any> = { L: 0, H: 1, Z: 0.5, X: 0.5, M: 0.5 };
 // a background style → { color } or { pattern, color } (null: none, as for draw=none)

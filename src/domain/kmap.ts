@@ -1,4 +1,6 @@
 import { runtime as TD } from '../runtime';
+import { layoutCache, srcKey } from './layout-cache';
+import { groupEnd as close, splitTop as split, skipSpace as skip } from '../core/tex-scan';
 // Karnaugh maps written with the karnaugh-map package (v2.0). The source is the object: a karnaugh-map
 // environment of \minterms, \maxterms, \indeterminants, \terms, \autoterms and \manualterms that fill the
 // cells, and \implicant, \implicantedge and \implicantcorner that mark the groups. It is drawn here at the
@@ -31,34 +33,7 @@ const varsOf = (x: any, y: any, z: any) => Math.log2(x * y * z);
 const GRAY = [0, 1, 3, 2];
 
 // ---------------------------------------------------------------- reading the code
-function close(s: any, i: any) {
-  const open = s[i], shut = ({ '{': '}', '[': ']', '(': ')' } as Record<string, any>)[open];
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (c === '{' && open !== '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
-const skip = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 const stripComments = (s: any) => s.replace(/(^|[^\\])%.*$/gm, '$1');
-function split(s: any, sep = ',') {
-  const out = [];
-  let d = 0, cur = '';
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (c === '\\') { cur += c + (s[i + 1] || ''); i++; continue; }
-    if ('{[('.includes(c)) d++;
-    else if ('}])'.includes(c)) d--;
-    if (c === sep && d === 0) { out.push(cur); cur = ''; continue; }
-    cur += c;
-  }
-  out.push(cur);
-  return out;
-}
 // a \foreach list of numbers: "0,2,5" or "0,2,...,10" or "1,...,5"
 function numbers(s: any) {
   const parts = split(s).map((x) => x.trim()).filter(Boolean), out = [];
@@ -430,18 +405,7 @@ function cubeGroup(M: any, p: any) {
 }
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s.src));
 const shown = (t: any) => String(t || '').replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$').replace(/\\\[([\s\S]*?)\\\]/g, '$$$1$$')
   .replace(/\$\$/g, ''); // $A$$B$ (two labels side by side) reads as one formula
 // a colour the package would use: an xcolor name or mix, else TikZ's own reading of it

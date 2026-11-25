@@ -13,7 +13,10 @@ import { patchSvg } from '../ui/svg-patch';
 import { editorPalette } from './editor-palette.svelte';
 import { iconSvg } from '../ui/kit/icons';
 import { marquee, marqueeSvg, marqueeTakes, boxPoly, ring } from './marquee';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { editorKeys } from './editor-keys';
+import { paletteDrag } from './palette-drag';
+import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { onLabelFontsChange } from '../domain/label-image';
@@ -85,28 +88,19 @@ import { onLabelFontsChange } from '../domain/label-image';
     ]);
   }
   // click a part to arm it; drag it onto the grid to drop it
-  let palDrag: any = null;
-  // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
-  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.cz-part'); if (b) arm(b.dataset.part); });
-  list.addEventListener('pointerdown', (e: any) => {
-    const b = e.target.closest('.cz-part');
-    if (!b || e.button !== 0) return;
-    if (b.dataset.part === 'short') { setTool('wire'); return; }
-    palDrag = { part: b.dataset.part, x: e.clientX, y: e.clientY, moved: false };
-    b.setPointerCapture(e.pointerId);
-  });
-  list.addEventListener('pointermove', (e: any) => {
-    if (!palDrag) return;
-    if (!palDrag.moved && Math.hypot(e.clientX - palDrag.x, e.clientY - palDrag.y) > 4) { palDrag.moved = true; E.part = palDrag.part; E.tool = 'place'; }
-    if (palDrag.moved) { E.hover = overStage(e) ? toCm(e) : null; draw(); }
-  });
-  list.addEventListener('pointerup', (e: any) => {
-    if (!palDrag) return;
-    const d = palDrag; palDrag = null;
-    if (!d.moved) { arm(d.part); return; }
-    if (overStage(e)) { begin(); dropPart(d.part, toCm(e)); commit(); }
-    E.tool = 'select'; E.part = null; E.hover = null;
-    updateTools(); buildPalette(); draw(); renderProps();
+  paletteDrag(list, {
+    selector: '.cz-part',
+    item: (b) => b.dataset.part!,
+    keyboard: true,
+    press: (b) => { if (b.dataset.part !== 'short') return false; setTool('wire'); return true; },
+    pick: arm,
+    start: (d) => { E.part = d.k; E.tool = 'place'; },
+    move: (d, e) => { E.hover = overStage(e) ? toCm(e) : null; draw(); },
+    drop: (d, e) => {
+      if (overStage(e)) { begin(); dropPart(d.k, toCm(e)); commit(); }
+      E.tool = 'select'; E.part = null; E.hover = null;
+      updateTools(); buildPalette(); draw(); renderProps();
+    },
   });
   function arm(part: any) {
     if (part === 'short') { setTool('wire'); return; }
@@ -705,7 +699,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     else if (a === 'undo') undo();
     else if (a === 'redo') redo();
     else if (a === 'fit') fit();
-    else if (a === 'copy') { navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); }); }
+    else if (a === 'copy') { copyCode(b, codeTa.value); }
     else if (a === 'done') finish(true);
     else if (a === 'cancel') finish(false);
   });
@@ -734,31 +728,23 @@ import { onLabelFontsChange } from '../domain/label-image';
     for (const id of [...E.sel]) if (!byId(id)) E.sel.delete(id);
     draw(); renderProps(); showRaw();
   }
-  codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
-  codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
+  wireCode(codeTa, { state: () => E, read: readCode, commit, sync: syncCode });
 
   window.addEventListener('keydown', (e) => {
-    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
-    if (pressesFocused(e)) return;
-    if (!E || root.hidden || dock.elsewhere(e)) return;
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; } // never the browser's Save Page
-    if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return; // a label popup handles its own keys
-    if (document.querySelector('.td-dialog')) return; // a confirm dialog on top handles its own keys
-    const mod = e.metaKey || e.ctrlKey, inField = !!((e.target! as Element).closest && (e.target! as Element).closest('input, textarea, select'));
-    e.stopPropagation(); // the main editor's shortcuts stay off while this is open
-    if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (editorMenuOpen()) { closeMenu(); return; }
-      if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (E.tool !== 'select') { setTool('select'); setTip(''); return; }
-      if (E.sel.size) { E.sel.clear(); draw(); renderProps(); return; }
-      finish(false); return;
-    }
-    if (inField) return;
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-    if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
+    const keys = editorKeys(e, {
+      open: () => !!E && !root.hidden && !dock.elsewhere(e),
+      save,
+      finish,
+      undo,
+      redo,
+      escape: () => {
+        if (E.tool !== 'select') { setTool('select'); setTip(''); return true; }
+        if (E.sel.size) { E.sel.clear(); draw(); renderProps(); return true; }
+        return false;
+      },
+    });
+    if (!keys) return;
+    const { mod } = keys;
     if (mod && e.key === 'd') { e.preventDefault(); duplicateSel(); return; }
     if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); E.sel = new Set(E.items.map((it: any) => it.id)); draw(); renderProps(); return; }
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }

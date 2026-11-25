@@ -1,6 +1,9 @@
 import { measurementElement } from './measurement';
 import { runtime as TD } from '../runtime';
 import { unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
+import { num3 } from '../core/format';
+import { groupEnd as close, splitTop as split, skipSpace as skip } from '../core/tex-scan';
 // UML class diagrams written for pgf-umlcd. The source is the object: a tikzpicture of class, interface,
 // abstractclass, staticclass and object environments (\attribute, \operation, \inherit, \implement,
 // \instanceOf), \association, \unidirectionalAssociation, \aggregation and \composition between them, \umlnote
@@ -41,36 +44,9 @@ const STEREO: Record<string, string> = { interface: 'interface', abstractclass: 
 const RELS: Record<string, number> = { association: 6, unidirectionalAssociation: 4, aggregation: 4, composition: 4 };
 
 // ---------------------------------------------------------------- reading the code
-function close(s: string, i: number): number {
-  const open = s[i], shut = ({ '{': '}', '[': ']', '(': ')' } as Record<string, string>)[open];
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (c === '{' && open !== '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
-function split(s: string, sep = ',') {
-  const out: string[] = [];
-  let d = 0, cur = '';
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (c === '\\') { cur += c + (s[i + 1] || ''); i++; continue; }
-    if ('{[('.includes(c)) d++;
-    else if ('}])'.includes(c)) d--;
-    if (c === sep && d === 0) { out.push(cur); cur = ''; continue; }
-    cur += c;
-  }
-  out.push(cur);
-  return out;
-}
 const opts = (s: any) => split(String(s || '')).map((x) => x.trim()).filter(Boolean);
 const kv = (it: string) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null as string | null }; };
 const stripComments = (s: string) => s.replace(/(^|[^\\])%.*$/gm, '$1');
-const skip = (s: string, i: number) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 function nextSemi(s: string, i: number) {
   for (let k = i; k < s.length; k++) {
     const c = s[k];
@@ -330,7 +306,7 @@ function readDraw(st: string) {
 }
 
 // ---------------------------------------------------------------- writing the code
-const num = (n: number) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); };
+const num = num3;
 function classCode(c: any, pad: string) {
   const lines = [`${pad}\\begin{${c.env}}${c.o ? `[${c.o}]` : ''}{${c.name}}{${c.x != null ? `${num(c.x)},${num(c.y)}` : c.pos}}`];
   if (c.instanceOf != null) lines.push(`${pad}  \\instanceOf{${c.instanceOf}}`);
@@ -584,18 +560,7 @@ function setLine(t: string, tw: number, st: any = {}) {
 }
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); baseCache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s.src), { onClear: () => { baseCache.clear(); } });
 
 // The backgrounds library's picture options: the grid, and how far the background reaches past the picture
 const EX = 4.30554, GRID_LW = 0.2;

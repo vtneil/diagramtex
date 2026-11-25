@@ -2,6 +2,7 @@
 // file's preamble definitions. The maths engine draws every formula with them (as KaTeX's and Temml's `macros`), and
 // every export writes them into the preamble. An import moves a preamble's macro definitions here, so they are
 // defined once for the whole file. No DOM.
+import { skipSpace } from './tex-scan';
 
 /** One definition statement: its text as written, the command it defines, and where it starts. */
 export interface MacroStatement { text: string; name: string; start: number; end: number }
@@ -77,7 +78,6 @@ export function stripComments(text: string): string {
   }
   return out;
 }
-const skipSpace = (t: string, i: number) => { while (i < t.length && /\s/.test(t[i])) i++; return i; };
 /** t[i] is `{`: the index just past its balanced `}`, or -1 */
 function groupEnd(t: string, i: number) {
   let depth = 0;

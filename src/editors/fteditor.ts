@@ -10,7 +10,10 @@ import { TREE_CHILD, TREE_SIBLING } from '../ui/kit/icons';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, menuRow, type MenuEntry } from './editor-menu';
+import { editorKeys } from './editor-keys';
+import { paletteDrag } from './palette-drag';
+import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
@@ -306,35 +309,25 @@ import { onLabelFontsChange } from '../domain/label-image';
     if (it.kind === 'template') return uiText('editor.ft.tipTemplate', '{name}: replaces the tree (undo brings it back)', { name });
     return uiText('editor.ft.tipStyle', '{name}: for the selected nodes, or for every node when none is selected', { name });
   }
-  let palDrag: any = null;
-  // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
-  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.qe-item'); if (b) pick(b.dataset.item); });
-  list.addEventListener('pointerdown', (e: any) => {
-    const b = e.target.closest('.qe-item');
-    if (!b || e.button !== 0) return;
-    palDrag = { k: b.dataset.item, x: e.clientX, y: e.clientY, moved: false };
-    b.setPointerCapture(e.pointerId);
-  });
-  list.addEventListener('pointermove', (e: any) => {
-    if (!palDrag) return;
-    if (!palDrag.moved && Math.hypot(e.clientX - palDrag.x, e.clientY - palDrag.y) > 4) palDrag.moved = true;
-    if (!palDrag.moved) return;
-    const it = ITEM[palDrag.k];
-    E.drop = overStage(e) ? dropAt(e, null, it.kind !== 'tree') : null;
-    E.ghost = { src: it.mini, e: pos(e) };
-    draw();
-  });
-  list.addEventListener('pointerup', (e: any) => {
-    if (!palDrag) return;
-    const d = palDrag; palDrag = null; E.ghost = null;
-    const t = E.drop; E.drop = null;
-    if (!d.moved) { pick(d.k); return; }
-    const it = ITEM[d.k];
-    if (it.kind === 'template' && overStage(e)) pick(d.k);
-    else if (t && it.kind === 'tree') { let m; edit(() => { m = subtree(it.payload); putAt(m, t); }); select([m]); }
-    else if (t) applyStyle(it.kind, it.payload, [t.n]);
-    else if (it.kind === 'tree' && !E.T.root && overStage(e)) pick(d.k);
-    draw();
+  paletteDrag(list, {
+    keyboard: true,
+    pick,
+    move: (d, e) => {
+      const it = ITEM[d.k];
+      E.drop = overStage(e) ? dropAt(e, null, it.kind !== 'tree') : null;
+      E.ghost = { src: it.mini, e: pos(e) };
+      draw();
+    },
+    drop: (d, e) => {
+      E.ghost = null;
+      const t = E.drop; E.drop = null;
+      const it = ITEM[d.k];
+      if (it.kind === 'template' && overStage(e)) pick(d.k);
+      else if (t && it.kind === 'tree') { let m; edit(() => { m = subtree(it.payload); putAt(m, t); }); select([m]); }
+      else if (t) applyStyle(it.kind, it.payload, [t.n]);
+      else if (it.kind === 'tree' && !E.T.root && overStage(e)) pick(d.k);
+      draw();
+    },
   });
   function pick(k: any) {
     const it = ITEM[k];
@@ -633,7 +626,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     else if (a === 'cancel') finish(false);
     else if (a === 'delete') removeSel(false);
     else if (a === 'lift') removeSel(true);
-    else if (a === 'copy' && b && b.closest('.cz-code-head')) navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
+    else if (a === 'copy' && b && b.closest('.cz-code-head')) copyCode(b, codeTa.value);
     else if (a === 'copy') { if (E.sel.length) E.clip = tops(E.sel).map(clone); }
     else if (a === 'paste') paste();
     else if (a === 'phantom' || a === 'visible') setPhantom(a === 'phantom');
@@ -681,8 +674,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     draw(); keepInView(); renderProps();
     showCodeNotes(codeMsg, TD.ft.layout({ type: 'forest', src: codeTa.value, size: E.st.size, font: E.st.font }).warnings);
   }
-  codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
-  codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
+  wireCode(codeTa, { state: () => E, read: readCode, commit, sync: syncCode });
 
   // the nearest of a node's neighbours (parent, children, siblings) in an arrow's direction
   function neighbour(n: any, dx: any, dy: any) {
@@ -700,26 +692,20 @@ import { onLabelFontsChange } from '../domain/label-image';
     return best;
   }
   window.addEventListener('keydown', (e) => {
-    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
-    if (pressesFocused(e)) return;
-    if (!E || root.hidden || dock.elsewhere(e)) return;
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
-    if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
-    if (document.querySelector('.td-dialog')) return;
-    const mod = e.metaKey || e.ctrlKey, inField = !!((e.target! as Element).closest && (e.target! as Element).closest('input, textarea, select'));
-    e.stopPropagation();
-    if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (editorMenuOpen()) { closeMenu(); return; }
-      if (E.sel.length) { select([]); return; }
-      finish(false); return;
-    }
-    if (inField) { if (e.key === 'Enter' && (e.target! as Element).matches('#ftModal .cz-props input')) (e.target! as HTMLElement).blur(); return; }
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-    if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
+    const keys = editorKeys(e, {
+      open: () => !!E && !root.hidden && !dock.elsewhere(e),
+      save,
+      finish,
+      undo,
+      redo,
+      escape: () => {
+        if (E.sel.length) { select([]); return true; }
+        return false;
+      },
+      field: (e) => { if (e.key === 'Enter' && (e.target! as Element).matches('#ftModal .cz-props input')) (e.target! as HTMLElement).blur(); },
+    });
+    if (!keys) return;
+    const { mod } = keys;
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     if (mod && e.key === 'a') { e.preventDefault(); select(order(E.T)); return; }
     if (mod && (e.key === 'c' || e.key === 'x')) { e.preventDefault(); if (E.sel.length) { E.clip = tops(E.sel).map(clone); if (e.key === 'x') removeSel(false); } return; }

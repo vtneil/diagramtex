@@ -1041,6 +1041,10 @@ input[data-tx="math"]:not(:disabled, [readonly], .tx-mixed), textarea[data-tx="m
   overflow: hidden; pointer-events: none; text-align: left; }
 .tx-hl:popover-open { inset: auto; } /* over a text popup, in the top layer: placed by sync() like any other */
 .tx-hl .tx-m { color: var(--mathpen); }
+/* brackets by depth (src/ui/tex-brackets.ts), in source fields and the LaTeX view, maths or not */
+.tx-b0 { color: var(--bracket1); }
+.tx-b1 { color: var(--bracket2); }
+.tx-b2 { color: var(--bracket3); }
 
 /* ---------- circuit editor (src/editors/czeditor.ts): palette | drafting grid | properties, one large modal ---------- */
 /* the editors' tool row follows the main tool rail (#tools): 32px buttons 4px apart, 18px icons,

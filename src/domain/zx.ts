@@ -1,4 +1,6 @@
 import { runtime as TD } from '../runtime';
+import { layoutCache, srcKey } from './layout-cache';
+import { groupEnd as close, skipSpace as skipWs } from '../core/tex-scan';
 // ZX-calculus diagrams written with the zx-calculus package. The source is the object: it is drawn
 // here as vectors, following the package's own sizes and wire shapes, and exported unchanged inside
 // \begin{ZX}. The visual editor (js/zxeditor.ts) rewrites the code cell by cell.
@@ -21,19 +23,6 @@ const LENGTHS: Record<string, any> = {
 };
 
 // ---------------------------------------------------------------- parsing
-function close(s: any, i: any) {
-  const open = s[i], shut = open === '{' ? '}' : ']';
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (open === '[' && c === '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
-const skipWs = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 // top-level comma list → { list, map }; a quoted label ("…") stays one item
 function opts(str: any) {
   const list: any[] = [], map: Record<string, any> = {};
@@ -296,18 +285,7 @@ function styleOf(item: any) {
 }
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine, s.minCell || 0].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s, s.minCell || 0), (s: any) => build(s));
 
 // phases are set at 8pt and the node scaled by 0.8: 6.4pt on the page
 const PHASE = { size: 6.4 * PT, font: 'default' }, LABEL = { size: 8 * PT, font: 'default' }, NORMAL = { size: 10 * PT, font: 'default' }, TINY = { size: 6 * PT, font: 'default' };

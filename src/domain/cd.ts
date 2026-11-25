@@ -1,5 +1,7 @@
 import { runtime as TD } from '../runtime';
 import { unbraceOnce as unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
+import { skipSpace as skipWs } from '../core/tex-scan';
 // Commutative diagrams written with tikz-cd. The source is the object: it is drawn here as vectors,
 // following the package's own sizes (cells, separations, arrow tips, labels), and exported unchanged
 // inside \begin{tikzcd}. The visual editor (js/cdeditor.ts) rewrites the code cell by cell.
@@ -26,7 +28,6 @@ for (const o of Object.values(SEPS)) Object.setPrototypeOf(o, null); // looked u
 TD.CD_SEPS = ['tiny', 'small', 'scriptsize', 'normal', 'large', 'huge'];
 
 // ---------------------------------------------------------------- parsing
-const skipWs = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 function unwrap(src: any) {
   src = String(src || '').replace(/(^|[^\\])%.*$/gm, '$1');
   const m = /\\begin\{tikzcd\}/.exec(src);
@@ -376,19 +377,11 @@ const TXT_DY = 1.4, BB_DY = 0.2, LAB_PAD = 1.2; // text lower, drawing within Te
 const strutH = (b: any) => { const m = /katex-strut" style="height:([\d.]+)em/.exec(b.html || ''); return m ? +m[1] * b.px : HK * b.h; };
 // (an end of line in maths is a space, which maths ignores)
 const mathOf = (t: any) => { t = texColors(String(t)); return /\$/.test(t) ? t : `$${t.replace(/\s*\n\s*/g, ' ')}$`; };
-const cache = new Map();
+const cached = layoutCache((s: any) => srcKey(s, s.minCell || 0, s.tex?.preamble || ''), (s: any) => build(s));
 function layout(s: any) {
   if (s.arrows) upgrade(s);
-  const key = [s.src, TD.math && TD.math.engine, s.minCell || 0, s.tex?.preamble || ''].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
+  return cached(s);
 }
-TD.onTextMetricsChange(() => { cache.clear(); });
 
 function build(s: any, PR?: any) {
   const P = parse(s.src);

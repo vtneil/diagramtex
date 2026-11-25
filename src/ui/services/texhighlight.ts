@@ -1,4 +1,5 @@
 import { runtime as TD } from '../../runtime';
+import { bracketMarks, bracketHtml } from '../tex-brackets';
 // Maths highlighting in the LaTeX text fields: $…$, $$…$$ and \[…\] show in the maths green, as in a
 // LaTeX editor. A field can't colour its own text, so while it has focus a copy of its text is laid
 // over it (same box, font and scroll, pointer-transparent) and the field's own text goes transparent;
@@ -6,7 +7,7 @@ import { runtime as TD } from '../../runtime';
 (function () {
   // the block editors and panels: their label popups and any field tagged data-tx="math" or data-tx="text"
   const SUB = '.td-pop-ta, [data-tx], .cz-props input[data-f="l"], .cz-props input[data-f="ann"], .cz-props input[data-f="v"], .cz-props input[data-f="i"], .cz-props input[data-f="text"]';
-  const FIELDS = '#props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], #qcModal .cz-code textarea, ' + SUB; // other panels' source: $…$ as in text
+  const FIELDS = '#props textarea[data-key="text"], #props input[data-key="label"], .blk-ed, #props textarea[data-p="src"], .cz-code textarea, ' + SUB; // other panels' source: $…$ as in text
 
   // Maths spans of one line as [start, end) offsets, delimiters included. Same rules as the renderer
   // (TD.textSegments), except an unclosed $ runs to the end of the line, so maths lights up as it is typed.
@@ -115,18 +116,19 @@ import { runtime as TD } from '../../runtime';
     return out;
   }
 
-  const esc = (s: any) => s.replace(/[&<>]/g, (c: any) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }) as Record<string, any>)[c]);
-  function paint(text: any, sp: any) {
+  // a line (at `base` in the whole text) with its maths spans green and its brackets in their colours (tex-brackets.ts)
+  function paint(text: string, sp: any, marks: Map<number, string>, base = 0) {
     let h = '', k = 0;
-    for (const [s, e] of sp) { if (s < k) continue; h += esc(text.slice(k, s)) + `<span class="tx-m">${esc(text.slice(s, e))}</span>`; k = e; }
-    return h + esc(text.slice(k));
+    for (const [s, e] of sp) { if (s < k) continue; h += bracketHtml(text, marks, base, k, s) + `<span class="tx-m">${bracketHtml(text, marks, base, s, e)}</span>`; k = e; }
+    return h + bracketHtml(text, marks, base, k);
   }
   // qc: true for quantikz code, 'all' for a field whose whole text is maths (data-tx="math": a quantikz gate label)
-  function html(text: any, qc: any) {
-    // a trailing newline still gets its line
-    if (qc === 'all') return text.split('\n').map((line: any) => paint(line, line ? spans(line, true) : [])).join('\n') + '\n';
-    if (qc) return paint(text, qcSpans(text)) + '\n';
-    return text.split('\n').map((line: any) => paint(line, spans(line))).join('\n') + '\n';
+  function html(text: string, qc: any) {
+    const marks = bracketMarks(text);
+    if (qc === true) return paint(text, qcSpans(text), marks) + '\n';
+    // line by line, each at its place in the whole (brackets nest across lines); a trailing newline still gets its line
+    let base = 0;
+    return text.split('\n').map((line) => { const h = paint(line, qc === 'all' ? (line ? spans(line, true) : []) : spans(line), marks, base); base += line.length + 1; return h; }).join('\n') + '\n';
   }
 
   // ----- the overlay -----

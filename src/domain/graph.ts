@@ -1,5 +1,6 @@
 import { runtime as TD } from '../runtime';
 import { fan, lines, isMultiline, halfH, lift, besideAt, close, split, opts, kv, unbrace, stripComments, shown, skip, nextSemi, cm, coord, num, applyOpts, baseStyle, polyline, along, ptsD, unit, bezAt, bezTan, arrowed, DIRS, LOOPS, WIDTHS } from './automata.ts';
+import { layoutCache, srcKey } from './layout-cache';
 // Graphs written with TikZ's graphs library: a tikzpicture holding one \graph { … }; of node
 // declarations (name/text [at={(x,y)}, options]) and edges (a ->["label"', options] b). It is drawn here
 // as vectors at TikZ's sizes and exported unchanged, its tikzpicture turned into a scope shifted to where
@@ -405,18 +406,7 @@ function shownText(n: any, G: any, text?: string) {
 }
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s.src));
 
 // distance from a node's centre to its border, in the direction (ux, uy)
 function reach(n: any, ux: number, uy: number) {

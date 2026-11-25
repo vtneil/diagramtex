@@ -1,5 +1,8 @@
 import { runtime as TD } from '../runtime';
 import { unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
+import { num3 } from '../core/format';
+import { groupEnd as close, splitTop as split, skipSpace as skip } from '../core/tex-scan';
 // State machines written with TikZ's automata library. The source is the object: a tikzpicture of
 // \node[state] lines (initial, accepting) and \path … edge … statements that join them with labelled
 // transitions and self-loops. It is drawn here as vectors at TikZ's own sizes (states 2.5em across,
@@ -34,32 +37,6 @@ const DIRS: Record<string, any> = { right: 0, 'above right': 45, above: 90, 'abo
 const LOOPS: Record<string, any> = { above: [105, 75], below: [285, 255], left: [195, 165], right: [15, -15] };
 
 // ---------------------------------------------------------------- reading the code
-function close(s: any, i: any) {
-  const open = s[i], shut = ({ '{': '}', '[': ']', '(': ')' } as Record<string, any>)[open];
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (c === '{' && open !== '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
-function split(s: any, sep = ',') {
-  const out = [];
-  let d = 0, cur = '';
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (c === '\\') { cur += c + (s[i + 1] || ''); i++; continue; }
-    if ('{[('.includes(c)) d++;
-    else if ('}])'.includes(c)) d--;
-    if (c === sep && d === 0) { out.push(cur); cur = ''; continue; }
-    cur += c;
-  }
-  out.push(cur);
-  return out;
-}
 const opts = (s: any) => split(s || '').map((x) => x.trim()).filter(Boolean);
 const kv = (it: any) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null }; };
 const stripComments = (s: any) => s.replace(/(^|[^\\])%.*$/gm, '$1');
@@ -118,7 +95,6 @@ function besideAt(b: any, t: string, ux: number, uy: number, em: number, above: 
   return [sx * hw, sy * hh + (sy < 0 ? above : 0)];
 }
 const needsAlign = (o: string[]) => !o.some((it) => /^(align|text width)$/.test(kv(it).k));
-const skip = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 function nextSemi(s: any, i: any) {
   for (let k = i; k < s.length; k++) {
     const c = s[k];
@@ -262,7 +238,7 @@ function readPath(st: any, M: any, warn: any) {
 }
 
 // ---------------------------------------------------------------- writing the code
-const num = (n: any) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); };
+const num = num3;
 function nodeCode(s: any) {
   const o = s.o.slice();
   if (isMultiline(s.text) && needsAlign(o)) o.push('align=center');
@@ -381,18 +357,7 @@ const isInitial = (it: any) => /^(initial|initial by arrow|initial (above|below|
 const isAccepting = (it: any) => /^(accepting|accepting by double)$/.test(kv(it).k);
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s.src));
 
 function polyline(pts: any) {
   const cum = [0];

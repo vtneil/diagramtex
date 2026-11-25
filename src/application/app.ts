@@ -64,6 +64,8 @@ import DiagramGallery, { type DiagramGalleryModel } from '../ui/DiagramGallery.s
 import { openModal as showModalEl, closeModal as hideModalEl, closeDialogElement, fadeOutDialog } from '../ui/kit/modal';
 import FileList, { type FileRow, type FileListModel } from '../ui/FileList.svelte';
 import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.svelte';
+import { escapeHtml } from '../core/html';
+import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
 // DiagramTeX editor: state, interaction, history, properties panel, storage and export.
 (function () {
   const { TYPES, util } = TD;
@@ -254,7 +256,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
         at: uiText('macros.why.at', 'it uses names with @ (\\makeatletter), which formulas here can’t read; exports still write it'),
         unreadable: uiText('macros.why.unreadable', 'this definition couldn’t be read'),
       };
-      const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+      const esc = escapeHtml;
       const head = n === 1 ? uiText('macros.count.one', '1 macro') : uiText('macros.count.many', '{n} macros', { n });
       return `<p>${esc(head)}</p>` + p.problems.map((q) => `<p><code>${esc(q.name)}</code>: ${esc(why[q.reason])}</p>`).join('');
     };
@@ -6494,9 +6496,13 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   function paintTikz() {
     const lines = tikzText.split('\n'), base = tikzBase.get(baseKey());
     const ch = base == null ? new Set() : changedLines(base.split('\n'), lines);
+    // brackets in their colours by depth, nesting across lines (src/ui/tex-brackets.ts)
+    const marks = bracketMarks(tikzText);
+    let at = 0;
     view.innerHTML = lines.map((l, i) => {
-      const e = tikzErr.get(i + 1);
-      return `<div class="cl${e ? ' err' : ''}${ch.has(i) ? ' chg' : ''}" data-n="${i + 1}"${e ? ` title="${esc(e.join('\n'))}"` : ''}>${esc(l)}</div>`;
+      const e = tikzErr.get(i + 1), h = bracketHtml(l, marks, at);
+      at += l.length + 1;
+      return `<div class="cl${e ? ' err' : ''}${ch.has(i) ? ' chg' : ''}" data-n="${i + 1}"${e ? ` title="${esc(e.join('\n'))}"` : ''}>${h}</div>`;
     }).join('');
     markSel(false);
   }
@@ -6566,7 +6572,10 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   const posIn = (node: any, off: any) => {
     if (node === view) { const k = Math.min(off, view.children.length - 1), el = view.children[k]; return el ? [+el.dataset.n, off >= view.children.length ? el.textContent.length : 0] : null; }
     const el = (node.nodeType === 3 ? node.parentElement : node).closest('.cl');
-    return el ? [+el.dataset.n, node.nodeType === 3 ? off : off ? el.textContent.length : 0] : null;
+    if (!el) return null;
+    // (a line's brackets are spans of their own: its text up to the point, whatever holds it)
+    const r = document.createRange(); r.setStart(el, 0); r.setEnd(node, off);
+    return [+el.dataset.n, r.toString().length];
   };
   view.addEventListener('copy', (e: any) => {
     const S = getSelection();

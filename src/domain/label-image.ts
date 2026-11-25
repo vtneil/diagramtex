@@ -7,8 +7,9 @@ import katexCss from '../../public/vendor/katex/katex.min.css';
 import scriptsCss from '../../public/vendor/katex/katex-scripts.css';
 import { fontData } from './label-fonts';
 import { svgToSrc } from '../platform/images';
+import { escapeHtml } from '../core/html';
 
-const esc = (value: string) => value.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const esc = escapeHtml;
 const styles = { katex: katexCss + scriptsCss, temml: '' };
 const faces = Object.values(styles).flatMap(css => [...css.matchAll(/@font-face\s*\{[^}]*\}/g)].map(match => {
   const css = match[0], property = (name: string) => new RegExp(name + '\\s*:\\s*([^;}]*)').exec(css)?.[1].trim().replace(/["']/g, '') || '';

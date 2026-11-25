@@ -1,6 +1,7 @@
 import { mathmlSvg } from './mathml-svg';
 import type { MathJob, MathResult } from './math-render-protocol';
 import { defineFunctions } from './math-functions';
+import { escapeHtml } from '../core/html';
 const scope = globalThis as unknown as {
   importScripts(...urls: string[]): void;
   katex: { renderToString(tex: string, options: object): string };
@@ -19,7 +20,7 @@ function compile(job: MathJob): MathResult {
   } catch (error) {
     // Keep Temml's ordinary error preview and the parse message for editors.
     const html = scope[job.engine].renderToString(job.tex, { ...options, throwOnError: false });
-    const escaped = job.tex.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const escaped = escapeHtml(job.tex);
     return { id: job.id, html: (html.includes('temml-error') || html.includes('katex-error')) ? html : `<i>${escaped}</i>`, error: String((error as Error).message || error) };
   }
 }

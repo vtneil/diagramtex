@@ -10,7 +10,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { editorKeys } from './editor-keys';
+import { paletteDrag } from './palette-drag';
+import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
@@ -353,28 +356,17 @@ import { keepComments } from './keep-comments';
         items: STYLES.map(([k, n, o]) => ({ id: `s:${k}`, label: styleName(k), title: `${styleName(k)}${o.length ? ` (${o.join(', ')})` : ''}`, alt: `${k} ${n}`, keywords: `arrows ${arrowsT}`, svg: fitMini(styleMini(o), 64, 34, 2.2), on: cur === k, attrs: { 'data-style': k } })) },
     ], { armed: E?.arm });
   }
-  let palDrag: any = null;
-  // the keyboard's click (Enter or Space on a focused item) chooses it, as a tap does
-  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('.qe-item'); if (b) if (b.dataset.style) pickStyle(b.dataset.style); else pick(b.dataset.item); });
-  list.addEventListener('pointerdown', (e: any) => {
-    const b = e.target.closest('.qe-item');
-    if (!b || e.button !== 0) return;
-    if (b.dataset.style) { pickStyle(b.dataset.style); return; }
-    palDrag = { k: b.dataset.item, x: e.clientX, y: e.clientY, moved: false };
-    b.setPointerCapture(e.pointerId);
-  });
-  list.addEventListener('pointermove', (e: any) => {
-    if (!palDrag) return;
-    if (!palDrag.moved && Math.hypot(e.clientX - palDrag.x, e.clientY - palDrag.y) > 4) palDrag.moved = true;
-    if (palDrag.moved) { E.hover = overStage(e) ? cellAt(e) : null; E.ghost = { k: palDrag.k, e: pos(e) }; draw(); }
-  });
-  list.addEventListener('pointerup', (e: any) => {
-    if (!palDrag) return;
-    const d = palDrag; palDrag = null; E.ghost = null;
-    if (!d.moved) { pick(d.k); return; }
-    const h = overStage(e) && cellAt(e);
-    if (h) { edit(() => place(d.k, h.r, h.c)); selectCell(h.r, h.c); renderProps(); }
-    E.hover = null; draw();
+  paletteDrag(list, {
+    keyboard: true,
+    press: (b) => { if (!b.dataset.style) return false; pickStyle(b.dataset.style); return true; },
+    pick,
+    move: (d, e) => { E.hover = overStage(e) ? cellAt(e) : null; E.ghost = { k: d.k, e: pos(e) }; draw(); },
+    drop: (d, e) => {
+      E.ghost = null;
+      const h = overStage(e) && cellAt(e);
+      if (h) { edit(() => place(d.k, h.r, h.c)); selectCell(h.r, h.c); renderProps(); }
+      E.hover = null; draw();
+    },
   });
   function pick(k: any) {
     const s = single();
@@ -904,7 +896,7 @@ import { keepComments } from './keep-comments';
     else if (a === 'label') { if (E.arrow) editLabel(E.arrow); }
     else if (a === 'addlabel') { if (E.arrow && arrowOf(E.arrow)) { E.lab = labelsOf(arrowOf(E.arrow)).length; renderProps(); focusField('label'); } }
     else if (a === 'rmlabel') { const w = E.arrow, ar = w && arrowOf(w), f = ar && firstLabel(ar); if (f) { const k = labIndex(ar); edit(() => { ar.items.splice(f.i, 1); touch(at(w[0], w[1])); }); E.lab = Math.min(k, Math.max(0, labelsOf(ar).length - 1)); renderProps(); draw(); } }
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = t('ui.copied', 'Copied'); setTimeout(() => (b.textContent = t('ui.copy', 'Copy')), 1200); });
+    else if (a === 'copy') copyCode(b, codeTa.value);
     else if (a === 'addrow') edit(() => ensure(M, nR(M) + 1, Math.max(nC(M), 1)));
     else if (a === 'addcol') edit(() => ensure(M, Math.max(nR(M), 1), nC(M) + 1));
     else if (a === 'pickarrow' && single()) { selectArrow([single().r1, single().c1, +b.dataset.i]); draw(); renderProps(); buildPalette(); }
@@ -933,32 +925,23 @@ import { keepComments } from './keep-comments';
     clampSel(); draw(); keepInView(); renderProps();
     showCodeNotes(codeMsg, layoutOf(codeTa.value).warnings);
   }
-  codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
-  codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
+  wireCode(codeTa, { state: () => E, read: readCode, commit, sync: syncCode });
 
   window.addEventListener('keydown', (e) => {
-    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
-    if (pressesFocused(e)) return;
-    if (!E || root.hidden || dock.elsewhere(e)) return;
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
-    if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
-    if (document.querySelector('.td-dialog')) return;
-    if (TD.colorPickerOpen?.()) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); TD.closeColorPicker(); } return; } // the colour picker's keys
-    const mod = e.metaKey || e.ctrlKey, inField = !!((e.target! as Element).closest && (e.target! as Element).closest('input, textarea, select'));
-    e.stopPropagation();
-    if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (editorMenuOpen()) { closeMenu(); return; }
-      if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
-      if (E.sel || E.arrow) { E.sel = null; E.arrow = null; draw(); renderProps(); buildPalette(); return; }
-      finish(false); return;
-    }
-    if (inField) return;
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-    if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
+    const keys = editorKeys(e, {
+      open: () => !!E && !root.hidden && !dock.elsewhere(e),
+      save,
+      finish,
+      undo,
+      redo,
+      escape: () => {
+        if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return true; }
+        if (E.sel || E.arrow) { E.sel = null; E.arrow = null; draw(); renderProps(); buildPalette(); return true; }
+        return false;
+      },
+    });
+    if (!keys) return;
+    const { mod } = keys;
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     const b = selBox();
     if (mod && e.key === 'a') { e.preventDefault(); if (nR(E.M) && nC(E.M)) { E.sel = { r1: 0, c1: 0, r2: nR(E.M) - 1, c2: nC(E.M) - 1 }; E.arrow = null; draw(); renderProps(); } return; }

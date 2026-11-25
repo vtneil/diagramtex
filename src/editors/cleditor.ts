@@ -9,7 +9,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { editorKeys } from './editor-keys';
+import { paletteDrag } from './palette-drag';
+import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
@@ -193,25 +196,18 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     })), { armed: E?.arm ?? null });
   }
   // click: arm it for placing; drag it onto the grid to place it there
-  let palDrag: any = null;
-  list.addEventListener('click', (e: any) => { if (e.detail !== 0) return; const b = e.target.closest('[data-cl]'); if (b) pick(b.dataset.cl); });
-  list.addEventListener('pointerdown', (e: any) => {
-    const b = e.target.closest('[data-cl]');
-    if (!b || e.button !== 0) return;
-    palDrag = { k: b.dataset.cl, x: e.clientX, y: e.clientY, moved: false };
-    try { b.setPointerCapture(e.pointerId); } catch { /* not tracked */ }
-  });
-  list.addEventListener('pointermove', (e: any) => {
-    if (!palDrag || !E) return;
-    if (!palDrag.moved && Math.hypot(e.clientX - palDrag.x, e.clientY - palDrag.y) > 4) palDrag.moved = true;
-    if (palDrag.moved) { E.hover = overStage(e) ? { at: toLocal(e, !e.altKey) } : null; E.ghost = palDrag.k; draw(); }
-  });
-  list.addEventListener('pointerup', (e: any) => {
-    if (!palDrag || !E) return;
-    const d = palDrag; palDrag = null; E.ghost = null;
-    if (!d.moved) { pick(d.k); return; }
-    if (overStage(e)) place(d.k, toLocal(e, !e.altKey));
-    E.hover = null; draw();
+  paletteDrag(list, {
+    selector: '[data-cl]',
+    item: (b) => b.dataset.cl!,
+    keyboard: true,
+    ready: () => !!E,
+    pick,
+    move: (d, e) => { E.hover = overStage(e) ? { at: toLocal(e, !e.altKey) } : null; E.ghost = d.k; draw(); },
+    drop: (d, e) => {
+      E.ghost = null;
+      if (overStage(e)) place(d.k, toLocal(e, !e.altKey));
+      E.hover = null; draw();
+    },
   });
   function pick(k: string) {
     if (!E || !ITEM[k]) return;
@@ -1054,7 +1050,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     else if (a === 'dup') duplicate();
     else if (a === 'up') shift(-1);
     else if (a === 'down') shift(1);
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
+    else if (a === 'copy') copyCode(b, codeTa.value);
     updateTools();
   }
   function syncCode() {
@@ -1075,29 +1071,23 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     commit(); // each pause in typing is one undo step
     clampSel(); draw(); renderProps();
   }
-  codeTa.addEventListener('input', () => { if (!E) return; clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
-  codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
+  wireCode(codeTa, { state: () => E, read: readCode, commit, sync: syncCode });
 
   window.addEventListener('keydown', (e) => {
-    if (inEditorMenu(e)) return; // the right-click menu's own keys
-    if (pressesFocused(e)) return;
-    if (!E || root.hidden || session.elsewhere(e)) return;
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
-    if (document.querySelector('.td-dialog')) return;
-    const mod = e.metaKey || e.ctrlKey, inField = !!(e.target as Element).closest?.('input, textarea, select');
-    e.stopPropagation();
-    if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (inField) { (e.target as HTMLElement).blur(); return; }
-      if (editorMenuOpen()) { closeEditorMenu(); return; }
-      if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return; }
-      if (selList().length) { E.sel = null; draw(); renderProps(); return; }
-      finish(false); return;
-    }
-    if (inField) return;
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-    if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
+    const keys = editorKeys(e, {
+      open: () => !!E && !root.hidden && !session.elsewhere(e),
+      save,
+      finish,
+      undo,
+      redo,
+      escape: () => {
+        if (E.arm) { E.arm = null; buildPalette(); setTip(''); draw(); return true; }
+        if (selList().length) { E.sel = null; draw(); renderProps(); return true; }
+        return false;
+      },
+    });
+    if (!keys) return;
+    const { mod } = keys;
     if (mod && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicate(); return; }
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setSel(objIds()); draw(); renderProps(); return; }

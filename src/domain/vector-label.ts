@@ -1,7 +1,8 @@
 import fonts from './label-glyphs';
+import { escapeHtml } from '../core/html';
 
 type Font = (typeof fonts)[string];
-const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const esc = escapeHtml;
 const ns = 'http://www.w3.org/2000/svg';
 let fontMetrics: CanvasRenderingContext2D | null | undefined;
 // Read baselines in their real inline contexts. A font box alone is insufficient:

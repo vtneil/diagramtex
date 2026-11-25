@@ -3,11 +3,11 @@
 // (@{…}, p{…}, *{n}{…}), an array's [t] position, and mathtools' multlined. Preview only: the exported LaTeX keeps
 // what was typed, with the packages (TD.lint.mathNeeds). A command the file's own macros define is left as it is.
 // No DOM.
+import { skipSpace } from '../core/tex-scan';
 
 /** Whether the file's macros define \name (then it is theirs, not the package's). */
 export type Defined = (name: string) => boolean;
 
-const skipSpace = (t: string, i: number) => { while (i < t.length && /\s/.test(t[i])) i++; return i; };
 /** A {group} at i (after spaces): its content and the index past it. */
 function group(t: string, i: number): { v: string; end: number } | null {
   i = skipSpace(t, i);

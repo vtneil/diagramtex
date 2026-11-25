@@ -1,5 +1,7 @@
 import { runtime as TD } from '../runtime';
 import { unbraceOnce as unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
+import { skipSpace as skipWs } from '../core/tex-scan';
 // XyMatrix block: a commutative diagram written for the xy package (\xymatrix{…}). The code is the object, as
 // with tikz-cd. To draw and edit it, the code is read into tikz-cd's form (an \arrow[dirs, options] per \ar),
 // laid out by cd.ts with xy's own geometry (3pt object margins, 2pc between entries, xy's arrow tips and curves),
@@ -21,7 +23,6 @@ TD.XY_DEFAULT = [
 const XY: Record<string, any> = { sep: 2 * PC, margin: 3 * PT, label: 2.5 * PT, curve: 0.5 * PC, shift: 0.5 * EX, turn: 10 * PT };
 
 // ---------------------------------------------------------------- code ↔ parts
-const skipWs = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 // \xymatrix@R=1pc@C=2pc{ … } → { env: '@R=1pc@C=2pc', inner, wrapped }
 function unwrap(src: any) {
   src = String(src || '').replace(/(^|[^\\])%.*$/gm, '$1');
@@ -472,20 +473,9 @@ function profile(cdEnv: any) {
     },
   };
 }
-const cache = new Map();
 // a layout of tikz-cd code with xy's geometry (the editor's model is tikz-cd code)
-function layoutCd(s: any) {
-  const key = [s.src, TD.math && TD.math.engine, s.minCell || 0].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = D.build(s, profile(D.unwrap(s.src).env));
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
+const layoutCd = layoutCache((s: any) => srcKey(s, s.minCell || 0), (s: any) => D.build(s, profile(D.unwrap(s.src).env)));
 const layout = (s: any) => layoutCd({ ...s, src: toCd(s.src) });
-TD.onTextMetricsChange(() => { cache.clear(); });
 const draw = (s: any, ctx: any) => D.draw(s, ctx, layout(s));
 function fullCode(src: any) {
   const t = String(src || '').trim();

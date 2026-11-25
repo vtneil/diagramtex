@@ -1,5 +1,7 @@
 import { runtime as TD } from '../runtime';
 import { parseMacros } from '../core/doc-macros';
+import { layoutCache } from './layout-cache';
+import { groupEnd as close, skipSpace as skipWs } from '../core/tex-scan';
 // Quantum circuits written in quantikz. The source is the object: it is drawn here as vectors
 // (an approximation of quantikz2's layout, or of the old library's when its document loaded that: s.lib) and exported
 // unchanged inside \begin{quantikz}.
@@ -37,20 +39,6 @@ const NOT_OLD = new Set(['metercw', 'inputD', 'wire', 'setwiretype', 'wireoverri
 // old quantikz: the commands that end with \qw, so draw the wire into their cell from the one on the left
 const OLD_QW = new Set(['qw', 'ctrl', 'octrl', 'control', 'ocontrol', 'phase', 'targ', 'targX', 'swap', 'meter', 'meterD', 'measure', 'measuretab', 'trash', 'push', 'phantomgate', 'hphantomgate']);
 
-// index of the bracket closing the one at s[i] ({ or [), skipping escapes and nested groups
-function close(s: any, i: any) {
-  const open = s[i], shut = open === '{' ? '}' : ']';
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (open === '[' && c === '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
-const skipWs = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 // top-level comma list → { list: [...], map: {key: value} }
 function opts(str: any) {
   const list: any[] = [], map: Record<string, any> = {};
@@ -261,19 +249,8 @@ function wiresOf(it: any) {
   return bare ? Math.max(1, +bare) : 1;
 }
 
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, s.size, s.font, s.lib, TD.math && TD.math.engine, TD.docMacros ? TD.docMacros() : ''].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s);
-  if (TD.measuring && TD.measuring()) return L; // text sizes may be placeholders in a measuring pass: don't keep them
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
+const layout = layoutCache((s: any) => [s.src, s.size, s.font, s.lib, TD.math && TD.math.engine, TD.docMacros ? TD.docMacros() : ''].join('\u0001'), (s: any) => build(s));
 // measured text sizes change when fonts load or the maths engine changes
-TD.onTextMetricsChange(() => { cache.clear(); });
 
 // \verticaltext{MAJ} stacks the letters, one upright letter per line
 const vtext = (t: any) => String(t || '').replace(/\\verticaltext\s*\{([^{}]*)\}/g, (m, w) => `\\begin{array}{c}${[...w.replace(/\s+/g, '')].map((ch) => `\\text{${ch}}`).join('\\\\')}\\end{array}`);

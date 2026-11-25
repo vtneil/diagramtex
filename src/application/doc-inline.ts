@@ -10,6 +10,7 @@
 //
 // The structural edits (Enter, Backspace at a block's start, Tab in lists, block kinds, inline formats) are
 // done here on the DOM, the same in every browser, instead of by the browser's own editing commands.
+import { escapeHtml } from '../core/html';
 
 export const HEAD_RE = /^(#{1,3})\s+(.*)$/;
 export const ITEM_RE = /^(\s*)([-*]|\d+[.)])\s+(?:\[([ xX])\]\s+)?(.*)$/;
@@ -22,7 +23,7 @@ export interface InlineDeps {
   heading(level: number, sec: number[], numbered: boolean): string;
 }
 
-const esc = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as Record<string, string>)[c]);
+const esc = escapeHtml;
 
 // ---------------------------------------------------------------- display maths
 // A text block's display maths: $$…$$, \[…\] and the amsmath display environments (equation, align, gather…,

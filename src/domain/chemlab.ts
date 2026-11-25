@@ -1,5 +1,7 @@
 import { runtime as TD } from '../runtime';
 import { message as msg, type Message } from '../i18n';
+import { layoutCache } from './layout-cache';
+import { num3 } from '../core/format';
 // Chemistry lab apparatus written for tikz-chemlab (the TikZ port of pst-labo). The source is the object: a
 // tikzpicture of \tkz… calls (\tkzTestTube, \tkzTitration, \tkzHeatFlask …), each usually in a scope that moves it,
 // \chemlabset lines, labels (\node … at (x,y) {…};) and leader lines (\draw … (a) -- (b);). It is drawn here as the
@@ -99,7 +101,7 @@ function split(s: string) {
 }
 const kv = (it: string) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null as string | null }; };
 const unbrace = (v: any) => { let t = String(v ?? '').trim(); while (/^\{[\s\S]*\}$/.test(t) && close(t, 0) === t.length - 1) t = t.slice(1, -1).trim(); return t; };
-const num = (v: number) => String(Math.round(v * 1000) / 1000).replace(/^-0$/, '0');
+const num = num3;
 // a length as cm (TikZ: a plain number in a dimension is pt)
 function lenCm(v: any, unitless = 'pt') {
   const m = /^\s*(-?[\d.]+)\s*(cm|mm|pt|in|bp|em|ex)?\s*$/.exec(String(v ?? ''));
@@ -1617,18 +1619,7 @@ function build(src: any): Layout {
     warnings: g.warnings, empty: !has,
   };
 }
-const cache = new Map<string, Layout>();
-function layout(s: any): Layout {
-  const key = String(s.src ?? '');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(key);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-if (TD.onTextMetricsChange) TD.onTextMetricsChange(() => cache.clear());
+const layout = layoutCache<any, Layout>((s: any) => String(s.src ?? ''), (s: any) => build(String(s.src ?? '')));
 
 // ---------------------------------------------------------------- drawing it
 let drawn = 0;

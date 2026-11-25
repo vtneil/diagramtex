@@ -8,11 +8,12 @@ import { nRows, nCols, owners, stripeOf, isBold, alignOf, thickPt, lenPt } from 
 import { parseNum, format, texParts, unitTex, numStyle } from './numbers';
 import { envRanges } from './latex';
 import { runtime as TD } from '../../runtime';
+import { escapeHtml } from '../../core/html';
 
 const K = () => TD.PT_PER_PX as number; // pt per px
 const pt = (v: number) => v / K();      // pt → px
 const r2 = (v: number) => Math.round(v * 100) / 100;
-const escAttr = (s: string) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const escAttr = escapeHtml;
 
 export interface CellBox {
   r: number; c: number; rs: number; cs: number;

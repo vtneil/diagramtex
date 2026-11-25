@@ -1,6 +1,8 @@
 import { measurementElement } from './measurement';
 import { runtime as TD } from '../runtime';
 import { unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
+import { groupEnd as close, skipSpace as skipWs } from '../core/tex-scan';
 // Chemistry with the chemfig package: structural formulas (\chemfig{…}) and reaction schemes
 // (\schemestart … \schemestop). The source is the object. It is read into a tree that keeps every piece as
 // written, laid out here by chemfig's own rules (read from chemfig.tex 1.6: atom sep 3em, bond offset 2pt,
@@ -40,18 +42,6 @@ const DEF = defaults();
 TD.CHEM_DEFAULT = '\\chemfig{H_3C-C(=[1]O)-[7]OH}';
 
 // ---------------------------------------------------------------- reading
-function close(s: any, i: any) {
-  const open = s[i], shut = ({ '{': '}', '[': ']', '(': ')' } as Record<string, any>)[open];
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (c === '{' && open !== '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
 function split(s: any, sep = ',') {
   const out = [];
   // brackets inside braces ({[}) are text, not nesting
@@ -85,7 +75,6 @@ function stackLines(lines: string[]) {
   while (L.length > 1 && !L[L.length - 1]) L.pop();
   return L.length > 1 ? `\\begin{tabular}{@{}c@{}}${L.map((x, i) => (i && x[0] === '[' ? `{}${x}` : x)).join('\\\\')}\\end{tabular}` : L[0] || '';
 }
-const skipWs = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 // spaces and % comments: what TeX skips before an optional argument
 const skipSp = (s: any, i: any) => { for (;;) { i = skipWs(s, i); if (s[i] !== '%') return i; const e = s.indexOf('\n', i); i = e < 0 ? s.length : e + 1; } };
 // a length → px ("3em", "2pt", "1cm", or a bare number of pt)
@@ -2158,18 +2147,7 @@ function layHreac(body: any, lead: any, P: any, warn: any, G: any) {
   return H;
 }
 
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); baseCache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s.src), { onClear: () => { baseCache.clear(); } });
 
 // ---------------------------------------------------------------- drawing
 // an arrow tip as chemfig's CF arrow: 5pt long, 4pt wide, inset 2.5pt; a harpoon keeps the left half

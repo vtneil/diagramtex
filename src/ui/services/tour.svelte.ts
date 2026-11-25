@@ -3,6 +3,7 @@ import { runtime as TD } from '../../runtime';
 import { t } from '../../i18n';
 import { mountFrame } from '../mount-frame';
 import Tour, { type TourModel, type TourStep } from '../Tour.svelte';
+import { escapeHtml } from '../../core/html';
 // The welcome tour: a few cards, opened from the command search (Welcome Tour); never on its own. Each card
 // (src/ui/Tour.svelte) has a small map of the window with the part it talks about
 // marked in blue pen, so nothing on the page itself moves or is covered. Previous / Next (← →), "I’m All Good" skips
@@ -10,7 +11,7 @@ import Tour, { type TourModel, type TourStep } from '../Tour.svelte';
 (function () {
   'use strict';
   const kb = (k: string) => (TD.app && TD.app.cmd ? TD.app.cmd.kb(k) : k);
-  const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const esc = escapeHtml;
   // translated text, escaped, with {name} slots filled by markup built here (the text itself never holds markup)
   const fill = (text: string, slots: Record<string, string>) => esc(text).replace(/\{([a-zA-Z]+)\}/g, (m, k) => (k in slots ? slots[k] : m));
   const b = (s: string) => `<b>${esc(s)}</b>`;

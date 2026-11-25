@@ -1,5 +1,7 @@
 import { runtime as TD } from '../runtime';
 import { unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
+import { skipSpace as skipWs } from '../core/tex-scan';
 // Bit fields written with the bytefield package (v2). The source is the object: a bytefield environment of
 // \bitheader, \bitbox, \bitboxes, \wordbox and \skippedwords rows broken by \\, with rightwordgroup and
 // leftwordgroup braces, \bytefieldsetup keys and the [lrtb] border option. It is read into a list of items
@@ -42,7 +44,6 @@ function brace(total: any) {
 }
 
 // ---------------------------------------------------------------- reading
-const skipWs = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 // the index after the group that opens at i ({…} or […]), honouring nesting and escapes
 function closeAt(s: any, i: any) {
   const open = s[i], shut = open === '{' ? '}' : ']';
@@ -390,18 +391,7 @@ const RULE = /^\s*(?:\\color\s*\{([^}]*)\}\s*)?\\rule\s*\{\\width\}\s*\{\\height
 const ROT = /^\s*\\rotatebox\s*(?:\[[^\]]*\])?\s*\{\s*(-?[\d.]+)\s*\}\s*\{([\s\S]*)\}\s*$/;
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s.src));
 
 // Everything is worked out in pt with y up from each row's baseline, then turned into px with y down.
 function build(src: any) {

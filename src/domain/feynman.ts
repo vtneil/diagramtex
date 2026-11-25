@@ -1,5 +1,8 @@
 import { runtime as TD } from '../runtime';
 import { unbrace } from './tex-groups';
+import { layoutCache } from './layout-cache';
+import { num3 } from '../core/format';
+import { groupEnd as close, skipSpace as skip } from '../core/tex-scan';
 // Feynman diagrams written with the tikz-feynman package. The source is the object: \vertex lines that
 // place the vertices and a \diagram* that joins them with propagators, or one \feynmandiagram. It is drawn here as
 // vectors at the package's own sizes (wave, coil, arrow and momentum measured from its output), and exported
@@ -54,18 +57,6 @@ const TYPE_SET = new Set(EDGE_TYPES), VSET = new Set(VERTEX_STYLES);
 const LUA_ONLY = /^(horizontal'?|vertical'?|(spring|spring electrical|tree|layered) layout|electric charge|same layer|layer|level distance|sibling distance|minimum layers|nodes behind edges)$/;
 
 // ---------------------------------------------------------------- reading the code
-function close(s: any, i: any) {
-  const open = s[i], shut = ({ '{': '}', '[': ']', '(': ')' } as Record<string, any>)[open];
-  let d = 0;
-  for (let k = i; k < s.length; k++) {
-    const c = s[k];
-    if (c === '\\') { k++; continue; }
-    if (c === '{' && open !== '{') { k = close(s, k); if (k < 0) return -1; continue; }
-    if (c === open) d++;
-    else if (c === shut && --d === 0) return k;
-  }
-  return -1;
-}
 // a top-level split at any of seps, minding braces, brackets and parentheses
 function split(s: any, sep = ',') {
   const out = [];
@@ -359,7 +350,6 @@ const NODE_HELD = /^(red|blue|green|black|gray|grey|orange|purple|brown|cyan|mag
 // and a circle node's: its fill and outline, minimum size and inner sep
 const CIRCLE_HELD = /^(circle|shape|fill|draw|minimum size|inner sep)$/;
 const isCircle = (o: string[]) => o.some((it) => { const q = kv(it); return (q.k === 'circle' && q.v == null) || (q.k === 'shape' && unbrace(q.v) === 'circle'); });
-const skip = (s: any, i: any) => { while (i < s.length && /\s/.test(s[i])) i++; return i; };
 function nextSemi(s: any, i: any) {
   for (let k = i; k < s.length; k++) {
     const c = s[k];
@@ -614,7 +604,7 @@ function envOf(wrap: string, env: string, warn: any, macros?: Map<string, string
 }
 
 // ---------------------------------------------------------------- writing the code
-const num = (n: any) => { const v = Math.round(n * 1000) / 1000; return Object.is(v, -0) ? '0' : String(v); };
+const num = num3;
 function vertexCode(v: any) {
   if (v.x == null && v.seg) return `\\path (${v.seg.p}) -- (${v.seg.q}) coordinate [pos=${num(v.seg.t)}] (${v.name});`;
   const o = v.o.slice();
@@ -658,18 +648,7 @@ function write(M: any, wrap = '') {
 const styleOf = (v: any) => { for (const it of v.o) { const k = kv(it).k; if (VSET.has(k)) return k; } return ''; };
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, s.wrap || '', s.macros ? JSON.stringify(s.macros) : '', TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src, s.wrap || '', s.macros);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => [s.src, s.wrap || '', s.macros ? JSON.stringify(s.macros) : '', TD.math && TD.math.engine].join('\u0001'), (s: any) => build(s.src, s.wrap || '', s.macros));
 
 // TeX's height and depth of a vertex's text (Computer Modern metrics where they are known, else the measured box)
 function textHD(t: string, b: any, em: number) {

@@ -5,6 +5,7 @@ import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai
 import { declaredFonts, definedNames, fontsKnown, preambleLines, withoutDefinitions } from '../core/doc-macros';
 import { closesAt } from '../core/tex-scan';
 import { textModeMath } from './math-rewrite';
+import { escapeHtml } from '../core/html';
 // Shape definitions: geometry, handles, SVG rendering and TikZ export.
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
@@ -85,7 +86,7 @@ import { textModeMath } from './math-rewrite';
 
   // ---------- helpers ----------
   const r2 = (n: any) => Math.round(n * 100) / 100;
-  const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const esc = escapeHtml;
   const dist = (a: any, b: any) => Math.hypot(a.x - b.x, a.y - b.y);
   const norm = (v: any, fb?: any) => {
     const l = Math.hypot(v.x, v.y);

@@ -9,7 +9,10 @@ import { mountFrame } from '../ui/mount-frame';
 import { runtime as TD } from '../runtime';
 import { patchSvg } from '../ui/svg-patch';
 import { editorPalette, fitMini } from './editor-palette.svelte';
-import { openEditorMenu, closeEditorMenu, editorMenuOpen, inEditorMenu, menuRow, type MenuEntry, type IconName, pressesFocused } from './editor-menu';
+import { openEditorMenu, closeEditorMenu, menuRow, type MenuEntry, type IconName } from './editor-menu';
+import { editorKeys } from './editor-keys';
+import { paletteDrag } from './palette-drag';
+import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
@@ -380,28 +383,14 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
   // kind between rows, where a line shows it goes; an interval or delay arrow from an edge to the next, drawn as it
   // hovers; a marker or break at a time. Letting go over the drawing places it as one undo step; anywhere else, or
   // Esc, drops it. A press without a drag picks the item, as a click.
-  let palDrag: any = null;
-  list.addEventListener('pointerdown', (e: any) => {
-    const b = e.target.closest('.qe-item');
-    if (!b || e.button !== 0 || !E) return;
-    palDrag = { k: b.dataset.item, x: e.clientX, y: e.clientY, moved: false };
-    try { b.setPointerCapture(e.pointerId); } catch { /* a pointer the browser doesn't know */ }
+  const palDnd = paletteDrag(list, {
+    ready: () => !!E,
+    pick,
+    start: () => { dropPaint(); disarm(); begin(); },
+    move: (d, e) => { dndShow(d, overStage(e) ? e : null); draw(); },
+    drop: (d, e) => { if (overStage(e)) { dndShow(d, e); dndPlace(d); } else dndDrop(d); },
+    cancel: (d) => dndDrop(d),
   });
-  list.addEventListener('pointermove', (e: any) => {
-    const d = palDrag;
-    if (!d) return;
-    if (!d.moved) { if (Math.hypot(e.clientX - d.x, e.clientY - d.y) <= 4) return; d.moved = true; dropPaint(); disarm(); begin(); }
-    dndShow(d, overStage(e) ? e : null);
-    draw();
-  });
-  list.addEventListener('pointerup', (e: any) => {
-    const d = palDrag;
-    if (!d) return;
-    palDrag = null;
-    if (!d.moved) { pick(d.k); return; }
-    if (overStage(e)) { dndShow(d, e); dndPlace(d); } else dndDrop(d);
-  });
-  list.addEventListener('pointercancel', () => { if (palDrag) { const d = palDrag; palDrag = null; if (d.moved) dndDrop(d); } });
   // what a dragged item shows where it is (or nothing, off the drawing): the model changes live for a value or an
   // arrow, from how it was when the drag began; a row, marker or break is a guide line
   function dndShow(d: any, e: any) {
@@ -453,7 +442,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     }
   }
   function dndDrop(d: any) { dndShow(d, null); E.dnd = null; commit(); draw(); }
-  function cancelDnd() { if (!palDrag) return false; const d = palDrag; palDrag = null; if (d.moved) dndDrop(d); return true; }
+  function cancelDnd() { return palDnd.cancel(); }
   // a value sets the selected segment, or is armed for painting; a row kind adds a row; an annotation is armed
   function pick(k: any) {
     dropPaint();
@@ -1102,7 +1091,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     else if (a === 'delete' || a === 'sdel' || a === 'rdel' || a === 'adel' || a === 'mdel' || a === 'bdel') deleteSel();
     else if (a === 'label') { if (s) editLabel(s); }
     else if (a.startsWith('add:')) addRow(a.slice(4), E.M.rows.length);
-    else if (a === 'copy') navigator.clipboard?.writeText(codeTa.value).then(() => { b.textContent = uiText('ui.copied', 'Copied'); setTimeout(() => (b.textContent = uiText('ui.copy', 'Copy')), 1200); });
+    else if (a === 'copy') copyCode(b, codeTa.value);
     else if (!s) return;
     else if (a === 'split' && s.r != null) splitSeg(s.r, s.i, snapT(E.menuAt, true));
     else if (a === 'rowsel' && s.r != null) { E.sel = { row: s.r }; draw(); renderProps(); }
@@ -1136,8 +1125,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     clampSel(); draw(); renderProps();
     showCodeNotes(codeMsg, T.layout({ src: codeTa.value }).warnings);
   }
-  codeTa.addEventListener('input', () => { clearTimeout(E.codeTimer); E.codeTimer = setTimeout(readCode, 250); });
-  codeTa.addEventListener('blur', () => { if (!E) return; readCode(); commit(); E.codeAt = null; syncCode(); });
+  wireCode(codeTa, { state: () => E, read: readCode, commit, sync: syncCode });
 
   // ←/→: the neighbouring segment; ↑/↓: the row above or below, at the same time
   function step(dx: any, dy: any) {
@@ -1154,28 +1142,21 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     draw(); renderProps();
   }
   window.addEventListener('keydown', (e) => {
-    if (inEditorMenu(e)) return; // the right-click menu's own keys: arrows, Enter, Esc
-    // a focused palette button keeps its own Enter and Space (they click it); ⌘Enter still reaches Done
-    if (pressesFocused(e)) return;
-    if (!E || root.hidden || dock.elsewhere(e)) return;
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.td-dialog')) save(); return; }
-    if ((e.target! as Element).closest && (e.target! as Element).closest('.td-pop-ta, .td-pop-ml')) return;
-    if (document.querySelector('.td-dialog')) return;
-    const mod = e.metaKey || e.ctrlKey, inField = !!((e.target! as Element).closest && (e.target! as Element).closest('input, textarea, select'));
-    e.stopPropagation();
-    if (mod && e.key === 'Enter') { e.preventDefault(); finish(true); return; }
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      if (inField) { (e.target! as HTMLElement).blur(); return; }
-      if (editorMenuOpen()) { closeMenu(); return; }
-      if (cancelDnd() || dropPaint()) return;
-      if (E.arm) { E.arm = null; buildPalette(); setHint(''); draw(); return; }
-      if (E.sel) { E.sel = null; draw(); renderProps(); return; }
-      finish(false); return;
-    }
-    if (inField) return;
-    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-    if (mod && e.key === 'y') { e.preventDefault(); redo(); return; }
+    const keys = editorKeys(e, {
+      open: () => !!E && !root.hidden && !dock.elsewhere(e),
+      save,
+      finish,
+      undo,
+      redo,
+      escape: () => {
+        if (cancelDnd() || dropPaint()) return true;
+        if (E.arm) { E.arm = null; buildPalette(); setHint(''); draw(); return true; }
+        if (E.sel) { E.sel = null; draw(); renderProps(); return true; }
+        return false;
+      },
+    });
+    if (!keys) return;
+    const { mod } = keys;
     if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
     // every segment of every row, as a marquee over the whole drawing takes them
     if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectSegs(E.M.rows.flatMap((_: any, r: number) => spansOf(r).map((_s: any, i: number) => ({ r, i })))); draw(); renderProps(); return; }

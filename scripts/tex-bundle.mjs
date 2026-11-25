@@ -36,6 +36,7 @@ const say = (...a) => console.log(...a);
 const ENGINES = args.includes('--engine') ? [args[args.indexOf('--engine') + 1]] : ['pdftex', 'xetex'];
 if (ENGINES.some((e) => e !== 'pdftex' && e !== 'xetex')) { console.error('--engine pdftex or --engine xetex'); process.exit(2); }
 const { DOC_FONTS, docFontPreamble, objectFont, thaiFallback, THAI_BREAK_DEF, THAI_PDF, thaiBreaks, thaiRuns } = await import('../src/core/doc-fonts.ts');
+const { PACKAGE_COMMANDS } = await import('../src/domain/package-commands.ts');
 
 // Packages the app writes or a document may load: these files' whole packages go in (step 3).
 const TREES = ['tikz.sty', 'pgf.revision.tex', 'pgfplots.sty', 'pgfplots.revision.tex', 'circuitikz.sty', 'tikz-cd.sty', 'forest.sty',
@@ -47,7 +48,9 @@ const TREES = ['tikz.sty', 'pgf.revision.tex', 'pgfplots.sty', 'pgfplots.revisio
   'caption.sty', 'subcaption.sty', 'float.sty', 'hyperref.sty', 'url.sty', 'microtype.sty', 'lmodern.sty', 'fontenc.sty', 'textcomp.sty',
   'times.sty', 'bm.sty', 'newtxtext.sty', 'newpxtext.sty', 'tgheros.sty',
   // what labels' maths may need (TD.lint.mathNeeds: the commands the maths engines draw)
-  'mhchem.sty', 'nicefrac.sty', 'xfrac.sty', 'tensor.sty', 'slashed.sty', 'centernot.sty', 'upgreek.sty', 'euscript.sty'];
+  'mhchem.sty', 'nicefrac.sty', 'xfrac.sty', 'tensor.sty', 'slashed.sty', 'centernot.sty', 'upgreek.sty', 'euscript.sty',
+  // every package an export loads by itself for a command it uses (src/domain/package-commands.ts: TD.lint.mathNeeds)
+  ...PACKAGE_COMMANDS.map(([pkg]) => pkg + '.sty')];
 const TREES_XE = ['fontspec.sty', 'xunicode.sty']; // XeLaTeX only
 // A document that loads them, so what they load in turn is recorded too (step 2).
 const EXTRA = String.raw`\documentclass{article}
@@ -77,7 +80,12 @@ const FONTS = ['fonts/type1/public/amsfonts', 'fonts/tfm/public/amsfonts', 'font
   // Times, Helvetica and Courier (the app's \fontfamily{ptm}, {phv}, {pcr}): URW's Type 1 fonts, Adobe metrics
   'fonts/type1/urw/times', 'fonts/type1/urw/helvetic', 'fonts/type1/urw/courier', 'fonts/tfm/adobe/times', 'fonts/tfm/adobe/helvetic',
   'fonts/tfm/adobe/courier', 'fonts/vf/adobe/times', 'fonts/vf/adobe/helvetic', 'fonts/vf/adobe/courier', 'fonts/tfm/urw35vf/times',
-  'fonts/tfm/urw35vf/helvetic', 'fonts/tfm/urw35vf/courier', 'fonts/vf/urw35vf/times', 'fonts/vf/urw35vf/helvetic', 'fonts/vf/urw35vf/courier'];
+  'fonts/tfm/urw35vf/helvetic', 'fonts/tfm/urw35vf/courier', 'fonts/vf/urw35vf/times', 'fonts/vf/urw35vf/helvetic', 'fonts/vf/urw35vf/courier',
+  // symbol packages an export or a preview may load (package-commands.ts, kept-preview.ts): their Type 1 fonts (ifsym's
+  // and yhmath's are METAFONT only, which this engine can't draw)
+  'fonts/tfm/urw35vf/zapfding', 'fonts/tfm/adobe/zapfding', 'fonts/type1/urw/zapfding', 'fonts/tfm/public/marvosym', 'fonts/type1/public/marvosym',
+  'fonts/tfm/public/bbding', 'fonts/type1/public/niceframe-type1', 'fonts/tfm/public/cmll', 'fonts/type1/public/cmll', 'fonts/tfm/public/mathabx',
+  'fonts/type1/public/mathabx-type1', 'fonts/tfm/public/mnsymbol', 'fonts/type1/public/mnsymbol', 'fonts/enc/dvips/mnsymbol'];
 const LAZY = ['fonts/type1/public/cm-super'];
 // XeLaTeX's OpenType fonts (fontspec by file name) and what dvipdfmx reads to write the PDF
 const FONTS_XE = ['fonts/opentype/public/lm', 'fonts/map/dvipdfmx', 'fonts/map/glyphlist', 'fonts/cmap/dvipdfmx'];
@@ -136,10 +144,29 @@ const corpus = fs.readdirSync(CORPUS).filter((f) => f.endsWith('.tex')).sort().m
   (function walk(rel) { if (!fs.existsSync(path.join(dir, rel))) return; for (const e of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) { const r = rel ? rel + '/' + e.name : e.name; if (e.isDirectory()) walk(r); else files[r] = fs.readFileSync(path.join(dir, r)).toString('base64'); } })('');
   return { name: f.slice(0, -4), src: fs.readFileSync(path.join(CORPUS, f), 'utf8'), files };
 });
+// Each of those packages with every command it defines typeset (with two arguments: what it doesn't take is text), so
+// the fonts its symbols are drawn in are opened and kept too. Not all of them compile, and need not: an error only
+// stops a command, and whatever the package opened before it is recorded. They go last: one can leave the engine unable to run
+// another (XeLaTeX's does), and the documents before them must all have their turn.
+const packageDocs = () => PACKAGE_COMMANDS.map(([pkg, names]) => ({ name: 'package-' + pkg, files: {}, src: String.raw`\documentclass{article}
+\usepackage{amsmath,amssymb}\usepackage{tikz}\usepackage{${pkg}}
+\begin{document}
+${names.split(' ').filter((n) => !n.endsWith('*')).map((n) => '\\par\\hbox{$\\' + n + '{a}{b}$}').join('\n')}
+\end{document}
+` }));
+// … and those fonts drawn: these must compile with the bundle alone
+const SYMBOLS = [['pifont', '\\ding{51}'], ['marvosym', '\\Mobilefone'], ['bbding', '\\Checkmark'], ['cmll', '$\\parr$'], ['wasysym', '\\smiley'],
+  ['stmaryrd', '$\\llbracket$'], ['esint', '$\\oiint$'], ['mathabx', '$\\divides$'], ['MnSymbol', '$\\powerset$'], ['extarrows', '$\\xlongequal{a}$']];
+const symbolDocs = () => SYMBOLS.map(([pkg, use]) => ({ name: 'symbols-' + pkg, files: {}, src: String.raw`\documentclass{article}
+\usepackage{${pkg}}
+\begin{document}
+${use}
+\end{document}
+` }));
 // the documents the app writes for XeLaTeX mark where Thai lines may break (thaiBreaks)
-const docsFor = (engine) => [{ name: 'extra-packages', src: EXTRA, files: {} }, ...fontDocs(engine), ...corpus] // (those that must compile first)
+const docsFor = (engine) => [{ name: 'extra-packages', src: EXTRA, files: {} }, ...fontDocs(engine), ...symbolDocs(), ...corpus, ...packageDocs()] // (those that must compile first)
   .map((d) => engine === 'xetex' ? { ...d, src: thaiBreaks(d.src) } : d);
-const must = (name) => name === 'extra-packages' || name.startsWith('fonts-');
+const must = (name) => name === 'extra-packages' || name.startsWith('fonts-') || name.startsWith('symbols-');
 
 // ---- a local server: the engines, the page that drives them, and TeX Live through kpsewhich (the engines' own
 // protocol: GET texlive/<pdftex|xetex>/<kpathsea format>/<name>, the file's name in a fileid header, 301 when there is none)
@@ -219,7 +246,10 @@ async function build(ENGINE) {
   p = await page();
   await p.evaluate((e) => window.stock(e), ENGINE);
   const passed = new Set();
-  for (const d of docs) { const r = await p.evaluate(({ src, files }) => window.compileStock(src, files), d); if (r.ok) passed.add(d.name); else if (must(d.name)) throw new Error(`the ${d.name} document failed:\n` + r.log); process.stdout.write(r.ok ? '.' : 'x'); }
+  // (one engine runs them all: XeLaTeX's gives out after a couple of hundred, so a document that fails is tried once more
+  // with a fresh one)
+  const stock = (d) => p.evaluate(({ src, files }) => window.compileStock(src, files), d);
+  for (const d of docs) { let r = await stock(d); if (!r.ok) { await p.close(); p = await page(); await p.evaluate((e) => window.stock(e), ENGINE); r = await stock(d); } if (r.ok) passed.add(d.name); else if (must(d.name)) throw new Error(`the ${d.name} document failed:\n` + r.log); process.stdout.write(r.ok ? '.' : 'x'); }
   say(`\n${passed.size} of ${docs.length} compiled; ${opened.size} files opened`);
   await p.close();
 
@@ -289,7 +319,9 @@ async function build(ENGINE) {
   if (loaded.cmd !== 'td:loaded') throw new Error('the worker could not load the bundle: ' + loaded.message);
   const lost = [];
   for (const d of docs) {
-    const r = await p.evaluate(({ src, files }) => window.compileOurs(src, files), d);
+    const ours = () => p.evaluate(({ src, files }) => window.compileOurs(src, files), d);
+    let r = await ours();
+    if (!r.ok && passed.has(d.name)) { await p.close(); p = await page(); await p.evaluate((e) => window.ours(e), ENGINE); r = await ours(); } // a fresh engine, as in step 2
     process.stdout.write(r.ok ? '.' : passed.has(d.name) ? 'X' : 'x');
     if (!r.ok && passed.has(d.name)) lost.push(`${d.name}: missing ${r.missing.join(', ') || '-'}\n${r.log}`);
   }

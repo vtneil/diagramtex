@@ -5,6 +5,7 @@ import { rewriteMath, textcolorGroups, asMleftright } from './math-rewrite';
 import { defineFunctions } from './math-functions';
 import { runtime as TD } from '../runtime';
 import { t } from '../i18n';
+import { escapeHtml } from '../core/html';
 // Maths parsing: KaTeX HTML or Temml MathML with deterministic SVG layout.
 // Scene labels isolate the resulting layout before applying SVG scene transforms.
 // Everything that draws maths calls TD.math.render(); the choice is a per-browser preference.
@@ -19,7 +20,7 @@ import { t } from '../i18n';
   const lib = (e: any) => (e === 'temml' ? window.temml : window.katex);
   if (!lib(engine)) engine = 'katex';
 
-  const esc = (s: any) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  const esc = escapeHtml;
   // xcolor's colour expressions, which KaTeX and Temml don't read: rgb,255:red,92;green,214;blue,92 is the named
   // colours mixed by their weights (over 255, or over the weights' sum when no divisor is given) → #rrggbb
   const BASIC: Record<string, string> = { red: '#ff0000', green: '#00ff00', blue: '#0000ff', cyan: '#00ffff', magenta: '#ff00ff', yellow: '#ffff00', black: '#000000', white: '#ffffff', gray: '#808080', orange: '#ff8000', violet: '#800080', purple: '#bf0040', brown: '#bf8040', lime: '#bfff00', olive: '#808000', pink: '#ffbfbf', teal: '#008080', darkgray: '#404040', lightgray: '#bfbfbf' };

@@ -1,5 +1,7 @@
 import { runtime as TD } from '../runtime';
 import { unbraceOnce as unbrace } from './tex-groups';
+import { layoutCache, srcKey } from './layout-cache';
+import { num3 } from '../core/format';
 // UML sequence diagrams written for pgf-umlsd. The source is the object: a sequencediagram environment of
 // \newinst and \newthread instances, \mess messages, call, callself and messcall environments (nested calls),
 // sdblock frames, \prelevel / \postlevel, \setthreadbias and \tikzstyle{inststyle} changes. It is drawn here
@@ -37,7 +39,7 @@ const tt = () => TD.texText;
 const close = (s: string, i: number) => tt().close(s, i);
 const opts = (s: any) => tt().split(String(s || '')).map((x: string) => x.trim()).filter(Boolean);
 const kv = (it: string) => { const m = /^([^=]+?)\s*(?:=\s*([\s\S]*))?$/.exec(it.trim()); return m ? { k: m[1].trim(), v: m[2] == null ? null : m[2].trim() } : { k: it.trim(), v: null as string | null }; };
-const num = (v: number) => String(Math.round(v * 1000) / 1000).replace(/^-0$/, '0');
+const num = num3;
 const cmOf = (v: any, dflt: number) => { const t = String(v ?? '').trim(); if (!t) return dflt; const m = /^(-?[\d.]+)\s*(cm|mm|pt|in)?$/.exec(t); if (!m) return NaN; const x = parseFloat(m[1]); return m[2] === 'mm' ? x / 10 : m[2] === 'pt' ? x / CM : m[2] === 'in' ? x * 2.54 : x; };
 
 // Arguments after a command: an optional [..] then n {..} groups (spaces and line breaks between them).
@@ -236,18 +238,7 @@ function textOf(t: string, st: any = TEXT) {
 const SIZES: Record<string, [number, number]> = { tiny: [5, 5], scriptsize: [7, 7], footnotesize: [8, 8], small: [9, 9], normalsize: [10, 10], large: [12, 11.74983], Large: [14.4, 14.09978], LARGE: [17.28, 16.91968], huge: [20.74, 20.30362], Huge: [24.88, 24.36435] };
 
 // ---------------------------------------------------------------- layout
-const cache = new Map();
-function layout(s: any) {
-  const key = [s.src, TD.math && TD.math.engine].join('\u0001');
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const L = build(s.src);
-  if (TD.measuring && TD.measuring()) return L;
-  if (cache.size > 200) cache.clear();
-  cache.set(key, L);
-  return L;
-}
-TD.onTextMetricsChange(() => { cache.clear(); });
+const layout = layoutCache((s: any) => srcKey(s), (s: any) => build(s.src));
 const col = (v: any) => (v == null ? null : TD.tikzColor ? TD.tikzColor(unbrace(v)) : null);
 
 // The arrow tips of PGF's old arrows library, in their own frame: x along the line, out of it, from where
