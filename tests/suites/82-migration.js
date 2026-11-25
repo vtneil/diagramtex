@@ -271,3 +271,23 @@ T.test('LaTeX suggestions sit over the text popup (both in the top layer)', asyn
     T.ok(pop.hidden && !pop.matches(':popover-open'), 'closing leaves the top layer');
   } finally { TD.texComplete.close(); h.close(); }
 });
+
+T.test('LaTeX suggestions offer what DiagramTeX draws itself: stand-ins (\\centernot, \\nicefrac) and rewritten commands (\\SIrange)', async () => {
+  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const h = TD.input.popup(document.getElementById('stage'), { text: '', at: () => [200, 40], onDone() {} });
+  try {
+    await frame();
+    const ta = document.querySelector('.td-pop-ta:not(.leaving)');
+    if (!ta) return; // the MathLive editor, which has its own suggestions
+    const pop = document.getElementById('texComplete');
+    const type = async (v) => { ta.focus(); ta.value = v; ta.setSelectionRange(v.length, v.length); ta.dispatchEvent(new Event('input', { bubbles: true })); await frame(); };
+    for (const [typed, name] of [['$a \\centern', 'centernot'], ['$\\nicef', 'nicefrac'], ['$\\SIr', 'SIrange']]) {
+      await type(typed);
+      T.ok(!pop.hidden && pop.textContent.includes(name), `${typed} offers \\${name}: ${pop.textContent.slice(0, 80)}`);
+    }
+    await type('$a \\centern');
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await frame();
+    T.ok(ta.value.startsWith('$a \\centernot{'), 'choosing it writes it with its argument: ' + ta.value);
+  } finally { TD.texComplete.close(); h.close(); }
+});

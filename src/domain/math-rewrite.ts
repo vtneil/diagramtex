@@ -662,6 +662,13 @@ export const REWRITTEN = new Set([...'SI si num ang unit qty SIrange qtyrange nu
   ...Object.keys(PREFIXES), ...Object.keys(UNITS), ...Object.keys(SYMBOLS),
   ...'per square cubic raiseto squared cubed tothe of highlight'.split(' ')]);
 
+/** The commands written here into what the engines draw, as they are typed, with their {} arguments: offered by the
+ *  LaTeX suggestions (siunitx's units are left out: they mean something only inside \SI, \si, \qty and \unit). */
+export const REWRITTEN_COMMANDS: [string, number][] = [['SI', 2], ['si', 1], ['num', 1], ['ang', 1], ['unit', 1], ['qty', 2],
+  ['SIrange', 3], ['qtyrange', 3], ['numrange', 2], ['SIlist', 2], ['qtylist', 2], ['numlist', 1], ['numproduct', 1], ['qtyproduct', 2],
+  ['ev', 1], ['expval', 1], ['expectationvalue', 1], ['vev', 1], ['ketbra', 2], ['dyad', 2], ['outerproduct', 2], ['mel', 3],
+  ['matrixel', 3], ['matrixelement', 3]];
+
 // ---------- colours ----------
 /** xcolor's \textcolor{c}{x} is {\color{c}x} (color.sty): a group, so an ordinary atom (a\textcolor{red}{+}b has no space round the +). */
 export function textcolorGroups(tex: string): string {

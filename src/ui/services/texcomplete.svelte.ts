@@ -2,6 +2,7 @@ import { flushSync, mount } from 'svelte';
 import { runtime as TD } from '../../runtime';
 import { message as msg, caption, type Message } from '../../i18n';
 import TexComplete, { type TexCompleteModel } from '../TexComplete.svelte';
+import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
 // LaTeX command suggestions: type "\" in any text field that takes LaTeX (the canvas text editor,
 // the Text / Label fields in the properties panel, Document text blocks) and a list of matching
 // commands appears at the caret with a rendered preview. ↑↓ choose, Enter / Tab insert, Esc close.
@@ -187,11 +188,33 @@ import TexComplete, { type TexCompleteModel } from '../TexComplete.svelte';
     const prev = tx ? `\\text{\\${n}${sample}}` : `\\${n}${sample}`;
     generated.push({ name: n, ins, prev, tx: !!tx, group: guessGroup(n, tx), text: ins.replace('|', ''), after: arity > 0 ? ins.length - ins.indexOf('|') - 1 : 0 });
   }
+  // … and what DiagramTeX draws itself where the engines can't: the stand-ins (\centernot, \nicefrac, physics' \dv …:
+  // mathengine.ts) and the commands rewritten into what they draw (siunitx, physics' \qty and bra-kets:
+  // math-rewrite.ts), all but those that aren't typed in a formula (lengths, counters, text declarations, plumbing)
+  const NOT_OFFERED = new Set(('jot nulldelimiterspace scriptspace arraycolsep tabcolsep fboxsep fboxrule thinmuskip medmuskip thickmuskip '
+    + 'stepcounter refstepcounter addtocounter setcounter centering raggedright raggedleft xspace ensuremath sp sb null slash m@th mathpalette '
+    + 'strut vspace qedhere boldmath unboldmath midrule toprule bottomrule multicolumn multirow bfseries itshape slshape sl em upshape rmfamily '
+    + 'sffamily ttfamily normalfont mdseries scshape sc mbox makebox framebox mathmakebox').split(' '));
+  let drawnAdded = false;
+  function addDrawn() {
+    if (drawnAdded || !TD.math?.standInCommands) return;
+    drawnAdded = true;
+    const seen = new Set([...curated, ...generated.map((g) => g.name)]);
+    for (const [n, arity] of [...TD.math.standInCommands(), ...REWRITTEN_COMMANDS]) {
+      if (seen.has(n) || NOT_OFFERED.has(n) || !/^[A-Za-z]+$/.test(n)) continue;
+      seen.add(n);
+      const ins = '\\' + n + (arity > 0 ? '{|}' + '{}'.repeat(arity - 1) : '');
+      const prev = '\\' + n + (['', '{x}', '{x}{y}', '{x}{y}{z}'][arity] ?? '');
+      generated.push({ name: n, ins, prev, tx: false, group: guessGroup(n, false), text: ins.replace('|', ''), after: arity > 0 ? ins.length - ins.indexOf('|') - 1 : 0 });
+    }
+    generated.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  }
   // The list for the engine in use: hand-picked first, then the rest A–Z; unsupported ones dropped.
   const lists: Record<string, any> = {};
   function list() {
     const e = (TD.math && TD.math.engine) || 'katex';
     if (lists[e]) return lists[e];
+    addDrawn();
     const col = ENGINE_COL[e] || 1;
     const usable = (c: any) => { const r = support.get(baseName(c.name)); return !r || (r as Record<string, any>)[col] >= 0 || TD.math.drawsAs(baseName(c.name)); };
     return (lists[e] = [...C.filter(usable), ...generated.filter(usable)]);

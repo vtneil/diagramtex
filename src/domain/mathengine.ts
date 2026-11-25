@@ -293,6 +293,8 @@ import { escapeHtml } from '../core/html';
     onProgress(fn: (ids: number[]) => void) { progress.push(fn); }, // ids: the formulae just finished
     // a command the engine in use lacks but draws with a stand-in (STAND_INS)
     drawsAs: (name: any) => !!standIns(engine)['\\' + name],
+    /** every command a stand-in draws, with how many arguments it takes (the LaTeX suggestions offer them) */
+    standInCommands: (): [string, number][] => Object.entries(STAND_INS).map(([k, v]) => [k, Math.max(0, ...[...v.matchAll(/#(\d)/g)].map((m) => +m[1]))]),
     useMacros,
     /** whether the open file's macros define \name */
     ownMacro,
