@@ -93,7 +93,7 @@ const PRECACHE = [
     'vendor/katex/fonts/TDScript_Math7-Italic.woff2',
     'vendor/katex/katex.min.css',
     'vendor/katex/katex-scripts.css',
-    'vendor/katex/katex-td1.min.js',
+    'vendor/katex/katex-td2.min.js',
     'vendor/katex/contrib/mhchem.min.js',
     'vendor/temml/Temml-Latin-Modern.css',
     'vendor/temml/Temml.woff2',

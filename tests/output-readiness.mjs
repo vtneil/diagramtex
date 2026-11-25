@@ -100,6 +100,9 @@ try {
         assert(!await b.page.locator('#btnExport').isDisabled());
         assert(!await b.page.locator('#topbar [data-cmd="print"]').isDisabled());
         await b.page.evaluate(()=>TD.app.cmd.runCmd('print'));
+        // with the in-browser TeX engines here, Print asks how to render first: As shown (the first choice) is this check's
+        await b.page.waitForFunction(()=>window.__prints===1||!!document.querySelector('.td-dialog [data-r="1"]'));
+        if(await b.page.locator('.td-dialog [data-r="1"]').count()) await b.page.locator('.td-dialog [data-r="1"]').click();
         await b.page.waitForFunction(()=>window.__prints===1);
         await b.page.evaluate(()=>{window.__prints=0;});
         console.log(`✓ ${browser} → ${target}: global output blocked; ready object SVG/PNG allowed; nested pending objects blocked; print protected`);

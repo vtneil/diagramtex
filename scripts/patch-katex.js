@@ -1,5 +1,5 @@
 // KaTeX with the layout rules where it differs from TeX, made once at maintenance time (like
-// scripts/generate-label-glyphs.js): public/vendor/katex/katex.min.js as published, written to katex-td1.min.js with
+// scripts/generate-label-glyphs.js): public/vendor/katex/katex.min.js as published, written to katex-td2.min.js with
 // these edits of its minified code. Each must match exactly once, so a new KaTeX fails here instead of being half
 // patched. A changed patch gets a new file name (td2 …): vendor files are cached for a year.
 //
@@ -48,6 +48,9 @@ const PATCHES = [
   // WebKit sizes a box by the furthest thing in it, so a padding a negative kern pulls back past the formula's start
   // (math-rewrite.ts's @{…}) would widen the formula and move it right
   ['0!==i&&(z=We(["arraycolsep"],[]),z.style.width=N(i),k.push(z))', '0!==i&&(z=We(["arraycolsep"],[]),z.style.marginRight=N(i),k.push(z))', 2],
+  // a single-column aligned or align* (no &) has no gap between columns: KaTeX wrote columnspacing="" in its MathML,
+  // which Firefox reports as an error
+  ['s.setAttribute("columnspacing",r.trim())', 'r&&s.setAttribute("columnspacing",r.trim())'],
 ];
 let out = source;
 for (const [from, to, count = 1] of PATCHES) {
@@ -56,8 +59,8 @@ for (const [from, to, count = 1] of PATCHES) {
   out = out.split(from).join(to);
 }
 out = '/*! KaTeX 0.19.1 with DiagramTeX\'s layout patches (scripts/patch-katex.js); see LICENSE */\n' + out;
-const target = path.join(dir, 'katex-td1.min.js');
+const target = path.join(dir, 'katex-td2.min.js');
 if (process.argv.includes('--check')) {
-  if (fs.readFileSync(target, 'utf8') !== out) throw new Error('katex-td1.min.js is stale: run node scripts/patch-katex.js');
+  if (fs.readFileSync(target, 'utf8') !== out) throw new Error('katex-td2.min.js is stale: run node scripts/patch-katex.js');
 } else fs.writeFileSync(target, out);
 console.log(`${PATCHES.length} patches; ${out.length} bytes`);

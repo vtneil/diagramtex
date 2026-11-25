@@ -24,6 +24,9 @@ try {
     };
     TD.app.cmd.runCmd('print');
    });
+   // with the in-browser TeX engines here, Print asks how to render first: As shown (the first choice) is this check's
+   await b.page.waitForFunction(()=>!!window.__printSnapshot||!!document.querySelector('.td-dialog [data-r="1"]'));
+   if(await b.page.locator('.td-dialog [data-r="1"]').count()) await b.page.locator('.td-dialog [data-r="1"]').click();
    await b.page.waitForFunction(()=>!!window.__printSnapshot);
    assert.equal(await b.page.evaluate(()=>window.__printSheets),2);
    const snapshot=await b.page.evaluate(()=>window.__printSnapshot);

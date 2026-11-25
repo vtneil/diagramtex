@@ -43,7 +43,8 @@ export function mathmlSvg(source: string): string {
       if (cells.some(row => row.some(cell => /padding-(left|right)/.test(adaptor.getAttribute(cell, 'style') || '')))) {
         const gaps = Array.from({ length: Math.max(0, columns - 1) }, (_, column) =>
           Math.max(0, ...cells.filter(row => row.length > column + 1).map(row => padding(row[column], 'right') + padding(row[column + 1], 'left'))));
-        adaptor.setAttribute(node, 'columnspacing', gaps.map(gap => `${gap}em`).join(' '));
+        // one column has no gap to give (an empty columnspacing is an error in Firefox)
+        if (gaps.length) adaptor.setAttribute(node, 'columnspacing', gaps.map(gap => `${gap}em`).join(' '));
         for (const row of cells) for (const cell of row) {
           const style = String(adaptor.getAttribute(cell, 'style') || '');
           adaptor.setAttribute(cell, 'style', style.replace(/(?:^|;)\s*padding-(?:left|right)\s*:[^;]*/g, ''));

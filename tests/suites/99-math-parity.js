@@ -74,7 +74,9 @@
         // (in pt: KaTeX's em is TeX's 10pt)
         const box = d.querySelector('.katex-html').getBoundingClientRect(), em = parseFloat(getComputedStyle(d.querySelector('.katex')).fontSize);
         const x = (c) => ([...d.querySelectorAll('.mord,.mrel')].find((e) => !e.children.length && e.textContent === c).getBoundingClientRect().left - box.left) / em * 10;
-        T.eq([x('a'), x('='), x('b')].map((v) => +v.toFixed(1)), at, 'cells where TeX sets them: ' + f);
+        // (within 0.15pt: browsers place a glyph on their own pixel grid, 10.3 on one is 10.4 on another)
+        const got = [x('a'), x('='), x('b')];
+        T.ok(got.every((v, i) => Math.abs(v - at[i]) < 0.15), `cells where TeX sets them: ${f}: ${got.map((v) => v.toFixed(2))} vs ${at}`);
       }
     } finally { d.remove(); }
   });

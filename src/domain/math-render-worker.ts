@@ -8,7 +8,7 @@ const scope = globalThis as unknown as {
   onmessage: (event: MessageEvent<MathJob | MathJob[]>) => void;
   postMessage(result: MathResult | MathResult[]): void;
 };
-scope.importScripts('vendor/temml/temml.min.js', 'vendor/temml/contrib/mhchem.min.js', 'vendor/katex/katex-td1.min.js', 'vendor/katex/contrib/mhchem.min.js');
+scope.importScripts('vendor/temml/temml.min.js', 'vendor/temml/contrib/mhchem.min.js', 'vendor/katex/katex-td2.min.js', 'vendor/katex/contrib/mhchem.min.js');
 // the tests and look-aheads the page's engines have too (\ifthenelse, \nonscript …)
 defineFunctions(scope.katex); defineFunctions(scope.temml);
 function compile(job: MathJob): MathResult {

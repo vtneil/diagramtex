@@ -22,7 +22,7 @@ Bundled third-party software and fonts retain their own licenses and copyright n
 |---|---|---|---|
 | Svelte (compiled into the app script) | `vendor/svelte/` | MIT | `LICENSE.txt` |
 | MathJax 4.1.3 and TeX font data (parts bundled into the app script) | `vendor/mathjax/` | Apache-2.0 | `LICENSE.txt`, `NOTICE.txt` |
-| KaTeX (script and stylesheet; `katex-td1.min.js` is `katex.min.js` with DiagramTeX's layout patches, `scripts/patch-katex.js`) | `vendor/katex/` | MIT | `LICENSE` |
+| KaTeX (script and stylesheet; `katex-td2.min.js` is `katex.min.js` with DiagramTeX's layout patches, `scripts/patch-katex.js`) | `vendor/katex/` | MIT | `LICENSE` |
 | KaTeX fonts | `vendor/katex/fonts/` | SIL OFL 1.1 | `FONTS-LICENSE.txt` |
 | TDScript fonts (KaTeX's fonts with the AMS Computer Modern 7pt and 5pt glyphs, for scripts) | `vendor/katex/fonts/` | SIL OFL 1.1 | `FONTS-LICENSE.txt` |
 | Temml | `vendor/temml/` | MIT | `LICENSE` |
