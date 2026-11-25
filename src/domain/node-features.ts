@@ -14,7 +14,10 @@ const linked = (s: any, X: any) => {
   if (!X.nodeTargets) X.nodeTargets = new Set((X.scene || []).flatMap((q: any) => [q.link1?.id, q.link2?.id].filter(Boolean)));
   return X.nodeTargets.has(s.id);
 };
-function nameOf(s: any) { return validName(s.nodeName) ? s.nodeName : validName(s.tex?.nm?.[0]) ? s.tex.nm[0] : 'tdnode' + Array.from(String(s.id), c=>c.codePointAt(0)!.toString(16)).join('x'); }
+// a name as code wrote it (an import's): what TikZ takes in ( ) as a node's name: 234, in 1, chain-2 (not a coordinate,
+// an anchor's dot or a polar colon, nor TeX's own characters)
+const texName = (name: unknown): name is string => typeof name === 'string' && /^[A-Za-z0-9_](?:[^.,;:()[\]{}$\\%#=\n]*[^.,;:()[\]{}$\\%#=\s])?$/.test(name);
+function nameOf(s: any) { return validName(s.nodeName) ? s.nodeName : texName(s.nodeName) && s.tex ? s.nodeName : texName(s.tex?.nm?.[0]) ? s.tex.nm[0] : 'tdnode' + Array.from(String(s.id), c=>c.codePointAt(0)!.toString(16)).join('x'); }
 const pinDistance = (s: any) => Number.isFinite(Number(s.nodePinDistance ?? 24)) ? Math.max(0,Number(s.nodePinDistance ?? 24)) : 24;
 function annotations(s: any) {
   if (!s.nodeLabel && !s.nodePin) return [];

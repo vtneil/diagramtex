@@ -199,7 +199,7 @@ export const thai: Record<string, string> = {
   "macros.help": "คำสั่งของไฟล์นี้เอง ตามที่ preamble นิยามไว้ (\\newcommand, \\DeclareMathOperator, \\def) สูตรจะวาดด้วยคำสั่งเหล่านี้ และทุกการส่งออกจะเขียนคำสั่งเหล่านี้ลงใน preamble",
   "macros.why.optional": "อาร์กิวเมนต์ที่ไม่บังคับจะใช้ค่าเริ่มต้นเสมอในที่นี้",
   "macros.why.delimited": "อาร์กิวเมนต์มีตัวคั่น ซึ่งสูตรในที่นี้อ่านไม่ได้",
-  "macros.why.at": "ชื่อที่มี @ ต้องใช้ \\makeatletter จึงไม่ได้ใช้ในที่นี้",
+  "macros.why.at": "ใช้ชื่อที่มี @ (\\makeatletter) ซึ่งสูตรในที่นี้อ่านไม่ได้ แต่การส่งออกยังเขียนคำนิยามนี้",
   "macros.why.unreadable": "อ่านคำนิยามนี้ไม่ได้",
   "macros.none": "ยังไม่มี สูตรใช้คำสั่งของไฟล์เองได้ ตามที่ \\newcommand นิยามไว้",
   "macros.edit": "แก้ไขมาโคร…",

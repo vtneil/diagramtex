@@ -943,8 +943,7 @@ body.mode-board #emptyHint .eh-board { display: block; }
 #props .pg-add { margin-top: 2px; border-style: dashed; color: var(--graphite); }
 
 /* LaTeX command suggestions (src/ui/services/texcomplete.svelte.ts) */
-#texComplete { position: fixed; z-index: 1000; width: 300px; background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-pop); font-size: 12px; }
-#texComplete[hidden] { display: none; }
+#texComplete { position: fixed; z-index: 1000; inset: auto; margin: 0; padding: 0; color: var(--ink); width: 300px; background: var(--sheet-raised); border: 1px solid var(--rule-strong); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--shadow-pop); font-size: 12px; }
 #texComplete ul { list-style: none; margin: 0; padding: 4px; max-height: 264px; overflow-y: auto; }
 #texComplete li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; padding: 4px 8px; border-radius: var(--r); cursor: pointer; }
 #texComplete li.on { background: var(--wash-strong); }

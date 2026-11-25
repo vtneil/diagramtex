@@ -1,5 +1,6 @@
 import { runtime as TD } from '../runtime';
 import { macrosOfPreamble } from '../core/doc-macros';
+import { DVIPS_NAMES, X11_NAMES } from './xcolor-names';
 import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
 // Import from LaTeX / TikZ: parses the common TikZ subset (and everything DiagramTeX exports)
 // into shapes; a full document is split into text and diagram blocks.
@@ -252,8 +253,13 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
   }
   // xcolor's svgnames (DarkBlue, ForestGreen, SteelBlue…) are the CSS colour names, written in CamelCase; the
   // browser knows their values. Lower-case names stay xcolor's own (green is #00ff00 there, not CSS's #008000).
+  // dvipsnames (BrickRed) and x11names (LightSteelBlue4) come from xcolor's own values (src/domain/xcolor-names.ts)
   let svgCtx: any = null;
+  const tableColour = (table: Record<string, string>, n: string) => (Object.prototype.hasOwnProperty.call(table, n) ? '#' + table[n].toLowerCase() : null);
   function svgName(n: any) {
+    return cssName(n) || tableColour(DVIPS_NAMES, n) || tableColour(X11_NAMES, n);
+  }
+  function cssName(n: any) {
     if (!/^[A-Z][a-z]+(?:[A-Z][a-z]+)*$/.test(n)) return null;
     try {
       svgCtx = svgCtx || document.createElement('canvas').getContext('2d');
@@ -271,7 +277,8 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     if (/:/.test(spec) && TD.xcolorExpr) return TD.xcolorExpr(spec, (n: any) => C.colors[n.trim()] || C.colors[n.trim().toLowerCase()] || null) || undefined;
     // mixes: red!50, red!30!blue, red!50!black
     const parts = spec.split('!').map((x: any) => x.trim());
-    const base = (n: any) => C.colors[n] || C.colors[n.toLowerCase()] || svgName(n);
+    // a document that loads xcolor with dvipsnames (and not svgnames) means dvipsnames' Green, not CSS's
+    const base = (n: any) => C.colors[n] || C.colors[n.toLowerCase()] || (C.dvipsFirst && tableColour(DVIPS_NAMES, n)) || svgName(n);
     let c = base(parts[0]);
     if (!c) return undefined;
     const rgb = (h: any) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -532,7 +539,8 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         // at least 5mm out; loop above also puts its label above
         else if (k === 'loop' || LOOPS[k]) { st.loop = true; if (LOOPS[k]) { [st.out, st.in] = LOOPS[k]; st.place = k.slice(5); } }
         else if (k === 'sharp corners') st.radius = 0;
-        else if (k.includes('-') && arrowSpec(k)) { const a = arrowSpec(k); st.startTip = a!.start; st.endTip = a!.end; }
+        // (a colour with a - in its name, light-gray, is the colour, not tips)
+        else if (k.includes('-') && color(C, k) === undefined && arrowSpec(k)) { const a = arrowSpec(k); st.startTip = a!.start; st.endTip = a!.end; }
         else { const c = color(C, k); if (c !== undefined) colorAll = c; }
         continue;
       }
@@ -540,7 +548,8 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         case 'draw': st.stroke = color(C, v) ?? (v === 'none' ? null : st.stroke || '#000000'); if (v !== 'none' && st.stroke == null) st.stroke = '#000000'; break;
         case 'fill': st.fill = color(C, v) ?? null; break;
         case 'color': colorAll = color(C, v) ?? null; break;
-        case 'line width': st.width = len(v, 'pt'); break;
+        // (\pgflinewidth is the width so far, 0.4pt unless set; a width that can't be read leaves it as it is)
+        case 'line width': { const w = len(String(v).replace(/\\pgflinewidth\b/g, `${+((st.width ?? 0.4 / K) * K).toFixed(4)}pt`), 'pt'); if (Number.isFinite(w)) st.width = w; break; }
         // line cap (cap is TikZ's alias) and line join: butt and miter unless set
         case 'line cap': case 'cap': if (/^(round|rect|butt)$/.test(v.trim())) st.cap = v.trim(); break;
         case 'line join': if (/^(round|bevel|miter)$/.test(v.trim())) st.join = v.trim(); break;
@@ -597,6 +606,8 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     }
     if (opts.some((o: any) => o.k === 'bend left' && o.v === null)) st.bend = 30;
     if (opts.some((o: any) => o.k === 'bend right' && o.v === null)) st.bend = -30;
+    // a bare `fill` with no colour given fills in the current one, black
+    if (!colorAll && opts.some((o: any) => o.k === 'fill' && o.v == null) && !opts.some((o: any) => o.k === 'fill' && o.v != null) && st.fill == null) st.fill = '#000000';
     if (colorAll) {
       // a bare `draw`/`fill` takes the current colour; `draw=red` keeps its own
       if (cmd !== 'fill' && cmd !== 'shade' && !opts.some((o: any) => o.k === 'draw' && o.v != null)) st.stroke = colorAll;
@@ -1216,7 +1227,12 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         // named, untransformed: its border, so the paths after it stop there as TikZ does
         const fr = tk.name && !(C.scopes || []).some((L: any) => L.xf && L.xf.length) && !opts.some((o: any) => XF_KEYS.has(o.k)) && TD.rotFrame(made);
         if (fr) { const g = geoOf(B.kind, fr, B.os); (C.geo ||= {})[tk.name] = g; C.names[tk.name] = { ...g!.c }; (C.kinds ||= {})[tk.name] = 'node'; return; }
-      } else if (at && tk.text!.trim()) { const t = textShape(C, tk.text, pno, at, st.color); delete t._box; t._importNodeAt = { ...at }; post.push(t); }
+      } else if (at && tk.text!.trim()) {
+        const t = textShape(C, tk.text, pno, at, st.color); delete t._box; t._importNodeAt = { ...at };
+        // (its name too, so the statement written from its objects still defines it for the code that names it)
+        if (tk.name) t.nodeName = tk.name;
+        post.push(t);
+      } else if (at && tk.name) post.push({ type: 'coord', x: at.x, y: at.y, tikzName: tk.name }); // an empty node named on a path
       if (tk.name && at) { C.names[tk.name] = toAbs(C, at); if (C.geo) delete C.geo[tk.name]; }
     };
     const pathTo = () => ({ bend: st.bend, out: st.out, in: st.in, looseness: st.looseness, minDist: st.minDist, maxDist: st.maxDist, loop: st.loop });
@@ -1431,10 +1447,12 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       }
       // coordinate (A) on a path: names the current point; its labels are text by that point
       if (tk.t === 'node' && tk.coordinate) {
-        if (cur) {
+        // (coordinate (B) at (x,y): there, not at the current point, which it leaves as it is)
+        const here = toks[i - 1]?.t === 'at' ? coord(C, toks[i - 1].raw) : cur;
+        if (here) {
           // (kept as a named point, so the code after it that names it still finds it once this is rewritten)
-          if (tk.name) { C.names[tk.name] = toAbs(C, cur); (C.kinds ||= {})[tk.name] = 'coordinate'; if (C.geo) delete C.geo[tk.name]; if (C.boxes) delete C.boxes[tk.name]; post.push({ type: 'coord', x: cur.x, y: cur.y, tikzName: tk.name }); }
-          const ls = labelShapes(C, parseOpts(tk.opts), { kind: 'rect', c: { ...cur }, U: { x: 0, y: 0 }, V: { x: 0, y: 0 } }, st.color);
+          if (tk.name) { C.names[tk.name] = toAbs(C, here); (C.kinds ||= {})[tk.name] = 'coordinate'; if (C.geo) delete C.geo[tk.name]; if (C.boxes) delete C.boxes[tk.name]; post.push({ type: 'coord', x: here.x, y: here.y, tikzName: tk.name }); }
+          const ls = labelShapes(C, parseOpts(tk.opts), { kind: 'rect', c: { ...here }, U: { x: 0, y: 0 }, V: { x: 0, y: 0 } }, st.color);
           if (ls) post.push(...ls);
         }
         continue;
@@ -1472,6 +1490,13 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         // midway (or pos=) on the rectangle just drawn: that far from its first corner to its second; otherwise the
         // node is at the current point (e.g. after a coordinate)
         const R = along && lastRect && lastRect.b === cur ? lastRect : null;
+        // (a node before any point, \path node (q) {q} -- …: at the origin, as TikZ puts it)
+        // (a node placed of another, above left=of b, on a path: TikZ's positioning, which only \node statements read)
+        if (no.some((o: any) => (PLACE_ANCHOR[o.k] && /\bof\b/.test(String(o.v ?? ''))) || OLD_OF.includes(o.k))) { C.warnings.push('a node on a path placed of another node'); continue; }
+        // (a node with a place of its own on a path, node (U2) at (0,3), or before any point, \path node (q) {q} -- …:
+        // not drawn here, so the statement stays code, written with its nodes as they are)
+        if (toks[i - 1]?.t === 'at') { C.warnings.push('a node at a point of its own on a path'); continue; }
+        if (!R && !cur) { C.warnings.push('a node before any point of its path'); continue; }
         nodeAt(tk, no, R ? { x: R.a.x + (R.b.x - R.a.x) * lab.labelPos, y: R.a.y + (R.b.y - R.a.y) * lab.labelPos } : cur);
         continue;
       }
@@ -1784,6 +1809,9 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       const h = Math.abs(dir.x) > 1e-3 ? (dir.x > 0 ? 'west' : 'east') : '', v = Math.abs(dir.y) > 1e-3 ? (dir.y < 0 ? 'south' : 'north') : '';
       const own = lastOpt(settings, 'anchor')?.v?.trim();
       const t = textShape(C, text, settings.filter((x: any) => !/^(shift|xshift|yshift|label distance|name|anchor)$/.test(x.k)), at, inherit, own || [v, h].filter(Boolean).join(' ') || 'center');
+      // (a label named, label={[name=aLabel]below:…}: code after it names its node)
+      const nm = String(lastOpt(settings, 'name')?.v ?? '').trim();
+      if (nm) { t.nodeName = nm; C.names[nm] = { x: t.x, y: t.y }; (C.kinds ||= {})[nm] = 'node'; }
       delete t._box; out.push(t);
     }
     return out;
@@ -2175,6 +2203,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       if (c === '=' ) { k = q + 1; continue; }
       if (c === '#' && /\d/.test(s[q + 1])) { k = q + 2; continue; }
       if (c === '\\' && first) { const m = /^\\[a-zA-Z@]+/.exec(s.slice(q)); if (m) { k = q + m[0].length; first = false; continue; } }
+      if (c === '*' && first) { k = q + 1; continue; } // \DeclareMathOperator*{…}
       break;
     }
     return k;
@@ -2192,9 +2221,12 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
   }
   // \foreach \x [opts] in {list} body — body a {group}, another \foreach or one statement
   function foreachParse(s: any, j: any, depth = 0) : any {
-    const m = /^\s*(?=((?:\\[a-zA-Z@]+\s*(?:\/\s*)?)+))\1(\[[^\]]*\])?\s*in\s*/.exec(s.slice(j));
-    if (!m) return { end: semiEnd(s, j) };
-    const vars = m[1].split('/').map((v) => v.trim()).filter(Boolean);
+    // (\foreach[evaluate=…] \x in …: its options before the variables, as well as after them)
+    const m0 = /^\s*(\[[^\]]*\])?\s*(?=((?:\\[a-zA-Z@]+\s*(?:\/\s*)?)+))\2(\[[^\]]*\])?\s*in\s*/.exec(s.slice(j));
+    if (!m0) return { end: semiEnd(s, j) };
+    const both = [m0[1], m0[3]].filter(Boolean).map((x: string) => x.slice(1, -1)).join(', ');
+    const m: any = [m0[0], m0[2], both ? `[${both}]` : undefined];
+    const vars = m[1].split('/').map((v: string) => v.trim()).filter(Boolean);
     let k = j + m[0].length, list = '';
     if (s[k] === '{') { const e = matchClose(s, k, '{', '}'); if (e < 0) return { end: s.length }; list = s.slice(k + 1, e); k = e + 1; } else { const e = /^[^\s{\\]+/.exec(s.slice(k)); list = e ? e[0] : ''; k += list.length; }
     while (/\s/.test(s[k])) k++;
@@ -2229,11 +2261,19 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     const out: any[] = [];
     if ((FOREACH_PASSES += vals.length) > 100000) { C.warnings.push('\\foreach makes too many passes: no preview'); return []; }
     vals.forEach((v, n) => {
-      const parts = f.vars.length > 1 ? v.replace(/^\{|\}$/g, '').split('/') : [v];
+      // (pgffor: a value's own braces come off, then 3/{N-1} splits at its top level /, each part's braces off too)
+      const unbrace = (x: string) => { x = x.trim(); return x[0] === '{' && matchClose(x, 0, '{', '}') === x.length - 1 ? x.slice(1, -1) : x; };
+      const parts = f.vars.length > 1 ? splitTop(unbrace(v), '/').map(unbrace) : [v];
       let body = f.body;
       const P = { ...C, macros:new Map(C.macros) };
       const replace = (text: string, nm: string, value: string) => text.replace(/\\[A-Za-z@]+/g, token => token === nm ? value : token);
-      f.vars.forEach((nm: any, q: any) => { body = replace(body,nm,`{${(parts[q] ?? parts[parts.length - 1]).trim()}}`); P.macros.set(nm.slice(1),(parts[q] ?? parts[parts.length - 1]).trim()); });
+      // (each value in braces, as one argument, unless it has $ in it: $\x$ with \x=$i$ is $$i$$ in TeX, ${$i$}$ an error)
+      // (and a plain name as it is where it names a node, (\nodename) or (\from.east): ({A}) names nothing)
+      f.vars.forEach((nm: any, q: any) => {
+        const val = (parts[q] ?? parts[parts.length - 1]).trim();
+        if (/^[\w -]+$/.test(val)) body = body.replace(new RegExp('\\(\\s*' + nm.replace(/[\\@]/g, '\\$&') + '(?![A-Za-z@])', 'g'), '(' + val);
+        body = replace(body, nm, val.includes('$') ? val : `{${val}}`); P.macros.set(nm.slice(1), val);
+      });
       if (count) { body = replace(body,count[1],String(n+1)); P.macros.set(count[1].slice(1),String(n+1)); }
       const saved = MAC; MAC=P.macros;
       try {
@@ -2650,6 +2690,13 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
   const SEMI = new Set(['pic', 'matrix', 'graph', 'datavisualization', 'calendar', 'spy', 'pattern', 'shadedraw']);
   const DEFS = new Set(['tikzset', 'tikzstyle', 'def', 'gdef', 'edef', 'xdef', 'let', 'newcommand', 'renewcommand', 'providecommand', 'definecolor', 'colorlet', 'pgfmathsetmacro', 'pgfmathtruncatemacro',
     'pgfmathparse', 'pgfplotsset', 'pgfdeclarelayer', 'pgfsetlayers', 'usetikzlibrary', 'tikzmath', 'pgfkeys', 'newlength', 'setlength', 'pgfmathsetlengthmacro', 'tikzcdset', 'ctikzset', 'pgfdeclarepatternformonly', 'pgfdeclarepattern', 'pgfdeclarehorizontalshading', 'pgfdeclareverticalshading', 'pgfdeclareradialshading', 'pgfdeclarefunctionalshading', 'pgfdeclareplotmark', 'pgfdeclarearrow', 'forestset', 'useforestlibrary', 'newcounter', 'setcounter', ...TDPLOT,
+    // more preamble definitions a picture's code may use: functions, pgfplots libraries, environments, boxes, switches
+    'pgfmathdeclarefunction', 'usepgfplotslibrary', 'newenvironment', 'renewenvironment', 'DeclareMathOperator', 'DeclareRobustCommand',
+    'NewDocumentCommand', 'RenewDocumentCommand', 'ProvideDocumentCommand', 'DeclareDocumentCommand', 'NewExpandableDocumentCommand',
+    'RenewExpandableDocumentCommand', 'ProvideExpandableDocumentCommand', 'DeclareExpandableDocumentCommand', 'NewDocumentEnvironment',
+    'RenewDocumentEnvironment', 'DeclareMathAlphabet', 'SetMathAlphabet', 'DeclareSymbolFont', 'SetSymbolFont', 'DeclareSymbolFontAlphabet',
+    'DeclareMathSymbol', 'DeclareMathDelimiter', 'DeclareMathAccent', 'DeclareFontFamily', 'DeclareFontShape', 'pgfdeclaredecoration', 'pgfdeclaremetadecoration', 'pgfdeclareshape', 'newif', 'newsavebox', 'sbox', 'savebox',
+    'newcolumntype', 'DeclareSIUnit', 'sisetup', 'tikzfading', 'pgfdeclareimage', 'newtoggle', 'newbool',
     'centering', 'small', 'footnotesize', 'scriptsize', 'tiny', 'normalsize', 'large', 'Large', 'LARGE', 'huge', 'Huge', 'bfseries', 'itshape', 'sffamily', 'ttfamily', 'rmfamily', 'color', 'selectfont', 'fontsize']);
   // nesting (environments, loops in loops) past 64 levels is not read: hostile input would overflow the stack.
   // FOREACH_PASSES bounds the passes of nested loops (400 × 400 × 400 … would never finish).
@@ -2682,6 +2729,12 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     const scopeIssue = () => (C.scopes || []).map((L: any) => L.issue).filter(Boolean).reverse();
     // one statement: shapes when exact, else one code object previewing them
     const done = (start: any, end: any, made: any, issues: any, extra: Record<string, any> = {}) => {
+      // \coordinate (x) at (2,0) node {…}: the named point as well as the node (kept as code, the code names it)
+      if (C.leadCoord) {
+        const L = C.leadCoord; C.leadCoord = null;
+        if (made.length && !extra.raw) made = [L, ...made];
+        extra = { ...extra, names: [L.tikzName, ...(extra.names || [])] };
+      }
       if (C.chainPending) {
         const P = C.chainPending; C.chainPending = null;
         for (const t of ['names', 'geo', 'boxes', 'kinds']) if (C[t]?.[P.name] && P.alias !== P.name) C[t][P.alias] = C[t][P.name];
@@ -2756,7 +2809,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       if (bs < 0) break;
       const m = s.slice(bs).match(/^\\([a-zA-Z@]+)\*?/);
       if (!m) { i = bs + 2; continue; }
-      const name = m[1];
+      let name = m[1];
       let j = bs + m[0].length;
       const w0 = C.warnings.length;
       const issues = () => C.warnings.slice(w0);
@@ -2784,6 +2837,15 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
           if (s[i] === '[') {
             const e2 = matchClose(s, i, '[', ']');
             const str = s.slice(i + 1, e2);
+            // an empty scope that starts a branch or chain ({[start branch=c2 going above]}): it draws nothing, but the
+            // nodes after it continue what it started, so it is kept as code
+            const empty = e2 > 0 && /^\s*\\end\{scope\}/.exec(s.slice(e2 + 1));
+            if (empty && /\b(?:start|continue) (?:branch|chain)\b/.test(str)) {
+              const end = e2 + 1 + empty[0].length;
+              i = end;
+              if (!preview) done(bs, end, [], ['an empty scope that starts a chain or branch is kept as code'], { raw: true });
+              continue;
+            }
             const { xf, rest, unresolved } = readXf(C, parseOpts(str));
             const shape = rest.some((x) => x.k === 'transform shape' && x.v !== 'false');
             // `transparency group, opacity=x` is how a translucent shape exports: the opacity belongs to the shapes inside
@@ -2910,8 +2972,17 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         done(bs, f.end, made, ['\\foreach is kept as code', ...P.warnings], { raw: true, why: [...new Set((E?.why || []).map((w: string) => w.replace(/^(in the loop: )+/, '')).filter((w: string) => !P.warnings.includes(w) && !/^\\foreach is kept as code$/.test(w)))].slice(0, 4) });
         continue;
       }
-      if (DEFS.has(name)) {
+      if (DEFS.has(name) || C.userDefs?.has(name)) {
         let end = argsEnd(s, j);
+        // \let\a=\b or \let\a\b: two tokens, the = between them optional
+        if (name === 'let') { const m = /^\s*(?:\\[A-Za-z@]+|\\.)\s*=?\s*(?:\\[A-Za-z@]+|\\.|[^\s])/.exec(s.slice(j)); if (m) end = j + m[0].length; }
+        // \def\a(#1,#2)#3{…}: its parameter text, then its body
+        if (/^[gex]?def$/.test(name)) {
+          const m = /^\s*(?:\\[A-Za-z@]+|\\.)[^{}\n]*\{/.exec(s.slice(j));
+          const pm = /^\s*\\([A-Za-z@]+)([^{}\n]*)\{/.exec(s.slice(j));
+          if (pm) (C.userParams ||= new Map()).set(pm[1], pm[2]);
+          if (m) { const e = matchClose(s, j + m[0].length - 1, '{', '}'); if (e > 0) end = e + 1; }
+        }
         const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
         i = end;
         // (a size, series or family switch lasts to the end of its scope, as a TeX group does: the nodes after it
@@ -2985,8 +3056,10 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       }
       if (name in PATHS || name === 'node' || name === 'coordinate' || SEMI.has(name)) {
         const k = semiEnd(s, j);
-        const stmt = s.slice(j, k - 1);
+        let stmt = s.slice(j, k - 1);
         i = k;
+        // \coordinate (A) at (…) coordinate (B) at (…) …: a path of named points, each one of them
+        if (name === 'coordinate' && tokenizePath(C, 'coordinate ' + stmt.trim()).filter((t: any) => t.t === 'node' && t.coordinate).length > 1) { name = 'path'; stmt = 'coordinate ' + stmt; }
         if (name in PATHS) {
           // (a \clip clips everything after it to the end of its scope: kept as code, and so is what it clips)
           const clipScope = () => { const L = innermost(C); if (L && !/\\clip/.test(L.issue || '')) L.issue = [L.issue, 'drawn under a \\clip kept as code'].filter(Boolean).join('; '); };
@@ -3049,6 +3122,13 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
           if (t.t === 'coord' && !at) { at = coord(C, t.raw); hasAt = true; }
         }
         if (!node) { styUsed = null; if (!preview) done(bs, k, [], ['not understood'], { raw: true }); continue; }
+        // \coordinate (x) at (2,0) node {…}: the point named, then the node there
+        const lead = name === 'coordinate' ? toks.find((t: any) => t.t === 'node') : null;
+        if (lead && lead !== node && lead.coordinate && lead.name && at) {
+          C.names[lead.name] = toAbs(C, at); (C.kinds ||= {})[lead.name] = 'coordinate'; if (C.boxes) C.boxes[lead.name] = { w: 0, h: 0, pt: true }; if (C.geo) delete C.geo[lead.name];
+          const p = applyXf([{ type: 'dot', cx: at.x, cy: at.y, r: 0 }], C.scopes || []).map((d: any) => ({ x: d.cx, y: d.cy }))[0];
+          if (!preview) C.leadCoord = { type: 'coord', x: p.x, y: p.y, tikzName: lead.name };
+        }
         const missingAt = hasAt && !at;
         at = at || { x: 0, y: 0 };
         // placed by name: at=(n1.east) (kept as code), or the positioning library's right=1cm of n1: the node
@@ -3208,6 +3288,12 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
           const xf = own.xf.map((x: any) => x.scale !== undefined ? { ...x, px: at.x, py: at.y } : x);
           styUsed = null; done(bs, k, applyXf([blk.shape], [...(C.scopes || []), { xf, shape: true }]), [...nodeIss(), ...blk.issues], { names }); continue;
         }
+        // a node holding a picture of its own (an axis in a \begin{tikzpicture} in the node) no block reads: code
+        if (/\\begin\{tikzpicture\}|\\tikz\b|\\begin\{axis\}/.test(node.text || '')) {
+          styUsed = null;
+          if (!preview) done(bs, k, [], ['a picture in a node is kept as code'], { raw: true, at, names });
+          continue;
+        }
         if (node.text.trim()) {
           let tbox: any = null;
           const make = () => {
@@ -3232,6 +3318,8 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
             keepStyles(made, su, make, C);
             const t = made[0];
             if (node.name && t) {
+              // (a matrix cell's name, m-1-1, is its own: the matrix's statement holds the others)
+              if (C.cellBoxes) t.nodeName = node.name;
               const b = TD.bbox(t); C.boxes[node.name] = { w: b.w, h: b.h };
               if (tbox) (C.geo ||= {})[node.name] = { kind: 'rect', c: { x: t.x, y: t.y }, U: { x: tbox.hw, y: 0 }, V: { x: 0, y: tbox.hh } };
               C.names[node.name] = { x: t.x, y: t.y };
@@ -3316,8 +3404,24 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       }
       // anything else: its arguments (and a ; right after them) are one statement, kept as code
       let end = argsEnd(s, j);
-      const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
-      if (/^\s*[([]/.test(s.slice(end)) || /^\s*(node|--)/.test(s.slice(end))) end = semiEnd(s, end); // \tkzDraw-like commands with path syntax
+      // (the source's own \def\Current[#1][#2](#3)(#4)#5#6[#7]{…}: its (…) are arguments too, and it ends after them)
+      const params = C.userParams?.get(name);
+      // (a parameter text ending in ; reads to the next ;: \def\binary[…] (#4) to (#5) node #6 and (#7) node #8;)
+      if (params != null && /;\s*$/.test(params)) end = semiEnd(s, j);
+      else if (params != null && params.includes('(')) {
+        for (let q = j; ;) {
+          while (q < s.length && /[ \t]/.test(s[q])) q++;
+          const c = s[q];
+          if (c !== '{' && c !== '[' && c !== '(') break;
+          const e = matchClose(s, q, c, c === '{' ? '}' : c === '[' ? ']' : ')');
+          if (e < 0) break;
+          end = q = e + 1;
+        }
+        const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
+      } else {
+        const semi = /^[ \t]*;/.exec(s.slice(end)); if (semi) end += semi[0].length;
+        if (/^\s*[([]/.test(s.slice(end)) || /^\s*(node|--)/.test(s.slice(end))) end = semiEnd(s, end); // \tkzDraw-like commands with path syntax
+      }
       i = end;
       if (preview) { C.warnings.push(`\\${name} not drawn`); continue; }
       if (/^(documentclass|usepackage|title|author|date)$/.test(name)) continue;
@@ -3362,10 +3466,56 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
   // the first shape of a statement also holds its source: src (from the end of the previous statement, so
   // comments and scope lines come along), cut (where its own text starts in src), ctx (the scopes around it),
   // nm (names it defines). The picture's first statement holds open and N (statements), the last one tail.
+  // The scopes library's shorthand: {[options] … } at the start of a statement is \begin{scope}[options] … \end{scope},
+  // read and written as one (in both copies, so they stay the same length place for place up to each edit)
+  function scopesShorthand(s: string, o: string): [string, string] {
+    const ops: [number, number, string][] = []; // [where, how long, what]
+    const optEnds = new Set<number>(); // (where a shorthand's [options] end: { [a] { [b] … } } nests)
+    const closes = new Set<number>(); // (where a group read as a scope ends: {[a] …} {[b] …})
+    // (and where each \begin{tikzpicture}[…] or \begin{scope}[…] ends its options, brackets inside them and all)
+    for (const m of s.matchAll(/\\begin\{(?:tikzpicture|scope)\}\s*\[/g)) { const e = matchClose(s, m.index! + m[0].length - 1, '[', ']'); if (e > 0) optEnds.add(e); }
+    for (let i = 0; i < s.length; i++) {
+      // (graph syntax has groups of its own, {[edges=fermion] b -- c}, and \tikzmath's { … }; : \graph's, \diagram's,
+      // \feynmandiagram's and \tikzmath's argument is skipped whole)
+      const gm = s[i] === '\\' && /^\\(?:graph|diagram|feynmandiagram|tikzmath)(?![A-Za-z@])\s*\*?\s*(?:\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*)?\{/.exec(s.slice(i, i + 400));
+      if (gm) { const e = matchClose(s, i + gm[0].length - 1, '{', '}'); if (e > 0) { i = e; continue; } }
+      // (and a \def's parameter text and body: \def\binary … node #8;{…} has no statements of its own)
+      const dm = s[i] === '\\' && /^\\[gex]?def\s*\\[A-Za-z@]+[^{}]*\{/.exec(s.slice(i, i + 400));
+      if (dm) { const e = matchClose(s, i + dm[0].length - 1, '{', '}'); if (e > 0) { i = e; continue; } }
+      if (s[i] === '\\') { i++; continue; }
+      if (s[i] !== '{') continue;
+      let j = i + 1; while (j < s.length && /\s/.test(s[j])) j++;
+      let p = i - 1; while (p >= 0 && /\s/.test(s[p])) p--;
+      const prev = p < 0 ? '' : s[p];
+      // where a statement starts: after ;, the start, an \end{…}, \begin{scope}, a group read as a scope here, or a
+      // scope's options; not an argument's braces after a } (\pgfmathsetmacro{\x}{1}, a loop's body,
+      // \begin{sdblock}{alt}{[condition]})
+      const starts = prev === '' || prev === ';'
+        || (prev === '}' && (closes.has(p) || /\\(?:end\{[A-Za-z*]+\}|begin\{(?:scope|tikzpicture)\})$/.test(s.slice(Math.max(0, p - 40), p + 1))))
+        || (prev === ']' && optEnds.has(p));
+      if (!starts) continue;
+      const close = matchClose(s, i, '{', '}');
+      if (close < 0) continue;
+      // a bare group, {\color{gray} \draw …; }, is a scope too
+      if (s[j] !== '[') {
+        if (s[j] !== '\\') continue;
+        ops.push([i, 1, '\\begin{scope}'], [close, 1, '\\end{scope}']); closes.add(close);
+        continue;
+      }
+      const oe = matchClose(s, j, '[', ']');
+      if (oe > 0) optEnds.add(oe);
+      ops.push([i, j - i, '\\begin{scope}'], [close, 1, '\\end{scope}']); closes.add(close);
+    }
+    if (!ops.length) return [s, o];
+    ops.sort((a, b) => b[0] - a[0]);
+    for (const [at, n, w] of ops) { s = s.slice(0, at) + w + s.slice(at + n); o = o.slice(0, at) + w + o.slice(at + n); }
+    return [s, o];
+  }
   function importPicture(C: any, s: any, o: any, open: any) {
     STY = C.styles;
+    [s, o] = scopesShorthand(String(s), String(o));
     // (C.pointKinds: points known before the picture is read, a circuit's anchors)
-    Object.assign(C, unitVectors()); C.picAuto = []; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = { ...(C.pointKinds || {}) }; C.approx = null; C.kept = null; C.unresolved = new Set(); C.picIssue = null; C.base = []; C.nodeDist = undefined; C.nodeDistH = undefined; C.chains = {}; C.chainCur = null; C.chainPending = null; C.labelDist = undefined; C.boxes = {}; C.geo = {}; C.tkz = null; C.tkzClips = []; gtTip = null;
+    Object.assign(C, unitVectors()); C.picAuto = []; C.scopes = []; C.stmts = []; C.struct = []; C.kinds = { ...(C.pointKinds || {}) }; C.approx = null; C.kept = null; C.unresolved = new Set(); C.picIssue = null; C.base = []; C.nodeDist = undefined; C.nodeDistH = undefined; C.chains = {}; C.chainCur = null; C.chainPending = null; C.leadCoord = null; C.labelDist = undefined; C.boxes = {}; C.geo = {}; C.tkz = null; C.tkzClips = []; gtTip = null;
     const optM = open && /^\\begin\{tikzpicture\}\s*\[([\s\S]*)\]\s*$/.exec(blankComments(open));
     const optStr0 = optM ? optM[1] : '';
     C.picOptStr = optStr0; // (a \graph in the picture is a Graph block with them)
@@ -3423,7 +3573,13 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     if (odd.length) C.picIssue = 'picture options the shapes do not hold: ' + odd.join(', ');
     C.picXf = pictureXf.unresolved.length > 0;
     if (pictureXf.unresolved.length) C.picIssue = pictureXf.unresolved.join('; ');
-    const picCtx = rest.length ? [rest.join(', ')] : [];
+    // (not the \tikzset's keys: the preamble written with the picture sets them, and declare function twice is an error)
+    const norm = (x: string) => x.replace(/\s+/g, ' ').trim();
+    const setItems = new Set(splitTop(setOpts, ',').map(norm).filter(Boolean)), ownItems = new Set(splitTop(optStr0, ',').map(norm));
+    const ctxRest = rest.filter((x) => !setItems.has(x) || ownItems.has(x));
+    // (an item in braces, {y=(0,1mm)}, loses them in pgfkeys only straight after the comma: written after ", " it
+    // would keep them and be one key's name, and without them its own comma would split it)
+    const picCtx = ctxRest.length ? [ctxRest.map((x, n) => (n ? (x[0] === '{' ? ',' : ', ') : '') + x).join('')] : [];
     const read = parseStatements(C, s, o);
     // a tkz clip held as its region stays so only while nothing after it crosses that (src/domain/tkzeuclide.ts)
     if (C.tkzClips?.length) TD.tkz?.checkClips(C, read);
@@ -3700,6 +3856,18 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       Object.assign(C.colors, P.colors);
       C.qtPre = P.qtSets || [];
       C.preSrc = ps;
+      // the preamble's own commands that only define (\def\pgfmathsetmacroFPU#1#2{…\pgfmathsetmacro{#1}{#2}…}): a picture's
+      // statement calling one is a definition, as \pgfmathsetmacro is
+      C.userDefs = new Set<string>();
+      C.userParams = new Map<string, string>();
+      for (const m of ps.matchAll(/\\[gex]?def\s*\\([A-Za-z@]+)([^{}\n]*)\{/g)) C.userParams.set(m[1], m[2]);
+      for (const m of ps.matchAll(/\\(?:[gex]?def\s*\\([A-Za-z@]+)[^{}\n]*|(?:re)?newcommand\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?(?:\s*\[[^\]]*\])*\s*)\{/g)) {
+        const e = matchClose(ps, m.index! + m[0].length - 1, '{', '}');
+        if (e < 0) continue;
+        const body = ps.slice(m.index! + m[0].length, e);
+        if (/\\(?:pgfmath(?:set|truncate|setlength)macro|[gex]?def|let|pgfmathsmuggle|tikzset|pgfkeys)\b/.test(body) && !/\\(?:draw|path|node|fill|filldraw|shade|shadedraw|coordinate|pic|foreach|clip|matrix|begin|tikz)\b/.test(body)) C.userDefs.add(m[1] || m[2]);
+      }
+      C.dvipsFirst = /\bdvipsnames\b/.test(ps) && !/\bsvgnames\b/.test(ps);
       // a definition read with @ a letter (after \makeatletter, as in \renewcommand{\small}{\@setfontsize…}) keeps it:
       // written alone, \@setfontsize would be \@ and letters (and \small would call itself without end)
       const atLetter = (i: number) => { const a = ps.lastIndexOf('\\makeatletter', i), b = ps.lastIndexOf('\\makeatother', i); return a >= 0 && a > b; }; // (comments blanked)
@@ -3707,11 +3875,12 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         .map((st: any) => { const t = po.slice(st.start, st.end).trim(); return atLetter(st.start) && /\\[A-Za-z]*@/.test(t) ? `\\makeatletter\n${t}\n\\makeatother` : t; })
         // not the lines DiagramTeX's own preamble adds (quantikz compatibility, pgfplots compat)
         .filter((t: any) => !/^\\pgfplotsset\{compat=[^}]*\}$/.test(t));
-      preDefs = defStmts.join('\n');
+      preDefs = fontsInUse(defStmts, s.slice(preEnd)).join('\n');
       // the preamble's macro definitions (\newcommand, \def, \DeclareMathOperator …) also come back as `macros`, for
       // the file's own (page.macros, src/core/doc-macros.ts): its formulas are drawn with them. The picture keeps its
       // copy, so it stays whole when copied elsewhere; the export writes each command once (the file's definition).
-      const mac = macrosOfPreamble(po);
+      // (font setup only as far as a maths command uses it: fontsInUse)
+      const mac = macrosOfPreamble(po, (texts) => fontsInUse(texts, s.slice(preEnd), true));
       if (mac) macroDefs = [mac];
       if (mac && TD.math?.useMacros) TD.math.useMacros([TD.math.macroText, mac].filter(Boolean).join('\n'));
     }
@@ -3742,7 +3911,15 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       let r = q; while (r < bodyS.length && /\s/.test(bodyS[r])) r++;
       let inner = q;
       if (bodyS[r] === '[') { const b0 = optsEnd(bodyS, r), b = b0 >= 0 ? b0 : bodyS.indexOf(']', r); if (b >= 0 && bodyS.indexOf(END, b + 1) >= 0) inner = b + 1; }
-      const e = bodyS.indexOf(END, inner);
+      // its own \end: a picture in one of its nodes (\node {\begin{tikzpicture} … \end{tikzpicture}};) ends first
+      let e = -1;
+      for (let k = inner, depth = 0; ;) {
+        const b = bodyS.indexOf(BEG, k), x = bodyS.indexOf(END, k);
+        if (x < 0) break;
+        if (b >= 0 && b < x) { depth++; k = b + BEG.length; continue; }
+        if (!depth) { e = x; break; }
+        depth--; k = x + END.length;
+      }
       if (e < 0) break;
       found.push({ at: p, end: e + END.length, open: p, inner, len: e - inner });
       p = bodyS.indexOf(BEG, e + END.length);
@@ -3752,7 +3929,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     for (const b of bodyS.matchAll(/\\begin\{circuitikz\}[\s\S]*?\\end\{circuitikz\}/g))
       if (!inPic(b.index)) found.push({ at: b.index, end: b.index + b[0].length, cz: bodyO.slice(b.index, b.index + b[0].length) });
     // (a tikz-cd diagram too, whose options may hold TikZ code of their own: execute at end picture={\draw …})
-    for (const b of bodyS.matchAll(/\\begin\{tikzcd\}[\s\S]*?\\end\{tikzcd\}|\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|\\begin\{sequencediagram\}[\s\S]*?\\end\{sequencediagram\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
+    for (const b of bodyS.matchAll(/\\begin\{tikzcd\}[\s\S]*?\\end\{tikzcd\}|\\begin\{quantikz\}[\s\S]*?\\end\{quantikz\}|\\begin\{forest\}[\s\S]*?\\end\{forest\}|\\begin\{ZX\}[\s\S]*?\\end\{ZX\}|\\begin\{tikztimingtable\}[\s\S]*?\\end\{tikztimingtable\}|\\begin\{sequencediagram\}[\s\S]*?\\end\{sequencediagram\}|\\begin\{blochsphere\}[\s\S]*?\\end\{blochsphere\}|(?:\\bytefieldsetup\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*)*\\begin\{bytefield\}[\s\S]*?\\end\{bytefield\}/g))
       // (a tikzpicture inside a tikzcd cell is read as that picture, so the tikzcd is not taken whole)
       if (!inPic(b.index) && !found.some((f: any) => f.at > b.index! && f.at < b.index! + b[0].length)) found.push({ at: b.index, end: b.index + b[0].length, bare: bodyO.slice(b.index, b.index + b[0].length) });
     // a body that is chemfig code (\chemfig, a \schemestart scheme), its TikZ only inside \chemmove{…} or a bond's […]:
@@ -3789,7 +3966,10 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         const q = circuitBlock(f.cz, false, czDoc), kept = String(q?.raw || '').split('\n').filter((l: string) => l.trim() && !/^\s*%/.test(l.trim()) && !czDrawsNothing(l));
         if (q && !q.items.some((it: any) => !TD.cz.isWire(it) && it.part !== 'text') && kept.length && !kept.some((l: string) => /\bto\s*\[/.test(l))) q.items = [];
         if (q && q.items.length) { blocks.push({ type: 'diagram', shapes: withDefs([q], preDefs, C) }); continue; }
-        const shapes = importPicture(C, bodyS.slice(f.at, f.end).replace(/\\(begin|end)\{circuitikz\}(\[[^\]]*\])?/g, (m: any) => ' '.repeat(m.length)), bodyO.slice(f.at, f.end), '');
+        // (the environment's \begin and \end out of both copies: the code as written would otherwise keep the \begin
+        // in its first statement and lose the \end)
+        const unwrap = (x: string) => x.replace(/\\(begin|end)\{circuitikz\}(\[[^\]]*\])?/g, (m: any) => ' '.repeat(m.length));
+        const shapes = importPicture(C, unwrap(bodyS.slice(f.at, f.end)), unwrap(bodyO.slice(f.at, f.end)), '');
         blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
         continue;
       }
@@ -3805,7 +3985,12 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       if (f.bare) {
         const q = `\\node at (0,0) {${f.bare}};`;
         const shapes = importPicture(C, f.plain ? `\\node at (0,0) {${f.plain}};` : q, q, '');
-        for (const x of shapes) delete x.tex;
+        for (const x of shapes) {
+          delete x.tex;
+          // kept as code (its block couldn't read it): an environment that is a picture of its own goes in the node
+          // between \pgfinterruptpicture and \endpgfinterruptpicture, as the blocks write theirs
+          if (x.type === 'tikz' && typeof x.code === 'string') x.code = x.code.replace(/^\\node at \(0,0\) \{(\\begin\{(tikzcd|quantikz|forest|ZX|tikztimingtable|sequencediagram|blochsphere)\}[\s\S]*\\end\{\2\})\};$/, '\\node at (0,0) {\\pgfinterruptpicture%\n$1%\n\\endpgfinterruptpicture};');
+        }
         // with the preamble's definitions (a forest tree's \forestset styles, its macros …), as a picture's
         blocks.push({ type: 'diagram', shapes: withDefs(shapes, preDefs, C) });
         continue;
@@ -4016,7 +4201,9 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     const rest = list.filter((x) => !TD.cz.styleOpt(x));
     let shapes;
     try { shapes = importPicture(C, s2.slice(e, end), o2.slice(e, end), `\\begin{tikzpicture}${rest.length ? `[${rest.join(', ')}]` : ''}`); } finally { delete C.pointKinds; }
-    const q = { ...TD.TYPES.cz.create({ x: 0, y: 0 }, {}), items: P.items, raw: P.set, x: 0, y: 0, size: czFontSize(P.set) || 'normalsize', id: uid8() };
+    // (macro definitions among its settings are the picture's, read with the rest: written once, not again in the block)
+    const set = String(P.set || '').split('\n').filter((l: string) => !/^\s*\\(?:(?:re)?newcommand|providecommand|[gex]?def|let|DeclareRobustCommand|(?:New|Renew|Provide|Declare)DocumentCommand)(?![A-Za-z@])/.test(l)).join('\n');
+    const q = { ...TD.TYPES.cz.create({ x: 0, y: 0 }, {}), items: P.items, raw: set, x: 0, y: 0, size: czFontSize(P.set) || 'normalsize', id: uid8() };
     const first = P.spans[0][0] - e, stmts = C.stmts || [];
     let at = shapes.findIndex((x: any) => x.tex && stmts[x.tex.k] && stmts[x.tex.k].start >= first);
     if (at < 0) at = shapes.length;
@@ -4081,6 +4268,27 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
   const DRAW_PKGS = new Set(['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'quantikz', 'tikz-feynman', 'forest', 'chemfig', 'tikz-timing', 'karnaugh-map', 'bytefield', 'pgf-umlcd', 'pgf-umlsd', 'tikz-chemlab', 'blochsphere',
     'zx-calculus', 'tikz-3dplot', 'tkz-euclide', 'pgfornament', 'xy', 'siunitx', 'bm', 'mathtools', 'physics', 'tikzpeople', 'pgf-pie', 'smartdiagram', 'tikz-qtree', 'tikz-qtree-compat', 'tikz-network', 'pgfgantt', 'bodegraph', 'pst-circ',
     'amsmath', 'amssymb', 'amsfonts', 'mathrsfs', 'stmaryrd', 'upgreek', 'esint', 'dsfont', 'bbm', 'tipa']);
+  // A preamble's font setup goes with its pictures only as far as they use it: a math symbol or alphabet whose command
+  // the document (or another definition) uses, the symbol fonts those name, and the font families and shapes those
+  // name or the document selects. The rest would load fonts nothing draws with, which the in-browser TeX may not have
+  // (mathabx's mathx).
+  const MATH_CMD = /^\\(?:DeclareMath(?:Symbol|Delimiter|Accent|Radical|Alphabet)|DeclareSymbolFontAlphabet|SetMathAlphabet)\s*\{?\s*\\([A-Za-z]+)/;
+  const SYM_FONT = /^\\(?:DeclareSymbolFont|SetSymbolFont)\s*\{\s*([^{}]+?)\s*\}/;
+  const FONT_FAM = /^\\Declare(?:FontFamily|FontShape)\s*\{\s*([^{}]*?)\s*\}\s*\{\s*([^{}]+?)\s*\}/;
+  // (fileLevel: for the file's own macros, which formulas typed later use too: every maths command, and what it needs)
+  function fontsInUse(stmts: string[], body: string, fileLevel = false): string[] {
+    const kind = (x: string) => MATH_CMD.test(x.trim()) ? 'cmd' : SYM_FONT.test(x.trim()) ? 'sym' : FONT_FAM.test(x.trim()) ? 'fam' : '';
+    if (!stmts.some(kind)) return stmts;
+    const others = stmts.filter((x) => !kind(x)).join('\n'), text = body + '\n' + others;
+    const keep = new Set<string>();
+    for (const x of stmts) { const m = MATH_CMD.exec(x.trim()); if (m && (fileLevel || new RegExp(`\\\\${m[1]}(?![A-Za-z@])`).test(text))) keep.add(x); }
+    const args = (xs: string[]) => new Set(xs.flatMap((x) => [...x.matchAll(/\{\s*([^{}\\]+?)\s*\}/g)].map((m) => m[1])));
+    const named = args([...keep]);
+    for (const x of stmts) { const m = SYM_FONT.exec(x.trim()); if (m && named.has(m[1])) keep.add(x); }
+    const named2 = args([...keep]);
+    for (const x of stmts) { const m = FONT_FAM.exec(x.trim()); if (m && (named2.has(m[2]) || new RegExp(`\\{\\s*${m[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}`).test(body))) keep.add(x); }
+    return stmts.filter((x) => !kind(x) || keep.has(x));
+  }
   // the preamble's definitions go with each picture, as a code object that exports them to the preamble
   function withDefs(shapes: any, defs: any, C: any) {
     // Definitions are source metadata when the whole figure is native, not drawing objects.

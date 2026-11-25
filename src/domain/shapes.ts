@@ -2,7 +2,7 @@ import { measurementElement } from './measurement';
 import { labelImage, onLabelFontsChange, prepareLabelFont } from './label-image';
 import { runtime as TD } from '../runtime';
 import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai, THAI_BREAK_DEF, THAI_PDF, type TexEngine } from '../core/doc-fonts';
-import { definedNames, preambleLines, withoutDefinitions } from '../core/doc-macros';
+import { declaredFonts, definedNames, fontsKnown, preambleLines, withoutDefinitions } from '../core/doc-macros';
 import { closesAt } from '../core/tex-scan';
 import { textModeMath } from './math-rewrite';
 // Shape definitions: geometry, handles, SVG rendering and TikZ export.
@@ -907,7 +907,10 @@ import { textModeMath } from './math-rewrite';
   /** The pictures' preamble definitions (X.preDefs) without those of commands the file's macros define. */
   TD.preDefsWithout = (X: any): string[] => {
     const names = definedNames(String(X.macros || ''));
-    return [...(X.preDefs || [])].map((t: string) => withoutDefinitions(t, names)).filter((t: string) => t.trim());
+    // (and without a symbol-font statement naming a font a package of the source's declared: preambleLines says why)
+    const fonts = declaredFonts([String(X.macros || ''), ...(X.preDefs || [])].join('\n'));
+    const known = (t: string) => t.split('\n').filter((l) => fontsKnown(l, fonts)).join('\n');
+    return [...(X.preDefs || [])].map((t: string) => known(withoutDefinitions(t, names))).filter((t: string) => t.trim());
   };
   TD.macroPreamble = (X: any, have: string[] = []) => {
     const text = String(X.macros || '');
@@ -1969,13 +1972,24 @@ import { textModeMath } from './math-rewrite';
     const pre = ['\\usepackage{tikz}'];
     // the old quantikz library and quantikz2 both define the quantikz environment: one of them
     if (X.libs.has('quantikz2')) X.libs.delete('quantikz');
-    const libs = [...X.libs], compat = TD.preambleCompat(X);
+    // pgfplots' libraries (pgfplots.fillbetween …) load after pgfplots, as \usepgfplotslibrary
+    // (fillbetween is also loaded as a TikZ library by that name)
+    const plotLib = (l: string) => l.startsWith('pgfplots.') || l === 'fillbetween';
+    const plotLibs = [...new Set([...X.libs].filter(plotLib).map((l: string) => l.replace(/^pgfplots\./, '')))];
+    if (plotLibs.length) X.pkgs.add('pgfplots');
+    const libs = [...X.libs].filter((l: string) => !plotLib(l)), compat = TD.preambleCompat(X);
     pre.push(...compat.before);
     if (libs.length) pre.push(`\\usetikzlibrary{${libs.join(', ')}}`);
-    if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}');
+    if (X.pkgs.has('pgfplots')) pre.push('\\usepackage{pgfplots}', '\\pgfplotsset{compat=1.18}', ...(plotLibs.length ? [`\\usepgfplotslibrary{${plotLibs.join(', ')}}`] : []));
     // forest with its libraries: 'forest', 'forest[edges]' … become one \usepackage[edges]{forest}
     const forest = [...X.pkgs].filter((p) => /^forest\b/.test(p));
-    for (const p of X.pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && !/^forest\b/.test(p) && !p.startsWith('svgcolor:')) pre.push(p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : p === 'svg' ? TD.texImages.SVG_PKG : TD.lint ? TD.lint.packageLine(p) : `\\usepackage{${p}}`);
+    // circuitikz with siunitx for its unit labels (circuitikz:siunitx)
+    const czOpt = X.pkgs.has('circuitikz:siunitx');
+    if (czOpt) X.pkgs.add('circuitikz');
+    // hyperref after the rest, and cleveref after it (each says so when it isn't)
+    const LAST = ['hyperref', 'cleveref'], rank = (p: string) => LAST.indexOf(p);
+    const pkgs = [...X.pkgs].sort((a: string, b: string) => rank(a) - rank(b));
+    for (const p of pkgs) if (p !== 'pgfplots' && p !== 'xy:color' && p !== 'circuitikz:siunitx' && !/^forest\b/.test(p) && !p.startsWith('svgcolor:')) pre.push(p === 'circuitikz' && czOpt ? '\\usepackage[siunitx]{circuitikz}' : p === 'tikz-feynman' ? '\\usepackage[compat=1.1.0]{tikz-feynman}' : p === 'xy' ? `\\usepackage[all${X.pkgs.has('xy:color') ? ',color' : ''}]{xy}` : p === 'svg' ? TD.texImages.SVG_PKG : TD.lint ? TD.lint.packageLine(p) : `\\usepackage{${p}}`);
     if (forest.length) {
       const fl = [...new Set(forest.map((p) => (/\[(.*)\]/.exec(p) || [])[1]).filter(Boolean))];
       pre.push(`\\usepackage${fl.length ? `[${fl.join(', ')}]` : ''}{forest}`);
@@ -2315,14 +2329,19 @@ import { textModeMath } from './math-rewrite';
       }
       X.refs = refMap(s, shapes, n, X);
       let code, placed = null;
+      // code kept as written, in place, takes its scopes as the statements' do: shared with its neighbours in the same
+      // ones (a chain started in a scope goes on through it), not one copy each
+      const ownCtx = s.type === 'tikz' && s.kind !== 'defs' && !s.pre && (s.ctx || []).length && !(Math.abs(s.x || 0) > 1e-6 || Math.abs(s.y || 0) > 1e-6) ? s.ctx : null;
       try {
-        code = namedCode(s, X) || styledCode(s, X) || shapeCode(s, X);
+        code = ownCtx ? shapeCode({ ...s, ctx: [] }, X) : namedCode(s, X) || styledCode(s, X) || shapeCode(s, X);
         placed = posCode(s, code, shapes, n);
         if (placed) code = placed;
       } finally { X.refs = null; }
       // a node other statements still name keeps its name, as a coordinate where the text is (a named point
       // renamed here keeps its old name the same way, for the code kept as written that uses it)
-      const old = t && t.nm && t.i === 0 ? t.nm.filter((nm: any) => !(s.type === 'coord' && nm === s.tikzName)) : [];
+      // (not one a named point of the same statement still writes: \coordinate (A) at … coordinate (B) at …)
+      const sibling = (nm: any) => shapes.some((q: any) => q !== s && q.type === 'coord' && q.tikzName === nm && q.tex && t && q.tex.p === t.p && q.tex.k === t.k);
+      const old = t && t.nm && t.i === 0 ? t.nm.filter((nm: any) => !(s.type === 'coord' && nm === s.tikzName) && !sibling(nm)) : [];
       // a node that was on a chain: written where it is, then put back in its chain (\chainin does not move it),
       // so the nodes after it kept as written still follow it (a text node takes its name back for that)
       let chainNm = s.chain && code ? s.nodeName || null : null;
@@ -2331,19 +2350,37 @@ import { textModeMath } from './math-rewrite';
         if (m) { code = code.replace(m[0], `\\node${m[1] || ''} (${old[0]}) at (`); chainNm = old[0]; }
         else if (code.includes(`(${old[0]})`)) chainNm = old[0];
       }
+      // a block written as a node (a table, a tabular in a node) takes the name the code still uses on that node
+      if (code && old.length && !placed && !chainNm && s.type !== 'text' && s.type !== 'coord') {
+        const m = /^\\node(\[(?:[^\[\]]|\[[^\[\]]*\])*\])?\s*at\s*\(/.exec(code);
+        if (m) code = code.replace(m[0], `\\node${m[1] || ''} (${old[0]}) at (`) + old.slice(1).map((nm: any) => `\n\\coordinate (${nm}) at (${old[0]});`).join('');
+      }
       if (code && old.length && !placed && !chainNm && !nativeChanged(s) && (s.type === 'text' || s.type === 'coord')) code += '\n' + old.map((nm: any) => `\\coordinate (${nm}) at ${X.c(s.x, s.y)};`).join('\n');
       if (code && chainNm) code += `\n\\chainin (${chainNm})${s.chain.name && s.chain.name !== 'chain' ? ` [on chain=${s.chain.name}]` : ''};`;
-      if (code) items.push({ code: mark([s.id], code), ctx: [], group: exportGroup(s), ids: [s.id] });
+      if (code) items.push({ code: mark([s.id], code), ctx: ownCtx || [], group: exportGroup(s), ids: [s.id] });
       n++;
     }
     // What an imported picture drew on the background layer comes first among its shapes (it lies under the rest), but
     // its code may name nodes made after it: written back where it stood among the picture's statements (the layer
     // puts it underneath wherever it is written).
-    if (items.some((it: any) => it.layer)) {
-      const rest = items.filter((it: any) => !it.layer);
-      for (const it of items.filter((it: any) => it.layer)) {
-        const q = rest.findIndex((r: any) => r.at && r.at[0] === it.at[0] && r.at[1] > it.at[1]);
-        rest.splice(q < 0 ? rest.length : q, 0, it);
+    // (an object written from what it is, not its statement, stands where its statement stood: s.tex's p and k)
+    // (and code kept from the background layer is that, written as its statement or not)
+    {
+      const src = new Map<any, any>(shapes.map((s: any) => [s.id, s]));
+      const txOf = (r: any) => (r.ids || []).map((id: any) => src.get(id)?.tex).find((x: any) => x && x.p != null && x.k != null);
+      for (const it of items) if (!it.layer && (it.ids || []).some((id: any) => { const s = src.get(id); return s && s.type === 'tikz' && (s.tex?.ctx || []).some(onLayer); })) it.layer = true;
+      const atOf = (r: any) => r.at || (() => { const tx = txOf(r); return tx ? [tx.p, tx.k] : null; })();
+      for (const it of items) if (it.layer && !it.at) it.at = atOf(it);
+    }
+    if (items.some((it: any) => it.layer && it.at)) {
+      const src = new Map<any, any>(shapes.map((s: any) => [s.id, s.tex]));
+      const atOf = (r: any) => r.at || (() => { const tx = (r.ids || []).map((id: any) => src.get(id)).find((x: any) => x && x.p != null && x.k != null); return tx ? [tx.p, tx.k] : null; })();
+      const rest = items.filter((it: any) => !(it.layer && it.at));
+      // (after the last statement of the picture before it, so every name it uses is made first, wherever the rest are)
+      for (const it of items.filter((it: any) => it.layer && it.at)) {
+        let q = -1;
+        rest.forEach((r: any, n: number) => { const a = atOf(r); if (a && a[0] === it.at[0] && a[1] < it.at[1]) q = n; });
+        rest.splice(q + 1, 0, it);
       }
       items.splice(0, items.length, ...rest);
     }
@@ -2368,24 +2405,80 @@ import { textModeMath } from './math-rewrite';
     };
     // consecutive statements from the same scopes share them, as any export writes them (a \clip or a definition in a
     // scope holds for the statements after it there); switches inside a scope end with it (TeX's group, pgf's state)
-    const out: string[] = [];
-    for (let a = 0; a < items.length;) {
-      const key = JSON.stringify([items[a].ctx, items[a].group]);
-      let b = a + 1;
-      while (b < items.length && JSON.stringify([items[b].ctx, items[b].group]) === key) b++;
-      const run = items.slice(a, b);
-      if (!items[a].group && !items[a].ctx.length) { const r = switched(run, shown); out.push(...r.lines); shown = r.cur; }
-      else {
+    // A definition stays in those of its source's scopes that a statement next to it is in (\clip … \pgfmathsetmacro …
+    // \draw in a picture's [scale=2] is one scope, the clip holding for the draw; asin(w) of the picture's declare
+    // function sees it), unless a statement written after those scopes names what it defines: a scope ends what
+    // \pgfmathsetmacro, \def and \tikzset said in it.
+    const J = (x: any) => JSON.stringify(x);
+    const defOnly = (it: any) => !it.group && !it.ctx.length && it.ids?.length
+      && it.ids.every((id: any) => { const s = byId.get(id); return s && s.type === 'tikz' && s.kind === 'defs' && !s.pre; });
+    const shared = (a: any[], b: any[]) => { let k = 0; while (k < a.length && k < b.length && J(a[k]) === J(b[k])) k++; return a.slice(0, k); };
+    const within = (c: any[], P: any[]) => P.length <= c.length && P.every((x: any, k: number) => J(x) === J(c[k]));
+    // what definitions define: macros (\x), styles (name/.style) and tikz-3dplot's coordinate styles
+    const definedBy = (code: string) => {
+      const out: RegExp[] = [];
+      const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      for (const m of code.matchAll(/\\(?:pgfmath(?:set|truncate|setlength)macro|(?:re)?newcommand\*?|providecommand\*?|[gex]?def|let|newlength|newsavebox|newif)\s*\{?\s*\\([A-Za-z@]+)/g)) out.push(new RegExp(`\\\\${esc(m[1])}(?![A-Za-z@])`));
+      for (const m of code.matchAll(/([A-Za-z][\w -]*?)\s*\/\.(?:style|append style|code|estyle|pic)\b/g)) out.push(new RegExp(`\\b${esc(m[1].trim())}\\b`));
+      for (const m of code.matchAll(/\\tikzstyle\s*\{\s*([^{}]+?)\s*\}/g)) out.push(new RegExp(`\\b${esc(m[1])}\\b`));
+      // (colours, functions, layers, lengths and fadings by their names)
+      for (const m of code.matchAll(/\\(?:definecolor|colorlet|pgfmathdeclarefunction\*?|pgfdeclarelayer|tikzfading|pgfdeclareimage)\s*(?:\[[^\]]*\])?\s*\{\s*([^{}]+?)\s*\}/g)) out.push(new RegExp(`(?<![\\w@-])${esc(m[1])}(?![\\w@-])`));
+      for (const m of code.matchAll(/declare function\s*=\s*\{([^]*)\}/g)) for (const f of m[1].matchAll(/([A-Za-z_]\w*)\s*(?:\([^)]*\))?\s*=/g)) out.push(new RegExp(`\\b${esc(f[1])}\\b`));
+      if (/\\tdplotset(?:rotated|thetaplane)coords/.test(code)) out.push(/tdplot_rotated_coords/);
+      return out;
+    };
+    for (let i = 0; i < items.length;) {
+      if (!defOnly(items[i])) { i++; continue; }
+      let j = i;
+      while (j < items.length && defOnly(items[j])) j++;
+      const run = items.slice(i, j), src = run.flatMap((it: any) => it.ids.map((id: any) => byId.get(id).tex?.ctx || byId.get(id).ctx || []));
+      const near = (it: any) => !it || it.group ? [] : src.reduce((P: any[], c: any[]) => shared(P, c), it.ctx);
+      const PA = near(items[i - 1]), PB = near(items[j]);
+      const P = PA.length >= PB.length ? PA : PB;
+      if (P.length) {
+        const names = run.flatMap((it: any) => definedBy(it.code));
+        let k = j;
+        while (k < items.length && (within(items[k].ctx, P) || defOnly(items[k])) && !items[k].group) k++;
+        // (a later statement's scopes count: \begin{scope}[tdplot_rotated_coords] uses what \tdplotsetrotatedcoords set)
+        if (!items.slice(k).some((it: any) => names.some((re: RegExp) => re.test(it.code) || it.ctx.some((c: any) => re.test(String(c))))))
+          for (let q = i; q < j; q++) items[q] = { ...items[q], ctx: P };
+      }
+      i = j;
+    }
+    // consecutive statements share the scopes they have in common, outermost first, as the source wrote them (a
+    // \clip or a definition in a scope holds for the statements after it there); switches inside a scope end with it
+    // (TeX's group, pgf's state)
+    const emit = (run: any[], d: number, cur: boolean) => {
+      const lines: string[] = [];
+      for (let a = 0; a < run.length;) {
+        const it = run[a];
+        let b = a + 1;
+        if (it.group) {
+          // an export group: its statements in a scope of their own, with their scopes inside it
+          while (b < run.length && J([run[b].ctx, run[b].group]) === J([it.ctx, it.group])) b++;
+        } else if (it.ctx.length > d) {
+          while (b < run.length && !run[b].group && run[b].ctx.length > d && J(run[b].ctx[d]) === J(it.ctx[d])) b++;
+        } else {
+          const vis = shows(it);
+          if (vis !== null && vis !== cur) { lines.push(OPACITY(vis ? 1 : 0)); cur = vis; if (!vis) hidden = true; }
+          lines.push(it.code);
+          a++;
+          continue;
+        }
+        const sub = run.slice(a, b);
         // round the scope: on when a statement shown is in it (a transparency group is painted where it ends, with
         // the state round it), then switched inside, statement by statement
-        const vis = run.map(shows).filter((v: any) => v !== null);
-        if (vis.length && vis.some(Boolean) !== shown) { shown = vis.some(Boolean); out.push(OPACITY(shown ? 1 : 0)); if (!shown) hidden = true; }
-        const code = switched(run, shown).lines.join('\n');
-        if (items[a].group) out.push('\\begin{scope}\n  ' + TD.rawTikz.wrapCode(code, items[a].ctx).replace(/\n/g, '\n  ') + '\n\\end{scope}');
-        else out.push(TD.rawTikz.wrapCode(code, items[a].ctx));
+        const vis = sub.map(shows).filter((v: any) => v !== null);
+        if (vis.length && vis.some(Boolean) !== cur) { cur = vis.some(Boolean); lines.push(OPACITY(cur ? 1 : 0)); if (!cur) hidden = true; }
+        if (it.group) lines.push('\\begin{scope}\n  ' + TD.rawTikz.wrapCode(switched(sub, cur).lines.join('\n'), it.ctx).replace(/\n/g, '\n  ') + '\n\\end{scope}');
+        else lines.push(TD.rawTikz.wrapCode(emit(sub, d + 1, cur).lines.join('\n'), [it.ctx[d]]));
+        a = b;
       }
-      a = b;
-    }
+      return { lines, cur };
+    };
+    const top = emit(items, 0, shown);
+    shown = top.cur;
+    const out: string[] = top.lines;
     // what the picture draws as it ends (show background rectangle, framed, a background grid, spy) goes with its first
     // statement that draws, when that one is shown: its picture is the lowest, so that lies under the rest, once
     if (X.only) {
@@ -2507,9 +2600,25 @@ import { textModeMath } from './math-rewrite';
     shapes = reach.shapes;
     if (reach.note) (X.notes = X.notes || new Set()).add(reach.note);
     const pic = TD.tikzPicture(shapes, X);
-    // the maths and text styles in labels: their packages, and definitions for \mathbfit and \mathsfit
-    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(pic, { macros: X.macros, pkgs: X.pkgs, libs: X.libs }) : { pkgs: [], defs: [] };
+    // the maths and text styles in labels and in the pictures' preamble definitions: their packages, and definitions
+    // for \mathbfit and \mathsfit (a command those definitions define needs no package)
+    const defsText = [...(X.preDefs || [])].join('\n');
+    const need = TD.lint && TD.lint.mathNeeds ? TD.lint.mathNeeds(pic + '\n' + defsText, { macros: String(X.macros || '') + '\n' + defsText, pkgs: X.pkgs, libs: X.libs }) : { pkgs: [], defs: [] };
     for (const p of need.pkgs) X.pkgs.add(p);
+    // xcolor's named colours anywhere (a block's own code too: bytefield's \colorbitbox{WildStrawberry}), by value
+    // and the TikZ and pgfplots libraries a block's own code or a label uses (a forest tree's name path=)
+    if (TD.lint?.uses) {
+      const all = pic + '\n' + defsText, u = TD.lint.uses(all);
+      for (const l of u.libs) X.libs.add(l);
+      for (const p of ['pgfplots', 'circuitikz:siunitx']) if (u.pkgs.includes(p)) X.pkgs.add(p);
+      for (const p of TD.lint.colours(all)) X.pkgs.add(p);
+    }
+    // a one-command package for a command the file or the picture's preamble defines itself (\newcommand{\bm}…): not
+    // loaded, which would make that definition an error
+    if (TD.lint?.ownCommands) {
+      const own = TD.lint.ownCommands(String(X.macros || '') + '\n' + defsText);
+      for (const [p, c] of [['bm', 'bm'], ['mathrsfs', 'mathscr'], ['dsfont', 'mathds'], ['bbm', 'mathbbm']]) if (own.has(c)) X.pkgs.delete(p);
+    }
     // the file's macros: their packages with the rest, and their definitions before the pictures' own (which leave
     // out any command the file defines: TD.preDefsWithout)
     const mac = TD.macroPreamble(X);

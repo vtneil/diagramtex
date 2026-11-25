@@ -35,7 +35,9 @@ function dedent(code: any) {
 }
 // code inside scopes: the context it was written in (innermost last), then the move
 function wrapCode(code: any, ctx: any, shift: any) {
-  let out = code;
+  // (a path named in a scope of its own is known only inside it, unless the name is global: the code after it,
+  // in scopes of its own, still names it)
+  let out = (ctx && ctx.length) || shift ? String(code).replace(/\bname path(?!\s+global)(\s*=)/g, 'name path global$1') : code;
   for (const o of [...(ctx || [])].reverse()) out = `\\begin{scope}[${o}]\n  ${out.replace(/\n/g, '\n  ')}\n\\end{scope}`;
   if (shift) out = `\\begin{scope}[shift={${shift}}]\n  ${out.replace(/\n/g, '\n  ')}\n\\end{scope}`;
   return out;

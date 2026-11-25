@@ -56,6 +56,11 @@
     T.ok(!W(doc, "! LaTeX Error: File `tikz-network.sty' not found.").includes('tikz-network'), 'a package with options');
     T.eq(W(doc, "I did not find the tikz library 'hobby'"), doc.replace('arrows.meta, hobby', 'arrows.meta'));
     T.eq(W(doc, 'Undefined control sequence'), doc, 'anything else: unchanged');
+    // a font the engine hasn't: the source's setup of its family, the symbol font on it and its maths symbols go
+    const fonts = '\\usepackage{pifont}\n\\DeclareFontFamily{U} {MnSymbolA}{}\n\\DeclareFontShape{U}{MnSymbolA}{m}{n}{\n  <-6> MnSymbolA5\n  <6-> MnSymbolA6}{}\n\\DeclareSymbolFont{MnSyA} {U} {MnSymbolA}{m}{n}\n\\DeclareMathSymbol{\\medslash}{\\mathrel}{MnSyA}{210}\n\\newcommand{\\x}{1}\n';
+    const lessFonts = W(fonts, '! Font U/MnSymbolA/m/n/9=MnSymbolA9 at 9.0pt not loadable: Metric (TFM) file not found.');
+    T.ok(!/MnSy|medslash/.test(lessFonts) && lessFonts.includes('\\newcommand{\\x}{1}') && lessFonts.includes('pifont'), 'the family\'s statements left out:\n' + lessFonts);
+    T.ok(!W(fonts, '! Font U/pzd/m/n/10=pzdr at 10.0pt not loadable: Metric (TFM) file not found.').includes('pifont'), 'a package\'s own family: the package');
     const log = 'x\n! Undefined control sequence.\n<argument> \\pgfmathparse {\\myLen \n                                 }\nl.12 \\draw (0,0) -- (\\myLen\n                   ,1);\n';
     T.eq(KP().named('Undefined control sequence.', log), 'Undefined control sequence \\myLen', 'the command TeX didn\'t know');
     T.eq(KP().named('Missing $ inserted.', log), 'Missing $ inserted.');

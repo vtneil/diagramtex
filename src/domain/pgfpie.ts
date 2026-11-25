@@ -235,7 +235,13 @@ export function pgfPieTikz(s: any, X: any) {
   if (P.hideLabel && P.text !== 'none') o.push('hide label');
   if (P.before) o.push(`before number=${braced(P.before)}`);
   if (P.after !== pgfPieAfter(P.sum)) o.push(`after number=${P.after ? braced(P.after) : ''}`);
-  if (P.style !== 'thick') o.push(`style={${P.style}}`);
+  // (pgf-pie draws with [\pgfpie@style]: pgfkeys takes the macro whole as one key's name, so keys with values or a
+  // list go in a style of their own, which the pie names)
+  let pre = '';
+  if (P.style !== 'thick') {
+    if (/[=,]/.test(P.style)) { pre = `\\tikzset{tdpie/.style={${P.style}}}\n`; o.push('style=tdpie'); }
+    else o.push(`style={${P.style}}`);
+  }
   if (P.pinDistance != null) o.push(`pin distance=${f(P.pinDistance)}pt`);
   if (P.align) o.push(`/tikz/every label/.append style={align=${P.align}}`, `/tikz/every pin/.append style={align=${P.align}}`);
   if ((s.size ?? 'normalsize') !== 'normalsize') {
@@ -243,5 +249,5 @@ export function pgfPieTikz(s: any, X: any) {
     if (fo) o.push(`font={${fo.slice(5)}}`);
   }
   const data = rows.map((x: any) => `${x.raw}/${item(x.label)}`).join(', ');
-  return `\\pie${o.length ? `[${o.join(', ')}]` : ''}{${data}}`;
+  return `${pre}\\pie${o.length ? `[${o.join(', ')}]` : ''}{${data}}`;
 }

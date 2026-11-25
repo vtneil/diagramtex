@@ -63,13 +63,14 @@
 \begin{tikzpicture}\node at (0,0) {$\norm{x} \in \R$};\end{tikzpicture}
 \end{document}`;
     const res = TD.importLatex(src);
-    T.eq(res.macros, '\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\norm}[1]{\\lVert#1\\rVert}', 'the movable definitions (not the one with @)');
+    T.eq(res.macros, '\\newcommand{\\R}{\\mathbb{R}}\n\\newcommand{\\norm}[1]{\\lVert#1\\rVert}\n\\makeatletter\n\\newcommand{\\at}{\\@ifnextchar}\n\\makeatother',
+      'the definitions, the one with @ between \\makeatletter and \\makeatother');
     const id = TD.app.newDoc('macros import', [], null, null);
     TD.app.setMode('diagram');
     // the file already defines \norm its own way: it keeps it
     TD.app.setMacros('\\newcommand{\\norm}[1]{\\|#1\\|}');
     TD.app.begin(); TD.app.takeMacros(res); TD.app.commit();
-    T.eq(TD.state.doc.page.macros, '\\newcommand{\\norm}[1]{\\|#1\\|}\n\\newcommand{\\R}{\\mathbb{R}}');
+    T.eq(TD.state.doc.page.macros, '\\newcommand{\\norm}[1]{\\|#1\\|}\n\\newcommand{\\R}{\\mathbb{R}}\n\\makeatletter\n\\newcommand{\\at}{\\@ifnextchar}\n\\makeatother');
     const shapes = res.blocks.flatMap((b) => b.shapes || []);
     const code = TD.toTikz(shapes, { standalone: true });
     T.eq((code.match(/\\newcommand\{\\norm\}/g) || []).length, 1, '\\norm once:\n' + code);
@@ -118,5 +119,43 @@
     T.ok(pre.includes('\\newcommand{\\norm}[1]{\\lVert#1\\rVert}') && pre.includes('\\DeclareMathOperator{\\Tr}{Tr}'), 'both in the preamble:\n' + pre);
     T.tex('doc-macros-document', tex);
     cleanup(id);
+  });
+
+  T.test('doc macros: definitions with @ or in expl3 syntax come with their \\makeatletter or \\ExplSyntaxOn, and export', () => {
+    const pre = String.raw`\documentclass{article}
+\usepackage{amsmath}
+\makeatletter
+\DeclareRobustCommand{\ggeq}{\mathrel{\mathpalette\gg@eq\gg}}
+\newcommand{\gg@eq}[2]{\mathrel{\ooalign{$\m@th#1#2$\cr\hidewidth$\m@th#1-$\hidewidth}}}
+\makeatother
+\ExplSyntaxOn
+\NewDocumentCommand{\twice}{m}{ \prg_replicate:nn { 2 } { #1 } }
+\ExplSyntaxOff
+\begin{document}\end{document}`;
+    const res = TD.importLatex(pre);
+    T.ok(/\\makeatletter\n\\newcommand\{\\gg@eq\}[^\n]*\n\\makeatother/.test(res.macros) && /\\ExplSyntaxOn\n\\NewDocumentCommand\{\\twice\}[^\n]*\n\\ExplSyntaxOff/.test(res.macros),
+      'each with its wrapper:\n' + res.macros);
+    T.ok(/\\makeatletter\n\\DeclareRobustCommand\{\\ggeq\}/.test(res.macros), '\\ggeq uses \\gg@eq, so it is wrapped too:\n' + res.macros);
+    const id = TD.app.newDoc('macros at', [text('a', 0, '$a \\ggeq b$ \\twice{x}')], null, null);
+    TD.app.setMode('diagram');
+    TD.app.setMacros(res.macros);
+    const code = TD.toTikz(TD.state.doc.shapes, { standalone: true });
+    T.tex('doc-macros-at-expl', code);
+    cleanup(id);
+  });
+
+  T.test('doc macros: a preamble\'s maths alphabets and symbols stay; a symbol font no command uses is left out', () => {
+    const pre = String.raw`\documentclass{article}
+\DeclareMathAlphabet\mathbfcal{OMS}{cmsy}{b}{n}
+\DeclareFontFamily{OT1}{pzc}{}
+\DeclareFontShape{OT1}{pzc}{m}{it}{<-> s * [1.13] pzcmi7t}{}
+\DeclareMathAlphabet{\mathpzc}{OT1}{pzc}{m}{it}
+\DeclareFontFamily{U}{mathx}{\hyphenchar\font45}
+\DeclareFontShape{U}{mathx}{m}{n}{<-> mathx10}{}
+\DeclareSymbolFont{mathx}{U}{mathx}{m}{n}
+`;
+    const mac = String(TD.importLatex(pre + '\\begin{document}\\end{document}').macros || '');
+    T.ok(mac.includes('\\mathbfcal') && mac.includes('\\mathpzc') && mac.includes('{OT1}{pzc}{m}{it}'), 'the alphabets and their family:\n' + mac);
+    T.ok(!/mathx/.test(mac), 'no symbol font no command uses:\n' + mac);
   });
 }

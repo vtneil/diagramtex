@@ -11,8 +11,8 @@ import { compileApp } from '../scripts/compile.js';
 export const ROOT = path.resolve(import.meta.dirname, '..');
 export const args = process.argv.slice(2);
 export const DIST = args.includes('--dist') || args.includes('dist');
-/** dist/ or public/: the folder the app is served from */
-export const APP_DIR = path.join(ROOT, DIST ? 'dist' : 'public');
+/** dist/ or public/: the folder the app is served from (APP_DIR in the environment: another build, as a scratch one) */
+export const APP_DIR = process.env.APP_DIR ? path.resolve(process.env.APP_DIR) : path.join(ROOT, DIST ? 'dist' : 'public');
 export const APP_NAME = DIST ? 'dist' : 'public';
 export const positional = args.filter((a) => !a.startsWith('--') && a !== 'dist');
 export const flag = (name) => args.includes(name);

@@ -249,3 +249,25 @@ T.test('migration: block editor and panel TeX fields declare math vs text mode, 
   phyModal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
 });
 
+T.test('LaTeX suggestions sit over the text popup (both in the top layer)', async () => {
+  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const host = document.getElementById('stage');
+  const h = TD.input.popup(host, { text: '', at: () => [200, 40], onDone() {} });
+  try {
+    await frame();
+    const ta = document.querySelector('.td-pop-ta:not(.leaving)');
+    if (!ta) return; // the MathLive editor, which has its own suggestions
+    ta.focus(); ta.value = '$x \\fr'; ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    await frame();
+    const pop = document.getElementById('texComplete');
+    T.ok(!pop.hidden && pop.matches(':popover-open'), 'the list is open in the top layer');
+    // a point inside both boxes: the list must be the one hit
+    const a = ta.getBoundingClientRect(), b = pop.getBoundingClientRect();
+    const x = (Math.max(a.left, b.left) + Math.min(a.right, b.right)) / 2, y = (Math.max(a.top, b.top) + Math.min(a.bottom, b.bottom)) / 2;
+    if (Math.max(a.left, b.left) < Math.min(a.right, b.right) && Math.max(a.top, b.top) < Math.min(a.bottom, b.bottom))
+      T.ok(pop.contains(document.elementFromPoint(x, y)), 'the list is drawn over the text popup');
+    TD.texComplete.close();
+    T.ok(pop.hidden && !pop.matches(':popover-open'), 'closing leaves the top layer');
+  } finally { TD.texComplete.close(); h.close(); }
+});

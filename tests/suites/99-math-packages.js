@@ -87,6 +87,24 @@
     T.tex('math-packages-own', code);
     TD.app.cmd.docAction?.('del', id);
   });
+
+  T.test('math packages: any command or environment of a package TeX Live has loads it (src/domain/package-commands.ts)', () => {
+    const id = TD.app.newDoc('table packages', [
+      label('a', String.raw`$a \lesssim b \triangleq c$, $\llbracket x \rrbracket$, $\begin{gathered} a \\ b \end{gathered}$`),
+      label('b', String.raw`\contour{white}{Name}\xspace and \ding{51}, $\overleftrightarrow{AB}$, \href{https://example.org}{a link}, \cref{x}`),
+    ], null, null);
+    TD.app.setMode('diagram');
+    // the file's own \bm: no bm package (it would say "\bm already defined"); \xspace in a macro's body loads xspace
+    TD.app.setMacros(String.raw`\newcommand{\bm}[1]{\boldsymbol{#1}}
+\newcommand{\TR}{\textrm{true}\xspace}`);
+    const code = TD.toTikz(TD.state.doc.shapes, { standalone: true });
+    for (const p of ['amssymb', 'stmaryrd', 'amsmath', 'contour', 'xspace', 'pifont', 'hyperref', 'cleveref'])
+      T.ok(code.includes(`\\usepackage{${p}}`), p + ' in:\n' + code);
+    T.ok(!code.includes('{bm}'), 'no bm for the file\'s own \\bm:\n' + code);
+    T.ok(code.indexOf('{hyperref}') < code.indexOf('{cleveref}') && code.indexOf('{amsmath}') < code.indexOf('{hyperref}'), 'hyperref after the rest, cleveref last:\n' + code);
+    T.tex('math-packages-table', code);
+    TD.app.cmd.docAction?.('del', id);
+  });
 }
 
 T.test('math packages: siunitx and mhchem in text (no $) are drawn as formulas, and written as typed', () => {

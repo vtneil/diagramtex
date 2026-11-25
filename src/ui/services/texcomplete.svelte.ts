@@ -275,9 +275,19 @@ import TexComplete, { type TexCompleteModel } from '../TexComplete.svelte';
     if (!items.length) return close();
     field = el; start = cur.at;
     Object.assign(model, { open: true, idx: 0, rows: items.map((c: any) => ({ name: c.name, prev: c.ex ? qcPrev(c.ex) : c.prev ? render1(c.prev) : '', group: GROUP[c.group] ? caption(GROUP[c.group]) : c.group })) });
+    lift();
     place(el, cur.at);
   }
-  function close() { if (model.open) { model.open = false; flushSync(); } field = null; items = []; }
+  // The list is a manual popover: the text popup is in the top layer, where no z-index reaches, so the list goes
+  // there too, shown again on each opening so it lands above whatever popup was opened since.
+  function lift() {
+    try { if (!pop.matches(':popover-open')) pop.showPopover(); } catch { /* not in the page */ }
+  }
+  function close() {
+    if (model.open) { model.open = false; flushSync(); }
+    try { if (pop.matches(':popover-open')) pop.hidePopover(); } catch { /* not in the page */ }
+    field = null; items = [];
+  }
   function move(d: any) {
     if (!items.length) return;
     model.idx = (model.idx + d + items.length) % items.length;
@@ -333,7 +343,7 @@ import TexComplete, { type TexCompleteModel } from '../TexComplete.svelte';
   document.addEventListener('input', (e) => { if (quiet) return; if (isField(e.target)) update(e.target); else if (field) close(); }, true);
   // Capture phase: runs before each editor's own Enter / Esc handling.
   document.addEventListener('keydown', (e) => {
-    if (pop.hidden || e.target !== field) return;
+    if (!model.open || e.target !== field) return;
     const k = e.key;
     if (k === 'ArrowDown' || k === 'ArrowUp') { move(k === 'ArrowDown' ? 1 : -1); }
     else if ((k === 'Enter' && !e.shiftKey) || k === 'Tab') { accept(); }
@@ -357,7 +367,7 @@ import TexComplete, { type TexCompleteModel } from '../TexComplete.svelte';
   });
 
   // a key the open list takes on its field (the block editors, which listen on window first, leave these to it)
-  const owns = (e: KeyboardEvent) => !pop.hidden && !!field && e.target === field
+  const owns = (e: KeyboardEvent) => model.open && !!field && e.target === field
     && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab' || e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey));
   TD.texComplete = { get commands() { return list(); }, close, owns };
 })();

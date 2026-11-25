@@ -30,10 +30,34 @@ export interface ParsedMacros {
 export interface Environment { args: number; def?: string; begin: string; end: string }
 
 const DEFINERS = ['newenvironment', 'newcommand', 'renewcommand', 'providecommand', 'DeclareRobustCommand', 'NewDocumentCommand',
-  'RenewDocumentCommand', 'ProvideDocumentCommand', 'DeclareDocumentCommand', 'DeclareMathOperator',
+  'RenewDocumentCommand', 'ProvideDocumentCommand', 'DeclareDocumentCommand', 'NewExpandableDocumentCommand',
+  'RenewExpandableDocumentCommand', 'ProvideExpandableDocumentCommand', 'DeclareExpandableDocumentCommand', 'DeclareMathOperator',
   'newrobustcmd', 'renewrobustcmd', 'providerobustcmd', // etoolbox's, read as \newcommand
   'DeclarePairedDelimiter', 'DeclarePairedDelimiterX', 'DeclarePairedDelimiterXPP', 'def', 'gdef', 'edef', 'xdef', 'let'];
-const DEFINER_RE = new RegExp('\\\\(' + DEFINERS.join('|') + ')(?![A-Za-z@])', 'g');
+/**
+ * Preamble statements that set up what formulas use without defining a macro the engines could read (math alphabets,
+ * symbol fonts, column types, siunitx units and settings, counters): kept with the definitions so that exports write
+ * them, each with how many mandatory arguments it takes (optional ones are read where they stand).
+ */
+const SETUP: Record<string, number> = {
+  DeclareMathAlphabet: 5, SetMathAlphabet: 6, DeclareSymbolFont: 5, SetSymbolFont: 6, DeclareSymbolFontAlphabet: 2,
+  DeclareMathSymbol: 4, DeclareMathDelimiter: 6, DeclareMathAccent: 4, DeclareMathRadical: 5, DeclareFontFamily: 3,
+  DeclareFontShape: 6, newcolumntype: 2, DeclareSIUnit: 2, sisetup: 1, newcounter: 1, setcounter: 2,
+};
+const DEFINER_RE = new RegExp('\\\\(' + [...DEFINERS, ...Object.keys(SETUP)].join('|') + ')(?![A-Za-z@])', 'g');
+/** A setup statement's arguments from i: its end, and its first mandatory argument (what it is named by). */
+function readSetup(kind: string, t: string, i: number): { end: number; first: string } | null {
+  let first = '';
+  for (let n = 0; n < SETUP[kind];) {
+    const o = opt(t, i);
+    if (o) { i = o.end; continue; }
+    const a = arg(t, i);
+    if (!a) return null;
+    if (!n) first = a.v.trim();
+    i = a.end; n++;
+  }
+  return { end: i, first };
+}
 
 /** % comments dropped as TeX reads them (the comment, its newline and the next line's leading spaces); \% stays. */
 export function stripComments(text: string): string {
@@ -360,12 +384,22 @@ export function parseMacros(tex: string): ParsedMacros {
   DEFINER_RE.lastIndex = 0;
   for (let m; (m = DEFINER_RE.exec(t));) {
     if (depthAt(m.index)) continue;
+    if (SETUP[m[1]] !== undefined) {
+      // written as it is, for exports; the engines have nothing to read in it
+      const q = readSetup(m[1], t, m.index + m[0].length);
+      if (!q) { out.problems.push({ line: lineAt(m.index), name: '\\' + m[1], reason: 'unreadable' }); continue; }
+      out.statements.push({ text: t.slice(m.index, q.end).trim(), name: `\\${m[1]}{${q.first}}`, start: m.index, end: q.end });
+      DEFINER_RE.lastIndex = at = q.end;
+      continue;
+    }
     const r = readDefinition(m[1], t, m.index + m[0].length);
     if (!r) { out.problems.push({ line: lineAt(m.index), name: '\\' + m[1], reason: 'unreadable' }); continue; }
     out.statements.push({ text: t.slice(m.index, r.end).trim(), name: r.name, start: m.index, end: r.end });
     DEFINER_RE.lastIndex = at = r.end; // (its own braces balance)
-    // a name with @ (\@foo) needs \makeatletter, and the engines read @ as an ordinary character
-    if (r.name.includes('@')) { out.problems.push({ line: lineAt(m.index), name: r.name, reason: 'at' }); continue; }
+    // a name with @ (\@foo), or one used, needs \makeatletter, and the engines read @ as an ordinary character;
+    // expl3 code (\ExplSyntaxOn) has names with _ and :, which they can't read either
+    if (r.name.includes('@') || (regionAt(t, m.index).at && /\\[A-Za-z]*@/.test(out.statements[out.statements.length - 1].text))) { out.problems.push({ line: lineAt(m.index), name: r.name, reason: 'at' }); continue; }
+    if (regionAt(t, m.index).expl) { out.problems.push({ line: lineAt(m.index), name: r.name, reason: 'unreadable' }); continue; }
     if (r.problem) out.problems.push({ line: lineAt(m.index), name: r.name, reason: r.problem });
     if (r.body !== undefined) out.macros[r.name] = everyArgument(emptyTests(r.body), r.args || 0);
     if (r.helpers) for (const [k, v] of Object.entries(r.helpers)) out.macros[k] = emptyTests(v);
@@ -382,13 +416,36 @@ export function parseMacros(tex: string): ParsedMacros {
 }
 
 /**
- * Whether a definition can leave its preamble for the file's macros: not one that names or uses an @ command (\@foo),
- * which is read only between \makeatletter and \makeatother.
+ * Whether `i` in `t` (comments removed) is read after \makeatletter (before its \makeatother) and after \ExplSyntaxOn
+ * (before its \ExplSyntaxOff).
  */
-export const movable = (s: MacroStatement) => !/\\[A-Za-z]*@/.test(s.text);
-/** The macro definitions a preamble holds that can move to the file's macros, one statement per line. */
-export function macrosOfPreamble(preamble: string): string {
-  return parseMacros(preamble).statements.filter(movable).map((s) => s.text).join('\n');
+function regionAt(t: string, i: number): { at: boolean; expl: boolean } {
+  const after = (on: string, off: string) => { const a = t.lastIndexOf(on, i), b = t.lastIndexOf(off, i); return a >= 0 && a > b; };
+  return { at: after('\\makeatletter', '\\makeatother'), expl: after('\\ExplSyntaxOn', '\\ExplSyntaxOff') };
+}
+/**
+ * A definition as a preamble must hold it on its own: between \makeatletter and \makeatother when it was read there and
+ * names or uses an @ command (\@foo), which TeX reads as one name only so, and between \ExplSyntaxOn and \ExplSyntaxOff when it was
+ * read in expl3 syntax (`t`: the comment-free text it is in).
+ */
+function standalone(t: string, s: MacroStatement): string {
+  let text = s.text;
+  if (regionAt(t, s.start).expl) text = `\\ExplSyntaxOn\n${text}\n\\ExplSyntaxOff`;
+  if (regionAt(t, s.start).at && /\\[A-Za-z]*@/.test(s.text)) text = `\\makeatletter\n${text}\n\\makeatother`;
+  return text;
+}
+/** The definitions of `tex`, each as a preamble must hold it on its own. */
+function standaloneStatements(tex: string): { s: MacroStatement; text: string }[] {
+  const t = stripComments(String(tex || ''));
+  return parseMacros(t).statements.map((s) => ({ s, text: standalone(t, s) }));
+}
+/**
+ * The macro definitions a preamble holds, for the file's macros: one statement per line, with \makeatletter or
+ * \ExplSyntaxOn round those that need it.
+ */
+export function macrosOfPreamble(preamble: string, keep?: (texts: string[]) => string[]): string {
+  const texts = standaloneStatements(preamble).map((x) => x.text);
+  return (keep ? keep(texts) : texts).join('\n');
 }
 
 /**
@@ -398,19 +455,52 @@ export function macrosOfPreamble(preamble: string): string {
 export function mergeMacros(current: string, added: string): { text: string; added: string[]; kept: string[] } {
   const have = parseMacros(current), by = new Map(have.statements.map((s) => [s.name, s.text]));
   const lines = current.trim() ? [current.trim()] : [], add: string[] = [], kept: string[] = [];
-  for (const s of parseMacros(added).statements) {
-    if (!movable(s)) continue;
+  for (const { s, text } of standaloneStatements(added)) {
     const old = by.get(s.name);
-    if (old === undefined) { lines.push(s.text); by.set(s.name, s.text); add.push(s.name); }
+    if (old === undefined) { lines.push(text); by.set(s.name, s.text); add.push(s.name); }
     else if (old !== s.text) kept.push(s.name);
   }
   return { text: lines.join('\n'), added: add, kept: [...new Set(kept)] };
 }
 
-/** The statements to write into a preamble, without those already in it. */
+// the arguments of a symbol-font statement that name a symbol font (1-based)
+const FONT_ARGS: Record<string, number[]> = {
+  DeclareSymbolFontAlphabet: [2], DeclareMathSymbol: [3], DeclareMathAccent: [3], DeclareMathDelimiter: [3, 5],
+  DeclareMathRadical: [2, 4], SetSymbolFont: [1],
+};
+// the symbol fonts LaTeX declares, and amsfonts' (amssymb's)
+const KNOWN_FONTS = new Set(['operators', 'letters', 'symbols', 'largesymbols', 'AMSa', 'AMSb']);
+/** The statements to write into a preamble, without those already in it. A statement naming a symbol font that
+ * isn't LaTeX's or declared among them (one a package of the source's declared: mathbbol's bbold) is left out: alone
+ * it is an error. */
+/** The symbol fonts `text` declares (\DeclareSymbolFont{name}…), with LaTeX's own. */
+export function declaredFonts(text: string): Set<string> {
+  const out = new Set(KNOWN_FONTS);
+  for (const m of text.matchAll(/\\DeclareSymbolFont\s*\{\s*([^{}]*?)\s*\}/g)) out.add(m[1]);
+  // (font families, as encoding/family: \DeclareFontShape{T1}{calligra} needs calligra's \DeclareFontFamily)
+  for (const m of text.matchAll(/\\DeclareFontFamily\s*\{\s*([^{}]*?)\s*\}\s*\{\s*([^{}]*?)\s*\}/g)) out.add(`${m[1]}/${m[2]}`);
+  return out;
+}
+/** Whether a statement names only symbol fonts in `declared` (any other statement: true). */
+export function fontsKnown(statement: string, declared: Set<string>): boolean {
+  const s = statement.trim(), m = /^\\([A-Za-z]+)/.exec(s), at = m && FONT_ARGS[m[1]];
+  if (m && m[1] === 'DeclareFontShape') {
+    // (a shape of a family that only a package of the source declared: calligra's T1/calligra)
+    const f = /^\\DeclareFontShape\s*\{\s*([^{}]*?)\s*\}\s*\{\s*([^{}]*?)\s*\}/.exec(s);
+    return !f || declared.has(`${f[1]}/${f[2]}`);
+  }
+  if (!at) return true;
+  const args: string[] = [];
+  for (let i = m![0].length, d = 0, from = -1; i < s.length; i++) {
+    const c = s[i];
+    if (c === '\\') { i++; continue; }
+    if (c === '{') { if (d++ === 0) from = i + 1; } else if (c === '}' && --d === 0) args.push(s.slice(from, i).trim());
+  }
+  return at.every((n) => args[n - 1] == null || declared.has(args[n - 1]));
+}
 export function preambleLines(macros: string, preamble: string[] = []): string[] {
-  const have = new Set(preamble.map((l) => l.trim()));
-  return parseMacros(macros).statements.map((s) => s.text).filter((l) => !have.has(l));
+  const have = new Set(preamble.map((l) => l.trim())), fonts = declaredFonts(macros);
+  return standaloneStatements(macros).filter((x) => !have.has(x.s.text) && !have.has(x.text) && fontsKnown(x.s.text, fonts)).map((x) => x.text);
 }
 
 /** The commands `macros` defines. */
@@ -428,5 +518,7 @@ export function withoutDefinitions(text: string, names: Set<string>): string {
   let out = '', at = 0;
   for (const s of cut) { out += t.slice(at, s.start); at = s.end; }
   out += t.slice(at);
+  // and the \makeatletter … \makeatother (or expl3) round a definition that was cut, now round nothing
+  for (let k = 0; k < 4; k++) out = out.replace(/\\makeatletter\s*\\makeatother/g, '').replace(/\\ExplSyntaxOn\s*\\ExplSyntaxOff/g, '');
   return out.split('\n').map((l) => l.replace(/\s+$/, '')).filter((l) => l.trim()).join('\n');
 }

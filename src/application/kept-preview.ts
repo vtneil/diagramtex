@@ -240,7 +240,52 @@ export function withoutMissing(doc: string, errors: string): string {
   });
   if (pkg) return drop(/(\\(?:usepackage|RequirePackage))(\[[^\]]*\])?\{([^{}]*)\}/g, pkg);
   if (lib) return drop(/(\\usetikzlibrary)()\{([^{}]*)\}/g, lib);
+  // a font this TeX hasn't (Font U/MnSymbolA/m/n/9=MnSymbolA9 … not loadable): the source's statements setting up its
+  // family, and the symbol fonts and maths symbols on it, are left out; a family a package's own .fd gives (pifont's
+  // pzd) takes the package. What used them is then undefined, which TeX goes past.
+  const fam = /Font ([^/\s]+)\/([^/\s]+)\/[^=]*=\S+ at [^ ]+ not loadable/.exec(errors);
+  if (fam) {
+    const less = withoutFontFamily(doc, fam[1], fam[2]);
+    if (less !== doc) return less;
+    const owner = FONT_PACKAGES.find(([re]) => re.test(fam[2]))?.[1];
+    if (owner) return drop(/(\\(?:usepackage|RequirePackage))(\[[^\]]*\])?\{([^{}]*)\}/g, owner);
+  }
   return doc;
+}
+// families a package's own font definitions give, and the package
+const FONT_PACKAGES: [RegExp, string][] = [[/^(pzd|psy)$/, 'pifont'], [/^math[abx]$/, 'mathabx'], [/^MnSymbol[A-F]$/, 'MnSymbol'], [/^wasy$/, 'wasysym'], [/^stmry$/, 'stmaryrd'], [/^(bbold|bbm)$/, 'bbm']];
+// how many arguments each font statement takes
+const FONT_STMTS: Record<string, number> = {
+  DeclareFontFamily: 3, DeclareFontShape: 6, DeclareFontSubstitution: 4, DeclareSymbolFont: 5, SetSymbolFont: 6,
+  DeclareMathSymbol: 4, DeclareMathDelimiter: 6, DeclareMathAccent: 4, DeclareMathRadical: 5, DeclareSymbolFontAlphabet: 2,
+  DeclareMathAlphabet: 5, SetMathAlphabet: 6,
+};
+/** `doc` without the statements setting up font family `fam` in encoding `enc`, and the symbol fonts and maths on it. */
+export function withoutFontFamily(doc: string, enc: string, fam: string): string {
+  const stmts: { from: number; to: number; kind: string; args: string[] }[] = [];
+  for (const m of doc.matchAll(/\\([A-Za-z]+)(?![A-Za-z])/g)) {
+    const n = FONT_STMTS[m[1]];
+    if (n == null) continue;
+    let i = m.index! + m[0].length;
+    const args: string[] = [];
+    while (args.length < n) {
+      while (/\s/.test(doc[i] || '')) i++;
+      if (doc[i] === '{') {
+        let d = 0, j = i;
+        for (; j < doc.length; j++) { if (doc[j] === '\\') { j++; continue; } if (doc[j] === '{') d++; else if (doc[j] === '}' && --d === 0) break; }
+        if (j >= doc.length) break;
+        args.push(doc.slice(i + 1, j).trim()); i = j + 1;
+      } else if (doc[i] === '\\') { const c = /^\\[A-Za-z@]+/.exec(doc.slice(i)); if (!c) break; args.push(c[0]); i += c[0].length; } else break;
+    }
+    if (args.length === n) stmts.push({ from: m.index!, to: i, kind: m[1], args });
+  }
+  const onFam = (s: any) => s.args.includes(fam) && s.args.includes(enc);
+  const sym = new Set(stmts.filter((s) => (s.kind === 'DeclareSymbolFont' || s.kind === 'SetSymbolFont') && onFam(s)).map((s) => s.args[0]));
+  const out = stmts.filter((s) => onFam(s) || ((/^DeclareMath|^DeclareSymbolFontAlphabet$/.test(s.kind)) && s.args.some((a) => sym.has(a))));
+  if (!out.length) return doc;
+  let r = doc;
+  for (const s of out.sort((a, b) => b.from - a.from)) r = r.slice(0, s.from) + r.slice(s.to);
+  return r;
 }
 // pictures TeX stopped in (the same for each statement in them), with its message
 const failed = new Map<string, string>();

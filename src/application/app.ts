@@ -251,7 +251,7 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
       const why: Record<string, string> = {
         optional: uiText('macros.why.optional', 'its optional argument is always its default here'),
         delimited: uiText('macros.why.delimited', 'its arguments are delimited, which formulas here can’t read'),
-        at: uiText('macros.why.at', 'a name with @ needs \\makeatletter, so it isn’t used here'),
+        at: uiText('macros.why.at', 'it uses names with @ (\\makeatletter), which formulas here can’t read; exports still write it'),
         unreadable: uiText('macros.why.unreadable', 'this definition couldn’t be read'),
       };
       const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
@@ -4097,13 +4097,14 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
   // ⌘V: what the system clipboard holds decides. A copy made in this app (in any of its windows) pastes its
   // shapes; anything else comes in through takeIn below. A browser that sends no paste event gets the shapes.
   let pasteTimer = 0, codeFailed = 0;
-  function pasteSoon() { clearTimeout(pasteTimer); pasteTimer = setTimeout(paste, 80); }
+  function pasteSoon() { clearTimeout(pasteTimer); pasteTimer = setTimeout(() => { if (!document.body.classList.contains('cz-open')) paste(); }, 80); }
   function ownCopy(text: any) {
     if (text === codeCopied) return true;
     const c: any = store.get(LS_CLIP, null);
     return !!(c && c.code && c.code === text);
   }
   document.addEventListener('paste', (e) => {
+    if (document.body.classList.contains('cz-open')) { clearTimeout(pasteTimer); pasteTimer = 0; return; }
     if (!pasteTimer || isTyping(e.target) || !$('#modal').hidden || !imp.hidden) return;
     clearTimeout(pasteTimer); pasteTimer = 0;
     const dt = e.clipboardData, text = (dt && dt.getData('text/plain')) || '', files = dt ? [...dt.files] : [];
@@ -5421,6 +5422,8 @@ import LayerList, { type LayerRow, type LayerListModel } from '../ui/LayerList.s
     // Ctrl/⌘ + = − 0 zoom the canvas (the Document view handles its own, in docview.ts)
     const z = zoomKey(e);
     if (inTool()) return; // Quick and Table handle their own keys (nothing to zoom there)
+    // an open block editor handles its own keys (its ⌘C, ⌘V and zoom are its own), even those it lets through
+    if (document.body.classList.contains('cz-open')) return;
     if (state.mode !== 'document') {
       if (z !== null) {
         if (!$('#modal').hidden || !imp.hidden) return; // a dialog is open: the page stays as it is
