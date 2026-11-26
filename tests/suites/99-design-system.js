@@ -31,6 +31,10 @@ T.test('menus: heading for an open submenu across the next row keeps it open; le
     ptr('pointerleave', a, x, y, b);
     await tick(380);
     T.ok(!a.classList.contains('open') && !menu.classList.contains('aiming'), 'resting on the way (300ms): it closes too');
+    ptr('pointerenter', a, ra.left + 20, ra.top + ra.height / 2);
+    a.querySelector(':scope > .sub .ctx-item').dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+    ptr('pointerleave', a, x, y, b);
+    T.ok(!a.classList.contains('open') && !menu.classList.contains('aiming'), 'leaving from inside the submenu: it closes at once');
   } finally { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); }
 });
 

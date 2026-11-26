@@ -10,6 +10,7 @@
   let { item, onpick }: { item: MenuItemSpec; onpick: (act: string) => void } = $props();
   let row: HTMLElement | undefined = $state();
   let sub: HTMLElement | undefined = $state();
+  let inSub = false; // where the pointer last was: in the submenu, or on the row
   // a submenu is placed beside its row, 4px clear, flipping left when there is no room (positionMenu)
   export function openSub(focus = false) {
     if (!row || !sub || item.disabled) return;
@@ -25,7 +26,12 @@
 {#if item.sub}
   <div bind:this={row} class={['ctx-item has-sub', item.disabled && 'dis'].filter(Boolean).join(' ')} role="menuitem" tabindex="-1" aria-haspopup="menu" aria-disabled={item.disabled || undefined} title={item.title}
     onpointerenter={() => { if (!aimingPast(row!, () => openSub())) openSub(); }}
-    onpointerleave={(e) => { if (e.relatedTarget instanceof Node && row?.contains(e.relatedTarget)) return; if (!(row?.classList.contains('open') && aimAt(row, sub!, e.clientX, e.clientY, closeSub))) closeSub(); }}
+    onpointerover={(e) => { inSub = !!sub?.contains(e.target as Node); }}
+    onpointerleave={(e) => {
+      if (e.relatedTarget instanceof Node && row?.contains(e.relatedTarget)) return;
+      // leaving the row itself for its open submenu: keep it open on the way; leaving from the submenu: close it now
+      if (!(!inSub && row?.classList.contains('open') && aimAt(row, sub!, e.clientX, e.clientY, closeSub))) closeSub();
+    }}
     >{@render lead()}<span class="arr" aria-hidden="true">›</span><div bind:this={sub} class="ctx sub"><Menu items={item.sub} {onpick} nested /></div></div>
 {:else}
   <button type="button" class={['ctx-item', item.danger && 'danger'].filter(Boolean).join(' ')} role={item.checked == null ? 'menuitem' : 'menuitemradio'} aria-checked={item.checked == null ? undefined : item.checked}
