@@ -10,7 +10,7 @@ import { escapeHtml } from '../core/html';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.59.2'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.59.3'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -1914,6 +1914,46 @@ import { escapeHtml } from '../core/html';
     if (t.translate) return t.translate(s, dx, dy);
     for (const [kx, ky] of t.pts) { s[kx] += dx; s[ky] += dy; }
     if (s.mc != null && s.type === 'line') s.mc += routeDir(s) === 'hh' ? dx : dy; // an elbow's middle moves with it
+  };
+  // A group resized from the box B to nb: each member goes where the box takes it. Points and boxes scale, and so do
+  // radii; line widths, arrow tips, a spring's coils, text and dots keep their size, as in TikZ, and text and blocks
+  // drawn at their own size move with their middle. A turned box (angle) scales along its own axes, as far as the
+  // group's stretch goes along them.
+  TD.scaleShape = function (s: any, B: any, nb: any) {
+    const t = (T as Record<string, any>)[s.type];
+    if (!t) return;
+    const sx = B.w > 0 ? nb.w / B.w : 1, sy = B.h > 0 ? nb.h / B.h : 1;
+    const X = (x: number) => nb.x + (x - B.x) * sx, Y = (y: number) => nb.y + (y - B.y) * sy;
+    const a = ((+s.angle || 0) * Math.PI) / 180, c = Math.cos(a), n = Math.sin(a);
+    const fu = Math.hypot(sx * c, sy * n), fv = Math.hypot(sx * n, sy * c); // along the shape's own x and y
+    const pts = () => { for (const [kx, ky] of t.pts) { s[kx] = X(s[kx]); s[ky] = Y(s[ky]); } };
+    const mid = () => { const b = TD.bbox(s), cx = b.x + b.w / 2, cy = b.y + b.h / 2; TD.translate(s, X(cx) - cx, Y(cy) - cy); };
+    switch (s.type) {
+      case 'poly': s.pts = s.pts.map(([x, y]: number[]) => [X(x), Y(y)]); return;
+      case 'region': s.rings = s.rings.map((r: number[][]) => r.map(([x, y]) => [X(x), Y(y)])); return;
+      case 'ellipse': pts(); s.rx *= fu; s.ry *= fv; return;
+      case 'arc': { const ry = s.ry > 0 ? s.ry : s.r; pts(); s.r *= fu; s.ry = ry * fv; if (Math.abs(s.ry - s.r) < 1e-9) delete s.ry; return; }
+      case 'ball': pts(); s.r *= Math.sqrt(sx * sy); return;
+      case 'dot': case 'coord': pts(); return;
+      case 'line': case 'curve': case 'spring': {
+        const hh = s.type === 'line' && s.mc != null && routeDir(s) === 'hh';
+        pts();
+        if (s.type === 'line' && s.mc != null) s.mc = hh ? X(s.mc) : Y(s.mc);
+        return;
+      }
+      case 'text':
+        pts();
+        if (s.tw > 0) s.tw *= fu;
+        if (s.th > 0) s.th *= fv;
+        return;
+    }
+    // a box of its own (a rectangle, symbol, picture or plot): its middle goes with the group, its sides scale
+    if (t.setHandle && [s.x, s.y, s.w, s.h].every((v) => typeof v === 'number')) {
+      const cx = X(s.x + s.w / 2), cy = Y(s.y + s.h / 2);
+      s.w *= fu; s.h *= fv; s.x = cx - s.w / 2; s.y = cy - s.h / 2;
+      return;
+    }
+    mid();
   };
   TD.bbox = function (s: any) {
     const t = (T as Record<string, any>)[s.type];

@@ -103,6 +103,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   let smartLines: SnapLine[] = [];
   let pointSnapCache: any = null;
   let guideMode: 'show' | 'locked' | 'off' = 'show';
+  const GRP_OUT = 7; // a group's frame (and its resize handles): this many screen px outside its members
   let selectedGuide: string | null = null;
   let guidePress: any = null;
   const activeGuides = () => guideMode === 'off' ? [] : home().guides || [];
@@ -2072,7 +2073,13 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     for (const s of sel) if (s.g) (groups.get(s.g) || groups.set(s.g, []).get(s.g)).push(s);
     for (const m of groups.values()) {
       const b = unionBox(m);
-      out.push(`<rect class="grp-box" x="${b.x - 7 / z}" y="${b.y - 7 / z}" width="${b.w + 14 / z}" height="${b.h + 14 / z}"/>`);
+      out.push(`<rect class="grp-box" x="${b.x - GRP_OUT / z}" y="${b.y - GRP_OUT / z}" width="${b.w + 2 * GRP_OUT / z}" height="${b.h + 2 * GRP_OUT / z}"/>`);
+    }
+    const G = !polyDraft && !arcDraft ? selFrame() : null;
+    if (G && !G.one) out.push(`<rect class="grp-box" x="${G.F.x}" y="${G.F.y}" width="${G.F.w}" height="${G.F.h}"/>`); // a group draws its own
+    if (G) for (const h of G.H) {
+      const q = 3.75 / z;
+      out.push(`<rect class="handle" data-handle="${h.k}" data-frame="1" x="${h.x - q}" y="${h.y - q}" width="${2 * q}" height="${2 * q}" style="cursor:${handleCursor({ type: 'rect' }, h.k)}"/>`);
     }
     if (arcDraft) {
       const d = arcDraft, c = d.cur, P = d.pts, L = (a: any, b: any) => out.push(`<line class="guide" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`);
@@ -2677,11 +2684,37 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const sel = selected();
     if (!sel.length || state.tool !== 'select' || !turnable(sel)) return null;
     let C = null;
+    const G = selFrame();
     if (sel.length === 1 && (TD.ROT_TYPES.has(sel[0].type) || sel[0].type === 'sym' || sel[0].type === 'arc')) C = TD.rotFrame(sel[0]);
-    if (!C) { const b = unionBox(sel); C = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]; }
+    if (!C) { const b = G ? G.F : unionBox(sel); C = [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]; }
     const cx = (C[0][0] + C[2][0]) / 2, cy = (C[0][1] + C[2][1]) / 2;
-    const H = sel.length === 1 ? TYPES[sel[0].type].handles(sel[0]) : []; // the resize handles actually drawn
+    const H = sel.length === 1 ? TYPES[sel[0].type].handles(sel[0]) : G ? G.H : []; // the resize handles actually drawn
     return { C, cx, cy, H };
+  }
+  // A selection of two or more objects (a group, several groups, loose shapes or a mix) is resized as one by eight
+  // handles on its frame, drawn GRP_OUT screen px outside what it holds: B is the box of its members, F the frame, H
+  // the handles on it, one whether it is one whole group (whose own frame F is). Null for one object or none.
+  function selFrame() {
+    const sel = selected();
+    if (sel.length < 2 || state.tool !== 'select') return null;
+    const B = unionBox(sel), o = GRP_OUT / state.view.zoom, F = { x: B.x - o, y: B.y - o, w: B.w + 2 * o, h: B.h + 2 * o };
+    return { B, F, H: TD.box.handles(F), one: !!sel[0].g && sel.every((s: any) => s.g === sel[0].g) };
+  }
+  // the members' box after a drag of handle k by (dx, dy): the opposite side holds, the box never turns inside out,
+  // and Shift at a corner keeps its proportions
+  function selResize(B: any, k: string, dx: number, dy: number, e: any) {
+    const MIN = 4 / state.view.zoom;
+    let x1 = B.x, y1 = B.y, x2 = B.x + B.w, y2 = B.y + B.h;
+    if (k.includes('w')) x1 = Math.min(x1 + dx, x2 - MIN);
+    if (k.includes('e')) x2 = Math.max(x2 + dx, x1 + MIN);
+    if (k.includes('n')) y1 = Math.min(y1 + dy, y2 - MIN);
+    if (k.includes('s')) y2 = Math.max(y2 + dy, y1 + MIN);
+    if (e.shiftKey && k.length === 2 && B.w > 0 && B.h > 0) {
+      const f = Math.max((x2 - x1) / B.w, (y2 - y1) / B.h), w = B.w * f, h = B.h * f;
+      if (k.includes('w')) x1 = x2 - w; else x2 = x1 + w;
+      if (k.includes('n')) y1 = y2 - h; else y2 = y1 + h;
+    }
+    return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
   }
   const insideQuad = (C: any, x: any, y: any) => {
     let sgn = 0;
@@ -2854,6 +2887,15 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       return;
     }
     const h = e.target.closest && e.target.closest('[data-handle]');
+    if (h && h.dataset.frame) {
+      const G = selFrame();
+      if (!G) return;
+      begin();
+      const hp = G.H.find((q: any) => q.k === h.dataset.handle);
+      drag = { mode: 'gresize', key: h.dataset.handle, B: G.B, hp, p0: p, orig: new Map(selected().map((s: any) => [s.id, clone(s)])) };
+      svg.style.setProperty('--drag-cur', h.style.cursor || 'move'); svg.classList.add('drag-cur');
+      return;
+    }
     if (h) {
       const hs = byId(h.dataset.hid);
       if (hs && hs.type === 'poly' && /^v\d+$/.test(h.dataset.handle)) {
@@ -3058,6 +3100,24 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
         render(); renderGeom();
         break;
       }
+      case 'gresize': {
+        // the handle snaps where a handle would (the grid, other shapes' anchors); the members follow the box
+        const k = drag.key, at = { x: drag.hp.x + p.x - drag.p0.x, y: drag.hp.y + p.y - drag.p0.y };
+        const q = snapPoint(at, e, new Set(drag.orig.keys()));
+        snapHint = q.anchor ? q : null;
+        const nb = selResize(drag.B, k, k.includes('w') || k.includes('e') ? q.x - drag.hp.x : 0, k.includes('n') || k.includes('s') ? q.y - drag.hp.y : 0, e);
+        for (const [id, o] of drag.orig) {
+          const s = byId(id);
+          for (const key of Object.keys(s!)) if (!(key in o)) delete s![key];
+          Object.assign(s!, clone(o));
+          TD.scaleShape(s, drag.B, nb);
+        }
+        detachFrom(selected(), state.sel);
+        showHint(`${Math.round((nb.w / (drag.B.w || 1)) * 100)}% × ${Math.round((nb.h / (drag.B.h || 1)) * 100)}%`, 600);
+        drag.moved = true;
+        render(); renderGeom();
+        break;
+      }
       case 'create': createMove(drag, p, e); break;
       case 'pencil': {
         const s = byId(drag.id), l = s!.pts[s!.pts.length - 1];
@@ -3135,7 +3195,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     drag = null; snapHint = null; linkHint = null; smartLines = [];
     svg.classList.remove('drag-cur', 'rot-zone');
     if (d.mode === 'create' || d.mode === 'pencil') { removeShape(d.id); state.sel.clear(); }
-    else if (d.mode === 'move' || d.mode === 'rotate') {
+    else if (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'gresize') {
       if (d.fast) { d.off = { dx: 0, dy: 0 }; fastLinks(d); endFastMove(d); }
       else for (const [id, o] of d.orig) putBack(byId(id), o);
     } else if (d.mode === 'handle') putBack(byId(d.id), d.before || d.orig);
