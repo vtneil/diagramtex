@@ -20,7 +20,10 @@ If the argument is missing or is none of these words, ask which one. Never guess
 ## Steps
 
 1. **Preflight.** Run `git status -sb` and `git fetch origin`.
-   - Must be on a branch with an upstream, and at least one un-pushed commit (`git log @{u}..HEAD`). If there are none, stop and say so.
+   - Must be on a branch with an upstream, and at least one un-pushed commit (`git log @{u}..HEAD`).
+   - **Nothing un-pushed** (everything already went out as previews):
+     - preview: stop and say so; there is nothing to push.
+     - subminor/minor: release what is on the remote. If the last tag already points at `HEAD` (`git describe --tags --exact-match`), stop and say so: nothing new to release. Otherwise go on: the version bump becomes the one un-pushed commit. Write the title (step 4) from the commits since the last tag (`git log $(git describe --tags --abbrev=0)..HEAD --format=%s`), skip the squash (step 5: commit only the two bumped files), then tag and push as usual. Nothing on the remote is rewritten.
    - Uncommitted changes: the user's working tree is part of the release only if they say so. If the tree is dirty, list the files and ask whether to include them in the release commit or stop. Never discard them.
    - If the branch is behind or diverged from upstream, stop and report; do not force anything.
 2. **Compute the new version** from `TD.VERSION = 'X.Y.Z'` in `src/domain/shapes.ts` and apply the rule above. *preview: skip.*
