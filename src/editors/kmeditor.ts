@@ -562,12 +562,11 @@ import { keepComments } from './keep-comments';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); if (selG()) deleteGroup(E.sel.g); return; }
     if (e.key.startsWith('Arrow') && selG()) { e.preventDefault(); nudge(e.key, e.shiftKey); return; }
     if (e.key === 'f' || e.key === 'F') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     const k = KEYS[e.key.toLowerCase()];
     if (!k) return;

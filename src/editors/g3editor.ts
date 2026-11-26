@@ -1277,7 +1277,7 @@ import { marquee, marqueeSvg, marqueeTakes } from './marquee';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicate(); return; }
     if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectAll(); return; }
     if (mod && !e.altKey && (e.key === 'c' || e.key === 'C' || e.key === 'x' || e.key === 'X')) { e.preventDefault(); copySel(e.key.toLowerCase() === 'x'); return; }
@@ -1285,7 +1285,6 @@ import { marquee, marqueeSvg, marqueeTakes } from './marquee';
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ']') { reorder(1); return; }
     if (e.key === '[') { reorder(-1); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; if (!E.drag) svg.style.cursor = 'grab'; return; }

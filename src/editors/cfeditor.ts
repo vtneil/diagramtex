@@ -1901,11 +1901,10 @@ import { keepComments } from './keep-comments';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     const v = selV(), b = selB(), a = selA();
     if ((e.key === 'Enter' || e.key === 'F2') && E.sel) { e.preventDefault(); if (v) editLabel(v); else if (a) editArrowLabel(a, 0); else focusField(); return; }

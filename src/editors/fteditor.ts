@@ -706,7 +706,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod && e.key === 'a') { e.preventDefault(); select(order(E.T)); return; }
     if (mod && (e.key === 'c' || e.key === 'x')) { e.preventDefault(); if (E.sel.length) { E.clip = tops(E.sel).map(clone); if (e.key === 'x') removeSel(false); } return; }
     if (mod && e.key === 'v') { e.preventDefault(); paste(); return; }
@@ -717,7 +717,6 @@ import { onLabelFontsChange } from '../domain/label-image';
     if (e.key === 'Enter') { e.preventDefault(); if (n) { if (n === E.T.root) editLabel(n); else addSibling(n, e.shiftKey); } else if (!E.T.root) addRoot(); return; }
     if (e.key === 'F2') { e.preventDefault(); if (n) editLabel(n); return; }
     if (e.key === '0') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     if (e.key.startsWith('Arrow')) {
       e.preventDefault();

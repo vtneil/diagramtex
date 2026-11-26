@@ -1157,13 +1157,12 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     // every segment of every row, as a marquee over the whole drawing takes them
     if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectSegs(E.M.rows.flatMap((_: any, r: number) => spansOf(r).map((_s: any, i: number) => ({ r, i })))); draw(); renderProps(); return; }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     if ((e.key === 'Enter' || e.key === 'F2') && E.sel) { e.preventDefault(); if (!editLabel(E.sel)) focusField(); return; }
     if (e.key.startsWith('Arrow')) { e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0, e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0); return; }

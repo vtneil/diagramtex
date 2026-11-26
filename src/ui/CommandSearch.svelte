@@ -12,7 +12,7 @@
   }
 </script>
 <script lang="ts">
-  // The "/" search (src/ui/services/palette.svelte.ts finds and runs; this draws): a field over the results and a line of
+  // The search (⌘K) (src/ui/services/palette.svelte.ts finds and runs; this draws): a field over the results and a line of
   // keys. The field keeps the focus; the result under the arrow keys (or the pointer) is `cur`, marked by a fill.
   // The controller listens on #cmdkIn and the rows' data-i.
   import { t, locale } from '../i18n';

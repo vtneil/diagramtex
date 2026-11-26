@@ -46,5 +46,5 @@ T.test('block editor code pane: brackets coloured while it has focus', async () 
     const ov = code.parentElement.querySelector('.tx-hl');
     T.ok(ov, 'the code pane has the highlighting copy over it');
     T.ok(ov && ov.querySelector('.tx-b0') && ov.textContent === code.value + '\n', 'its brackets are coloured, its text the same');
-  } finally { document.activeElement?.blur(); TD.graphEditor.close(); }
+  } finally { document.activeElement?.blur(); document.querySelector('#graphModal [data-ge="done"]')?.click(); } // Done closes it; TD.graphEditor.close only undocks it from Quick
 });

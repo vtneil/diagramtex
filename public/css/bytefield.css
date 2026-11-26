@@ -6,7 +6,7 @@
    the selected fields (one, or every field of a dragged, ⇧-clicked or ⇧-arrowed range), the resize handle */
 .bf-grid { fill: none; stroke: color-mix(in srgb, var(--bluepen) 10%, transparent); stroke-width: 1; pointer-events: none; }
 .bf-grid8 { fill: none; stroke: color-mix(in srgb, var(--bluepen) 24%, transparent); stroke-width: 1; pointer-events: none; }
-.bf-hov { fill: rgba(28, 27, 25, .04); stroke: none; pointer-events: none; }
+.bf-hov { fill: color-mix(in srgb, var(--canvas-ink) 4%, transparent); stroke: none; pointer-events: none; }
 .bf-sel { fill: none; stroke: var(--redpen); stroke-width: 1.5; stroke-linecap: square; pointer-events: none; }
 .bf-selfill { fill: var(--redpen-wash); stroke-width: 1.5; pointer-events: none; }
 .bf-handle { fill: var(--handle); stroke: var(--redpen); stroke-width: 1.5; pointer-events: none; }

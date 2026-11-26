@@ -117,17 +117,19 @@
   T.test('the circuit editor draws its labels in the block\'s font and size, as the canvas does', async () => {
     const text = { id: 't1', part: 'text', p: [0, -1], text: 'Caption', opts: '' };
     const family = () => getComputedStyle(document.querySelector('.cz-stage foreignObject .tx')).fontFamily;
+    // Done closes the editor (TD.czEditor.close only takes it out of Quick's dock, and would leave it open)
+    const done = () => document.querySelector('#czModal [data-cz="done"]')?.click();
     try {
       TD.czEditor.open({ items: [text], raw: '', size: 'large', font: 'cmss' }, () => {});
       await new Promise((r) => setTimeout(r, 100));
       T.ok(/KaTeX_SansSerif/.test(family()), 'Computer Modern Sans: ' + family());
       const big = document.querySelector('.cz-stage foreignObject .tx').style.fontSize;
-      TD.czEditor.close();
+      done(); await new Promise((r) => setTimeout(r, 50));
       TD.czEditor.open({ items: [text], raw: '' }, () => {});
       await new Promise((r) => setTimeout(r, 100));
       T.ok(/KaTeX_Main/.test(family()), 'a block with no font: the default: ' + family());
       T.ok(parseFloat(big) > parseFloat(document.querySelector('.cz-stage foreignObject .tx').style.fontSize), 'large is larger');
-    } finally { TD.czEditor.close(); }
+    } finally { done(); }
   });
 
   T.test('dialog: choose picks how in a dropdown at the left; the action and Cancel stay at the right', async () => {

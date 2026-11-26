@@ -1,5 +1,5 @@
 // Ratchet for the move to the interface kit (src/ui/kit). Counts hand-written markup for controls the kit now
-// provides, per file, and fails when any count grows past tests/legacy-ui.json: new code uses the kit, old code
+// provides, and colours and type sizes written into the stylesheets instead of taken from tokens, per file, and fails when any count grows past tests/legacy-ui.json: new code uses the kit, old code
 // only shrinks. When a count falls, the baseline is lowered (run with --update) in the same change, so the
 // ground gained can't be lost again.
 //   node tests/legacy-ui.mjs           check
@@ -26,6 +26,9 @@ const PATTERNS = {
   'colour-button': { re: /class=["']cbtn/g, use: 'ColourButton (src/ui/kit)' },
   'toolbar-separator': { re: /class="cz-sep/g, use: 'Separator (src/ui/kit)' },
   'style-assignment': { re: /\.style\.[a-zA-Z]+\s*=(?!=)/g, use: 'a class, or style: in Svelte' },
+  // the stylesheets (public/css, all but tokens.css, which holds the values): colours and type sizes come from tokens
+  'css-colour-literal': { css: true, re: /#[0-9a-fA-F]{3,8}\b|rgba?\(/g, use: 'a colour token (css/tokens.css; --canvas-* for what is drawn on the light canvas)' },
+  'css-font-px': { css: true, re: /font(?:-size)?:[^;}]*?\d(?:\.\d+)?px/g, use: 'the type scale (--fs-caption, -small, -label, -body, -title)' },
 };
 const SKIP = new Set(['src/ui/kit']);
 
@@ -41,9 +44,13 @@ function files(dir) {
 }
 
 const counts = {};
-for (const rel of files('src').sort()) {
-  const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
-  for (const [name, { re }] of Object.entries(PATTERNS)) {
+const sheets = fs.readdirSync(path.join(ROOT, 'public/css')).filter((f) => f.endsWith('.css') && f !== 'tokens.css').map((f) => `public/css/${f}`);
+for (const rel of [...files('src'), ...sheets].sort()) {
+  const css = rel.endsWith('.css');
+  // a data: URL's colours (an SVG chevron drawn in the stylesheet) are the picture's, not the interface's
+  const text = fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/url\("data:[^"]*"\)/g, 'url()');
+  for (const [name, { re, css: forCss }] of Object.entries(PATTERNS)) {
+    if (!!forCss !== css) continue;
     const n = (text.match(re) || []).length;
     if (n) (counts[name] ??= {})[rel] = n;
   }

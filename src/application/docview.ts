@@ -11,6 +11,9 @@ import DocumentView, { type DocumentViewModel } from '../ui/DocumentView.svelte'
 import DocBlockChrome, { type DocBlockChromeModel } from '../ui/DocBlockChrome.svelte';
 import { runtime as TD } from '../runtime';
 import { t, onLocale } from '../i18n';
+import { keyLabel } from '../ui/kit/keys';
+import { applyTexFormat } from '../ui/tex-format';
+const undoText = () => t('hint.undoBringsBack', '{key} brings it back', { key: keyLabel('Ctrl+Z') });
 import { downloadImage } from '../platform/download';
 import { readPicture } from '../platform/images';
 import * as IE from './doc-inline';
@@ -979,9 +982,8 @@ import { createDocHistory } from './doc-history';
   function fmtAction(ta: any, f: any, val?: any) {
     const b = doc().blocks[editingIdx];
     if (!ta || !b) return;
-    if (f === 'b') wrapSel(ta, '\\textbf{', '}');
-    else if (f === 'i') wrapSel(ta, '\\textit{', '}');
-    else if (f === 'u') wrapSel(ta, '\\underline{', '}');
+    // bold, italic and underline as text or maths, whichever the selection is in (src/ui/tex-format.ts)
+    if (f === 'b' || f === 'i' || f === 'u') applyTexFormat(ta, f === 'b' ? 'bold' : f === 'i' ? 'italic' : 'underline');
     else if (f === 's') wrapSel(ta, '\\sout{', '}');
     else if (f === 'math') wrapSel(ta, '$', '$', 'x');
     else if (f === 'color' || f === 'hl') {
@@ -1504,9 +1506,8 @@ import { createDocHistory } from './doc-history';
     }
     if ((e.target! as Element).closest('[data-rm]')) {
       const remove = () => { keepActive((d: any) => d.blocks.splice(i, 1)); editingIdx = -1; changed(); render(); };
-      if (b.type === 'diagram' && b.shapes.length) {
-        TD.confirm(t('doc.diag.deleteTitle', 'Delete this diagram?'), b.shapes.length > 1 ? t('doc.diag.deleteMany', 'Its {n} objects will be deleted too.', { n: b.shapes.length }) : t('doc.diag.deleteOne', 'Its 1 object will be deleted too.'), { ok: t('ui.delete', 'Delete'), danger: true }).then((yes) => { if (yes) remove(); });
-      } else remove();
+      remove(); // undoable, so no question first: the hint says how to take it back
+      if (b.type === 'diagram' && b.shapes.length) app.showHint?.(b.shapes.length > 1 ? t('doc.diag.deletedMany', 'Deleted the diagram and its {n} objects. {undo}', { n: b.shapes.length, undo: undoText() }) : t('doc.diag.deletedOne', 'Deleted the diagram and its object. {undo}', { undo: undoText() }), 2400);
       return;
     }
     if ((e.target! as Element).closest('[data-edit]')) { openDiagram(i); return; }

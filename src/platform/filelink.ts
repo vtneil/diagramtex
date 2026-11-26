@@ -69,17 +69,18 @@ import { runtime as TD } from '../runtime';
   async function link(id: any, handle: any, text: any, disk = text) {
     let mtime = null;
     try { mtime = (await handle.getFile()).lastModified; } catch { /* no read access yet */ }
-    held.delete(id);
+    held.delete(id); missing.delete(id);
     await put('doc:' + id, { handle, name: handle.name, hash: hash(text), disk: hash(disk), mtime });
     await check(id);
   }
-  async function unlink(id: any) { writable.delete(id); held.delete(id); await put('doc:' + id, null); }
+  async function unlink(id: any) { writable.delete(id); held.delete(id); missing.delete(id); await put('doc:' + id, null); }
 
   // ---- autosave to the linked file ----
   // Only while the browser already lets the page write to the file: asking needs a click, so after a reload the
   // document autosaves in the browser until a save (which asks) allows the file again. A file changed on disk by
-  // something else is not written over: autosave stops for it until the next save.
-  const writable = new Set(), held = new Set();
+  // something else is not written over (held): autosave stops for it until the next save, which asks which to keep.
+  // A file moved or deleted (missing) stops it too, until a save picks where it goes.
+  const writable = new Set(), held = new Set(), missing = new Set();
   const listeners = new Set<() => void>();
   const changed = () => listeners.forEach((f) => f());
   async function check(id: any) {
@@ -90,33 +91,66 @@ import { runtime as TD } from '../runtime';
     if (ok !== was) changed();
     return ok;
   }
-  const autoSaving = (id: any) => !!fileOf(id) && writable.has(id) && !held.has(id);
+  const autoSaving = (id: any) => !!fileOf(id) && writable.has(id) && !held.has(id) && !missing.has(id);
   const writing = new Map<any, Promise<any>>();
+  // one at a time per file: a look at the disk never runs while a write is under way, which would find the file
+  // changed by the write itself
+  const queue = <T>(id: any, run: () => Promise<T>): Promise<T> => { const p = (writing.get(id) || Promise.resolve()).then(run, run); writing.set(id, p); return p; };
+  const notFound = (e: any) => e && e.name === 'NotFoundError';
+  // What the file on disk holds now, against what was last written to it or read from it: 'same', 'changed' (with
+  // its text), 'missing' (moved or deleted), 'unknown' (no access yet: the browser asks only on a click) or 'none'
+  // (not linked). Rewritten with the same contents (a sync, a touch) counts as the same.
+  async function look(id: any): Promise<{ state: 'same' | 'changed' | 'missing' | 'unknown' | 'none'; text?: string }> {
+    const r = fileOf(id);
+    if (!r) return { state: 'none' };
+    try {
+      if ((await r.handle.queryPermission({ mode: 'read' })) !== 'granted') return { state: 'unknown' };
+      const f = await r.handle.getFile();
+      if (missing.delete(id)) changed();
+      if (r.mtime != null && f.lastModified === r.mtime) return { state: 'same' };
+      const text = await f.text(), h = hash(text);
+      if (h === r.hash || h === r.disk) { await put('doc:' + id, { ...r, mtime: f.lastModified }); return { state: 'same' }; }
+      return { state: 'changed', text };
+    } catch (e: any) {
+      if (notFound(e)) { if (!missing.has(id)) { missing.add(id); changed(); } return { state: 'missing' }; }
+      return { state: 'unknown' };
+    }
+  }
+  const diskState = (id: any) => queue(id, () => look(id));
+  /** Stop autosave writing over a file changed on disk; true when it wasn't stopped already. */
+  const hold = (id: any) => { if (held.has(id)) return false; held.add(id); changed(); return true; };
   // Write the document's text to its file. 'saved', 'off' (no file, no access or a write that failed), or
   // 'changed' (the file changed on disk since it was last written or opened).
+  // 'missing' (moved or deleted since).
   function autoWrite(id: any, text: any): Promise<string> {
-    const run = async () => {
+    return queue(id, async () => {
       const r = fileOf(id);
       if (!r || !autoSaving(id)) return 'off';
       if (r.hash === hash(text)) return 'saved';
       try {
         if ((await r.handle.queryPermission({ mode: 'readwrite' })) !== 'granted') { writable.delete(id); changed(); return 'off'; }
-        const f = await r.handle.getFile();
-        if (r.mtime != null ? f.lastModified !== r.mtime : hash(await f.text()) !== r.disk) { held.add(id); changed(); return 'changed'; }
+        const now = await look(id);
+        if (now.state === 'changed') { hold(id); return 'changed'; }
+        if (now.state === 'missing') return 'missing';
         await write(r.handle, text);
         await link(id, r.handle, text);
         return 'saved';
-      } catch { writable.delete(id); changed(); return 'off'; }
-    };
-    const p = (writing.get(id) || Promise.resolve()).then(run, run);
-    writing.set(id, p);
-    return p;
+      } catch (e: any) {
+        if (notFound(e)) { missing.add(id); changed(); return 'missing'; }
+        writable.delete(id); changed(); return 'off';
+      }
+    });
   }
   // Save `text` to the document's file, or pick one first (always, with `pick`). Returns the file name,
-  // null if the person cancelled, or throws.
-  async function saveDoc(id: any, text: any, suggestedName: any, pick: any) {
+  // null if the person cancelled, or throws. A file changed on disk since it was last written or opened here is not
+  // written over at once: `changedOnDisk` gets its text and says whether to ('overwrite') or not ('cancel').
+  async function saveDoc(id: any, text: any, suggestedName: any, pick: any, changedOnDisk?: (disk: string) => Promise<'overwrite' | 'cancel'>) {
     let rec = !pick && fileOf(id), h = rec && rec.handle;
     if (h && !(await allowed(h))) h = null; // no access: pick the file again
+    if (h && changedOnDisk) {
+      const now = await queue(id, () => look(id));
+      if (now.state === 'changed' && (await changedOnDisk(now.text!)) !== 'overwrite') return null;
+    }
     if (!h) {
       try {
         h = await picker('showSaveFilePicker', { id: 'diagramtex-doc', suggestedName, startIn: fileOf(id)?.handle || mem.get('lastDir') || 'documents',
@@ -126,6 +160,7 @@ import { runtime as TD } from '../runtime';
     try { await write(h, text); }
     catch (e: any) {
       if (!rec || e.name !== 'NotFoundError') throw e;
+      missing.add(id); changed();
       return saveDoc(id, text, suggestedName, true); // the file was moved or deleted: pick another
     }
     await link(id, h, text);
@@ -177,6 +212,7 @@ import { runtime as TD } from '../runtime';
 
   async function forget(id: any) { await unlink(id); await clearDir(id); }
 
-  TD.files = { can, ready, hash, fileOf, link, unlink, saveDoc, isSaved, isOnDisk, docFor, pickOpen, dirOf, pickDir, clearDir, exportDir, writeIn, forget, allowed,
+  TD.files = { can, ready, hash, fileOf, link, unlink, saveDoc, isSaved, isOnDisk, docFor, diskState, hold,
+    conflict: (id: any) => held.has(id), missing: (id: any) => missing.has(id), pickOpen, dirOf, pickDir, clearDir, exportDir, writeIn, forget, allowed,
     autoSaving, autoWrite, check, onChange: (f: () => void) => { listeners.add(f); } };
 })();

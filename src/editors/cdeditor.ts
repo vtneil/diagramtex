@@ -942,7 +942,7 @@ import { keepComments } from './keep-comments';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     const b = selBox();
     if (mod && e.key === 'a') { e.preventDefault(); if (nR(E.M) && nC(E.M)) { E.sel = { r1: 0, c1: 0, r2: nR(E.M) - 1, c2: nC(E.M) - 1 }; E.arrow = null; draw(); renderProps(); } return; }
     if (mod && (e.key === 'c' || e.key === 'x') && b) {
@@ -960,7 +960,6 @@ import { keepComments } from './keep-comments';
     }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ' && !single()) { e.preventDefault(); E.space = true; return; }
     const s = single();
     if (e.key === 'Enter' || e.key === 'F2') {

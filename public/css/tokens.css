@@ -40,11 +40,19 @@
   --bracket3: #1d5fa3;
   --okpen: #2b8a47;          /* the one green in the interface: the top bar's dot for a file saved to disk */
   --canvas: #fffdf8;         /* the drawing sheet: content, stays light in both appearances */
+  /* what the app draws on that light surface (block editors' stages, the Table's grid, Quick's stage, palette
+     pictures): the light appearance's ink, paper and pencil in both appearances, never redefined for dark */
+  --canvas-ink: #1c1b19;
+  --canvas-graphite: #5d5b55;
+  --canvas-pencil: #6f6c64;  /* 5.2:1 on the canvas: hints drawn on a stage still pass AA */
+  --canvas-paper: #fffdf8;   /* knobs and plus buttons on a stage, the quantum editor's paper */
+  --checker: repeating-conic-gradient(#e2dfd7 0 25%, #fff 0 50%) 0 0 / 8px 8px; /* behind a see-through colour */
   --handle: #ffffff;
   --scrim: rgba(28, 27, 25, .32);
   --shadow-pop: 0 0 0 .5px rgba(28,27,25,.06), 0 8px 24px rgba(28,27,25,.13), 0 2px 6px rgba(28,27,25,.07);
   --shadow-modal: 0 0 0 .5px rgba(28,27,25,.08), 0 20px 50px rgba(28,27,25,.22);
   --shadow-knob: 0 .5px 1px rgba(28,27,25,.18), 0 1px 3px rgba(28,27,25,.10);
+  --shadow-page: 0 0 0 1px rgba(28,27,25,.07), 0 1px 2px rgba(28,27,25,.06), 0 4px 14px rgba(28,27,25,.06); /* a sheet of paper on the desk */
   /* geometry: 4px grid, one control height. Rounded corners nest concentrically: a shape inset by N px
      inside another uses the outer radius minus N (segment 5 in an 8 track with 3px padding, menu row 8
      in a 12 menu with 4px padding), so inner and outer corners share their diagonal. */
@@ -59,6 +67,14 @@
   --font-ui: "Atkinson Hyperlegible Next", "Sarabun", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-tex: KaTeX_Main, "Latin Modern Roman", "Times New Roman", serif; /* drawing & page content only, never UI chrome */
   --font-mono: "Atkinson Hyperlegible Mono", "Sarabun", ui-monospace, "SF Mono", Menlo, monospace;
+  /* type scale: nothing below 10px; body 13, labels 12, section titles 11, rulers and captions 10, titles 15 */
+  --fs-caption: 10px;
+  --fs-small: 11px;
+  --fs-label: 12px;
+  --fs-body: 13px;
+  --fs-title: 15px;
+  /* motion: a press springs back in --t-press (under 250ms, as every transition here) */
+  --t-press: .24s;
   --ease: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* overshoots a little: a pressed control springing back */
   --ruler: 18px;
@@ -126,5 +142,7 @@
   :root { --pencil: var(--graphite); --rule: rgba(28, 27, 25, .3); --rule-soft: rgba(28, 27, 25, .2); --rule-strong: rgba(28, 27, 25, .5); }
 }
 @media (prefers-contrast: more) {
-  :root[data-theme=dark] { --rule: rgba(236, 235, 230, .3); --rule-soft: rgba(236, 235, 230, .2); --rule-strong: rgba(236, 235, 230, .5); }
+  /* the dark appearance and the dark-mode page set --pencil themselves (more specific than :root), so each promotes it again */
+  :root[data-theme=dark] { --pencil: var(--graphite); --rule: rgba(236, 235, 230, .3); --rule-soft: rgba(236, 235, 230, .2); --rule-strong: rgba(236, 235, 230, .5); }
+  [data-theme=dark] .doc-page { --pencil: var(--graphite); --rule: rgba(28, 27, 25, .3); --rule-soft: rgba(28, 27, 25, .2); --rule-strong: rgba(28, 27, 25, .5); }
 }

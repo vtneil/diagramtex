@@ -8,6 +8,7 @@ import { escapeHtml } from '../../core/html';
 // In-app dialogs replacing the browser's alert / confirm / prompt, styled like the rest of the app.
 // Each returns a Promise:  TD.confirm(...) → true/false,  TD.prompt(...) → string or null,  TD.alert(...) → undefined,
 // TD.choose(...) → the index of the way chosen in its dropdown when OK is pressed, or null.
+// TD.ask(...) → 'ok', 'alt' (a second answer, the plain button at the left) or null.
 // Keyboard: Enter activates the focused button (the default one when the focus is in the text field),
 // Esc cancels, Tab stays inside the dialog. Focus returns to where it was when the dialog closes.
 // Destructive confirmations show the action in red and start with the focus on Cancel (Apple HIG: a
@@ -19,12 +20,12 @@ import { escapeHtml } from '../../core/html';
 
   // preview: (value) => HTML shown under the field as it is typed (a title with maths, say); with notes: true it is
   // interface text about what is typed (what was understood, what can't be used) rather than how it reads
-  function dialog({ title, message = '', input = null, multiline = false, ok = msg("ui.ok", 'OK'), cancel = msg("ui.cancel", 'Cancel'), danger = false, readonly = false, placeholder = '', preview = null, notes = false, choices = undefined, choiceLabel = undefined, choiceNotes = undefined }: any) {
+  function dialog({ title, message = '', input = null, multiline = false, ok = msg("ui.ok", 'OK'), cancel = msg("ui.cancel", 'Cancel'), danger = false, readonly = false, placeholder = '', preview = null, notes = false, choices = undefined, alt = undefined, choiceLabel = undefined, choiceNotes = undefined }: any) {
     if (open) open.finish(false);
     const prev = document.activeElement;
     const root = document.createElement('div');
     root.className = 'td-dialog';
-    const component = mountFrame(root, Dialog, { title, message, input, multiline, ok, cancel, danger, readonly, placeholder, preview: !!preview, notes, choices, choiceLabel, choiceNotes });
+    const component = mountFrame(root, Dialog, { title, message, input, multiline, ok, cancel, danger, readonly, placeholder, preview: !!preview, notes, choices, choiceLabel, choiceNotes, alt });
     document.body.appendChild(root);
     const box = root.firstElementChild, inp = root.querySelector('.tdd-in'), pv = root.querySelector('.tdd-pv');
     if (preview && inp && pv) {
@@ -38,7 +39,7 @@ import { escapeHtml } from '../../core/html';
       function finish(yes: any) {
         if (closed || !root.isConnected) return;
         closed = true; open = null;
-        resolve(choices ? (yes === true && pick ? +pick.value : null) : input == null ? (cancel ? yes : undefined) : yes ? (inp! as HTMLInputElement).value : null);
+        resolve(alt ? (yes === 'alt' ? 'alt' : yes === true ? 'ok' : null) : choices ? (yes === true && pick ? +pick.value : null) : input == null ? (cancel ? yes : undefined) : yes ? (inp! as HTMLInputElement).value : null);
         if (prev && prev.isConnected && (prev as HTMLElement).focus) (prev as HTMLElement).focus({ preventScroll: true });
         // the answer is in and the focus back at once; the dialog fades out (kit.css, .td-dialog-leaving), then goes
         fadeOutDialog(root, () => { if (root.isConnected) { void unmount(component); root.remove(); } });
@@ -47,7 +48,7 @@ import { escapeHtml } from '../../core/html';
       root.addEventListener('click', (e) => {
         const b = (e.target! as Element).closest('[data-r]');
         const r = b && (b as HTMLElement).dataset.r;
-        if (r) finish(r === '1');
+        if (r) finish(r === '2' ? 'alt' : r === '1');
       });
       // a press on the scrim does nothing (as with a native modal); stop it reaching the app's
       // click-outside handlers, which would otherwise close editors behind the dialog
@@ -83,4 +84,6 @@ import { escapeHtml } from '../../core/html';
   TD.prompt = (title: any, value = '', opts = {}) => dialog({ title, input: value, ...opts });
   TD.alert = (title: any, message: any, opts = {}) => dialog({ title, message, cancel: null, ...opts });
   TD.choose = (title: any, message: any, choices: any[], opts = {}) => dialog({ title, message, choices, ...opts }) as Promise<number | null>;
+  // two ways to answer and Cancel: 'ok' (the main button), 'alt' (the plain one at the left) or null
+  TD.ask = (title: any, message: any, opts: { ok: any; alt: any; danger?: boolean }) => dialog({ title, message, ...opts }) as Promise<'ok' | 'alt' | null>;
 })();

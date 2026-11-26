@@ -747,7 +747,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     const { mod } = keys;
     if (mod && e.key === 'd') { e.preventDefault(); duplicateSel(); return; }
     if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); E.sel = new Set(E.items.map((it: any) => it.id)); draw(); renderProps(); return; }
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     const k = e.key.toLowerCase();
@@ -757,7 +757,6 @@ import { onLabelFontsChange } from '../domain/label-image';
     else if (k === 'x' || k === 'f') mirrorSel('y'); // X: left to right (F: the old Mirror key)
     else if (k === 'y') mirrorSel('x'); // Y: top to bottom
     else if (k === '0') fit();
-    else if (k === '/') { e.preventDefault(); search.focus(); }
     else if (k === ' ') { e.preventDefault(); E.space = true; }
     else if (e.key.startsWith('Arrow') && E.sel.size) {
       e.preventDefault();

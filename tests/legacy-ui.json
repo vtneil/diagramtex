@@ -1,4 +1,16 @@
 {
+  "css-font-px": {
+    "public/css/bytefield.css": 1,
+    "public/css/kit.css": 6,
+    "public/css/language-menu.css": 3,
+    "public/css/style.css": 11,
+    "public/css/table.css": 2
+  },
+  "css-colour-literal": {
+    "public/css/kit.css": 26,
+    "public/css/style.css": 42,
+    "public/css/table.css": 6
+  },
   "style-assignment": {
     "src/application/app.ts": 11,
     "src/application/docview.ts": 14,

@@ -1028,11 +1028,10 @@ import { keepComments } from './keep-comments';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     const n = selN();
     if ((e.key === 'Enter' || e.key === 'F2') && E.sel) { e.preventDefault(); if (!(n && n.k === 'class' && editName(E.sel.n))) focusField(n && n.k === 'note' ? 'ntext' : undefined); return; }

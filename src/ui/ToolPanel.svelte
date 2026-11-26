@@ -16,7 +16,7 @@
 <script lang="ts">
   // What a tool group's flyout holds (#fly-lines, #fly-shapes … #fly-blocks): sections, each a small title over a grid
   // of symbol buttons (data-pick) or the kit's picture tiles (data-insert). src/application/app.ts builds the model
-  // and picks the tool on a click; the "/" search (ui/services/palette.svelte.ts) reads the buttons and the titles over them.
+  // and picks the tool on a click; the ⌘K search (ui/services/palette.svelte.ts) reads the buttons and the titles over them.
   import Button from './kit/Button.svelte';
   import Tile from './kit/Tile.svelte';
   import TileGrid from './kit/TileGrid.svelte';

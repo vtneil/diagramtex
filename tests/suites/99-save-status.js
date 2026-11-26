@@ -76,6 +76,60 @@
     } finally { await TD.files.unlink(id); TD.app.cmd.showSaveState(); await dir.removeEntry('status-test.diagramtex').catch(() => {}); }
   });
 
+  T.test('disk: a file something else changed is read in, or not written over; Ctrl+S asks, and each answer keeps the other version', async () => {
+    if (!TD.files.can || !navigator.storage?.getDirectory) return; // (file links: Chromium)
+    const dir = await navigator.storage.getDirectory(), h = await dir.getFileHandle('disk-test.diagramtex', { create: true });
+    if (!h.createWritable) return;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms)), el = document.querySelector('#saveStatus');
+    const write = async (t) => { await wait(30); const w = await h.createWritable(); await w.write(t); await w.close(); };
+    const disk = async () => (await h.getFile()).text();
+    const place = (sid) => TD.app.cmd.placeOnCanvas([{ ...TD.TYPES.text.create({ x: 0, y: 0 }, TD.state.defaults), id: sid, text: sid }]);
+    const has = (sid) => TD.state.doc.shapes.some((q) => q.text === sid); // placed shapes get new ids; their text is theirs
+    TD.app.newDoc('disk test', [], null, null, null, 'board'); await wait(200);
+    const id = TD.app.state.docId, ask = TD.ask;
+    let asked = 0, answer = 'ok';
+    TD.ask = async () => { asked++; return answer; };
+    document.activeElement?.blur?.();
+    try {
+      const plain = TD.app.projectJson(TD.state.doc);
+      await write(plain); await TD.files.link(id, h, plain);
+      place('ext1'); const other = TD.app.projectJson(TD.state.doc);
+      TD.app.cmd.undo(); TD.app.cmd.diskWritten(id); TD.app.cmd.writeLinked(id); await wait(50);
+      T.eq((await TD.files.diskState(id)).state, 'same', 'linked, nothing changed');
+
+      await write(other);
+      const looked = await TD.app.cmd.lookAtDisk(id);
+      T.ok(has('ext1'), 'nothing unsaved here: the version on disk comes in (' + looked + ')');
+      T.eq(el.dataset.tone, 'ok', 'and the file counts as saved');
+
+      place('loc1'); await write(plain);
+      TD.app.cmd.writeLinked(id); await wait(100);
+      T.ok(TD.files.conflict(id), 'changes here and on disk: autosave stops');
+      T.eq(await disk(), plain, 'the file is not written over');
+      T.ok(/changed on disk/.test(el.querySelector('.save-text').textContent), 'the top bar says so: ' + el.querySelector('.save-text').textContent);
+
+      answer = 'ok'; await TD.app.cmd.saveFile();
+      T.eq(asked, 1, 'Ctrl+S asks');
+      T.ok((await disk()).includes('loc1'), 'Save Over It writes the file');
+      T.ok(TD.app.recovery.list(id).some((c) => c.name === 'On disk before saving over it'), 'its version on disk kept as a saved version');
+      T.ok(!TD.files.conflict(id) && el.dataset.tone === 'ok', 'autosave writes it again');
+
+      place('loc2'); await write(plain);
+      answer = 'alt'; await TD.app.cmd.saveFile();
+      T.eq(asked, 2);
+      T.ok(!has('loc2') && !has('loc1'), 'Open Disk Version brings in the file');
+      T.eq(await disk(), plain, 'and leaves it as it was');
+      T.ok(TD.app.recovery.list(id).some((c) => JSON.stringify(c.doc).includes('loc2')), 'what was here is in the version history');
+
+      await write(await disk());
+      T.eq((await TD.files.diskState(id)).state, 'same', 'written again with the same contents (a sync, a touch): no change');
+
+      await dir.removeEntry('disk-test.diagramtex');
+      await TD.app.cmd.lookAtDisk(id);
+      T.ok(TD.files.missing(id) && /moved or deleted/.test(el.querySelector('.save-text').textContent), 'a file moved or deleted says so');
+    } finally { TD.ask = ask; await TD.files.unlink(id); TD.app.cmd.diskWritten(id); TD.app.cmd.showSaveState(); await dir.removeEntry('disk-test.diagramtex').catch(() => {}); }
+  });
+
   T.test('save status: a long file name is cut in its middle, its start and extension kept', async () => {
     const keep = { can: TD.files.can, fileOf: TD.files.fileOf, autoSaving: TD.files.autoSaving };
     const name = 'Lecture notes for week three of the signals course.diagramtex', txt = document.querySelector('#saveStatus .save-text');

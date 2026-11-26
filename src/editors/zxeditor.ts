@@ -868,7 +868,7 @@ import { keepComments } from './keep-comments';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     const b = selBox();
     if (mod && e.key === 'a') { e.preventDefault(); if (nR(E.M) && nC(E.M)) { E.sel = { r1: 0, c1: 0, r2: nR(E.M) - 1, c2: nC(E.M) - 1 }; E.wire = null; draw(); renderProps(); } return; }
     if (mod && (e.key === 'c' || e.key === 'x') && b) {
@@ -889,7 +889,6 @@ import { keepComments } from './keep-comments';
     if (e.key.toLowerCase() === 'v' || e.key.toLowerCase() === 'w') { e.preventDefault(); act(e.key.toLowerCase() === 'v' ? 'select' : 'wire'); return; }
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     const s = single();
     if ((e.key === 'Enter' || e.key === 'F2') && (s || E.wire)) { e.preventDefault(); if (!(s && editPhase(s.r1, s.c1))) focusField(); return; }

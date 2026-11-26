@@ -403,7 +403,7 @@
           <div>{@html rich(t("shell.sentence8", "Place anything straight onto the paper: <kbd>T</kbd> text \u00b7 <kbd>M</kbd> maths \u00b7 shapes, plots and images from the left.", {}, $locale))}</div>
           <div>{@html rich(t("shell.sentence9", "The blue dashed margins are guides you can snap to. Export with <b>LaTeX</b>: everything keeps its exact position.", {}, $locale))}</div>
         </div>
-        <div class="eh-search">{@html rich(t("shell.sentence10", "Press <kbd>/</kbd> to search every tool, shape and command.", {}, $locale))}</div>
+        <div class="eh-search">{@html rich(t("shell.sentence10", "Press <kbd>{mod}</kbd>+<kbd>K</kbd> to search every tool, shape and command.", { mod: modKey }, $locale))}</div>
       </div>
     </div>
 

@@ -3,7 +3,7 @@ import { runtime as TD } from '../../runtime';
 import { t, message as msg, caption, type Message } from '../../i18n';
 import { mountFrame } from '../mount-frame';
 import CommandSearch, { type CommandSearchModel } from '../CommandSearch.svelte';
-// Search ("/"): one field that finds tools and shapes, commands (Save, Export, Add Page…), modes and files,
+// Search (⌘K, Ctrl+K): one field that finds tools and shapes, commands (Save, Export, Add Page…), modes and files,
 // and runs the one picked (drawn by src/ui/CommandSearch.svelte). Tools and shapes are read from the toolbar and its menus as they are, so
 // anything added there can be found here without a second list; commands and modes are listed below.
 (function () {
@@ -238,14 +238,15 @@ import CommandSearch, { type CommandSearchModel } from '../CommandSearch.svelte'
   root.addEventListener('pointerdown', (e) => { if (e.target === root) { e.preventDefault(); close(); } });
   window.addEventListener('resize', () => { if (!root.hidden) place(); });
 
-  const typing = (t: any) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'MATH-FIELD' || t.isContentEditable);
   const modalOpen = () => [...document.querySelectorAll('[aria-modal="true"]')].some((el) => el !== box && el.getClientRects().length && !el.closest('.modal-leaving'))
     || !one('#modal').hidden || !one('#importModal').hidden;
+  // ⌘K (Ctrl+K) opens it from anywhere, a text field too, and closes it again; a block editor takes the key first, for
+  // its own palette's search, and a dialog keeps it
   document.addEventListener('keydown', (e) => {
-    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
-    if (!root.hidden || typing(e.target) || modalOpen()) return;
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.isComposing || e.key.toLowerCase() !== 'k') return;
+    if (root.hidden && modalOpen()) return;
     e.preventDefault(); e.stopPropagation();
-    open();
+    if (root.hidden) open(); else close();
   }, true);
   TD.palette = { open, close, get isOpen() { return !root.hidden; } };
 })();

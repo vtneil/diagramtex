@@ -407,14 +407,15 @@
     const b = fresh('Fold/two'); edit(8);
     const keep = fresh('outside');
     C.openDoc(b);
-    const confirm = TD.confirm; TD.confirm = async () => true;
+    const confirm = TD.confirm; let asked = 0; TD.confirm = async () => { asked++; return true; };
     try {
-      // the folder menu passes its path the way the sidebar does
+      // the folder menu passes its path the way the sidebar does; it asks nothing first (undo brings it back)
       const row = document.querySelector('#docList [data-folder="Fold"]');
       row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 50, clientY: 50 }));
       document.querySelector('[data-act="doc:delfolder"]').click();
       await new Promise(r => setTimeout(r, 20));
     } finally { TD.confirm = confirm; }
+    T.eq(asked, 0, 'no question first');
     T.ok(inBin(a) && inBin(b), 'both in the bin'); T.ok(TD.state.docId !== b);
     C.undo();
     T.ok(listed(a) && listed(b), 'both back'); T.eq(TD.state.docId, b, 'the open one reopens'); T.eq(x(), 8);

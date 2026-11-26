@@ -1,7 +1,7 @@
 /* Karnaugh map editor (src/editors/kmeditor.ts): the frame, panel and palette pieces come from the cz-* and qe-* rules */
 /* palette: a cell with its value, and a group over two cells */
 .km-vmini rect { fill: var(--qe-paper); stroke: currentColor; stroke-width: 1; }
-.km-vmini text { fill: currentColor; font: 15px var(--font-tex); text-anchor: middle; dominant-baseline: middle; }
+.km-vmini text { fill: currentColor; font: var(--fs-title) var(--font-tex); text-anchor: middle; dominant-baseline: middle; }
 .km-vmini .g { fill: var(--qe-paper); stroke: currentColor; stroke-width: 1; }
 .km-vmini .grp { fill: color-mix(in srgb, currentColor 14%, transparent); stroke: currentColor; stroke-width: 1.2; }
 /* palette: a size as its grids */
@@ -15,13 +15,13 @@
 .km-sw { flex: none; width: 12px; height: 12px; margin-right: 8px; border-radius: 3px; border: 1px solid var(--rule-strong); }
 .km-sw { background-clip: padding-box; opacity: .85; }
 .km-sw.bw { background: transparent; }
-.km-term { margin: 8px 0; padding: 0 2px; min-height: 22px; font-size: 15px; color: var(--ink); overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
-.km-status { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; font-size: 12px; line-height: 16px; color: var(--graphite); }
+.km-term { margin: 8px 0; padding: 0 2px; min-height: 22px; font-size: var(--fs-title); color: var(--ink); overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
+.km-status { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; font-size: var(--fs-label); line-height: 16px; color: var(--graphite); }
 .km-st { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .km-status.ok .km-st, .km-groups .km-st.ok { color: var(--ink); }
 .km-status.bad .km-st, .km-groups .km-st.bad { color: var(--redpen); }
 .km-groups { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; }
-.km-groups button { display: flex; align-items: center; gap: 0; height: 28px; padding: 0 8px; border: 1px solid transparent; background: transparent; text-align: left; font-size: 12px; color: var(--ink); }
+.km-groups button { display: flex; align-items: center; gap: 0; height: 28px; padding: 0 8px; border: 1px solid transparent; background: transparent; text-align: left; font-size: var(--fs-label); color: var(--ink); }
 .km-groups button:hover { background: var(--wash); }
 .km-groups .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .km-groups .km-st { margin-left: 8px; }

@@ -1089,12 +1089,11 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     if (!keys) return;
     const { mod } = keys;
     if (mod && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicate(); return; }
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setSel(objIds()); draw(); renderProps(); return; }
     if (mod) return;
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); deleteSel(); return; }
     if (e.key === '0') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; svg.classList.add('pan-ready'); return; }
     if ((e.key === 'Enter' || e.key === 'F2') && E.sel != null) { e.preventDefault(); focusField(); return; }
     if (e.key === 'Tab') {

@@ -6,13 +6,15 @@
   // LaTeX autocomplete (texhighlight.ts and texcomplete.ts act on it), or MathLive (one maths field per line,
   // TD.input.mount), following the Text input setting. It floats in a positioned `host`, its top centre at
   // (x, y) in host pixels, kept 8px inside the host. Esc, a click away, or Enter finishes; for a paragraph or code
-  // Enter is a new line and ⌘/Ctrl+Enter finishes. It fades in and out.
+  // Enter is a new line and ⌘/Ctrl+Enter finishes. ⌘B, ⌘I and ⌘U format the selection in LaTeX, as text or maths
+  // (tex-format.ts). It fades in and out.
   // Open it with openTextPopup() (text-popup.ts) from code that isn't Svelte.
   import { onMount, tick, untrack } from 'svelte';
   import { cubicOut } from 'svelte/easing';
   import { runtime as TD } from '../../runtime';
   import { locale, t } from '../../i18n';
   import { isMac } from './keys';
+  import { texFormatKey } from '../tex-format';
   let { value = '', kind = 'line', math = false, bare = false, prose, start, caret, roomy = false, mode, x, y, width, placeholder, label, oninput, ondone, onfallback }: {
     /** the text when it opens; later changes are ignored, the field is the user's */
     value?: string;
@@ -115,6 +117,8 @@
   }
   function keys(e: KeyboardEvent) {
     e.stopPropagation(); // keep typing away from the app's shortcuts
+    // ⌘B / ⌘I / ⌘U write \textbf… or \mathbf…, as the selection is text or maths (not in code: quantikz source)
+    if (kind !== 'code' && texFormatKey(e, e.currentTarget as HTMLTextAreaElement, math)) return;
     if (e.key === 'Escape' || (e.key === 'Enter' && (multi ? e.metaKey || e.ctrlKey : !e.shiftKey))) { e.preventDefault(); finish(); }
   }
   function typed(e: Event) { const ta = e.currentTarget as HTMLTextAreaElement; oninput?.(ta.value); size(ta); place(); }

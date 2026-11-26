@@ -981,7 +981,7 @@ import { keepComments } from './keep-comments';
     });
     if (!keys) return;
     const { mod } = keys;
-    if (mod && e.key === 'f') { e.preventDefault(); search.focus(); search.select(); return; }
+    if (mod && (e.key === 'f' || e.key === 'k')) { e.preventDefault(); search.focus(); search.select(); return; } // ⌘F or ⌘K: the palette's search
     if (mod && (e.key === 'a' || e.key === 'A') && !e.shiftKey) { e.preventDefault(); selectAll(); return; }
     if (mod) return;
     const it = selItem(), g = selGroup();
@@ -991,7 +991,6 @@ import { keepComments } from './keep-comments';
     if ((e.key === 's' || e.key === 'S') && it) { e.preventDefault(); split(E.sel.ii, false); return; }
     if ((e.key === 'm' || e.key === 'M') && it) { e.preventDefault(); merge(E.sel.ii, e.shiftKey ? -1 : 1); return; }
     if (e.key === 'f' || e.key === 'F') { fit(); return; }
-    if (e.key === '/') { e.preventDefault(); search.focus(); return; }
     if (e.key === ' ') { e.preventDefault(); E.space = true; return; }
     const k = KEYS[e.key.toLowerCase()];
     if (!k) return;

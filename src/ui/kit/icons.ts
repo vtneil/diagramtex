@@ -36,7 +36,7 @@ const SNAP_ANCHORS = '<g fill="currentColor" stroke="none"><circle cx="2" cy="2"
 const border = (path: string) => `<path d="M3 3h14v14H3zM10 3v14M3 10h14" opacity=".2" stroke-width="1"/>${path ? `<path d="${path}" stroke-width="1.5"/>` : ''}`;
 
 export const ICONS = {
-  // files and commands (the "/" search)
+  // files and commands (the ⌘K search)
   newFile: { d: '<path d="M5 2.5h7l3 3v12H5z"/><path d="M10 9v6M7 12h6"/>' },
   file: { d: '<path d="M5 2.5h6.5l3.5 3.5v11.5H5zM11.5 2.5V6H15"/>' },
   open: { d: '<path d="M2.5 5.5v10h13l2-7h-13l-2 7"/><path d="M2.5 5.5V4h5l1.5 1.5h6v3"/>' },

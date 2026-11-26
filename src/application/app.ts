@@ -324,15 +324,15 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (name == null || name === st.name) return;
     begin(); setStyles(namedStyles().map((x) => (x.id === st.id ? { ...x, name } : x))); render(); commit(); renderProps();
   }
-  async function deleteNamed() {
+  // undoable, so no question first: the hint says what happened and how to take it back
+  function deleteNamed() {
     const st = linkedOf()?.st;
     if (!st) return;
     const n = usersOf(st.id);
-    const yes = await TD.confirm(uiText('dlg.ns.delete.title', 'Delete the style "{name}"?', { name: st.name }),
-      n === 1 ? uiText('dlg.ns.delete.one', '1 object uses it. It keeps how it looks and is no longer linked.') : uiText('dlg.ns.delete.many', '{n} objects use it. They keep how they look and are no longer linked.', { n }),
-      { ok: caption(captions["ui.delete"]), danger: true });
-    if (!yes) return;
     begin(); setStyles(namedStyles().filter((x) => x.id !== st.id)); render(); commit(); renderProps();
+    showHint(n === 1 ? uiText('hint.ns.deleted.one', 'Deleted the style "{name}": the object that used it keeps how it looks. {undo}', { name: st.name, undo: undoHint() })
+      : n ? uiText('hint.ns.deleted.many', 'Deleted the style "{name}": the {n} objects that used it keep how they look. {undo}', { name: st.name, n, undo: undoHint() })
+      : uiText('hint.ns.deleted', 'Deleted the style "{name}". {undo}', { name: st.name, undo: undoHint() }), 2400);
   }
   function namedMenu(btn: HTMLElement) {
     const L = linkedOf(), over = styleTargets().some((q) => q.style && q.so?.length);
@@ -342,7 +342,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       { act: 'reset', label: uiText('ns.reset', 'Reset to Style'), icon: 'undo', disabled: !over, title: uiText('ns.reset.title', 'Drop what the selection sets differently from its style') },
       { act: 'detach', label: uiText('ns.detach', 'Detach from Style'), icon: 'unlink' }, '-',
       { act: 'rename', label: uiText('ns.renameDots', 'Rename Style…'), icon: 'rename' },
-      { act: 'delete', label: uiText('ns.deleteDots', 'Delete Style…'), icon: 'delete', danger: true },
+      { act: 'delete', label: uiText('ns.delete', 'Delete Style'), icon: 'delete', danger: true },
     ], 0, 0, (act) => {
       if (act === 'update') updateNamed(); else if (act === 'reset') resetNamed(); else if (act === 'detach') applyNamed('');
       else if (act === 'rename') void renameNamed(); else if (act === 'delete') void deleteNamed();
@@ -431,8 +431,9 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       if (r === 'saved') diskWritten(id, edit);
       if (r === 'changed') {
         const f = TD.files.fileOf(id);
-        showHint(uiText('hint.fileChangedOnDisk', '{file} changed on disk, so changes are no longer saved to it as you work. {key} saves over it.', { file: f?.name || '', key: isMac ? '⌘S' : 'Ctrl+S' }), 6000);
+        showHint(uiText('hint.fileChangedOnDisk', '{file} changed on disk, so changes are no longer saved to it as you work. {key} lets you choose which to keep.', { file: f?.name || '', key: keyLabel('Ctrl+S') }), 6000);
       }
+      if (r === 'missing') showHint(uiText('hint.fileMissing', '{file} was moved or deleted. Changes stay in this browser; {key} asks where to save it.', { file: TD.files.fileOf(id)?.name || '', key: keyLabel('Ctrl+S') }), 6000);
       if (id === state.docId) showSaveState();
     });
   }
@@ -463,6 +464,35 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     diskDirty.delete(id); store.set(DISK_DIRTY, [...diskDirty]);
     if (id === state.docId) showSaveState();
   }
+  // Back in the tab, or switched to a linked file: has something else changed the file on disk meanwhile? With
+  // nothing here unsaved to it, the disk's version comes in (this browser's is kept in version history); otherwise
+  // autosave to it stops, the top bar says so and ⌘S asks which to keep. A file moved or deleted says so too. Not
+  // while something is being edited (a field, a dialog, a block editor): the next look, or autosave's, finds it.
+  const diskLook = { busy: false };
+  // What it did ('changed', 'missing', 'same', …), or why it didn't look ('skip: …'), for the tests.
+  async function lookAtDisk(id: string | null = state.docId): Promise<string> {
+    if (!id || !TD.files.fileOf(id)) return 'skip: not linked';
+    if (diskLook.busy) return 'skip: busy';
+    if (TD.files.conflict(id)) return 'skip: held';
+    if (TD.app?.cmd?.inTool?.()) return 'skip: in Quick or the Table'; // not from under them
+    const a = document.activeElement as HTMLElement | null;
+    if (a?.closest?.('input, textarea, select, [contenteditable], math-field')) return 'skip: typing in ' + a.tagName;
+    const top = [...document.querySelectorAll<HTMLElement>('.td-dialog, [aria-modal="true"]')].find((el) => el.getClientRects().length);
+    if (top) return 'skip: under ' + (top.id || top.className);
+    diskLook.busy = true;
+    try {
+      const was = TD.files.missing(id), now = await TD.files.diskState(id), name = TD.files.fileOf(id)?.name || '';
+      if (id !== state.docId) return 'skip: switched';
+      if (now.state === 'changed') {
+        if (!diskDirty.has(id)) await takeDisk(id, now.text, name);
+        else if (TD.files.hold(id)) showHint(uiText('hint.fileChangedBoth', '{file} changed on disk while it has changes here. {key} lets you choose which to keep.', { file: name, key: keyLabel('Ctrl+S') }), 6000);
+      } else if (now.state === 'missing' && !was) showHint(uiText('hint.fileMissing', '{file} was moved or deleted. Changes stay in this browser; {key} asks where to save it.', { file: name, key: keyLabel('Ctrl+S') }), 6000);
+      showSaveState();
+      return now.state + (now.state === 'changed' && diskDirty.has(id) ? ': held' : '');
+    } finally { diskLook.busy = false; }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void lookAtDisk(); });
+  addEventListener('focus', () => { void lookAtDisk(); });
   function unsavedToDisk() {
     const open = new Set(store.get<any[]>(LS_INDEX, []).map((d) => d.id)); // not one in the bin
     return [...diskDirty].some((id) => open.has(id) && !!TD.files.fileOf(id));
@@ -519,6 +549,10 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const [tone, make, tip]: [string, (name: string) => string, string] =
       mode === 'none' ? ['err', fixed(uiText('save.status.none', 'Autosave unavailable')), uiText('save.autosaveNone.tip', 'This browser can’t keep your work as you go. Save it as a file to keep it.')]
       : !saveOk ? ['err', fixed(saveFull ? uiText('save.state.full', 'Autosave failed: browser storage is full') : uiText('save.state.unavailable', 'Autosave failed: browser storage unavailable')), '']
+      : f && TD.files.missing(state.docId) ? ['warn', (name) => uiText('save.status.missing', '{file} was moved or deleted · {key} saves it again', { file: name, key: ctrlS }),
+        uiText('save.status.missing.tip', 'Every change is still saved in this browser. {key} asks where to save the file.', { key: ctrlS })]
+      : f && TD.files.conflict(state.docId) ? ['warn', (name) => uiText('save.status.conflict', '{file} changed on disk · {key} to choose which to keep', { file: name, key: ctrlS }),
+        uiText('save.status.conflict.tip', 'Something else saved the file while it had changes here. They are kept in this browser; {key} asks whether to save over the file or open its version.', { key: ctrlS })]
       : onDisk ? ['ok', (name) => uiText('save.status.saved', 'Changes are saved to {file}', { file: name }),
         mode === 'file' ? uiText('save.autosaveFile.tip', 'Every change is written to it as you work, and kept in this browser too.') : uiText('save.state.saved', '{key} saves later changes to it.', { key: ctrlS })]
       : f ? ['warn', (name) => uiText('save.status.notOnDisk', 'Autosaved in browser only · Not saved to {file} yet', { file: name }), uiText('save.state.dirty', '{key} saves them to it.', { key: ctrlS })]
@@ -642,6 +676,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     store.set('diagramtex.last', id);
     store.set('diagramtex.last.' + kind, id);
     if (gone) { saveNow(); retiredHint(gone); }
+    void lookAtDisk(id);
   }
   // Switch the canvas to another diagram block of the current document.
   function setActiveBlock(i: any, scrollTo = true) {
@@ -829,13 +864,12 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     binDocs([id]);
     showHint(uiText('hint.binned.undo', 'Moved "{name}" to the Recycle Bin. {undo}', { name: leafOf(it.name), undo: undoHint() }), 2400);
   }
-  // A folder goes to the bin with everything in it (files of the kind on show, and the folders inside).
-  async function deleteFolder(path: any) {
+  // A folder goes to the bin with everything in it (files of the kind on show, and the folders inside): no question
+  // first, as ⌘Z or the bin brings it all back.
+  function deleteFolder(path: any) {
     const kind = state.doc.kind, pre = path + '/';
     const ids = index().filter((d) => ((d as any).kind || 'classic') === kind && pathOf((d as any).name).join('/').startsWith(pre)).map((d) => (d as any).id);
     if (!ids.length) return;
-    if (!(await TD.confirm(uiText('dlg.deleteFolder.title', 'Delete the folder "{name}"?', { name: leafOf(path) }), ids.length === 1 ? uiText('dlg.deleteFolder.one', 'The file in it goes to the Recycle Bin, where you can restore it for {days} days.', { days: BIN_DAYS })
-      : uiText('dlg.deleteFolder.many', 'All {n} files in it go to the Recycle Bin, where you can restore them for {days} days.', { n: ids.length, days: BIN_DAYS }), { ok: uiText('dlg.deleteFolder.ok', 'Delete Folder'), danger: true }))) return;
     fileRedo.length = 0;
     binDocs(ids, path);
     for (const k of [...folded]) if (k === foldKey(path) || (k as any).startsWith(foldKey(pre))) folded.delete(k);
@@ -1808,11 +1842,11 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     });
     goToPage(at);
   }
-  async function deletePage(k: any) {
+  // undoable, so no question first, even with objects on the page: the hint says how to take it back
+  function deletePage(k: any) {
     const G = pageGeom();
     if (G.n < 2) { showHint(uiText('hint.pageNeedsOne', 'A page file needs at least one page'), 1400); return; }
     const lost = onPage(k, G).length;
-    if (lost && !(await TD.confirm(message("dialog.deletePage", 'Delete page {page}?', { page: k + 1 }), lost > 1 ? uiText('dlg.deletePage.many', 'The {n} objects on it will be deleted too.', { n: lost }) : uiText('dlg.deletePage.one', 'The 1 object on it will be deleted too.'), { ok: uiText('dlg.deletePage.ok', 'Delete Page'), danger: true }))) return;
     pageOp(() => {
       const keep = [];
       for (const s of shapes()) { const p = pageOf(s, G); if (p === k) continue; if (p > k) TD.translate(s, 0, -pageStep(G)); keep.push(s); }
@@ -1820,6 +1854,9 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       state.doc.sheet.pages = G.n - 1;
     });
     goToPage(Math.min(k, G.n - 2));
+    showHint(lost > 1 ? uiText('hint.pageDeleted.many', 'Deleted page {page} and the {n} objects on it. {undo}', { page: k + 1, n: lost, undo: undoHint() })
+      : lost ? uiText('hint.pageDeleted.one', 'Deleted page {page} and the object on it. {undo}', { page: k + 1, undo: undoHint() })
+      : uiText('hint.pageDeleted', 'Deleted page {page}. {undo}', { page: k + 1, undo: undoHint() }), 2400);
   }
   function duplicatePage(k: any) {
     pageOp((G: any) => {
@@ -3583,7 +3620,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (!sel.length) {
       const d = state.defaults, keys = ['stroke', 'fill', 'width', 'dash', 'color', 'size', 'font', 'ballColor'];
       const shortcuts = [
-        ['V L A C P', uiText('sc.tools1', 'select · line · arrow · curve · polyline')], ['O S R E', uiText('sc.tools2', 'arc · spring · rect · ellipse')], ['B D T', uiText('sc.tools3', 'ball · dot · text')],
+        ['Ctrl+K', uiText('sc.search', 'search tools, shapes and commands')], ['V L A C P', uiText('sc.tools1', 'select · line · arrow · curve · polyline')], ['O S R E', uiText('sc.tools2', 'arc · spring · rect · ellipse')], ['B D T', uiText('sc.tools3', 'ball · dot · text')],
         ['Shift', uiText('sc.shift', 'constrain angle / square')], ['Alt', uiText('sc.alt', 'drag without snapping')], ...(state.mode === 'board' ? [['H', uiText('sc.handBoard', 'hand: drag the board')], ['wheel', uiText('sc.wheel', 'move around')]] : state.mode === 'page' ? [['H', uiText('sc.handPage', 'hand: drag the page')]] : []), ['Space+drag', uiText('sc.pan', 'pan (or middle mouse)')], ['Ctrl+wheel', uiText('sc.zoom', 'zoom')],
         ['Ctrl+G', uiText('sc.group', 'group (Shift: ungroup)')], ['Ctrl+R', uiText('sc.rotate', 'rotate 90°')], ['Ctrl+] / [', uiText('sc.order', 'forward / backward')], ['Ctrl+D', uiText('sc.dup', 'duplicate')],
         ['Enter', uiText('sc.enter', 'label a box')], ['Ctrl+C', uiText('sc.copy', 'copy, also as TikZ code')], ['Ctrl+V', uiText('sc.paste', 'paste; TikZ code imports')], ['Ctrl+Alt+K', uiText('sc.comp', 'make component')],
@@ -5113,14 +5150,18 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     else { newDoc(name, null, null, p.blocks, p.page, p.kind); zoomFit(); }
     return true;
   }
+  // A project file's contents (parseProject) as storage keeps a file of the app; `old`, what storage held, gives the view and mode.
+  function storedOf(p: any, old: any) {
+    return p.kind === 'page'
+      ? { kind: 'page', name: p.name, page: p.page, sheet: p.sheet, view: old.view, mode: 'page' }
+      : { kind: p.kind, name: p.name, blocks: p.blocks, active: 0, page: p.page, view: old.view, mode: p.kind === 'board' ? 'board' : (old.mode === 'diagram' ? 'diagram' : 'document') };
+  }
   // Put a project file's contents into an existing file of the app (reopening it from disk).
   function replaceDoc(id: any, p: any) {
     if (state.docId === id) saveNow();
     const old = store.get<Record<string, any> | null>(LS_DOC + id, null) || {};
     recovery.take(id, old.kind ? old : null, docEntry(id)?.updated, true); // what it held stays recoverable
-    store.set(LS_DOC + id, p.kind === 'page'
-      ? { kind: 'page', name: p.name, page: p.page, sheet: p.sheet, view: old.view, mode: 'page' }
-      : { kind: p.kind, name: p.name, blocks: p.blocks, active: 0, page: p.page, view: old.view, mode: p.kind === 'board' ? 'board' : (old.mode === 'diagram' ? 'diagram' : 'document') });
+    store.set(LS_DOC + id, storedOf(p, old));
     const idx = index(), it: any = idx.find((x) => (x as any).id === id);
     if (it) { it.name = p.name; it.kind = p.kind; it.updated = Date.now(); store.set(LS_INDEX, idx); }
     if (state.docId === id) state.docId = null; // reopen without saving the old contents over the new
@@ -5230,7 +5271,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       item(uiText('ctx.newFolderInside', 'New Folder Inside…'), d('newfolderin'), { ic: 'folder' }), hr,
       item(uiText('ctx.renameFolder', 'Rename Folder…'), d('renamefolder'), { ic: 'rename' }),
       item(shut ? uiText('layers.unfold', 'Unfold') : uiText('layers.fold', 'Fold'), d('fold'), { ic: 'disclosure' }), hr,
-      item(uiText('ctx.deleteFolder', 'Delete Folder…'), d('delfolder'), { ic: 'delete', danger: true })], x, y, { folder: path });
+      item(uiText('ctx.deleteFolder', 'Delete Folder'), d('delfolder'), { ic: 'delete', danger: true })], x, y, { folder: path });
   }
   // Rename in place: the row's name becomes a field. Enter or leaving keeps it, Esc cancels; the file stays closed.
   function renameDoc(id: any, name: any) {
@@ -5817,7 +5858,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const id = state.docId, text = projectJson(state.doc), edit = diskEdit(id);
     if (!TD.files.can) { download(fileName(), text, FILE_TYPE); return; }
     try {
-      const name = await TD.files.saveDoc(id, text, fileName(), pick);
+      const name = await TD.files.saveDoc(id, text, fileName(), pick, (disk: string) => diskConflict(id, disk));
       if (name) diskWritten(id, edit);
       if (name) showHint(uiText('hint.savedTo', 'Saved to {file}', { file: name }), 1200);
     } catch (e: any) {
@@ -5855,16 +5896,39 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   // changed on disk since it was last saved or opened.
   async function reopenLinked(id: any, text: any, name: any) {
     const fresh = !TD.files.isOnDisk(id, text);
-    if (id !== state.docId) openDoc(id);
-    if (!fresh) { showHint(uiText('hint.isOpen', '"{name}" is open', { name }), 1200); return; }
+    diskLook.busy = true; // this reads the file itself
+    try {
+      if (id !== state.docId) openDoc(id);
+      if (!fresh) { showHint(uiText('hint.isOpen', '"{name}" is open', { name }), 1200); return; }
+      if (diskDirty.has(id) &&
+        !(await TD.confirm(uiText('dlg.changedOnDisk.title', '"{name}" changed on disk', { name }), uiText('dlg.changedOnDisk.body', 'This file also has changes that are not saved to it. Replace them with the version on disk?'), { ok: uiText('dlg.changedOnDisk.ok', 'Use the Version on Disk') }))) return;
+      await takeDisk(id, text, name);
+    } finally { diskLook.busy = false; }
+  }
+  // The file's version on disk (its text) comes into the app's file `id`; what the app held is kept in its version
+  // history (replaceDoc), and the file counts as saved.
+  async function takeDisk(id: any, text: any, name: any) {
     const p = parseProject(text, baseName(name));
     if (!p) throw new Error('not valid JSON');
-    if (diskDirty.has(id) &&
-      !(await TD.confirm(uiText('dlg.changedOnDisk.title', '"{name}" changed on disk', { name }), uiText('dlg.changedOnDisk.body', 'This file also has changes that are not saved to it. Replace them with the version on disk?'), { ok: uiText('dlg.changedOnDisk.ok', 'Use the Version on Disk') }))) return;
     replaceDoc(id, p);
     await TD.files.link(id, TD.files.fileOf(id).handle, projectJson(state.doc), text);
     diskWritten(id);
     showHint(uiText('hint.reloaded', 'Reloaded "{name}" from disk', { name }), 1400);
+  }
+  // ⌘S found the file changed on disk since it was last saved or opened here. Save over it (its version on disk
+  // kept as a saved version first), or open its version (this browser's kept in version history): nothing is lost.
+  async function diskConflict(id: any, disk: string): Promise<'overwrite' | 'cancel'> {
+    const file = TD.files.fileOf(id)?.name || fileName();
+    const a = await TD.ask(uiText('dlg.diskConflict.title', '"{file}" changed on disk', { file }),
+      uiText('dlg.diskConflict.body', 'Something else saved it after it was last saved here. Save over it, or open the version on disk? The one replaced is kept in this file’s version history.'),
+      { ok: uiText('dlg.diskConflict.over', 'Save Over It'), alt: uiText('dlg.diskConflict.open', 'Open Disk Version') });
+    if (a === 'ok') {
+      const p = parseProject(disk, baseName(file));
+      if (p) recovery.save(id, storedOf(p, store.get<Record<string, any> | null>(LS_DOC + id, null) || {}), Date.now(), uiText('rec.diskVersion', 'On disk before saving over it'));
+      return 'overwrite';
+    }
+    if (a === 'alt') { diskLook.busy = true; try { await takeDisk(id, disk, file); } finally { diskLook.busy = false; } }
+    return 'cancel';
   }
   async function openFile() {
     if (!TD.files.can) { $('#fileInput').click(); return; }
@@ -7242,7 +7306,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     // for the command search (src/ui/services/palette.svelte.ts)
     cmd: {
       runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, ctxAct, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
-      toggleSnap: cycleSnapMode, unsavedToDisk, showSaveState, diskChanged, diskWritten,
+      toggleSnap: cycleSnapMode, unsavedToDisk, showSaveState, diskChanged, diskWritten, saveFile, lookAtDisk, writeLinked,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac, editMacros,
       canUndo: () => state.undo.length > 0 || canUndoFile(), canRedo: () => state.redo.length > 0 || canRedoFile(),

@@ -15,5 +15,5 @@ T.test('block editor: ⌘C / ⌘V in an open editor leave the canvas alone', asy
     }
     await new Promise((r) => setTimeout(r, 200));
     T.eq(TD.state.doc.shapes.length, 1, 'no shapes pasted onto the canvas');
-  } finally { TD.graphEditor.close(); }
+  } finally { document.querySelector('#graphModal [data-ge="done"]')?.click(); } // Done closes it; TD.graphEditor.close only undocks it from Quick
 });
