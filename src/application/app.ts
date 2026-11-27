@@ -5651,6 +5651,8 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       return;
     }
     // (the Enter is used up here: an editor it opens takes the focus at once, and must not get a new line from it)
+    // a focused control (a panel's button, a switch, a link) takes its own Enter: neither cancelled nor also editing
+    if (e.key === 'Enter' && (e.target as Element)?.closest?.('button, a[href], summary, [role="button"], [role="radio"], [role="switch"], [role="tab"], [role="menuitem"]')) return;
     if (e.key === 'Enter') { e.preventDefault(); if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (TD.blocks.editable(s.type)) openBlock(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
       if (cancelDrag()) return;
