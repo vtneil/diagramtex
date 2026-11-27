@@ -17,7 +17,8 @@ TD.panels.plot = {
       if (is3) axis.push(row(msg('plot.zlabel', 'z label'), I('zlabel', s.zlabel, { 'data-tx': 'text' })));
       axis.push(row(msg('plot.xrange', 'x range'), I('xmin', s.xmin, { placeholder: 'auto' }, 'text', AUTO), I('xmax', s.xmax, { placeholder: 'auto' }, 'text', AUTO)), row(msg('plot.yrange', 'y range'), I('ymin', s.ymin, { placeholder: 'auto' }, 'text', AUTO), I('ymax', s.ymax, { placeholder: 'auto' }, 'text', AUTO)));
       if (is3) axis.push(row(msg('plot.zrange', 'z range'), I('zmin', s.zmin, { placeholder: 'auto' }, 'text', AUTO), I('zmax', s.zmax, { placeholder: 'auto' }, 'text', AUTO)), row(msg('form.view', 'View (az, el)'), I('view0', s.view?.[0] ?? 25, { step: '5' }, 'number'), I('view1', s.view?.[1] ?? 30, { step: '5' }, 'number')));
-      else axis.push(row(msg('plot.axisLines', 'Axis lines'), S('axisLines', [['box', msg('plot.axis.box', 'Box')], ['left', msg('plot.axis.left', 'Left (arrows)')], ['middle', msg('plot.axis.middle', 'Middle (through 0)')]], s.axisLines)));
+      else axis.push(row(msg('plot.axisLines', 'Axis lines'), S('axisLines', [['box', msg('plot.axis.box', 'Box')], ['left', msg('plot.axis.left', 'Left (arrows)')], ['middle', msg('plot.axis.middle', 'Middle (through 0)')]], s.axisLines)),
+        row(msg('plot.xnumbers', 'x numbers'), C('xnumbers', !s.xticklabelsNone)), row(msg('plot.ynumbers', 'y numbers'), C('ynumbers', !s.yticklabelsNone)));
       axis.push(row(captions["ui.grid"], C('grid', s.grid)), row(captions["ui.variables"], I('vars', s.vars || '', { placeholder: 'a = 2, b = 0.5', spellcheck: 'false', title: 'Constants you can use in every function and domain' }, 'text', { title: msg('plot.vars.title', 'Constants you can use in every function and domain') })),
         row(msg('plot.colormap', 'Colour map'), S('colormap', Object.keys(CMAPS).map(k => [k, k]), s.colormap)), row(msg('plot.colorbar', 'Colour bar'), C('colorbar', s.colorbar)),
         row(msg('plot.legend', 'Legend'), S('legendPos', [['north east', msg('plot.legend.ne', 'Top right')], ['north west', msg('plot.legend.nw', 'Top left')], ['south east', msg('plot.legend.se', 'Bottom right')], ['south west', msg('plot.legend.sw', 'Bottom left')], ['outer north east', msg('plot.legend.out', 'Outside right')], ['none', msg('plot.legend.hidden', 'Hidden')]], s.legendPos)));
@@ -74,6 +75,8 @@ TD.panels.plot = {
       if (t.dataset.p) {
         const k = t.dataset.p;
         if (k === 'view0' || k === 'view1') { s.view = [...(s.view || [25, 30])]; s.view[+k.slice(-1)] = parseFloat(t.value) || 0; return false; }
+        // x numbers / y numbers: the ticks stay; only their labels go (xticklabels={})
+        if (k === 'xnumbers' || k === 'ynumbers') { if (t.checked) delete s[k[0] + 'ticklabelsNone']; else s[k[0] + 'ticklabelsNone'] = true; return false; }
         s[k] = t.type === 'checkbox' ? t.checked : t.value;
         return false;
       }

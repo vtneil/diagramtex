@@ -778,6 +778,8 @@ export const thai: Record<string, string> = {
   "plot.yrange": "ช่วง y",
   "plot.zrange": "ช่วง z",
   "plot.axisLines": "เส้นแกน",
+  "plot.xnumbers": "ตัวเลขแกน x",
+  "plot.ynumbers": "ตัวเลขแกน y",
   "plot.axis.box": "กรอบ",
   "plot.axis.left": "ซ้าย (มีลูกศร)",
   "plot.axis.middle": "กลาง (ผ่าน 0)",

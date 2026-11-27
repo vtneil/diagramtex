@@ -32,3 +32,17 @@ T.test('plot layout: an automatic range sampled just short of a round value reac
   T.ok(/ytick=\{[^}]*-1[,}]/.test(tex) || !/ytick=/.test(tex), 'and its -1 tick');
   T.tex('plot sin range', tex);
 });
+
+T.test('plot layout: the panel\'s x numbers / y numbers checkboxes hide one axis\' tick labels (preview and export)', () => {
+  const s = plot({ colorbar: false });
+  const box = (k) => TD.panels.plot.model(s).sections[0].rows.flatMap((r) => r.controls || []).find((c) => c.attrs?.['data-p'] === k);
+  T.ok(box('xnumbers')?.checked && box('ynumbers')?.checked, 'shown at first');
+  const n0 = svgOf(s).querySelectorAll('text, foreignObject, image').length;
+  TD.panels.plot.apply(s, { dataset: { p: 'xnumbers' }, type: 'checkbox', checked: false });
+  T.ok(s.xticklabelsNone && !s.yticklabelsNone && !box('xnumbers').checked && box('ynumbers').checked, 'x off, y kept');
+  T.ok(TD.toTikz([s], { standalone: true }).includes('xticklabels={}') && !TD.toTikz([s], { standalone: true }).includes('yticklabels={}'), 'export: xticklabels={} only');
+  T.ok(svgOf(s).querySelectorAll('text, foreignObject, image').length < n0, 'the preview drops the x numbers');
+  TD.panels.plot.apply(s, { dataset: { p: 'xnumbers' }, type: 'checkbox', checked: true });
+  T.ok(!('xticklabelsNone' in s) && !TD.toTikz([s], { standalone: true }).includes('ticklabels={}'), 'back on: the flag goes');
+  T.ok(!TD.panels.plot.model({ ...plot({}), dim: 3 }).sections[0].rows.some((r) => (r.controls || []).some((c) => c.attrs?.['data-p'] === 'xnumbers')), '3D plots: not offered');
+});
