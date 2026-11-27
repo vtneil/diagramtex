@@ -38,7 +38,7 @@ function unwrap(src: any) {
 function argAt(s: any, i: any) {
   i = skipWs(s, i);
   if (s[i] === '{') { const j = Z.close(s, i); const k = j < 0 ? s.length : j; return { v: s.slice(i + 1, k), raw: s.slice(i, k + 1), end: k + 1 }; }
-  if (s[i] === '\\') { const m = /^\\([A-Za-z]+|.)/.exec(s.slice(i)); return { v: m![0], raw: m![0], end: i + m![0].length }; }
+  if (s[i] === '\\') { const m = /^\\([A-Za-z]+|[\s\S]?)/.exec(s.slice(i)); return { v: m![0], raw: m![0], end: i + m![0].length }; }
   return i < s.length ? { v: s[i], raw: s[i], end: i + 1 } : null;
 }
 // a delimited part: @/…/, @<…>, @(…), @[…] (nested braces respected)
@@ -183,7 +183,7 @@ function cell(text: any) {
     const c = text[i];
     if (c === '{') { const j = Z.close(text, i); const k = j < 0 ? text.length : j + 1; t += text.slice(i, k); i = k; continue; }
     if (c === '\\') {
-      const m = /^\\([A-Za-z]+|.)/.exec(text.slice(i));
+      const m = /^\\([A-Za-z]+|[\s\S]?)/.exec(text.slice(i));
       if (m![1] === 'ar') {
         const a = readAr(text, i + 3);
         out.arrows.push(a); i = a.end;
@@ -212,7 +212,7 @@ function tokens(spec: any) {
   for (let i = 0; i < spec.length;) {
     const c = spec[i];
     if (/\s/.test(c)) { i++; continue; }
-    if ((c === '^' || c === '_') && spec[i + 1] === '{') { const j = Z.close(spec, i + 1); out.push(spec.slice(i, j + 1)); i = j + 1; continue; }
+    if ((c === '^' || c === '_') && spec[i + 1] === '{') { const j = Z.close(spec, i + 1); if (j < 0) { out.push(spec.slice(i)); break; } out.push(spec.slice(i, j + 1)); i = j + 1; continue; }
     out.push(c); i++;
   }
   return out;
@@ -854,8 +854,10 @@ function pathToTurns(tp: any, rc: any, la: any, L: any, r0: any, c0: any, warn: 
     if (/^node\b/.test(s)) {
       i = skipWs(tp, i + 4);
       let o = '';
-      if (tp[i] === '[') { const j = Z.close(tp, i); o = tp.slice(i + 1, j); i = skipWs(tp, j + 1); }
-      const j = Z.close(tp, i), t = tp.slice(i + 1, j).trim();
+      if (tp[i] === '[') { const j = Z.close(tp, i); if (j < 0) return null; o = tp.slice(i + 1, j); i = skipWs(tp, j + 1); }
+      const j = Z.close(tp, i);
+      if (j < 0) return null;
+      const t = tp.slice(i + 1, j).trim();
       i = j + 1;
       const ol = Z.opts(o).list;
       const fill = ol.some((x: any) => /^fill\b/.test(x) && !/none/.test(x)), swap = ol.includes('swap');

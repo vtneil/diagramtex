@@ -469,7 +469,7 @@ import { keepComments } from './keep-comments';
       draw(); return;
     }
   });
-  svg.addEventListener('pointerup', (e: any) => {
+  const up = (e: any) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'arrow') {
@@ -485,7 +485,9 @@ import { keepComments } from './keep-comments';
       return;
     }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up); // a cancelled drag ends as a release
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
 
   // right-click: the element's actions
@@ -746,6 +748,7 @@ import { keepComments } from './keep-comments';
     if (k) { e.preventDefault(); pick(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

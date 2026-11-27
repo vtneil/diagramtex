@@ -484,6 +484,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     }
     draw();
   });
+  svg.addEventListener('pointercancel', () => { if (E && E.drag) { E.drag = null; E.drop = null; setTip(''); draw(); } }); // a cancelled drag ends as a release, with no move to where it was let go
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover >= 0) { E.hover = -1; draw(); } });
 
   // right-click: around the node under the pointer
@@ -736,6 +737,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     if (n && e.key.length === 1 && !e.altKey && TD.input && TD.input.mode !== 'mathlive') { e.preventDefault(); editLabel(n, e.key); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

@@ -928,7 +928,7 @@ import { marquee, marqueeSvg, marqueeTakes } from './marquee';
     const all = [...sel].sort((a, b) => (a as any) - (b as any));
     E.sel = all.length === 1 ? all[0] : null; E.many = all.length > 1 ? all : null;
   }
-  svg.addEventListener('pointerup', () => {
+  const up = () => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     svg.style.cursor = E.space ? 'grab' : '';
@@ -936,7 +936,9 @@ import { marquee, marqueeSvg, marqueeTakes } from './marquee';
     if (d.mode === 'pan' && FLAT && Math.hypot(d.ox - E.view.ox, d.oy - E.view.oy) < 1) renderProps();
     if (d.mode === 'marquee') { if (!d.moved && d.base.length) { E.sel = d.base.length === 1 ? d.base[0] : null; E.many = d.base.length > 1 ? d.base : null; } renderProps(); }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up); // a cancelled drag ends as a release
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
 
   // right-click: the command's actions
@@ -1308,7 +1310,10 @@ import { marquee, marqueeSvg, marqueeTakes } from './marquee';
     const k = (KEYS() as Record<string, any>)[e.key.toLowerCase()];
     if (k) { e.preventDefault(); add(k); }
   }, true);
-  window.addEventListener('keyup', (e) => { if (E && e.key === ' ') { E.space = false; if (!E.drag) svg.style.cursor = ''; } }, true);
+  // Space let go, or the window left while it was held (Alt/Cmd+Tab): panning ends
+  const spaceUp = () => { if (!E) return; E.space = false; if (!E.drag) svg.style.cursor = ''; };
+  window.addEventListener('keyup', (e) => { if (e.key === ' ') spaceUp(); }, true);
+  window.addEventListener('blur', spaceUp);
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

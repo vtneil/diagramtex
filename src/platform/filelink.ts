@@ -157,13 +157,18 @@ import { runtime as TD } from '../runtime';
           types: [{ description: 'DiagramTeX file', accept: { 'application/vnd.diagramtex+json': ['.diagramtex'] } }] });
       } catch (e: any) { if (aborted(e)) return null; throw e; }
     }
-    try { await write(h, text); }
-    catch (e: any) {
-      if (!rec || e.name !== 'NotFoundError') throw e;
+    // in the file's queue, as autosave writes: an autosave never writes between this write and its link, nor looks at
+    // the disk before the link has noted this write
+    const gone = await queue(id, async () => {
+      try { await write(h, text); }
+      catch (e: any) { if (!rec || e.name !== 'NotFoundError') throw e; return true; }
+      await link(id, h, text);
+      return false;
+    });
+    if (gone) {
       missing.add(id); changed();
-      return saveDoc(id, text, suggestedName, true); // the file was moved or deleted: pick another
+      return saveDoc(id, text, suggestedName, true); // the file was moved or deleted: pick another (outside the queue: it asks)
     }
-    await link(id, h, text);
     writable.add(id); changed(); // written just now, so access is granted
     await put('lastDir', h);
     return h.name;

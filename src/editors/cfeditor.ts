@@ -1377,7 +1377,7 @@ import { keepComments } from './keep-comments';
       draw();
     }
   });
-  svg.addEventListener('pointerup', () => {
+  const up = () => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'ahead' || d.mode === 'mctl') { setTip(''); commit(); L = null; draw(); renderProps(); return; }
@@ -1400,7 +1400,9 @@ import { keepComments } from './keep-comments';
       return;
     }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up); // a cancelled drag ends as a release
   function reselectKey(key: any) { L = null; E.sel = findV(key) ? { v: key } : null; draw(); renderProps(); }
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.ptr)) { E.hover = null; E.knobAt = null; E.ptr = null; draw(); } });
   // double-clicking a bond steps it single → double → triple
@@ -1914,6 +1916,7 @@ import { keepComments } from './keep-comments';
     if (k && k[0] === 'b') { e.preventDefault(); if (b) apply(k, { b }); else pick(k); return; }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

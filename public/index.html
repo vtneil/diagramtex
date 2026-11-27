@@ -6,6 +6,8 @@
   <title>DiagramTeX: draw diagrams, export LaTeX/TikZ</title>
   <meta name="description" content="Free diagram editor for physics and maths: circuits, quantum circuits, commutative diagrams, Bloch spheres and plots. Export TikZ, LaTeX, PDF, SVG or PNG.">
   <!-- Nothing is loaded from another site: every script, style, font and image is served from here (or made in the page). -->
+  <!-- 'unsafe-inline' in script-src is a placeholder: scripts/prerender.js swaps it for the hash of the one inline script (the
+       preflight) in every page it writes (public/ and dist/), so markup injected into the app's page can't run script. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-qIzbr9+6GAwZcH/6kNC/doxbakYwCqCueX+vXTpFcZs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <link rel="canonical" href="https://diagramtex.com/">

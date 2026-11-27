@@ -547,7 +547,7 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
       draw(); renderProps(); return;
     }
   });
-  svg.addEventListener('pointerup', () => {
+  const up = () => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     svg.classList.remove('panning');
@@ -557,7 +557,9 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
     if ((d.mode === 'shandle' || d.mode === 'smove') && d.moved) { const sh = shapeOf(d.i); if (sh && typeOf(sh).endHandle) { typeOf(sh).endHandle(sh); touchShape(d.i); } commit(); renderProps(); }
     if (d.mode === 'handle' && d.moved) { setTip(''); commit(); renderProps(); }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up); // a cancelled drag ends as a release
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
   svg.addEventListener('dblclick', (e: any) => e.preventDefault());
 

@@ -295,14 +295,16 @@ function pathEls(src: any, k: any, end: any) {
 
 // ================================================================ numbers (pgfmath: angles in degrees)
 const UNIT: Record<string, any> = { pt: 1 / 28.4528, cm: 1, mm: 0.1, in: 2.54, bp: 2.54 / 72, em: 0.35, ex: 0.15 };
-const FN: Record<string, any> = {
+// null prototype: toString, constructor… are not functions of the expression
+const FN: Record<string, any> = Object.assign(Object.create(null), {
   sin: (x: any) => Math.sin(x * D2R), cos: (x: any) => Math.cos(x * D2R), tan: (x: any) => Math.tan(x * D2R),
   sec: (x: any) => 1 / Math.cos(x * D2R), cosec: (x: any) => 1 / Math.sin(x * D2R), cot: (x: any) => 1 / Math.tan(x * D2R),
   asin: (x: any) => Math.asin(x) / D2R, acos: (x: any) => Math.acos(x) / D2R, atan: (x: any) => Math.atan(x) / D2R, atan2: (y: any, x: any) => Math.atan2(y, x) / D2R,
   sqrt: Math.sqrt, abs: Math.abs, exp: Math.exp, ln: Math.log, log10: Math.log10, log2: Math.log2, pow: Math.pow,
   min: Math.min, max: Math.max, mod: (a: any, b: any) => a % b, round: Math.round, floor: Math.floor, ceil: Math.ceil, int: Math.trunc,
   sign: Math.sign, deg: (x: any) => x / D2R, rad: (x: any) => x * D2R, veclen: (a: any, b: any) => Math.hypot(a, b), sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
-};
+});
+const own = (o: any, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 // { v, unit } of an expression; macros from env (\name → number), \x-style variables from vars
 function evalExpr(txt: any, env?: any, vars?: any) {
   const s = unbrace(String(txt ?? ''));
@@ -336,7 +338,7 @@ function evalExpr(txt: any, env?: any, vars?: any) {
     const mac = /^\\([A-Za-z@]+)/.exec(s.slice(p));
     if (mac) {
       p += mac[0].length;
-      if (vars && mac[1] in vars) return vars[mac[1]];
+      if (vars && own(vars, mac[1])) return vars[mac[1]];
       if (env && env.has(mac[1])) return env.get(mac[1]);
       if (mac[1] === 'pgfmathresult') return 0;
       throw new Error(`\\${mac[1]} is not defined`);
@@ -347,7 +349,7 @@ function evalExpr(txt: any, env?: any, vars?: any) {
       const w = id[1];
       if (w === 'pi') return Math.PI;
       if (w === 'e') return Math.E;
-      const uf = env && env.funcs && env.funcs[w];
+      const uf = env && env.funcs && own(env.funcs, w) && env.funcs[w];
       if (uf) {
         if (peek() !== '(') throw new Error(`${w} needs (…)`);
         p++;

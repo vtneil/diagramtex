@@ -693,12 +693,14 @@ import { keepComments } from './keep-comments';
       setTip(boxTip(boxOf(d.ii)));
     }
   });
-  svg.addEventListener('pointerup', () => {
+  const up = () => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'w' || d.mode === 'h' || d.mode === 'g') { commit(); renderProps(); }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up); // a cancelled drag ends as a release
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; E.hoverKey = ''; setTip(''); draw(); } });
 
   // ---------------------------------------------------------------- label editor
@@ -998,6 +1000,7 @@ import { keepComments } from './keep-comments';
     add(k);
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

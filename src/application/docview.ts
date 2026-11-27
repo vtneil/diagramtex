@@ -297,7 +297,7 @@ import { createDocHistory } from './doc-history';
     return out.join('\n');
   }
   function imageToLatex(b: any, i: any, X: any) {
-    const name = TD.texImages.use(X, imageName(b, i), b.src), w = +(b.width || 0.6).toFixed(2);
+    const name = TD.texImages.use(X, imageName(b, i), b.src), w = +(+b.width || 0.6).toFixed(2);
     const g = TD.texImages.include(X, name, `width=${w === 1 ? '' : w}\\linewidth`);
     const note = `% image file: ${name} (save it next to the .tex)`;
     if (b.caption && b.caption.trim()) return [note, '\\begin{figure}[h]', '  \\centering', '  ' + g, `  \\caption{${escTex(b.caption)}}`, '\\end{figure}'].join('\n');
@@ -317,7 +317,7 @@ import { createDocHistory } from './doc-history';
         let t = textToLatex(b.text || '', tctx);
         if (!t) return;
         textPkgs(b.text || '', pk);
-        if (b.size && b.size !== 'normalsize') t = `{\\${b.size}\n${t}\\par}`;
+        if (SIZES.has(b.size) && b.size !== 'normalsize') t = `{\\${b.size}\n${t}\\par}`;
         if (ALIGN_ENV[b.align]) t = `\\begin{${ALIGN_ENV[b.align]}}\n${t}\n\\end{${ALIGN_ENV[b.align]}}`;
         body.push(t, '');
         return;
@@ -448,6 +448,8 @@ import { createDocHistory } from './doc-history';
   const doc = () => app.state.doc;
   const diagramCount = () => doc().blocks.filter((b: any) => b.type === 'diagram').length;
   const SIZE_EM: Record<string, any> = { tiny: 0.5, scriptsize: 0.7, footnotesize: 0.8, small: 0.9, normalsize: 1, large: 1.2, Large: 1.44, LARGE: 1.728, huge: 2.074, Huge: 2.488 };
+  // a block's settings as the file gives them (a share link, an opened file): only these are drawn or written out
+  const SIZES = new Set(Object.keys(SIZE_EM)), ALIGNS = new Set(['left', 'center', 'right', 'justify']), BORDERS = new Set(['all', 'header', 'none']);
   // the page's controls are containers left empty here and filled by ui/DocBlockChrome.svelte (mountChrome)
   const insertBar = (i: any) => `<div class="ins" data-at="${i}"></div>`;
   // The text source stays LaTeX-flavoured text; the toolbar wraps the selection in commands.
@@ -499,7 +501,7 @@ import { createDocHistory } from './doc-history';
   const tableHtml = (b: any, editing: any) => {
     const rows = b.rows || [[]], nc = Math.max(1, ...rows.map((r: any) => r.length));
     const al = ({ l: 'left', c: 'center', r: 'right' } as Record<string, any>)[b.colAlign || 'c'];
-    const cls = `dtab b-${b.borders || 'all'}${b.header !== false ? ' hdr' : ''}`;
+    const cls = `dtab b-${BORDERS.has(b.borders) ? b.borders : 'all'}${b.header !== false ? ' hdr' : ''}`;
     return `<table class="${cls}" style="--al:${al}">${rows.map((r: any, ri: any) => `<tr>${Array.from<any, any>({ length: nc }, (_, ci) => {
       const v = r[ci] ?? '';
       return `<td>${editing ? `<input class="cell" data-r="${ri}" data-c="${ci}" value="${esc(v)}" spellcheck="false">` : inl(v) || '&nbsp;'}</td>`;
@@ -566,7 +568,7 @@ import { createDocHistory } from './doc-history';
       const tools = forPrint ? '' : '<div class="blk-tools"></div>';
       const edc = ed ? ' editing' : '';
       if (b.type === 'text') {
-        const st = `text-align:${b.align || 'justify'}${b.size && b.size !== 'normalsize' ? `;font-size:${SIZE_EM[b.size]}em` : ''}`;
+        const st = `text-align:${ALIGNS.has(b.align) ? b.align : 'justify'}${SIZES.has(b.size) && b.size !== 'normalsize' ? `;font-size:${SIZE_EM[b.size]}em` : ''}`;
         const ph = t('doc.text.ph', 'Write text. $x^2$ for math, $$…$$ for display math, # Section, - bullet, 1. numbered, - [ ] checkbox');
         h += `<div class="blk blk-text${edc}" data-i="${i}">${tools}${!ed
           ? `<div class="blk-body" lang="en" style="${st}">${textToHtml(b.text || '', tctx)}</div>`
@@ -1428,13 +1430,18 @@ import { createDocHistory } from './doc-history';
   function addImage(at: any, replaceIdx?: any) {
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/gif,image/svg+xml,image/webp';
+    // the file and the block it goes to, held through the file dialog and the decoding: another file, or the block
+    // moved or deleted meanwhile, and the picture is dropped
+    const d = doc(), blk = replaceIdx != null ? d.blocks[replaceIdx] : null;
+    const gone = () => doc() !== d || app.state.mode !== 'document' || (blk && !d.blocks.includes(blk));
     inp.onchange = () => {
       const f = inp.files && inp.files[0];
-      if (!f) return;
+      if (!f || gone()) return;
       // as the canvas takes pictures: GIF, WebP and the like become PNG (what pdflatex reads), big ones are scaled down
       readPicture(f).then((pic) => {
-        if (replaceIdx != null) Object.assign(doc().blocks[replaceIdx], { src: pic.src, name: f.name });
-        else { keepActive((d: any) => d.blocks.splice(at, 0, { type: 'image', src: pic.src, name: f.name, width: 0.6, caption: '' })); editingIdx = at; }
+        if (gone()) return;
+        if (blk) Object.assign(blk, { src: pic.src, name: f.name });
+        else { at = Math.min(at, d.blocks.length); keepActive((d: any) => d.blocks.splice(at, 0, { type: 'image', src: pic.src, name: f.name, width: 0.6, caption: '' })); editingIdx = at; }
         changed(); render();
       }, (err) => app.showHint?.(t('doc.img.openFailed', "Couldn't open {name}: {error}", { name: f.name, error: err.message }), 2500, 'error'));
     };
@@ -1547,9 +1554,9 @@ import { createDocHistory } from './doc-history';
     }
     const blk = (t! as Element).closest('.blk');
     if (!blk) return;
-    const b = doc().blocks[+(blk as HTMLElement).dataset.i!];
+    const bi = +(blk as HTMLElement).dataset.i!, b = doc().blocks[bi];
     if ((t! as HTMLElement).dataset.tb) { b[((t! as HTMLElement).dataset.tb as any)] = (t! as any).type === 'checkbox' ? (t! as HTMLInputElement).checked : (t! as HTMLInputElement).value; changed(); render(); return; }
-    if ((t! as HTMLElement).dataset.im === 'caption') { b.caption = (t! as HTMLInputElement).value; changed([editingIdx]); }
+    if ((t! as HTMLElement).dataset.im === 'caption') { b.caption = (t! as HTMLInputElement).value; changed([bi]); } // its own block: a click elsewhere has already ended editing
   });
   root!.addEventListener('dblclick', (e) => {
     if ((e.target as Element).closest('.doc-title')) { renameFromTitle(); return; }
@@ -1690,7 +1697,8 @@ import { createDocHistory } from './doc-history';
   TD.docToHtml = async function (pageBody: any) {
     const was = editingIdx;
     editingIdx = -1;
-    const { h, P } = pageBody ? { h: pageBody, P: TD.pageSize(doc().page) } : pageHtml(true);
+    TD.math.useMacros(doc().page?.macros); // the file's macros, and every formula finished, as render(true) draws it
+    const { h, P } = pageBody ? { h: pageBody, P: TD.pageSize(doc().page) } : TD.math.synchronous(() => pageHtml(true));
     editingIdx = was;
     const box = document.createElement('div');
     box.innerHTML = h;

@@ -11,7 +11,7 @@ import { escapeHtml } from '../core/html';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.60.4'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.60.5'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -45,7 +45,9 @@ import { escapeHtml } from '../core/html';
   TD.parseColor = (c: any) => {
     if (!c) return null;
     if (typeof c === 'object') c = TD.fillColor(c);
-    const h = c.replace('#', '');
+    // letters and digits only: a colour from an untrusted document is written into SVG attributes and CSS (one that
+    // isn't hex stays an invalid colour, as before, which an attribute ignores: g3editor's currentColor relies on it)
+    const h = String(c).replace(/[^0-9a-z]/gi, '');
     return { hex: '#' + h.slice(0, 6).toLowerCase(), a: h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1 };
   };
   TD.css = (c: any) => {
@@ -738,8 +740,9 @@ import { escapeHtml } from '../core/html';
     if (typeof st !== 'object' || st === null) st = { size: st || 'normalsize' };
     const ts = textStyle(st), px = ts.px;
     // a text box with a fixed width wraps its lines (TikZ: text width=…, align=…)
-    if (st.tw > 0) ts.css += `width:${r2(st.tw)}px;white-space:pre-wrap;text-align:${st.align || 'left'};`;
-    else if (st.align && st.align !== 'center') ts.css += `text-align:${st.align};`; // lines of a multi-line label
+    const al = ['left', 'center', 'right', 'justify'].includes(st.align) ? st.align : ''; // (written into a style attribute)
+    if (st.tw > 0) ts.css += `width:${r2(st.tw)}px;white-space:pre-wrap;text-align:${al || 'left'};`;
+    else if (al && al !== 'center') ts.css += `text-align:${al};`; // lines of a multi-line label
     const key = ts.css + '|' + text;
     let box = sizeCache.get(key);
     if (cachedGeometryDepth && box?.html != null) return { ...box, px, css: ts.css };
@@ -979,11 +982,13 @@ import { escapeHtml } from '../core/html';
   TD.styleOpts = (s: any, X: any, o: any) => styleOpts(s, X, o);
   TD.fmt = f;
 
+  // a text's alignment as TikZ takes it (a document from outside could hold anything, written raw into the options)
+  const alignOr = (a: any, d: string) => (['left', 'center', 'right', 'justify'].includes(a) ? a : d);
   // font=..., text=... options for nodes from a style source (size, font, bold, italic, color)
   function textOpts(s: any, X: any) {
     const o = [], fo = [];
     if (typeof s.size === 'number') { const p = f(s.size * K); fo.push(`\\fontsize{${p}pt}{${f(s.size * K * 1.2)}pt}\\selectfont`); }
-    else if (s.size && s.size !== 'normalsize') fo.push('\\' + s.size);
+    else if (s.size && s.size !== 'normalsize' && TD.SIZES.some((q: any) => q[0] === s.size)) fo.push('\\' + s.size);
     // the object's own font, written for the engine and against the document's font (src/core/doc-fonts.ts)
     const fam = objectFont(s.font, X.engine || 'pdflatex', X.docFont || 'cm');
     if (fam.code) fo.push(fam.code);
@@ -1484,11 +1489,11 @@ import { escapeHtml } from '../core/html';
     samples: (s: any) => [{ x: s.x, y: s.y }, { x: s.x + s.w, y: s.y + s.h }],
     svg(s: any, ctx: any) {
       const d = `M${r2(s.x)},${r2(s.y)}h${r2(s.w)}v${r2(s.h)}h${r2(-s.w)}Z`;
-      return wrap(s, outline(s, `<rect x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" rx="${s.radius || 0}"`)) +
+      return wrap(s, outline(s, `<rect x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" rx="${r2(s.radius || 0)}"`)) +
         hit(d, ctx) + (s.fill && !ctx.export ? `<path class="hitfill" d="${d}"/>` : '');
     },
     // what casts its shadow (src/domain/shadow.ts)
-    shadowShape: (s: any) => `<rect x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" rx="${s.radius || 0}"/>`,
+    shadowShape: (s: any) => `<rect x="${r2(s.x)}" y="${r2(s.y)}" width="${r2(s.w)}" height="${r2(s.h)}" rx="${r2(s.radius || 0)}"/>`,
     tikz(s: any, X: any) {
       const sh = TD.shadowTikz?.(s, X) ?? [];
       const c = cmd(s, true) || (sh.length ? '\\path' : null);
@@ -1830,7 +1835,7 @@ import { escapeHtml } from '../core/html';
       const frameStyle = () => ({ stroke: s.stroke, width: s.width ?? 1, dash: s.dash, fill: s.fill });
       if (isPara(s)) {
         const L = paraLayout(s), f = L.f;
-        let box = s.boxed ? `<rect x="${r2(f.x)}" y="${r2(f.y)}" width="${r2(f.w)}" height="${r2(f.h)}" rx="${s.radius || 0}" ${strokeAttrs(frameStyle(), true)}/>` : '';
+        let box = s.boxed ? `<rect x="${r2(f.x)}" y="${r2(f.y)}" width="${r2(f.w)}" height="${r2(f.h)}" rx="${r2(s.radius || 0)}" ${strokeAttrs(frameStyle(), true)}/>` : '';
         if (box && op) box = `<g${op}>${box}</g>`;
         // the whole frame is clickable, not just the glyphs
         const hit = ctx.export ? '' : `<rect class="hitfill" x="${r2(f.x)}" y="${r2(f.y)}" width="${r2(f.w)}" height="${r2(L.bottom - f.y)}"/>`;
@@ -1839,7 +1844,7 @@ import { escapeHtml } from '../core/html';
       let box = '';
       if (s.boxed) {
         const b = textBox(s.text || ' ', s), p = textPad(s);
-        box = `<rect x="${r2(s.x - b.w / 2 - p)}" y="${r2(s.y - b.h / 2 - p)}" width="${r2(b.w + 2 * p)}" height="${r2(b.h + 2 * p)}" rx="${s.radius || 0}" ${strokeAttrs(frameStyle(), true)}/>`;
+        box = `<rect x="${r2(s.x - b.w / 2 - p)}" y="${r2(s.y - b.h / 2 - p)}" width="${r2(b.w + 2 * p)}" height="${r2(b.h + 2 * p)}" rx="${r2(s.radius || 0)}" ${strokeAttrs(frameStyle(), true)}/>`;
         box = op ? `<g${op}>${box}</g>` : box;
       }
       return box + textSvg(s.text || ' ', s, s.color, s.x, s.y, ctx, op);
@@ -1850,7 +1855,7 @@ import { escapeHtml } from '../core/html';
       let b;
       if (isPara(s)) b = paraLayout(s).f;
       else { const t = textBox(s.text || ' ', s), p = textPad(s); b = { x: s.x - t.w / 2 - p, y: s.y - t.h / 2 - p, w: t.w + 2 * p, h: t.h + 2 * p }; }
-      return `<rect x="${r2(b.x)}" y="${r2(b.y)}" width="${r2(b.w)}" height="${r2(b.h)}" rx="${s.radius || 0}"/>`;
+      return `<rect x="${r2(b.x)}" y="${r2(b.y)}" width="${r2(b.w)}" height="${r2(b.h)}" rx="${r2(s.radius || 0)}"/>`;
     },
     tikz(s: any, X: any) {
       if (!s.text.trim()) return '';
@@ -1872,7 +1877,7 @@ import { escapeHtml } from '../core/html';
           if (s.opacity < 1) so.push(`opacity=${f(s.opacity)}`);
           frame = `\\path${opts(so)} ${X.c(F.x, F.y)} rectangle ${X.c(F.x + F.w, F.y + F.h)};\n`;
         }
-        o.push(`text width=${X.len(L.st.tw)}cm`, `align=${s.align || 'left'}`, 'inner sep=0pt');
+        o.push(`text width=${X.len(L.st.tw)}cm`, `align=${alignOr(s.align, 'left')}`, 'inner sep=0pt');
         // top-aligned text hangs from the frame's top-left corner; middle and bottom sit on the frame's
         // middle or bottom inner edge (unless the text is taller than the frame)
         const vb = L.dy > 0 && s.valign === 'bottom', vm = L.dy > 0 && s.valign === 'middle';
@@ -1881,9 +1886,9 @@ import { escapeHtml } from '../core/html';
         return frame + `\\node${opts(o)} at ${X.c(F.x + L.p, ny)} {${tikzText(s.text)}};`;
       }
       if (s.boxed) o.push(...frameOpts());
-      if (s.tw > 0) o.push(`text width=${X.len(s.tw)}cm`, `align=${s.align || 'left'}`, `inner sep=${s.boxed ? X.pt(textPad(s)) : '0pt'}`);
-      else if (s.boxed) { o.push(`inner sep=${X.pt(textPad(s))}`); if (s.text.includes('\n')) o.push(`align=${s.align || 'center'}`); }
-      else if (s.text.includes('\n')) o.push(`align=${s.align || 'center'}`);
+      if (s.tw > 0) o.push(`text width=${X.len(s.tw)}cm`, `align=${alignOr(s.align, 'left')}`, `inner sep=${s.boxed ? X.pt(textPad(s)) : '0pt'}`);
+      else if (s.boxed) { o.push(`inner sep=${X.pt(textPad(s))}`); if (s.text.includes('\n')) o.push(`align=${alignOr(s.align, 'center')}`); }
+      else if (s.text.includes('\n')) o.push(`align=${alignOr(s.align, 'center')}`);
       // top- or bottom-aligned multi-line text: anchor that edge, so LaTeX grows the node away from it as well
       // (the anchor sits inner sep outside the glyph box: 0 for unboxed wrapping text, ⅓ em otherwise)
       if ((s.valign === 'top' || s.valign === 'bottom') && (s.text.includes('\n') || s.tw > 0) && !s.angle) {

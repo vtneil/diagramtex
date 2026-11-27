@@ -34,7 +34,7 @@ export function createProjectFiles(types: Record<string, unknown>) {
       }
     };
     take(doc); take(doc?.sheet);
-    for (const block of doc?.blocks || []) take(block);
+    if (Array.isArray(doc?.blocks)) for (const block of doc.blocks) take(block);
     return gone;
   }
   function stringify(doc: ProjectInput) {

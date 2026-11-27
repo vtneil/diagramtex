@@ -22,6 +22,10 @@ export function createDocumentFactory({ uid, upgrade, pageDefaults, onDropped }:
       if (!shape || typeof shape !== 'object') { dropped++; return false; }
       if (!shape.id || typeof shape.id !== 'string' || seen.has(shape.id)) shape.id = uid();
       seen.add(shape.id);
+      // kept TikZ code draws its importer's shapes (src/domain/rawtikz.ts s.prev): those are repaired the same way
+      if (shape.type === 'tikz' && shape.prev !== undefined) {
+        shape.prev = Array.isArray(shape.prev) ? shape.prev.filter((p: Shape) => p && typeof p === 'object' && p.type !== 'tikz' && upgrade(p) !== false) : [];
+      }
       if (upgrade(shape) === false) { dropped++; return false; }
       return true;
     };

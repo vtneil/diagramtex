@@ -796,8 +796,10 @@ function layMol(seg: any, P: any, warn: any) {
           // hashed: dashes 1pt on 2pt off along the axis from the wide end, line width cram width, clipped to the triangle
           // (cram rectangle drops the clip: every dash as wide as the wide end; solid and hollow wedges don't change)
           const Lb = Math.hypot(N[0] - W[0], N[1] - W[1]) || 1, vx = (N[0] - W[0]) / Lb, vy = (N[1] - W[1]) / Lb, mx = vy, my = -vx;
+          // (a step of zero or less would never move on, and one far below the bond's length never ends: Lb/1000 at least)
           let d = '';
-          for (let s0 = 0; s0 < Lb; s0 += P.dashOn + P.dashOff) {
+          const step = Math.max(P.dashOn + P.dashOff, Lb / 1000);
+          for (let s0 = 0; s0 < Lb; s0 += step) {
             // (the dashes' line width is the cram width as written; the clip, a node shift, is scaled)
             const s1 = Math.min(Lb, s0 + P.dashOn), w0 = P.cramRect ? P.cram / 2 : h * (1 - s0 / Lb), w1 = P.cramRect ? P.cram / 2 : h * (1 - s1 / Lb);
             const c0 = [W[0] + vx * s0, W[1] + vy * s0], c1 = [W[0] + vx * s1, W[1] + vy * s1];
@@ -1624,7 +1626,7 @@ function richLabel(txt: any, sg: any, mid: any, rot: any, P: any, warn: any, G: 
   const st = /^\s*\*\s*/.exec(t);
   if (st) {
     let k = st[0].length;
-    if (t[k] === '{') { const e = close(t, k); theta = parseFloat(t.slice(k + 1, e)); k = e + 1; } else { theta = parseFloat(t[k]); k++; }
+    if (t[k] === '{') { const e = close(t, k), f = e < 0 ? t.length : e; theta = parseFloat(t.slice(k + 1, f)); k = f + 1; } else { theta = parseFloat(t[k]); k++; }
     if (!isFinite(theta)) theta = 0;
     t = t.slice(k);
   }
@@ -1934,7 +1936,7 @@ function readPath(p: any, names: any, warn: any, org: number[] = [0, 0], one = f
     } else if (p.startsWith('to', i)) {
       i += 2; ws();
       let o = '';
-      if (p[i] === '[') { const e = close(p, i); o = p.slice(i + 1, e); i = e + 1; }
+      if (p[i] === '[') { const e = close(p, i); if (e < 0) { warn('\\chemmove: the [ after to is not closed'); return null; } o = p.slice(i + 1, e); i = e + 1; }
       const c = coord(); if (!c) return null;
       const end = take(c, last);
       const kv: Record<string, any> = {};

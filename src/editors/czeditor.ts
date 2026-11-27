@@ -515,7 +515,7 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
     const T = C.bipXf(it), b = G.box, body = boxPoly(b.x1, b.y1, b.x2, b.y2).map((q: any) => M(T(q[0], q[1])));
     return { pts: [a, z, ...body], segs: [[a, z], ...ring(body)] as any, areas: [body] };
   }
-  svg.addEventListener('pointerup', (e: any) => {
+  const up = (e: any) => {
     if (!E) return;
     if (E.wireDown) {
       const d = E.wireDown; E.wireDown = null;
@@ -534,7 +534,9 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
     if (d.mode === 'end') { const it = byId(d.id); if (C.same(it.a, it.b)) it.b = [r3(it.a[0] + defLen(it.part)), it.a[1]]; }
     if (d.contacts) E.items.push(...contactWires(d.contacts));
     commit(); draw(); renderProps();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', (e: any) => { if (E) E.wireDown = null; up(e); }); // a cancelled drag ends as a release
   svg.addEventListener('pointerleave', () => { if (E && !E.drag) { E.hover = null; draw(); } });
   // ---------------------------------------------------------------- label editor
   // Double-click a part: its label (a node's text) in a floating box under it (TD.input.popup), LaTeX or
@@ -764,6 +766,7 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
     }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

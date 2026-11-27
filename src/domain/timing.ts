@@ -213,6 +213,7 @@ function readRow(src: any, warn: any) {
 }
 
 // The characters of a row → a flat list of segs and raw tokens (kept, not drawn). Repeats are expanded.
+const MAX_CHARS = 5000;
 function readChars(s: any, warn: any) : any {
   const out = [];
   let i = 0, width = null, adj = 0;
@@ -234,7 +235,10 @@ function readChars(s: any, warn: any) : any {
         const e = close(s, j);
         if (e < 0) { warn('A { in a row is not closed'); break; }
         const inner: any = readChars(s.slice(j + 1, e), warn), n = Math.round(parseFloat(nm[0]));
-        for (let r = 0; r < n; r++) for (const k of inner) out.push(k.raw != null ? { raw: k.raw } : { ...k, pre: [] });
+        // (so many characters in a row at most: a repeat past them, or repeats in repeats, would never end)
+        let r = 0;
+        for (; r < n && out.length < MAX_CHARS; r++) for (const k of inner) out.push(k.raw != null ? { raw: k.raw } : { ...k, pre: [] });
+        if (r < n && inner.length) warn(`A row is cut at ${MAX_CHARS} characters`);
         i = e + 1; width = null; continue;
       }
       if (/[bBfF]/.test(s[j] || '')) { adj += (/[bB]/.test(s[j]) ? -1 : 1) * parseFloat(nm[0]); i = j + 1; continue; }
@@ -302,7 +306,8 @@ function readChars(s: any, warn: any) : any {
     // anything else: kept
     if (c === '!' || c === '@') {
       const j = skip(s, i + 1);
-      const e = s[j] === '{' ? close(s, j) : j;
+      let e = s[j] === '{' ? close(s, j) : j;
+      if (e < 0) e = s.length - 1;
       out.push({ raw: s.slice(i, e + 1) });
       warn(`"${s.slice(i, e + 1)}" in a row isn't drawn here (it is kept in the code)`);
       i = e + 1; continue;
@@ -330,6 +335,8 @@ function readExtra(s: any, warn: any, ctx: any = { sc: [], layers: [] }) {
   const tag = (it: any) => { it.sc = ctx.sc.map((x: any) => x.o).filter(Boolean); it.back = ctx.sc.some((x: any) => x.back); return it; };
   // [opts] after i (spaces and line breaks first), or ''
   const optAt = (j: any) => { const k = skip(s, j); if (s[k] !== '[') return ['', j]; const e = close(s, k); return e < 0 ? ['', j] : [s.slice(k + 1, e).trim(), e + 1]; };
+  // an unclosed { or [: the rest kept as written
+  const keepRest = () => { const src = s.slice(i).trim(); out.push({ k: 'raw', src }); warn(`"${src.slice(0, 40)}…" isn't drawn here (it is kept in the code)`); };
   while (i < s.length) {
     i = skip(s, i);
     if (i >= s.length) break;
@@ -337,7 +344,7 @@ function readExtra(s: any, warn: any, ctx: any = { sc: [], layers: [] }) {
     let m = /^\\begin\s*\{(pgfonlayer|scope|background)\}/.exec(rest);
     if (m) {
       let j = i + m[0].length, o = '', back = false;
-      if (m[1] === 'pgfonlayer') { const k = skip(s, j); if (s[k] === '{') { const e = close(s, k); back = s.slice(k + 1, e).trim() === 'background'; j = e + 1; } }
+      if (m[1] === 'pgfonlayer') { const k = skip(s, j); if (s[k] === '{') { const e = close(s, k); if (e < 0) { keepRest(); break; } back = s.slice(k + 1, e).trim() === 'background'; j = e + 1; } }
       else { [o, j] = optAt(j); back = m[1] === 'background' || /(^|,)\s*on background layer\s*(,|$)/.test(o); }
       ctx.sc.push({ o: o.replace(/(^|,)\s*on background layer\s*(?=,|$)/, '$1'), back, env: m[1] });
       out.push({ k: 'open', src: s.slice(i, j).trim() });
@@ -370,7 +377,7 @@ function readExtra(s: any, warn: any, ctx: any = { sc: [], layers: [] }) {
       let j = le < 0 ? -1 : skip(s, le + 1), body = '';
       if (j >= 0 && s[j] === '{') { const e = close(s, j); if (e < 0) j = -1; else { body = s.slice(j + 1, e); j = e + 1; } }
       else if (j >= 0) { const e = stmtEnd(s, j); body = s.slice(j, e + 1); j = e + 1; }
-      if (j < 0) { const src = s.slice(i).trim(); out.push({ k: 'raw', src }); warn(`"${src.slice(0, 40)}…" isn't drawn here (it is kept in the code)`); break; }
+      if (j < 0) { keepRest(); break; }
       const cm = /count\s*=\s*\\([A-Za-z]+)(?:\s+from\s+(-?[\d.]+))?/.exec(`${m[1] || ''},${m[3] || ''}`);
       out.push(tag({ k: 'each', v: m[2], cnt: cm ? cm[1] : null, from: cm && cm[2] != null ? parseFloat(cm[2]) : 1, list: s.slice(lb + 1, le), body, ctx: { sc: ctx.sc.slice(), layers: [] }, src: s.slice(i, j).trim() }));
       i = j; continue;
@@ -378,9 +385,9 @@ function readExtra(s: any, warn: any, ctx: any = { sc: [], layers: [] }) {
     m = /^\\(vertlines|horlines)\b\s*/.exec(rest);
     if (m) {
       let j = i + m[0].length, o = '';
-      if (s[j] === '[') { const e = close(s, j); o = s.slice(j + 1, e).trim(); j = skip(s, e + 1); }
+      if (s[j] === '[') { const e = close(s, j); if (e < 0) { keepRest(); break; } o = s.slice(j + 1, e).trim(); j = skip(s, e + 1); }
       let list = '';
-      if (s[j] === '{') { const e = close(s, j); list = s.slice(j + 1, e).trim(); j = e + 1; }
+      if (s[j] === '{') { const e = close(s, j); if (e < 0) { keepRest(); break; } list = s.slice(j + 1, e).trim(); j = e + 1; }
       out.push(tag({ k: m[1] === 'vertlines' ? 'vert' : 'hor', o, list, src: s.slice(i, j).trim() }));
       i = j; continue;
     }
@@ -389,7 +396,7 @@ function readExtra(s: any, warn: any, ctx: any = { sc: [], layers: [] }) {
     m = /^\\(tablegrid|fulltablegrid)\b(\*?)\s*/.exec(rest);
     if (m) {
       let j = i + m[0].length, o = '';
-      if (s[j] === '[') { const e = close(s, j); o = s.slice(j + 1, e).trim(); j = e + 1; }
+      if (s[j] === '[') { const e = close(s, j); if (e < 0) { keepRest(); break; } o = s.slice(j + 1, e).trim(); j = e + 1; }
       out.push(tag({ k: m[1] === 'tablegrid' ? 'grid' : 'fullgrid', star: !!m[2], o, src: s.slice(i, j).trim() }));
       i = j; continue;
     }
@@ -888,7 +895,7 @@ function drawRow(row: any, cfg: any) {
       // zigzag: segment length .25, amplitude .225
       const pts = [[from, 0.5]], seg_ = 0.25;
       let k = 0;
-      for (let q = from + seg_ / 4; q < b - 1e-9; q += seg_ / 4) { k++; pts.push([q, 0.5 + [0.225, 0, -0.225, 0][(k - 1) % 4]]); }
+      for (let q = from + seg_ / 4; q < b - 1e-9 && k < 20000; q += seg_ / 4) { k++; pts.push([q, 0.5 + [0.225, 0, -0.225, 0][(k - 1) % 4]]); }
       pts.push([b, 0.5]);
       pen(ink, pts);
     } else pen(ink, [[from, lv], [b, lv]]);
@@ -1028,8 +1035,9 @@ function build(src: any, plain?: any, pre?: any) {
       for (const it of opts(x.o)) { const { k, v } = kv(it), q = parseFloat(v!); if (!(q > 0)) continue; if (k === 'step' || k === 'xstep') xs = q; if (k === 'step' || k === 'ystep') ys = q; }
       let d = '';
       const grid = (oy: any, xb: any, yb: any) => {
-        for (let q = 0; q <= xb + 1e-9; q += xs) { const [X, Ya] = P(q * G.RX, oy, st), [, Yb] = P(q * G.RX, oy + yb * G.RY, st); d += `M${r2(X)},${r2(Ya)}V${r2(Yb)}`; }
-        for (let q = 0; q <= yb + 1e-9; q += ys) { const [Xa, Y] = P(0, oy + q * G.RY, st), [Xb] = P(xb * G.RX, oy + q * G.RY, st); d += `M${r2(Xa)},${r2(Y)}H${r2(Xb)}`; }
+        // (so many lines at most: a step too small for the width, or a width too large, would never end)
+        for (let q = 0, n = 0; q <= xb + 1e-9 && n < 5000; q += xs, n++) { const [X, Ya] = P(q * G.RX, oy, st), [, Yb] = P(q * G.RX, oy + yb * G.RY, st); d += `M${r2(X)},${r2(Ya)}V${r2(Yb)}`; }
+        for (let q = 0, n = 0; q <= yb + 1e-9 && n < 5000; q += ys, n++) { const [Xa, Y] = P(0, oy + q * G.RY, st), [Xb] = P(xb * G.RX, oy + q * G.RY, st); d += `M${r2(Xa)},${r2(Y)}H${r2(Xb)}`; }
       };
       if (x.k === 'fullgrid') grid(lastOy, maxW, (G.RY - lastOy) / G.RY);
       else for (const { oy, R } of rows) grid(oy, x.star ? R.end : maxW, 1);

@@ -69,6 +69,7 @@ import { escapeHtml } from '../../core/html';
           const f = [...box!.querySelectorAll('input, textarea, select, button')];
           const i = f.indexOf(document.activeElement!), n = f.length;
           e.preventDefault();
+          if (!n) return;
           (f[(i + (e.shiftKey ? n - 1 : 1)) % n] as HTMLElement).focus();
         }
       });

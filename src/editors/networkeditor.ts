@@ -461,12 +461,12 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
   // a CSV from disk: linked where the browser keeps a handle, else read once through a file input
   async function pickCsv(name: string | null): Promise<{ name: string; text: string } | null> {
     if (TD.files?.data?.can) {
-      const key = name ? linkKey(name) : linkKey('\u0001new');
+      const cur = E, key = name ? linkKey(name) : linkKey('\u0001new');
       const r = await TD.files.data.pick(key, { 'text/csv': ['.csv'] });
-      if (!r) return null;
+      if (!r || E !== cur) return null;
       const nm = name || safeName(r.name);
       if (!name) await TD.files.data.move(key, linkKey(nm));
-      return { name: nm, text: r.text };
+      return E === cur ? { name: nm, text: r.text } : null;
     }
     return new Promise((res) => {
       const inp = document.createElement('input');
@@ -476,18 +476,19 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
     });
   }
   async function loadFile(name: string) {
-    const r = await pickCsv(name);
-    if (!r || !E) return;
+    const cur = E, r = await pickCsv(name);
+    if (!r || !cur || E !== cur) return;
     begin(); E.files[name] = r.text; E.edited.delete(name); commit(); draw(); renderProps();
     stageNote.flash(linked(name) ? uiText('editor.network.loadedLinked', '{name} read in and linked to the file on disk', { name }) : uiText('editor.network.loaded', '{name} read in', { name }), 2000);
   }
   async function addDataFile() {
-    const r = await pickCsv(null);
-    if (!r || !E) return;
+    const cur = E, r = await pickCsv(null);
+    if (!r || !cur || E !== cur) return;
     const T = N.csv(r.text), isEdges = T.head.includes('u') && T.head.includes('v'), isVertices = T.head.includes('id');
-    if (!isEdges && !isVertices) { await TD.alert(uiText('editor.network.badCsv', 'That file has no id column (vertices) nor u and v columns (edges)'), uiText('editor.network.badCsvMsg', 'tikz-network reads a CSV file with a header row: id, x, y … for vertices; u, v … for edges.')); if (linked(r.name)) await TD.files.data.unlink(linkKey(r.name)); return; }
+    if (!isEdges && !isVertices) { const key = linkKey(r.name); await TD.alert(uiText('editor.network.badCsv', 'That file has no id column (vertices) nor u and v columns (edges)'), uiText('editor.network.badCsvMsg', 'tikz-network reads a CSV file with a header row: id, x, y … for vertices; u, v … for edges.')); if (TD.files?.data?.of(key)) await TD.files.data.unlink(key); return; }
     let name = r.name;
     if (E.files[name] != null && E.files[name] !== r.text) { let k = 2; const base = name.replace(/\.csv$/i, ''); while (E.files[`${base}-${k}.csv`] != null) k++; const to = `${base}-${k}.csv`; if (linked(name)) await TD.files.data.move(linkKey(name), linkKey(to)); name = to; }
+    if (E !== cur) return;
     edit(() => {
       ensureEnv();
       E.files[name] = r.text;
@@ -500,14 +501,16 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
   // read a linked file again: when it changed on disk, and was changed here too, ask which to keep
   async function reloadFile(name: string, ask: boolean) {
     if (!linked(name) || !E) return;
-    const key = linkKey(name), r = await TD.files.data.look(key, ask);
-    if (!E) return;
+    const cur = E, key = linkKey(name), r = await TD.files.data.look(key, ask);
+    if (E !== cur) return;
     if (r.state === 'changed') {
       if (E.edited.has(name)) {
         const c = await TD.ask(uiText('editor.network.bothChanged', '{name} changed on disk and here', { name }), uiText('editor.network.bothChangedMsg', 'Read the file from disk, losing the changes made here, or keep the ones made here?'), { ok: uiText('editor.network.useDisk', 'Use Disk'), alt: uiText('editor.network.keepHere', 'Keep These') });
-        if (c !== 'ok') return;
+        if (c !== 'ok' || E !== cur) return;
       }
-      begin(); E.files[name] = r.text; E.edited.delete(name); commit(); await TD.files.data.mark(key, r.text!); draw(); renderProps();
+      begin(); E.files[name] = r.text; E.edited.delete(name); commit(); await TD.files.data.mark(key, r.text!);
+      if (E !== cur) return;
+      draw(); renderProps();
       stageNote.flash(uiText('editor.network.reread', '{name} read in again: it changed on disk', { name }), 2400);
     } else if (ask) {
       stageNote.flash(r.state === 'same' ? uiText('editor.network.unchanged', '{name} is as on disk', { name }) : r.state === 'missing' ? uiText('editor.network.missing', '{name} isn\'t where it was on disk', { name }) : uiText('editor.network.noAccess', 'No access to {name}', { name }), 2000);
@@ -515,10 +518,11 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
   }
   async function writeFile(name: string, force = false) {
     if (!linked(name) || !E) return;
-    const r = await TD.files.data.write(linkKey(name), E.files[name] || '', force);
+    const cur = E, r = await TD.files.data.write(linkKey(name), E.files[name] || '', force);
+    if (E !== cur) return;
     if (r === 'changed') {
       const c = await TD.ask(uiText('editor.network.diskNewer', '{name} changed on disk since it was read', { name }), uiText('editor.network.diskNewerMsg', 'Write the version here over it, or keep the file on disk as it is?'), { ok: uiText('editor.network.overwrite', 'Write Over It'), alt: uiText('editor.network.keepDisk', 'Keep the File') });
-      if (c === 'ok') return writeFile(name, true);
+      if (c === 'ok' && E === cur) return writeFile(name, true);
       return;
     }
     if (r === 'saved') { E.edited.delete(name); renderProps(); stageNote.flash(uiText('editor.network.written', '{name} written to disk', { name }), 1800); }
@@ -526,20 +530,20 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
   }
   // a CSV file's rows as text, edited in a dialog
   async function editCsv(name: string) {
-    const t = await TD.prompt(uiText('editor.network.editRowsTitle', 'Rows of {name}', { name }), E.files[name] ?? '', { multiline: true, message: uiText('editor.network.editRowsMsg', 'A header row, then one row per line, the values separated by commas'), ok: uiText('ui.done', 'Done') });
-    if (t == null || !E || t === E.files[name]) return;
+    const cur = E, t = await TD.prompt(uiText('editor.network.editRowsTitle', 'Rows of {name}', { name }), E.files[name] ?? '', { multiline: true, message: uiText('editor.network.editRowsMsg', 'A header row, then one row per line, the values separated by commas'), ok: uiText('ui.done', 'Done') });
+    if (t == null || !cur || E !== cur || t === E.files[name]) return;
     begin(); E.files[name] = t.endsWith('\n') ? t : t + '\n'; E.edited.add(name); commit(); clampSel(); draw(); renderProps();
   }
   // a picture for the selected plane(s): read in, kept in the block like the CSV files, its name in image=
   function addImage() {
-    const inp = document.createElement('input');
+    const cur = E, inp = document.createElement('input');
     inp.type = 'file'; inp.accept = 'image/png,image/jpeg';
     inp.onchange = () => {
       const f = inp.files && inp.files[0];
-      if (!f || !E) return;
+      if (!f || !cur || E !== cur) return;
       const rd = new FileReader();
       rd.onload = () => {
-        if (!E) return;
+        if (E !== cur) return;
         let name = (String(f.name).replace(/[^\w.-]+/g, '-') || 'plane.png');
         if (E.files[name] != null && E.files[name] !== rd.result) { const base = name.replace(/\.\w+$/, ''), ext = /\.\w+$/.exec(name)?.[0] || '.png'; let k = 2; while (E.files[`${base}-${k}${ext}`] != null) k++; name = `${base}-${k}${ext}`; }
         edit(() => { E.files[name] = String(rd.result); for (const q of ents()) q.set('image', name); });
@@ -548,7 +552,7 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
     };
     inp.click();
   }
-  async function unlinkFile(name: string) { if (!E) return; await TD.files.data.unlink(linkKey(name)); renderProps(); }
+  async function unlinkFile(name: string) { const cur = E; if (!cur) return; await TD.files.data.unlink(linkKey(name)); if (E === cur) renderProps(); }
   function removeFile(name: string) { edit(() => { delete E.files[name]; E.edited.delete(name); }); }
 
   // ---------------------------------------------------------------- palette
@@ -879,7 +883,7 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
     }
     if (d.mode === 'box') { d.x = sx; d.y = sy; draw(); return; }
   });
-  svg.addEventListener('pointerup', (e: any) => {
+  const up = (e: any) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'edge') {
@@ -912,7 +916,9 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
       E.sel = uniq[0] || null; E.more = uniq.slice(1); renderProps();
     }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', (e: any) => { if (E?.drag?.mode === 'edge') { E.drag = null; E.hover = null; setTip(''); draw(); } else up(e); }); // a cancelled drag ends as a release, with no new edge where it was let go
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt)) { E.hover = null; E.knobAt = null; draw(); } });
 
   // right-click: the item's actions
@@ -1480,6 +1486,7 @@ import { planeGrid, type Plane } from '../ui/plane-grid';
     if (k) { e.preventDefault(); pick(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

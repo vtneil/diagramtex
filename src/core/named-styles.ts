@@ -5,6 +5,7 @@
 // writes the style once as \tikzset{name/.style={…}} and names it on each shape (src/domain/shapes.ts).
 // The table lives in the file's settings (`page.styles`), which every save, merge and copy already carries. No DOM.
 import type { Shape, ShapeOwner } from './contracts';
+import { conformStyleKeys } from './conform';
 
 export interface NamedStyle {
   id: string;
@@ -19,10 +20,12 @@ export const STYLE_KEYS = ['stroke', 'width', 'dash', 'fill', 'opacity', 'startT
 const J = (v: unknown) => JSON.stringify(v ?? null);
 const clone = <T>(v: T): T => (v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v);
 
-/** The file's styles (a list kept in its settings). */
+/** The file's styles (a list kept in its settings). The table comes with the file, so from anyone: a style keeps only
+ * the fields it can hold, with values a shape can (linking copies them onto shapes), and a name TikZ can take. */
 export function stylesOf(page: { styles?: unknown } | null | undefined): NamedStyle[] {
   const list = page && Array.isArray(page.styles) ? page.styles as NamedStyle[] : [];
-  return list.filter((s) => s && typeof s.id === 'string' && typeof s.name === 'string' && s.keys && typeof s.keys === 'object');
+  return list.filter((s) => s && typeof s.id === 'string' && typeof s.name === 'string' && nameProblem(s.name, []) !== 'chars' && s.keys && typeof s.keys === 'object')
+    .map((s) => ({ ...s, keys: conformStyleKeys(s.keys, STYLE_KEYS) }));
 }
 /** The style fields `shape` has, for a new style made from it. */
 export function keysFrom(shape: Shape): Record<string, unknown> {

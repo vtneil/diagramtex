@@ -12,20 +12,21 @@ import { runtime as TD } from '../runtime';
 // moved along with what it depends on (both dragged together) keeps it.
 (function () {
   const rad = Math.PI / 180;
-  const FN: Record<string, any> = {
+  // null-prototype tables: a name like toString or constructor is not a function, constant or anchor
+  const FN: Record<string, any> = Object.assign(Object.create(null), {
     sqrt: Math.sqrt, abs: Math.abs, min: Math.min, max: Math.max, round: Math.round, floor: Math.floor, ceil: Math.ceil,
     exp: Math.exp, ln: Math.log, log: Math.log10, pow: Math.pow,
     sin: (a: any) => Math.sin(a * rad), cos: (a: any) => Math.cos(a * rad), tan: (a: any) => Math.tan(a * rad),
     asin: (v: any) => Math.asin(v) / rad, acos: (v: any) => Math.acos(v) / rad, atan: (v: any) => Math.atan(v) / rad, atan2: (y: any, x: any) => Math.atan2(y, x) / rad,
-  };
+  });
   // functions of points: the distance between two, the direction from one to another (degrees)
-  const PFN: Record<string, any> = { dist: (p: any, q: any) => Math.hypot(q.x - p.x, q.y - p.y), angle: (p: any, q: any) => Math.atan2(q.y - p.y, q.x - p.x) / rad };
-  const CONST: Record<string, any> = { pi: Math.PI, e: Math.E };
-  const ANCHOR: Record<string, any> = {
+  const PFN: Record<string, any> = Object.assign(Object.create(null), { dist: (p: any, q: any) => Math.hypot(q.x - p.x, q.y - p.y), angle: (p: any, q: any) => Math.atan2(q.y - p.y, q.x - p.x) / rad });
+  const CONST: Record<string, any> = Object.assign(Object.create(null), { pi: Math.PI, e: Math.E });
+  const ANCHOR: Record<string, any> = Object.assign(Object.create(null), {
     center: [0.5, 0.5], north: [0.5, 1], south: [0.5, 0], east: [1, 0.5], west: [0, 0.5],
     northeast: [1, 1], northwest: [0, 1], southeast: [1, 0], southwest: [0, 0],
     ne: [1, 1], nw: [0, 1], se: [1, 0], sw: [0, 0], n: [0.5, 1], s: [0.5, 0], e: [1, 0.5], w: [0, 0.5],
-  };
+  });
   const anchorOf = (k: any) => ANCHOR[k.replace(/_/g, '').toLowerCase()];
 
   // ---- reading: numbers, names (a, a.b, a.b.c), + - * / ^, unary -, calls, parentheses

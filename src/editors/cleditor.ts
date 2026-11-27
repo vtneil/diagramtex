@@ -603,7 +603,7 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
       draw(); return;
     }
   });
-  svg.addEventListener('pointerup', () => {
+  const up = () => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     svg.classList.remove('panning');
@@ -614,7 +614,9 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
       commit(); E.arm = null; buildPalette(); setTip(''); renderProps();
     } else if (d.moved) { commit(); setTip(''); renderProps(); }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up); // a cancelled drag ends as a release
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
   svg.addEventListener('dblclick', (e: any) => e.preventDefault());
 

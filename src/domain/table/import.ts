@@ -444,9 +444,12 @@ let defColors: Record<string, string> = {};
 const colorOf = (model: string | undefined, v: string): string | undefined => {
   if (!model && defColors[v.trim()]) return defColors[v.trim()];
   if (model === 'HTML') return /^[0-9a-f]{6}$/i.test(v.trim()) ? '#' + v.trim().toLowerCase() : undefined;
-  if (model === 'rgb') { const p = v.split(',').map(Number); return p.length === 3 ? '#' + p.map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('') : undefined; }
-  if (model === 'RGB') { const p = v.split(',').map(Number); return p.length === 3 ? '#' + p.map((x) => Math.round(x).toString(16).padStart(2, '0')).join('') : undefined; }
-  if (model === 'gray') { const g = Math.round(+v * 255).toString(16).padStart(2, '0'); return '#' + g + g + g; }
+  // a channel 0…255 as two hex digits; a value that is not a number makes the colour unreadable
+  const hx = (x: number) => Math.round(Math.min(255, Math.max(0, x))).toString(16).padStart(2, '0');
+  const chans = (k: number) => { const p = v.split(',').map(Number); return p.length === 3 && p.every(isFinite) ? '#' + p.map((x) => hx(x * k)).join('') : undefined; };
+  if (model === 'rgb') return chans(255);
+  if (model === 'RGB') return chans(1);
+  if (model === 'gray') { if (!v.trim() || !isFinite(+v)) return undefined; const g = hx(+v * 255); return '#' + g + g + g; }
   const h = TD.tikzColor ? TD.tikzColor(v) : null;
   return typeof h === 'string' ? h.toLowerCase() : undefined;
 };
@@ -829,8 +832,9 @@ export function formatXlsxNumber(v: number, fmt: string): string {
   const pct = f.includes('%'), x = pct ? v * 100 : v;
   const dm = /\.([0#]+)/.exec(f);
   if (!/[0#]/.test(f)) return String(v);
-  let s = dm ? x.toFixed(dm[1].replace(/#/g, '').length || 0) : Math.round(x).toString();
-  if (dm && dm[1].includes('#')) s = s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+  let s = dm ? x.toFixed(dm[1].length) : Math.round(x).toString();
+  // # places show only when needed: trailing zeros go, down to the 0 places
+  if (dm && dm[1].includes('#')) { const min = dm[1].replace(/#/g, '').length; s = s.replace(/\.(\d+)$/, (_, d: string) => { let k = d.length; while (k > min && d[k - 1] === '0') k--; return k ? '.' + d.slice(0, k) : ''; }); }
   if (/#,##/.test(f)) { const [a, b] = s.split('.'); s = a.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (b ? '.' + b : ''); }
   return s + (pct ? '\\%' : '');
 }

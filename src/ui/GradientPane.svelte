@@ -3,6 +3,7 @@
   // colour stops (press the bar to add one, drag one to move it), the chosen stop's colour and place, and the preset
   // colours. `value` is the gradient (src/domain/fills.ts); `onset(v, final)` gives a new one, `final` false while a
   // stop is dragged.
+  import { onDestroy } from 'svelte';
   import { runtime as TD } from '../runtime';
   import { t, locale } from '../i18n';
   import Segmented from './kit/Segmented.svelte';
@@ -39,9 +40,14 @@
     const put = (final: boolean) => { g.stops.sort((a: any, b: any) => a[0] - b[0]); pick = g.stops.indexOf(st); onset(JSON.parse(JSON.stringify(g)), final); };
     put(false);
     const move = (ev: PointerEvent) => { st[0] = at(ev); put(false); };
-    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); put(true); };
-    addEventListener('pointermove', move); addEventListener('pointerup', up);
+    const up = () => { stop!(); put(true); };
+    stop?.();
+    stop = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); stop = null; };
+    addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
   }
+  // the window's drag listeners go with the pane (the picker closed by Esc mid-drag)
+  let stop: (() => void) | null = null;
+  onDestroy(() => stop?.());
 </script>
 <Swatches class="fp-presets" columns={6} label={t('color.gradientPresets', 'Preset gradients', {}, $locale)}
   colours={TD.GRAD_PRESETS.map((p: any, i: number) => ({ css: F.gradCss(p), title: t('color.gradientPreset', 'Gradient {n}', { n: i + 1 }, $locale) }))}

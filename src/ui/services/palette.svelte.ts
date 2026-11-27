@@ -196,8 +196,12 @@ import CommandSearch, { type CommandSearchModel } from '../CommandSearch.svelte'
     list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
   }
   const move = (to: number) => { if (!shown.length) return; model.cur = to; draw(); };
+  // fading out (120ms) counts as closed: opened again meanwhile, it stays
+  let closeTimer = 0;
+  const shut = () => root.hidden || root.classList.contains('closing');
   function open() {
-    if (!root.hidden) { inp.select(); return; }
+    if (!shut()) { inp.select(); return; }
+    clearTimeout(closeTimer);
     prevFocus = document.activeElement;
     items = [...commands(), ...modes(), ...tools(), ...files()];
     model.query = ''; model.cur = 0; inp.value = '';
@@ -206,10 +210,10 @@ import CommandSearch, { type CommandSearchModel } from '../CommandSearch.svelte'
     inp.focus({ preventScroll: true });
   }
   function close(then?: any) {
-    if (root.hidden) return;
+    if (shut()) return;
     const done = () => { root.hidden = true; root.classList.remove('closing'); };
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) done();
-    else { root.classList.add('closing'); setTimeout(done, 120); }
+    else { root.classList.add('closing'); closeTimer = window.setTimeout(done, 120); }
     if (then) then();
     else if (prevFocus && prevFocus.isConnected && prevFocus.focus) prevFocus.focus({ preventScroll: true });
   }
@@ -244,9 +248,9 @@ import CommandSearch, { type CommandSearchModel } from '../CommandSearch.svelte'
   // its own palette's search, and a dialog keeps it
   document.addEventListener('keydown', (e) => {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.isComposing || e.key.toLowerCase() !== 'k') return;
-    if (root.hidden && modalOpen()) return;
+    if (shut() && modalOpen()) return;
     e.preventDefault(); e.stopPropagation();
-    if (root.hidden) open(); else close();
+    if (shut()) open(); else close();
   }, true);
-  TD.palette = { open, close, get isOpen() { return !root.hidden; } };
+  TD.palette = { open, close, get isOpen() { return !shut(); } };
 })();

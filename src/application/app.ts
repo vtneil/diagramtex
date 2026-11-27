@@ -149,16 +149,22 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   // 'board' (a whiteboard: one diagram on an endless canvas, stored like a Classic file with one block).
   const normKind = TD.projectFiles.normKind;
   // a document from outside (a link, a file, a paste or storage) is repaired against fresh defaults before use
-  const templates = new Map<string, Record<string, unknown>>();
+  // the defaults a new user starts with, not this user's: a custom px size there would turn every loaded size into that number
+  const templates = new Map<string, Record<string, unknown>>(), FRESH = createEditorState(() => ({}) as never).defaults;
   function conform(sh: Shape) {
     const type = TD.TYPES[sh.type];
     if (!type) return;
+    // kept TikZ code draws its importer's shapes (src/domain/rawtikz.ts): a pasted one is repaired as makeDocument does
+    if (sh.type === 'tikz' && sh.prev !== undefined) {
+      sh.prev = Array.isArray(sh.prev) ? sh.prev.filter((p: Shape) => p && typeof p === 'object' && p.type !== 'tikz' && TD.TYPES[p.type]) : [];
+      for (const p of sh.prev) conform(p);
+    }
     if (!templates.has(sh.type)) {
       let made: Record<string, unknown> = {};
-      try { made = type.create({ x: 0, y: 0 }, { x: 40, y: 40 }, sh.type) || {}; } catch { made = {}; }
+      try { made = type.create({ x: 0, y: 0 }, FRESH, sh.type) || {}; } catch { made = {}; }
       templates.set(sh.type, made);
     }
-    conformShape(sh, templates.get(sh.type)!, state.defaults as Record<string, unknown>);
+    conformShape(sh, templates.get(sh.type)!, FRESH);
   }
   const makeDoc = createDocumentFactory({
     uid,
@@ -1005,7 +1011,8 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     store.set(LS_DOC + id, { ...copy.doc, kind: cur.kind, name: cur.name, view: cur.view, mode: cur.mode });
     const idx: any[] = index(), it = idx.find((x) => x.id === id);
     if (it) { it.updated = Date.now(); store.set(LS_INDEX, idx); }
-    if (open) { state.docId = null; openDoc(id); } else renderDocList();
+    if (TD.files.fileOf(id)) diskChanged(id); // its file on disk still holds the version before
+    if (open) { state.docId = null; openDoc(id); if (state.docId === id && TD.files.autoSaving(id)) scheduleSave(); } else renderDocList();
     showHint(restoredHint(copy), 3200, 'ok');
   }
   const restoredHint = (copy: RecoveryCopy) => copy.name ? uiText('hint.versionRestored', 'Restored the version "{name}". The state before it is kept in the version history.', { name: copy.name })
@@ -4286,13 +4293,16 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   // blocks, after the block they are dropped on (pasted: after the active one).
   const PIC_FILE = (f: File) => /^image\//.test(f.type) || /\.(svg|png|jpe?g|gif|webp|bmp|avif|ico)$/i.test(f.name);
   const TEXT_FILE = (f: File) => /\.(tex|tikz|ltx|txt)$/i.test(f.name) || /^text\/(plain|x-tex)/.test(f.type);
+  // where a paste or a drop goes, taken before it waits on a file or a fetch: another file, view or diagram by then, and it is dropped
+  const placeOf = () => ({ id: state.docId, mode: state.mode, active: state.doc.active });
+  const stillAt = (p: ReturnType<typeof placeOf>) => p.id === state.docId && p.mode === state.mode && (p.mode === 'document' || p.active === state.doc.active);
   async function takeIn(text: string, files: File[], at: any, docAt?: number, html = '') {
-    const pics = files.filter(PIC_FILE), texts = files.filter((f) => !PIC_FILE(f) && TEXT_FILE(f)), t = String(text || '').trim();
+    const pics = files.filter(PIC_FILE), texts = files.filter((f) => !PIC_FILE(f) && TEXT_FILE(f)), t = String(text || '').trim(), place = placeOf();
     // on the canvas, cells from a spreadsheet (or a Markdown table) become a Table block, and so does a dropped .csv, .tsv or .xlsx
     if (state.mode !== 'document') {
       const sheet = files.find(TABLE_FILE);
       if (sheet && !pics.length) {
-        try { const r = await TD.table.importFile(sheet); placeTable(r.table, at, uiText('hint.insertedTable', 'Inserted {name} as a table', { name: sheet.name })); } catch (err: any) { showHint(uiText('hint.couldntRead', "Couldn't read {name}: {error}", { name: sheet.name, error: err.message || err }), 2600, 'error'); }
+        try { const r = await TD.table.importFile(sheet); if (stillAt(place)) placeTable(r.table, at, uiText('hint.insertedTable', 'Inserted {name} as a table', { name: sheet.name })); } catch (err: any) { showHint(uiText('hint.couldntRead', "Couldn't read {name}: {error}", { name: sheet.name, error: err.message || err }), 2600, 'error'); }
         return;
       }
       const tb = files.every(PIC_FILE) && tableFrom(html, text); // a spreadsheet's copy may carry a picture of the cells too
@@ -4300,9 +4310,9 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     }
     // a picture copied from a file manager or a web page carries its file name or address as text too
     const nameOnly = !t || (!t.includes('\n') && (/^https?:\/\/\S+$/.test(t) || /^[^\s\\$]+\.\w{2,5}$/.test(t) || pics.some((f) => f.name === t)));
-    if (pics.length && nameOnly) return takePictures(pics.map((f) => ({ blob: f, name: f.name })), at, docAt);
-    if (t) return takeText(text, at, docAt);
-    if (texts.length) { try { return takeText(await texts[0].text(), at, docAt); } catch (err: any) { showHint(uiText('hint.couldntReadFile', "Couldn't read {name}", { name: texts[0].name }), 2000, 'error'); return; } }
+    if (pics.length && nameOnly) return takePictures(pics.map((f) => ({ blob: f, name: f.name })), at, docAt, place);
+    if (t) return takeText(text, at, docAt, place);
+    if (texts.length) { try { return takeText(await texts[0].text(), at, docAt, place); } catch (err: any) { showHint(uiText('hint.couldntReadFile', "Couldn't read {name}", { name: texts[0].name }), 2000, 'error'); return; } }
     if (files.length) showHint(uiText('hint.cantUse', "Can't use {name}: drop a picture (PNG, JPEG, SVG, GIF, WebP) or a .tex file", { name: files[0].name }), 2600, 'error');
   }
   const TABLE_FILE = (f: File) => /\.(csv|tsv|tab|xlsx|xlsm)$/i.test(f.name);
@@ -4329,13 +4339,13 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     commit(); render(); renderProps();
     showHint(msg, 1800, 'ok');
   }
-  async function takePictures(list: { blob: Blob | string; name: string }[], at: any, docAt?: number) {
+  async function takePictures(list: { blob: Blob | string; name: string }[], at: any, docAt?: number, place = placeOf()) {
     const got: { pic: Picture; name: string }[] = [];
     for (const it of list) {
       try { got.push({ pic: await readPicture(it.blob), name: it.name }); }
       catch (err: any) { showHint(uiText('hint.couldntOpenFile', "Couldn't open {name}: {error}", { name: it.name || uiText('hint.thatPicture', 'that picture'), error: err.message }), 2600, 'error'); }
     }
-    if (!got.length) return;
+    if (!got.length || !stillAt(place)) return;
     if (state.mode === 'document') {
       insertBlocks(got.map((g) => ({ type: 'image', src: g.pic.src, name: g.name || 'image', width: 0.6, caption: '' })), docAt);
       return;
@@ -4347,14 +4357,14 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     commit(); render(); renderProps();
     showHint(got.length > 1 ? uiText('hint.insertedPictures', 'Inserted {n} pictures', { n: got.length }) : uiText('hint.insertedPicture', 'Inserted the picture · the LaTeX names it {file}', { file: TYPES.image.fileName(selected()[0]) }), 2000, 'ok');
   }
-  async function takeText(text: string, at: any, docAt?: number) {
+  async function takeText(text: string, at: any, docAt?: number, place = placeOf()) {
     const P = TD.pasteIn, k = P.kind(text);
-    if (k === 'empty') return;
-    if (k === 'svg') return takePictures([{ blob: text.trim(), name: 'image.svg' }], at, docAt);
+    if (k === 'empty' || !stillAt(place)) return;
+    if (k === 'svg') return takePictures([{ blob: text.trim(), name: 'image.svg' }], at, docAt, place);
     if (k === 'image') {
       let blob: Blob;
       try { blob = await (await fetch(text.trim())).blob(); } catch (err: any) { showHint(uiText('hint.couldntReadPicture', "Couldn't read that picture"), 2000, 'error'); return; }
-      return takePictures([{ blob, name: 'image' }], at, docAt);
+      return takePictures([{ blob, name: 'image' }], at, docAt, place);
     }
     if (k === 'tex' || k === 'block') {
       const src = k === 'block' ? P.asPicture(text) : text;
@@ -4432,12 +4442,12 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const uri = (dt.getData('text/uri-list') || '').split('\n').find((l: string) => l && !l.startsWith('#')) || '';
     let docAt: number | undefined;
     if (state.mode === 'document') { const b = (e.target as Element).closest('#docview .blk') as HTMLElement | null; docAt = b ? +b.dataset.i! + 1 : undefined; }
-    const at = state.mode === 'document' ? null : toWorld(e);
+    const at = state.mode === 'document' ? null : toWorld(e), place = placeOf();
     // a picture dragged from a web page comes as its address: fetched (where the site allows it)
     if (!files.length && uri && (!text.trim() || text.trim() === uri.trim()) && /^(https?:|data:image\/)/.test(uri)) {
       fetch(uri).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status))))).then((blob) => {
         if (!/^image\//.test(blob.type)) throw new Error('not a picture');
-        takePictures([{ blob, name: decodeURIComponent((uri.split(/[?#]/)[0].split('/').pop() || 'image')) }], at, docAt);
+        takePictures([{ blob, name: decodeURIComponent((uri.split(/[?#]/)[0].split('/').pop() || 'image')) }], at, docAt, place);
       }).catch(() => showHint(uiText('hint.siteBlocksCopy', "That site doesn't let its pictures be copied: save the picture, then drop the file"), 3000, 'error'));
       return;
     }
@@ -5534,7 +5544,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (a === 'group') groupSel();
     if (a === 'cb') combineSel(arg);
     if (a === 'ungroup') ungroupSel();
-    if (a === 'comp:make') makeComponent();
+    if (a === 'comp' && arg === 'make') makeComponent();
     if (a === 'a') arrange(arg);
     if (a === 'r') transformSel(arg);
     if (a === 'l') alignSel(arg);

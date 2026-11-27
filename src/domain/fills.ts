@@ -33,14 +33,14 @@ import { patternName, gradientName } from './fill-names';
     ['nw', 'North-west lines'], ['cross', 'Crosshatch'], ['bricks', 'Bricks'], ['dots', 'Dots']];
 
   const gnorm = (v: any) => ({ g: v.g, angle: v.angle || 0, scale: v.scale ?? 100, cx: v.cx ?? 50, cy: v.cy ?? 50,
-    stops: (v.stops || []).slice().sort((a: any, b: any) => a[0] - b[0]) });
+    stops: (Array.isArray(v.stops) ? v.stops : []).filter(Array.isArray).sort((a: any, b: any) => a[0] - b[0]) });
   const pnorm = (v: any) => ({ p: v.p, size: Math.max(2, v.size || 8), lw: v.lw ?? 0.75, color: v.color || '#000000' });
 
   // ---------- SVG defs ----------
   function hash(s: any) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
   function gradDef(v0: any, id: any) {
     const v = gnorm(v0);
-    const st = v.stops.map(([o, c]: any) => { const p = TD.parseColor(c); return `<stop offset="${r2(o)}" stop-color="${p.hex}"${p.a < 1 ? ` stop-opacity="${r2(p.a)}"` : ''}/>`; }).join('');
+    const st = v.stops.map(([o, c]: any) => { const p = TD.parseColor(c || '#000000'); return `<stop offset="${r2(o)}" stop-color="${p.hex}"${p.a < 1 ? ` stop-opacity="${r2(p.a)}"` : ''}/>`; }).join('');
     const sc = v.scale / 100, cx = v.cx / 100, cy = v.cy / 100;
     if (v.g === 'radial') return `<radialGradient id="${id}" cx="${r2(cx)}" cy="${r2(cy)}" r="${r2(0.5 * sc)}">${st}</radialGradient>`;
     return `<linearGradient id="${id}" x1="0" y1="0.5" x2="1" y2="0.5" gradientTransform="translate(${r2(cx - 0.5)} ${r2(cy - 0.5)}) rotate(${r2(-v.angle)} 0.5 0.5) translate(0.5 0.5) scale(${r2(sc)}) translate(-0.5 -0.5)">${st}</linearGradient>`;

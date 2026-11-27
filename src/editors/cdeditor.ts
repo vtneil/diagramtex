@@ -598,6 +598,7 @@ import { keepComments } from './keep-comments';
     }
     draw();
   });
+  svg.addEventListener('pointercancel', () => { if (E && E.drag) { E.drag = null; E.hover = null; setTip(''); draw(); } }); // a cancelled drag ends as a release, with no arrow or move to where it was let go
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt || E.del || E.near)) { E.hover = null; E.knobAt = null; E.del = null; E.near = null; draw(); } });
   // a click on a delete gutter: that row or column goes, as one undo step
   function delLine(dz: any) {
@@ -983,6 +984,7 @@ import { keepComments } from './keep-comments';
     if (s && e.key.length === 1 && !e.altKey) { e.preventDefault(); editCell(s.r1, s.c1, e.key); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

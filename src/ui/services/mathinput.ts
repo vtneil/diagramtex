@@ -79,7 +79,7 @@ import { themeField, liftSuggestions } from './mathlive-theme';
         continue;
       }
       if (tex[i] === '\\') { // copy a command (or escaped character) whole
-        const c = /^\\([A-Za-z]+|.)/.exec(tex.slice(i));
+        const c = /^\\([A-Za-z]+|[\s\S]?)/.exec(tex.slice(i)); // a \ at the end, or before a newline, too
         math += c![0]; i += c![0].length; continue;
       }
       if (tex[i] === '{') { // copy a group whole, so \text inside it stays maths

@@ -40,6 +40,8 @@ import { compatNum } from './pgfplots-annot';
     }
     return -1;
   }
+  // text matched as itself in a RegExp (a name or a parameter as written)
+  const reEsc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   function splitTop(s: string, sep: string) {
     const out: string[] = []; let d = 0, buf = '';
     for (let i = 0; i < s.length; i++) {
@@ -180,7 +182,7 @@ import { compatNum } from './pgfplots-annot';
             if (close < 0) break;
             const args = splitTop(t.slice(open + 1, close), ',').map((q) => q.trim());
             let b = F.body;
-            F.params.forEach((p, k) => { b = b.replace(new RegExp(`\\\\${p}(?![A-Za-z@])|(?<![A-Za-z_0-9\\\\])${p}(?![A-Za-z_0-9])`, 'g'), `(${args[k] ?? ''})`); });
+            F.params.forEach((p, k) => { b = b.replace(new RegExp(`\\\\${reEsc(p)}(?![A-Za-z@])|(?<![A-Za-z_0-9\\\\])${reEsc(p)}(?![A-Za-z_0-9])`, 'g'), `(${args[k] ?? ''})`); });
             out += t.slice(last, m.index) + `(${b})`; last = close + 1; re.lastIndex = close + 1; changed = true;
           }
           t = out + t.slice(last);
@@ -246,9 +248,9 @@ import { compatNum } from './pgfplots-annot';
           } else if (kw && kw[1] === 'table') {
             let k = 'table'.length; while (/\s/.test(rest[k])) k++;
             let topt = '';
-            if (rest[k] === '[') { const e = matchClose(rest, k); topt = rest.slice(k + 1, e); k = e + 1; while (/\s/.test(rest[k])) k++; }
+            if (rest[k] === '[') { const e = matchClose(rest, k); if (e < 0) return false; topt = rest.slice(k + 1, e); k = e + 1; while (/\s/.test(rest[k])) k++; }
             if (rest[k] !== '{') { issue('table read from a file'); src = null; }
-            else { const e = matchClose(rest, k); src = { type: 'table', opts: topt, text: rest.slice(k + 1, e) }; }
+            else { const e = matchClose(rest, k); if (e < 0) return false; src = { type: 'table', opts: topt, text: rest.slice(k + 1, e) }; }
           } else if (kw && kw[1] === 'expression') {
             const b = rest.indexOf('{'), e = b >= 0 ? matchClose(rest, b) : -1;
             if (e > 0) src = { type: 'expr', text: rest.slice(b + 1, e) };
@@ -259,10 +261,12 @@ import { compatNum } from './pgfplots-annot';
           } else if (kw) issue(`\\addplot ${kw[1]} not held`);
           else if (rest[0] === '{') {
             const e = matchClose(rest, 0);
+            if (e < 0) return false;
             src = { type: 'expr', text: rest.slice(1, e) };
             if (rest.slice(e + 1).trim()) issue('text after the plot expression not drawn');
           } else if (rest[0] === '(') {
             const e = matchClose(rest, 0);
+            if (e < 0) return false;
             const parts = splitTop(rest.slice(1, e), ',').map(unbrace);
             src = { type: 'param', parts };
             if (rest.slice(e + 1).trim()) issue('text after the plot expression not drawn');
@@ -275,9 +279,10 @@ import { compatNum } from './pgfplots-annot';
         }
         if (name === 'legend' || name === 'addlegendentry' || name === 'addlegendentryexpanded') {
           j = skipWs(j);
-          if (s[j] === '[') { const e = matchClose(s, j); issue('legend entry options not held'); j = skipWs(e + 1); }
+          if (s[j] === '[') { const e = matchClose(s, j); if (e < 0) return false; issue('legend entry options not held'); j = skipWs(e + 1); }
           if (s[j] !== '{') { i = j; continue; }
           const e = matchClose(s, j);
+          if (e < 0) return false;
           const arg = s.slice(j + 1, e);
           if (name === 'legend') legendList = splitTop(arg, ',').map(unbrace);
           else { const p = [...plots].reverse().find((q) => !q.forget); if (p) p.legend = unbrace(arg); }
@@ -294,14 +299,14 @@ import { compatNum } from './pgfplots-annot';
         if (name === 'begin') {
           const em = /^\s*\{([^}]*)\}/.exec(s.slice(j));
           const env = em ? em[1] : '';
-          const re = new RegExp(`\\\\(begin|end)\\{${env.replace(/[*]/g, '\\*')}\\}`, 'g');
+          const re = new RegExp(`\\\\(begin|end)\\{${reEsc(env)}\\}`, 'g');
           re.lastIndex = bs; let d = 0, stop = s.length, innerEnd = s.length, mm;
           while ((mm = re.exec(s))) { d += mm[1] === 'begin' ? 1 : -1; if (!d) { innerEnd = mm.index; stop = mm.index + mm[0].length; break; } }
           const whole = s.slice(bs, stop);
           if (/\\addplot/.test(whole)) {
             // a scope round plots: its plots read, its options not held
             issue(`\\begin{${env}} in the axis not held`);
-            if (env === 'scope' && depth < 4) { let k = skipWs(j + em![0].length); if (s[k] === '[') k = matchClose(s, k) + 1; if (!scan(s.slice(k, innerEnd), depth + 1)) return false; }
+            if (env === 'scope' && depth < 4) { let k = skipWs(j + em![0].length); if (s[k] === '[') { const e = matchClose(s, k); if (e < 0) return false; k = e + 1; } if (!scan(s.slice(k, innerEnd), depth + 1)) return false; }
           } else if (env === 'scope' || env === 'pgfonlayer') annots.push({ at: plots.length, code: whole.trim() });
           else { issue(`\\begin{${env}} in the axis not drawn`); if (/\\addplot/.test(whole)) unread = true; }
           i = stop;
@@ -350,7 +355,7 @@ import { compatNum } from './pgfplots-annot';
         issue(`\\${name} in the axis not drawn`);
         if (DEFINES.has(name)) {
           let k = skipWs(j);
-          if (s[k] === '{') k = matchClose(s, k) + 1; else if (s[k] === '\\') { const c = /^\\[A-Za-z@]+/.exec(s.slice(k)); k += c ? c[0].length : 2; }
+          if (s[k] === '{') { const e = matchClose(s, k); k = e < 0 ? s.length : e + 1; } else if (s[k] === '\\') { const c = /^\\[A-Za-z@]+/.exec(s.slice(k)); k += c ? c[0].length : 2; }
           if (/^(e|g|x)?def$/.test(name)) { while (k < s.length && s[k] !== '{') k++; }
           i = skipArgs(k);
         } else i = skipArgs(j);
@@ -366,7 +371,8 @@ import { compatNum } from './pgfplots-annot';
           const a = out.length >= 2 ? +out[out.length - 2] : NaN, b = +out[out.length - 1], c = +parts[k + 1];
           const st = isFinite(a) ? b - a : c >= b ? 1 : -1;
           if (!isFinite(b) || !isFinite(c) || !st || (c - b) / st > 1000) return null;
-          for (let v = b + st; st > 0 ? v <= c + 1e-9 : v >= c - 1e-9; v += st) out.push(String(+v.toPrecision(12)));
+          // (at most the 1000 steps let through: a step below b's precision would not move v)
+          for (let v = b + st, n = 0; (st > 0 ? v <= c + 1e-9 : v >= c - 1e-9) && n <= 1000; v += st, n++) out.push(String(+v.toPrecision(12)));
           k++; continue;
         }
         out.push(parts[k]);
@@ -482,7 +488,7 @@ import { compatNum } from './pgfplots-annot';
           const a = out[out.length - 2], b = out[out.length - 1], c = numOf(parts[k + 1], expand);
           const st = out.length >= 2 ? b - a : c > b ? 1 : -1;
           if (!isFinite(b) || !isFinite(c) || !(st !== 0) || (c - b) / st > 1000) return null;
-          for (let v = b + st; st > 0 ? v <= c + 1e-9 : v >= c - 1e-9; v += st) out.push(+v.toPrecision(12));
+          for (let v = b + st, n = 0; (st > 0 ? v <= c + 1e-9 : v >= c - 1e-9) && n <= 1000; v += st, n++) out.push(+v.toPrecision(12));
           k++; continue;
         }
         const n = numOf(parts[k], expand);
@@ -633,7 +639,7 @@ import { compatNum } from './pgfplots-annot';
         } else if (src.type === 'param' && src.parts.length === 3) {
           const curve = st.samplesY != null && numOf(st.samplesY, expand) === 0;
           const v = st.variable;
-          const E = src.parts.map((q: string) => pgfExpr(q.replace(/\\([xy])(?![A-Za-z@])/g, '$1').replace(new RegExp(`(?<![A-Za-z_])${v}(?![A-Za-z_0-9])`, 'g'), curve ? 't' : 'u').replace(/(?<![A-Za-z_])y(?![A-Za-z_0-9])/g, 'v'), deg, curve ? ['x', 't'] : ['x', 'y', 'u', 'v'], fx));
+          const E = src.parts.map((q: string) => pgfExpr(q.replace(/\\([xy])(?![A-Za-z@])/g, '$1').replace(new RegExp(`(?<![A-Za-z_])${reEsc(v)}(?![A-Za-z_0-9])`, 'g'), curve ? 't' : 'u').replace(/(?<![A-Za-z_])y(?![A-Za-z_0-9])/g, 'v'), deg, curve ? ['x', 't'] : ['x', 'y', 'u', 'v'], fx));
           // the plot's own evaluator checks them again with its variables
           for (const e of E) if (e.error && !/Unknown name/.test(e.error)) issue(`expression not read: ${e.error}`);
           kind = curve ? 'curve3d' : 'param3d';
@@ -654,7 +660,7 @@ import { compatNum } from './pgfplots-annot';
       } else if (src.type === 'param') {
         if (src.parts.length !== 2) { issue('a parametric plot not read'); continue; }
         const v = st.variable;
-        const E = src.parts.map((q: string) => pgfExpr(q.replace(new RegExp(`\\\\${v}(?![A-Za-z@])`, 'g'), v).replace(new RegExp(`(?<![A-Za-z_])${v}(?![A-Za-z_0-9])`, 'g'), 't'), deg, ['t'], fx));
+        const E = src.parts.map((q: string) => pgfExpr(q.replace(new RegExp(`\\\\${reEsc(v)}(?![A-Za-z@])`, 'g'), v).replace(new RegExp(`(?<![A-Za-z_])${reEsc(v)}(?![A-Za-z_0-9])`, 'g'), 't'), deg, ['t'], fx));
         for (const e of E) if (e.error) issue(`expression not read: ${e.error}`);
         kind = 'param';
         Object.assign(ser, { kind, source: 'expr', expr: E[0].expr, expr2: E[1].expr });
@@ -791,7 +797,7 @@ import { compatNum } from './pgfplots-annot';
       const d = numOf(dv, expand), L = L0();
       if (!(d > 0) || (L[a + 'max'] - L[a + 'min']) / d > 200) { issue(`${a}tick distance=${dv} not read`); continue; }
       const out: number[] = [];
-      for (let v = Math.ceil(L[a + 'min'] / d - 1e-9) * d; v <= L[a + 'max'] + d * 1e-9; v += d) out.push(+v.toPrecision(12));
+      for (let v = Math.ceil(L[a + 'min'] / d - 1e-9) * d, n = 0; v <= L[a + 'max'] + d * 1e-9 && n <= 201; v += d, n++) out.push(+v.toPrecision(12));
       shape[a + 'tick'] = out;
     }
     // at= and anchor= place the axis box (default: its south west corner at the origin)

@@ -62,6 +62,8 @@ function guardStructure(t: string) {
   const re = /\\(begin|end)\{([^{}]*)\}|\\(tabularnewline|crcr|cr)(?![A-Za-z])/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(t))) {
+    let k0 = m.index; while (k0 > 0 && t[k0 - 1] === '\\') k0--;
+    if ((m.index - k0) % 2) continue; // \\cr, \\begin: a line break, then the word
     if (m[3]) { bad.push(m.index); continue; }
     if (m[1] === 'begin') envs.push({ name: m[2], at: m.index });
     else if (envs.length && envs[envs.length - 1].name === m[2]) envs.pop();
@@ -75,6 +77,18 @@ function guardStructure(t: string) {
     t = t.slice(0, i) + '\\textbackslash{}' + cmd[1] + (cmd[2] ? '\\{' + cmd[2].slice(1, -1) + '\\}' : '') + t.slice(i + cmd[0].length);
   }
   return t;
+}
+/** A cell's escaped text as its lines: a newline in $…$ or in an environment is a space there, not a new line. */
+function cellLines(t: string) {
+  if (!t.includes('\n')) return [t];
+  const envs = envRanges(t), out = t.split('');
+  let math = false;
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] === '\\') i++;
+    else if (out[i] === '$') math = !math;
+    else if (out[i] === '\n' && (math || inRanges(envs, i))) out[i] = ' ';
+  }
+  return out.join('').split(/\n/);
 }
 /** Plain text (a CSV value, a spreadsheet cell) as LaTeX that prints it exactly. */
 const PLAIN: Record<string, string> = { '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', $: '\\$', '%': '\\%', '&': '\\&', '#': '\\#', _: '\\_', '^': '\\textasciicircum{}', '~': '\\textasciitilde{}' };
@@ -201,14 +215,14 @@ export function toLatex(m: TableModel, o: LatexOptions = {}): LatexResult {
     }
     let s = safeTex(t).trim();
     if (!s) return '';
-    const lines = s.split(/\n/).map((l) => l.trim());
+    const lines = cellLines(s).map((l) => l.trim());
     if (lines.length > 1) {
       if (wrapCol) s = lines.join(' \\newline ');
       else {
         const al = alignOf(m, c, x), va = x.va === 'm' ? 'c' : x.va === 'b' ? 'b' : 't';
         s = `\\begin{tabular}[${(x.rs || 1) > 1 ? 'c' : va}]{@{}${al === 'j' ? 'l' : al}@{}}${lines.join(' \\\\ ')}\\end{tabular}`;
       }
-    }
+    } else s = lines[0];
     if (x.tt) s = `\\texttt{${s}}`;
     if (x.u) s = `\\underline{${s}}`;
     if (x.i) s = `\\textit{${s}}`;

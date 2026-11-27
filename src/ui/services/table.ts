@@ -1085,13 +1085,13 @@ const PICTURE_MS = 10;
     };
     const move = (ev: PointerEvent) => { x = ev.clientX; if (!frame) frame = requestAnimationFrame(apply); };
     const up = () => {
-      removeEventListener('pointermove', move); removeEventListener('pointerup', up);
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
       if (frame) { cancelAnimationFrame(frame); apply(); }
       if (x === x0) M.cols[c].w = (JSON.parse(before) as TableModel).cols[c].w; // a click (or a double-click's first half) changes nothing
       paint();
       if (JSON.stringify(M) !== before) { undoStack.push(before); redoStack.length = 0; fresh = false; save(); panel(); preview(); }
     };
-    addEventListener('pointermove', move); addEventListener('pointerup', up);
+    addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up); // a cancelled drag ends as a release
   }
   // the LaTeX view reads like a field: a click focuses it, and ⌘A takes just the code, not the page (as #tikzOut);
   // copying all of it gives the exact text (an empty line is drawn as a space)

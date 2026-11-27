@@ -50,14 +50,18 @@
   function drag(fn: (x: number, y: number, final: boolean) => void) {
     return (node: HTMLElement) => {
       const at = (e: PointerEvent, final: boolean) => { const r = node.getBoundingClientRect(); fn(clamp((e.clientX - r.left) / r.width), clamp((e.clientY - r.top) / r.height), final); };
+      let end: (() => void) | null = null;
       const down = (e: PointerEvent) => {
-        e.preventDefault(); node.setPointerCapture(e.pointerId); at(e, false);
-        const move = (ev: PointerEvent) => at(ev, false);
-        const up = (ev: PointerEvent) => { node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', up); at(ev, true); };
-        node.addEventListener('pointermove', move); node.addEventListener('pointerup', up);
+        e.preventDefault(); end?.(); node.setPointerCapture(e.pointerId); at(e, false);
+        let last = e;
+        const move = (ev: PointerEvent) => at(last = ev, false);
+        // a cancelled drag (the system took the pointer) ends where it last was: its own event has no place to trust
+        const up = (ev: PointerEvent) => { end!(); at(ev.type === 'pointercancel' ? last : ev, true); };
+        end = () => { node.removeEventListener('pointermove', move); node.removeEventListener('pointerup', up); node.removeEventListener('pointercancel', up); end = null; };
+        node.addEventListener('pointermove', move); node.addEventListener('pointerup', up); node.addEventListener('pointercancel', up);
       };
       node.addEventListener('pointerdown', down);
-      return () => node.removeEventListener('pointerdown', down);
+      return () => { node.removeEventListener('pointerdown', down); end?.(); };
     };
   }
   const change = (f: 'hex' | 'r' | 'g' | 'b' | 'a') => (e: Event) => act.field(f, (e.currentTarget as HTMLInputElement).value);

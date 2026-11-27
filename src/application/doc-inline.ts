@@ -675,7 +675,7 @@ export function toggleFormat(root: Element, cmd: string, tag: string, attrs: Rec
   }
   if (anc && force) {
     // the same format around the whole of it: change that one instead of nesting
-    for (const e of made) if (e.parentElement === anc && anc.childNodes.length === 1) { for (const [k, v] of Object.entries(attrs)) anc.setAttribute(k, v); if (style) anc.setAttribute('style', style); unwrap(e); }
+    made.forEach((e, i) => { if (e.parentElement === anc && anc.childNodes.length === 1) { for (const [k, v] of Object.entries(attrs)) anc.setAttribute(k, v); if (style) anc.setAttribute('style', style); unwrap(e); made[i] = anc; } }); // the selection goes on anc, not the detached e
   }
   if (made.length) {
     // selected inside the new formats, so the toolbar shows them on

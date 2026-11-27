@@ -32,11 +32,20 @@ export function createExportWriter(files: {
   };
 }
 
+/** The address a picture's `src` resolves to against `base`, when it is image data, a blob or an ordinary web address;
+ * null otherwise. Resolved as the browser would (it drops tabs, newlines and leading control characters, so
+ * `java\tscript:` is javascript:), then the scheme is checked. */
+export function imageUrl(src: string, base: string): string | null {
+  let u: URL;
+  try { u = new URL(String(src || ''), base); } catch { return null; }
+  if (u.protocol === 'data:') return /^data:image\//i.test(u.href) ? u.href : null;
+  return ['blob:', 'http:', 'https:'].includes(u.protocol) ? u.href : null;
+}
 /** Save a picture the document holds. Only image data and ordinary web addresses are followed: a document can come
  * from anyone, and a javascript: or other scheme in an anchor would run or open something instead of saving. */
 export function downloadImage(src: string, name: string) {
-  const url = String(src || '').trim();
-  if (!/^(data:image\/|blob:|https?:)/i.test(url) && /^[a-z][\w+.-]*:/i.test(url)) return false;
+  const url = imageUrl(src, document.baseURI);
+  if (!url) return false;
   const a = document.createElement('a');
   a.href = url; a.download = name; a.click();
   return true;

@@ -415,7 +415,7 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
       draw(); return;
     }
   });
-  svg.addEventListener('pointerup', (e: any) => {
+  const up = (e: any) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'edge') {
@@ -437,7 +437,9 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
     }
     if (d.mode === 'move' && d.moved) { setTip(''); commit(); renderProps(); draw(); return; }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', (e: any) => { if (E?.drag?.mode === 'edge') { E.drag = null; E.hover = null; setTip(''); draw(); } else up(e); }); // a cancelled drag ends as a release, with no new edge where it was let go
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && (E.hover || E.knobAt)) { E.hover = null; E.knobAt = null; draw(); } });
 
   // right-click: the vertex's or line's actions
@@ -651,6 +653,7 @@ import { planeGrid, uprightPlane } from '../ui/plane-grid';
     if (k) { e.preventDefault(); pick(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

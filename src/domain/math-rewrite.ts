@@ -629,7 +629,7 @@ export function rewriteMath(tex: string, defined: Defined = () => false): string
     if (name === 'si' || name === 'unit') { done(`{${bare(unitTex(a.v, opts))}}`, a.end); continue; }
     if (name === 'num' || name === 'tablenum') { done(`{${numberTex(a.v)}}`, a.end); continue; }
     if (name === 'ang') {
-      const parts = a.v.split(';').map((s) => s.trim());
+      const parts = a.v.split(';').slice(0, 3).map((s) => s.trim()); // degrees; minutes; seconds
       const marks = ['{}^{\\circ}', "{}'", "{}''"];
       done(`{${parts.map((p, k) => (p ? numberTex(p) + marks[k] : '')).join('')}}`, a.end); continue;
     }

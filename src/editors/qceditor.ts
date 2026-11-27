@@ -824,7 +824,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     }
     if (d.mode === 'range') { const h = pick(e); if (h && h.r < nR(E.M) && h.c < nC(E.M)) { E.sel.r2 = h.r; E.sel.c2 = h.c; draw(); renderProps(); } }
   });
-  svg.addEventListener('pointerup', (e: any) => {
+  const up = (e: any) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'range' && d.group) { addGroup(selBox(), d.group === 'glabel'); return; }
@@ -837,7 +837,9 @@ import { onLabelFontsChange } from '../domain/label-image';
       E.hover = null; draw(); renderProps(); return;
     }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', (e: any) => { if (E?.drag?.mode === 'move') { E.drag = null; E.hover = null; draw(); } else up(e); }); // a cancelled drag ends as a release, with no move to where it was let go
   // right-click: wires and steps, around the cell (or range) under the pointer
   // the menu rows' icons (src/ui/kit/icons.ts)
   const MI: Record<string, IconName> = { above: 'rowAbove', below: 'rowBelow', before: 'colBefore', after: 'colAfter', rowdel: 'rowDelete', coldel: 'colDelete', clear: 'clear', left: 'moveLeft', right: 'moveRight', group: 'group', glabel: 'labelAbove', glabelbelow: 'labelBelow', gdel: 'groupDelete' };
@@ -1402,6 +1404,7 @@ import { onLabelFontsChange } from '../domain/label-image';
     if (k && s) { e.preventDefault(); put(k, s.r1, s.c1, true); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

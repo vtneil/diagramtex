@@ -363,7 +363,7 @@ import { keepComments } from './keep-comments';
       draw(); return;
     }
   });
-  svg.addEventListener('pointerup', (e: any) => {
+  const up = (e: any) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'paint') { commit(); renderProps(); draw(); return; }
@@ -379,7 +379,9 @@ import { keepComments } from './keep-comments';
       renderProps(); draw(); return;
     }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', up); // a cancelled drag ends as a release
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover != null) { E.hover = null; if (!E.arm) setTip(''); draw(); } });
   function cellTip(n: any) {
     const M = E.M, nv = F.varsOf(M.X, M.Y, M.Z), v = valOf(n);
@@ -576,6 +578,7 @@ import { keepComments } from './keep-comments';
     pick(k);
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

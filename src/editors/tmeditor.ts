@@ -821,7 +821,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
       setMarks(x, v); setHint(uiText('editor.tm.markerAt', 'Marker at {t}', { t: T.num(v[d.j]) })); draw();
     }
   });
-  svg.addEventListener('pointerup', (e: any) => {
+  const up = (e: any) => {
     if (!E || !E.drag) return;
     const d = E.drag; E.drag = null;
     if (d.mode === 'paint') {
@@ -850,7 +850,9 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     if ((d.mode === 'edge' || d.mode === 'move' || d.mode === 'mmove' || d.mode === 'bmove') && d.moved) { setHint(''); commit(); renderProps(); draw(); return; }
     if ((d.mode === 'amove' && d.moved) || d.mode === 'aend') { setHint(''); commit(); renderProps(); draw(); return; }
     draw();
-  });
+  };
+  svg.addEventListener('pointerup', up);
+  svg.addEventListener('pointercancel', (e: any) => { if (E?.drag?.mode === 'paint') { E.drag.click = true; dropPaint(); } else up(e); }); // a cancelled drag ends as a release, a stroke being painted taken back
   document.addEventListener('pointerdown', (e) => { if (E && E.drag && E.drag.click && !svg.contains(e.target as Node)) dropPaint(); }, true);
   svg.addEventListener('pointerleave', () => { if (E && !E.drag && E.hover) { E.hover = null; draw(); } });
 
@@ -1170,6 +1172,7 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     if (k) { e.preventDefault(); pick(k); }
   }, true);
   window.addEventListener('keyup', (e) => { if (E && e.key === ' ') E.space = false; }, true);
+  window.addEventListener('blur', () => { if (E) E.space = false; }); // Space let go in another window
   TD.editorSession.watchSize(root, () => { if (E && !root.hidden) draw(); });
 
   // ---------------------------------------------------------------- open / close

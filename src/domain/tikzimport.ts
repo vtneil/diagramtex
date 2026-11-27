@@ -2425,7 +2425,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     if (last('at')?.v) atRaw = String(last('at').v).trim().replace(/^\(([\s\S]*)\)$/, '$1');
     const colSep = matrixSep(last('column sep')?.v), rowSep = matrixSep(last('row sep')?.v);
     if (!colSep.ok || !rowSep.ok) issues.push('matrix separation not understood');
-    const ampO = last('ampersand replacement'), amp = ampO?.v ? String(ampO.v).trim() : '&';
+    const amp = String(last('ampersand replacement')?.v ?? '').trim() || '&'; // (none, or only spaces: &)
     const emptyNodes = opts.some((o: any) => o.k === 'nodes in empty cells' && o.v !== 'false');
     const xf = readXf(C, opts.filter((o: any) => XF_KEYS.has(o.k)));
     if (xf.xf.some((t: any) => t.dx === undefined)) issues.push('matrix rotated or scaled');
@@ -2570,7 +2570,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
   }
   // \begin{env} … \end{env} with nesting: index just after the matching \end
   function envEnd(s: any, env: any, from: any) {
-    const re = new RegExp(`\\\\(begin|end)\\{${env.replace(/[*]/g, '\\*')}\\}`, 'g');
+    const re = new RegExp(`\\\\(begin|end)\\{${String(env).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`, 'g');
     re.lastIndex = from; let d = 1, m;
     while ((m = re.exec(s))) { d += m[1] === 'begin' ? 1 : -1; if (!d) return m.index + m[0].length; }
     return s.length;
@@ -2835,7 +2835,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
           i = e + 1; while (/\s/.test(s[i])) i++;
           let L: Record<string, any> = { xf: [], shape: false, opts: '' };
           if (s[i] === '[') {
-            const e2 = matchClose(s, i, '[', ']');
+            const e2 = shut(s, i, '[', ']');
             const str = s.slice(i + 1, e2);
             // an empty scope that starts a branch or chain ({[start branch=c2 going above]}): it draws nothing, but the
             // nodes after it continue what it started, so it is kept as code
@@ -3625,7 +3625,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
         if ([...C.styles.keys()].some((k: string) => k.startsWith(PIC_CODE))) own.definitions = Object.fromEntries(C.styles);
         const used = Object.keys(C.names).filter((nm) => own.code.includes('(' + nm));
         if (used.length) own.names = Object.fromEntries<any>(used.map((nm) => [nm, C.names[nm]]));
-        const macs = [...C.macros.keys()].filter((nm) => new RegExp(`\\\\${nm}(?![A-Za-z@])`).test(own.code));
+        const macs = [...C.macros.keys()].filter((nm) => new RegExp(`\\\\${String(nm).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z@])`).test(own.code));
         if (macs.length && own.kind !== 'defs') own.macros = Object.fromEntries<any>(macs.map((nm) => [nm, C.macros.get(nm)]));
       }
       prevEnd = end;

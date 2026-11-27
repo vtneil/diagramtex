@@ -131,8 +131,9 @@
       const wrap = math ? !!v0 : bare && /^\s*\\[A-Za-z]/.test(v0) && !v0.includes('$');
       ml = TD.input.mount(host, {
         text: wrap ? `$${v0}$` : v0, para: multi, prose: prose ?? !math, start: v0 ? 'end' : start ?? (math ? 'math' : 'text'),
-        // a line that is all maths goes back without its $ where the content is maths already
-        onInput: (v: string) => { const u = /^\$([^$]*)\$$/.exec(v); oninput?.(wrap && u ? u[1] : v); place(); },
+        // a line that is all maths goes back without its $ where the content is maths already (a maths label: even
+        // one opened empty, which isn't wrapped but starts in maths mode)
+        onInput: (v: string) => { const u = /^\$([^$]*)\$$/.exec(v); oninput?.((math || wrap) && u ? u[1] : v); place(); },
         onDone: finish,
       });
       tick().then(place);

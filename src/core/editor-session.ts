@@ -147,15 +147,17 @@ export function createEditorSession(services: {
   function lifecycle({ state, clear, snapshot, commit, root, code, readCode, note, discardTitle, settle, source, result, selOut, selIn }: LifecycleHooks) {
     const { show, changed, release, elsewhere, docked, resumed } = dockable({ root, state, snapshot, result, selOut, selIn });
     const saved = () => (source ? source() : snapshot());
+    // the code as typed: read while its pane has focus or a read is still due (wireCode's 250ms); moving the root drops focus without it
+    function flush() { const e: any = state(); if (e && (document.activeElement === code || e.codeTimer != null)) readCode(); }
     // embedded: back over the page, and closed as Done would (the host's close)
-    function detach() { if (!docked()) return; release(); finish(true); }
+    function detach() { if (!docked()) return; flush(); release(); finish(true); }
     services.unsaved.push(() => { const e = state(); return !!e && !docked() && snapshot() !== e.start; });
     // ⌘S: write the drawing back to the page (one undo step there) and keep editing; embedded, every edit already is
     function save() {
       if (!state()) return;
-      if (docked()) { if (document.activeElement === code) readCode(); commit(); changed(); return; }
+      if (docked()) { flush(); commit(); changed(); return; }
       settle?.();
-      if (document.activeElement === code) readCode();
+      flush();
       commit();
       const e = state()!, src = saved();
       if (src !== e.start) { e.start = src; e.saved = true; e.done(result ? result() : { src }); }
@@ -165,7 +167,7 @@ export function createEditorSession(services: {
     async function finish(ok: boolean) {
       if (!state() || docked()) return;
       settle?.();
-      if (document.activeElement === code) readCode();
+      flush();
       if (document.activeElement && root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
       commit();
       const e = state()!, src = saved(), edited = src !== e.start;
@@ -173,6 +175,7 @@ export function createEditorSession(services: {
       const done = e.done, out = ok && edited ? (result ? result() : { src }) : null;
       closeModal(root);
       document.body.classList.remove('cz-open');
+      clearTimeout((e as any).codeTimer);
       clear();
       if (out) done(out);
     }

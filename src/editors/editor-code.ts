@@ -5,7 +5,7 @@ import { t } from '../i18n';
 
 /** state() is the editor's open state (null when closed), holding codeTimer and codeAt as each editor's does. */
 export function wireCode(ta: HTMLTextAreaElement, ed: { state: () => any; read: () => void; commit: () => void; sync: () => void }) {
-  ta.addEventListener('input', () => { const E = ed.state(); if (!E) return; clearTimeout(E.codeTimer); E.codeTimer = setTimeout(ed.read, 250); });
+  ta.addEventListener('input', () => { const E = ed.state(); if (!E) return; clearTimeout(E.codeTimer); E.codeTimer = setTimeout(() => { if (ed.state() === E) ed.read(); }, 250); });
   ta.addEventListener('blur', () => { const E = ed.state(); if (!E) return; ed.read(); ed.commit(); E.codeAt = null; ed.sync(); });
 }
 
