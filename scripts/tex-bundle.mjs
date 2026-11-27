@@ -20,6 +20,9 @@
 //
 // The bundles stay out of the repository: scripts/tex-bundle-pack.mjs packs them for a GitHub release and pins that in
 // scripts/tex-bundle.lock.json, and scripts/tex-bundle-fetch.mjs (CI, before every build) puts them back.
+//
+// Usually run on GitHub instead: the TeX bundle workflow (.github/workflows/tex-bundle.yml, run by hand) installs TeX Live,
+// runs this with --capture, packs and publishes the archive and opens a pull request pinning it.
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';

@@ -1,0 +1,113 @@
+name: TeX bundle
+
+# Rebuilds the in-browser LaTeX's TeX Live bundles (scripts/tex-bundle.mjs) on a runner with a full TeX Live, publishes
+# the archive as a tex-… release and opens a pull request pinning it in scripts/tex-bundle.lock.json. Run it by hand
+# (Actions › TeX bundle › Run workflow) after changing what the bundles hold (scripts/tex-bundle.mjs, the packages the
+# app writes). Merging the pull request changes nothing live: the next release (/release) deploys the new bundles.
+on:
+  workflow_dispatch:
+    inputs:
+      texlive:
+        description: TeX Live year the bundles must come from
+        default: '2026'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tex-bundle
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    # the image the other jobs use (Node and the browsers), as root: TeX Live goes into /opt/texlive
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+    steps:
+      - uses: actions/checkout@v7
+      # TeX Live from CTAN: the full scheme without documentation or sources (the TLWG Thai fonts the document fonts
+      # need are in it). Installed each run: this workflow runs rarely, and a cache this size would push others out
+      - name: Install TeX Live
+        shell: bash
+        run: |
+          apt-get update -qq && apt-get install -y -qq perl wget xz-utils fontconfig >/dev/null
+          cd /tmp && wget -q https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz && tar -xzf install-tl-unx.tar.gz
+          cat > profile <<'PROFILE'
+          selected_scheme scheme-full
+          TEXDIR /opt/texlive
+          TEXMFLOCAL /opt/texlive/texmf-local
+          TEXMFSYSVAR /opt/texlive/texmf-var
+          TEXMFSYSCONFIG /opt/texlive/texmf-config
+          TEXMFHOME ~/texmf
+          instopt_adjustpath 0
+          tlpdbopt_install_docfiles 0
+          tlpdbopt_install_srcfiles 0
+          tlpdbopt_autobackup 0
+          PROFILE
+          sed -i 's/^ *//' profile
+          ./install-tl-*/install-tl --profile profile >/tmp/install-tl.log 2>&1 || { tail -50 /tmp/install-tl.log; exit 1; }
+          echo "/opt/texlive/bin/x86_64-linux" >> "$GITHUB_PATH"
+      - name: TeX Live ${{ inputs.texlive }}
+        shell: bash
+        run: |
+          pdflatex --version | head -1
+          pdflatex --version | head -1 | grep -q "TeX Live ${{ inputs.texlive }}" || { echo "::error::CTAN gives a TeX Live other than ${{ inputs.texlive }}"; exit 1; }
+          kpsewhich tikz-network.sty
+      - uses: ./.github/actions/setup
+      # the bundles pinned now: the test suite's own in-browser compiles use them while the corpus is collected
+      - run: node scripts/tex-bundle-fetch.mjs
+      - name: Build the bundles (the corpus collected from the test suite, then both engines, checked in the browser)
+        shell: bash
+        run: node scripts/tex-bundle.mjs --capture
+      - run: node scripts/tex-bundle-pack.mjs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tex-bundle
+          path: |
+            .tex-bundle/*.tar
+            scripts/tex-bundle.lock.json
+          include-hidden-files: true
+          retention-days: 7
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tex-bundle-diagnostics
+          path: .ci-artifacts/
+          include-hidden-files: true
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: tex-bundle
+          path: built
+      - name: Publish the archive and open a pull request pinning it
+        shell: bash
+        run: |
+          cp built/scripts/tex-bundle.lock.json scripts/tex-bundle.lock.json
+          if git diff --quiet -- scripts/tex-bundle.lock.json; then echo "The bundles are the ones pinned already: nothing to publish"; exit 0; fi
+          tag=$(jq -r .tag scripts/tex-bundle.lock.json) file=$(jq -r .file scripts/tex-bundle.lock.json) year=$(jq -r .texlive scripts/tex-bundle.lock.json)
+          if gh release view "$tag" >/dev/null 2>&1; then echo "$tag is released already"
+          else gh release create "$tag" "built/.tex-bundle/$file" --latest=false --title "TeX Live $year bundle ${tag##*-}" --notes "The in-browser LaTeX's TeX Live bundles, built by the TeX bundle workflow (run $GITHUB_RUN_ID) from $GITHUB_SHA."; fi
+          branch="tex-bundle/$tag"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add scripts/tex-bundle.lock.json
+          git commit -m "The in-browser LaTeX uses the TeX Live bundles $tag"
+          git push origin "$branch"
+          gh pr create --base "$GITHUB_REF_NAME" --head "$branch" --title "The in-browser LaTeX uses the TeX Live bundles $tag" \
+            --body "Pins the bundles built by run $GITHUB_RUN_ID ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) in scripts/tex-bundle.lock.json. Merge, then release: the release's build fetches them." \
+            || echo "::warning::Could not open the pull request (Settings › Actions › General › Allow GitHub Actions to create pull requests). The branch $branch is pushed: open it by hand."
