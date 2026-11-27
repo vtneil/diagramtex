@@ -190,7 +190,13 @@ const FMT = { pdftex: 'swiftlatexpdftex.fmt', xetex: 'swiftlatexxetex.fmt' };
 const FMT_ALIASES = new Set(['swiftlatexpdftex.fmt', 'swiftlatexxetex.fmt', 'xelatex.fmt', 'pdflatex.fmt']);
 let opened = new Map(), fmtFile = null; // for the engine being built: name → file in TeX Live, for every file it opened
 const PAGE = `<!doctype html><meta charset="utf-8"><title>tex-bundle</title><script>
-const run = (w, msg, until) => new Promise((res) => { w.onmessage = (e) => { if (until(e.data)) res(e.data); }; if (msg) w.postMessage(msg); });
+// an answer from a worker, or an error: never a wait without end (a worker that fails to load or dies says nothing)
+const run = (w, msg, until, ms = 300000) => new Promise((res, rej) => {
+  const t = setTimeout(() => rej(new Error('no answer from the engine in ' + ms / 1000 + ' s')), ms);
+  w.onmessage = (e) => { if (until(e.data)) { clearTimeout(t); res(e.data); } };
+  w.onerror = (e) => { clearTimeout(t); rej(new Error('the engine\'s worker failed: ' + (e.message || 'it did not load'))); };
+  if (msg) w.postMessage(msg);
+});
 const boot = async (js) => { const w = new Worker(js); await run(w, null, (d) => d.result); w.postMessage({ cmd: 'settexliveurl', url: location.origin + '/texlive/' }); return w; };
 window.stock = async (engine) => { window.E = engine; window.W = await boot('tex/swiftlatex' + engine + '.js'); if (engine === 'xetex') window.D = await boot('tex/swiftlatexdvipdfm.js'); };
 window.format = async () => { const d = await run(W, { cmd: 'compileformat' }, (d) => d.cmd === 'compile'); if (d.result !== 'ok') return { log: d.log.slice(-2000) }; await fetch('/fmt', { method: 'POST', body: d.pdf }); return { ok: true, size: d.pdf.byteLength }; };
@@ -242,6 +248,11 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const URL0 = `http://127.0.0.1:${server.address().port}/`;
+// the bundle is checked through the app's own LaTeX worker (public/tex/tex-worker.js), which is compiled, not kept in the
+// repository: compiled here, as a fresh checkout (CI) has none
+const { compileApp } = await import('./compile.js');
+await compileApp();
+if (!fs.existsSync(path.join(TEX, 'tex-worker.js'))) throw new Error('public/tex/tex-worker.js was not compiled');
 const { chromium } = await import('playwright');
 const browser = await chromium.launch();
 const page = async () => { const p = await browser.newPage(); await p.goto(URL0); return p; };
@@ -283,8 +294,9 @@ async function build(ENGINE) {
   const stockPage = async () => { const q = await page(); await q.evaluate((e) => window.stock(e), ENGINE); return q; };
   const stockOne = async (cur, d, renew) => {
     const stock = (q) => q.evaluate(({ src, files }) => window.compileStock(src, files), d);
-    let r = await stock(cur());
-    if (!r.ok) r = await stock(await renew());
+    const tryStock = (q) => stock(q).catch((e) => ({ ok: false, log: String(e) }));
+    let r = await tryStock(cur());
+    if (!r.ok) r = await tryStock(await renew());
     if (r.ok) passed.add(d.name); else if (must(d.name)) throw new Error(`the ${d.name} document failed:\n` + r.log); else failed.push(d.name);
   };
   await eachDoc(`${ENGINE} with TeX Live (must)`, docs.filter((d) => must(d.name)), stockPage, stockOne);
@@ -360,8 +372,9 @@ async function build(ENGINE) {
   };
   await eachDoc(`${ENGINE} with the bundle`, docs, oursPage, async (cur, d, renew) => {
     const ours = (q) => q.evaluate(({ src, files }) => window.compileOurs(src, files), d);
-    let r = await ours(cur());
-    if (!r.ok && passed.has(d.name)) r = await ours(await renew()); // a fresh engine, as in step 2
+    const tryOurs = (q) => ours(q).catch((e) => ({ ok: false, missing: [], log: String(e) }));
+    let r = await tryOurs(cur());
+    if (!r.ok && passed.has(d.name)) r = await tryOurs(await renew()); // a fresh engine, as in step 2
     if (!r.ok && passed.has(d.name)) { lost.push(`${d.name}: missing ${r.missing.join(', ') || '-'}\n${r.log}`); say(`  [FAILED] ${d.name}: compiles with TeX Live, not with the bundle`); }
   });
   if (lost.length) throw new Error(`${lost.length} documents compile with TeX Live but not with the bundle:\n${lost.slice(0, 5).join('\n\n')}`);
