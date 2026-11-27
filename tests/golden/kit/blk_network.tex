@@ -1,0 +1,15 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{tikz-network}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0.32,-1.22)}]
+    \Vertex[x=0,y=0,label=A,position=above]{A}
+    \Vertex[x=2.5,y=0.5,label=B,position=above]{B}
+    \Vertex[x=1.5,y=-1.5,label=C,position=below]{C}
+    \Edge[label=1](A)(B)
+    \Edge[Direct,bend=-20](B)(C)
+    \Edge(C)(A)
+  \end{scope}
+\end{tikzpicture}
+\end{document}

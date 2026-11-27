@@ -33,6 +33,9 @@ blk_umlsd: 1/1 modelled · regenerated same
 blk_geo2d: 44/45 modelled · regenerated differs from line 2 (geo2d → coord,dot,line,text,tikz)
 blk_bytefield: 1/1 modelled · regenerated same
 blk_physics: 19/24 modelled · regenerated differs from line 6 (physics → dot,line,poly,text,tikz)
+blk_graph: 1/1 modelled · regenerated same
+blk_chemlab: 1/1 modelled · regenerated same
+blk_network: 1/1 modelled · regenerated same
 sym_basic: 66/66 modelled · regenerated differs from line 3 (sym → line,poly,region,text,tikz)
 sym_flow: 88/88 modelled · regenerated differs from line 3 (sym → line,poly,region,text,tikz)
 sym_elec: 183/183 modelled · regenerated differs from line 2 (sym → curve,line,poly)

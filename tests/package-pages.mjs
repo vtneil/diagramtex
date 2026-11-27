@@ -38,13 +38,17 @@ const EMBEDDED = async () => {
   await w().document.fonts.ready;
 };
 // in the embedded app: what shows, and the Quick drafts of `type`
-const EMBED_STATE = (type) => {
+const EMBED_STATE = async (type) => {
   const w = document.querySelector('figure.try iframe').contentWindow, d = w.document;
   const st = JSON.parse(w.localStorage.getItem('diagramtex.quick.blocks'));
   const vis = (s) => !!d.querySelector(s)?.getClientRects().length;
   const cur = st.items[type].find((x) => x.id === st.cur[type]);
+  // the drawing the link carries (data-draft: "1." + deflated JSON, base64url), before any editor has measured it
+  const draft = document.querySelector('figure.try').dataset.draft.slice(2).replace(/-/g, '+').replace(/_/g, '/');
+  const bytes = Uint8Array.from(atob(draft), (c) => c.charCodeAt(0));
+  const carried = JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text());
   return { embed: d.documentElement.classList.contains('embed'), topbar: vis('#topbar'), files: vis('#files'), editor: vis('#quick .qk-dock .modal-head'),
-    fromExample: st.items[type].filter((x) => x.src).length, name: cur.name || null, tikz: w.TD.toTikz([cur.shape]),
+    fromExample: st.items[type].filter((x) => x.src).length, name: cur.name || null, tikz: w.TD.toTikz([carried]),
     view: st.view, quick: w.localStorage.getItem('diagramtex.quick'), hash: w.location.hash,
     place: d.querySelector('#quick [data-place]')?.textContent.trim(),
     code: document.querySelector('.code pre code').textContent };
@@ -91,7 +95,7 @@ try {
           const e = await p.evaluate(`(${EMBED_STATE})(${JSON.stringify(type)})`);
           assert.ok(e.embed && !e.topbar && !e.files && e.editor, `${at} round ${round}: only the block's editor shows ${JSON.stringify({ topbar: e.topbar, files: e.files, editor: e.editor })}`);
           assert.equal(e.fromExample, 1, `${at} round ${round}: one draft from the example`);
-          // the drawing as the link brings it; once its editor has run, an engine may measure the block a hair differently
+          // the drawing as the link brings it: once its editor has docked, an engine may measure the block a hair differently
           if (round === 1) assert.equal(e.tikz.trim(), e.code.trim(), `${at}: the example writes the page's code (if the app's export changed, run node scripts/package-pages.mjs)`);
           assert.equal(e.view, 'formula', `${at} round ${round}: the app's Quick view is left as it was`);
           assert.equal(e.quick, null, `${at} round ${round}: the app still opens as it did`);

@@ -957,7 +957,9 @@ TD.TYPES.network = {
       const used = TD.texImages.use(X, name + ext, csvData(text)), usedName = ext ? used.slice(0, -ext.length) : used;
       if (usedName !== name) t = t.split(`{${name}}`).join(`{${usedName}}`).split(`vertices=${name}`).join(`vertices=${usedName}`).split(`image=${name}`).join(`image=${usedName}`);
     }
-    const m = /\\begin\{tikzpicture\}\s*(\[)?/.exec(t);
+    // the spaces after \begin{tikzpicture} only when its options follow: otherwise they are the first line's indent, and
+    // taking them would indent that line less than the rest (an import evens the lines out, so each round trip shifted them)
+    const m = /\\begin\{tikzpicture\}(?:\s*(\[))?/.exec(t);
     let env = '', i = m!.index + m![0].length;
     if (m![1]) { const e = close(t, i - 1); env = t.slice(i, e).trim(); i = e + 1; }
     const end = t.lastIndexOf('\\end{tikzpicture}');

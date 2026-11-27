@@ -1,0 +1,13 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usepackage{tikz-chemlab}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0.27,-1.82)}, scale=0.5]
+    \tkzTestTube[liquidLevel1=40]
+    \begin{scope}[shift={(3,0)}]
+      \tkzTestTube[glassType=erlenmeyer, liquidStyle1=Champagne]
+    \end{scope}
+  \end{scope}
+\end{tikzpicture}
+\end{document}

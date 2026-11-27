@@ -1,0 +1,20 @@
+\documentclass[tikz, border=4pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{graphs, quotes, arrows.meta}
+\begin{document}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(0.36,-1.36)}, >=Stealth]
+    \graph[no placement, nodes={draw, circle, minimum size=7mm}] {
+      a/$a$ [at={(0,0)}];
+      b/$b$ [at={(2,1)}];
+      c/$c$ [at={(2,-1)}];
+      d/$d$ [at={(4,0)}];
+      a -- b;
+      a -- c;
+      b -- c;
+      b ->["$3$"] d;
+      c ->["$5$"'] d;
+    };
+  \end{scope}
+\end{tikzpicture}
+\end{document}
