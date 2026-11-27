@@ -1547,17 +1547,22 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     width = width === true;
     if (state.mode === 'document') { fitLater = true; return; }
     const r = fitArea();
+    // Fit Width keeps the place in view: what is at the middle of the view stays there, only the width is fitted
+    const midY = state.view.y + r.h / 2 / state.view.zoom, keepY = (z: number) => midY - r.h / 2 / z;
     if (state.mode === 'page') {
-      const b = sheetBox(), ph = Math.min(b.h, pageGeom().h);
+      // the pages the drawing is on, first to last (nothing drawn: the page in view)
+      const b = sheetBox(), G = pageGeom(), on = shapes().map((s: any) => pageOf(s, G));
+      const first = on.length ? Math.min(...on) : currentPage(), last = on.length ? Math.max(...on) : first;
+      const top = pageTop(first, G), ph = pageTop(last, G) + G.h - top;
       const z = Math.max(0.1, Math.min(width ? 8 : 3, (r.w - 60) / b.w, width ? Infinity : (r.h - 60) / ph));
-      state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: width ? -30 / z : ph / 2 - r.h / 2 / z };
+      state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: width ? keepY(z) : top + ph / 2 - r.h / 2 / z };
       render(); return;
     }
     if (!shapes().length) { state.view = { x: -60, y: -60, zoom: 1 }; render(); return; }
     const b = TD.bboxOf(shapes().flatMap((s: any) => { const q = TD.bbox(s); return [{ x: q.x, y: q.y }, { x: q.x + q.w, y: q.y + q.h }]; }));
     // as far out as zooming by hand goes (a Whiteboard 3%), so Fit always brings everything into view
     const z = Math.max(state.mode === 'board' ? 0.03 : 0.1, Math.min(width ? 8 : 3, (r.w - 80) / Math.max(b.w, 1), width ? Infinity : (r.h - 80) / Math.max(b.h, 1)));
-    state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: width ? b.y - 40 / z : b.y + b.h / 2 - r.h / 2 / z };
+    state.view = { zoom: z, x: b.x + b.w / 2 - r.w / 2 / z, y: width ? keepY(z) : b.y + b.h / 2 - r.h / 2 / z };
     render();
   }
   const zoomFitWidth = () => zoomFit(true);

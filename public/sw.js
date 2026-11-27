@@ -5,7 +5,7 @@
 // fallback for HTML export fonts) pass straight through.
 // Bump CACHE when the file list below changes; stale caches are deleted on activate. (This literal is for the
 // dev server only: scripts/build.js names dist/sw.js's cache after a hash of everything it precaches.)
-const CACHE = 'diagramtex-v138';
+const CACHE = 'diagramtex-v139';
 const SLOW_MS = 4000;
 // The in-browser pdfLaTeX (tex/: the engine and its TeX Live bundle) is not precached: it is downloaded the first time
 // someone compiles, into a cache of its own that a deploy doesn't clear. The bundle's chunks are named after their
