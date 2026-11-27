@@ -411,10 +411,13 @@ function pathSvg(it: any, ink: any) {
   const body = `<path d="${d}" fill="none" stroke="${col}" stroke-width="${r2(w)}"${da}/>` + tips;
   return st.opacity < 1 ? `<g opacity="${st.opacity}">${body}</g>` : body;
 }
+let drawn = 0; // drawings so far, for ids unique to each drawing
 function draw(s: any, ctx: any) {
   const L = layout(s), ink = '#000000'; // colours come from the code only, as in LaTeX
   const J = projector(L.opts);
-  const gid = `bloch-${(s.id || 'x').replace(/[^\w-]/g, '')}${ctx.export ? 'e' : ''}`;
+  // a fresh id for every drawing: the same sphere is drawn on the canvas, in the Layers thumbnails and on the Document's
+  // page, and url(#id) finds the first copy in the page, which may be one that isn't rendered
+  const gid = `bloch-${++drawn}`;
   let out = '';
   for (const it of L.items) {
     if (it.k === 'ball') {

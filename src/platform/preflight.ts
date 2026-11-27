@@ -61,4 +61,9 @@
       touch.addEventListener('change', apply);
     })();
 
+    // An editor embedded in another page of the site (?embed=<block>, a package page's "Edit this example here"):
+    // html.embed shows Quick's editor for that block and nothing else. Set here, as small-screen is, so the rest of
+    // the app never flashes. app.ts reads the block from the address.
+    if (/[?&]embed=/.test(location.search)) document.documentElement.classList.add('embed');
+
 export {};

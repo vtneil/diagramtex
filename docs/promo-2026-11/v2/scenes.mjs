@@ -33,7 +33,7 @@ export const scenes=[
 {name:'f10-import',js:L+`await hideSide();TD.app.setMode('diagram');TD.app.openImport(${JSON.stringify(IMPORT)});await sleep(700);`},
 {name:'f10-imported',js:L+`await hideSide();await foldLayers();TD.app.openImport(${JSON.stringify(IMPORT)});await sleep(400);$('#impNew').click();await sleep(900);TD.app.setMode('diagram');await frame();TD.app.zoomFit();await sleep(500);const r=shapes().find(x=>x.type==='rect'||x.type==='node'||x.type==='box');if(r)select([r.id]);window.__out=shapes().map(s=>s.type+':'+(s.text||s.label||'').slice(0,12));`},
 {name:'f11-chem',js:L+`await hideSide();`+inject('chem')},
-{name:'f12-cd',js:L+`await hideSide();await open('commutative ladder');await edit('cd');`},
+{name:'f12-cd',js:L+`await hideSide();await open('commutative cube');await edit('cd');`},
 {name:'f13-hatch',js:L+`await hideSide();await foldLayers();await open('retaining wall');const s=shapes().filter(x=>x.fill&&typeof x.fill==='object');select([s[1]?.id||s[0].id]);window.__out=s.map(x=>x.type);`},
 {name:'f14-quick',js:L+`TD.app.cmd.setQuick(true);await sleep(600);const q=$('#quickTex');q.value=String.raw\`\\\hat f(\\xi) = \\int_{-\\infty}^{\\infty} f(x)\\, e^{-2\\pi i x \\xi}\\, dx\`;q.dispatchEvent(new Event('input',{bubbles:true}));await sleep(1200);`},
 {name:'f15-export',js:L+`theme('light');await hideSide();await open('Damped oscillation');select([shapes().find(x=>x.type==='plot').id]);$('#btnExport').click();await sleep(700);`},

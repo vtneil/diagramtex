@@ -14,34 +14,33 @@ export function advancedBlockExamples(g: ExampleTools) {
 \draw (5,3) to[C,l=$C_2$,*-*] (5,0);
 \draw (7.5,3) to[R,l=$R_L$,v=$v_o$] (7.5,0) -- (0,0);
 \end{circuitikz}`;
-    const parsed = TD.cz.parse(src); add('cz', 'cz', { x: 55, y: 270, ...parsed });
+    const parsed = TD.cz.parse(src); add('cz', 'cz', { x: 55, y: 270, ...parsed, size: 'large' });
     text(230, 350, 'Source impedance → resonant ladder → load', { size: 17 });
   });
-  example('Quantum teleportation with classical corrections', 'Three wires include Bell-pair preparation, a Bell-basis measurement and classically controlled X/Z corrections. Every gate remains editable in the quantum circuit editor.', () => {
-    const figure = block('qc', R`\begin{quantikz}[row sep=0.6cm,column sep=0.45cm]
-\lstick{\ket{\psi}} & \qw & \qw & \ctrl{1} & \gate{H} & \meter{} \setwiretype{c} & \cw & \cwbend{2} & \cw \\
-\lstick{\ket{0}} & \gate{H} & \ctrl{1} & \targ{} & \qw & \meter{} \setwiretype{c} & \cwbend{1} & \cw & \cw \\
-\lstick{\ket{0}} & \qw & \targ{} & \qw & \qw & \qw & \gate{X} & \gate{Z} & \rstick{\ket{\psi}}\qw
-\end{quantikz}`);
-    note(figure, '$\\ket{\\psi}=\\alpha\\ket0+\\beta\\ket1$');
+  example('Four-qubit quantum Fourier transform with measurement', 'Hadamards and controlled phase rotations on four wires, a swap network that reverses the qubit order, a dashed gate group and a meter on every wire. Every gate remains editable in the quantum circuit editor.', () => {
+    const figure = block('qc', R`\begin{quantikz}
+\lstick{$\ket{x_3}$} & \gate{H}\gategroup[4,steps=12,style={dashed,rounded corners,inner xsep=2pt},label style={label position=above}]{QFT$_4$} & \gate{R_2} & \gate{R_3} & \gate{R_4} & & & & & & & \swap{3} & & \meter{} \\
+\lstick{$\ket{x_2}$} & & \ctrl{-1} & & & \gate{H} & \gate{R_2} & \gate{R_3} & & & & & \swap{1} & \meter{} \\
+\lstick{$\ket{x_1}$} & & & \ctrl{-2} & & & \ctrl{-1} & & \gate{H} & \gate{R_2} & & & \targX{} & \meter{} \\
+\lstick{$\ket{x_0}$} & & & & \ctrl{-3} & & & \ctrl{-2} & & \ctrl{-1} & \gate{H} & \targX{} & & \meter{}
+\end{quantikz}`, { size: 'large' });
+    note(figure, '$R_k=\\begin{pmatrix}1&0\\\\0&e^{2\\pi i/2^k}\\end{pmatrix},\\qquad \\ket{x}\\mapsto\\frac{1}{4}\\sum_{y=0}^{15}e^{2\\pi i\\,xy/16}\\ket{y}$');
   });
-  example('A commutative ladder of short exact sequences', 'The tikz-cd editor holds a three-row ladder with zero objects, named maps and commuting vertical squares. Change arrow styles, labels or the matrix in the block editor.', () => {
-    const figure = block('cd', R`\begin{tikzcd}[row sep=large,column sep=large]
-0 \arrow[r] & A_1 \arrow[r,"f_1"] \arrow[d,"a"] & B_1 \arrow[r,"g_1"] \arrow[d,"b"] & C_1 \arrow[r] \arrow[d,"c"] & 0 \\
-0 \arrow[r] & A_2 \arrow[r,"f_2"] \arrow[d,"a'"] & B_2 \arrow[r,"g_2"] \arrow[d,"b'"] & C_2 \arrow[r] \arrow[d,"c'"] & 0 \\
-0 \arrow[r] & A_3 \arrow[r,"f_3"] & B_3 \arrow[r,"g_3"] & C_3 \arrow[r] & 0
+  example('A commutative cube with crossing arrows', 'Two commuting squares joined by vertical maps form a cube. The front arrows cross over the back ones, and one arrow is written from its other end. Change arrows, labels or the matrix in the tikz-cd editor.', () => {
+    const figure = block('cd', R`\begin{tikzcd}[row sep=scriptsize,column sep=scriptsize]
+& P \arrow[dl,"p_1"'] \arrow[rr,"q_1"] \arrow[dd,"u" near start] & & B \arrow[dl,"g"] \arrow[dd,"v"] \\
+A \arrow[rr,crossing over,"f" near end] \arrow[dd,"w"'] & & C \\
+& P' \arrow[dl,"p_2"'] \arrow[rr,"q_2" near start] & & B' \arrow[dl,"g'"] \\
+A' \arrow[rr,"f'"'] & & C' \arrow[from=uu,crossing over,"x" near start]
 \end{tikzcd}`);
-    note(figure, '$g_i f_i=0,\\qquad b f_1=f_2 a,\\qquad c g_1=g_2 b$');
+    note(figure, '$x\\circ f=f\'\\circ w,\\qquad g\'\\circ v=x\\circ g$');
   });
-  example('XyMatrix: a natural transformation on a triangle', 'Two triangular diagrams are joined by the components of a natural transformation. XyMatrix labels, diagonal arrows and commuting squares remain native editor data.', () => {
-    const figure = block('xy', R`\xymatrix@C=2.2pc@R=2.8pc{
-F(A) \ar[rr]^{F(f)} \ar[dr]_{F(g)} \ar[ddd]_{\eta_A} && F(B) \ar[dl]^{F(h)} \ar[ddd]^{\eta_B} \\
-& F(C) \ar[ddd]^{\eta_C} & \\
-&& \\
-G(A) \ar[rr]_{G(f)} \ar[dr]_{G(g)} && G(B) \ar[dl]^{G(h)} \\
-& G(C) &
-}`);
-    note(figure, '$\\eta_B\\circ F(f)=G(f)\\circ\\eta_A$');
+  example('XyMatrix: the Mayer–Vietoris long exact sequence', 'Three rows of the long exact sequence are joined by connecting maps that turn back across the diagram with XyMatrix’s turning arrows, each with a mid-arrow label. Entries, labels and turns remain native editor data.', () => {
+    const figure = block('xy', R`\xymatrix{
+& H^{k+1}(M) \ar[r]^-{i^*} & \cdots \\
+& H^k(M) \ar[r]^-{i^*} & H^k(U) \oplus H^k(V) \ar[r]^-{j^*} & H^k(U \cap V) \ar ${'`'}[ul] ${'`'}[l] ${'`'}[lllu] |{\delta} ${'`'}[l] [rlllu] \\
+& *{} & \cdots \ar[r]^-{j^*} & H^{k-1}(U \cap V) \ar ${'`'}[ul] ${'`'}[l] ${'`'}[lllu] |{\delta} ${'`'}[l] [rlllu] }`);
+    note(figure, '$\\cdots\\to H^k(M)\\to H^k(U)\\oplus H^k(V)\\to H^k(U\\cap V)\\xrightarrow{\\delta}H^{k+1}(M)\\to\\cdots$');
   });
   example('Decision tree with probabilities and terminal payoffs', 'A three-level forest tree has labelled branches, asymmetric growth and distinct terminal outcomes. The complete tree and its styles are editable in the forest editor.', () => {
     block('forest', R`\begin{forest}
@@ -105,20 +104,23 @@ for tree={draw,rounded corners,align=center,l sep=12mm,s sep=7mm,inner sep=4pt}
 \end{blochsphere}`);
     note(figure, R`$|\psi\rangle=\cos(\theta/2)|0\rangle+e^{i\varphi}\sin(\theta/2)|1\rangle$`);
   });
-  example('TCP active-open connection lifecycle', 'An annotated subset of the RFC state machine follows active open, established communication and orderly close. State nodes, curved transitions and loop labels are edited in the automata editor.', () => {
-    const figure = block('automata', R`\begin{tikzpicture}[->,>=Stealth,shorten >=1pt,auto,node distance=3cm]
-\node[state,initial] (closed) at (0,0) {$C$};
+  example('TCP active-open connection lifecycle', 'An annotated subset of the RFC state machine follows active open, established communication and orderly close. The initial state is also accepting, three states have self-loops on different sides, and two labels run over two lines. Edit states and transitions in the automata editor.', () => {
+    const figure = block('automata', R`\begin{tikzpicture}[->,>=Stealth,shorten >=1pt,auto,node distance=3cm,semithick]
+\node[state,initial,accepting] (closed) at (0,0) {$C$};
 \node[state] (syn) at (4,0) {$S$};
 \node[state] (est) at (8,0) {$E$};
-\node[state] (fin1) at (8,-3) {$F_1$};
-\node[state] (fin2) at (4,-3) {$F_2$};
-\node[state] (time) at (0,-3) {$W$};
+\node[state] (fin1) at (8,-3.5) {$F_1$};
+\node[state] (fin2) at (4,-3.5) {$F_2$};
+\node[state] (time) at (0,-3.5) {$W$};
 \path (closed) edge node {open / SYN} (syn)
-(syn) edge node {SYN+ACK / ACK} (est)
+(syn) edge node[align=center] {SYN+ACK \\ / ACK} (est)
+(syn) edge [loop above] node {timeout / SYN} ()
 (est) edge [loop above] node {data / ACK} ()
 (est) edge node {close / FIN} (fin1)
 (fin1) edge node {ACK} (fin2)
+(fin1) edge [loop right] node[align=center] {data \\ / ACK} ()
 (fin2) edge node {FIN / ACK} (time)
+(time) edge [loop below] node {FIN / ACK} ()
 (time) edge node {2MSL timeout} (closed)
 (syn) edge [bend left=35] node {reset} (closed);
 \end{tikzpicture}`);
@@ -136,7 +138,7 @@ RD & 3H 6L 3H 3L 9H \\
 VALID & 8L 2H 4L 2H 8L \\
 \extracode
 \vertlines[help lines]{2,8,10,14,16,18}
-\draw[<->] (2,-19) -- node[above] {read latency} (8,-19);
+\draw[<->] (2,-19) -- node[below] {read latency} (8,-19);
 \end{tikztimingtable}`);
   });
   example('Six-variable Karnaugh map with cross-map groups', 'Four submaps display 64 minterms, wraparound implicants and cross-map grouping. Change cells and implicant geometry in the Karnaugh-map editor.', () => {
@@ -167,59 +169,151 @@ VALID & 8L 2H 4L 2H 8L \\
 \end{rightwordgroup}
 \end{bytefield}`);
   });
-  example('Aromatic chemistry: salicylic acid and aspirin', 'Two native chemfig blocks show aromatic rings, branches, carbonyls and heteroatoms; a Chemistry Laboratory block shows the round flask heated under a reflux condenser. The arrow and reaction annotation are editable canvas shapes; double-click a structure for the chemistry editor, or the apparatus for the lab editor.', () => {
-    block('chemfig', R`\chemfig{**6((-OH)-(-C(=[1]O)-[7]OH)-----)}`, { x: 50, y: 100 });
-    block('chemfig', R`\chemfig{**6((-O-C(=[2]O)-[7]CH_3)-(-C(=[1]O)-[7]OH)-----)}`, { x: 510, y: 100 });
-    arrow(290, 155, 440, 155, { width: 2 }); text(365, 115, 'Acetylation', { size: 15 }); text(365, 200, '$H^+$', { size: 16 });
-    text(140, 355, 'Salicylic acid'); text(620, 355, 'Acetylsalicylic acid (aspirin)');
-    const lab = block('chemlab', R`\begin{tikzpicture}[scale=0.6]
-  \tkzRoundFlask[glassType=roundFlask, condenserBulbs]
-\end{tikzpicture}`, { x: 900, y: 30 });
-    note(lab, 'Heated under reflux', 25);
-  });
-  example('Composite design pattern with interface and ownership', 'A class hierarchy combines an abstract component, leaf and composite implementations, attributes, operations and a collection relationship. The UML editor owns all classes and relations.', () => {
-    block('uml', R`\begin{tikzpicture}
-\begin{abstractclass}[text width=4.3cm]{Component}{0,0}
-\attribute{- name : String}
-\operation[0]{+ render() : void}
-\operation{+ getName() : String}
-\end{abstractclass}
-\begin{class}[text width=4cm]{Leaf}{-3.5,-4}
-\inherit{Component}
-\attribute{- value : double}
-\operation{+ render() : void}
-\end{class}
-\begin{class}[text width=5cm]{Composite}{3.5,-4}
-\inherit{Component}
-\attribute{- children : List<Component>}
-\operation{+ add(c : Component) : void}
-\operation{+ remove(c : Component) : void}
-\operation{+ render() : void}
-\end{class}
-\aggregation{Composite}{children}{0..*}{Component}
+  example('Imine formation: mechanism and laboratory set-up', 'A two-line chemfig scheme shows addition and elimination with labelled equilibrium arrows, lone pairs, charges and five dashed electron-pushing arrows. A Chemistry Laboratory block beside it holds a clamped test tube over a Bunsen burner and a round flask under a reflux condenser. Double-click the scheme for the chemistry editor, or the apparatus for the lab editor.', () => {
+    block('chemfig', R`\setchemfig{atom sep=2.5em,compound sep=5em}
+\schemestart
+  \chemfig{R-@{aton}\charge{90=\|}{N}H_2}
+  \+
+  \chemfig{@{atoc}C([3]-CH_3)([5]-CH_3)=[@{atoo1}]O}
+  \chemfig{@{atoo2}\chemabove{H}{\scriptstyle\oplus}}
+  \chemmove[-stealth,shorten <=3pt,dash pattern= on 1pt off 1pt,thin]{
+    \draw[shorten >=2pt](aton) ..controls +(up:10mm) and +(left:5mm)..(atoc);
+    \draw[shorten >=8pt](atoo1) ..controls +(up:10mm) and +(north west:10mm)..(atoo2);}
+  \arrow{<=>[\tiny addition]}
+  \chemfig{R-@{aton}\chembelow{N}{\scriptstyle\oplus}H([2]-[@{sb}]H)-C(-[2]CH_3)(-[6]CH_3)-OH}
+\schemestop
+\chemmove{
+  \draw[-stealth,dash pattern= on 1pt off 1pt,shorten <=3pt,shorten >=2pt](sb)..controls +(180:0.35cm) and +(150:0.55cm)..(aton);}
+\par
+\schemestart
+  \arrow{<=>}
+  \chemfig{R-@{aton}\charge{90=\|}{N}([6]-[@{sbh}]H)-[@{sb}]C(-[2]CH_3)(-[6]CH_3)-[@{sbo}]@{atoo}
+  \chemabove{O}{\scriptstyle\oplus}(-[1]H)(-[7]H)}
+  \chemmove[-stealth,shorten <=3pt,shorten >=2pt,dash pattern= on 1pt off 1pt,thin]{
+    \draw(aton) ..controls +(up:5mm) and +(up:5mm)..(sb);
+    \draw(sbh) ..controls +(left:5mm) and +(south west:5mm)..(aton);
+    \draw(sbo) ..controls +(up:5mm) and +(north west:5mm)..(atoo);}
+  \arrow{<=>[\tiny elimination]}\chemfig{R-N=C(-[1]CH_3)(-[7]CH_3)}
+  \+
+  \chemfig{H_3\chemabove{O}{\scriptstyle\oplus}}
+\schemestop`, { x: 30, y: 60 });
+    const lab = block('chemlab', R`\begin{tikzpicture}[scale=0.4]
+\chemlabset{flame scale=1.3}
+\tkzStand
+\begin{scope}[shift={(1.5,2)}]\tkzTestTube[clamp, liquidLevel1=45]\end{scope}
+\begin{scope}[shift={(1.5,-1)}]\tkzBunsenBurner\end{scope}
+\begin{scope}[shift={(9,0)}]\tkzRoundFlask[glassType=roundFlask, condenserBulbs]\end{scope}
+\end{tikzpicture}`, { x: 560, y: 20 });
+    note(lab, 'Heated over a burner and under reflux', 25);
+  }, 'Scheme adapted from the chemfig manual.');
+  example('Abstract Factory design pattern', 'Two concrete factories implement an abstract factory interface and instantiate two product families. Interfaces, implementation arrows, routed dependency paths with sloped stereotypes and the background grid are all held by the UML editor.', () => {
+    block('uml', R`\begin{tikzpicture}[show background grid]
+  \begin{interface}{AbstractFactory}{0,0}
+    \operation[0]{+ CreateProductA()}
+    \operation[0]{+ CreateProductB()}
+  \end{interface}
+
+  \begin{class}{ConcreteFactory2}{-3,-4}
+    \implement{AbstractFactory}
+    \operation{+ CreateProductA()}
+    \operation{+ CreateProductB()}
+  \end{class}
+
+  \begin{class}{ConcreteFactory1}{3,-4}
+    \implement{AbstractFactory}
+    \operation{+ CreateProductA()}
+    \operation{+ CreateProductB()}
+  \end{class}
+
+  \begin{interface}{AbstractProductA}{15,-2}
+  \end{interface}
+
+  \begin{class}{ProductA1}{12,-5}
+    \implement{AbstractProductA}
+  \end{class}
+
+  \begin{class}{ProductA2}{18,-5}
+    \implement{AbstractProductA}
+  \end{class}
+
+  \draw[umlcd style dashed line,->] (ConcreteFactory1) --node[above,
+  sloped, black]{$<<$instantiate$>>$} (ProductA1);
+
+  \draw[umlcd style dashed line,->] (ConcreteFactory2.south) ++
+  (1,0) -- ++(0,-1) -- node[above, sloped,
+  black]{$<<$instantiate$>>$} ++(20,0) -| (ProductA2);
+
+  \begin{interface}{AbstractProductB}{15,-8}
+  \end{interface}
+
+  \begin{class}{ProductB1}{12,-11}
+    \implement{AbstractProductB}
+  \end{class}
+
+  \begin{class}{ProductB2}{18,-11}
+    \implement{AbstractProductB}
+  \end{class}
+
+  \draw[umlcd style dashed line,->] (ConcreteFactory1) |-node[above,
+  sloped, black]{$<<$instantiate$>>$} (ProductB1);
+
+  \draw[umlcd style dashed line,->] (ConcreteFactory2.south) ++
+  (-1,0) -- ++(0,-7) -- node[above, sloped,
+  black]{$<<$instantiate$>>$} ++(20,0) -| (ProductB2);
+
+  \begin{class}{Client}{22,-0.5}
+  \end{class}
+
+  \draw[umlcd style dashed line,->] (Client) --node[above, sloped,
+  black]{$<<$import$>>$} (AbstractFactory);
+
+  \draw[umlcd style dashed line,->] (Client) |-node[above, sloped,
+  black]{$<<$import$>>$} (AbstractProductA);
+
+  \draw[umlcd style dashed line,->] (Client) |-node[above, sloped,
+  black]{$<<$import$>>$} (AbstractProductB);
 \end{tikzpicture}`);
-  });
-  example('Checkout sequence with nested inventory and payment calls', 'Five participants exchange nested synchronous calls, responses and an asynchronous notification. Double-click to edit the sequence’s participants, activations and messages.', () => {
+  }, 'Adapted from the pgf-umlcd demo.');
+  example('Simulation loop with threads and nested calls', 'Two coloured threads and two instances exchange messages inside a labelled loop block. Calls nest three deep, two are self-calls, the thread bias moves for one call and the levels are raised by hand. Double-click to edit participants, activations and messages.', () => {
     block('umlsd', R`\begin{sequencediagram}
-\newthread{u}{:Customer}
-\newinst[1]{web}{:Checkout}
-\newinst[1]{stock}{:Inventory}
-\newinst[1]{pay}{:Payment}
-\newinst[1]{mail}{:Notifier}
-\begin{call}{u}{submit(cart)}{web}{confirmation}
-\begin{call}{web}{reserve(items)}{stock}{reservationId}
-\end{call}
-\begin{call}{web}{authorize(total)}{pay}{approved}
-\begin{call}{pay}{fraudCheck()}{pay}{clear}
-\end{call}
-\end{call}
-\begin{call}{web}{commit(reservationId)}{stock}{allocated}
-\end{call}
-\mess{web}{sendReceipt}{mail}
-\end{call}
+  \tikzstyle{inststyle}+=[bottom color=yellow] % custom the style
+  \newthread[blue]{ss}{:SimulationServer}
+  \newinst{ps}{:PhysicsServer}
+  \newinst[2]{sense}{:SenseServer}
+  \newthread[red]{ctr}{:SimControlNode}
+  
+  \begin{sdblock}[green!20]{Run Loop}{The main loop}
+    \mess{ctr}{StartCycle}{ss}
+    \begin{call}{ss}{Update()}{ps}{}
+      \prelevel
+      \begin{call}{ctr}{SenseAgent()}{ctr}{}
+        \begin{call}[3]{ctr}{Read}{sense}{}
+        \end{call}
+      \end{call}
+      \prelevel\prelevel\prelevel\prelevel
+      \setthreadbias{west}
+      \begin{call}{ps}{PrePhysicsUpdate()}{sense}{}
+      \end{call}
+      \setthreadbias{center}
+      \begin{call}{ps}{Update()}{ps}{}
+        \begin{call}{ps}{\small CollisionDetection()}{ps}{}
+        \end{call}
+        \begin{call}{ps}{Dynamics()}{ps}{}
+        \end{call}
+      \end{call}
+      \begin{call}{ps}{PostPhysicsUpdate()}{sense}{}
+      \end{call}
+    \end{call}
+    \mess{ss}{EndCycle}{ctr}
+    \begin{call}{ctr}{ActAgent()}{ctr}{}
+      \begin{call}{ctr}{Write}{sense}{}
+      \end{call}
+    \end{call}
+  \end{sdblock}
+
 \end{sequencediagram}`);
-  });
-  example('Circle geometry with tangent, secant and power of a point', 'A 2D geometry block contains a circle, tangent/secant construction, marked points, perpendicular radius and a power-of-a-point equation. Edit its TikZ geometry or drag supported point handles.', () => {
+  }, 'Adapted from the pgf-umlsd demo.');
+  example('Circle geometry with tangent, secant and power of a point', 'A 2D geometry block contains a circle, tangent/secant construction, marked points, a right-angle mark where the radius meets the tangent, a labelled angle at the external point and a power-of-a-point equation. Edit its TikZ geometry or drag supported point handles in the geometry editor.', () => {
     block('geo2d', R`\begin{tikzpicture}
 \coordinate (O) at (0,0);
 \coordinate (P) at (5,0);
@@ -232,6 +326,8 @@ VALID & 8L 2H 4L 2H 8L \\
 \draw[red,thick] (P) -- (T);
 \draw[blue] (O) -- (T);
 \draw[gray,dashed] (P) -- (0.8,-1.833);
+\pic[draw] {right angle = O--T--P};
+\pic[draw,"$\alpha$",angle radius=9mm,angle eccentricity=1.35] {angle = T--P--A};
 \fill (O) circle (1.5pt) node[below] {$O$};
 \fill (P) circle (1.5pt) node[right] {$P$};
 \fill (T) circle (1.5pt) node[above] {$T$};
@@ -260,13 +356,50 @@ VALID & 8L 2H 4L 2H 8L \\
 \node at (2,-1,0) {$\mathbf r=(r\sin\theta\cos\phi,r\sin\theta\sin\phi,r\cos\theta)$};
 \end{tikzpicture}`);
   });
-  example('Computed Atwood machine and a four-bar linkage', 'Two separate mechanics blocks demonstrate computed tension/acceleration and constrained linkage geometry. Double-click either to edit its parameters; the accompanying values are computed from those parameters.', () => {
+  example('Computed Atwood machine and a Mach–Zehnder interferometer', 'A mechanics block computes the tension and acceleration of an Atwood machine. An optics block sends a laser through two beam splitters, two mirrors and a phase plate to two detectors and computes the interference. Double-click either to edit its parameters.', () => {
     block('physics', R`\physics{mechanics}
 \atwood[m1=2,m2=3,r=0.6,l1=2.5,l2=3.5,forces=true](0,0)`, { x: 30, y: 60 });
-    block('physics', R`\physics{mechanics}
-\fourbar[a=1,b=3,c=2.2,d=3,theta=60,labels=true](0,0)`, { x: 450, y: 100 });
+    block('physics', R`\physics{optics}
+\setup[lambda=633nm]
+\laser[pol=0, label=laser](-3, 0)
+\splitter[angle=45, label=$BS_1$](0, 0)
+\mirror[angle=45, h=1, label=$M_1$](0, 3)
+\mirror[angle=45, h=1, label=$M_2$](4, 0)
+\phase[phi=180, label=$\varphi$](2, 3)
+\splitter[angle=45, label=$BS_2$](4, 3)
+\detector[angle=90, label=$D_1$](6, 3)
+\detector[angle=0, label=$D_2$](4, 5)`, { x: 240, y: 60 });
     text(170, 410, '$a=\\frac{m_2-m_1}{m_1+m_2}g$'); text(170, 455, '$T=\\frac{2m_1m_2}{m_1+m_2}g$');
-    text(600, 410, '$a=1,\\ b=3,\\ c=2.2,\\ d=3$'); text(600, 455, 'Closed-chain geometric constraint');
+    text(460, 410, '$\\varphi=180^\\circ$ in the upper arm'); text(460, 455, 'Two outputs, $D_1$ and $D_2$');
+  });
+  example('Graph with node shapes, fanned edges and a loop', 'A TikZ graph places four node shapes by hand. Three parallel edges fan out between two nodes, a two-way edge is dashed, a node has a two-line name, an edge has a two-line label and one node loops back on itself. Double-click to edit nodes and edges in the graph editor.', () => {
+    block('graph', R`\begin{tikzpicture}[>=Stealth]
+\graph[no placement, nodes={draw}] {
+  a/A [at={(0,0)}, rectangle, rounded corners];
+  b/B [at={(3,0)}, diamond];
+  c/C [at={(1.5,-2)}, ellipse, label=below:{note}];
+  p/ [at={(3,-2)}, circle, fill, inner sep=0pt, minimum size=4pt];
+  d [as={top \\ $x_1$}, at={(-2,-2)}, align=center, rectangle];
+  a ->[bend left=49] b; a -> b; a ->[bend right=49] b;
+  b <->[dashed] c;
+  c -- p;
+  a --[loop left] a;
+  d ->["$p$ \\ $q$", align=center] c;
+};
+\end{tikzpicture}`);
+  });
+  example('Two-layer network in 3D', 'A tikz-network picture in multilayer 3D: two planes (one without a border), vertices of different colours and shapes on each layer, a bent directed edge with a label, an edge between layers, a loop and a text label. Pick a layer to focus it in the network editor.', () => {
+    block('network', R`\begin{tikzpicture}[multilayer=3d]
+\Plane[x=-.5,y=-.5,width=3,height=3,layer=1]
+\Plane[x=-.5,y=-.5,width=3,height=3,layer=2,NoBorder]
+\Vertex[x=0,y=0,layer=1,label=$a$]{A}
+\Vertex[x=2,y=1,layer=1,color=red]{B}
+\Vertex[x=1,y=2,layer=2,shape=diamond]{C}
+\Edge[Direct,bend=20,label=1](A)(B)
+\Edge(B)(C)
+\Edge[loopposition=90](C)(C)
+\Text[x=3,y=3]{Layers}
+\end{tikzpicture}`);
   });
   example('Scientific results table with grouped headers', 'A native Table model demonstrates merged header cells, booktabs rules, mathematical headings, uncertainty notation, aligned numerical columns and highlighted best values.', () => {
     const data = [

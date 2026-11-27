@@ -7,7 +7,7 @@ for (const p of ['function', 'line', 'scatter', 'area', 'bar', 'contour', 'heatm
   KIT['plot_' + p] = () => SC.plot(p);
 for (const [n, t] of [['blk_qc', 'qc'], ['blk_cd', 'cd'], ['blk_forest', 'forest'], ['blk_cz', 'cz'], ['blk_zx', 'zx'], ['blk_feynman', 'feynman'],
   ['blk_bloch', 'bloch'], ['blk_timing', 'timing'], ['blk_kmap', 'kmap'], ['blk_automata', 'automata'], ['blk_geo3d', 'geo3d'], ['blk_chem', 'chemfig'], ['blk_uml', 'uml'], ['blk_umlsd', 'umlsd'],
-  ['blk_geo2d', 'geo2d'], ['blk_bytefield', 'bytefield'], ['blk_physics', 'physics']])
+  ['blk_geo2d', 'geo2d'], ['blk_bytefield', 'bytefield'], ['blk_physics', 'physics'], ['blk_graph', 'graph'], ['blk_chemlab', 'chemlab'], ['blk_network', 'network']])
   KIT[n] = () => SC.block(t);
 KIT.sym_basic = () => SC.syms(['basic', 'rect']); KIT.sym_flow = () => SC.syms(['flow', 'arrow']);
 KIT.sym_elec = () => SC.syms(['misc', 'elec', 'wave']); KIT.sym_phys = () => SC.syms(['mech', 'optics']);

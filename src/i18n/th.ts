@@ -383,6 +383,8 @@ const core: Record<string, string> = {
   "phone.kind.trees": "แผนภาพต้นไม้",
   "phone.kind.graphs": "กราฟ",
   "phone.kind.automata": "เครื่องสถานะ",
+  "phone.kind.timing": "แผนภาพเวลา",
+  "phone.kind.kmap": "แผนผังคาร์โนห์",
   "phone.kind.chem": "โครงสร้างเคมี",
   "phone.kind.tables": "ตาราง",
   "phone.guide.title": "คู่มือ",

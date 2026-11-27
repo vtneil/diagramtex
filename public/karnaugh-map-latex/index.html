@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Karnaugh Map in LaTeX: Online K-Map Editor (karnaugh-map) | DiagramTeX</title>
+  <meta name="description" content="Draw a Karnaugh map of 2 to 6 variables, group the ones (or let it find the smallest cover), and copy LaTeX code for the karnaugh-map package. Free, offline, no sign-up.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <link rel="canonical" href="https://diagramtex.com/karnaugh-map-latex/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="DiagramTeX">
+  <meta property="og:url" content="https://diagramtex.com/karnaugh-map-latex/">
+  <meta property="og:title" content="Karnaugh maps in LaTeX: fill the cells, copy the code">
+  <meta property="og:description" content="Fill a K-map of 2 to 6 variables, group it, and copy karnaugh-map LaTeX code. Free, offline, no sign-up.">
+  <meta property="og:image" content="https://diagramtex.com/guide/img/ed-kmap.webp">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "DiagramTeX", "item": "https://diagramtex.com/" },
+      { "@type": "ListItem", "position": 2, "name": "Karnaugh map in LaTeX", "item": "https://diagramtex.com/karnaugh-map-latex/" }
+    ]
+  }
+  </script>
+  <link rel="icon" href="../icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#fffdf8">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../site/site.css">
+  <script src="../site/site.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="../" title="Open DiagramTeX">
+      <svg viewBox="0 0 256 256" aria-hidden="true"><path class="k" d="M84.14 55.86L200.14 171.86L171.86 200.14L55.86 84.14Z"/><circle cx="70" cy="70" r="54" fill="#FF5A3C"/><rect x="132" y="132" width="108" height="108" rx="16" fill="#2F7BFF"/></svg>
+      DiagramTeX
+    </a>
+    <span class="sp"></span>
+    <nav aria-label="Site"><a href="../guide/">Guide</a><a href="https://github.com/vtneil/diagramtex" rel="noopener">Source</a></nav>
+    <a class="btn" href="../">Open DiagramTeX
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+  </header>
+
+  <main>
+    <p class="crumbs"><a href="../">DiagramTeX</a><span>/</span>Karnaugh map in LaTeX</p>
+    <div class="eyebrow">K-maps for LaTeX</div>
+    <h1>Karnaugh maps in LaTeX: fill the cells, copy the code</h1>
+    <p class="lede">Click the cells to set 0, 1 or don’t care, drag to draw groups, or let DiagramTeX find the smallest cover for you. It writes code for the <code>karnaugh-map</code> package and shows the simplified function beside the map.</p>
+    <div class="actions">
+      <a class="btn primary big" href="../">Open the editor</a>
+      <a class="btn big" href="../#share=1.ZVLLsqIwEP0VKuOytSCiV9jNezHLWaqLJokYhYRKgo-h-PfpcPVOWSNWp9_pPjkDw65jJZMaa4dtUDcG7KKc19awcgnsrI2kuGjQey0oaLBV5Pitb_MLOo1Vo5Jf6Az29TFpsUuuOhwT4az382jWzvadp8IOayoc6OyUow6Yk9M6rUwgq7MuONSBfFdW8gzYkY5i8QaspThfrEipnkrzVNxDOdjYJaOyoEND9wTXK2DYh6ONl1Fb3zmFtAvlmL6tlFNkHLDxagRWNVacPSu3Awv3Tv1DJBYeaeKX2JkWo8CNlesU2J2VGzq8ExTa7SpVazOcH5BEDMZtvn_8Z99mJL5G8SWKz1H8iOL7bL8zu12rTVCu9UMKOWwg45AtIcshW0G2Bp4Cz4FvgBewTGGZwZLDcg05ZeeQb2DFYbWGdTrGXrS9nZpt06m3brtGCzRhyPg4ZPm4TSF7jShZqyEdh834LmMG0BVTljLydS_CQNhmAvhTOv3IoyNflMSzCCfJRvhAjcgV3lHjRboocj5Bt1pvFkVBTJvCJfvp8D4XVqoE5QmFMuKeaJ_Q43nlLkomOHErCUeVHGzvEt9XNEtkWCDm0ENcsNE1sZe1WkriAj2N_kMDZG9PnjCpDtg3cZrKNk8a0OiBSsWH-f9utkOhw30i0bQnf-vk9WQ4G_f0_QU">Open this example</a>
+    </div>
+    <ul class="facts"><li>2 to 6 variables</li><li>Free and open source</li><li>Works offline</li><li>No sign-up</li></ul>
+
+    <figure class="try" data-embed="kmap" data-draft="1.VZDNbsMgEITfhfo4lQBjRH3r70uYHKhBLnWMLYdIjRDvXnB7yQp9K3ZHg4ZE4m1zpCfzYjYC8kN6SUFupFelXfaxrLT-dJMPaTZ7MNfp67FI8yBO_6d5awpeK14qnis-Kt6bkw5aLz5Ety-XRCGgwDhYCybAOjAJTsEFuAJ_QkvRMrQcrYQoagGh0HF0EpLm6mWucT3MBnp4-2U7-9GEmBjPiYk8ULD7jbOTSzQnlf9YFShPHCoX7H2u8gfjel73kvuBHlUm3pars2Ye47cl-Rc">
+      <img src="../guide/img/ed-kmap.webp" width="1520" height="950" alt="The Karnaugh map editor: a six-variable map as four 4×4 grids with green groups that cross maps, and the simplified function and code on the right">
+      <button class="btn primary big try-btn" type="button" hidden>Edit this example here</button>
+      <figcaption>The Karnaugh map editor: the map in the middle, the simplified function and the <code>karnaugh-map</code> code on the right.</figcaption>
+    </figure>
+
+    <h2>How to make a Karnaugh map</h2>
+    <ol class="steps">
+      <li><b>Add a Karnaugh map block:</b> open <a href="../">DiagramTeX</a>, click the cube on the left rail, pick <b>K-map</b> and click the canvas. Double-click the block to open its editor.</li>
+      <li><b>Fill the cells:</b> click a cell to step through 0, 1 and don’t care, or paint cells with <kbd>1</kbd>, <kbd>0</kbd> and <kbd>D</kbd>.</li>
+      <li><b>Group them:</b> drag across cells to draw a group; groups wrap round the edges. Or press <b>Find Groups</b> for a smallest cover.</li>
+      <li><b>Copy the code:</b> press <b>Done</b>, then <kbd>Ctrl</kbd><kbd>E</kbd> (<kbd>⌘</kbd><kbd>E</kbd> on a Mac) and <b>Copy</b>.</li>
+    </ol>
+
+    <h2>Example: <span data-example>Six-variable Karnaugh map with cross-map groups</span></h2>
+    <p>This is the code DiagramTeX writes for the map in the picture above: the cells as <code>\minterms</code> and each group as an implicant.</p>
+    <div class="code-head"><span>karnaugh-map snippet</span><a href="../#share=1.ZVLLsqIwEP0VKuOytSCiV9jNezHLWaqLJokYhYRKgo-h-PfpcPVOWSNWp9_pPjkDw65jJZMaa4dtUDcG7KKc19awcgnsrI2kuGjQey0oaLBV5Pitb_MLOo1Vo5Jf6Az29TFpsUuuOhwT4az382jWzvadp8IOayoc6OyUow6Yk9M6rUwgq7MuONSBfFdW8gzYkY5i8QaspThfrEipnkrzVNxDOdjYJaOyoEND9wTXK2DYh6ONl1Fb3zmFtAvlmL6tlFNkHLDxagRWNVacPSu3Awv3Tv1DJBYeaeKX2JkWo8CNlesU2J2VGzq8ExTa7SpVazOcH5BEDMZtvn_8Z99mJL5G8SWKz1H8iOL7bL8zu12rTVCu9UMKOWwg45AtIcshW0G2Bp4Cz4FvgBewTGGZwZLDcg05ZeeQb2DFYbWGdTrGXrS9nZpt06m3brtGCzRhyPg4ZPm4TSF7jShZqyEdh834LmMG0BVTljLydS_CQNhmAvhTOv3IoyNflMSzCCfJRvhAjcgV3lHjRboocj5Bt1pvFkVBTJvCJfvp8D4XVqoE5QmFMuKeaJ_Q43nlLkomOHErCUeVHGzvEt9XNEtkWCDm0ENcsNE1sZe1WkriAj2N_kMDZG9PnjCpDtg3cZrKNk8a0OiBSsWH-f9utkOhw30i0bQnf-vk9WQ4G_f0_QU">Open it in DiagramTeX and edit it</a></div>
+    <div class="code"><button class="btn copy" type="button">Copy</button><pre><code>% Requires: \usepackage{tikz} \usepackage{karnaugh-map}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[inner sep=0pt] at (7.27,-7.61) {\pgfinterruptpicture%
+  \begin{karnaugh-map}[4][4][4][$D$][$C$][$B$][$A$][$F$][$E$]
+  \minterms{0,4,8,12,13,14,15,16,20,24,28,29,30,31,32,36,40,44,48,52,56,60}
+  \autoterms[0]
+  \implicant{12}{14}[0,1]
+  \implicantedge{0}{8}{0}{8}[0,1,2,3]
+  \end{karnaugh-map}%
+  \endpgfinterruptpicture};
+\end{tikzpicture}</code></pre></div>
+    <p>The <code>karnaugh-map</code> environment inside can also go straight into your document on its own, with <code>\usepackage{karnaugh-map}</code> in the preamble.</p>
+
+    <h2>What the Karnaugh map editor does</h2>
+    <ul class="how">
+      <li><b>2 to 6 variables:</b> five and six variables are drawn as two or four submaps, as the package draws them.</li>
+      <li><b>Groups that wrap:</b> groups can wrap round the edges and cross submaps.</li>
+      <li><b>Smallest cover:</b> <b>Find Groups</b> finds one for you, and the panel shows the simplified function.</li>
+      <li><b>Don’t cares:</b> mark them and they are used where they make a group bigger.</li>
+      <li><b>Code both ways:</b> the code beside the map follows every change, and the map follows the code when you edit it.</li>
+      <li><b>Pictures too:</b> export the map as SVG, PNG at any DPI, or PDF, for slides and worksheets.</li>
+    </ul>
+
+    <h2>Questions</h2>
+    <dl class="faq">
+      <dt>Which LaTeX package does the code use?</dt>
+      <dd>The <code>karnaugh-map</code> package from CTAN, which is in TeX Live and on Overleaf. The code’s first line names what to load.</dd>
+      <dt>Is it free?</dt>
+      <dd>Yes. DiagramTeX is free and open source (GNU AGPLv3), with no account, no paid tier and no ads. The code it writes for you is yours to use however you like.</dd>
+      <dt>Does it work with Overleaf?</dt>
+      <dd>Yes. Copy the code into your project and add <code>\usepackage{karnaugh-map}</code>. The LaTeX dialog can also download a <code>.zip</code> to upload to Overleaf.</dd>
+      <dt>Is my map uploaded anywhere?</dt>
+      <dd>No. DiagramTeX runs in your browser and keeps your files there. Once it has loaded, it also works offline.</dd>
+    </dl>
+
+    <h2>Other editors</h2>
+    <ul class="related">
+      <li><a href="../circuitikz-editor/">circuitikz editor</a><span>Electronic circuits for LaTeX</span></li>
+      <li><a href="../quantikz-editor/">quantikz editor</a><span>Quantum circuits for LaTeX</span></li>
+      <li><a href="../chemfig-editor/">chemfig editor</a><span>Molecules and reactions for LaTeX</span></li>
+      <li><a href="../tikz-timing-editor/">tikz-timing editor</a><span>Timing diagrams for LaTeX</span></li>
+      <li><a href="../tikz-cd-editor/">tikz-cd editor</a><span>Commutative diagrams for LaTeX</span></li>
+      <li><a href="../tikz-feynman-editor/">tikz-feynman editor</a><span>Feynman diagrams for LaTeX</span></li>
+      <li><a href="../guide/#blocks">All the blocks</a><span>Every package DiagramTeX writes</span></li>
+      <li><a href="../guide/">User guide</a><span>Every tool, mode and export</span></li>
+    </ul>
+
+    <footer>DiagramTeX is free and open source under the GNU Affero General Public License v3.0. Source, issues and releases: <a href="https://github.com/vtneil/diagramtex" rel="noopener">github.com/vtneil/diagramtex</a>.</footer>
+  </main>
+</body>
+</html>

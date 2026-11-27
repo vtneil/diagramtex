@@ -529,6 +529,7 @@ function textAt(t: any, ink: string, ctx: any) {
     return TD.textSvg(l.t, t.st, color, t.x * PT, Y(t.base + l.dy) - tt().baseOff(t.st) + b.h / 2, ctx);
   }).join('');
 }
+let drawn = 0; // drawings so far, for ids unique to each drawing
 function draw(s: any, ctx: any) {
   const Lo = layout(s), ink = TD.css('#000000'), bb = Lo.bb;
   let out = '';
@@ -536,6 +537,9 @@ function draw(s: any, ctx: any) {
     out += `<rect x="${r2(bb.x)}" y="${r2(bb.y)}" width="${r2(bb.w)}" height="${r2(bb.h)}" fill="none" stroke="${ink}" stroke-width="${r2(2 * LW * PT)}" stroke-dasharray="${r2(3 * PT)} ${r2(2 * PT)}" rx="4"/>`;
     if (!ctx.export) out += TD.textSvg('Empty sequence diagram', { size: 'small', font: 'default' }, '#888888', bb.x + bb.w / 2, bb.y + bb.h / 2, ctx);
   }
+  // a fresh id for every drawing: the same diagram is drawn on the canvas, in the Layers thumbnails and on the Document's
+  // page, and url(#id) finds the first copy in the page, which may be one that isn't rendered (its gradient then paints nothing)
+  const drawId = ++drawn;
   const sw = r2(LW * PT);
   // the background: lifelines, dotted (on 0.4pt, off 2pt)
   for (const l of Lo.lifelines) out += `<path d="M${X(l.x)},${Y(l.y1)}V${Y(l.y2)}" stroke="${ink}" stroke-width="${sw}" stroke-dasharray="${r2(LW * PT)} ${r2(2 * PT)}"/>`;
@@ -547,7 +551,7 @@ function draw(s: any, ctx: any) {
     out += `<rect x="${r2(+x + SHADOW * PT)}" y="${r2(+y + SHADOW * PT)}" width="${w}" height="${h}"${rx} fill="${ink}"/>`;
     let fill = S.fill ? TD.css(S.fill) : 'none';
     if (S.top || S.bottom) {
-      const id = `sdg${s.id || ''}_${n.idx}`, top = TD.css(S.top || col('white')), bot = TD.css(S.bottom || col('white')), mid = S.middle ? TD.css(S.middle) : null;
+      const id = `sdg${drawId}_${n.idx}`, top = TD.css(S.top || col('white')), bot = TD.css(S.bottom || col('white')), mid = S.middle ? TD.css(S.middle) : null;
       out += `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/>${mid ? `<stop offset="0.5" stop-color="${mid}"/>` : ''}<stop offset="1" stop-color="${bot}"/></linearGradient></defs>`;
       fill = `url(#${id})`;
     }

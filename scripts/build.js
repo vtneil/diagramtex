@@ -134,9 +134,31 @@ async function main() {
   if (!VERSION) throw new Error('src/domain/shapes.ts: TD.VERSION not found');
   write('version.json', JSON.stringify({ version: VERSION }) + '\n');
 
+  // ---- sitemap.xml: every page in dist/ that names its canonical address, at that address, so a new page is listed
+  // without editing a file. No <lastmod>: CI checks out shallow, so git can't date a page, and search engines ignore
+  // dates that aren't accurate.
+  const pages = [];
+  (function list(rel) {
+    for (const ent of fs.readdirSync(path.join(OUT, rel), { withFileTypes: true })) {
+      const r = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) { if (r !== 'vendor' && r !== 'tex') list(r); continue; }
+      if (!ent.name.endsWith('.html') || ent.name === '404.html') continue;
+      const page = fs.readFileSync(path.join(OUT, r), 'utf8');
+      if (/<meta name="robots" content="[^"]*noindex/.test(page)) continue;
+      const canonical = /<link rel="canonical" href="(https:\/\/diagramtex\.com\/[^"]*)">/.exec(page);
+      if (canonical) pages.push(canonical[1]);
+    }
+  })('');
+  if (!pages.includes('https://diagramtex.com/')) throw new Error('sitemap: index.html names no canonical address');
+  pages.sort((a, b) => a.length - b.length || a.localeCompare(b));
+  write('sitemap.xml', ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...[...new Set(pages)].map((u) => `  <url><loc>${u}</loc></url>`), '</urlset>', ''].join('\n'));
+
   // ---- sw.js: precache every file the app can load, as it is in dist/ (not version.json: it must come from the network)
-  // (not the in-browser pdfLaTeX, tex/: it is downloaded the first time someone compiles, and kept in its own cache)
-  const SKIP = /^(index\.html|sw\.js|version\.json|robots\.txt|sitemap\.xml|404\.html|_headers)$|LICENSE|\.txt$|^icons\/og-image\.|^tex\//;
+  // (not the in-browser pdfLaTeX, tex/: it is downloaded the first time someone compiles, and kept in its own cache;
+  // nor the guide's screenshots, about a hundred in two languages: each is kept once it has been looked at. The phone
+  // page's picture, which lives with them, is precached.)
+  const SKIP = /^(index\.html|sw\.js|version\.json|robots\.txt|sitemap\.xml|404\.html|_headers)$|LICENSE|\.txt$|^icons\/og-image\.|^tex\/|^guide\/img\/(?!phone-canvas\.)/;
   const files = [];
   (function list(rel) {
     for (const ent of fs.readdirSync(path.join(OUT, rel), { withFileTypes: true })) {

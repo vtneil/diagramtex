@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tikz-Feynman Editor Online: Draw Feynman Diagrams for LaTeX | DiagramTeX</title>
+  <meta name="description" content="Free online tikz-feynman editor. Place vertices, drag propagators between them (fermion, photon, gluon, scalar…), add labels and momenta, and copy tikz-feynman code for Overleaf or any LaTeX document. Works offline, with no sign-up.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <link rel="canonical" href="https://diagramtex.com/tikz-feynman-editor/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="DiagramTeX">
+  <meta property="og:url" content="https://diagramtex.com/tikz-feynman-editor/">
+  <meta property="og:title" content="tikz-feynman editor online: draw Feynman diagrams, copy the LaTeX">
+  <meta property="og:description" content="Draw a Feynman diagram and copy tikz-feynman code for your LaTeX document. Free, offline, no sign-up.">
+  <meta property="og:image" content="https://diagramtex.com/guide/img/ed-feynman.webp">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "DiagramTeX", "item": "https://diagramtex.com/" },
+      { "@type": "ListItem", "position": 2, "name": "tikz-feynman editor", "item": "https://diagramtex.com/tikz-feynman-editor/" }
+    ]
+  }
+  </script>
+  <link rel="icon" href="../icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#fffdf8">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../site/site.css">
+  <script src="../site/site.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="../" title="Open DiagramTeX">
+      <svg viewBox="0 0 256 256" aria-hidden="true"><path class="k" d="M84.14 55.86L200.14 171.86L171.86 200.14L55.86 84.14Z"/><circle cx="70" cy="70" r="54" fill="#FF5A3C"/><rect x="132" y="132" width="108" height="108" rx="16" fill="#2F7BFF"/></svg>
+      DiagramTeX
+    </a>
+    <span class="sp"></span>
+    <nav aria-label="Site"><a href="../guide/">Guide</a><a href="https://github.com/vtneil/diagramtex" rel="noopener">Source</a></nav>
+    <a class="btn" href="../">Open DiagramTeX
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+  </header>
+
+  <main>
+    <p class="crumbs"><a href="../">DiagramTeX</a><span>/</span>tikz-feynman editor</p>
+    <div class="eyebrow">Feynman diagrams for LaTeX</div>
+    <h1>tikz-feynman editor: draw the diagram, copy the LaTeX</h1>
+    <p class="lede">Place vertices, drag propagators between them and pick each line’s kind with one key. DiagramTeX writes the <code>tikz-feynman</code> code as you draw, ready to paste into Overleaf or any LaTeX document.</p>
+    <div class="actions">
+      <a class="btn primary big" href="../">Open the editor</a>
+      <a class="btn big" href="../#share=1.fZPdbqMwEIVfBc1eNKxMVJOk7bLaZ9gHqKPKgAlW8I-M2U2E8u4dMKQlqQoXNud8Ho-Ohh64tZBBKfnBceXFCQj8E66VRkO2IXCUukS_aHjbygJNzZVA4a8WSWOMjSrTucTWxhsd5eYUTZWQtPyAZI-rFQ6P8C2KxkmhPX5Z47zj0qP2H7KUEqhx-bV-JqDQT9c73OTzppk3btpUZqhC8ZiXvsF7vOsEAd752gyXYdnWOsGxeWR0p3LhBH5UvGnFhUDemOLYQvbagz9b8RHBcLDGjhdeJc5acY3eCbKnRwJnyF5waV2BLmO5OEjdT9SFacYwQwwzWvE44j5aUULj35_1POjbW72Y9YSud0urnEvdW5IGL6EE04mjnrEVYweuFH-jjMWXJZ1e6WSzhNM72Eyln-4rb-7hdIZvC2-v7JTzT7T12HiSRK9hgIgyCqejU3_wpB073w8RkoFMvyQfApoGtBxRHshKOCVvih4Dly-I_Rj7UihvhdBF_k27m1AbAxvI4rt2txOaxkyHVIQur_ODY1aYZhzjH4_jg4ocfkPvX-rzc03hssf3HQ">Open this example</a>
+    </div>
+    <ul class="facts"><li>Free and open source</li><li>Works offline</li><li>No sign-up</li><li>Nothing is uploaded</li></ul>
+
+    <figure class="try" data-embed="feynman" data-draft="1.fZLRaoQwFER_RdKHaollE-12sfRLepcSTVZDm0RsWlbEf280KlXL5iVk5mQYLrdDtq0FytBFtFoxjTC6oux4wKhF2cldX03hXIBclFJ3E9WDBvgRjRXXIGRRwGwQEkyil7967vV0qxezHpPHp7XF56i9JYn3YoKp84IOIAQomVLsnQBE_ZqmCx0na5juYDNFH_fJyR6mM7wNTheWS1Y2TD04W4_F4zh4qytjjcbKKKHtt3p1P-ux-XkYIR5I-i9571HqUT6izJMX0Si5Cf3wXL4izuPY1wLfCr5FfqNu4rPdwAayuFU3nVAagfZTEZov--PWrDCfpnGrdXcYj1Mkd09rT1X7XBHU_wI">
+      <img src="../guide/img/ed-feynman.webp" width="1520" height="950" alt="The Feynman editor: vertices and propagators on the left, a one-loop box diagram of four photons in the middle, and the tikz-feynman code on the right">
+      <button class="btn primary big try-btn" type="button" hidden>Edit this example here</button>
+      <figcaption>The Feynman editor: vertices and propagators on the left, the diagram in the middle, the <code>tikz-feynman</code> code on the right.</figcaption>
+    </figure>
+
+    <h2>How to draw a Feynman diagram</h2>
+    <ol class="steps">
+      <li><b>Add a Feynman block:</b> open <a href="../">DiagramTeX</a>, click the cube on the left rail, pick <b>Feynman</b> and click the canvas. Double-click the block to open its editor.</li>
+      <li><b>Place vertices:</b> click a vertex in the palette, then the grid.</li>
+      <li><b>Draw a propagator:</b> drag a vertex’s blue handle to another vertex.</li>
+      <li><b>Pick its kind:</b> with the line selected, press <kbd>F</kbd> fermion, <kbd>P</kbd> photon, <kbd>G</kbd> gluon, <kbd>S</kbd> scalar, <kbd>M</kbd> Majorana or <kbd>B</kbd> boson.</li>
+      <li><b>Label, bend or add momentum:</b> select the line and use the panel. Right-click it to reverse it.</li>
+      <li><b>Copy the code:</b> press <b>Done</b>, then <kbd>Ctrl</kbd><kbd>E</kbd> (<kbd>⌘</kbd><kbd>E</kbd> on a Mac) and <b>Copy</b>.</li>
+    </ol>
+
+    <h2>Example: <span data-example>One-loop four-photon box diagram</span></h2>
+    <p>This is the code DiagramTeX writes for the Feynman diagram in the picture above. The first line names the packages to load.</p>
+    <div class="code-head"><span>tikz-feynman snippet</span><a href="../#share=1.fZPdbqMwEIVfBc1eNKxMVJOk7bLaZ9gHqKPKgAlW8I-M2U2E8u4dMKQlqQoXNud8Ho-Ohh64tZBBKfnBceXFCQj8E66VRkO2IXCUukS_aHjbygJNzZVA4a8WSWOMjSrTucTWxhsd5eYUTZWQtPyAZI-rFQ6P8C2KxkmhPX5Z47zj0qP2H7KUEqhx-bV-JqDQT9c73OTzppk3btpUZqhC8ZiXvsF7vOsEAd752gyXYdnWOsGxeWR0p3LhBH5UvGnFhUDemOLYQvbagz9b8RHBcLDGjhdeJc5acY3eCbKnRwJnyF5waV2BLmO5OEjdT9SFacYwQwwzWvE44j5aUULj35_1POjbW72Y9YSud0urnEvdW5IGL6EE04mjnrEVYweuFH-jjMWXJZ1e6WSzhNM72Eyln-4rb-7hdIZvC2-v7JTzT7T12HiSRK9hgIgyCqejU3_wpB073w8RkoFMvyQfApoGtBxRHshKOCVvih4Dly-I_Rj7UihvhdBF_k27m1AbAxvI4rt2txOaxkyHVIQur_ODY1aYZhzjH4_jg4ocfkPvX-rzc03hssf3HQ">Open it in DiagramTeX and edit it</a></div>
+    <div class="code"><button class="btn copy" type="button">Copy</button><pre><code>% Requires: \usepackage{tikz} \usepackage[compat=1.1.0]{tikz-feynman}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \begin{scope}[shift={(2.69,-4.8)}]
+  \begin{feynman}
+  \vertex (a) at (1,1);
+  \vertex (b) at (4,1);
+  \vertex (c) at (4,-1.5);
+  \vertex (d) at (1,-1.5);
+  \vertex (i1) at (-1,2.5) {\(\gamma_1\)};
+  \vertex (i2) at (-1,-3) {\(\gamma_2\)};
+  \vertex (o1) at (6,2.5) {\(\gamma_3\)};
+  \vertex (o2) at (6,-3) {\(\gamma_4\)};
+  \diagram* {
+  (i1) -- [photon,momentum=\(p_1\)] (a),
+  (i2) -- [photon,momentum'=\(p_2\)] (d),
+  (a) -- [fermion,momentum=\(k\)] (b) -- [fermion] (c) -- [fermion] (d) -- [fermion] (a),
+  (b) -- [photon,momentum=\(p_3\)] (o1),
+  (c) -- [photon,momentum'=\(p_4\)] (o2)
+  };
+  \end{feynman}
+  \end{scope}
+\end{tikzpicture}</code></pre></div>
+
+    <h2>What the editor does</h2>
+    <ul class="how">
+      <li><b>Every propagator:</b> fermion, photon, gluon, scalar, Majorana and boson lines, each one key.</li>
+      <li><b>Labels and momenta:</b> LaTeX labels and momentum arrows on any line, typeset as you type.</li>
+      <li><b>Bent lines:</b> bend a propagator from the panel.</li>
+      <li><b>Code both ways:</b> the code beside the diagram follows every change, and the diagram follows the code when you edit it.</li>
+      <li><b>Bring diagrams in:</b> paste a <code>tikzpicture</code> holding a <code>feynman</code> environment and it becomes a block you can edit.</li>
+      <li><b>Pictures too:</b> export the diagram as SVG, PNG at any DPI, or PDF, for slides and papers.</li>
+    </ul>
+
+    <h2>Questions</h2>
+    <dl class="faq">
+      <dt>Is it free?</dt>
+      <dd>Yes. DiagramTeX is free and open source (GNU AGPLv3), with no account, no paid tier and no ads. The code it writes for you is yours to use however you like.</dd>
+      <dt>Does it work with Overleaf?</dt>
+      <dd>Yes. Copy the code into your project and add what its first line names (<code>\usepackage{tikz-feynman}</code>). The LaTeX dialog can also download a <code>.zip</code> to upload to Overleaf.</dd>
+      <dt>Is my diagram uploaded anywhere?</dt>
+      <dd>No. DiagramTeX runs in your browser and keeps your files there. Once it has loaded, it also works offline.</dd>
+    </dl>
+
+    <h2>Other editors</h2>
+    <ul class="related">
+      <li><a href="../circuitikz-editor/">circuitikz editor</a><span>Electronic circuits for LaTeX</span></li>
+      <li><a href="../quantikz-editor/">quantikz editor</a><span>Quantum circuits for LaTeX</span></li>
+      <li><a href="../karnaugh-map-latex/">Karnaugh map editor</a><span>K-maps with the karnaugh-map package</span></li>
+      <li><a href="../chemfig-editor/">chemfig editor</a><span>Molecules and reactions for LaTeX</span></li>
+      <li><a href="../tikz-timing-editor/">tikz-timing editor</a><span>Timing diagrams for LaTeX</span></li>
+      <li><a href="../tikz-cd-editor/">tikz-cd editor</a><span>Commutative diagrams for LaTeX</span></li>
+      <li><a href="../guide/#blocks">All the blocks</a><span>Every package DiagramTeX writes</span></li>
+      <li><a href="../guide/">User guide</a><span>Every tool, mode and export</span></li>
+    </ul>
+
+    <footer>DiagramTeX is free and open source under the GNU Affero General Public License v3.0. Source, issues and releases: <a href="https://github.com/vtneil/diagramtex" rel="noopener">github.com/vtneil/diagramtex</a>.</footer>
+  </main>
+</body>
+</html>

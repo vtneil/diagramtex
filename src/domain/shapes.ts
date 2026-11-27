@@ -7,6 +7,7 @@ import { closesAt } from '../core/tex-scan';
 import { inlineEnvs, logicalLines, mathEnvAt } from '../core/tex-envs';
 import { textModeMath } from './math-rewrite';
 import { escapeHtml } from '../core/html';
+let ballDrawn = 0; // ball drawings so far, for gradient ids unique to each drawing
 // Shape definitions: geometry, handles, SVG rendering and TikZ export.
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
@@ -1556,7 +1557,7 @@ import { escapeHtml } from '../core/html';
     anchors: (s: any) => [{ x: s.cx, y: s.cy }, { x: s.cx + s.r, y: s.cy }, { x: s.cx - s.r, y: s.cy }, { x: s.cx, y: s.cy + s.r }, { x: s.cx, y: s.cy - s.r }],
     samples: (s: any) => [{ x: s.cx - s.r, y: s.cy - s.r }, { x: s.cx + s.r, y: s.cy + s.r }],
     svg(s: any, ctx: any) {
-      const id = 'bg-' + s.id + (ctx.export ? '-x' : '');
+      const id = 'bg-' + ++ballDrawn; // unique to this drawing: url(#id) finds the first copy in the page, which may not be rendered
       const c = TD.parseColor(s.ballColor).hex;
       return wrap(s, `<defs><radialGradient id="${id}" cx="0.42" cy="0.38" r="0.7" fx="0.3" fy="0.25">` +
         `<stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="${c}"/><stop offset="1" stop-color="${shade(c, 0.35)}"/></radialGradient></defs>` +

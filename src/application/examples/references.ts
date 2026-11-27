@@ -1,4 +1,5 @@
-// Research links for original, editable adaptations. These are not imported screenshots or copied TeX.
+// Research links for the editable examples. Most are original adaptations; a figure adapted from a package's manual
+// or demo says so in its caption (the example's credit), and its link names that package and its author.
 export const exampleReferences: [string, string][] = [
   ['Pendulum force decomposition · OpenStax', 'https://openstax.org/books/university-physics-volume-1/pages/15-4-pendulums'],
   ['Cylindrical Gaussian surfaces · OpenStax', 'https://openstax.org/books/university-physics-volume-2/pages/6-3-applying-gausss-law'],
@@ -19,9 +20,9 @@ export const exampleReferences: [string, string][] = [
   ['Feedback control · Kjell Magne Fauske', 'https://texample.net/control-system-principles/'],
   ['Oriented boundaries · OpenStax', 'https://openstax.org/books/calculus-volume-3/pages/6-4-greens-theorem'],
   ['Circuit examples · CircuiTikZ manual', 'https://ctan.net/graphics/pgf/contrib/circuitikz/doc/circuitikzmanual.pdf'],
-  ['Quantum circuits · Alastair Kay', 'https://arxiv.org/abs/1809.03842'],
+  ['Quantum Fourier transform · Wikipedia', 'https://en.wikipedia.org/wiki/Quantum_Fourier_transform'],
   ['Commutative constructions · tikz-cd manual', 'https://tikz.dev/tikz-cd/getting-started'],
-  ['Diagram matrices · Xy-pic manual', 'https://ctan.org/pkg/xypic'],
+  ['Mayer–Vietoris sequence · Wikipedia', 'https://en.wikipedia.org/wiki/Mayer%E2%80%93Vietoris_sequence'],
   ['Decision trees · Sašo Živanović', 'https://tikz.dev/forest/'],
   ['ZX circuit translations · PennyLane', 'https://pennylane.ai/demos/tutorial_zx_calculus'],
   ['Loop diagrams · Joshua Ellis', 'https://tikz.dev/tikz-feynman/examples'],
@@ -30,12 +31,14 @@ export const exampleReferences: [string, string][] = [
   ['Bus waveforms · Martin Scharrer', 'https://ctan.org/pkg/tikz-timing'],
   ['Multi-map implicants · karnaugh-map manual', 'https://ctan.org/pkg/karnaugh-map'],
   ['IPv4 header · RFC 791', 'https://www.rfc-editor.org/rfc/rfc791.html'],
-  ['Molecular structures · Christian Tellechea', 'https://tikz.dev/chemfig/gallery'],
-  ['Class relationships · Yuan Xu', 'https://tug.ctan.org/graphics/pgf/contrib/pgf-umlcd/pgf-umlcd-manual.pdf'],
-  ['Nested calls · Yuan Xu', 'https://ctan.math.utah.edu/ctan/tex-archive/graphics/pgf/contrib/pgf-umlsd/pgf-umlsd-manual.pdf'],
+  ['Imine formation scheme · chemfig manual, Christian Tellechea', 'https://ctan.org/pkg/chemfig'],
+  ['Abstract Factory demo · pgf-umlcd, Yuan Xu', 'https://ctan.org/pkg/pgf-umlcd'],
+  ['Multi-threads demo · pgf-umlsd, Yuan Xu', 'https://ctan.org/pkg/pgf-umlsd'],
   ['Circle constructions · PGF/TikZ manual', 'https://tikz.dev/tutorial-Euclid'],
   ['Spherical coordinates · tikz-3dplot manual', 'https://ctan.org/pkg/tikz-3dplot'],
-  ['Coupled mechanical systems · tikzphysics manual', 'https://ctan.math.utah.edu/pub/ctan/tex-archive/graphics/pgf/contrib/tikzphysics/tikzphysics.pdf'],
+  ['Mach–Zehnder interferometer · Wikipedia', 'https://en.wikipedia.org/wiki/Mach%E2%80%93Zehnder_interferometer'],
+  ['Graph specifications · PGF/TikZ manual', 'https://tikz.dev/tikz-graphs'],
+  ['Multilayer networks · tikz-network, Jürgen Hackl', 'https://ctan.org/pkg/tikz-network'],
   ['Scientific tables · Simon Fear / Danie Els', 'https://ctan.org/pkg/booktabs'],
   ['Multi-series plots · PGFplots manual', 'https://tikz.dev/pgfplots/'],
   ['Surface and contour plots · PGFplots manual', 'https://tikz.dev/pgfplots/'],

@@ -52,12 +52,14 @@
       channel?.close();
     };
   });
-  const KINDS: [Message, string][] = [
-    [message('phone.kind.circuits', 'Circuits'), 'circuitikz'], [message('phone.kind.quantum', 'Quantum circuits'), 'quantikz'],
-    [message('phone.kind.cd', 'Commutative diagrams'), 'tikz-cd'], [message('phone.kind.plots', 'Plots and charts'), 'pgfplots'],
-    [message('phone.kind.3d', '3D figures'), 'tikz-3dplot'], [message('phone.kind.feynman', 'Feynman diagrams'), 'tikz-feynman'],
+  // name, package, and the package's own page (public/<page>/) where there is one
+  const KINDS: [Message, string, string?][] = [
+    [message('phone.kind.circuits', 'Circuits'), 'circuitikz', 'circuitikz-editor/'], [message('phone.kind.quantum', 'Quantum circuits'), 'quantikz', 'quantikz-editor/'],
+    [message('phone.kind.cd', 'Commutative diagrams'), 'tikz-cd', 'tikz-cd-editor/'], [message('phone.kind.plots', 'Plots and charts'), 'pgfplots'],
+    [message('phone.kind.3d', '3D figures'), 'tikz-3dplot'], [message('phone.kind.feynman', 'Feynman diagrams'), 'tikz-feynman', 'tikz-feynman-editor/'],
     [message('phone.kind.trees', 'Trees'), 'forest'], [message('phone.kind.graphs', 'Graphs'), 'graphs'], [message('phone.kind.automata', 'State machines'), 'automata'],
-    [message('phone.kind.chem', 'Chemical structures'), 'chemfig'], [message('phone.kind.tables', 'Tables'), 'booktabs'],
+    [message('phone.kind.timing', 'Timing diagrams'), 'tikz-timing', 'tikz-timing-editor/'], [message('phone.kind.kmap', 'Karnaugh maps'), 'karnaugh-map', 'karnaugh-map-latex/'],
+    [message('phone.kind.chem', 'Chemical structures'), 'chemfig', 'chemfig-editor/'], [message('phone.kind.tables', 'Tables'), 'booktabs'],
   ];
   const GUIDE: [Message, string][] = [
     [message('phone.g.start', 'Get started'), 'start'], [message('phone.g.drawing', 'Drawing'), 'drawing'], [message('phone.g.maths', 'LaTeX maths'), 'maths'],
@@ -156,7 +158,7 @@
       <section aria-labelledby="pwKinds">
         <h2 id="pwKinds">{t("phone.kinds", "What you can draw", {}, $locale)}</h2>
         <ul class="pw-kinds">
-          {#each KINDS as [name, pkg] (pkg)}<li><span>{caption(name, $locale)}</span><code>{pkg}</code></li>{/each}
+          {#each KINDS as [name, pkg, page] (pkg)}<li>{#if page}<a href={page}>{caption(name, $locale)}</a>{:else}<span>{caption(name, $locale)}</span>{/if}<code>{pkg}</code></li>{/each}
         </ul>
       </section>
       <section aria-labelledby="pwGuide">

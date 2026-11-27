@@ -55,11 +55,14 @@ import { escapeHtml } from '../../core/html';
   const BKEY = 'diagramtex.quick.blocks', HISTORY = 24;
   // name: the user's, or none (the list shows when it was last changed); memo: how its editor was left, without the
   // undo history, which is kept only in memory (memos) for as long as the page is open
-  type Drawing = { id: string; t: number; shape: any; name?: string; memo?: EditorMemo };
+  // src: the #draft= code an embed made it from (app.ts startEmbed), so the same example reopens it
+  type Drawing = { id: string; t: number; shape: any; name?: string; memo?: EditorMemo; src?: string };
   const memos = new Map<string, EditorMemo>();
   const store: { view: string; items: Record<string, Drawing[]>; cur: Record<string, string> } = { view: 'formula', items: {}, cur: {} };
   try { Object.assign(store, JSON.parse(localStorage.getItem(BKEY) || '{}')); } catch (e: any) { /* storage blocked */ }
-  const saveStore = () => { try { localStorage.setItem(BKEY, JSON.stringify(store)); } catch (e: any) { /* storage blocked or full */ } };
+  // embedded in a package page (embed, below), Quick shows that page's block but keeps the view the app had
+  let embedded = false, keepView: string | null = null;
+  const saveStore = () => { try { localStorage.setItem(BKEY, JSON.stringify(keepView === null ? store : { ...store, view: keepView })); } catch (e: any) { /* storage blocked or full */ } };
   const list = document.getElementById('quickList');
   // the blocks shown in Quick: those with an embeddable editor, in the toolbar's order
   const dockBlocks = () => [...TD.blocks.entries()].filter(([type]: any) => TD.blocks.dockable(type))
@@ -157,6 +160,7 @@ import { escapeHtml } from '../../core/html';
   }
   // Add to …: named after the view the open file was left in
   function placeCaption() {
+    if (embedded) return [t('quick.openInApp', 'Open in DiagramTeX'), t('quick.openInAppTip', 'Carry on with this drawing in DiagramTeX: it is in Quick, with your other drafts')];
     const m = TD.app.cmd.fileMode ? TD.app.cmd.fileMode() : 'diagram';
     if (m === 'document') return [t('quick.addToDocument', 'Add to Document'), t('quick.addToDocumentTip', 'Leave Quick and add this drawing to the document, as a new diagram at the cursor')];
     const tip = t('quick.placeTip', 'Leave Quick and add this drawing to the open file, in the middle of the view');
@@ -355,6 +359,7 @@ import { escapeHtml } from '../../core/html';
     if (b.dataset.newDraft !== undefined && isBlockView()) { addDrawing(store.view); return; }
     if (b.dataset.q) act(b.dataset.q, b);
     const d = isBlockView() ? current(store.view) : null;
+    if (b.dataset.place !== undefined && d && embedded) { keepView = null; saveStore(); TD.app.cmd.leaveEmbed(); return; }
     if (b.dataset.place !== undefined && d) placeDrawing(store.view, d.id);
   });
   // the sidebar list: Formula, the blocks, and the open block's drawings
@@ -373,12 +378,14 @@ import { escapeHtml } from '../../core/html';
   // isn't open goes; a named draft is only ever deleted by the user
   function addDrawing(type: string, from?: Drawing) {
     undock();
+    pushDrawing(type, from ? { id: Math.random().toString(36).slice(2, 10), t: Date.now(), shape: JSON.parse(JSON.stringify(from.shape)), ...(from.name ? { name: t('quick.copyName', '{name} copy', { name: from.name }) } : {}) } : fresh(type));
+    show(type);
+  }
+  function pushDrawing(type: string, d: Drawing) {
     const all = store.items[type] ||= [];
-    const d: Drawing = from ? { id: Math.random().toString(36).slice(2, 10), t: Date.now(), shape: JSON.parse(JSON.stringify(from.shape)), ...(from.name ? { name: t('quick.copyName', '{name} copy', { name: from.name }) } : {}) } : fresh(type);
     all.unshift(d);
     for (let i = all.length - 1; all.length > HISTORY && i > 0; i--) if (!all[i].name) { memos.delete(all[i].id); all.splice(i, 1); }
     store.cur[type] = d.id;
-    show(type);
   }
   function openDrawing(type: string, id: string) { if (id !== store.cur[type]) { undock(); store.cur[type] = id; show(type); } }
   // rename in place, in the row: Enter or leaving the field keeps it, Esc puts it back; empty goes back to the time
@@ -470,6 +477,15 @@ import { escapeHtml } from '../../core/html';
 
   TD.quick = {
     show() { shown = true; appHost.hidden = false; if (!onPhone()) show(store.view); },
+    // app.ts startEmbed, before show(): the page's block, on the drawing made from its example (shape, from the code
+    // src) the first time, or on that same drawing as it was left; no shape (no example, or a bad one) opens as usual
+    embed(type: string, shape: any, src: string | null) {
+      embedded = true; keepView = store.view;
+      const had = src ? (store.items[type] || []).find((x) => x.src === src) : undefined;
+      if (had) store.cur[type] = had.id;
+      else if (shape && src) pushDrawing(type, { id: Math.random().toString(36).slice(2, 10), t: Date.now(), shape, src });
+      store.view = type;
+    },
     hide() { shown = false; closeExport(); if (!onPhone()) { undock(); destroyView(appHost); appHost.classList.remove('qk-blocks'); } appHost.hidden = true; if (list) destroyView(list); },
   };
   // follow the phone page as it comes and goes (turning the phone, resizing a window)

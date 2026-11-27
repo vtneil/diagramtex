@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DiagramTeX: draw diagrams, export LaTeX/TikZ</title>
-  <meta name="description" content="Free diagram editor for physics and maths: circuits, quantum circuits, commutative diagrams, Bloch spheres and plots. Export TikZ, LaTeX, PDF, SVG or PNG.">
+  <title>Online TikZ Editor: Draw Diagrams, Export LaTeX | DiagramTeX</title>
+  <meta name="description" content="Free online TikZ editor: draw diagrams with the mouse and copy LaTeX/TikZ code for Overleaf. Circuits, quantum circuits, commutative diagrams, plots and more. Works offline, no sign-up.">
   <!-- Nothing is loaded from another site: every script, style, font and image is served from here (or made in the page). -->
   <!-- 'unsafe-inline' in script-src is a placeholder: scripts/prerender.js swaps it for the hash of the one inline script (the
        preflight) in every page it writes (public/ and dist/), so markup injected into the app's page can't run script. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-qIzbr9+6GAwZcH/6kNC/doxbakYwCqCueX+vXTpFcZs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-7QdbZnBHiSNM8QKwrGuDH6zLMADLIYxpAA0+J2tIv+w='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; media-src 'self' data: blob:; worker-src 'self'; frame-src 'self' blob: data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <link rel="canonical" href="https://diagramtex.com/">
   <!-- link previews (Slack, Discord, X, iMessage…) -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="DiagramTeX">
   <meta property="og:url" content="https://diagramtex.com/">
-  <meta property="og:title" content="DiagramTeX: draw diagrams, export LaTeX/TikZ">
+  <meta property="og:title" content="DiagramTeX: online TikZ editor, draw diagrams and export LaTeX">
   <meta property="og:description" content="Draw physics and maths diagrams in your browser and export them as TikZ, LaTeX, PDF, SVG or PNG. Free, and it works offline.">
   <meta property="og:image" content="https://diagramtex.com/icons/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="DiagramTeX: draw diagrams, export LaTeX/TikZ">
+  <meta property="og:image:alt" content="DiagramTeX: online TikZ editor, draw diagrams and export LaTeX">
   <meta name="twitter:card" content="summary_large_image">
   <!-- for search engines: what the app is, and the site's name -->
   <script type="application/ld+json">
@@ -130,6 +130,7 @@
     addEventListener("resize", apply);
     touch.addEventListener("change", apply);
   })();
+  if (/[?&]embed=/.test(location.search)) document.documentElement.classList.add("embed");
 })();
 </script>
 
@@ -210,7 +211,7 @@
       <section aria-labelledby="pwKinds">
         <h2 id="pwKinds">What you can draw</h2>
         <ul class="pw-kinds">
-          <!--[--><li><span>Circuits</span><code>circuitikz</code></li><li><span>Quantum circuits</span><code>quantikz</code></li><li><span>Commutative diagrams</span><code>tikz-cd</code></li><li><span>Plots and charts</span><code>pgfplots</code></li><li><span>3D figures</span><code>tikz-3dplot</code></li><li><span>Feynman diagrams</span><code>tikz-feynman</code></li><li><span>Trees</span><code>forest</code></li><li><span>Graphs</span><code>graphs</code></li><li><span>State machines</span><code>automata</code></li><li><span>Chemical structures</span><code>chemfig</code></li><li><span>Tables</span><code>booktabs</code></li><!--]-->
+          <!--[--><li><!--[0--><a href="circuitikz-editor/">Circuits</a><!--]--><code>circuitikz</code></li><li><!--[0--><a href="quantikz-editor/">Quantum circuits</a><!--]--><code>quantikz</code></li><li><!--[0--><a href="tikz-cd-editor/">Commutative diagrams</a><!--]--><code>tikz-cd</code></li><li><!--[-1--><span>Plots and charts</span><!--]--><code>pgfplots</code></li><li><!--[-1--><span>3D figures</span><!--]--><code>tikz-3dplot</code></li><li><!--[0--><a href="tikz-feynman-editor/">Feynman diagrams</a><!--]--><code>tikz-feynman</code></li><li><!--[-1--><span>Trees</span><!--]--><code>forest</code></li><li><!--[-1--><span>Graphs</span><!--]--><code>graphs</code></li><li><!--[-1--><span>State machines</span><!--]--><code>automata</code></li><li><!--[0--><a href="tikz-timing-editor/">Timing diagrams</a><!--]--><code>tikz-timing</code></li><li><!--[0--><a href="karnaugh-map-latex/">Karnaugh maps</a><!--]--><code>karnaugh-map</code></li><li><!--[0--><a href="chemfig-editor/">Chemical structures</a><!--]--><code>chemfig</code></li><li><!--[-1--><span>Tables</span><!--]--><code>booktabs</code></li><!--]-->
         </ul>
       </section>
       <section aria-labelledby="pwGuide">

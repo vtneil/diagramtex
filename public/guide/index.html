@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DiagramTeX Guide</title>
+  <title>DiagramTeX Guide: Visual TikZ and LaTeX Diagram Editor</title>
   <meta name="description" content="How to use DiagramTeX: drawing, LaTeX maths, circuits, quantum circuits, plots, 3D, chemistry, UML, tables and the other blocks, documents and pages, and getting TikZ and LaTeX out.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
@@ -120,6 +120,24 @@
     figure { margin: 16px 0 24px; }
     figure img { display: block; width: 100%; height: auto; border-radius: var(--r-lg); border: 1px solid var(--rule); background: var(--sheet); }
     figcaption { font-size: 13px; color: var(--pencil); margin-top: 8px; }
+    figure img { cursor: zoom-in; }
+    /* two pictures side by side; one under the other on a narrow screen */
+    .shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 20px 24px; margin: 16px 0 24px; }
+    .shots figure { margin: 0; }
+    /* a tall, narrow picture (a menu, the file list) beside the text that explains it */
+    figure.aside { float: right; width: 280px; margin: 4px 0 16px 28px; }
+    .aside-end { clear: both; }
+    /* numbered pins on a picture, matching the numbered headings below it */
+    .pinned { position: relative; }
+    .pin { position: absolute; transform: translate(-50%, -50%); width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--sheet);
+      font: 600 12px/24px var(--font-mono); text-align: center; box-shadow: 0 0 0 2px var(--sheet); pointer-events: none; }
+    .n { display: inline-block; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: var(--sheet); font: 600 11px/20px var(--font-mono);
+      text-align: center; margin-right: 6px; vertical-align: 1px; }
+    /* a picture opened at full size */
+    dialog.zoom { padding: 0; border: 0; background: transparent; max-width: 96vw; max-height: 96vh; overflow: visible; cursor: zoom-out; }
+    dialog.zoom::backdrop { background: rgba(28, 27, 25, .72); }
+    dialog.zoom img { display: block; max-width: 96vw; max-height: 92vh; width: auto; height: auto; border-radius: var(--r-lg); background: var(--sheet); }
+    dialog.zoom p { margin: 8px 0 0; color: #f4f2ec; font-size: 13px; text-align: center; }
 
     .steps { counter-reset: s; list-style: none; padding: 0; display: grid; gap: 12px; }
     .steps li { counter-increment: s; position: relative; padding-left: 32px; margin: 0; }
@@ -130,6 +148,13 @@
     .card h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
     .card p { margin: 0; font-size: 13.5px; color: var(--graphite); }
 
+    ul.how { list-style: none; padding: 0; margin: 0 0 16px; }
+    ul.how li { margin: 0; padding: 6px 0; border-bottom: 1px solid var(--rule-soft); }
+    ul.how li:last-child { border-bottom: 0; }
+    ul.how li > b:first-child { margin-right: 2px; }
+    details.block ul.how { margin-bottom: 0; }
+    ol.legend { list-style: none; padding: 0; margin: 0 0 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 32px; font-size: 14px; }
+    ol.legend li { margin: 0; }
     .note { border-left: 2px solid var(--bluepen); padding: 2px 0 2px 14px; margin: 0 0 16px; font-size: 14px; color: var(--graphite); }
     .note.warn { border-left-color: var(--redpen); }
 
@@ -165,6 +190,10 @@
       .toc-m nav.toc { display: block; position: static; max-height: none; padding: 0 8px 8px; }
       h1 { font-size: 30px; }
       .cards { grid-template-columns: minmax(0, 1fr); }
+      .shots { grid-template-columns: minmax(0, 1fr); }
+      ol.legend { grid-template-columns: minmax(0, 1fr); }
+      figure.aside { float: none; width: auto; max-width: 320px; margin: 16px 0 24px; }
+      .pin { width: 18px; height: 18px; font-size: 10px; line-height: 18px; }
       .brand small { display: none; }
       .toc-m nav.toc { padding: 0 0 8px; }
     }
@@ -203,7 +232,8 @@
         <li><a href="#drawing">Drawing</a>
           <ol>
             <li><a href="#tools">Tools</a></li>
-            <li><a href="#precision">Snapping and precision</a></li>
+            <li><a href="#physics">Physics figures</a></li>
+            <li><a href="#precision">Placing exactly</a></li>
             <li><a href="#arrange">Arranging</a></li>
             <li><a href="#style">Style</a></li>
           </ol>
@@ -216,8 +246,8 @@
         <li><a href="#export">Getting LaTeX out</a></li>
         <li><a href="#import">Bringing TikZ in</a></li>
         <li><a href="#files">Files and saving</a></li>
-        <li><a href="#parity">How close to LaTeX</a></li>
         <li><a href="#keys">Keyboard shortcuts</a></li>
+        <li><a href="#parity">How close to LaTeX</a></li>
         <li><a href="#privacy">Offline and privacy</a></li>
         <li><a href="#ai">Use of generative AI</a></li>
         <li><a href="#faq">Questions</a></li>
@@ -230,7 +260,7 @@
       <section class="hero">
         <div class="eyebrow">User guide</div>
         <h1>Draw it, then paste the LaTeX.</h1>
-        <p class="lede">DiagramTeX is a diagram editor that writes TikZ. You draw with the mouse, type labels in LaTeX maths, and copy clean code into Overleaf or any LaTeX document. This guide covers everything it does, from the first line to a whole typeset document.</p>
+        <p class="lede">DiagramTeX is a diagram editor that writes TikZ: draw with the mouse, type labels in LaTeX, paste the code into your document. This guide shows how to do each thing, step by step.</p>
         <ul class="facts">
           <li>Free and open source</li><li>Works offline</li><li>No account</li><li>Nothing leaves your browser</li>
         </ul>
@@ -239,481 +269,473 @@
       <section id="start">
         <h2>Get started</h2>
         <ol class="steps">
-          <li><b>Pick a tool and draw.</b> The rail on the left holds every tool; press <kbd>L</kbd> for a line, <kbd>R</kbd> for a rectangle, <kbd>T</kbd> for text.</li>
-          <li><b>Type maths in labels.</b> Anything between <code>$…$</code> is LaTeX maths and renders as you type: <code>$\vec F = m\vec a$</code>.</li>
-          <li><b>Copy the TikZ.</b> Press <kbd class="mod">Ctrl</kbd><kbd>E</kbd> to open the code. The comment at the top lists the packages it needs.</li>
-          <li><b>Paste and compile.</b> Put the code in your document, load the listed packages, and build with pdfLaTeX.</li>
+          <li><b>Draw.</b> Pick a tool on the left rail: <kbd>L</kbd> line, <kbd>R</kbd> rectangle, <kbd>T</kbd> text.</li>
+          <li><b>Type maths.</b> Write it between <code>$…$</code>: <code>$\vec F = m\vec a$</code>.</li>
+          <li><b>Copy the TikZ.</b> Press <kbd class="mod">Ctrl</kbd><kbd>E</kbd> and click <b>Copy</b>.</li>
+          <li><b>Paste and compile.</b> Paste into your document, load the packages in the first line, build with pdfLaTeX.</li>
         </ol>
-        <p>The first time you open DiagramTeX it shows a <b>Welcome</b> file: an introduction, two diagrams with one example of almost everything it can draw, and a short manual. Open any of its objects to see how it was made. A short <b>welcome tour</b> points out the left, top and right of the window: search for “Welcome Tour” (<kbd class="mod">Ctrl</kbd><kbd>K</kbd>) to open it. To keep DiagramTeX on your computer, use <b>Install</b> beside the language switcher when your browser offers it, or the browser's own install menu (<b>Add to Home Screen</b> in Safari); it then runs without a connection. Once installed, the same place offers <b>Download TeX engine</b> with its size: it keeps pdfLaTeX and XeLaTeX in the app, so Compile and printing or exporting a PDF through LaTeX work offline too, and goes once both are kept.</p>
+        <div class="shots">
+          <figure><img src="img/fly-lines.webp" width="677" height="528" alt="The tool rail with the Lines flyout open: line, arrow, double arrow, elbow, curved connector, Bézier and curved arrow, then the freeform tools" loading="lazy"><figcaption><b>1.</b> Rest on a tool with a corner triangle to open its flyout.</figcaption></figure>
+          <figure><img src="img/maths-dock.webp" width="1520" height="808" alt="The LaTeX editor docked under the canvas, with the source of an integral on the left and the typeset integral on the right" loading="lazy"><figcaption><b>2.</b> Double-click a text to edit its LaTeX.</figcaption></figure>
+          <figure><img src="img/latex.webp" width="1520" height="950" alt="The LaTeX Code dialog over the canvas, with a TikZ picture and its packages in the first line" loading="lazy"><figcaption><b>3.</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd>: the code, packages first.</figcaption></figure>
+          <figure><img src="img/compile.webp" width="1520" height="950" alt="The LaTeX Code dialog with the code on the left and the compiled PDF of the pendulum diagram on the right" loading="lazy"><figcaption><b>4.</b> <b>Compile</b> checks it with pdfLaTeX in your browser.</figcaption></figure>
+        </div>
+        <ul class="how">
+          <li><b>Learn by example:</b> open the <b>Welcome</b> file and double-click any object to see how it was made.</li>
+          <li><b>Take the tour:</b> <kbd class="mod">Ctrl</kbd><kbd>K</kbd>, type “Welcome Tour”.</li>
+          <li><b>Use it offline:</b> click <b>Install</b> at the top right. Then <b>Download TeX engine</b> to compile offline too.</li>
+        </ul>
       </section>
 
       <section id="window">
         <h2>The window</h2>
         <figure>
-          <img src="img/01-diagram.png" width="1920" height="1080" alt="The DiagramTeX window: the file list on the left, the tool rail beside it, the canvas with formulae, a flowchart, a circuit, a plot and a quantum circuit, and the properties panel on the right" loading="lazy">
-          <figcaption>A Classic diagram with the plot selected: its settings fill the panel on the right.</figcaption>
+          <div class="pinned">
+            <img src="img/window.webp" width="1520" height="950" alt="The DiagramTeX window: the top bar, the file list on the left, the tool rail beside it, the canvas with formulae, a flowchart, a circuit, a plot, a quantum circuit and a commutative diagram, and the properties panel and Layers on the right" loading="lazy">
+            <span class="pin" style="left: 46.5%; top: 7.2%">1</span>
+            <span class="pin" style="left: 7%; top: 21%">2</span>
+            <span class="pin" style="left: 15.5%; top: 88.6%">3</span>
+            <span class="pin" style="left: 92.6%; top: 15%">4</span>
+            <span class="pin" style="left: 91%; top: 73.7%">5</span>
+            <span class="pin" style="left: 46.5%; top: 94.3%">6</span>
+          </div>
         </figure>
-        <div class="cards">
-          <div class="card"><h4>Top bar</h4><p>The first row has the logo on the left, the file name in the centre, and language and appearance on the right. The second row holds New, Open, Save and Import; the mode selector and adjacent Classic Document/Diagram views; undo and redo; grid and snap; Print, Export and LaTeX.</p></div>
-          <div class="card"><h4>File list</h4><p>Your files of the current kind. Right-click a file to rename, duplicate or delete it. The button at the far left folds the list away. Underneath: the text input mode and the maths engine.</p></div>
-          <div class="card"><h4>Tool rail</h4><p>Every tool. A button with a small corner triangle opens a flyout of related tools when you hover it.</p></div>
-          <div class="card"><h4>Properties panel</h4><p>Floats over the top right of the canvas. With nothing selected it sets the default style for new shapes and lists the shortcuts; click its heading to fold it.</p></div>
-          <div class="card"><h4>Layers</h4><p>Under the properties panel, top first. Click to select, drag to restack, the eye hides, the lock stops picking. Double-click a name to rename it.</p></div>
-          <div class="card"><h4>Rulers, status bar and view bar</h4><p>Centimetre rulers in TikZ coordinates (y up) show the selection in red. The status bar shows the cursor, the marquee's width and height while you drag one, and snap. The view bar at the canvas's bottom left sets the grid spacing (and the oblique grid's axes) and the zoom, with <b>1:1</b>, <b>Fit</b> and <b>Fit Width</b>.</p></div>
+        <ol class="legend">
+          <li><span class="n">1</span><b>Top bar:</b> files, modes, undo, grid and snap, Print, Export, LaTeX.</li>
+          <li><span class="n">2</span><b>File list:</b> right-click a file to rename, duplicate or delete it.</li>
+          <li><span class="n">3</span><b>Tool rail:</b> a corner triangle means more tools on hover.</li>
+          <li><span class="n">4</span><b>Properties:</b> settings of what is selected; with nothing selected, the style of new shapes.</li>
+          <li><span class="n">5</span><b>Layers:</b> click to select, drag to restack, eye to hide, lock to stop picking.</li>
+          <li><span class="n">6</span><b>View bar:</b> grid spacing and zoom, <b>1:1</b>, <b>Fit</b>, <b>Fit Width</b>.</li>
+        </ol>
+        <div class="shots">
+          <figure><img src="img/window-dark.webp" width="1520" height="950" alt="The DiagramTeX window in dark appearance, with the pendulum diagram on a light sheet and a line selected" loading="lazy"><figcaption>Switch appearance at the top right. The sheet stays light, so colours look as on paper.</figcaption></figure>
+          <figure><img src="img/window-thai.webp" width="1520" height="950" alt="The DiagramTeX window in Thai, with translated toolbar, plot settings and layers beside an unchanged damped-oscillation plot" loading="lazy"><figcaption>Switch language from the flag at the top right. Your text and code stay as written.</figcaption></figure>
         </div>
-        <p>1 cm in TikZ is 40 px on the canvas at 100%. Canvas y points down and TikZ y points up; the faint cross on the canvas marks the TikZ origin. The app follows your system's light or dark appearance, or the choice at the right end of the top bar. The drawing sheet stays light in both, so colours look as they will on paper.</p>
       </section>
-
-      <figure>
-        <img src="img/12-thai-interface.png" width="1920" height="1080" alt="The main app in Thai, showing translated toolbar, plot settings and layers alongside unchanged diagram content" loading="lazy">
-        <figcaption>On first access, a Thai browser preference selects Thai; other languages select English. Change it from the first row and your choice is remembered. Your names, text, maths and code stay as written.</figcaption>
-      </figure>
 
       <section id="modes">
         <h2>Five modes</h2>
-        <p>The top bar's main switch is <b>Classic | Page | Whiteboard | Table | Quick</b>. Each of the first three is its own kind of file; the sidebar lists only files of the current kind, and <b>New</b> makes one of that kind.</p>
-        <div class="cards">
-          <div class="card"><h4>Classic</h4><p>Diagrams plus a document that arranges them with text, as in Mathcha. A second switch, <b>Document | Diagram</b>, flips between writing and drawing.</p></div>
-          <div class="card"><h4>Page</h4><p>A free-form sheet of paper. Place text, maths, shapes, plots and images anywhere on A4 or Letter pages, and export a full <code>article</code> that keeps every position.</p></div>
-          <div class="card"><h4>Whiteboard</h4><p>One endless canvas with no edges. Scroll to move, pinch or <kbd class="mod">Ctrl</kbd>+scroll to zoom (3% to 800%), and <kbd>H</kbd> or <kbd>Space</kbd>-drag to grab the board.</p></div>
-          <div class="card"><h4>Table</h4><p>One table to make and take away: import cells from a spreadsheet, a CSV, Excel, Markdown, HTML or LaTeX, edit them in a grid, and copy clean <code>booktabs</code> LaTeX. See <a href="#table">Tables</a>.</p></div>
-          <div class="card"><h4>Quick</h4><p>One figure, without a file. <b>Formula</b>: type LaTeX, then <b>Copy PNG</b> (<kbd class="mod">Ctrl</kbd><kbd>Enter</kbd>) to paste it into slides or chats, or copy the SVG. Or pick a block from Quick's list to draw it in its own editor. Your open file stays open. See <a href="#quick">Quick</a>.</p></div>
+        <p>Pick a mode in the top bar. Classic, Page and Whiteboard are kinds of file; <b>New</b> makes one of the kind you are in.</p>
+        <div class="shots">
+          <figure><img src="img/mode-document.webp" width="1520" height="950" alt="Classic in Document view: an A4 page with a heading, a paragraph and the thin-lens ray diagram, and the page setup on the right" loading="lazy"><figcaption><b>Classic:</b> diagrams plus a document. Switch <b>Document | Diagram</b> to write or draw.</figcaption></figure>
+          <figure><img src="img/mode-page.webp" width="1520" height="950" alt="Page mode: an A4 sheet with the thin-lens diagram placed on it, margins as dashed guides, and the page list in the panel" loading="lazy"><figcaption><b>Page:</b> place anything anywhere on A4 or Letter pages.</figcaption></figure>
+          <figure><img src="img/mode-board.webp" width="1520" height="950" alt="Whiteboard mode: a feedback-control block diagram on an edgeless canvas" loading="lazy"><figcaption><b>Whiteboard:</b> one endless canvas. <kbd class="mod">Ctrl</kbd>+scroll zooms, <kbd>Space</kbd>-drag moves.</figcaption></figure>
+          <figure><img src="img/mode-quick.webp" width="1520" height="950" alt="Quick mode: a Fourier-transform formula typed in LaTeX, its large preview, and Copy PNG, Copy SVG, PNG and SVG buttons" loading="lazy"><figcaption><b>Quick:</b> one formula or block, no file. <b>Table</b> is under <a href="#table">Tables</a>.</figcaption></figure>
         </div>
         <h3 id="quick">Quick</h3>
-        <ul>
-          <li><b>Formula:</b> the preview updates as you type, in LaTeX or MathLive. Choose the size (Normal, Large, Huge), how sharp the PNG is (4× to 32×) and a transparent background. <b>Copy PNG</b>, <b>Copy SVG</b>, or download <code>formula.png</code> / <code>formula.svg</code>.</li>
-          <li><b>Blocks:</b> under Formula, Quick's list holds every block that has an editor (commutative diagrams, quantum and electrical circuits, trees, graphs, ZX, Feynman, timing, automata, networks, UML, Karnaugh maps, bit fields, chemistry, 2D and 3D geometry, physics), each with the number of drafts it has. Pick one and its editor opens in place, with its drafts listed under it; the one open is filled in. Up to 24 drafts are kept per block. A new draft is only made when you press <b>New</b>.</li>
-          <li><b>Drafts stay as you left them:</b> go to another block and come back, and the draft reopens with the same zoom, selection and undo history. Zoom and selection also survive a reload; undo history lasts until you close the tab.</li>
-          <li><b>Names:</b> a draft is named after when it last changed. Double-click it, press <kbd>F2</kbd> or right-click and choose <b>Rename…</b> to give it a name; clear the name to go back to the time. A named draft is never dropped to make room.</li>
-          <li><b>Output:</b> on the right of the editor's top bar. <b>Copy TikZ</b> copies the code. <b>Export</b> copies or downloads the drawing as PNG (choose its sharpness, and a transparent background) or SVG. <b>Add to Document</b> (or Diagram, Page, Whiteboard, after the mode your file was in) leaves Quick and adds the drawing to the file you had open, in the middle of the view.</li>
-          <li><b>Right-click</b> a draft in the list to open, rename, add to your file, duplicate or delete it, or a block to start a new one.</li>
+        <ul class="how">
+          <li><b>Copy a formula as a picture:</b> type the LaTeX, pick Normal, Large or Huge, then <b>Copy PNG</b> (<kbd class="mod">Ctrl</kbd><kbd>Enter</kbd>) or <b>Copy SVG</b>. Paste into slides or chat.</li>
+          <li><b>Draw a block without a file:</b> pick a block under Formula, press <b>New</b>, draw. <b>Copy TikZ</b> or <b>Export</b> at the top right.</li>
+          <li><b>Put it in your file:</b> <b>Add to Document</b> (or Diagram, Page, Whiteboard).</li>
+          <li><b>Rename a draft:</b> double-click it or press <kbd>F2</kbd>. Named drafts are kept; up to 24 per block.</li>
         </ul>
+        <figure><img src="img/quick-block.webp" width="1520" height="950" alt="Quick with the Quantum block open: the block list with its one draft on the left, the quantum circuit editor in the middle, and Add to Document, Export and Copy TikZ at the top right" loading="lazy"><figcaption>A quantum circuit drawn in Quick; its drafts are listed under the block.</figcaption></figure>
       </section>
 
       <section id="drawing">
         <h2>Drawing</h2>
         <h3 id="tools">Tools</h3>
-        <ul>
-          <li><b>Select</b> (<kbd>V</kbd>), <b>Maths</b> (<kbd>M</kbd>, a text object that starts in <code>$…$</code>) and <b>Text</b> (<kbd>T</kbd>; drag for a paragraph box).</li>
-          <li><b>Lines:</b> line, arrow, double arrow, elbow connector, curved connector, Bézier curve and curved arrow; then freeform: curve through points, curvature pen, polyline, smooth closed curve, arc by centre, arc through three points and spring. A line's <b>Route</b> in the panel makes it straight, an <b>elbow</b> (right angles; drag its middle handle to move the bend, or pull it out sideways from a straight run to make a U; it stays put when the shapes at its ends move, until one comes within 0.5&nbsp;cm, and springs back when it moves away) or <b>curved</b>, and <b>Direction</b> sets whether it leaves and arrives sideways or up and down. Connector ends hold on to shapes. Any line draws with a drag, or with two clicks: start, then end (<kbd>Esc</kbd> cancels in between). <b>Arc by centre</b> (<kbd>O</kbd>): click the centre, the start, then the end; the arc follows the way you turn, either way and past 180°, and <kbd>Shift</kbd> snaps to 15°. <b>Arc through three points</b>: click both ends, then a point on the arc. <kbd>Esc</kbd> cancels. Afterwards the end handles set only the angles θ<sub>1</sub> and θ<sub>2</sub>, the round handle halfway along sets the radius, the edge handles on its box stretch it into an elliptical arc (<kbd>Shift</kbd> makes it round again), and it rotates like any other shape. Click a polyline point to pick it, drag a <b>+</b> to add one, double-click to remove one.</li>
-          <li><b>Curves through points</b> are TikZ's own <code>plot[smooth]</code>, so the canvas and the PDF match; <b>Tension</b> in the panel sets how round they are (0 straight, 0.5 TikZ's default). The <b>curvature pen</b> works like Photoshop's: click points and the curve bends smoothly through them, double-click (or <kbd class="alt">Alt</kbd>-click) for a corner, click the first point to close it, <kbd>Enter</kbd> or <kbd>Esc</kbd> to leave it open. Afterwards drag its points, drag a <b>+</b> to add one, double-click a point to switch it between smooth and corner, and <kbd>Delete</kbd> removes the chosen point.</li>
-          <li><b>Shapes:</b> rectangles (plain, rounded, snipped), 33 basic shapes and 28 flowchart symbols. Library symbols export as exact TikZ paths and can hold centred text.</li>
-          <li><b>Rectangle and ellipse</b> (<kbd>R</kbd>, <kbd>E</kbd>, first in the Shapes menu's basic shapes): rest the mouse on either button, or right-click it, to choose how it draws. Rectangle: corner to corner, from the centre, or three points (a corner, the next corner, then the other side: a turned rectangle). Ellipse: corner to corner, from the centre, a circle from its centre, a circle by two points (a diameter) or by three points. The choice is ticked, shown on the button and remembered. Each draws with a drag or with two clicks (the three-point ones with three). <kbd class="shift">Shift</kbd> keeps a box square; <kbd>Esc</kbd> cancels between clicks.</li>
-          <li><b>Electrical:</b> the circuit editor, common symbols (resistor, capacitor, sources, diode, transistor, logic gates, ground) and waveforms (sine, square, pulse, triangle, sawtooth, rectified, chopped…).</li>
-          <li><b>Physics:</b> at the top, computed figures for six domains (Mechanics, Optics, Fields, Waves, Spacetime, Energy levels; see <a href="#physics">Physics figures</a>); below them, mechanics symbols (ground, wall, block, incline, cart, pulley, pendulum) and optics symbols (lenses, mirrors, prism, screen, slits, rays, source, eye).</li>
-          <li><b>Misc:</b> axes, wave, brace, ruler, grid, ball and dot; <b>Arrows:</b> 27 block arrows; <b>Image</b> (<kbd>I</kbd>) and <b>Pencil</b> (<kbd>N</kbd>, freehand, smoothed into Bézier curves).</li>
+        <ul class="how">
+          <li><b>Draw a line or arrow:</b> <kbd>L</kbd> or <kbd>A</kbd>, then drag, or click the start and the end.</li>
+          <li><b>Connect two shapes:</b> use the elbow or curved connector from Lines; its ends hold on to the shapes. Drag the middle handle to move the bend.</li>
+          <li><b>Draw a smooth curve:</b> the curvature pen: click points, double-click for a corner, <kbd>Enter</kbd> to finish, click the first point to close.</li>
+          <li><b>Draw an arc:</b> <kbd>O</kbd>, click the centre, the start, then the end. <kbd class="shift">Shift</kbd> snaps to 15°.</li>
+          <li><b>Draw a rectangle or ellipse:</b> <kbd>R</kbd> or <kbd>E</kbd> and drag. Right-click the button to draw from the centre, by three points or as a circle.</li>
+          <li><b>Add text or maths:</b> <kbd>T</kbd> for text (drag for a paragraph), <kbd>M</kbd> for maths.</li>
+          <li><b>Add a picture:</b> <kbd>I</kbd>, or paste or drop an image.</li>
+          <li><b>Draw freehand:</b> <kbd>N</kbd>; the stroke is smoothed into curves.</li>
+          <li><b>Edit a polyline’s points:</b> drag a <b>+</b> to add one, double-click a point to remove it.</li>
         </ul>
-        <p>Detailed shapes keep their detail size when you resize them: stretching a wave adds periods, a spring or coil adds loops, a ruler adds ticks. The panel holds the detail sizes (period, loop pitch, tick spacing, cell size).</p>
+        <div class="shots">
+          <figure><img src="img/fly-shapes.webp" width="905" height="1000" alt="The Shapes flyout: rectangles, basic shapes and flowchart symbols" loading="lazy"><figcaption><b>Shapes:</b> rectangles, 33 basic shapes, 28 flowchart symbols.</figcaption></figure>
+          <figure><img src="img/fly-phys.webp" width="905" height="967" alt="The Physics flyout: six computed domains as picture tiles, then mechanics and optics symbols" loading="lazy"><figcaption><b>Physics:</b> computed figures, then mechanics and optics symbols.</figcaption></figure>
+        </div>
 
         <h3 id="physics">Physics figures</h3>
-        <p>A physics figure works out its own physics: move a lens and the rays and the image follow, steepen an incline and the forces and acceleration change. Pick a domain from the <b>Physics</b> menu, then click the canvas; the figure starts from an example. Double-click it, press <kbd>Enter</kbd> or use <b>Edit Physics…</b> to open the editor.</p>
-        <ul>
-          <li><b>Mechanics:</b> blocks on inclines with friction, applied forces, Atwood machines, springs, pendulums, projectiles and linkages. <b>Optics:</b> rays through lenses, mirrors, prisms, slabs and interfaces, with images, polarisers, beam splitters and interferometers. <b>Fields:</b> field lines, equipotentials and null points of charges and currents. <b>Waves:</b> interference, slits and gratings, beats, standing waves. <b>Spacetime:</b> Minkowski diagrams with moving frames, light cones and intervals. <b>Energy levels:</b> levels, transitions and spectra.</li>
-          <li><b>Editor:</b> pick an object on the left, click the grid to place it (<kbd>Esc</kbd> when done). Drag handles: a square moves, a circle turns, a diamond sets a size or focal length; <kbd>Alt</kbd> turns snapping off. Arrows nudge, <kbd>Tab</kbd> walks the objects, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>D</kbd> duplicates, <kbd>Delete</kbd> removes. The examples sit below the palette.</li>
-          <li><b>Drawing:</b> the main editor's tools sit below the physics objects: text and maths, lines and arrows, curves, polylines, the pencil, rectangles, ellipses, shapes, block arrows and symbols (no blocks or plots). They behave as on the main canvas. Drag on an empty spot to select with a marquee, <kbd class="shift">Shift</kbd>-click to add one; the selection moves, duplicates and deletes together. Space-drag or the middle button moves the view.</li>
-          <li><b>Results:</b> with nothing selected, the right side lists every computed value, each tagged <i>exact</i>, <i>ideal</i> (exact for a stated idealisation such as a thin lens), <i>approx</i> or <i>schematic</i>. Setups that cannot happen are shown as warnings.</li>
-          <li><b>Source:</b> one object per line, such as <code>\lens[f=2](3)</code>, live in both directions. Values take units (<code>500nm</code>, <code>30deg</code>, <code>2kg</code>). Lines it does not know are kept. This is DiagramTeX's own syntax, not LaTeX, so it won't compile on its own: Export or <b>Copy TikZ Code</b> gives the LaTeX, plain TikZ with <code>arrows.meta</code>.</li>
+        <ul class="how">
+          <li><b>Add one:</b> open the Physics flyout, pick a domain (Mechanics, Optics, Fields, Waves, Spacetime, Energy levels), click the canvas.</li>
+          <li><b>Edit it:</b> double-click it or press <kbd>Enter</kbd>.</li>
+          <li><b>Place an object:</b> pick it on the left and click the grid; <kbd>Esc</kbd> when done.</li>
+          <li><b>Change it:</b> drag a square to move, a circle to turn, a diamond to set a size or focal length. Rays, forces and images follow.</li>
+          <li><b>Read the results:</b> click empty space; the right side lists every computed value.</li>
         </ul>
+        <figure><img src="img/physics.webp" width="1520" height="950" alt="The physics editor with an Atwood machine: objects on the left, the pulley and two masses with tension and weight arrows in the middle, computed acceleration and tension and the source on the right" loading="lazy"></figure>
 
-        <h3 id="precision">Snapping and precision</h3>
-        <ul>
-          <li>The grid is 0.25 cm. Shapes snap to it and to other shapes' points; hold <kbd class="alt">Alt</kbd> to place freely. Beside Snap, choose the grid's style: lines, dots, isometric, isometric dots, or <b>Oblique</b>, a grid on two axes at any angle; the view bar then picks its axes from a preset (Skew 45°, Isometric or Triangular) or as two angles typed into u₁ and u₂, and shapes snap along them.</li>
-          <li>Hold <kbd class="shift">Shift</kbd> to keep angles to 15° steps and to draw squares and circles.</li>
-          <li>Arrow keys nudge the selection. The panel shows every coordinate in TikZ centimetres, ready to type.</li>
-          <li><b>Rotate</b> by hovering just outside the middle of any edge of the selection until the cursor turns, then drag (<kbd class="shift">Shift</kbd> for 15°). <kbd class="mod">Ctrl</kbd><kbd>R</kbd> turns 90°.</li>
+        <h3 id="precision">Placing exactly</h3>
+        <ul class="how">
+          <li><b>Place off the grid:</b> hold <kbd class="alt">Alt</kbd> while you drag.</li>
+          <li><b>Keep angles to 15°, or draw a square or circle:</b> hold <kbd class="shift">Shift</kbd>.</li>
+          <li><b>Type a position:</b> select the object and type TikZ centimetres in the panel.</li>
+          <li><b>Nudge:</b> arrow keys.</li>
+          <li><b>Rotate:</b> hover just outside the middle of an edge until the cursor turns, then drag. <kbd class="mod">Ctrl</kbd><kbd>R</kbd> turns 90°.</li>
+          <li><b>Change the grid:</b> the menu beside Snap: lines, dots, isometric or oblique. Set its spacing in the view bar.</li>
         </ul>
+        <figure><img src="img/rulers.webp" width="1520" height="912" alt="An incline diagram with the slope selected: its extent is shaded in red on the centimetre rulers along the top and left" loading="lazy"><figcaption>The rulers are TikZ centimetres, y up; the selection is shaded on them.</figcaption></figure>
 
         <h3 id="arrange">Arranging</h3>
-        <ul>
-          <li><b>Right-click</b> any object for copy (also as TikZ or as an image), cut, paste, duplicate, delete, group, <b>Copy as Image</b> and <b>Save as Image</b> (PNG on white, PNG with a transparent background, or SVG with its maths fonts), and the Combine, Arrange, Rotate, Align and Distribute menus. On a touch screen, hold a finger still on the object for half a second.</li>
-          <li><b>Groups</b> (<kbd class="mod">Ctrl</kbd><kbd>G</kbd>; add <kbd class="shift">Shift</kbd> to ungroup) select and align as one piece. Drag a handle on the dashed frame round a group, or round any two or more selected objects (loose shapes, several groups or both), to resize all of it: shapes, lines and radii scale, the opposite side holds, and line widths, text and dots keep their size; <kbd class="shift">Shift</kbd> at a corner keeps its proportions. Click a member of a selected group again to select just it, to move or copy it on its own.</li>
-          <li><b>Combine</b> two or more closed shapes: Unite, Intersect, Subtract, Exclude or Divide. The result is a Region, which can have holes, exported with <code>even odd rule</code>.</li>
-          <li><b>Stacking:</b> <kbd class="mod">Ctrl</kbd><kbd>]</kbd> and <kbd class="mod">Ctrl</kbd><kbd>[</kbd> move forward and backward, or drag rows in Layers.</li>
+        <ul class="how">
+          <li><b>Open an object’s menu:</b> right-click it (or hold a finger on it).</li>
+          <li><b>Group:</b> <kbd class="mod">Ctrl</kbd><kbd>G</kbd>; <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>G</kbd> ungroups. Click a member again to pick just it.</li>
+          <li><b>Resize several together:</b> select them and drag a handle of the dashed frame.</li>
+          <li><b>Align or distribute:</b> right-click, <b>Align</b> or <b>Distribute</b>, or the buttons in the panel.</li>
+          <li><b>Cut one shape from another:</b> select both, right-click, <b>Combine</b> → <b>Subtract</b> (or Unite, Intersect, Exclude, Divide).</li>
+          <li><b>Bring forward or back:</b> <kbd class="mod">Ctrl</kbd><kbd>]</kbd> / <kbd class="mod">Ctrl</kbd><kbd>[</kbd>, or drag in Layers.</li>
         </ul>
+        <figure><img src="img/context-menu.webp" width="1520" height="950" alt="Two circles of a Venn diagram selected, with the right-click menu open: Copy, Copy TikZ Code, Copy as Image, Save as Image, Cut, Paste, Duplicate, Delete, Group, Make Component, Combine, Arrange, Rotate, Align and Distribute" loading="lazy"></figure>
 
         <h3 id="style">Style</h3>
-        <ul>
-          <li><b>Colour</b> with presets, alpha and “No colour”. <b>Fill</b> is a colour, a <b>gradient</b> (linear or radial, with draggable stops; exported as pgf shadings) or a <b>pattern</b> (lines, grid, crosshatch, bricks, dots; exported with <code>patterns.meta</code>).</li>
-          <li><b>Lines:</b> width, dash presets or a custom <code>on off</code> pattern, 27 arrow tips, double, wavy and ticked shafts, opacity.</li>
-          <li><b>Shadow</b> (rectangles, ellipses, closed polygons and curves, Combine regions, the closed basic shapes, flowchart symbols and block arrows, boxed text and images): turn it on, then set how far it falls (<b>Shadow offset</b>: right and down; below 0, up and left) and how dark it is (<b>Shadow alpha</b>). It falls down the page even when the object is rotated. Exported as TikZ's <code>drop shadow</code> (<code>shadows</code> library).</li>
-          <li><b>Images</b> (a photo collage, say): <b>Border</b> puts a margin round the picture, white by default like a photo print, in <b>Border colour</b>; <b>Stroke</b> adds an outline round it, and <b>Corner radius</b> rounds the frame and the picture inside it. Add a shadow and a little rotation to each photo. The border is the <code>inner sep</code> of the picture's node, and rounded pictures are clipped with <code>\clip</code>.</li>
-          <li><b>Text:</b> font family (including the Thai fonts Garuda, Kinnari and Laksaman, which are for viewing in the app: the LaTeX keeps your document's font), bold and italic, size from <code>\tiny</code> to <code>\Huge</code> or a custom size, and a wrap width with left, centre, right or justified alignment.</li>
-          <li>With nothing selected, the panel sets the <b>default style</b> that new shapes start with.</li>
-          <li><b>Named styles:</b> select objects and choose <b>New Style from Selection…</b> in the <b>Style</b> row at the top of the panel to give their outline, fill, arrow tips, opacity and text a name, such as <code>block</code>. Pick the style for other objects to link them. A linked object can still set anything differently: a dot marks each field that differs, and <b>Reset to Style</b> (the <b>⋯</b> button) drops those. <b>Update "block" from This Object</b> changes the style, and every object linked to it, in every diagram of the file, follows. The LaTeX defines each style once, <code>\tikzset{block/.style={…}}</code>, and writes <code>\draw[block]</code>, or <code>\draw[block, dashed]</code> where an object differs. When that wouldn't draw exactly the same, the object's options are written out in full. The styles belong to the file; <b>Detach from Style</b> unlinks an object and <b>Delete Style…</b> removes a style, and the objects keep how they look.</li>
-          <li><b>Macros:</b> a file can define its own commands, as a preamble does: <code>\newcommand{\R}{\mathbb{R}}</code>, <code>\DeclareMathOperator{\Tr}{Tr}</code>, <code>\DeclarePairedDelimiter\abs{\lvert}{\rvert}</code>, <code>\def</code> and <code>\let</code>. Open them with <b>Macros…</b> in the command search, or <b>Edit Macros…</b> in the Document's <b>Page setup</b>. Every formula in the file is drawn with them, and every export (TikZ, the Document's and the Page's LaTeX) defines them once in its preamble, with the packages they use. Importing LaTeX brings its preamble's macros into the file; a command the file already defines keeps the file's definition. An optional argument is read as LaTeX reads it, with its default when it is left out: <code>\newcommand{\f}[2][x]</code>, and xparse's starred and optional arguments (<code>\NewDocumentCommand\f{s o m}</code>). <code>\def</code> with delimited arguments (<code>\def\pair#1,#2.{…}</code>) works too, and so do tests on the arguments (ifthen's <code>\ifthenelse{\equal{#1}{}}{…}{…}</code>, <code>\isempty</code>, etoolbox's <code>\ifstrempty</code> and <code>\ifstrequal</code>, <code>\ifx&amp;#1&amp;</code>), <code>\newrobustcmd</code>, <code>\newenvironment</code>, mathtools' <code>\DeclarePairedDelimiterX</code> with its <code>*</code> and size, and <code>\left</code> and <code>\right</code> redefined as mleftright's. A definition that uses an <code>@</code> command stays with its picture.</li>
+        <ul class="how">
+          <li><b>Colour, fill, line:</b> select the object and use the panel. Fill can be a colour, a gradient or a pattern.</li>
+          <li><b>Arrow tips and dashes:</b> pick from the <b>Tips</b> and <b>Dash</b> lists in the panel.</li>
+          <li><b>Add a shadow:</b> turn on <b>Shadow</b>, then set its offset and alpha.</li>
+          <li><b>Set the style of new shapes:</b> click empty space and change the panel.</li>
+          <li><b>Reuse a style:</b> select objects, <b>Style</b> → <b>New Style from Selection…</b>, name it. Pick that style for other objects; <b>Update “…” from This Object</b> changes them all.</li>
+          <li><b>Define your own commands:</b> <kbd class="mod">Ctrl</kbd><kbd>K</kbd>, <b>Macros…</b>, and write <code>\newcommand{\R}{\mathbb{R}}</code>. Every formula and export in the file uses them.</li>
         </ul>
+        <figure><img src="img/style.webp" width="1520" height="950" alt="A ring-shaped region with a hatched pattern fill selected, and its colours, fill, line width, dash, opacity and shadow in the panel" loading="lazy"></figure>
       </section>
 
       <section id="maths">
         <h2>Text and maths</h2>
-        <ul>
-          <li><code>$…$</code> is inline maths. <code>$$…$$</code> or <code>\[…\]</code> is display style (full-size fractions and limits), exported as <code>$\displaystyle …$</code>. <b>Math style</b> in the panel switches every formula in the selection at once.</li>
-          <li><b>Command suggestions:</b> type <code>\</code> and matching commands appear with a rendered preview, about 250 common ones first. <kbd>↑</kbd> <kbd>↓</kbd> to choose, <kbd>Enter</kbd> or <kbd>Tab</kbd> to insert, <kbd>Esc</kbd> to close.</li>
-          <li><b>Text input</b> (left sidebar): <b>LaTeX</b> to type source, or <b>MathLive</b> to edit maths visually. Double-clicking a label edits it in the mode you chose.</li>
-          <li><b>The LaTeX editor:</b> with LaTeX input, double-clicking a text or a label opens an editor along the bottom of the canvas: the source on the left, the text as it is drawn on the right, and the first LaTeX error underneath. <b>B</b>, <b>I</b> and <i>x</i> add bold, italic and <code>$…$</code>; <b>Environment</b> inserts aligned equations, cases or a matrix. <kbd>Enter</kbd> starts a new line; <kbd class="mod">Ctrl</kbd><kbd>Enter</kbd>, <kbd>Esc</kbd>, <b>Done</b> or a click away finishes, and <b>Cancel</b> puts the text back.</li>
-          <li><b>Environments</b> work in a text, over as many lines as you like, with or without <code>$$</code>: <code>\begin{align*} … \end{align*}</code>, <code>gather*</code>, <code>equation*</code>, <code>aligned</code>, <code>cases</code>, <code>pmatrix</code>, <code>bmatrix</code>, <code>array</code> and the rest. A node can't hold a numbered display, so <code>align*</code> is exported as <code>$\displaystyle\begin{aligned} … \end{aligned}$</code> (and <code>gather*</code> as <code>gathered</code>), which LaTeX sets the same way.</li>
-          <li><b>LaTeX engine</b> (left sidebar) changes only the preview: <b>KaTeX</b> provides a fast LaTeX preview; <b>Temml</b> covers more LaTeX and looks closer to TeX. The exported code is the same.</li>
-          <li>Labels on lines and curves use TikZ's <code>auto</code> and <code>swap</code> placement, so they sit where LaTeX puts them.</li>
-          <li><b>Commands from packages</b> are drawn too: chemistry with <code>\ce{2H2 + O2 -> 2H2O}</code> (mhchem), units with siunitx's <code>\SI{9.8}{\metre\per\second\squared}</code>, <code>\si</code>, <code>\qty</code>, <code>\num</code> and <code>\ang</code>, physics' <code>\qty(…)</code>, <code>\abs</code>, <code>\dv</code>, and its bra-kets <code>\ev</code>, <code>\vev</code>, <code>\ketbra</code> and <code>\mel</code> with their stars, <code>\cancelto</code>, <code>\nicefrac</code>, <code>\tensor</code>, <code>\slashed</code>, <code>\prescript</code>, upright Greek (<code>\upmu</code>), <code>multlined</code> with its first line at the left and its last at the right, <code>\makebox[2em]{…}</code>, and arrays with <code>@{}</code>, <code>&gt;{…}</code>, <code>&lt;{…}</code> or <code>p{…}</code> columns. Subscripts and superscripts are set in the 7pt and 5pt Computer Modern designs, as LaTeX sets them, so a formula is as wide as LaTeX's; the rows of <code>aligned</code>, <code>gathered</code> and <code>multlined</code> are as far apart as LaTeX sets them, with <code>\\[…]</code> gaps and the <code>[t]</code> and <code>[b]</code> positions, and <code>\int\limits</code> takes the width LaTeX gives it. Every export loads the packages its formulas use; a command the file defines in its <b>Macros</b> needs no package. A <code>$…$</code> inside <code>\text{…}</code> is maths within the formula's text, as in LaTeX.</li>
+        <figure><img src="img/maths-dock.webp" width="1520" height="808" alt="The LaTeX editor docked along the bottom of the canvas: Edit Text with B, I, maths and Environment, the source of an integral, its typeset form, and Cancel and Done" loading="lazy"><figcaption>The LaTeX editor: source on the left, the text as drawn on the right.</figcaption></figure>
+        <ul class="how">
+          <li><b>Write a formula:</b> put it between <code>$…$</code>. For display size, use <code>$$…$$</code>.</li>
+          <li><b>Edit a text:</b> double-click it. <kbd>Enter</kbd> starts a new line; <kbd class="mod">Ctrl</kbd><kbd>Enter</kbd> or <kbd>Esc</kbd> finishes; <b>Cancel</b> puts it back.</li>
+          <li><b>Make it bold or italic:</b> <kbd class="mod">Ctrl</kbd><kbd>B</kbd> / <kbd class="mod">Ctrl</kbd><kbd>I</kbd>, or <b>B</b> and <b>I</b> in the editor.</li>
+          <li><b>Write aligned equations, cases or a matrix:</b> <b>Environment</b> in the editor, or type <code>\begin{align*}…</code> over several lines.</li>
+          <li><b>Find a command:</b> type <code>\</code> and pick from the list (<kbd>↑</kbd> <kbd>↓</kbd>, <kbd>Enter</kbd>).</li>
+          <li><b>Edit maths visually:</b> <b>Text input</b> → <b>MathLive</b> in the left sidebar.</li>
+          <li><b>Use units or chemistry:</b> <code>\SI{9.8}{\metre\per\second\squared}</code>, <code>\ce{2H2 + O2 -> 2H2O}</code>; the export loads the packages.</li>
         </ul>
-        <p class="note">Maths inside LaTeX source fields is shown in green, so you can see at a glance which part is maths. In maths, typing <code>(</code>, <code>[</code> or <code>{</code> adds its closing partner when nothing, a space or the closing <code>$</code> follows the caret (or wraps the selected text in the pair); typing the closer steps over it, and Backspace between an empty pair removes both.</p>
       </section>
 
       <section id="plots">
         <h2>Plots and 3D</h2>
         <h3>2D plots (pgfplots)</h3>
-        <p>Click the plot button to place one, or drag out a box. Each plot holds several series, written as expressions such as <code>sin(x)*exp(-x/4)</code> or as data. Kinds: function, line, scatter, area, bar, contour, heatmap, and pie chart (one <code>label value [#color]</code> per line). A function series can also be an inequality (shaded, dashed edge when strict), a region between two curves, <i>x</i> in terms of <i>y</i>, parametric, polar, implicit <code>F(x, y) = 0</code>, points, vectors, a vector field or a phase portrait. Define variables once (<code>a = 2, b = 0.5</code>) and use them in every series. Axis labels, ranges, the numbers on each axis (shown or hidden), grid, legend, colour maps and a colour bar are in the panel; expression errors show both there and on the canvas.</p>
-        <p>A <code>pgf-pie</code> chart (<code>\pie[…]{30/A, 70/B}</code>) that is read in becomes a pie chart that keeps pgf-pie's look: slices counter-clockwise from the right, pgf-pie's colours, the numbers inside, and labels beside the slices, on pins, inside or in a legend. Its panel sets the labels, the sum (<code>auto</code> for the values' total), the rotation, how far slices are pulled out, the text before and after each number, hidden numbers and a polar area chart, and it is written back as <code>\pie</code>. A pie that uses what pgf-pie draws but the app doesn't (<code>square</code>, <code>cloud</code>, a command around the numbers, a legend after other drawing in the picture) stays as code.</p>
-        <h3>2D geometry</h3>
-        <p><b>2D Geometry</b>, in the Blocks menu, is a plain TikZ figure for vectors and coordinate geometry: drag points, add vectors, projections such as <code>(Q |- P)</code>, angle marks and plots, and measures that print their value and update when a point moves. See <a href="#blocks">Blocks</a>.</p>
-        <h3>3D</h3>
-        <p>The 3D menu has seven tools; each one's variants are chosen in its panel.</p>
-        <ul>
-          <li><b>3D plots</b> (pgfplots): surface <code>z = f(x, y)</code> (or a mesh), parametric surface, space curve and 3D scatter, with pgfplots' <code>view={az}{el}</code> angles.</li>
-          <li><b>3D figures in plain TikZ</b>, for calculus: solid regions over an ellipse, rectangle, polar curve or polar rectangle (with Riemann columns), solids of revolution (disks, washers, shells, cut open, with a highlighted slice) and basic solids (box, cube, cylinder, cone, frustum, hollow cylinder, sphere, hemisphere, spherical cap, ellipsoid, torus, prism, hexagonal prism, pyramid, tetrahedron, octahedron and spherical wedge, picked from a grid of pictures). Hidden edges are dashed; lower a colour's alpha to see through.</li>
+        <figure><img src="img/plot-2d.webp" width="1520" height="950" alt="A damped-oscillation plot selected: a fitted curve through sample points with a dashed envelope and a legend, and its axis, range, variable and colour settings in the panel" loading="lazy"></figure>
+        <ul class="how">
+          <li><b>Add a plot:</b> the <b>2D plots</b> button on the rail, then click the canvas (or drag a box).</li>
+          <li><b>Plot a function:</b> type an expression such as <code>sin(x)*exp(-x/4)</code> in the series.</li>
+          <li><b>Add a series:</b> <b>Add series</b> in the panel; choose function, line, scatter, area, bar, contour, heatmap or pie.</li>
+          <li><b>Use a parameter:</b> type <code>a = 2, b = 0.5</code> in <b>Variables</b> and use <code>a</code> in any series.</li>
+          <li><b>Set axes and legend:</b> labels, ranges, grid and legend are in the panel.</li>
         </ul>
-        <p><b>3D Geometry</b> (<code>tikz-3dplot</code>), a picture you turn by dragging, is in the Blocks menu, next to 2D Geometry. See <a href="#blocks">Blocks</a>.</p>
+        <h3>3D</h3>
+        <div class="shots">
+          <figure><img src="img/plot-3d.webp" width="1520" height="950" alt="A 3D surface plot of a function with several peaks beside a contour map of the same function, with view angles in the panel" loading="lazy"><figcaption>Surface and contour map of one function.</figcaption></figure>
+          <figure><img src="img/solid-3d.webp" width="1520" height="950" alt="Two solids of revolution in plain TikZ: a washer cut open and a cylindrical shell, with their region, axis and slice settings" loading="lazy"><figcaption>Solids of revolution, cut open.</figcaption></figure>
+        </div>
+        <ul class="how">
+          <li><b>Plot a surface:</b> <b>3D plots</b> on the rail → surface, then type <code>z = f(x, y)</code>. Set the view angles in the panel.</li>
+          <li><b>Draw a solid of revolution:</b> <b>3D figures</b> on the rail → solid of revolution; set the curves, the axis and the sweep in the panel.</li>
+          <li><b>Draw a basic solid:</b> <b>3D figures</b> → basic solid, then pick a cone, sphere, prism… from the pictures.</li>
+          <li><b>Draw points and vectors in 3D:</b> <b>3D Geometry</b> in the Blocks menu (see <a href="#blocks">Blocks</a>).</li>
+        </ul>
       </section>
 
       <section id="blocks">
         <h2>Blocks</h2>
-        <p>A block is a whole figure written in one LaTeX package, edited in its own editor. Add one from the <b>Blocks</b> menu (the cube on the tool rail), where they are grouped by subject: General, Maths, Quantum and physics, Electronics, Computing and Chemistry. Blocks are experimental, so check the compiled figure before you rely on it. Placing a block only selects it; <b>double-click</b> it, press <kbd>Enter</kbd> or use the <b>Edit…</b> button in the panel to open its editor. To draw one without a file, open it from <a href="#quick">Quick</a>.</p>
-        <figure>
-          <img src="img/05-quantum.png" width="1920" height="1080" alt="The quantum circuit editor: a palette of gates on the left, a three-qubit QFT circuit with a dashed gate group in the middle, and its quantikz code on the right" loading="lazy">
-          <figcaption>Every block editor has the same shape: palette on the left, the drawing in the middle, the panel and the code on the right.</figcaption>
-        </figure>
-        <p><b>All editors work the same way:</b></p>
-        <ul>
-          <li><b>Palette</b> on the left: click an item and click the grid, or drag it in. Single keys place the common items. On a narrower window the palette shrinks from three items a row to two, then one, to leave the drawing more room.</li>
-          <li><b>Code on the right, live both ways.</b> The code follows the drawing, and typing in it updates the drawing after a short pause. Parts you didn't touch keep the code you wrote, <code>%</code> comments stay beside the line they were on whatever you change in the drawing (only deleting them in the code removes them), and commands the editor can't draw are kept and exported as written (it tells you which).</li>
-          <li><b>Right-click</b> an item for its actions: insert, delete, reverse, bend, edit label. Double-click a label to edit it in place.</li>
-          <li><b>Done</b> (<kbd class="mod">Ctrl</kbd><kbd>Enter</kbd>) writes the block back and closes; <kbd class="mod">Ctrl</kbd><kbd>S</kbd> writes it back and keeps the editor open. <b>Cancel</b> or <kbd>Esc</kbd> asks before discarding changes.</li>
-        </ul>
+        <p>A block is a figure in one LaTeX package (circuits, quantum circuits, trees, chemistry…), drawn in its own editor. Blocks are experimental: check the compiled figure.</p>
+        <figure class="aside"><img src="img/blocks-menu.webp" width="761" height="1634" alt="The Blocks menu: General (Tree, Graph, Table), Maths (CD, XyMatrix, 2D and 3D Geometry), Quantum and physics, Electronics, Computing and Chemistry" loading="lazy"><figcaption>The Blocks menu.</figcaption></figure>
+        <ol class="steps">
+          <li><b>Add one:</b> click the cube on the rail, pick a block, click the canvas.</li>
+          <li><b>Open its editor:</b> double-click it, or press <kbd>Enter</kbd>.</li>
+          <li><b>Draw:</b> click an item on the left, then the grid. Right-click an item for its actions.</li>
+          <li><b>Edit the code if you like:</b> the code on the right follows the drawing, and the drawing follows the code.</li>
+          <li><b>Finish:</b> <b>Done</b> (<kbd class="mod">Ctrl</kbd><kbd>Enter</kbd>). <kbd class="mod">Ctrl</kbd><kbd>S</kbd> saves and stays open; <kbd>Esc</kbd> cancels.</li>
+        </ol>
+        <p class="aside-end"></p>
+        <figure><img src="img/ed-quantum.webp" width="1520" height="950" alt="The quantum circuit editor: a palette of gates on the left, a four-qubit quantum Fourier transform in a dashed group, with swaps and measurements, in the middle, and the circuit settings and quantikz code on the right" loading="lazy"><figcaption>Every editor: palette on the left, drawing in the middle, settings and code on the right.</figcaption></figure>
+        <p>Open a block for how to use its editor.</p>
 
         <details class="block"><summary>Circuit <code>circuitikz</code><span class="muted">415 parts</span></summary><div>
-          <ul>
-            <li>Parts come in searchable categories. Click a part and click the grid, or drag from start to end to set a two-terminal part's length.</li>
-            <li><b>Wires</b> (<kbd>W</kbd>) snap to pins and stay attached when parts move. Transistors, op amps and ICs are named for you (<code>Q1</code>, <code>U1</code>), so wires export as <code>(Q1.B)</code>. Click a wire to select one segment (drag it and the segments beside it stretch to stay joined); double-click to select the whole wire. Drag across empty space to select several: left to right takes what lies wholly inside, right to left anything the box touches. <kbd class="mod">Ctrl</kbd><kbd>A</kbd> selects everything.</li>
-            <li>The panel sets the label (maths welcome: <code>$R_1$</code>), annotation, voltage and current arrows (pick which side each sits on and which way it points; the icons turn with the part), open and closed ends, rotation and mirroring.</li>
-            <li><b>Text</b> (under Wires &amp; nodes) puts a label anywhere, written as <code>\node at (x,y) {…}</code>.</li>
-            <li>Code from other tools reads as parts too: options after <code>at</code>, mirrored or scaled transistors (<code>yscale=-1</code>), a plain <code>to</code>, <code>-- cycle</code>, polar steps such as <code>++(90:0.5)</code>, <code>\draw[thick, red]</code> and <code>\tikzstyle</code> settings. Lines it can't draw are kept as written.</li>
-            <li>An imported document's circuitikz options (<code>european</code>, <code>RPvoltages</code>, <code>siunitx</code> …) become the circuit's own <code>\ctikzset</code> settings, and its labels take the document's size. Anchors such as <code>(Q.base)</code>, <code>(opamp.out |- A)</code>, <code>anchor=</code>, <code>right=of U1</code>, calc's <code>$(a)!0.5!(b)$</code>, <code>coordinate (x)</code> on a path and <code>to[Tnpn]</code> are placed where LaTeX puts them. In a picture that mixes parts with other TikZ, the parts become one Circuit and the rest ordinary objects; a piece of a path the circuit can't draw is kept as its own code.</li>
-            <li>Exported as a <code>scope</code> with <code>\usepackage{circuitikz}</code>; <b>Copy circuitikz Code</b> gives a standalone environment.</li>
-          </ul>
-          <figure><img src="img/06-circuit-dark.png" width="1920" height="1080" alt="The circuit editor in dark mode: a voltage source, resistor and capacitor, and the circuitikz code beside it" loading="lazy"></figure>
+          <figure><img src="img/ed-circuit.webp" width="1520" height="950" alt="The circuit editor: searchable parts on the left, a loaded RLC ladder with a source, resistors, an inductor and capacitors in the middle, and its circuitikz code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Place a part:</b> search the list, click a part, then click the grid. Drag from start to end to set a two-terminal part’s length.</li>
+          <li><b>Wire it:</b> press <kbd>W</kbd> and click from pin to pin. Wires stay attached when parts move.</li>
+          <li><b>Label it:</b> select the part and type in the panel (<code>$R_1$</code>). Voltage and current arrows, ends, rotation and mirroring are there too.</li>
+          <li><b>Select a whole wire:</b> double-click it. A single click selects one segment.</li>
+        </ul>
+          <p>An example with its code to copy: <a href="../circuitikz-editor/">circuitikz editor</a>.</p>
         </div></details>
 
         <details class="block"><summary>Quantum circuit <code>quantikz</code></summary><div>
-          <ul>
-            <li>The circuit is a grid of wires × steps. Keys place gates and step right: <kbd>H</kbd> <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd> <kbd>S</kbd> <kbd>T</kbd> <kbd>U</kbd>, <kbd>C</kbd> control, <kbd>O</kbd> open control, <kbd>+</kbd> target, <kbd>M</kbd> meter.</li>
-            <li>Drop on the dashed row or column to add a wire or step. Right-click a cell or a range to insert or delete wires and steps, or clear cells.</li>
-            <li>A <code>{</code> left open in the code swallows the rest of the circuit into one cell, as it would in LaTeX. The note under the code says so, and until it is closed that cell keeps the code as written, whatever you do in the drawing.</li>
-            <li>Controls link to the nearest gate in their step; drag the blue handle to link another wire. Drag a gate's top or bottom bar to span several wires, or its corner handle to set a minimum size.</li>
-            <li>Drag an element to move it; drag from the empty part of a cell to select a range of cells.</li>
-            <li>Double-click a gate, or a slice's or a group's label, to edit that label in place.</li>
-            <li>The panel edits labels, spans, wire types (quantum, classical, bundle), slices and gate groups. To label a gate or several gates without a box, use <b>Label above</b> from the palette, or set a group's <b>Border</b> to None. The editor still outlines such a group with a dashed blue line so you can see what it covers; it isn't exported. Right-click a cell or a selected range for <b>Group Selection</b>, <b>Label Above Selection</b> and <b>Delete Group</b>. <b>Group</b> and <b>Label above</b> in the palette also wrap a selected range, or, chosen first, the cells you then drag across. Select any cell a group covers to edit that group in the panel (one section per group over the cell) and to show a bar on each of its edges; drag one to another wire or step to resize the group. A group's or a slice's label can sit at the <b>Top</b>, the <b>Bottom</b> or <b>Both</b> (with its own <b>Bottom label</b>), and a slice's <b>From wire</b> / <b>To wire</b> make it cross only some wires. Exported in <code>\begin{quantikz}</code> with <code>\usetikzlibrary{quantikz2}</code>.</li>
-            <li>A circuit imported from a document that loads the old library (<code>\usetikzlibrary{quantikz}</code>, quantikz 0.9.8) keeps it: it is drawn by that library's rules (a wire only where a command such as <code>\qw</code> draws one, <code>\qwbundle[alternate]</code> as three wires) and exported with that library alone. Text in a cell (<code>\cdots</code>, <code>\ket{0}</code>) is drawn as the cell's content, and <code>ampersand replacement=\&amp;</code> is read.</li>
-          </ul>
+          <figure><img src="img/ed-quantum.webp" width="1520" height="950" alt="The quantum circuit editor: a palette of gates on the left, a four-qubit quantum Fourier transform in a dashed group, with swaps and measurements, in the middle, and the circuit settings and quantikz code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Place gates:</b> click a cell and type <kbd>H</kbd> <kbd>X</kbd> <kbd>Y</kbd> <kbd>Z</kbd> <kbd>S</kbd> <kbd>T</kbd> <kbd>U</kbd>, <kbd>C</kbd> for a control, <kbd>O</kbd> open control, <kbd>+</kbd> target, <kbd>M</kbd> meter. The cursor steps right.</li>
+          <li><b>Add a wire or step:</b> drop a gate on the dashed row or column, or right-click a cell.</li>
+          <li><b>Link a control:</b> drag its blue handle to another wire.</li>
+          <li><b>Span several wires:</b> drag a gate’s top or bottom bar.</li>
+          <li><b>Group gates:</b> drag across cells, right-click, <b>Group Selection</b>.</li>
+        </ul>
+          <p>An example with its code to copy: <a href="../quantikz-editor/">quantikz editor</a>.</p>
         </div></details>
 
         <details class="block"><summary>Commutative diagram <code>tikz-cd</code></summary><div>
-          <ul>
-            <li>Select a cell and type its object, or drop one from the palette. Drag from cell to cell to draw an arrow in the palette's style (maps to, inclusion, onto, dashed, implies, equal, harpoon, squiggly…).</li>
-            <li>The panel sets an arrow's label and side, head, line, crossing gap, bend and shift; <b>Reverse</b> swaps its ends.</li>
-            <li>An arrow can carry several labels (one near the start, one near the end): <b>Add Label</b> adds one, the numbered buttons pick which one the fields edit, and <b>Remove Label</b> takes it off.</li>
-          </ul>
+          <figure><img src="img/ed-cd.webp" width="1520" height="950" alt="The tikz-cd editor: objects and arrow styles on the left, a commutative cube with crossing arrows on a grid, and the tikz-cd code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Add an object:</b> select a cell and type it, or drop one from the palette.</li>
+          <li><b>Draw an arrow:</b> pick an arrow style in the palette, then drag from cell to cell.</li>
+          <li><b>Label or bend it:</b> select the arrow and use the panel. <b>Add Label</b> puts a second label on it; <b>Reverse</b> swaps its ends.</li>
+        </ul>
+          <p>An example with its code to copy: <a href="../tikz-cd-editor/">tikz-cd editor</a>.</p>
         </div></details>
 
         <details class="block"><summary>Commutative diagram <code>xymatrix</code></summary><div>
-          <ul>
-            <li>The CD editor, writing <code>\xymatrix{…}</code> for the <code>xy</code> package: arrows like <code>\ar@{-&gt;&gt;}[r]^{f}</code>, curves <code>@/^1pc/</code>, shifts <code>@&lt;.5ex&gt;</code>, spacing <code>@R=</code>, <code>@C=</code>.</li>
-            <li>Drawn with xy's spacing and arrow tips, and exported as written with <code>\usepackage[all]{xy}</code>. An empty entry takes xy's 6pt box. What xy's position language adds after an <code>\ar</code> (named labels and targets such as <code>="1"</code> and <code>"1";"2"</code>, a label that is an object or a <code>\hole</code>, <code>-&lt;3pt,0pt&gt;{}</code>) isn't drawn: it is listed in the panel and kept in the code.</li>
-            <li><b>Convert to tikz-cd</b> in the panel rewrites the block as a CD block, and <b>Convert to xymatrix</b> on a CD block goes the other way. Converting back before you edit restores your original code; anything the other package can't say is listed in a hint.</li>
-          </ul>
+          <figure><img src="img/ed-xy.webp" width="1520" height="950" alt="The xymatrix editor: the Mayer–Vietoris long exact sequence, its rows joined by snaking connecting maps, with its xymatrix code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Draw:</b> as in the tikz-cd editor. The code is written as <code>\xymatrix{…}</code>.</li>
+          <li><b>Switch package:</b> <b>Convert to tikz-cd</b> in the panel (and <b>Convert to xymatrix</b> on a CD block).</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Tree <code>forest</code></summary><div>
-          <ul>
-            <li>For syntax trees, org charts, directory trees, decision and probability trees. Start from a template, then add, move and restyle nodes by keyboard or by dragging.</li>
-            <li>Tree-direction buttons follow the tree's growth; the code is live beside it.</li>
-            <li><b>Phantom:</b> a phantom node keeps its place but isn't drawn. Use <b>Phantom</b> in the palette, the <b>Show</b> switch in the panel, or right-click and <b>Make Phantom</b> (<b>Make Visible</b> brings it back).</li>
-            <li><b>tikz-qtree trees:</b> a pasted or imported <code>\Tree [.S …]</code> becomes a Tree, with tikz-qtree's spacing, edges and roofs written as forest options. Until you edit it, it exports as you wrote it. Code after it can use its named nodes (<code>\node (a) {…};</code>). If code kept as written uses those names, the tree stays as written too.</li>
-            <li>Code after the tree inside <code>\begin{forest}</code>, a node's <code>tikz={…}</code> and an <code>edge path</code> are drawn with the tree, and the tree uses the styles your preamble's <code>\forestset</code> and <code>\tikzset</code> define.</li>
-            <li><b>Drawn as forest places it:</b> the tree honours <code>\usepackage[linguistics]{forest}</code> and a <code>default preamble</code>, every <code>calign</code> (child edge, edge midpoint, fixed angles …), <code>fit=band</code>, <code>l</code> and <code>s</code> set <code>before computing xy</code>, <code>align=</code> nodes of several lines, <code>folder</code>, <code>shape=coordinate</code>, <code>insert before={[…]}</code>, and conditions such as <code>where={iseven(level())}{…}{…}</code>.</li>
-          </ul>
+          <figure><img src="img/ed-forest.webp" width="1520" height="950" alt="The tree editor: node templates on the left, a decision tree with probabilities and payoffs in the middle, and the forest code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Start:</b> pick a template (syntax tree, org chart, directory, decision tree).</li>
+          <li><b>Add a node:</b> select a node and add a child or sibling from the palette, or drag one in.</li>
+          <li><b>Change the direction:</b> use the tree-direction buttons in the panel.</li>
+          <li><b>Hide a node but keep its place:</b> right-click, <b>Make Phantom</b>.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Graph <code>TikZ graphs</code></summary><div>
-          <ul>
-            <li>For any graph of nodes and edges. Place nodes (circle, box, rounded, ellipse, diamond, point, text box) from the palette or double-click the grid; <kbd class="shift">Shift</kbd>-click or drag a box to select several and move, restyle, align or join them. Double-click a node or an edge to label it.</li>
-            <li>Drag a selected node's blue handle to another node for an edge, onto itself for a loop, or onto empty grid for a new node. Drag an edge's middle handle to bend it; right-click to reverse it or change its ends.</li>
-            <li><b>From text:</b> paste an adjacency matrix, adjacency list, edge list, DOT, Mermaid, JSON or a TikZ <code>\graph</code>, and the graph is drawn. Start from K₅, Petersen, trees, grids and more.</li>
-            <li><b>Auto layout:</b> Spread Out, On a Circle, In Layers or On a Grid. Exported with <code>\usetikzlibrary{graphs}</code>; builds with pdfLaTeX.</li>
-            <li>A <code>\graph</code> without positions is drawn where TikZ places its nodes: chains and groups, <code>grow</code> and <code>branch</code> (with <code>sep</code>), <code>clockwise</code> and circular placement, and the subgraphs <code>I_n</code>, <code>K_n</code>, <code>C_n</code> and <code>P_n</code> with <code>n</code>, <code>V</code> and <code>name</code>. Moving a node writes every node's place. A <code>\graph</code> that only joins nodes the picture already has becomes those edges.</li>
-          </ul>
+          <figure><img src="img/ed-graph.webp" width="1520" height="950" alt="The graph editor: node shapes and graph templates on the left, a six-node graph in the middle, and layout buttons and the TikZ graph code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Add a node:</b> double-click the grid, or drop one from the palette.</li>
+          <li><b>Add an edge:</b> drag a node’s blue handle to another node (onto itself for a loop).</li>
+          <li><b>Paste a graph:</b> paste an adjacency matrix, edge list, DOT, Mermaid or JSON; or start from K₅, Petersen, a tree or a grid.</li>
+          <li><b>Tidy it:</b> <b>Spread Out</b>, <b>On a Circle</b>, <b>In Layers</b> or <b>On a Grid</b> in the panel.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>ZX diagram <code>zx-calculus</code></summary><div>
-          <ul>
-            <li>Drop Z and X spiders, Hadamard boxes, points and loops onto cells, or type <kbd>Z</kbd> <kbd>X</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>L</kbd>.</li>
-            <li>Drag a node's blue handle to another cell to wire them. Click a wire to choose its shape from pictures, add a marker, or make it classical, bold or dashed.</li>
-            <li>The panel sets a spider's colour, phase (plain or a fraction) and where the phase goes.</li>
-            <li>Imported circuits are drawn as zx-calculus draws them: gates (<code>\zxGate</code>, <code>\zxBox</code>, <code>\zxGateMulti</code>, with a meter or a label), controls, NOT, swap crosses, inputs and outputs, and <code>\zxMatrix</code> boxes; a wire with <code>to=</code> or <code>from=</code> reaches the node named with <code>a=</code>. Slices, braces, ground and dividers stay in the code and are named in the panel.</li>
-          </ul>
+          <figure><img src="img/ed-zx.webp" width="1520" height="950" alt="The ZX editor: Z and X spiders on the left, a three-wire phase network of green and red spiders in the middle, and the zx-calculus code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Place spiders:</b> click a cell and type <kbd>Z</kbd> <kbd>X</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>L</kbd>.</li>
+          <li><b>Wire them:</b> drag a node’s blue handle to another cell.</li>
+          <li><b>Set a phase:</b> select the spider and type the phase in the panel.</li>
+          <li><b>Change a wire’s shape:</b> click the wire and pick a picture.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Feynman diagram <code>tikz-feynman</code></summary><div>
-          <ul>
-            <li>Place vertices (dot, blob, crossed dot, particle) on a centimetre grid; drag the blue handle from one vertex to another to draw a propagator: fermion, photon, gluon, scalar, ghost, Majorana, boson and more (keys <kbd>F</kbd> <kbd>P</kbd> <kbd>G</kbd> <kbd>S</kbd> <kbd>M</kbd> <kbd>B</kbd> <kbd>L</kbd>).</li>
-            <li>A line has a label, a momentum arrow, a bend or half circle and an insertion; right-click to reverse it.</li>
-            <li>Exported with <code>\usepackage[compat=1.1.0]{tikz-feynman}</code> and builds with pdfLaTeX, because every vertex has a position.</li>
-            <li>Imported diagrams are drawn as pdfLaTeX draws them: <code>\feynmandiagram</code> and <code>\diagram</code> without the star put each chain in a row and each new vertex 1&nbsp;cm along (the automatic layouts need LuaLaTeX); a <code>\vertex</code> with no place is at the origin; <code>right=of …</code>, the picture's scale, <code>small</code> and <code>large</code>, loops and <code>\node</code>, <code>\coordinate</code> and calc positions in the environment come in as written, and its <code>\draw</code> lines become the picture's own.</li>
-          </ul>
+          <figure><img src="img/ed-feynman.webp" width="1520" height="950" alt="The Feynman editor: vertices and propagators on the left, a one-loop box diagram of four photons in the middle, and the tikz-feynman code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Place vertices:</b> click a vertex in the palette, then the grid.</li>
+          <li><b>Draw a propagator:</b> drag the blue handle from one vertex to another. Keys pick its kind: <kbd>F</kbd> fermion, <kbd>P</kbd> photon, <kbd>G</kbd> gluon, <kbd>S</kbd> scalar, <kbd>M</kbd> Majorana, <kbd>B</kbd> boson.</li>
+          <li><b>Label, bend or add momentum:</b> select the line and use the panel. Right-click to reverse it.</li>
+        </ul>
+          <p>An example with its code to copy: <a href="../tikz-feynman-editor/">tikz-feynman editor</a>.</p>
         </div></details>
 
         <details class="block"><summary>2D geometry <code>TikZ</code></summary><div>
-          <ul>
-            <li>The 3D geometry editor seen straight on: drag across empty space to select (left to right takes what lies wholly inside, right to left anything the box touches; <kbd class="shift">Shift</kbd> adds), hold <kbd>Space</kbd> and drag or use the arrow keys to move the view, drag a point to move it (<kbd class="alt">Alt</kbd> places it off the 0.05 grid). A point at (angle:radius) keeps that form.</li>
-            <li>Drag a circle by its rim or its centre to move it. Hovering the rim shows a small square at its top right: drag that to change the radius (<kbd class="alt">Alt</kbd> sizes it freely). A number, a length in cm or mm, or the value the radius names is rewritten; a radius worked out in the code has no square.</li>
-            <li>Drag a line, an edge or the inside of a shape to move the whole object: a polygon, a segment, a vector (a circle moves by its rim, not its inside). Every point it uses moves by the same step (snapped to 0.05; <kbd class="alt">Alt</kbd> moves it freely), so a named point such as <code>(P)</code> moves where it is defined and anything else built on it follows. A path through computed points (a projection, a calc expression, a loop or a plot) and the grid stay put.</li>
-            <li>Hold <kbd class="shift">Shift</kbd> while dragging a point to snap it to whichever is nearer: a whole-number point, or (for the end of a line) a multiple of 15° from the point it joins. <kbd class="alt">Alt</kbd> with <kbd class="shift">Shift</kbd> keeps only the angle.</li>
-            <li>Press <kbd class="mod">Ctrl</kbd><kbd>A</kbd> to select everything. Drag any of it to move it all together, the grid included; <kbd>⌫</kbd> deletes it all and <kbd>Esc</kbd> or a click on empty space clears the selection.</li>
-            <li>Add axes, a grid, points by (x, y) or (r, θ), labels, segments, vectors, projections, polygons, circles, angle and right-angle marks (pick one, then click inside a corner where two lines meet; select a mark to drag its square to size it and its label in or out), and plots y = f(x), polar and parametric (keys <kbd>A</kbd> <kbd>G</kbd> <kbd>P</kbd> <kbd>T</kbd> <kbd>S</kbd> <kbd>V</kbd> <kbd>C</kbd> <kbd>M</kbd> <kbd>F</kbd>).</li>
-            <li><kbd>⌘C</kbd> / <kbd>⌘X</kbd> copy or cut the selected commands as TikZ, and <kbd>⌘V</kbd> pastes them, offset a little, with clashing point names renamed.</li>
-            <li>Measures (Δx, Δy, length, angle): select a segment between two points, then pick one. The value is computed in the code and printed with <code>\pgfmathprintnumber</code>, so it follows the points.</li>
-            <li>The panel gives each value set to a number a slider. Exported as written, with the <code>angles</code> and <code>quotes</code> libraries when it uses angle marks.</li>
-          </ul>
+          <figure><img src="img/ed-geo2d.webp" width="1520" height="950" alt="The 2D geometry editor: points, lines, circles, angles and measures on the left, a circle with a tangent and a secant in the middle, and the TikZ code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Add points, lines and shapes:</b> pick from the palette (keys <kbd>A</kbd> axes, <kbd>G</kbd> grid, <kbd>P</kbd> point, <kbd>S</kbd> segment, <kbd>V</kbd> vector) and click.</li>
+          <li><b>Move a point:</b> drag it. <kbd class="alt">Alt</kbd> places it off the grid; <kbd class="shift">Shift</kbd> snaps to whole numbers or 15°.</li>
+          <li><b>Mark an angle:</b> pick an angle mark, then click inside the corner.</li>
+          <li><b>Show a length or angle:</b> select a segment, then pick a measure. It updates when points move.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>3D geometry <code>tikz-3dplot</code></summary><div>
-          <ul>
-            <li>Drag empty space to turn the view; arrow keys turn it by 5° (<kbd class="shift">Shift</kbd> 15°). Drag a point to move it level; hold <kbd class="shift">Shift</kbd> to move it up and down.</li>
-            <li>Add axes, rotated frames, points by (x, y, z) or (r, θ, φ), vectors, segments, projections, planes <i>ax + by + cz = d</i>, surfaces, triangles, circles, spheres, boxes, curves and angle arcs (keys <kbd>A</kbd> <kbd>R</kbd> <kbd>P</kbd> <kbd>T</kbd> <kbd>V</kbd> <kbd>S</kbd> <kbd>L</kbd> <kbd>C</kbd> <kbd>B</kbd>).</li>
-            <li>The code is the figure: <code>\foreach</code> loops, <code>\def</code> values and scopes are read and drawn. Moving a point defined by <code>\def</code> values writes the new values there.</li>
-          </ul>
+          <figure><img src="img/ed-geo3d.webp" width="1520" height="950" alt="The 3D geometry editor: a point in spherical coordinates with its projections onto the axes, and the tikz-3dplot code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Turn the view:</b> drag empty space, or use the arrow keys (5°, <kbd class="shift">Shift</kbd> 15°).</li>
+          <li><b>Add objects:</b> axes, points, vectors, planes, spheres, boxes, curves (keys <kbd>A</kbd> <kbd>P</kbd> <kbd>V</kbd> <kbd>S</kbd> <kbd>B</kbd>…).</li>
+          <li><b>Move a point:</b> drag it to move it level; hold <kbd class="shift">Shift</kbd> to move it up and down.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Timing diagram <code>tikz-timing</code></summary><div>
-          <ul>
-            <li>Pick a value (High, Low, High-Z, Unknown, Data, Clock, Toggle, Metastable, Glitch, Gap, Hatched; keys <kbd>H</kbd> <kbd>L</kbd> <kbd>Z</kbd> <kbd>X</kbd> <kbd>D</kbd> <kbd>U</kbd> <kbd>C</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>G</kbd> <kbd>S</kbd> <kbd>W</kbd>) and drag along a row to paint it, or click where it starts, point to where it ends and click again. The row shows the result as you go; click twice on a segment to paint just that one, and <kbd>Esc</kbd> drops a paint not yet placed.</li>
-            <li>You can also drag any item from the palette onto the drawing: a value onto a segment, a row between rows, an arrow onto an edge. It shows where it lands as you move.</li>
-            <li>Drag over empty space to select several segments (left to right takes those wholly inside, right to left any the box touches), click one and <kbd class="shift">Shift</kbd>-click another, or press <kbd class="mod">Ctrl</kbd><kbd>A</kbd> for all of them. A value then paints them all, <kbd>Delete</kbd> removes them, and the panel sets their value or width together.</li>
-            <li>Drag an edge to move a transition; with <kbd class="shift">Shift</kbd> the rest of the row moves too. Data cells can be filled in a colour or hatched.</li>
-            <li><b>Interval</b> and <b>Delay</b> draw labelled arrows between edges (setup, hold, clock-to-output); <b>Break</b> (<kbd>B</kbd>) puts <code>//</code> marks across every row.</li>
-            <li>Text you type is escaped so it can't break the table; write <code>$x_1$</code> for a subscript.</li>
-            <li>An imported table is drawn at the size its options give it (<code>scale</code>, <code>timing/xunit</code>, <code>font</code>, <code>timing/rowdist=3ex</code>, <code>timing/wscale</code> and the like), blank rows included, and its extra code's nodes, <code>\foreach</code> loops, <code>\tablerules</code> and <code>\tableheader</code> are drawn, inside layers and scopes too. The timing styles a document's preamble sets with <code>\tikzset</code> and its macros (<code>\def</code>, <code>\newcommand</code>) are used as LaTeX uses them. The editor shows it in the package's standard size.</li>
-          </ul>
+          <figure><img src="img/ed-timing.webp" width="1520" height="950" alt="The timing editor: signal values on the left, a synchronous bus transaction with clock, request, ready, address and data rows, and the tikz-timing code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Paint a signal:</b> pick a value (<kbd>H</kbd> high, <kbd>L</kbd> low, <kbd>Z</kbd> high-Z, <kbd>D</kbd> data, <kbd>C</kbd> clock…) and drag along a row.</li>
+          <li><b>Move a transition:</b> drag the edge; with <kbd class="shift">Shift</kbd> the rest of the row follows.</li>
+          <li><b>Mark setup or hold time:</b> drag <b>Interval</b> or <b>Delay</b> between two edges.</li>
+          <li><b>Change several at once:</b> drag across segments, or <kbd class="mod">Ctrl</kbd><kbd>A</kbd>, then pick a value.</li>
+        </ul>
+          <p>An example with its code to copy: <a href="../tikz-timing-editor/">tikz-timing editor</a>.</p>
         </div></details>
 
-        <details class="block"><summary>State machine TikZ <code>automata</code></summary><div>
-          <ul>
-            <li>Place states (State, Initial, Final, Both); drag a state's blue handle to another state for a transition, or back onto itself for a loop. <kbd>I</kbd>, <kbd>A</kbd> and <kbd>L</kbd> toggle initial, accepting and add a loop.</li>
-            <li><b>Auto layout</b> places every state in layers or on a circle, bending transitions just enough to clear other states.</li>
-          </ul>
+        <details class="block"><summary>State machine <code>automata</code></summary><div>
+          <figure><img src="img/ed-automata.webp" width="1520" height="950" alt="The state machine editor: the TCP active-open lifecycle as states and labelled transitions, with auto layout and the automata code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Add a state:</b> pick State, Initial, Final or Both and click the grid.</li>
+          <li><b>Add a transition:</b> drag a state’s blue handle to another state (back onto itself for a loop).</li>
+          <li><b>Toggle initial or accepting:</b> select the state and press <kbd>I</kbd> or <kbd>A</kbd>.</li>
+          <li><b>Tidy it:</b> <b>Auto layout</b> in layers or on a circle.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Network <code>tikz-network</code></summary><div>
-          <ul>
-            <li><b>Blocks → Network</b> adds a small network to start from. Place vertices (circle, square, diamond, pentagon, star, ellipse, triangle, or a hidden one, which isn't drawn but edges still meet); drag a vertex's blue handle to another vertex for an edge, or back onto itself for a loop. The edge kind picked in the palette (undirected, directed, bent, or through a point, which runs through a hidden vertex halfway that you drag to route it) is the kind new edges get; two edges between the same vertices bend apart. <kbd>L</kbd> adds a loop to the selected vertex and <kbd>D</kbd> turns the selected edge's arrow on or off.</li>
-            <li><b>Every key tikz-network has is in the panel:</b> for a vertex its name, place and layer; shape, size, fill, opacity, a ball shading or any TikZ style, <code>Pseudo</code> and <code>RGB</code>; what its label shows (its name, text or nothing), where it sits and how far, its font size, colour and scale, and <code>Math</code>. For an edge: arrow, in front or behind, bend or a path through other vertices and points, a loop's side, size and opening; width, colour, opacity, style; its label, side, place along it and font. <code>\Text</code> has its place, layer, side, distance, anchor, width, colour, opacity, size, rotation and a style (a box drawn or filled round it); <code>\Plane</code> its place, size, layer, fill, opacity, grid, border style, <code>NoFill</code>, <code>NoBorder</code>, <code>InBG</code> and a picture.</li>
-            <li><b>Several at once:</b> <kbd>⇧</kbd>-click or <kbd>⇧</kbd>-drag a box to select several; drag one to move them all, and a field in the panel sets them all. <kbd>⌘A</kbd> selects everything, <kbd>⌘C</kbd> and <kbd>⌘V</kbd> copy and paste, <kbd>⌘D</kbd> duplicates (vertices are renamed where the name is taken, and the edges between them come along). A selected plane's corners resize it.</li>
-            <li><b>Layers stay in order:</b> tikz-network paints in the order of the code, so every edit keeps the code with the farthest layer first: layer 3, then layer 2, then layer 1 on top (with the default layer distance), and items on no layer last. Settings and TikZ commands keep their places, and an edge always comes after its vertices. Code written out of order is left as it is until you edit it; the Picture section says so and offers <b>Put in Layer Order</b>. <b>Arrange</b> in the right-click menu (<kbd>⌘]</kbd> Bring Forward, <kbd>⌘[</kbd> Send Backward, with <kbd>⇧</kbd> to the front or back) moves the selection among what lies on its own layer.</li>
-            <li><b>The grid lies on the plane you place on:</b> in a 3D picture it is drawn on the layer new items go on, in perspective, with its origin. Clicking an item moves the grid, and new items, to that item's layer; while you drag something, the grid is on its layer. New items and dragged ones snap to that grid. A 3D picture opens with new items going on the nearest layer in use.</li>
-            <li><b>Working on one layer:</b> the layer selector at the bottom left of the drawing lists the layers, the nearest at the top, and <b>+</b> for a new one. Choose a layer to focus it: the other layers fade, only its items can be clicked or selected, and new items go on it (an edge can still be drawn to a vertex on another layer). The home symbol or <kbd>Esc</kbd> shows every layer again. Right-click a layer to delete it: what is on it goes, and the layers behind it move up one.</li>
-            <li><b>With nothing selected</b> the panel sets the picture: <b>Multilayer</b> (off, 2D or 3D), the <b>3D axes</b> (<code>\SetCoordinates</code>, written before the picture), the layer distance, unit and distance scale, whether edges go behind or in front of the vertices, the planes' default size, the layer new items go on, and the default style of every vertex, edge, plane and text (<code>\SetVertexStyle</code> and the others). <b>In the code</b> lists what the stage can't click: <code>\Vertices</code> and <code>\Edges</code>, Layer environments, TikZ commands and hidden vertices.</li>
-            <li><b>Data files:</b> <code>\Vertices</code> and <code>\Edges</code> read CSV files (a header row: <code>id, x, y, …</code> for vertices, <code>u, v, …</code> for edges); their panel sets what every row gets, which layers to read and the vertex file. <b>Add CSV File…</b> reads one in and <b>Edit Rows…</b> edits it as text; the block keeps a copy, so it draws and exports anywhere. Where the browser allows it, the file stays linked: when it changes on disk it is read in again the next time the editor opens (or on <b>Reload</b>), and if it was also changed in the editor you are asked which to keep. Selecting a vertex or edge from a file edits its row; <b>Write to Disk</b> saves a linked file. Nothing is written on its own. A plane's picture is kept the same way. Export puts the files beside the <code>.tex</code>.</li>
-            <li>TikZ commands in the picture (<code>\draw</code>, <code>\node</code> …, in a Layer environment on its plane) and <code>\clip</code> are drawn too. Exported with <code>\usepackage{tikz-network}</code>; <b>Import LaTeX/TikZ</b> reads tikz-network pictures back as Network blocks.</li>
-          </ul>
+          <figure><img src="img/ed-network.webp" width="1520" height="950" alt="The network editor: vertex shapes and edge kinds on the left, three vertices joined by edges in the middle, and the picture settings and tikz-network code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Add a vertex:</b> pick a shape and click the grid.</li>
+          <li><b>Add an edge:</b> pick an edge kind, then drag a vertex’s blue handle to another vertex.</li>
+          <li><b>Change several:</b> <kbd class="shift">Shift</kbd>-click or drag a box round them; the panel sets them all.</li>
+          <li><b>Work in layers:</b> turn on <b>Multilayer</b> with nothing selected, then pick a layer at the bottom left.</li>
+          <li><b>Load data:</b> <b>Add CSV File…</b> reads vertices or edges from a CSV.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>UML class diagram <code>pgf-umlcd</code></summary><div>
-          <figure><img src="img/09-uml.png" width="1920" height="1080" alt="The class diagram editor: a palette of elements and relations on the left, an abstract Shape class with Circle and Square subclasses in the middle, and the pgf-umlcd code on the right" loading="lazy"></figure>
-          <ul>
-            <li><b>Blocks → UML</b> adds a class diagram (an abstract Shape with two subclasses to start from). Double-click it or press <kbd>Enter</kbd> to edit.</li>
-            <li><b>Elements:</b> class, interface, abstract class, static class, object and note. Click the grid, drag from the palette, or drag a box's knob onto empty grid for a linked one. Double-click a name to rename it (every reference follows), or an attribute or operation to edit it in place. Drag a line's label along it or to either side.</li>
-            <li><b>Relations:</b> inheritance, implementation, association, unidirectional association, aggregation, composition, dependency and note link. Drag from a box's knob to another box; the relation picked in the palette is the kind it gets. The panel sets role names and multiplicities, reverses or changes the kind.</li>
-            <li>Boxes are measured as the package draws them. Hand-written routed <code>\draw</code> lines are drawn as TikZ draws them and follow their classes. Exported with <code>\usepackage{pgf-umlcd}</code>; <b>Import LaTeX/TikZ</b> reads pgf-umlcd classes back.</li>
-          </ul>
+          <figure><img src="img/ed-uml.webp" width="1520" height="950" alt="The class diagram editor: elements and relations on the left, the Composite pattern with an abstract Component, a Leaf and a Composite in the middle, and the pgf-umlcd code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Add a class:</b> click the grid, or drag a box’s knob onto empty grid for a linked one.</li>
+          <li><b>Rename or add members:</b> double-click a name, attribute or operation.</li>
+          <li><b>Relate two classes:</b> pick a relation in the palette, then drag from one box’s knob to the other.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>UML sequence diagram <code>pgf-umlsd</code></summary><div>
-          <ul>
-            <li><b>Blocks → Sequence</b> adds a sequence diagram (a client thread calling a server, which queries a database).</li>
-            <li><b>Lifelines:</b> instances (<kbd>I</kbd>, passive until called) and threads (<kbd>T</kbd>, active from the start). Drag an instance sideways to reorder.</li>
-            <li><b>Messages:</b> call (with a return), self call, message and call without a return (keys <kbd>C</kbd> <kbd>S</kbd> <kbd>M</kbd> <kbd>A</kbd>). Drag from one lifeline to another; a message drawn inside an activation nests inside that call. The panel sets its text, return value, length or delay.</li>
-            <li><b>Blocks:</b> <kbd>B</kbd> frames the selected message with a caption and comment. <kbd>⌥</kbd><kbd>↑</kbd> / <kbd>↓</kbd> move a message among its neighbours.</li>
-            <li>Drawn as the package draws it (activation bars, shadows, <code>\prelevel</code>, <code>\unitfactor</code>) and exported with <code>\usepackage{pgf-umlsd}</code>. A message's text names nodes, so commands and round brackets in it don't compile; the panel warns. <b>Import LaTeX/TikZ</b> reads a <code>sequencediagram</code> back.</li>
-          </ul>
+          <figure><img src="img/ed-umlsd.webp" width="1520" height="950" alt="The sequence diagram editor: a checkout across five lifelines with nested calls and returns, and the pgf-umlsd code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Add a lifeline:</b> <kbd>I</kbd> instance or <kbd>T</kbd> thread. Drag it sideways to reorder.</li>
+          <li><b>Add a message:</b> pick <kbd>C</kbd> call, <kbd>S</kbd> self call or <kbd>M</kbd> message, then drag from one lifeline to another.</li>
+          <li><b>Frame messages:</b> select a message and press <kbd>B</kbd>.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Karnaugh map <code>karnaugh-map</code><span class="muted">2 to 6 variables</span></summary><div>
-          <ul>
-            <li>Click a cell to step it through 0, 1 and don't care, or paint with <kbd>1</kbd> <kbd>0</kbd> <kbd>D</kbd> <kbd>E</kbd>. Rows and columns are in Gray code.</li>
-            <li>Drag across cells to group them; past an edge, a group wraps round. The panel checks each group, writes out the simplified function, and <b>Find Groups</b> finds a smallest cover.</li>
-          </ul>
+          <figure><img src="img/ed-kmap.webp" width="1520" height="950" alt="The Karnaugh map editor: a six-variable map as four 4×4 grids with green groups that cross maps, and the simplified function and code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Fill cells:</b> click to step 0, 1, don’t care, or paint with <kbd>1</kbd> <kbd>0</kbd> <kbd>D</kbd>.</li>
+          <li><b>Group:</b> drag across cells (groups wrap round edges). <b>Find Groups</b> finds a smallest cover.</li>
+        </ul>
+          <p>An example with its code to copy: <a href="../karnaugh-map-latex/">Karnaugh maps in LaTeX</a>.</p>
         </div></details>
 
         <details class="block"><summary>Bit field <code>bytefield</code><span class="muted">packet and register layouts</span></summary><div>
-          <ul>
-            <li>Starts from an IPv4-style header. The palette adds a Bit box (<kbd>B</kbd>), Word box (<kbd>W</kbd>), single Bits (<kbd>I</kbd>), Skipped words (<kbd>K</kbd>) and a bit Header (<kbd>H</kbd>).</li>
-            <li>Drag a field's right edge to move the line between it and the next (it snaps to bits); drag a word box's bottom to change its height. <kbd>S</kbd> splits a field, <kbd>M</kbd> and <kbd class="shift">Shift</kbd><kbd>M</kbd> merge it with the next or previous one, and double-click or <kbd>Enter</kbd> edits its label.</li>
-            <li><b>Selecting:</b> drag from a field across others, <kbd class="shift">Shift</kbd>-click a second field, or <kbd class="shift">Shift</kbd> and an arrow key, to select every field in between; <kbd class="mod">Ctrl</kbd><kbd>A</kbd> selects them all. Then <kbd>R</kbd> or <kbd>L</kbd> puts a labelled brace round their rows, and <kbd>Delete</kbd> removes them (whole rows if every field of them is selected) in one undo step. Drag a brace's end handle to change which rows it covers.</li>
-            <li>The panel sets a field's borders, fill colour (<code>bgcolor</code>) and formatting, and the whole field's width, bit size and endianness. The canvas follows the package's own measurements, and code you didn't touch is kept as written.</li>
-          </ul>
+          <figure><img src="img/ed-bytefield.webp" width="1520" height="950" alt="The bit field editor: a complete IPv4 header laid out in 32-bit rows with a brace for the header and the payload, and the bytefield code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Resize a field:</b> drag its right edge (it snaps to bits).</li>
+          <li><b>Split or merge:</b> <kbd>S</kbd> splits, <kbd>M</kbd> merges with the next.</li>
+          <li><b>Label it:</b> double-click or press <kbd>Enter</kbd>.</li>
+          <li><b>Brace rows:</b> select fields, then <kbd>R</kbd> or <kbd>L</kbd>.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Chemistry <code>chemfig</code></summary><div>
-          <ul>
-            <li>Pick an atom and drag its blue handle to grow a bond (snaps to 15°). Type <kbd>C</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>O</kbd>… to relabel it, or double-click to type any label such as <code>NH_2</code>. Double-click a bond to step it single, double, triple.</li>
-            <li>The palette adds rings (benzene, aromatic, 3 to 7 sides, fused onto a picked side), groups (OH, COOH, NO₂…), charges and lone pairs; drag an item onto an atom or bond. The panel sets an atom's lone pairs (dots or bars) and radicals, an atom's colour (each atom wrapped in <code>\textcolor</code>, kept apart with <code>|</code> so chemfig still splits them), a partial charge (δ+ or δ−) with its position and distance, placed clear of the atom (chemfig centres a charge on the atom's edge, so it is written with a distance such as <code>90:4pt=$\delta+$</code>), and a bond's look. A single, double or triple bond has a line (solid, dashed, dotted, or none: not drawn but kept in place), a width and a colour; a wedge has a colour, and the wedge sizes of its molecule (<code>\chemfig[cram width=…]</code>), since chemfig sizes wedges per molecule or drawing, not per bond. A bond's own settings win over <b>All bonds</b>, as in chemfig; Solid under a dashed <code>bond style</code> writes <code>solid</code>; for a bond into a group such as <code>CH_2OH</code>, <b>Leaves from</b> and <b>Arrives at</b> choose which of its atoms it joins. Right-click for bond types, <b>Hide Bond</b> / <b>Show Bond</b> and deleting an atom, bond, ring, molecule or arrow.</li>
-            <li><b>Reactions:</b> an arrow turns the drawing into a <code>\schemestart … \schemestop</code> scheme with a copy of the molecule to change into the product. Drag an arrow's head to turn and stretch it. An arrow with nothing after it ends in a dashed box: click it to type the next compound in chemfig code (such as <code>CH_3-COOH</code>), or drop an atom, ring or group in it. <b>Merge</b> joins two compounds into a new one; a picked molecule can be put in brackets or grouped with the next step into a <code>\subscheme</code>.</li>
-            <li><b>Settings:</b> with nothing picked, the panel sets the whole drawing (<code>\setchemfig</code>): bond length, double bond gap, wedge width, angle step, fixed length, the width and gap of hashed wedges, square hashes (<code>cram rectangle</code>) and the size of ring circles; a width, colour and line for <b>All bonds</b> (<code>bond style</code>; a bond's own options win); and, in a scheme, the spacing of compounds, arrows and names, the arrow head (chemfig's, Stealth, LaTeX or open) and a colour and line for every arrow. A picked arrow has its own colour and line; a picked ring side sets the ring's circle (on or off, its arc, colour and line). <b>chemfig 1.x code</b> (the setters chemfig 1.4 removed, such as <code>\setatomsep</code>, <code>\setcrambond</code>, <code>\setarrowdefault</code> or <code>\enablebondjoin</code>, and <code>\chemfig*</code> or <code>\chemfig[…][…]</code>), which current chemfig stops on, is drawn, and comes in today's form: when you paste or import it, and when you open it in the editor (a note says what changed; Undo or Cancel keeps the old code). <code>\setandsign</code>'s spacing is written onto each <code>\+</code>. <code>\resetchemfig</code>, <code>\setcharge</code> and <code>\resetcharge</code> are drawn too, as are a molecule's own settings, <code>\chemfig[atom sep=2em]{…}</code>. Lengths take a unit, such as <code>2.5em</code>; clearing a field goes back to chemfig's default.</li>
-            <li><b>Names:</b> a dashed box sits under each compound without a name; click it to type the name in place, or double-click a name to change it (<kbd>Shift</kbd><kbd>Enter</kbd> for a second line). It is written as <code>\chemname</code>; the panel's <b>Name</b> field under <b>Compound</b> does the same, and emptying it takes the name away.</li>
-            <li><b>Curved arrow:</b> click the atom or bond it starts from, then the one it goes to; the ends get <code>@{name}</code>s and a <code>\chemmove</code> is written. Drag its blue handles to bend it; the panel sets tips, line and colour. ⌫ deletes it.</li>
-            <li>Drawn by chemfig's own rules, so the canvas matches the PDF.</li>
-            <li>Pasted code can use submolecules (<code>\definesubmol</code>, with arguments), <code>\setchemfig</code>, curved electron-pushing arrows (<code>@{name}</code> and <code>\chemmove</code>) and <code>\hreac … \endhreac</code>: all are drawn. Atoms that come from a submolecule are changed in its <code>\definesubmol</code> line.</li>
-            <li>An imported document's preamble settings (<code>\setchemfig</code>, <code>\definesubmol</code>, <code>\setcharge</code> and the <code>\tikzset</code> styles the code names) come in at the head of each chemistry block, and a document that is only chemfig code, a scheme of plain-text compounds or code with TikZ inside <code>\chemmove</code>, comes in as the block. Also drawn as chemfig draws them: <code>atom style={scale=…}</code> and <code>chemfig style={scale=…, line width=…}</code>, a <code>compound style</code> frame, snake, dash-pattern, see-through and shortened bonds, <code>\polymerdelim</code>'s brackets, and <code>\chemmove</code> paths that are filled, closed with <code>-- cycle</code> or have shifted points.</li>
-          </ul>
+          <figure><img src="img/ed-chemfig.webp" width="1520" height="950" alt="The chemistry editor: atoms, bonds and rings on the left, the imine-formation mechanism, with curved arrows, charges and reaction arrows between the compounds, and the chemfig settings and code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Grow a molecule:</b> drag an atom’s blue handle to add a bond. Type <kbd>C</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>O</kbd> to relabel, or double-click for any label.</li>
+          <li><b>Change a bond:</b> double-click it: single, double, triple.</li>
+          <li><b>Add a ring or group:</b> drag it from the palette onto an atom or bond.</li>
+          <li><b>Write a reaction:</b> add an arrow, then type or drop the next compound in its dashed box.</li>
+          <li><b>Name a compound:</b> click the dashed box under it.</li>
+        </ul>
+          <p>An example with its code to copy: <a href="../chemfig-editor/">chemfig editor</a>.</p>
         </div></details>
 
         <details class="block"><summary>Chemistry Laboratory <code>tikz-chemlab</code></summary><div>
-          <ul>
-            <li>Laboratory apparatus, written for <code>tikz-chemlab</code> (the TikZ version of pst-labo). The palette has <b>glassware</b> (test tube, round flask, beaker, Erlenmeyer flask, reagent bottle, volumetric flask, watch glass, graduated cylinder, a small one and one with liquid, funnel, separatory funnel, pipette, inverted tube, reflux flask), whole <b>set-ups</b> (a test tube or flask heated over a Bunsen burner, gas collected over water, reflux, titration, distillation and the package's fractional distillation picture), <b>equipment</b> (Bunsen burner, with gauze or as a flame alone, stand, hot plate, magnetic stirrer, stir bar, pH meter, crystallising dish, heating bath, thermometer, fractionating column, Liebig and ball condensers, test tube rack, a drop) and <b>labels</b> with leader lines. Folded below them are the <b>parts</b> the package builds its apparatus from (glass bodies, rims, scales, taps, the burette's pieces), the <b>fittings</b> on their own (stoppers, clamp, tubes) and the <b>contents</b> (bubbles, beads, filings … scattered as in a glass, and one piece of each solid); they stay open once opened. Click an item, then click the grid where its base goes, or drag it in. Every macro tikz-chemlab draws is here, except <code>\tkzLargePipette</code> and its body, which draw one wall 23cm tall (the package's port of pst-labo's big pipette was never finished); written by hand, they are read and drawn as pdflatex draws them.</li>
-            <li>Drag a piece to move it (<kbd>Alt</kbd> turns snapping off), or nudge it with the arrow keys. A moved call gets a scope with a <code>shift</code> of its own; a scope that already leads with shifts has them written as one. Positions are in the picture's own units (its <code>scale</code> undone), from the cross at its origin.</li>
-            <li>tikz-chemlab has no scale for one piece (<code>\tkzTestTube[scale=0.5]</code> stops pdflatex), so a piece's <b>Scale</b> is written on the scope round it (<code>\begin{scope}[shift={(3,0)}, scale=0.5]</code>): it grows or shrinks about its origin, line widths too, and nothing else moves. A call with no scope gets one; clearing the scale takes that scope away again. A group has a Scale of its own; with nothing selected, Scale sizes the whole picture.</li>
-            <li>A selected test tube, round flask or graduated cylinder has a round handle past its top: drag it round to tilt the glass about its foot (in 5° steps; <kbd>Alt</kbd> for single degrees). As in the package, a test tube's liquid stays level as it tilts, while a flask's and a cylinder's tilt with the glass. Each liquid it draws has a bar where its surface meets the glass's axis: drag it up or down to set that level (in steps of five; <kbd>Alt</kbd> for single steps), as do a separatory funnel's two layers, a titration's burette and a pipette's reagent.</li>
-            <li>The panel sets what the package lets you set: the glass, up to three liquids (level and style: cyan, Champagne, Blood, Oil, the aqueous and organic phases, the diffusions …), tilt, a stopper or tube on top (straight, bent, U-tube, delivery tube, reflux condenser; on a funnel, on the test tube under it), a clamp, a tag with text, what is in the glass (bubbles, filaments, beads, copper turnings, iron filings, zinc granules) and, for each set-up, its burner, burette, pH meter, stirrer or gas jar. With nothing picked, it sets the picture's scale, its <b>line widths</b> (a preset, <code>\chemlabset{style=…}</code>, and the outlines, rims, tube mouths and graduations one by one: a length or <code>thin</code>, <code>semithick</code>, <code>thick</code>, <code>very thick</code> or <code>ultra thick</code>, the only words the package knows) and the <b>flame</b> of the burner with a gauze (<code>\tkzHeatFlask</code>, <code>\tkzBunsenBurnerGrill</code>: its size and the base and tip colours of its outer and inner parts; the plain burner under <code>\tkzHeatTube</code> keeps the package's flame), all written in one <code>\chemlabset</code> at the top.</li>
-            <li><code>\tkzTitration</code>, <code>\tkzHeatFlask</code> and <code>\tkzRoundFlask</code> set themselves beside the one of their kind written before them, and keep its settings. When you add, move, delete or reorder something, the others are shifted back, so nothing moves that you didn't move.</li>
-            <li>Drawn as pdflatex draws it, statement by statement from the package, so the picture is the size the PDF makes it. Bubbles and turnings are scattered at random, in the PDF too, so they never fall in quite the same places. Options the package doesn't have (pdflatex stops at them), an unknown glass or liquid style and code the drawing doesn't read are listed. A liquid style of your own, defined in the picture's options (<code>MyStyle/.style={fill=orange}</code>), is drawn.</li>
-            <li>Exported with <code>\usepackage{tikz-chemlab}</code> as a scope moved to where the block sits. <b>Import LaTeX/TikZ</b> reads a picture of apparatus back as a block, and a call pasted on its own (<code>\tkzTestTube[…]</code>) comes in as one.</li>
-          </ul>
+          <figure><img src="img/ed-chemlab.webp" width="1520" height="950" alt="The laboratory editor: glassware on the left, a heated flask under a reflux condenser in the middle, and the piece settings and tikz-chemlab code on the right" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Place glassware:</b> pick a piece or a whole set-up and click the grid.</li>
+          <li><b>Tilt a glass:</b> drag the round handle above it.</li>
+          <li><b>Set liquids, stopper or clamp:</b> select the piece and use the panel.</li>
+        </ul>
         </div></details>
 
         <details class="block"><summary>Bloch sphere <code>blochsphere</code></summary><div>
-          <ul>
-            <li>Set the radius, tilt and rotation, the ball style (shaded, outline, none) and colours in the panel, and list states by their label, θ and φ.</li>
-            <li>The code below is editable too; commands the panel doesn't cover are kept.</li>
-          </ul>
+          <figure><img src="img/bloch.webp" width="1520" height="950" alt="A Bloch sphere selected on the canvas: a shaded ball with a state vector and a rotated state, and its radius, tilt, rotation, colours and states in the panel" loading="lazy"></figure>
+          <ul class="how">
+          <li><b>Set it up:</b> select it and set the radius, tilt, rotation and colours in the panel.</li>
+          <li><b>Add a state:</b> <b>Add State</b>, then its label, θ and φ.</li>
+        </ul>
         </div></details>
       </section>
 
       <section id="table">
         <h2>Tables</h2>
-        <p>Choose <b>Table</b> in the mode switch. It is not a kind of file: it is one table to make and take away, and the file you had open stays open.</p>
-        <figure>
-          <img src="img/10-table.png" width="1920" height="1080" alt="Table mode: a spreadsheet-style grid of five columns with a header row, the Academic style's rendered preview below it with Copy LaTeX, .tex, SVG and PNG buttons, and the table's settings on the right" loading="lazy">
-          <figcaption>Table mode: the grid on top, the booktabs preview below it, and the style, column and LaTeX settings on the right.</figcaption>
-        </figure>
-        <ul>
-          <li><b>Import:</b> paste cells copied from Excel, Google Sheets or Numbers (<kbd class="mod">Ctrl</kbd><kbd>V</kbd> anywhere in Table), drop or open a CSV, TSV, Excel (<code>.xlsx</code>), Markdown, HTML or LaTeX file, or paste their text. A LaTeX <code>tabular</code>, <code>tabularx</code> or <code>longtable</code> with <code>\multicolumn</code>, <code>\multirow</code>, colours, <code>\rowcolors</code> stripes, double rules, <code>m{}</code>/<code>b{}</code> columns, <code>\newcolumntype</code>, rule width and colour, row spacing, placement and a longtable's head and foot rows, and siunitx <code>S</code> columns reads back as it was. Merged cells, bold, italic, colours, fills, borders and alignment come along; <code>$…$</code> stays maths, while <code>$5 and $10</code> stays money. Paste a whole page and the table is taken out of it.</li>
-          <li><b>Edit</b> in a grid like a spreadsheet: arrows, <kbd>Tab</kbd> and <kbd>Enter</kbd> move (<kbd>Tab</kbd> past a row's end leaves the grid), <kbd class="shift">Shift</kbd> extends the range, type to replace a cell, <kbd>Enter</kbd>, <kbd>F2</kbd> or double-click to edit it. The bar above the grid edits the active cell's LaTeX. Right-click for inserting, deleting and moving rows and columns, merging, splitting and header rows. Drag a column header's right edge to set a width (it wraps as <code>p{…}</code>). Pasting cells puts their top-left at the active cell and grows the table; only <b>Import</b> replaces it all. Cells may be edited as LaTeX or in MathLive, as set under Text input.</li>
-          <li><b>Format</b> from the toolbar and the panel: style (Academic with booktabs rules, Minimal, Grid, Striped, Plain), header rows, column alignment and width, decimal alignment, scientific notation, uncertainties, a siunitx unit after the header, cell colours and size, and the caption, label, float and placement.</li>
-          <li><b>Take it away:</b> the pane under the grid shows the preview or the LaTeX with the packages it needs. <b>Copy LaTeX</b> (<kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>C</kbd>), <b>.tex</b> (compiles on its own), <b>SVG</b> (maths fonts embedded), <b>PNG</b> at 150, 300 or 600 DPI, or <b>Copy PNG</b>.</li>
-          <li>The table stays in the browser until the next import; it is not saved in files.</li>
-          <li><b>In a diagram:</b> <b>Blocks → Table</b> adds a Table block, and cells pasted from a spreadsheet, a Markdown table, a dropped <code>.csv</code> or <code>.xlsx</code>, or a pasted <code>tabular</code> become one. Double-click it to edit it here: <b>Done</b> (<kbd class="mod">Ctrl</kbd><kbd>S</kbd> to keep going) puts it back in the diagram, <b>Cancel</b> drops the changes, and the workspace's own table is left as it was. It is exported as a <code>tabular</code> in a TikZ node, so it has no caption or float.</li>
+        <figure><img src="img/mode-table.webp" width="1520" height="950" alt="Table mode: a results table in a spreadsheet grid with grouped headers, the Academic preview below it with Copy LaTeX, Copy PNG, .tex, SVG and PNG, and the table, column and cell settings on the right" loading="lazy"><figcaption>Table mode: grid on top, preview below, settings on the right.</figcaption></figure>
+        <ul class="how">
+          <li><b>Bring a table in:</b> choose <b>Table</b> in the mode switch and paste cells from Excel, Sheets or Numbers (<kbd class="mod">Ctrl</kbd><kbd>V</kbd>), or drop a CSV, Excel, Markdown, HTML or LaTeX file.</li>
+          <li><b>Edit a cell:</b> type to replace it; <kbd>Enter</kbd>, <kbd>F2</kbd> or double-click to edit it. Arrows and <kbd>Tab</kbd> move.</li>
+          <li><b>Add, merge or move rows and columns:</b> right-click the grid.</li>
+          <li><b>Format:</b> pick a style (Academic, Minimal, Grid, Striped, Plain); set alignment, decimals and units in the panel.</li>
+          <li><b>Take it away:</b> <b>Copy LaTeX</b> (<kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>C</kbd>), <b>.tex</b>, <b>SVG</b>, <b>PNG</b> or <b>Copy PNG</b>.</li>
+          <li><b>Put a table in a diagram:</b> Blocks → <b>Table</b>, or paste spreadsheet cells onto the canvas. Double-click it to edit.</li>
         </ul>
+        <p class="note">Table mode keeps one table until the next import; it isn’t saved in a file. A Table block is.</p>
       </section>
 
       <section id="documents">
         <h2>Documents and pages</h2>
-        <figure>
-          <img src="img/04-document.png" width="1920" height="1080" alt="Document view: a page with headings, text and maths, and diagram blocks between them, with the page setup on the right" loading="lazy">
-          <figcaption>Document view lays out text and diagrams on true-to-scale pages.</figcaption>
-        </figure>
         <h3>Classic documents</h3>
-        <ul>
-          <li>A Classic file is a <b>document</b> of text blocks and diagram blocks. Text blocks take <code># Heading</code>, <code>$inline$</code> maths, display maths as <code>$$…$$</code>, <code>\[…\]</code> or an amsmath environment (<code>equation</code>, <code>align</code>, <code>gather</code>…), <code>\textbf{}</code> and <code>\emph{}</code>. A display is one piece: click it to edit the formula, and it is written back the way you typed it.</li>
-          <li><b>Text is edited in place,</b> as it looks on the page. Type <code>$x^2$</code> and the formula appears as you close it; click a formula to edit it. Start a line with <code># </code>, <code>- </code>, <code>1. </code> or <code>[ ] </code> for a section, bullet, numbered item or checkbox. While you edit, a toolbar at the top sets the paragraph style, bold, italic, colour, highlight, links, lists and alignment; <code>&lt;/&gt;</code> shows the LaTeX source.</li>
-          <li><b>Undo and redo</b> (the top bar's buttons, or <kbd class="mod">Ctrl</kbd><kbd>Z</kbd>) work on the whole page: typing, adding, moving and deleting blocks, and the page setup. Diagrams keep their own undo.</li>
-          <li>Double-click a diagram block, or press <b>Edit</b>, to draw it on the canvas. In Diagram view, the selector in the top bar picks between diagrams.</li>
-          <li><b>Page setup</b> (right panel): paper (A4, A5, B5, US Letter, US Legal or custom), orientation, margins, font and font size, title and the author under it, line spacing and numbered sections. The preview marks approximate page breaks.</li>
-          <li><b>Font:</b> Computer Modern (LaTeX's own), Latin Modern, Times, Palatino or Helvetica (the TeX Gyre fonts, with matching maths), or the Thai fonts Kinnari, Garuda and Laksaman. The page shows it, and the LaTeX sets it for the engine: Type 1 packages for pdfLaTeX, <code>fontspec</code> for XeLaTeX. An object with a font of its own keeps it. Thai is set with either engine, from the TLWG fonts, and lines break between Thai words; Thai text in a Latin font is set in Kinnari, and text in a Thai font keeps it. A Thai document font with pdfLaTeX sets only the Thai in it and the rest in Computer Modern; XeLaTeX sets all of it.</li>
-          <li>Diagrams wider than the text are scaled down to fit, on screen and in the export (<code>\resizebox{\linewidth}{!}{…}</code>).</li>
+        <figure><img src="img/doc-edit.webp" width="1520" height="779" alt="A Classic document being edited in place: the formatting toolbar with paragraph style, bold, italic, underline, colour, highlight, lists and alignment above the page" loading="lazy"><figcaption>Click the text to write; the toolbar formats it.</figcaption></figure>
+        <ul class="how">
+          <li><b>Write:</b> switch to <b>Document</b> and click the page. Start a line with <code># </code> for a heading, <code>- </code> for a bullet, <code>1. </code> for a numbered item.</li>
+          <li><b>Add maths:</b> type <code>$x^2$</code> inline, or <code>$$…$$</code> or <code>\begin{align}</code> for a display.</li>
+          <li><b>Add or edit a diagram:</b> double-click a diagram block (or <b>Edit</b>) to draw it.</li>
+          <li><b>Set the paper and font:</b> <b>Page setup</b> on the right: paper, margins, font, title, author, numbered sections.</li>
+          <li><b>Get the LaTeX:</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd> downloads the whole document as an <code>article</code>.</li>
         </ul>
         <h3>Page mode</h3>
-        <ul>
-          <li>Place anything anywhere on the paper. Margins are blue dashed guides; corners, margins and centre lines are snap points.</li>
-          <li>Several pages stack down the canvas. With nothing selected, the panel lists every page to reorder, duplicate, insert or delete; an object belongs to the page under its centre and moves with it. <kbd>PgUp</kbd> / <kbd>PgDn</kbd> move between pages.</li>
-          <li>The LaTeX export draws each page in one <code>tikzpicture</code>, set at the paper's top-left corner with <code>eso-pic</code>, so positions are exact after a single run.</li>
+        <ul class="how">
+          <li><b>Place things:</b> draw anywhere on the paper; margins and centre lines are snap points.</li>
+          <li><b>Add a page:</b> click empty space; the panel lists the pages to add, reorder, duplicate or delete.</li>
+          <li><b>Go to a page:</b> <kbd>PgUp</kbd> / <kbd>PgDn</kbd>.</li>
         </ul>
       </section>
 
       <section id="export">
         <h2>Getting LaTeX out</h2>
-        <table>
-          <thead><tr><th>Command</th><th>What you get</th></tr></thead>
-          <tbody>
-            <tr><td><b>LaTeX</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>The code dialog, to copy or download. Pick a <code>tikzpicture</code> snippet or a <code>standalone</code> document, for everything or only the selection (the header comment lists the packages and libraries to load), or the whole document.</td></tr>
-            <tr><td><b>Compile</b></td><td>In the LaTeX dialog: compiles the code with pdfLaTeX or XeLaTeX (TeX Live; pick the engine beside the code's scope, which also writes the code for it) in your browser and shows the PDF beside it, or marks TeX's errors on their lines. The dialog starts on XeLaTeX when the file's font or text is Thai. Nothing is sent anywhere. The first compile with an engine downloads it (pdfLaTeX about 26&nbsp;MB, XeLaTeX more, with its OpenType fonts), which the browser keeps for offline use (the T1 text fonts, which few documents use, are fetched one by one when a document first needs one); the button's tooltip gives the size, or says why this browser can't run it (it needs WebAssembly). It has the packages the app's own LaTeX uses; a package it lacks is named.</td></tr>
-            <tr><td><b>Whole document</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>Downloads the whole document at once as an <code>article</code> with <code>geometry</code> page settings and each diagram in a <code>tikzpicture</code>. Importing it again brings back lines, shapes and text; plots, most blocks and library symbols come back as TikZ code (the LaTeX window says when that applies). To keep editing, keep the <code>.diagramtex</code> file.</td></tr>
-            <tr><td><b>Export</b></td><td><b>PNG</b> at any DPI from 24 to 2400 (written into the file, so it opens at true size, optionally transparent), <b>SVG</b> (vector, maths fonts embedded) or <b>PDF</b> (vector with selectable text, through the print window; turn on <b>Flatten</b> for pages as pictures at a DPI you choose, 300 by default, saved directly). In Document view: <b>PDF</b> of the document (vector, through the print window) or <b>Web page</b>. For PDF, <b>Render</b> picks <b>As shown</b> (what you see, as above) or <b>pdfLaTeX</b> / <b>XeLaTeX</b>: the file's LaTeX compiled in your browser and saved as the PDF LaTeX makes. It starts on As shown each time.</td></tr>
-            <tr><td><b>Print</b> <kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>Pages at true size; choose Save as PDF for a vector PDF. Where the LaTeX engine runs, Print asks each time how to render, in the dropdown beside Cancel and Print: <b>As shown</b>, or with pdfLaTeX or XeLaTeX (the file's LaTeX compiled here, and that PDF printed). For a file with Thai, choosing pdfLaTeX (here or in Export) shows a red warning that XeLaTeX sets Thai best.</td></tr>
-            <tr><td><b>Download .zip</b></td><td>In the LaTeX dialog, when the code uses pictures: the <code>.tex</code> and every picture it names, ready to compile or upload to Overleaf. SVGs go in with <code>\includesvg</code> (needs Inkscape and shell escape, which Overleaf has); the arrow beside the button offers <b>SVG as PDF, no Inkscape</b>, which adds a vector PDF of each SVG so plain pdfLaTeX compiles it.</td></tr>
-            <tr><td><b>Right-click → Copy TikZ</b></td><td>Just the selected objects' code, straight to the clipboard.</td></tr>
-          </tbody>
-        </table>
-        <p><b>Save to</b> (Chrome, Edge and other Chromium browsers): choose a folder for a file's exports once, such as your paper's <code>figures/</code> folder, and every later export overwrites its copy there.</p>
-        <p>A typical snippet looks like this:</p>
+        <div class="shots">
+          <figure><img src="img/compile.webp" width="1520" height="950" alt="The LaTeX Code dialog with Compile done: the TikZ code on the left and the PDF that pdfLaTeX made on the right" loading="lazy"><figcaption><b>Compile</b> shows the PDF beside the code.</figcaption></figure>
+          <figure><img src="img/export.webp" width="1520" height="1013" alt="The Export popover over a selected plot: PNG, SVG, PDF and Web page, the resolution in DPI with the size it gives, a transparent background, Save to and Download PNG" loading="lazy"><figcaption><b>Export</b>: PNG, SVG, PDF or web page.</figcaption></figure>
+        </div>
+        <ul class="how">
+          <li><b>Copy the TikZ:</b> <kbd class="mod">Ctrl</kbd><kbd>E</kbd>, then <b>Copy</b>. Choose a snippet or a <code>standalone</code> document, all or only the selection.</li>
+          <li><b>Copy only some objects:</b> select them, right-click, <b>Copy TikZ Code</b>.</li>
+          <li><b>Check it compiles:</b> in the LaTeX dialog, <b>Compile</b> (pick pdfLaTeX or XeLaTeX). Errors are marked on their lines.</li>
+          <li><b>Save a picture:</b> <b>Export</b>: PNG at any DPI (transparent if you like), SVG, or PDF.</li>
+          <li><b>Print or make a PDF:</b> <kbd class="mod">Ctrl</kbd><kbd>P</kbd>, then Save as PDF.</li>
+          <li><b>Get files for Overleaf:</b> in the LaTeX dialog, <b>Download .zip</b> (the <code>.tex</code> and its pictures).</li>
+          <li><b>Export to your paper’s folder each time:</b> <b>Save to</b> in Export (Chrome, Edge): pick the folder once.</li>
+        </ul>
+        <p>The first line of the code lists the packages to load, for example:</p>
 <pre><code>% Requires: \usepackage{tikz} \usetikzlibrary{arrows.meta}
 \begin{tikzpicture}[x=1cm, y=1cm]
   \draw[line width=0.71pt, -{Stealth}] (0,0) -- (3,0) node[midway, above] {$\vec v$};
-  \draw[line width=0.71pt] (4,0) circle (0.5);
 \end{tikzpicture}</code></pre>
-        <p><b>Packages by block:</b> TikZ always; <code>circuitikz</code>, <code>pgfplots</code>, <code>tikz-cd</code>, <code>xy</code>, the <code>quantikz2</code> library, <code>forest</code>, the <code>graphs</code> library, <code>zx-calculus</code>, <code>tikz-feynman</code>, <code>tikz-3dplot</code>, <code>tikz-timing</code>, the <code>automata</code> library, <code>tikz-network</code>, <code>pgf-umlcd</code>, <code>pgf-umlsd</code>, <code>karnaugh-map</code>, <code>bytefield</code>, <code>chemfig</code>, <code>tikz-chemlab</code> and <code>blochsphere</code> as used. All of them are in TeX Live and on Overleaf.</p>
-        <p class="note warn">quantikz2 restyles every <code>tikz-cd</code> diagram in the same document. When a quantum circuit shares a figure with a commutative or ZX diagram, the export adds a few preamble lines that keep those diagrams as they look on their own.</p>
       </section>
 
       <section id="import">
         <h2>Bringing TikZ in</h2>
-        <p><b>Paste and drop from anywhere:</b> <kbd class="mod">Ctrl</kbd><kbd>V</kbd> or drag in a picture (PNG, JPEG, SVG; GIF and WebP go in as PNG), a <code>.tex</code> file, TikZ code, a block's environment (<code>quantikz</code>, <code>tikzcd</code>, <code>\chemfig{…}</code>, <code>\tkzTestTube[…]</code>, <code>forest</code>…), a formula or symbol (<code>\alpha</code>, <code>x^2</code>) or plain text. Each becomes what it is; a dropped one lands where you drop it, and in the Document view each becomes a block. Shapes copied in another DiagramTeX window paste back as shapes.</p>
-        <p><b>Import LaTeX/TikZ</b> (top bar) takes pasted code or a <code>.tex</code> file and turns it into objects you can edit.</p>
-        <ul>
-          <li>Commands: <code>\draw</code>, <code>\fill</code>, <code>\filldraw</code>, <code>\node</code>, <code>\coordinate</code>.</li>
-          <li>Paths: <code>--</code>, <code>..controls..</code>, <code>|-</code>, <code>rectangle</code>, <code>circle</code>, <code>ellipse</code>, <code>arc</code>, <code>to[bend]</code>, <code>grid</code> and inline nodes.</li>
-          <li>Options: colours (including <code>red!50</code>), widths, dashes, line caps and joins, arrows, <code>scale</code>, polar and relative coordinates; <code>rotate</code>, <code>shift</code>, <code>xshift</code>, <code>yshift</code> on paths, nodes and nested scopes.</li>
-          <li><code>ZX</code>, <code>feynman</code>, <code>tikztimingtable</code> and <code>bytefield</code> environments come back as blocks you can edit. Document text becomes text blocks, its <code>itemize</code> and <code>enumerate</code> lists (checklists too) the blocks' own lists, and <code>\documentclass</code> and <code>geometry</code> options become the page setup, as do <code>\author</code> and numbered <code>\section</code>s. A figure's <code>\caption</code> becomes a centred line under its diagram.</li>
-          <li>The switch on its own row under the dialog's head chooses what TikZ code that can't be read exactly becomes. <b>As Written</b> keeps it as code, exported unchanged and drawn in a dashed frame. <b>Editable Shapes</b> turns it into ordinary shapes you can edit, exported from the shapes, so some details may change.</li>
-          <li><b>Code kept as written is drawn by pdfLaTeX</b> once the LaTeX engine is in your browser (after a first Compile, Print with LaTeX or <b>Download TeX engine</b>), or when you press <b>Draw with pdfLaTeX</b> in its panel: the canvas shows the picture LaTeX makes, in place of an approximation. A statement in a larger picture is compiled with the rest of the picture, so the names it uses are there, and only its own drawing is shown. A picture that uses a package with a block of its own (circuits, tikz-cd, trees, plots, automata, 3D, geometry …) is drawn by DiagramTeX instead, all of it, so it can be improved into editable objects. A statement TeX can't compile doesn't stop the rest of its picture from being drawn, and its panel names the command TeX didn't know. The drawings are kept in your browser, so a file opens with them at once; the exported LaTeX is unchanged.</li>
-          <li><b>Insert into Diagram</b> adds each picture as one group in the middle of the canvas, or, in the Document view, as a new diagram after the active one (⌘V there does the same); <b>Import as New Document</b> opens it in a new file.</li>
-          <li>A <code>tkz-euclide</code> picture is read as the TikZ its commands stand for. Its points (<code>\tkzDefPoint</code>, in the <code>\tkzInit</code> frame) become named points the rest of the picture can use; its constructions (intersections, projections, rotations, midpoints, circumcentres, regular polygons …) put their points where tkz-euclide does; and its segments, lines, polygons, circles, arcs, points, labels, angle and segment marks, grids, axes and clips become ordinary shapes with tkz-euclide's look (0.2pt lines with round ends, grey circles). A command or option it can't draw exactly stays as code.</li>
-          <li>A hand-written <code>axis</code> becomes a plot. TikZ drawing inside it (<code>\draw</code>, <code>\node</code>, <code>\fill</code> at <code>axis cs</code>, <code>rel axis cs</code> or, from <code>compat=1.11</code>, plain points) is kept with the plot, drawn where pgfplots puts it, cut at the axis box, and written back inside the axis. The axis also takes <code>\pgfplotsset</code> sizes and styles, widths in <code>\textwidth</code>, <code>axis equal</code>, <code>hide axis</code>, <code>symbolic x coords</code> and empty axes as pgfplots draws them; a <code>groupplot</code> and <code>fill between</code> are drawn as pgfplots draws them and stay as code. A bare <code>tikzcd</code> environment is not read: paste it into a tikz-cd block's code instead. LaTeX DiagramTeX exported comes back as lines, shapes and text where it can, the rest as TikZ code; older exports with a <code>% diagramtex-data:</code> comment come back exactly.</li>
+        <div class="shots">
+          <figure><img src="img/import.webp" width="1520" height="950" alt="The Import LaTeX or TikZ dialog with a pasted TikZ picture of an encoder, a latent variable and a decoder, the As Written and Editable Shapes switch, and Insert into Diagram" loading="lazy"><figcaption>Paste the code into <b>Import LaTeX/TikZ</b>…</figcaption></figure>
+          <figure><img src="img/imported.webp" width="1520" height="950" alt="The imported picture as editable shapes: Encoder, Latent z and Decoder boxes joined by labelled arrows, a dashed red arrow and a formula, with a box selected" loading="lazy"><figcaption>…and edit it as shapes.</figcaption></figure>
+        </div>
+        <ul class="how">
+          <li><b>Paste anything:</b> <kbd class="mod">Ctrl</kbd><kbd>V</kbd> a picture, TikZ code, a formula or a block (<code>quantikz</code>, <code>\chemfig{…}</code>…). It lands in the middle of the view.</li>
+          <li><b>Import a .tex file:</b> <b>Import</b> in the top bar (or drop the file). Then <b>Insert into Diagram</b> or <b>Import as New Document</b>.</li>
+          <li><b>Choose how unknown code comes in:</b> <b>As Written</b> keeps it as code; <b>Editable Shapes</b> turns it into shapes.</li>
+          <li><b>See kept code as LaTeX draws it:</b> select it and press <b>Draw with pdfLaTeX</b>.</li>
         </ul>
       </section>
 
       <section id="files">
         <h2>Files and saving</h2>
-        <p>Drop one or more <code>.diagramtex</code> files anywhere in the app to open them in their saved modes. Backup bundles work too. Your current file stays in the file list; dropped project contents are not inserted into its canvas.</p>
-        <figure><img src="img/11-file-sorting.png" width="1920" height="1080" alt="The file-list sorting menu with custom order, date created, date modified, name and direction choices" loading="lazy"><figcaption>Use the sort button beside + to choose the file order. Custom order lets you drag files into your own sequence.</figcaption></figure>
-        <ul>
-          <li><b>Autosave:</b> every change is saved in your browser (IndexedDB) as you work. Nothing is uploaded. A dot and a line beside the logo say where the open file is kept: <b>green</b>, its changes are saved to its file on disk; <b>yellow</b>, autosaved in the browser only, not yet saved to disk (with the shortcut that saves it, or the name of its file); <b>blue</b>, autosaved in the browser, which can't save to disk as you go (Safari, Firefox); <b>red</b>, autosave is unavailable or failed. A long file name is shortened in the middle; hover the line to read all of it. A block editor's edits join the document when you press Done (or ⌘S); reloading or closing the tab before that makes the browser ask first. The same file open in two tabs stays one file: what you change in one shows in the other, and changes made in both at once are put together (where both changed the same thing, the tab saving last keeps its version).</li>
-          <li><b>Save</b> (<kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd>) writes a <code>.diagramtex</code> file (JSON inside); <b>Open</b> (<kbd class="mod">Ctrl</kbd><kbd>O</kbd>) loads it back in the right mode. A block made by a newer version shows as a note and is kept as it is when you save.</li>
-          <li><b>Export All Files…</b> (right-click the empty part of the file list) saves every Pages, Classic and Whiteboard file into one <code>.diagramtex</code> bundle. Opening the bundle puts each file back in its own kind, skips ones already here unchanged, and adds “copy” to names that are taken.</li>
-          <li><b>Linked files</b> (Chromium browsers): after the first Save, the file stays linked, so <kbd class="mod">Ctrl</kbd><kbd>S</kbd> writes straight to it, and every change is written to it a second after you stop. A yellow dot means changes not yet saved to it; closing or reloading the tab while any linked file has changes not saved to it makes the browser ask first. Safari and Firefox download a copy each time instead.</li>
-          <li>The installed app can open <code>.diagramtex</code>, <code>.tex</code> and <code>.tikz</code> files from Finder or Explorer (Open With).</li>
-                  <li><b>Sorting:</b> the sort button beside <b>+</b> at the top of the file list sorts by <i>Custom order</i> (your own; drag files up and down to rearrange them), <i>Date created</i>, <i>Date modified</i> or <i>Name</i>, each either way round. While the list is sorted, dragging only moves files into or out of folders.</li>
-                  <li><b>Folders:</b> put a slash in a name to file it in a folder, as in cloud storage: <code>Physics/Lab 1</code> is listed as <i>Lab 1</i> inside <i>Physics</i>. Drag a file onto a folder to move it there, or onto the empty part of the list to take it out. Right-click a folder to add a file or folder to it, rename it, fold it or delete it.</li>
-          <li><b>Undo deletes:</b> <kbd class="mod">Ctrl</kbd><kbd>Z</kbd> brings a deleted file or folder straight back from the Recycle Bin. Undo history is kept per file, so switching files doesn't lose it. A file made or opened after the delete has nothing to undo or redo.</li>
-          <li><b>Version History:</b> while you edit, the browser keeps earlier states of the file on its own: at most one every 10 minutes, the newest 3, plus one more every 5 minutes in between. A copy is also kept just before an import into the file, before a restore, and before changes from another tab are merged into yours. <b>Save Version…</b> (right-click a file, or search "Version") keeps the file as it is now under a name, such as "Before review", until you delete it. Right-click a file and choose <b>Version History…</b> to see each copy, how it differs from the file now, and how much space it takes; restore one in place of the file, open it as a new file, name it to keep it, or delete it. The same dialog sets how often copies are kept and how many, and shows how much of the browser's storage DiagramTeX uses.</li>
-          <li><b>Recycle Bin:</b> deleting a file or a folder moves it to the Recycle Bin under the file list. Open it to restore something or delete it for good. Anything left there for 30 days is removed automatically.</li>
-          <li><b>Share links:</b> right-click a file and choose <b>Copy Share Link</b>. A small file is packed into the link itself (after the <code>#</code>, so it is never sent to a server); opening the link gives the other person their own copy. A file too large for a link has to be sent as a <code>.diagramtex</code> file instead.</li>
+        <figure class="aside"><img src="img/files.webp" width="648" height="1438" alt="The file list with Lectures and Thesis folders, and the right-click menu of a file: Open, Rename, Move to Folder, Duplicate, Save a Copy, Save Version, Version History, Copy, Paste, Copy Share Link, Save to File, Save to New File, Export and Move to Recycle Bin" loading="lazy"><figcaption>Right-click a file for its menu.</figcaption></figure>
+        <ul class="how">
+          <li><b>Save to disk:</b> <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd> writes a <code>.diagramtex</code> file. In Chrome and Edge it stays linked: <kbd class="mod">Ctrl</kbd><kbd>S</kbd> saves to it.</li>
+          <li><b>Open:</b> <kbd class="mod">Ctrl</kbd><kbd>O</kbd>, or drop <code>.diagramtex</code> files on the app.</li>
+          <li><b>Make a folder:</b> put a slash in the name: <code>Physics/Lab 1</code>. Drag files onto a folder.</li>
+          <li><b>Sort the list:</b> the sort button beside <b>+</b>.</li>
+          <li><b>Go back to an earlier state:</b> right-click the file, <b>Version History</b>. <b>Save Version…</b> keeps a named one.</li>
+          <li><b>Bring back a deleted file:</b> <kbd class="mod">Ctrl</kbd><kbd>Z</kbd>, or open the <b>Recycle Bin</b> (kept 30 days).</li>
+          <li><b>Share:</b> right-click, <b>Copy Share Link</b>. The file travels in the link.</li>
+          <li><b>Back up everything:</b> right-click empty space in the list, <b>Export All Files…</b>.</li>
         </ul>
-        <p class="note">Browser storage can be cleared by the browser or by you. Keep a <code>.diagramtex</code> copy of anything you care about.</p>
-      </section>
-
-      <section id="parity">
-        <h2>How close to LaTeX</h2>
-        <p>The canvas is drawn with each package's own geometry, so what you see is what <code>pdflatex</code> makes: across the test figures, 99.5&nbsp;% of the ink lands within half a millimetre. The main differences you may notice:</p>
-        <ul>
-          <li><b>Fonts:</b> the preview uses KaTeX or Temml, which are close to Computer Modern but not identical; line breaks in wrapped text can fall slightly differently.</li>
-          <li><b>Fill patterns:</b> LaTeX lines up stripes and dots with the page corner, so they can be shifted inside a shape.</li>
-          <li><b>Small offsets:</b> a circuit's curved voltage arrow on parts other than resistors and capacitors, op-amp signs, and 3D plot axis labels at unusual view angles can be up to about 1 mm off.</li>
-          <li><b>Code the editor keeps but doesn't draw</b> (an unusual option, chemfig's <code>-U&gt;</code> arc) appears only in the PDF. Each editor lists such lines.</li>
-        </ul>
-        <p>The full report, with side-by-side images and a match rate for every kind of figure, is <a href="https://github.com/vtneil/diagramtex/blob/main/PARITY.md" target="_blank" rel="noopener">PARITY.md</a>.</p>
+        <p class="note aside-end">Work autosaves in your browser. The dot beside the logo: <b>green</b> saved to its file, <b>yellow</b> not yet saved to disk, <b>blue</b> browser only, <b>red</b> not saving. Keep a <code>.diagramtex</code> copy of anything you care about.</p>
       </section>
 
       <section id="keys">
         <h2>Keyboard shortcuts</h2>
+        <figure><img src="img/cmdk.webp" width="1520" height="950" alt="The command search open over the canvas with “rot” typed: rotate commands, rotated shapes and other matches, each with its shortcut" loading="lazy"><figcaption><kbd class="mod">Ctrl</kbd><kbd>K</kbd> finds any tool, command or file, with its shortcut.</figcaption></figure>
         <table>
           <thead><tr><th>Keys</th><th>Action</th></tr></thead>
           <tbody>
@@ -721,43 +743,37 @@
             <tr><td><kbd>O</kbd> <kbd>S</kbd> <kbd>R</kbd> <kbd>E</kbd></td><td>Arc, spring, rectangle, ellipse</td></tr>
             <tr><td><kbd>B</kbd> <kbd>D</kbd> <kbd>T</kbd> <kbd>M</kbd></td><td>Ball, dot, text, maths</td></tr>
             <tr><td><kbd>I</kbd> <kbd>N</kbd> <kbd>H</kbd></td><td>Image, pencil, hand</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>K</kbd></td><td>Search every tool, shape, command, mode and file</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>B</kbd> <kbd class="mod">Ctrl</kbd><kbd>I</kbd> <kbd class="mod">Ctrl</kbd><kbd>U</kbd> while editing a label</td><td>Bold, italic, underline in LaTeX: <code>\textbf</code>, <code>\textit</code>, <code>\underline</code> in text, <code>\mathbf</code>, <code>\mathit</code>, <code>\underline</code> inside <code>$…$</code>. Again to take it off</td></tr>
-            <tr><td><kbd class="shift">Shift</kbd></td><td>Constrain angle to 15°, square, circle</td></tr>
-            <tr><td><kbd class="alt">Alt</kbd></td><td>Drag without snapping</td></tr>
-            <tr><td><kbd>Space</kbd>+drag</td><td>Pan (or the middle mouse button)</td></tr>
-            <tr><td><kbd>Esc</kbd> while dragging</td><td>Cancel the drag: a shape being drawn goes, a move, resize or turn goes back</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd>+scroll</td><td>Zoom</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>K</kbd></td><td>Search everything</td></tr>
+            <tr><td><kbd class="shift">Shift</kbd> / <kbd class="alt">Alt</kbd></td><td>15° and squares / no snapping</td></tr>
+            <tr><td><kbd>Space</kbd>+drag, <kbd class="mod">Ctrl</kbd>+scroll</td><td>Pan, zoom</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></td><td>Zoom in, out, 100%</td></tr>
             <tr><td><kbd class="mod">Ctrl</kbd><kbd>Z</kbd> / <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>Z</kbd></td><td>Undo, redo</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></td><td>Zoom the drawing in, out, to 100% (canvas, whiteboard and Document view)</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>D</kbd></td><td>Duplicate</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>G</kbd></td><td>Group (add <kbd class="shift">Shift</kbd> to ungroup)</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>R</kbd></td><td>Rotate 90°</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>D</kbd>, <kbd class="mod">Ctrl</kbd><kbd>G</kbd>, <kbd class="mod">Ctrl</kbd><kbd>R</kbd></td><td>Duplicate, group, rotate 90°</td></tr>
             <tr><td><kbd class="mod">Ctrl</kbd><kbd>]</kbd> / <kbd>[</kbd></td><td>Bring forward, send backward</td></tr>
-            <tr><td><kbd>Enter</kbd></td><td>Open the selected block's editor</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>B</kbd> <kbd>I</kbd> <kbd>U</kbd></td><td>Bold, italic, underline (while editing text)</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Edit the selected text or block</td></tr>
             <tr><td><kbd class="mod">Ctrl</kbd><kbd>Enter</kbd></td><td>Done (in an editor); Copy PNG (Quick)</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>S</kbd></td><td>Save (in an editor: write back and stay open)</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd></td><td>Save as a file</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>O</kbd></td><td>Open a file</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd>E</kbd></td><td>TikZ code</td></tr>
-            <tr><td><kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>Export the whole document as LaTeX</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Cancel a drag; leave an editor</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>S</kbd> / <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>S</kbd> / <kbd class="mod">Ctrl</kbd><kbd>O</kbd></td><td>Save, save as a file, open</td></tr>
+            <tr><td><kbd class="mod">Ctrl</kbd><kbd>E</kbd> / <kbd class="mod">Ctrl</kbd><kbd class="shift">Shift</kbd><kbd>E</kbd></td><td>TikZ code, whole document as LaTeX</td></tr>
             <tr><td><kbd class="mod">Ctrl</kbd><kbd>P</kbd></td><td>Print or PDF</td></tr>
-            <tr><td>Right-click</td><td>Object menu</td></tr>
           </tbody>
         </table>
+      </section>
+
+      <section id="parity">
+        <h2>How close to LaTeX</h2>
+        <p>The canvas uses each package’s own geometry: 99.5&nbsp;% of the ink lands within half a millimetre of the PDF. Fonts differ slightly (the preview uses KaTeX or Temml), so wrapped lines can break differently. Code an editor can’t draw is kept and appears only in the PDF; each editor lists it. Measurements for every kind of figure: <a href="https://github.com/vtneil/diagramtex/blob/main/PARITY.md" target="_blank" rel="noopener">PARITY.md</a>.</p>
       </section>
 
       <section id="privacy">
         <h2>Offline and privacy</h2>
         <ul>
-          <li><b>Your work never leaves your device.</b> Files and settings live in your browser; there is no server-side storage.</li>
-          <li><b>No account, no tracking:</b> no sign-up, analytics, cookies, ads or third-party scripts in the app.</li>
-          <li><b>One exception:</b> the host's own Cloudflare Workers analytics, which are aggregate, server-side request counts (requests, errors, rough country) kept by Cloudflare for the site's owner. They set no cookie, add no script to the page and never see your documents.</li>
-          <li><b>Offline:</b> after the first visit, the app, both maths engines, MathLive and every font are stored by the browser, so everything works without a connection.</li>
-          <li><b>Updates:</b> when a newer release is on the same site, an amber dot appears before the version number at the bottom of the file list; click it to reload into it. The app checks once per load and asks no other site.</li>
-          <li><b>Compile</b> runs pdfLaTeX or XeLaTeX inside the browser. The engines (SwiftLaTeX's pdfTeX, XeTeX and dvipdfmx) and their TeX Live files come from this site, are downloaded when you first compile (or all at once with <b>Download TeX engine</b> in the installed app), and are kept for offline use like the rest of the app.</li>
-          <li><b>No requests to other sites,</b> even from your exports: SVG, HTML, PNG and PDF exports embed the maths fonts instead of linking them.</li>
-          <li><b>Open source</b> under the GNU Affero General Public License v3.0; you can host it yourself as plain static files.</li>
+          <li><b>Your work stays on your device.</b> Files live in your browser; nothing is uploaded. No account, no tracking, no ads.</li>
+          <li><b>Offline:</b> after the first visit everything works without a connection. Compile downloads its TeX engine the first time.</li>
+          <li><b>The only count kept:</b> the host’s Cloudflare request totals (requests, errors, rough country), with no cookie or script.</li>
+          <li><b>Updates:</b> an amber dot before the version number at the bottom of the file list; click it to reload.</li>
+          <li><b>Open source</b> under the GNU AGPL v3.0; you can host it yourself.</li>
         </ul>
       </section>
 
@@ -769,19 +785,17 @@
       <section id="faq">
         <h2>Questions</h2>
         <h3 id="generated-content-license">Licensing of generated content</h3>
-        <p>DiagramTeX is licensed under the GNU Affero General Public License v3.0.</p>
-        <p>Diagrams, LaTeX code, images, PDFs, and other content created using DiagramTeX are not subject to the AGPL solely because they were produced with DiagramTeX. Users may use their original creations in academic publications, commercial projects, proprietary documents, and other works without additional licensing obligations imposed by DiagramTeX.</p>
-        <p>Third-party assets or content incorporated into an output may remain subject to their own licenses.</p>
+        <p>DiagramTeX is licensed under the GNU Affero General Public License v3.0. Diagrams, LaTeX code, images, PDFs and other content you make with it are not subject to the AGPL because they were made with DiagramTeX: use them in papers, commercial projects and proprietary documents without obligations from DiagramTeX. Third-party content you include keeps its own licence.</p>
         <h3>Can I use the output in Overleaf?</h3>
-        <p>Yes. Press <kbd class="mod">Ctrl</kbd><kbd>E</kbd>, copy the code and paste it into your project; load the packages listed in the comment at the top.</p>
+        <p>Yes. <kbd class="mod">Ctrl</kbd><kbd>E</kbd>, copy, paste into your project, and load the packages in the first line.</p>
         <h3>Does it work on phones and tablets?</h3>
-        <p>Tablets, yes. Held upright, the Document page uses the whole width and the side panel floats over it (fold it to see the whole page), and a top bar too narrow for its buttons shows « or » at the end with more: click it, or swipe the bar. A phone, either way round, or a window under 600 × 500 pixels asks you to continue on a bigger screen: the editor needs the room. That page still lets you type a formula and copy or download it as a PNG or SVG.</p>
+        <p>Tablets, yes. A phone or a window under 600 × 500 pixels asks for a bigger screen, but still lets you copy a formula as a PNG or SVG.</p>
         <h3>How large can a drawing get?</h3>
-        <p>Tens of thousands of objects. Only what is near the view is drawn, so editing stays smooth at 20,000 objects.</p>
+        <p>Tens of thousands of objects; editing stays smooth at 20,000.</p>
         <h3>Where are my diagrams stored?</h3>
-        <p>In your browser's IndexedDB. Use <b>Save</b> to keep a <code>.diagramtex</code> copy as a file.</p>
-        <h3>Something the editor can't draw?</h3>
-        <p>Type it in the editor's code. It is kept and exported as written, and the editor tells you which lines it couldn't draw.</p>
+        <p>In your browser. Use <b>Save</b> to keep a <code>.diagramtex</code> file.</p>
+        <h3>Something the editor can’t draw?</h3>
+        <p>Type it in the editor’s code. It is kept and exported as written.</p>
       </section>
 
       <footer>
@@ -790,6 +804,22 @@
     </main>
   </div>
 
+  <dialog class="zoom" id="zoom" aria-label="Picture"><img alt=""><p></p></dialog>
+  <script>
+    // A click on a picture shows it at full size; a click or Esc closes it
+    (function () {
+      var z = document.getElementById('zoom'), zi = z.querySelector('img'), zp = z.querySelector('p');
+      document.querySelector('main').addEventListener('click', function (e) {
+        var im = e.target.closest('figure img');
+        if (!im || !z.showModal) return;
+        zi.src = im.currentSrc || im.src; zi.alt = im.alt;
+        var cap = im.closest('figure').querySelector('figcaption');
+        zp.textContent = cap ? cap.textContent : '';
+        z.showModal();
+      });
+      z.addEventListener('click', function () { z.close(); });
+    })();
+  </script>
   <script>
     // Shortcuts read ⌘ ⌥ ⇧ on a Mac, Ctrl / Alt / Shift elsewhere (as in the app)
     (function () {

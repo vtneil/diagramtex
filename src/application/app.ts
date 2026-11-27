@@ -166,15 +166,17 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     }
     conformShape(sh, templates.get(sh.type)!, FRESH);
   }
+  // a shape from outside, repaired and brought up to date; false when it can't be drawn
+  function repair(sh: Shape) {
+    conform(sh);
+    const t = TD.TYPES[sh.type];
+    if (t && t.upgrade) t.upgrade(sh);
+    // a shape its type cannot measure would break every redraw (and, at startup, the whole app): leave it out
+    try { TD.bbox(sh); return true; } catch (err) { console.warn('Left out a damaged shape', sh.type, err); return false; }
+  }
   const makeDoc = createDocumentFactory({
     uid,
-    upgrade(sh) {
-      conform(sh);
-      const t = TD.TYPES[sh.type];
-      if (t && t.upgrade) t.upgrade(sh);
-      // a shape its type cannot measure would break every redraw (and, at startup, the whole app): leave it out
-      try { TD.bbox(sh); return true; } catch (err) { console.warn('Left out a damaged shape', sh.type, err); return false; }
-    },
+    upgrade: repair,
     onDropped: (n) => setTimeout(() => showHint(n > 1 ? uiText('hint.droppedShapes.many', 'Left out {n} damaged shapes that could not be drawn', { n }) : uiText('hint.droppedShapes.one', 'Left out 1 damaged shape that could not be drawn'), 5000, 'warn'), 0),
     pageDefaults: TD.PAGE_DEFAULT,
   });
@@ -6175,6 +6177,35 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   }
   // Quick: a formula box on its own, over whatever file is open. Picking a file kind leaves it.
   const QUICK_KEY = 'diagramtex.quick', TABLE_KEY = 'diagramtex.tablemode';
+  // ?embed=<block>: the app in a frame on a package page (public/circuitikz-editor/…), showing only Quick on that block
+  // (html.embed, set by src/platform/preflight.ts). It leaves the files, and how the app opens next time, as they were.
+  const EMBED = document.documentElement.classList.contains('embed') ? new URLSearchParams(location.search).get('embed') : null;
+  const DRAFT_KEY = 'draft=';
+  // #draft=<code>: the drawing to start on, one shape packed as a share link packs a file. It is repaired like any
+  // document from outside, and must be a shape of the embedded block. The same drawing opened again reopens its
+  // draft as it was left (quick.ts).
+  async function startEmbed() {
+    let shape: any = null, code: string | null = null;
+    const h = location.hash.slice(1);
+    if (h.startsWith(DRAFT_KEY)) {
+      history.replaceState(null, '', location.pathname + location.search);
+      code = h.slice(DRAFT_KEY.length);
+      try {
+        const s = JSON.parse(await unpackShare(code));
+        if (s && typeof s === 'object' && !Array.isArray(s) && EMBED && s.type === EMBED && TD.blocks.dockable(EMBED) && TD.projectFiles.validShapes([s])) {
+          if (typeof s.id !== 'string') s.id = uid();
+          if (repair(s)) shape = s;
+        }
+      } catch (e: any) { console.warn('The embedded drawing could not be read', e); }
+    }
+    TD.quick.embed(EMBED, shape, shape ? code : null);
+    setQuick(true);
+  }
+  // Open in DiagramTeX, from the embed: the whole app, in Quick on the same drawing
+  function leaveEmbed() {
+    try { localStorage.setItem(QUICK_KEY, '1'); } catch (e: any) { /* storage blocked */ }
+    window.open(location.pathname, '_top');
+  }
   const inQuick = () => document.body.classList.contains('mode-quick');
   // Table (src/ui/services/table.ts): a table to import, format and export, over whatever file is open, like Quick
   const inTable = () => document.body.classList.contains('mode-table');
@@ -6204,7 +6235,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (on) { magnifier.hide(); setTable(false); finishEdit(); finishPoly(); commit(); if (state.docId) saveNow(); }
     TD.math.cancelPending();
     document.body.classList.toggle('mode-quick', on);
-    try { on ? localStorage.setItem(QUICK_KEY, '1') : localStorage.removeItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
+    if (!EMBED) try { on ? localStorage.setItem(QUICK_KEY, '1') : localStorage.removeItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
     if (on) {
       hideFly(); closeCtx(); closeExport();
       document.querySelectorAll('#kindSeg [data-mode], #kindSeg [data-kind]').forEach((b) => b.classList.remove('on'));
@@ -7473,7 +7504,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     svgWithFonts, // a standalone SVG with the maths fonts embedded (Table's SVG download)
     // for the command search (src/ui/services/palette.svelte.ts)
     cmd: {
-      runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, ctxAct, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
+      runCmd, setMode, setQuick, inQuick, leaveEmbed, placeOnCanvas, openMenu, ctxAct, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
       toggleSnap: cycleSnapMode, setGridAxes, unsavedToDisk, showSaveState, diskChanged, diskWritten, saveFile, lookAtDisk, writeLinked,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac, editMacros,
@@ -7482,10 +7513,11 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   };
   // the files are read from IndexedDB first; the loading screen stays up until they are open
   TD.ready = init().catch((e) => { console.error(e); }).then(() => {
-    let q = null; try { q = localStorage.getItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
+    let q = null; if (!EMBED) try { q = localStorage.getItem(QUICK_KEY); } catch (e: any) { /* storage blocked */ }
     // src/ui/services/quick.ts may still be loading: the page's scripts can still be parsing when the files are read
-    if (q) { if (TD.quick) setQuick(true); else document.addEventListener('DOMContentLoaded', () => setQuick(true), { once: true }); }
-    let t = null; try { t = localStorage.getItem(TABLE_KEY); } catch (e: any) { /* storage blocked */ }
+    if (EMBED) { if (TD.quick) startEmbed(); else document.addEventListener('DOMContentLoaded', () => startEmbed(), { once: true }); }
+    else if (q) { if (TD.quick) setQuick(true); else document.addEventListener('DOMContentLoaded', () => setQuick(true), { once: true }); }
+    let t = null; if (!EMBED) try { t = localStorage.getItem(TABLE_KEY); } catch (e: any) { /* storage blocked */ }
     if (t && !q) { if (TD.tableWs) setTable(true); else document.addEventListener('DOMContentLoaded', () => setTable(true), { once: true }); }
     // Refresh controller-owned UI captions too. This does not commit or alter document content.
     // AppShell's reactive titles update on the same change: the ones this file sets from state are put back after it

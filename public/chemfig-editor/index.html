@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chemfig Editor Online: Draw Molecules and Reactions for LaTeX | DiagramTeX</title>
+  <meta name="description" content="Free online chemfig editor. Grow molecules bond by bond, drop in rings and groups, write reaction schemes, and copy chemfig code for Overleaf or any LaTeX document. Works offline, with no sign-up.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <link rel="canonical" href="https://diagramtex.com/chemfig-editor/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="DiagramTeX">
+  <meta property="og:url" content="https://diagramtex.com/chemfig-editor/">
+  <meta property="og:title" content="chemfig editor online: draw molecules, copy the LaTeX">
+  <meta property="og:description" content="Draw structural formulas and reactions and copy chemfig code for your LaTeX document. Free, offline, no sign-up.">
+  <meta property="og:image" content="https://diagramtex.com/guide/img/ed-chemfig.webp">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      { "@type": "ListItem", "position": 1, "name": "DiagramTeX", "item": "https://diagramtex.com/" },
+      { "@type": "ListItem", "position": 2, "name": "chemfig editor", "item": "https://diagramtex.com/chemfig-editor/" }
+    ]
+  }
+  </script>
+  <link rel="icon" href="../icons/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#fffdf8">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../site/site.css">
+  <script src="../site/site.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="../" title="Open DiagramTeX">
+      <svg viewBox="0 0 256 256" aria-hidden="true"><path class="k" d="M84.14 55.86L200.14 171.86L171.86 200.14L55.86 84.14Z"/><circle cx="70" cy="70" r="54" fill="#FF5A3C"/><rect x="132" y="132" width="108" height="108" rx="16" fill="#2F7BFF"/></svg>
+      DiagramTeX
+    </a>
+    <span class="sp"></span>
+    <nav aria-label="Site"><a href="../guide/">Guide</a><a href="https://github.com/vtneil/diagramtex" rel="noopener">Source</a></nav>
+    <a class="btn" href="../">Open DiagramTeX
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+  </header>
+
+  <main>
+    <p class="crumbs"><a href="../">DiagramTeX</a><span>/</span>chemfig editor</p>
+    <div class="eyebrow">Chemistry for LaTeX</div>
+    <h1>chemfig editor: draw the molecule, copy the LaTeX</h1>
+    <p class="lede">Grow a molecule bond by bond, drop in rings and groups, and write reactions with arrows between compounds. DiagramTeX writes the <code>chemfig</code> code as you draw, ready to paste into Overleaf or any LaTeX document.</p>
+    <div class="actions">
+      <a class="btn primary big" href="../">Open the editor</a>
+      <a class="btn big" href="../#share=1.lVZbb6M4GP0rFvuSqCQKobnOMBq10iorrVpptm-ARgZM8NTYHtu0kzL89_0MIU16iTrJA_Z3ObbP-XypHSyls3YyircKl4b8clzngShNBXfWvuvcU56BP2VYa5qCk-OSgOGfknKCcqFKbCB2jUqSFphTXSLMM8RwIhQ2Qu2QJmZUSciUeAuZNXwlUQCBL8EoFCXcQE8KZRSmBmyPznrquU4Bn9V44Tol-KfjGTSSvsH6hto3cmFRPEgz1DAYx6iKuA6uTCHsYACrpSIYFgMxvCoTogh0csw0aVwnYSK91846rB2zk-SZEptYwIxPfGlBypxuwfcLWJq4zs5Zz-GjVQreKII170NqIKEEDmQA0ySlm4pSigoYsiYwNBGHcBtMtMHKRByhKOqTv42-WgDeWBNWW1KvJkEU_W7qm2bzfdp00RenSW1K2lwPQj8eXW---8NBONu3grD1Cq-Jb5s30sS06Syg3wOpN01tZ6eoNNrsGIkiIVmlm6PUEuLCkTYEM1O4Gtg2hKPPgS-Nm2FdIImNIYoHSHDkSYNEntuvawrK49oCWahM4cewz_4STKWJB3blQzQep6CtEkyji0El196kLIdtkV0MGMnNegb98dhGp8NP7-At93jCOw_IIaFAj6BFZ-5wxXT4ab9krJR4rD8HX8IoMpTvEM4yandA3JyRjkC5Mci7eYfPzSCcxiPQRidNvBmOrgcjMHTajcJ51xrdbk6qRUjb6zWou-HbdR_kOCvAqVYvuNfJ8IQnbzlZT8b-LD1Q5c2sZWYtHUu8JSmKJFZvFvWBunNMvSjyASy-46VoidlT9DY_rVM0cVfJR6N0xXz7DvmA4AE2fBbw-WBpn9D1p4X-TmXPnutw3wNiQYiTogZD8SL1sAv2yVpUfRE_7w3-CkacncHRTngGEe_vA8IoXAl4vxWOxL0JrluGe7UWXevtsws8H5HsxT6AczgVrD3n_5q0P7BQe2_lM_7ge37mNO7J4Q33U3d4z-bd6T09Or0TsqW8NvT-SdLUVIo0oU4xI8FkfBn3ew4Q4JSvcwb3Ierc3thvJ2bun_4zwKJtd1g6FdKiFDQ3QT3w4MaaDpu4Db2DJdxVCQnhji2lixj9WdHsX_JAmBdcziCI8GyPcBZx5PWQVxXXhF9VihP1ofSVO-lzv9nb6W-47u_Drb3074C0QB2MLoKKyQjgq6uKJfrV9GzvmLpeidXPyY_C99WxEvDcMJ0M8_kSDhe_lcJfLcbLy6XbudfOhmBDMgT1oBBGSbuqtkhhTtBSJGeVfbYYeDeAig-Y0S08XpySZhm8BEBX-gSjeYv-leBkJMcVs0MngvWPAJingdT00H1dUkLilJpd-4RoFzXRJJ2rH7CoGP7_Aw">Open this example</a>
+    </div>
+    <ul class="facts"><li>Free and open source</li><li>Works offline</li><li>No sign-up</li><li>Nothing is uploaded</li></ul>
+
+    <figure class="try" data-embed="chemfig" data-draft="1.lVTLbqMwFP0Vi9mAAoiHaDu0VCNlwyqVZotR5YBTkMBG2GkmYvzvc3nkQZpEHTa2r-89xuec606T-4ZqoZYVtN6UH5qp_dFC3zG1vRY-wCDaDHYxFlROKR2RvEaCNpFnB7Q2M143fMvyIQQBhRmk98lUSNJKzBDC-FD82_rVAzDVh0j7QbufToTxX9WtVPzuqTF7MS8aSjK11BM_tZbxu2_oSTDNomTY5a5K39SVMu6pMULW_JN2ser6v2vLRgq5ryjGvKm2Qp2V1pCXWEJSUsnCFAVvJWXoJfIbaeZEFKghUtKWRYgz5DYS8c2mH01ZlCzteqAeKm_JLjlUv0ZeI1O9v7mBbDvjTLa8Emihb5vQderaQAQoXOgV3cgwgLVt99mZ8XwD72nC4-59QAYFBdqBFmN4xOWe8TxdmbQt33Uv0WuCsSzZHpE8L2XJWaruSEfrNa2gbnWDz1hPvNQCbcRapbFhLXULAqN2VvIwzqy3eOYW3vSrgwbdePxw76McdwWYa3XBvVgbM57cJyd0bD_IjlS5QR8J-sjIEhtIwrgh7VVTH6m7x9SFyXW4_MhLMRAzUXSdn2GTq3R08tkpo5nfbpAPCC5gw_AIwzetPaPrf41-w9nByYfTCogFIWamhkBxUXrsgqlY8O3BxKfeYF9g-N0_OOuEEwi_3Qe0KuuSkakVzsRdRcuB4YNaj-Ps-tsFO9-R7KIP4B3OeMVbeHt_OMMHkTKH5SZgn77r55r6Bw">
+      <img src="../guide/img/ed-chemfig.webp" width="1520" height="950" alt="The chemistry editor: atoms, bonds and rings on the left, the imine-formation mechanism, with curved arrows, charges and reaction arrows between the compounds, and the chemfig settings and code on the right">
+      <button class="btn primary big try-btn" type="button" hidden>Edit this example here</button>
+      <figcaption>The chemistry editor: atoms, bonds and rings on the left, the molecules in the middle, the <code>chemfig</code> code on the right.</figcaption>
+    </figure>
+
+    <h2>How to draw a molecule</h2>
+    <ol class="steps">
+      <li><b>Add a Chemistry block:</b> open <a href="../">DiagramTeX</a>, click the cube on the left rail, pick <b>Chemistry</b> and click the canvas. Double-click the block to open its editor.</li>
+      <li><b>Grow it:</b> drag an atom’s blue handle to add a bond. Type <kbd>C</kbd> <kbd>H</kbd> <kbd>N</kbd> <kbd>O</kbd> to relabel an atom, or double-click it for any label.</li>
+      <li><b>Change a bond:</b> double-click it to cycle single, double and triple.</li>
+      <li><b>Add a ring or group:</b> drag it from the palette onto an atom or bond.</li>
+      <li><b>Write a reaction:</b> add an arrow, then type or drop the next compound in its dashed box. Click the dashed box under a compound to name it.</li>
+      <li><b>Copy the code:</b> press <b>Done</b>, then <kbd>Ctrl</kbd><kbd>E</kbd> (<kbd>⌘</kbd><kbd>E</kbd> on a Mac) and <b>Copy</b>.</li>
+    </ol>
+
+    <h2>Example: <span data-example>Imine formation</span></h2>
+    <p>This is the code DiagramTeX writes for the molecule in the picture above. The first line names the packages to load.</p>
+    <div class="code-head"><span>chemfig snippet</span><a href="../#share=1.lVZbb6M4GP0rFvuSqCQKobnOMBq10iorrVpptm-ARgZM8NTYHtu0kzL89_0MIU16iTrJA_Z3ObbP-XypHSyls3YyircKl4b8clzngShNBXfWvuvcU56BP2VYa5qCk-OSgOGfknKCcqFKbCB2jUqSFphTXSLMM8RwIhQ2Qu2QJmZUSciUeAuZNXwlUQCBL8EoFCXcQE8KZRSmBmyPznrquU4Bn9V44Tol-KfjGTSSvsH6hto3cmFRPEgz1DAYx6iKuA6uTCHsYACrpSIYFgMxvCoTogh0csw0aVwnYSK91846rB2zk-SZEptYwIxPfGlBypxuwfcLWJq4zs5Zz-GjVQreKII170NqIKEEDmQA0ySlm4pSigoYsiYwNBGHcBtMtMHKRByhKOqTv42-WgDeWBNWW1KvJkEU_W7qm2bzfdp00RenSW1K2lwPQj8eXW---8NBONu3grD1Cq-Jb5s30sS06Syg3wOpN01tZ6eoNNrsGIkiIVmlm6PUEuLCkTYEM1O4Gtg2hKPPgS-Nm2FdIImNIYoHSHDkSYNEntuvawrK49oCWahM4cewz_4STKWJB3blQzQep6CtEkyji0El196kLIdtkV0MGMnNegb98dhGp8NP7-At93jCOw_IIaFAj6BFZ-5wxXT4ab9krJR4rD8HX8IoMpTvEM4yandA3JyRjkC5Mci7eYfPzSCcxiPQRidNvBmOrgcjMHTajcJ51xrdbk6qRUjb6zWou-HbdR_kOCvAqVYvuNfJ8IQnbzlZT8b-LD1Q5c2sZWYtHUu8JSmKJFZvFvWBunNMvSjyASy-46VoidlT9DY_rVM0cVfJR6N0xXz7DvmA4AE2fBbw-WBpn9D1p4X-TmXPnutw3wNiQYiTogZD8SL1sAv2yVpUfRE_7w3-CkacncHRTngGEe_vA8IoXAl4vxWOxL0JrluGe7UWXevtsws8H5HsxT6AczgVrD3n_5q0P7BQe2_lM_7ge37mNO7J4Q33U3d4z-bd6T09Or0TsqW8NvT-SdLUVIo0oU4xI8FkfBn3ew4Q4JSvcwb3Ierc3thvJ2bun_4zwKJtd1g6FdKiFDQ3QT3w4MaaDpu4Db2DJdxVCQnhji2lixj9WdHsX_JAmBdcziCI8GyPcBZx5PWQVxXXhF9VihP1ofSVO-lzv9nb6W-47u_Drb3074C0QB2MLoKKyQjgq6uKJfrV9GzvmLpeidXPyY_C99WxEvDcMJ0M8_kSDhe_lcJfLcbLy6XbudfOhmBDMgT1oBBGSbuqtkhhTtBSJGeVfbYYeDeAig-Y0S08XpySZhm8BEBX-gSjeYv-leBkJMcVs0MngvWPAJingdT00H1dUkLilJpd-4RoFzXRJJ2rH7CoGP7_Aw">Open it in DiagramTeX and edit it</a></div>
+    <div class="code"><button class="btn copy" type="button">Copy</button><pre><code>% Requires: \usepackage{tikz} \usepackage{chemfig}
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[anchor=north west, inner sep=0pt, text width=11.81cm, align=left] at (0.75,-1.5) {%
+  \setchemfig{atom sep=2.5em,compound sep=5em}
+  \schemestart
+    \chemfig{R-@{aton}\charge{90=\|}{N}H_2}
+    \+
+    \chemfig{@{atoc}C([3]-CH_3)([5]-CH_3)=[@{atoo1}]O}
+    \chemfig{@{atoo2}\chemabove{H}{\scriptstyle\oplus}}
+    \chemmove[-stealth,shorten &lt;=3pt,dash pattern= on 1pt off 1pt,thin]{
+      \draw[shorten &gt;=2pt](aton) ..controls +(up:10mm) and +(left:5mm)..(atoc);
+      \draw[shorten &gt;=8pt](atoo1) ..controls +(up:10mm) and +(north west:10mm)..(atoo2);}
+    \arrow{&lt;=&gt;[\tiny addition]}
+    \chemfig{R-@{aton}\chembelow{N}{\scriptstyle\oplus}H([2]-[@{sb}]H)-C(-[2]CH_3)(-[6]CH_3)-OH}
+  \schemestop
+  \chemmove{
+    \draw[-stealth,dash pattern= on 1pt off 1pt,shorten &lt;=3pt,shorten &gt;=2pt](sb)..controls +(180:0.35cm) and +(150:0.55cm)..(aton);}
+  \par
+  \schemestart
+    \arrow{&lt;=&gt;}
+    \chemfig{R-@{aton}\charge{90=\|}{N}([6]-[@{sbh}]H)-[@{sb}]C(-[2]CH_3)(-[6]CH_3)-[@{sbo}]@{atoo}
+    \chemabove{O}{\scriptstyle\oplus}(-[1]H)(-[7]H)}
+    \chemmove[-stealth,shorten &lt;=3pt,shorten &gt;=2pt,dash pattern= on 1pt off 1pt,thin]{
+      \draw(aton) ..controls +(up:5mm) and +(up:5mm)..(sb);
+      \draw(sbh) ..controls +(left:5mm) and +(south west:5mm)..(aton);
+      \draw(sbo) ..controls +(up:5mm) and +(north west:5mm)..(atoo);}
+    \arrow{&lt;=&gt;[\tiny elimination]}\chemfig{R-N=C(-[1]CH_3)(-[7]CH_3)}
+    \+
+    \chemfig{H_3\chemabove{O}{\scriptstyle\oplus}}
+  \schemestop%
+  };
+\end{tikzpicture}</code></pre></div>
+
+    <h2>What the editor does</h2>
+    <ul class="how">
+      <li><b>Structural formulas:</b> atoms, single, double and triple bonds, rings and ready-made groups.</li>
+      <li><b>Reaction schemes:</b> arrows between compounds, with names under them.</li>
+      <li><b>Charges and curved arrows:</b> for mechanisms, as <code>chemfig</code> draws them.</li>
+      <li><b>Code both ways:</b> the code beside the drawing follows every change, and the drawing follows the code when you edit it.</li>
+      <li><b>Bring molecules in:</b> paste <code>\chemfig{…}</code> onto the canvas and it becomes a block you can edit.</li>
+      <li><b>Pictures too:</b> export the molecule as SVG, PNG at any DPI, or PDF, for slides and worksheets.</li>
+    </ul>
+
+    <h2>Questions</h2>
+    <dl class="faq">
+      <dt>Is it free?</dt>
+      <dd>Yes. DiagramTeX is free and open source (GNU AGPLv3), with no account, no paid tier and no ads. The code it writes for you is yours to use however you like.</dd>
+      <dt>Does it work with Overleaf?</dt>
+      <dd>Yes. Copy the code into your project and add <code>\usepackage{chemfig}</code>. The LaTeX dialog can also download a <code>.zip</code> to upload to Overleaf.</dd>
+      <dt>Is my molecule uploaded anywhere?</dt>
+      <dd>No. DiagramTeX runs in your browser and keeps your files there. Once it has loaded, it also works offline.</dd>
+    </dl>
+
+    <h2>Other editors</h2>
+    <ul class="related">
+      <li><a href="../circuitikz-editor/">circuitikz editor</a><span>Electronic circuits for LaTeX</span></li>
+      <li><a href="../quantikz-editor/">quantikz editor</a><span>Quantum circuits for LaTeX</span></li>
+      <li><a href="../karnaugh-map-latex/">Karnaugh map editor</a><span>K-maps with the karnaugh-map package</span></li>
+      <li><a href="../tikz-timing-editor/">tikz-timing editor</a><span>Timing diagrams for LaTeX</span></li>
+      <li><a href="../tikz-cd-editor/">tikz-cd editor</a><span>Commutative diagrams for LaTeX</span></li>
+      <li><a href="../tikz-feynman-editor/">tikz-feynman editor</a><span>Feynman diagrams for LaTeX</span></li>
+      <li><a href="../guide/#blocks">All the blocks</a><span>Every package DiagramTeX writes</span></li>
+      <li><a href="../guide/">User guide</a><span>Every tool, mode and export</span></li>
+    </ul>
+
+    <footer>DiagramTeX is free and open source under the GNU Affero General Public License v3.0. Source, issues and releases: <a href="https://github.com/vtneil/diagramtex" rel="noopener">github.com/vtneil/diagramtex</a>.</footer>
+  </main>
+</body>
+</html>

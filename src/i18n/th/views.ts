@@ -429,6 +429,8 @@ export const thai: Record<string, string> = {
   "quick.ctxRename": "เปลี่ยนชื่อ…",
   "quick.draftName": "ชื่อฉบับร่าง",
   "quick.placeTip": "ออกจากโหมดด่วนและเพิ่มภาพนี้ลงในไฟล์ที่เปิดอยู่ ตรงกลางมุมมอง",
+  "quick.openInApp": "เปิดใน DiagramTeX",
+  "quick.openInAppTip": "ทำภาพนี้ต่อใน DiagramTeX: อยู่ในโหมดด่วน พร้อมฉบับร่างอื่น ๆ ของคุณ",
   "quick.blockUnavailable": "ยังแก้ไขบล็อกนี้ที่นี่ไม่ได้ในขณะนี้",
   "tour.welcome.title": "ยินดีต้อนรับสู่ DiagramTeX",
   "tour.welcome.body": "วาดแผนภาพ เขียนข้อความประกอบ แล้วนำไปใช้ใน LaTeX เป็นโค้ด TikZ ที่คอมไพล์ได้ มาดูส่วนต่าง ๆ กันสั้น ๆ",

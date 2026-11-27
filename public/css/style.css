@@ -1487,6 +1487,7 @@ html.small-screen #phoneWall .pw-steps li::before { content: counter(pw); positi
 html.small-screen #phoneWall .pw-kinds, html.small-screen #phoneWall .pw-links { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
 html.small-screen #phoneWall .pw-kinds li { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule-soft); }
 html.small-screen #phoneWall .pw-links li { border-bottom: 1px solid var(--rule-soft); }
+html.small-screen #phoneWall .pw-kinds a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 3px; }
 html.small-screen #phoneWall .pw-links a { display: flex; align-items: center; justify-content: space-between; min-height: 44px; color: var(--ink); text-decoration: none; }
 html.small-screen #phoneWall .pw-links a::after { content: ""; width: 6px; height: 6px; border-top: 1.5px solid var(--pencil); border-right: 1.5px solid var(--pencil); transform: rotate(45deg); }
 html.small-screen #phoneWall .pw-links a:active { color: var(--graphite); }
@@ -1590,6 +1591,8 @@ body.mode-quick #quickList { display: flex; flex-direction: column; gap: 4px; fl
 /* a block in Quick: its editor fills the pane, embedded rather than over the page, with the output bar below */
 /* a block fills the pane edge to edge, as part of the page rather than a window over it: no frame, no gap, the
    output bar a strip along the bottom */
+/* embedded in a package page (html.embed, src/platform/preflight.ts): the block's editor alone, filling the frame */
+html.embed #topbar, html.embed #files { display: none !important; }
 body.mode-quick #quick.qk-blocks { display: flex; flex-direction: column; overflow: hidden; padding: 0; scrollbar-gutter: auto; background: var(--sheet-raised); }
 .qk-blk { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .qk-dock { flex: 1; min-height: 0; display: flex; }
