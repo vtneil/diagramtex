@@ -9,8 +9,23 @@ export async function runBrowserUI(page, filter = '') {
     name = 'Browser UI: ' + name;
     if (filter && !name.includes(filter)) return;
     const start = Date.now(), result = { name, err: null, goldens: [], tex: [] };
-    try { await fn(); } catch (error) { result.err = error.stack; }
+    try { await fn(); } catch (error) { result.err = error.stack; await recover().catch(() => {}); }
     result.ms = Date.now() - start; results.push(result);
+  }
+  // after a failure, close what the test left open (a block editor, a dialog, a label popup), so the tests after it
+  // start from the app as they expect instead of failing behind it
+  async function recover() {
+    for (let i = 0; i < 8; i++) {
+      const open = await page.evaluate(() => {
+        const shown = (el) => el.getClientRects().length > 0;
+        if ([...document.querySelectorAll('.td-dialog')].some(shown)) return 'dialog';
+        return [...document.querySelectorAll('.modal, .text-pop, .ctx')].some((el) => !el.hidden && shown(el)) ? 'window' : '';
+      });
+      if (!open) return;
+      if (open === 'dialog') await page.locator('.td-dialog [data-act="ok"], .td-dialog button.danger').first().click({ timeout: 2000 }).catch(() => page.keyboard.press('Escape'));
+      else await page.keyboard.press('Escape');
+      await page.waitForTimeout(200);
+    }
   }
   async function language(value) {
     await page.locator('#languageTrigger').click();
@@ -693,10 +708,14 @@ export async function runBrowserUI(page, filter = '') {
       });
       await page.mouse.click(lab.x, lab.y);
       await page.waitForTimeout(400);
-      await page.mouse.dblclick(lab.x, lab.y);
+      // the label popup, measured once it is laid out (on a busy machine the double-click may need a second go)
       const pop = page.locator('.text-pop');
-      await pop.waitFor();
-      const box = await pop.boundingBox();
+      let box = null;
+      for (let k = 0; k < 2 && !box; k++) {
+        await page.mouse.dblclick(lab.x, lab.y);
+        for (let t = 0; t < 30 && !box; t++) { box = await pop.first().boundingBox().catch(() => null); if (!box) await page.waitForTimeout(100); }
+      }
+      assert.ok(box, `${type}: the label popup opens`);
       assert.ok(box.height <= 48, `${type}: one line high (${box.height}px)`);
       assert.ok(box.y >= lab.bottom, `${type}: below the label (${box.y} vs ${lab.bottom})`);
       await closeEditor();
