@@ -13,7 +13,7 @@
     "tex:fetch": "node scripts/tex-bundle-fetch.mjs",
     "tex:pack": "node scripts/tex-bundle-pack.mjs",
     "dev": "node scripts/dev.js",
-    "check": "svelte-check --tsconfig ./tsconfig.json && node tests/legacy-ui.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.json && node tests/legacy-ui.mjs && node tests/toast-kinds.mjs",
     "check:legacy-ui": "node tests/legacy-ui.mjs",
     "pretest": "npm run check",
     "test": "node tests/run.mjs",

@@ -22,6 +22,7 @@ import './tex-groups.mjs';
 import './editor-stage.mjs';
 import './circuit-wires.mjs';
 import './canvas-grid.mjs';
+import './plane-grid.mjs';
 import './smart-snap.mjs';
 import fs from 'node:fs';
 import os from 'node:os';

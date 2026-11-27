@@ -11,6 +11,7 @@ import type { TableModel, TCell, Range, HAlign, BorderWhere, Rule } from '../../
 import { patchSvg } from '../svg-patch';
 import { labelBudget, laterPicture } from '../../domain/label-image';
 import { escapeHtml } from '../../core/html';
+import type { HintKind } from './hint-toast';
 // milliseconds of new cell pictures the preview makes a frame
 const PICTURE_MS = 10;
 // Table: a quick tool for one table, beside the files like Quick. Import (paste or drop CSV, TSV, Excel,
@@ -119,17 +120,17 @@ const PICTURE_MS = 10;
 
   function undo() {
     finishEdit(true);
-    if (!undoStack.length) { hint(t('table.hint.noUndo', 'Nothing to undo')); return; }
+    if (!undoStack.length) { hint(t('table.hint.noUndo', 'Nothing to undo'), undefined, 'warn'); return; }
     redoStack.push(JSON.stringify(M)); M = T.normalize(JSON.parse(undoStack.pop()!));
     clampSel(); save(); refresh();
   }
   function redo() {
     finishEdit(true);
-    if (!redoStack.length) { hint(t('table.hint.noRedo', 'Nothing to redo')); return; }
+    if (!redoStack.length) { hint(t('table.hint.noRedo', 'Nothing to redo'), undefined, 'warn'); return; }
     undoStack.push(JSON.stringify(M)); M = T.normalize(JSON.parse(redoStack.pop()!));
     clampSel(); save(); refresh();
   }
-  function hint(text: string, ms = 1600) { if (TD.app && TD.app.showHint) TD.app.showHint(text, ms); }
+  function hint(text: string, ms = 1600, kind?: HintKind) { if (TD.app && TD.app.showHint) TD.app.showHint(text, ms, kind); }
 
   // ---------------------------------------------------------------- icons
   // the toolbar's text glyphs (its drawn icons are the kit's: src/ui/kit/icons.ts)
@@ -483,7 +484,7 @@ const PICTURE_MS = 10;
     const g = range(), cols = Array.from({ length: g.c1 - g.c0 + 1 }, (_, k) => g.c0 + k);
     const on = cols.every((c) => M.cols[c].num);
     change(() => { for (const c of cols) M.cols[c].num = on ? null : startNum(c); });
-    if (!on) hint(t('table.hint.numOn', 'Numbers aligned on the decimal point (siunitx S column). Round them in the panel on the right.'), 2600);
+    if (!on) hint(t('table.hint.numOn', 'Numbers aligned on the decimal point (siunitx S column). Round them in the panel on the right.'), 2600, 'info');
   }
   /** the toolbar follows the selection (shellModel) */
   const toolbarState = renderShell;
@@ -564,7 +565,7 @@ const PICTURE_MS = 10;
       setNum(cols, (n) => (a.startsWith('ng:') ? setGroup(n, v) : setDec(n, v)));
       focusGrid(); return;
     }
-    if (a.startsWith('bw:')) { borderW = +a.slice(3) as Rule; hint(borderW === 3 ? t('table.hint.rulesDouble', 'New rules are double') : borderW === 2 ? t('table.hint.rulesThick', 'New rules are thick') : t('table.hint.rulesThin', 'New rules are thin')); return; }
+    if (a.startsWith('bw:')) { borderW = +a.slice(3) as Rule; hint(borderW === 3 ? t('table.hint.rulesDouble', 'New rules are double') : borderW === 2 ? t('table.hint.rulesThick', 'New rules are thick') : t('table.hint.rulesThin', 'New rules are thin'), undefined, 'info'); return; }
     switch (a) {
       case 'cut': copySel(true); break;
       case 'copy': copySel(false); break;
@@ -573,10 +574,10 @@ const PICTURE_MS = 10;
       case 'row-below': change(() => T.insertRows(M, g.r1 + 1, g.r1 - g.r0 + 1)); select([g.r1 + 1, act[1]]); break;
       case 'col-left': change(() => T.insertCols(M, g.c0, g.c1 - g.c0 + 1)); select([act[0], g.c0]); break;
       case 'col-right': change(() => T.insertCols(M, g.c1 + 1, g.c1 - g.c0 + 1)); select([act[0], g.c1 + 1]); break;
-      case 'up': if (change(() => T.moveRows(M, g.r0, g.r1, -1))) { act[0]--; ext[0]--; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
-      case 'down': if (change(() => T.moveRows(M, g.r0, g.r1, 1))) { act[0]++; ext[0]++; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
-      case 'left': if (change(() => T.moveCols(M, g.c0, g.c1, -1))) { act[1]--; ext[1]--; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
-      case 'right': if (change(() => T.moveCols(M, g.c0, g.c1, 1))) { act[1]++; ext[1]++; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way')); break;
+      case 'up': if (change(() => T.moveRows(M, g.r0, g.r1, -1))) { act[0]--; ext[0]--; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way'), undefined, 'warn'); break;
+      case 'down': if (change(() => T.moveRows(M, g.r0, g.r1, 1))) { act[0]++; ext[0]++; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way'), undefined, 'warn'); break;
+      case 'left': if (change(() => T.moveCols(M, g.c0, g.c1, -1))) { act[1]--; ext[1]--; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way'), undefined, 'warn'); break;
+      case 'right': if (change(() => T.moveCols(M, g.c0, g.c1, 1))) { act[1]++; ext[1]++; syncSel(true); } else hint(t('table.hint.mergedInWay', 'A merged cell is in the way'), undefined, 'warn'); break;
       case 'merge': mergeSel(); break;
       case 'split': change(() => T.split(M, g)); break;
       case 'head': change(() => { M.head = g.r1 + 1 >= T.nRows(M) ? T.nRows(M) - 1 : g.r1 + 1; T.restyle(M); }); break;
@@ -591,7 +592,7 @@ const PICTURE_MS = 10;
     const filled = new Set(anchorsSel().map((x) => x.t.trim()).filter(Boolean)).size;
     change(() => T.merge(M, g));
     act = [g.r0, g.c0]; ext = act.slice() as [number, number]; syncSel();
-    if (filled > 1) hint(t('table.hint.merged', 'Merged: the texts were joined. {key} undoes it.', { key: MOD + 'Z' }), 2200);
+    if (filled > 1) hint(t('table.hint.merged', 'Merged: the texts were joined. {key} undoes it.', { key: MOD + 'Z' }), 2200, 'ok');
   }
 
   // ---------------------------------------------------------------- clipboard
@@ -621,7 +622,7 @@ const PICTURE_MS = 10;
     try {
       if (window.ClipboardItem && navigator.clipboard?.write) await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]);
       else await navigator.clipboard.writeText(text);
-    } catch (e: any) { hint(t('table.hint.copyFailed', "Couldn't copy")); return; }
+    } catch (e: any) { hint(t('table.hint.copyFailed', "Couldn't copy"), undefined, 'error'); return; }
     if (cut) change(() => T.clearRange(M, g, 'all'));
   }
   async function pasteFromClipboard() {
@@ -629,7 +630,7 @@ const PICTURE_MS = 10;
       const items = await navigator.clipboard.read();
       for (const it of items) if (it.types.includes('text/html')) { pasteData(await (await it.getType('text/html')).text(), await (it.types.includes('text/plain') ? (await it.getType('text/plain')).text() : '')); return; }
       pasteData('', await navigator.clipboard.readText());
-    } catch (e: any) { hint(t('table.hint.usePaste', 'Use {key} to paste', { key: MOD + 'V' })); }
+    } catch (e: any) { hint(t('table.hint.usePaste', 'Use {key} to paste', { key: MOD + 'V' }), undefined, 'warn'); }
   }
   /** ⌘V pastes at the selection's top-left cell, growing the table to fit: copied cells (this tool, Excel,
    *  Sheets) with their formats, text tables (TSV, CSV, Markdown, a LaTeX tabular) as text, keeping the cells'
@@ -653,7 +654,7 @@ const PICTURE_MS = 10;
         if (styles) src = T.importText(body, f).table;
         // more than one value: lines, or tabs (a single line with commas is one value: "Hello, world")
         else if (/[\t\n]/.test(body)) src = T.fromDelimited(body, f === 'tsv' ? '\t' : undefined);
-      } catch (e: any) { hint(String(e.message || e)); return; }
+      } catch (e: any) { hint(String(e.message || e), undefined, 'error'); return; }
     }
     if (fresh && src && T.nRows(src) * T.nCols(src) > 1) { replaceTable(src, t('table.pasted', 'Pasted')); return; }
     if (!src) {
@@ -682,7 +683,7 @@ const PICTURE_MS = 10;
     if (p) wrapNumbersIn(p);
     if (p) {
       act = [p.r0, p.c0]; ext = [p.r1, p.c1]; clampSel(); syncSel(true); panel();
-      if (T.nRows(M) > nrWas || T.nCols(M) > ncWas) hint(t('table.hint.grew', 'Pasted {h} × {w}; the table grew to {rows} × {cols}', { h, w, rows: T.nRows(M), cols: T.nCols(M) }), 2000);
+      if (T.nRows(M) > nrWas || T.nCols(M) > ncWas) hint(t('table.hint.grew', 'Pasted {h} × {w}; the table grew to {rows} × {cols}', { h, w, rows: T.nRows(M), cols: T.nCols(M) }), 2000, 'ok');
     }
   }
   // incoming: imported or pasted text, whose numbers become maths (not a table opened as it was)
@@ -696,13 +697,13 @@ const PICTURE_MS = 10;
     syncSel(); panel();
     focusGrid();
     if (incoming) wrapNumbersIn(whole());
-    if (note) hint(t('table.hint.replaced', '{what} · {rows} × {cols}. {key} undoes it.', { what: note, rows: T.nRows(M), cols: T.nCols(M), key: MOD + 'Z' }), 2400);
+    if (note) hint(t('table.hint.replaced', '{what} · {rows} × {cols}. {key} undoes it.', { what: note, rows: T.nRows(M), cols: T.nCols(M), key: MOD + 'Z' }), 2400, 'ok');
   }
   async function importFile(file: File) {
     try {
       const r = await T.importFile(file);
       replaceTable(r.table, t('table.importedFile', 'Imported {name}', { name: file.name }));
-      if (r.warnings.length) setTimeout(() => hint(r.warnings.join(' · '), 3200), 2500);
+      if (r.warnings.length) setTimeout(() => hint(r.warnings.join(' · '), 3200, 'warn'), 2500);
     } catch (e: any) { TD.alert(t('table.importFileFailed', "Couldn't import the file"), String(e.message || e)); }
   }
   function chooseFile() {
@@ -718,7 +719,7 @@ const PICTURE_MS = 10;
       placeholder: '\\begin{tabular}{lr}\n\\toprule\nName & Value \\\\\n\\midrule\n…',
     });
     if (text == null) return; // Cancel
-    if (!String(text).trim()) { hint(t('table.hint.emptyImport', 'Nothing to import: the box was empty')); return; }
+    if (!String(text).trim()) { hint(t('table.hint.emptyImport', 'Nothing to import: the box was empty'), undefined, 'warn'); return; }
     try { const r = T.importText(String(text)); replaceTable(r.table, t('table.importedFormat', 'Imported ({format})', { format: r.format })); }
     catch (e: any) { TD.alert(t('table.importFailed', "Couldn't import"), String(e.message || e)); }
   }
@@ -910,7 +911,7 @@ const PICTURE_MS = 10;
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': TD.app.pngOf([shape()], +out.dpi, false) })]);
         flash(what);
       }
-    } catch (e: any) { hint(what.startsWith('dl') ? t('table.hint.fileFailed', "Couldn't make the file: {error}", { error: e.message || e }) : t('table.hint.copyFailedWhy', "Couldn't copy: {error}", { error: e.message || e }), 2600); }
+    } catch (e: any) { hint(what.startsWith('dl') ? t('table.hint.fileFailed', "Couldn't make the file: {error}", { error: e.message || e }) : t('table.hint.copyFailedWhy', "Couldn't copy: {error}", { error: e.message || e }), 2600, 'error'); }
   }
 
   // ---------------------------------------------------------------- events
@@ -939,7 +940,7 @@ const PICTURE_MS = 10;
       case 'blank': replaceTable(T.create(4, 3, 'booktabs')); break;
       case 'import-text': {
         const v = ($('.tb-paste') as HTMLTextAreaElement).value;
-        if (!v.trim()) { hint(t('table.hint.pasteFirst', 'Paste a table first')); return; }
+        if (!v.trim()) { hint(t('table.hint.pasteFirst', 'Paste a table first'), undefined, 'warn'); return; }
         try { const r = T.importText(v); replaceTable(r.table, t('table.importedFormat', 'Imported ({format})', { format: r.format })); } catch (err: any) { TD.alert(t('table.importFailed', "Couldn't import"), String(err.message || err)); }
         break;
       }
@@ -1180,7 +1181,7 @@ const PICTURE_MS = 10;
   host.addEventListener('drop', (e) => {
     host!.classList.remove('drop');
     const f = e.dataTransfer && e.dataTransfer.files[0];
-    if (!f) { const txt = e.dataTransfer?.getData('text/plain'); if (txt) { e.preventDefault(); try { const r = T.importText(txt); replaceTable(r.table, t('table.importedFormat', 'Imported ({format})', { format: r.format })); } catch (err: any) { hint(String(err.message || err)); } } return; }
+    if (!f) { const txt = e.dataTransfer?.getData('text/plain'); if (txt) { e.preventDefault(); try { const r = T.importText(txt); replaceTable(r.table, t('table.importedFormat', 'Imported ({format})', { format: r.format })); } catch (err: any) { hint(String(err.message || err), undefined, 'error'); } } return; }
     e.preventDefault(); e.stopPropagation();
     importFile(f);
   });
@@ -1290,7 +1291,7 @@ const PICTURE_MS = 10;
     finishEdit();
     const cur = JSON.stringify(M);
     if (cur !== session.start) { session.start = cur; session.done({ src: '', table: JSON.parse(cur) }); }
-    hint(t('table.hint.saved', 'Saved to the diagram'));
+    hint(t('table.hint.saved', 'Saved to the diagram'), undefined, 'ok');
   }, true);
   TD.tableBlockEditor = { open: editBlock };
   // a language switch while the table is on screen redraws its frame (the model and selection stay)

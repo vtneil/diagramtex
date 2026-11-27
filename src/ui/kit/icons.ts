@@ -64,6 +64,7 @@ export const ICONS = {
   cut: { d: '<circle cx="5.5" cy="15" r="2.5"/><circle cx="14.5" cy="15" r="2.5"/><path d="M7 13.2L15 3M13 13.2L5 3"/>' },
   paste: { d: '<path d="M6 4H4v14h12V4h-2"/><path d="M7 2.5h6v3H7z"/>' },
   add: { d: '<path d="M10 5v10M5 10h10"/>' },
+  home: { d: '<path d="M3.5 9.5L10 4l6.5 5.5"/><path d="M5.5 8v8.5h9V8"/>' }, // back to the whole: every layer shown (the Network editor's layer selector)
   moveUp: { d: '<path d="M10 15V5M6 9l4-4 4 4"/>' },
   moveDown: { d: '<path d="M10 5v10M6 11l4 4 4-4"/>' },
   duplicate: { d: '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M13 7V4.5A1.5 1.5 0 0011.5 3h-7A1.5 1.5 0 003 4.5v7A1.5 1.5 0 004.5 13H7"/>' },
@@ -103,6 +104,7 @@ export const ICONS = {
   gridLines: { d: '<path d="M3 3h14v14H3zM3 7.7h14M3 12.3h14M7.7 3v14M12.3 3v14"/>' },
   gridDot: { d: '<g fill="currentColor" stroke="none"><circle cx="4" cy="4" r="1.3"/><circle cx="10" cy="4" r="1.3"/><circle cx="16" cy="4" r="1.3"/><circle cx="4" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="16" cy="10" r="1.3"/><circle cx="4" cy="16" r="1.3"/><circle cx="10" cy="16" r="1.3"/><circle cx="16" cy="16" r="1.3"/></g>' },
   gridIsometric: { d: '<path d="M10 3.5L17 16H3Z"/>' },
+  gridOblique: { d: '<path d="M2 5h16M2 10h16M2 15h16M3 15L13 5M8 15L18 5"/>' }, // a grid on two axes at any angle: span{u1, u2}
   gridIsometricDot: { d: '<g fill="currentColor" stroke="none"><circle cx="10" cy="4.5" r="1.7"/><circle cx="4" cy="15" r="1.7"/><circle cx="16" cy="15" r="1.7"/></g>' },
   // the properties panel's switches: text alignment, vertical alignment, a line's route and its direction
   routeStraight: { d: '<path d="M3 16L17 4"/>' },
@@ -200,6 +202,7 @@ export const ICONS = {
   // cells, rows, groups and blocks
   check: { d: '<path d="M4 10.5l4 4 8-9"/>' }, // a check that passed (the K-map's groups)
   attention: { d: '<path d="M10 4v8M10 15.5v.5"/>' }, // a check that did not
+  info: { d: '<path d="M10 4v.5M10 8.5v7.5"/>' }, // a note that only informs (the status toast)
   clear: { d: '<path d="M4 4l12 12M16 4L4 16"/>' },
   moveLeft: { d: '<path d="M16 10H4M8.5 5.5L4 10l4.5 4.5"/>' },
   moveRight: { d: '<path d="M4 10h12M11.5 5.5L16 10l-4.5 4.5"/>' },

@@ -20,6 +20,7 @@ import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { onLabelFontsChange } from '../domain/label-image';
+import { planeGrid, uprightPlane } from '../ui/plane-grid';
 // Circuit editor: the overlay that opens on a Circuit block. A searchable palette of circuitikz parts,
 // a drafting grid where parts are dropped, dragged, rotated and wired (ends snap to pins), the selected
 // part's properties, and beside them the circuitikz it writes, live both ways (edits there are read back).
@@ -338,13 +339,8 @@ import { onLabelFontsChange } from '../domain/label-image';
     syncCode();
     const r = rect(), v = E.view, k = v.k;
     const W = r.width, H = r.height;
-    // grid: minor every 0.25cm (hidden when too dense), major every 1cm
-    let grid = '';
-    const step = k * GRID >= 7 ? GRID : 1, xs = Math.floor(-v.ox / k / step), xe = Math.ceil((W - v.ox) / k / step), ys = Math.floor((v.oy - H) / k / step), ye = Math.ceil(v.oy / k / step);
-    let minor = '', major = '';
-    for (let i = xs; i <= xe; i++) { const X = Math.round(v.ox + i * step * k) + 0.5, maj = Math.abs((i * step) % 1) < 1e-6; (maj ? (major += `M${X},0V${H}`) : (minor += `M${X},0V${H}`)); }
-    for (let j = ys; j <= ye; j++) { const Y = Math.round(v.oy - j * step * k) + 0.5, maj = Math.abs((j * step) % 1) < 1e-6; (maj ? (major += `M0,${Y}H${W}`) : (minor += `M0,${Y}H${W}`)); }
-    grid = `<path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/>`;
+    // the grid: minor every 0.25cm (left out when too dense), major every 1cm, and the origin
+    const grid = planeGrid(uprightPlane(v.ox, v.oy, k), W, H);
     const colorOf = (it: any, ic: any) => (E.sel.has(it.id) ? 'var(--redpen)' : ic || '#1c1b19');
     const wrap = (it: any, s: any) => {
       let hit;
@@ -398,10 +394,8 @@ import { onLabelFontsChange } from '../domain/label-image';
     if (E.drag && E.drag.snapAt) { const [X, Y] = m(...(E.drag.snapAt as [any, any])); ghost += `<circle class="cz-snap on" cx="${X}" cy="${Y}" r="6"/>`; }
     let mq = '';
     if (E.drag && E.drag.mode === 'marquee') { const d = E.drag; mq = marqueeSvg(d.sx, d.sy, d.ex, d.ey); }
-    // origin cross
-    const [OX, OY] = m(0, 0);
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    patchSvg(svg, `<rect width="${W}" height="${H}" class="cz-bg"/>${grid}<path class="cz-origin" d="M${OX - 6},${OY}h12M${OX},${OY - 6}v12"/>${body}${pins}${hs}${ghost}${mq}`);
+    patchSvg(svg, `${grid}${body}${pins}${hs}${ghost}${mq}`);
     svg.classList.toggle('placing', E.tool !== 'select');
   }
 

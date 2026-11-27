@@ -244,7 +244,7 @@
     <Segmented many class="flag-seg diag-only" id="gridFlags" label={t("ui.grid", "Grid", {}, $locale)} options={[
         { icon: 'guides', title: t('assist.guides', 'Guides', {}, $locale), attrs: { id: 'btnGuides', 'data-cmd': 'guides' } },
         { icon: 'snap', title: t("ui.snap.to.grid.points.hold.alt.to.bypass", "Snap to grid & points (hold Alt to bypass)", {}, $locale), on: true, attrs: { id: 'btnSnap' } },
-      ]}><GridStyleButtons id="gridStyle" /></Segmented>
+      ]}><GridStyleButtons id="gridStyle" oblique /></Segmented>
     <div class="group">
       <IconButton data-cmd="print" title={t("ui.print.save.as.pdf.ctrl.p", "Print / save as PDF (Ctrl+P)", {}, $locale)} icon="print" variant="default" />
     </div>
@@ -356,6 +356,7 @@
         <rect id="paper" fill="#fff"/>
         <g id="pageLayer"></g>
         <rect id="gridRect" fill="url(#gridMajor)"/>
+        <g id="gridPlane"></g>
         <path id="origin" class="origin"/>
         <g id="content"></g>
         <path id="pageMask" fill-rule="evenodd"/>
@@ -367,8 +368,8 @@
       <div class="ruler" id="rulerY"><svg></svg></div>
       <div id="status">
         <span id="cursorPos">{t("ui.x.0.00.y.0.00.cm", "x 0.00 · y 0.00 cm", {}, $locale)}</span>
-        <span id="selInfo"></span>
-        <span id="gridInfo"><label for="gridVal">{t("ui.grid.variant1", "grid", {}, $locale)}</label><input id="gridVal" type="text" inputmode="decimal" value="0.25" title={t("ui.grid.spacing.in.cm.type.a.value.and.press.enter", "Grid spacing in cm: type a value and press Enter", {}, $locale)} aria-label={t("ui.grid.spacing.cm", "Grid spacing (cm)", {}, $locale)} autocomplete="off" spellcheck="false">{" "}{t("shell.gridUnit", "cm", {}, $locale)}{" · "}<span id="snapInfo">{t("ui.snap.on", "snap on", {}, $locale)}</span></span>
+        <span id="selSize" title={t("ui.selection.size", "Size of the marquee being dragged", {}, $locale)}></span>
+        <span id="snapInfo">{t("ui.snap.on", "snap on", {}, $locale)}</span>
         <span class="grow"></span>
         <div class="zoom pagenav" id="pageNav" hidden>
           <Button id="pagePrev" title={t("ui.previous.page.pgup", "Previous page (PgUp)", {}, $locale)}>‹</Button>
@@ -376,7 +377,12 @@
           <Button id="pageNext" title={t("ui.next.page.pgdn", "Next page (PgDn)", {}, $locale)}>›</Button>
           <Button id="pageAdd" title={t("ui.insert.a.blank.page.after.this.one", "Insert a blank page after this one", {}, $locale)}>{t("ui.page.variant1", "+ Page", {}, $locale)}</Button>
         </div>
-        <span class="gap" aria-hidden="true"></span>
+      </div>
+      <!-- the view: grid spacing, the oblique grid's axes, zoom and fit; floating at the canvas's bottom left -->
+      <div id="viewBar" role="toolbar" aria-label={t("ui.view", "View", {}, $locale)}>
+        <span id="gridInfo"><label for="gridVal">{t("ui.grid.variant1", "grid", {}, $locale)}</label><input id="gridVal" type="text" inputmode="decimal" value="0.25" title={t("ui.grid.spacing.in.cm.type.a.value.and.press.enter", "Grid spacing in cm: type a value and press Enter", {}, $locale)} aria-label={t("ui.grid.spacing.cm", "Grid spacing (cm)", {}, $locale)} autocomplete="off" spellcheck="false">{t("shell.gridUnit", "cm", {}, $locale)}</span>
+        <span id="gridAxesBox" hidden><Select id="gridAxes" value="0,45" aria-label={t("ui.gridAxes", "Oblique grid's axes", {}, $locale)} title={t("ui.gridAxes", "Oblique grid's axes", {}, $locale)} options={[{ value: '0,45', label: t("ui.gridAxes.skew", "Skew 45°", {}, $locale), note: '0° · 45°' }, { value: '30,150', label: t("ui.gridAxes.iso", "Isometric", {}, $locale), note: '30° · 150°' }, { value: '0,60', label: t("ui.gridAxes.tri", "Triangular", {}, $locale), note: '0° · 60°' }]} /><label for="gridU1">u₁</label><input id="gridU1" class="vb-angle" type="text" inputmode="decimal" value="0°" title={t("ui.gridAxes.u1", "First axis, in degrees from x: type a value and press Enter", {}, $locale)} aria-label={t("ui.gridAxes.u1.name", "First axis (degrees)", {}, $locale)} autocomplete="off" spellcheck="false"><label for="gridU2">u₂</label><input id="gridU2" class="vb-angle" type="text" inputmode="decimal" value="45°" title={t("ui.gridAxes.u2", "Second axis, in degrees from x: type a value and press Enter", {}, $locale)} aria-label={t("ui.gridAxes.u2.name", "Second axis (degrees)", {}, $locale)} autocomplete="off" spellcheck="false"></span>
+        <span class="vb-sep" aria-hidden="true"></span>
         <div class="zoom">
           <Button id="zoomOut" title={t("ui.zoom.out.ctrl", "Zoom out (Ctrl+-)", {}, $locale)}>−</Button>
           <input id="zoomVal" type="text" inputmode="decimal" value="100%" title={t("ui.zoom.type.a.percentage.and.press.enter", "Zoom: type a percentage and press Enter", {}, $locale)} aria-label={t("ui.zoom.percentage", "Zoom percentage", {}, $locale)} autocomplete="off" spellcheck="false">
@@ -386,7 +392,7 @@
           <Button id="zoomFitW" title={t("ui.zoom.to.fit.the.width.from.the.top", "Zoom to fit the width, from the top", {}, $locale)}>{t("ui.fit.width", "Fit Width", {}, $locale)}</Button>
         </div>
       </div>
-      <div id="hint"></div>
+      <div id="hint" hidden></div>
       <div id="emptyHint" hidden>
         <div class="eh-diagram">
           <div class="eh-title">{t("ui.empty.diagram", "Empty diagram", {}, $locale)}</div>

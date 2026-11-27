@@ -17,6 +17,7 @@ import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
+import { planeGrid, uprightPlane } from '../ui/plane-grid';
 // Physics editor: the overlay that opens on a Physics block. A palette of the domain's objects, grouped;
 // the figure solved and drawn on a centimetre grid, where objects are selected, moved and reshaped by their
 // handles (lens focus, ray angle, slope angle, …); the selected object's settings, generated from its
@@ -392,12 +393,8 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     if (!E) return;
     syncCode();
     const r0 = rect(), W = r0.width, H = r0.height, v = E.view, k = v.k;
-    const step = k * GRID >= 7 ? GRID : 1, xs = Math.floor(-v.ox / k / step), xe = Math.ceil((W - v.ox) / k / step), ys = Math.floor((v.oy - H) / k / step), ye = Math.ceil(v.oy / k / step);
-    let minor = '', major = '';
-    for (let i = xs; i <= xe; i++) { const X = Math.round(v.ox + i * step * k) + 0.5, maj = Math.abs((i * step) % 1) < 1e-6; if (maj) major += `M${X},0V${H}`; else minor += `M${X},0V${H}`; }
-    for (let j = ys; j <= ye; j++) { const Y = Math.round(v.oy - j * step * k) + 0.5, maj = Math.abs((j * step) % 1) < 1e-6; if (maj) major += `M0,${Y}H${W}`; else minor += `M0,${Y}H${W}`; }
-    const [OX, OY] = m([0, 0]);
-    let out = `<rect width="${W}" height="${H}" class="cz-bg"/><path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/><path class="cz-origin" d="M${OX - 6},${OY}h12M${OX},${OY - 6}v12"/>`;
+    // the grid: minor every 0.25cm (left out when too dense), major every 1cm, and the origin
+    let out = planeGrid(uprightPlane(v.ox, v.oy, k), W, H);
     const r = R(), kk = k / PX;
     // the selection, as a halo under the drawing; objects with a problem get a red dashed outline
     const halo = (i: any, cls: any) => {

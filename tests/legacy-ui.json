@@ -12,7 +12,7 @@
     "public/css/table.css": 6
   },
   "style-assignment": {
-    "src/application/app.ts": 11,
+    "src/application/app.ts": 9,
     "src/application/docview.ts": 14,
     "src/domain/label-image.ts": 3,
     "src/domain/shapes.ts": 3,

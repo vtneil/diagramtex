@@ -4007,7 +4007,7 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
       const lab = rescaled(TD.chemlab && TD.chemlab.fromPicture(pic1), sc);
       if (lab) { blocks.push({ type: 'diagram', shapes: withDefs([lab], preDefs, C) }); continue; }
       // a picture drawn wholly with circuitikz parts: a Circuit block
-      const czq = rescaled(circuitBlock(pic1, true, czDoc) || automataBlock(pic1) || graphBlock(pic1), sc);
+      const czq = rescaled(circuitBlock(pic1, true, czDoc) || automataBlock(pic1) || graphBlock(pic1) || networkBlock(pic1), sc);
       if (czq) { blocks.push({ type: 'diagram', shapes: withDefs([czq], preDefs, C) }); continue; }
       // circuitikz parts among other TikZ: a Circuit block and the rest as shapes
       const sp = !peeled && (C.pkgs || []).includes('circuitikz') && circuitSplit(C, bodyS.slice(f.at, f.end), picO, czDoc);
@@ -4261,6 +4261,25 @@ import { czDocOf, czDrawsNothing, czFontSize, czSiLabels } from './czimport';
     const at = u.at || [0, 0], b = TD.graph.layout(q).bb;
     q.x = at[0] * TD.PX_PER_CM + b.x; q.y = -at[1] * TD.PX_PER_CM + b.y;
     // the picture's scale is about its origin
+    if (own.k !== 1) rescaled(q, { k: own.k, px: at[0] * TD.PX_PER_CM, py: -at[1] * TD.PX_PER_CM });
+    return q;
+  }
+  // a picture of tikz-network commands (\Vertex, \Edge, \Vertices …) and nothing else: a Network block. Data files
+  // its \Vertices and \Edges name aren't read here: the block asks for them (its editor's Data files)
+  function networkBlock(pic: string) {
+    if (!TD.network || !TD.TYPES.network || !/\\(?:Vertex|Vertices)\b/.test(pic) || !/^\s*\\begin\{tikzpicture\}/.test(pic)) return null;
+    const u = unscope(pic);
+    if (!u) return null;
+    const own = ownScale(u.opts);
+    if (!own || (own.k !== 1 && !own.shape)) return null; // positions scaled, nodes not: drawn as separate objects
+    u.opts = own.opts;
+    const lines = u.body.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n'), ind = least(lines.filter((l) => l.trim()).map((l) => (/^[ \t]*/.exec(l))![0].length));
+    const src = `\\begin{tikzpicture}${u.opts.length ? `[${u.opts.join(', ')}]` : ''}\n${lines.map((l) => (l.trim() ? '  ' + l.slice(isFinite(ind) ? ind : 0) : '')).join('\n')}\n\\end{tikzpicture}`;
+    const M = TD.network.parse(src);
+    if (M.warnings.length || !M.items.some((it: any) => it.k === 'v' || it.k === 'vs') || M.items.some((it: any) => it.k === 'raw')) return null;
+    const q: any = { ...TD.TYPES.network.create({ x: 0, y: 0 }), src, id: uid8() };
+    const at = u.at || [0, 0], b = TD.network.layout(q).bb;
+    q.x = at[0] * TD.PX_PER_CM + b.x; q.y = -at[1] * TD.PX_PER_CM + b.y;
     if (own.k !== 1) rescaled(q, { k: own.k, px: at[0] * TD.PX_PER_CM, py: -at[1] * TD.PX_PER_CM });
     return q;
   }

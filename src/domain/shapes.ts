@@ -10,7 +10,7 @@ import { escapeHtml } from '../core/html';
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.59.3'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.60.0'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -347,7 +347,7 @@ import { escapeHtml } from '../core/html';
   function hopsFor(s: any, P: any, scene: any) {
     if (ext(s, 'cross') !== 'hop' || !scene) return null;
     const idx = scene.indexOf(s);
-    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o: any) => o !== s && (T as Record<string, any>)[o.type] && (T as Record<string, any>)[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'geo3d', 'geo2d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'kmap', 'bytefield', 'chemfig', 'table', 'tikz'].includes(o.type));
+    const below = (idx < 0 ? scene : scene.slice(0, idx)).filter((o: any) => o !== s && (T as Record<string, any>)[o.type] && (T as Record<string, any>)[o.type].samples && !['text', 'image', 'plot', 'solid', 'prim3d', 'revolve', 'geo3d', 'geo2d', 'pie', 'cd', 'xy', 'qc', 'forest', 'zx', 'bloch', 'feynman', 'timing', 'automata', 'network', 'kmap', 'bytefield', 'chemfig', 'table', 'tikz'].includes(o.type));
     const polys = below.map((o: any) => {
       const q = (T as Record<string, any>)[o.type].samples(o);
       if (o.type === 'rect') return [q[0], { x: q[1].x, y: q[0].y }, q[1], { x: q[0].x, y: q[1].y }, q[0]];

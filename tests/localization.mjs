@@ -43,7 +43,7 @@ function visit(node) {
 for (const f of catalogs) visit(ts.createSourceFile(f, fs.readFileSync(f, 'utf8'), ts.ScriptTarget.Latest, true));
 // every caption has its Thai, except content shown as written in both languages: package and program names, units,
 // a placeholder reading, and the kit catalogue's demo page
-const ASIS = new Set(['ui.diagramtex', 'ui.latex', 'ui.cm', 'ui.x.0.00.y.0.00.cm', 'ui.circuitikz', 'ui.tikz.automata', 'ui.forest', 'ui.tikz.feynman',
+const ASIS = new Set(['ui.diagramtex', 'ui.latex', 'ui.cm', 'ui.x.0.00.y.0.00.cm', 'ui.circuitikz', 'ui.tikz.automata', 'ui.tikz.network', 'ui.forest', 'ui.tikz.feynman',
   'ui.tikz.3dplot', 'ui.tikz.timing', 'ui.pgf.umlsd', 'ui.zx.calculus', 'editor.xy.title', 'ui.reset']);
 for (const id of defaults.keys()) if (!seenThai.has(id) && !ASIS.has(id) && !/\.lang$/.test(id)) errors.push(`No Thai for: ${id} ("${defaults.get(id)}")`);
 if (errors.length) throw new Error(errors.join('\n'));

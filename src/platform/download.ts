@@ -6,19 +6,29 @@ export function downloadBlob(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(link.href), 2000);
 }
 export interface ExportDirectory { name: string }
+/** How an export landed, for the caller to say in its own words: written into the linked folder, downloaded, or
+ *  downloaded because the folder failed or was not allowed */
+export type ExportOutcome =
+  | { kind: 'saved'; name: string; folder: string }
+  | { kind: 'downloaded'; name: string }
+  | { kind: 'folderFailed'; name: string; folder: string; error: string }
+  | { kind: 'noAccess'; name: string; folder: string };
 export function createExportWriter(files: {
   dirOf(id: string | null): ExportDirectory | null | undefined;
   exportDir(id: string | null): Promise<ExportDirectory | null>;
   writeIn(directory: ExportDirectory, name: string, data: Blob): Promise<void>;
-}, documentId: () => string | null, hint: (message: string, duration: number) => void) {
+}, documentId: () => string | null, report: (outcome: ExportOutcome) => void) {
   return async function writeExport(name: string, data: Blob | BlobPart, type?: string) {
     const blob = data instanceof Blob ? data : new Blob([data], { type });
     const directory = files.dirOf(documentId()) && await files.exportDir(documentId());
+    // a folder that failed or wasn't allowed says "downloaded instead" itself, so that is the one report
     if (directory) {
-      try { await files.writeIn(directory, name, blob); hint(`Saved ${name} to ${directory.name}`, 1600); return; }
-      catch (error: any) { hint(`Couldn't save to ${directory.name} (${(error as Error).message}). Downloaded instead.`, 3000); }
-    } else if (files.dirOf(documentId())) hint(`No access to ${files.dirOf(documentId())!.name}. Downloaded instead.`, 2500);
+      try { await files.writeIn(directory, name, blob); report({ kind: 'saved', name, folder: directory.name }); return; }
+      catch (error: any) { downloadBlob(name, blob); report({ kind: 'folderFailed', name, folder: directory.name, error: (error as Error).message }); return; }
+    }
+    const folder = files.dirOf(documentId());
     downloadBlob(name, blob);
+    report(folder ? { kind: 'noAccess', name, folder: folder.name } : { kind: 'downloaded', name });
   };
 }
 

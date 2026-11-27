@@ -71,6 +71,7 @@ export const captions = {
   "ui.grid": message("ui.grid", "Grid"),
   "ui.grid.variant1": message("ui.grid.variant1", "grid"),
   "ui.snap.on": message("ui.snap.on", "snap on"),
+  "ui.selection.size": message("ui.selection.size", "Size of the marquee being dragged"),
   "ui.grid.spacing.cm": message("ui.grid.spacing.cm", "Grid spacing (cm)"),
   "ui.show.grid.g": message("ui.show.grid.g", "Show grid (G)"),
   "ui.undo.ctrl.z": message("ui.undo.ctrl.z", "Undo (Ctrl+Z)"),

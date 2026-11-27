@@ -212,7 +212,58 @@ import { runtime as TD } from '../runtime';
 
   async function forget(id: any) { await unlink(id); await clearDir(id); }
 
+  // ---- data files a block reads (a network's CSVs), linked to files on disk ----
+  // key: '<document id>:<object id>:<file name>'. The block keeps the file's text as well, so it draws and exports
+  // without the link; the link lets it be read in again when the file changes, and written back on request. As
+  // with documents, nothing is written over a file that changed on disk since it was last read or written.
+  const dataOf = (key: string) => mem.get('data:' + key) || null;
+  /** pick a file to read; linked under `key` where the browser can keep a handle. { name, text } or null */
+  async function pickData(key: string, accept: Record<string, string[]>) {
+    if (typeof window.showOpenFilePicker !== 'function') return null;
+    let hs;
+    try { hs = await picker('showOpenFilePicker', { id: 'diagramtex-data', types: [{ description: Object.keys(accept).join(', '), accept }], startIn: mem.get('lastDir') || 'documents' }); }
+    catch (e: any) { if (aborted(e)) return null; throw e; }
+    const h = hs[0], f = await h.getFile(), text = await f.text();
+    await put('data:' + key, { handle: h, name: h.name, hash: hash(text), mtime: f.lastModified });
+    return { name: h.name, text };
+  }
+  /** what the linked file holds now: 'same', 'changed' (with its text), 'missing', 'unknown' (no access yet; `ask`
+   *  asks for it, which needs a recent click) or 'none' (not linked) */
+  async function lookData(key: string, ask = false): Promise<{ state: 'same' | 'changed' | 'missing' | 'unknown' | 'none'; text?: string }> {
+    const r = dataOf(key);
+    if (!r) return { state: 'none' };
+    try {
+      const ok = ask ? await allowed(r.handle) : (await r.handle.queryPermission({ mode: 'read' })) === 'granted';
+      if (!ok) return { state: 'unknown' };
+      const f = await r.handle.getFile();
+      if (r.mtime != null && f.lastModified === r.mtime) return { state: 'same' };
+      const text = await f.text();
+      if (hash(text) === r.hash) { await put('data:' + key, { ...r, mtime: f.lastModified }); return { state: 'same' }; }
+      return { state: 'changed', text };
+    } catch (e: any) { return { state: notFound(e) ? 'missing' : 'unknown' }; }
+  }
+  /** the text now read in (or written), so the next look compares against it */
+  async function markData(key: string, text: string) {
+    const r = dataOf(key);
+    if (!r) return;
+    let mtime = null;
+    try { mtime = (await r.handle.getFile()).lastModified; } catch { /* no access */ }
+    await put('data:' + key, { ...r, hash: hash(text), mtime });
+  }
+  /** write the block's copy back to the linked file: 'saved', 'changed' (changed on disk since: not written), 'off' */
+  async function writeData(key: string, text: string, force = false): Promise<'saved' | 'changed' | 'off'> {
+    const r = dataOf(key);
+    if (!r || !(await allowed(r.handle))) return 'off';
+    if (!force) { const now = await lookData(key); if (now.state === 'changed') return 'changed'; }
+    try { await write(r.handle, text); await markData(key, text); return 'saved'; } catch { return 'off'; }
+  }
+  const unlinkData = (key: string) => put('data:' + key, null);
+  /** the link moves with its object (a copy keeps the text, not the link) */
+  async function moveData(from: string, to: string) { const r = dataOf(from); if (!r) return; await put('data:' + to, r); await put('data:' + from, null); }
+  const canPickData = typeof window.showOpenFilePicker === 'function';
+
   TD.files = { can, ready, hash, fileOf, link, unlink, saveDoc, isSaved, isOnDisk, docFor, diskState, hold,
     conflict: (id: any) => held.has(id), missing: (id: any) => missing.has(id), pickOpen, dirOf, pickDir, clearDir, exportDir, writeIn, forget, allowed,
-    autoSaving, autoWrite, check, onChange: (f: () => void) => { listeners.add(f); } };
+    autoSaving, autoWrite, check, onChange: (f: () => void) => { listeners.add(f); },
+    data: { can: canPickData, of: dataOf, pick: pickData, look: lookData, mark: markData, write: writeData, unlink: unlinkData, move: moveData } };
 })();

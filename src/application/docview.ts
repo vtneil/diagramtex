@@ -868,7 +868,7 @@ import { createDocHistory } from './doc-history';
   }
   function setPage(patch: any) {
     const d = doc(), next = { ...TD.PAGE_DEFAULT, ...d.page, ...patch };
-    if (!TD.pageFits(next)) { app.showHint?.(t('page.noRoom', 'That leaves no room for text: keep at least 1 cm between the margins'), 2400); renderSettings(document.getElementById('props')!); return; }
+    if (!TD.pageFits(next)) { app.showHint?.(t('page.noRoom', 'That leaves no room for text: keep at least 1 cm between the margins'), 2400, 'warn'); renderSettings(document.getElementById('props')!); return; }
     d.page = next;
     changed(); render(); renderSettings(document.getElementById('props')!);
   }
@@ -1439,7 +1439,7 @@ import { createDocHistory } from './doc-history';
         if (replaceIdx != null) Object.assign(doc().blocks[replaceIdx], { src: pic.src, name: f.name });
         else { keepActive((d: any) => d.blocks.splice(at, 0, { type: 'image', src: pic.src, name: f.name, width: 0.6, caption: '' })); editingIdx = at; }
         changed(); render();
-      }, (err) => app.showHint?.(t('doc.img.openFailed', "Couldn't open {name}: {error}", { name: f.name, error: err.message }), 2500));
+      }, (err) => app.showHint?.(t('doc.img.openFailed', "Couldn't open {name}: {error}", { name: f.name, error: err.message }), 2500, 'error'));
     };
     inp.click();
   }
@@ -1507,7 +1507,7 @@ import { createDocHistory } from './doc-history';
     if ((e.target! as Element).closest('[data-rm]')) {
       const remove = () => { keepActive((d: any) => d.blocks.splice(i, 1)); editingIdx = -1; changed(); render(); };
       remove(); // undoable, so no question first: the hint says how to take it back
-      if (b.type === 'diagram' && b.shapes.length) app.showHint?.(b.shapes.length > 1 ? t('doc.diag.deletedMany', 'Deleted the diagram and its {n} objects. {undo}', { n: b.shapes.length, undo: undoText() }) : t('doc.diag.deletedOne', 'Deleted the diagram and its object. {undo}', { undo: undoText() }), 2400);
+      if (b.type === 'diagram' && b.shapes.length) app.showHint?.(b.shapes.length > 1 ? t('doc.diag.deletedMany', 'Deleted the diagram and its {n} objects. {undo}', { n: b.shapes.length, undo: undoText() }) : t('doc.diag.deletedOne', 'Deleted the diagram and its object. {undo}', { undo: undoText() }), 2400, 'ok');
       return;
     }
     if ((e.target! as Element).closest('[data-edit]')) { openDiagram(i); return; }

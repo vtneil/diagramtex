@@ -39,6 +39,13 @@
   --bracket2: #8b3aa8;
   --bracket3: #1d5fa3;
   --okpen: #2b8a47;          /* the one green in the interface: the top bar's dot for a file saved to disk */
+  /* the status toast's icon tiles: the pens, solid; a glyph on them is white, or ink on the amber marker */
+  --tile-ok: var(--okpen);
+  --tile-info: var(--bluepen);
+  --tile-warn: var(--marker);
+  --tile-error: var(--redpen);
+  --on-pen: #ffffff;
+  --on-marker: #1c1b19;
   --canvas: #fffdf8;         /* the drawing sheet: content, stays light in both appearances */
   /* what the app draws on that light surface (block editors' stages, the Table's grid, Quick's stage, palette
      pictures): the light appearance's ink, paper and pencil in both appearances, never redefined for dark */
@@ -114,6 +121,11 @@
     --bracket2: #d595ea;
     --bracket3: #7fb6f2;
     --okpen: #5fbf7a;
+    /* the dark pens are light: darkened a fifth as tiles, white glyphs still read (3.5:1 and up) */
+    --tile-ok: color-mix(in srgb, var(--okpen) 80%, #000);
+    --tile-info: color-mix(in srgb, var(--bluepen) 80%, #000);
+    --tile-warn: color-mix(in srgb, var(--marker) 80%, #000);
+    --tile-error: color-mix(in srgb, var(--redpen) 80%, #000);
     --canvas: #ebe9e2;
     /* Keep the engineering grid's contrast against the softened drawing sheet. */
     --grid-minor: #d3d8cf;

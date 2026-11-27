@@ -16,10 +16,12 @@ TD.panels.tikz = {
     action(s, act) {
       if (act === 'rawdraw') {
         const mb = (n: number) => `${(n / 1e6).toFixed(n < 1e7 ? 1 : 0)} MB`;
-        void TD.keptPreview.allow((done: number, total: number) => TD.app.showHint?.(t('tex.downloadingOf', 'Downloading the LaTeX engine: {done} of {total}…', { done: mb(done), total: mb(total) }), 0))
-          .then(() => TD.app.showHint?.('', 0))
-          .catch((e: any) => TD.app.showHint?.(t('tex.failed', 'The LaTeX engine could not start: {error}', { error: e?.message || String(e) }), 5000));
-        return t('kept.starting', 'Starting the LaTeX engine…');
+        // a live note while the engine downloads and starts; the drawing appearing on the canvas says it worked
+        const job = TD.app.hintTask('tex', t('kept.starting', 'Starting the LaTeX engine…'));
+        void TD.keptPreview.allow((done: number, total: number) => job.update(t('tex.downloadingOf', 'Downloading the LaTeX engine: {done} of {total}…', { done: mb(done), total: mb(total) })))
+          .then(() => job.done())
+          .catch((e: any) => job.fail(t('tex.failed', 'The LaTeX engine could not start: {error}', { error: e?.message || String(e) }), 5000));
+        return;
       }
       if (act !== 'rawconvert') return;
       const list = TD.app.state.doc.shapes, i = list.indexOf(s);

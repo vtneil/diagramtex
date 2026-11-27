@@ -16,6 +16,7 @@ import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { keepComments } from './keep-comments';
 import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
+import { planeGrid, uprightPlane } from '../ui/plane-grid';
 // Graph editor: the overlay that opens on a Graph block. A palette of node kinds, edge kinds and whole
 // graphs; the graph drawn on a centimetre grid, where nodes are placed, dragged (alone or several at once)
 // and joined by dragging a node's blue handle to another; a selected edge's middle handle bends it; Auto
@@ -525,12 +526,8 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
     if (!E) return;
     syncCode();
     const r = rect(), W = r.width, H = r.height, v = E.view, k = v.k;
-    const step = k * GRID >= 7 ? GRID : 1, xs = Math.floor(-v.ox / k / step), xe = Math.ceil((W - v.ox) / k / step), ys = Math.floor((v.oy - H) / k / step), ye = Math.ceil(v.oy / k / step);
-    let minor = '', major = '';
-    for (let i = xs; i <= xe; i++) { const X = Math.round(v.ox + i * step * k) + 0.5, maj = Math.abs((i * step) % 1) < 1e-6; if (maj) major += `M${X},0V${H}`; else minor += `M${X},0V${H}`; }
-    for (let j = ys; j <= ye; j++) { const Y = Math.round(v.oy - j * step * k) + 0.5, maj = Math.abs((j * step) % 1) < 1e-6; if (maj) major += `M0,${Y}H${W}`; else minor += `M0,${Y}H${W}`; }
-    const [OX, OY] = m(0, 0);
-    let out = `<rect width="${W}" height="${H}" class="cz-bg"/><path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/><path class="cz-origin" d="M${OX - 6},${OY}h12M${OX},${OY - 6}v12"/>`;
+    // the grid: minor every 0.25cm (left out when too dense), major every 1cm, and the origin
+    let out = planeGrid(uprightPlane(v.ox, v.oy, k), W, H);
     const L = lay(), kk = k / PX;
     const se = selE(), sl = se && L.edges.find((x: any) => x.i === E.sel.e);
     if (sl) out += `<g transform="translate(${r2(v.ox)},${r2(v.oy)}) scale(${kk})"><path class="ze-wsel" d="${sl.d}" stroke-width="${r2(10 / kk)}"/></g>`;

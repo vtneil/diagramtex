@@ -16,6 +16,7 @@ import { wireCode, copyCode } from './editor-code';
 import { showCodeNotes, stageTip } from '../ui/editor-notes';
 import { editorStage, fitView } from './editor-stage';
 import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
+import { planeGrid, uprightPlane } from '../ui/plane-grid';
 // Chemistry Laboratory editor: the overlay that opens on a Chemistry Laboratory block (tikz-chemlab). A palette of apparatus (glassware,
 // set-ups, equipment) and of labels and leader lines; the picture drawn as pdfLaTeX draws it, on a grid in the
 // picture's own units, where apparatus is placed, selected and moved; the selected one's settings (glass, liquids,
@@ -468,13 +469,9 @@ import { marquee, marqueeSvg, marqueeTakes, boxShape } from './marquee';
 
   // ---------------------------------------------------------------- drawing
   function grid(W: number, H: number) {
-    const m = L().pm, ux = Math.hypot(m[0], m[1]) * E.view.k, uy = Math.hypot(m[2], m[3]) * E.view.k, u = Math.min(ux, uy);
-    const step = u * GRID >= 7 ? GRID : u >= 7 ? 1 : 5;
+    const m = L().pm, ux = Math.hypot(m[0], m[1]) * E.view.k, uy = Math.hypot(m[2], m[3]) * E.view.k;
     const [OX, OY] = scr(m[4] * PX, -m[5] * PX);
-    let minor = '', major = '';
-    for (let i = Math.floor(-OX / ux / step); i <= Math.ceil((W - OX) / ux / step); i++) { const X = Math.round(OX + i * step * ux) + 0.5, maj = Math.abs((i * step) % 1) < 1e-6; if (maj) major += `M${X},0V${H}`; else minor += `M${X},0V${H}`; }
-    for (let j = Math.floor((OY - H) / uy / step); j <= Math.ceil(OY / uy / step); j++) { const Y = Math.round(OY - j * step * uy) + 0.5, maj = Math.abs((j * step) % 1) < 1e-6; if (maj) major += `M0,${Y}H${W}`; else minor += `M0,${Y}H${W}`; }
-    return `<rect width="${W}" height="${H}" class="cz-bg"/><path d="${minor}" class="cz-gmin"/><path d="${major}" class="cz-gmaj"/><path class="cz-origin" d="M${r2(OX - 6)},${r2(OY)}h12M${r2(OX)},${r2(OY - 6)}v12"/>`;
+    return planeGrid(uprightPlane(OX, OY, ux, uy), W, H, { steps: [GRID, 1, 5] });
   }
   function halo(i: number, cls: string) {
     const it = items()[i];

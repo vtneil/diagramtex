@@ -1,0 +1,14 @@
+% expect: native match>=0.95
+\usepackage{tikz-network}
+\begin{tikzpicture}
+  \Vertex[x=0,y=0,label=A,position=above]{A}
+  \Vertex[x=2.5,y=0.5,label=B,position=above,color=red]{B}
+  \Vertex[x=1.5,y=-1.5,label=$c$,Math,position=below,shape=diamond]{C}
+  \Vertex[x=4,y=-1,size=1,opacity=.5]{D}
+  \Edge[label=1](A)(B)
+  \Edge[Direct,bend=-20](B)(C)
+  \Edge[lw=2pt,color=blue](C)(A)
+  \Edge[loopposition=90](A)(A)
+  \Edge[Direct](B)(D)
+  \Text[x=2,y=-2.5]{a network}
+\end{tikzpicture}

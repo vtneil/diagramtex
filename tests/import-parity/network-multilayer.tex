@@ -1,0 +1,14 @@
+% expect: native match>=0.93
+\usepackage{tikz-network}
+\begin{tikzpicture}[multilayer=3d]
+  \Plane[x=-.5,y=-.5,width=3,height=3,layer=1]
+  \Plane[x=-.5,y=-.5,width=3,height=3,layer=2,grid=1]
+  \Vertex[x=0,y=0,layer=1,label=$a$]{A}
+  \Vertex[x=2,y=1,layer=1,color=red]{B}
+  \Vertex[x=1,y=2,layer=2,shape=diamond]{C}
+  \Vertex[x=0,y=2,layer=2]{D}
+  \Edge[Direct,label=1](A)(B)
+  \Edge(B)(C)
+  \Edge(A)(D)
+  \Edge(C)(D)
+\end{tikzpicture}

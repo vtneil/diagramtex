@@ -1,4 +1,4 @@
-T.test('canvas grid: four choices work in Diagram, Whiteboard and Page and share one preference', async () => {
+T.test('canvas grid: five choices work in Diagram, Whiteboard and Page and share one preference', async () => {
   const app = TD.app, state = app.state, previous = { style: state.gridStyle, grid: state.grid, mode: state.mode };
   const select = document.querySelector('#gridStyle'), rect = document.querySelector('#gridRect');
   const click = value => select.querySelector(`[data-grid-style="${value}"]`).click();
@@ -6,16 +6,17 @@ T.test('canvas grid: four choices work in Diagram, Whiteboard and Page and share
   const selected = () => select.querySelector('[aria-checked="true"]').dataset.gridStyle;
   const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   try {
-    T.eq(Array.from(select.querySelectorAll('[role=radio]')).map(o => o.dataset.gridStyle), ['grid', 'dot', 'isometric', 'isometric-dot']);
+    T.eq(Array.from(select.querySelectorAll('[role=radio]')).map(o => o.dataset.gridStyle), ['grid', 'dot', 'isometric', 'isometric-dot', 'oblique']);
     T.ok(!document.querySelector('#btnGrid'), 'no separate visibility button');
-    const ids = { grid: 'gridMajor', dot: 'gridDots', isometric: 'gridIsometric', 'isometric-dot': 'gridIsometricDots' };
+    const ids = { grid: 'gridMajor', dot: 'gridDots', isometric: 'gridIsometric', 'isometric-dot': 'gridIsometricDots', oblique: '' };
     for (const mode of ['diagram', 'board', 'page']) {
       app.cmd.setMode(mode); await frame();
       for (const style of Object.keys(ids)) {
         choose(style);
         T.eq(state.gridStyle, style, 'shared preference updated');
         T.eq(select.querySelectorAll('[aria-checked="true"]').length, 1, 'exactly one style selected');
-        T.ok(getComputedStyle(rect).fill.includes(ids[style]), `${mode} renders ${style}`);
+        if (style === 'oblique') T.ok(document.querySelectorAll('#gridPlane path').length === 2 && /L/.test(document.querySelector('#gridPlane path').getAttribute('d') + document.querySelectorAll('#gridPlane path')[1].getAttribute('d')), `${mode} renders oblique`);
+        else T.ok(getComputedStyle(rect).fill.includes(ids[style]), `${mode} renders ${style}`);
         T.ok(state.grid, 'choosing style shows grid');
         click(style);
         T.ok(!state.grid, 'clicking active style hides grid');

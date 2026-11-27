@@ -63,7 +63,7 @@ T.test('architecture: every block editor opens through Enter, panel alias and co
 for (const [type, editorName, modalId, action] of [
   ['kmap', 'kmapEditor', 'kmModal', 'ke'], ['bytefield', 'bytefieldEditor', 'bfModal', 'be'], ['physics', 'physicsEditor', 'phyModal', 'pe'],
   ['cd', 'cdEditor', 'cdModal', 'ce'], ['chemfig', 'chemEditor', 'cfModal', 'ce'], ['cz', 'czEditor', 'czModal', 'cz'],
-  ['automata', 'fsmEditor', 'fsmModal', 'fe'], ['forest', 'ftEditor', 'ftModal', 'fe'], ['feynman', 'feynEditor', 'fyModal', 'fe'],
+  ['automata', 'fsmEditor', 'fsmModal', 'fe'], ['network', 'networkEditor', 'networkModal', 'ne'], ['forest', 'ftEditor', 'ftModal', 'fe'], ['feynman', 'feynEditor', 'fyModal', 'fe'],
   ['geo3d', 'geo3dEditor', 'g3Modal', 'ge'], ['graph', 'graphEditor', 'graphModal', 'ge'], ['qc', 'qcEditor', 'qcModal', 'qe'],
   ['timing', 'timingEditor', 'tmModal', 'te'], ['uml', 'umlEditor', 'umlModal', 'ue'], ['umlsd', 'umlsdEditor', 'umlsdModal', 'ue'],
   ['zx', 'zxEditor', 'zxModal', 'ze'], ['chemlab', 'chemlabEditor', 'clModal', 'le'],

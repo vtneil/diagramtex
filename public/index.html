@@ -371,6 +371,9 @@
         <!---->
 <button type="button" class="press" role="radio" data-grid-style="isometric-dot" aria-checked="false" tabindex="-1" title="Isometric Dot" aria-label="Isometric Dot"><!--[-1--><!--]--><!---->
 <svg viewBox="0 0 20 20" aria-hidden="true"><!----><g fill="currentColor" stroke="none"><circle cx="10" cy="4.5" r="1.7"/><circle cx="4" cy="15" r="1.7"/><circle cx="16" cy="15" r="1.7"/></g><!----></svg><!----></button><!---->
+        <!--[0--><!---->
+<button type="button" class="press" role="radio" data-grid-style="oblique" aria-checked="false" tabindex="-1" title="Oblique" aria-label="Oblique"><!--[-1--><!--]--><!---->
+<svg viewBox="0 0 20 20" aria-hidden="true"><!----><path d="M2 5h16M2 10h16M2 15h16M3 15L13 5M8 15L18 5"/><!----></svg><!----></button><!--]-->
       </div><!---->
   <!--[--><!---->
     <!--[0-->
@@ -626,6 +629,7 @@
         <rect id="paper" fill="#fff"></rect>
         <g id="pageLayer"></g>
         <rect id="gridRect" fill="url(#gridMajor)"></rect>
+        <g id="gridPlane"></g>
         <path id="origin" class="origin"></path>
         <g id="content"></g>
         <path id="pageMask" fill-rule="evenodd"></path>
@@ -637,8 +641,8 @@
       <div class="ruler" id="rulerY"><svg></svg></div>
       <div id="status">
         <span id="cursorPos">x 0.00 · y 0.00 cm</span>
-        <span id="selInfo"></span>
-        <span id="gridInfo"><label for="gridVal">grid</label><input id="gridVal" type="text" inputmode="decimal" value="0.25" title="Grid spacing in cm: type a value and press Enter" aria-label="Grid spacing (cm)" autocomplete="off" spellcheck="false"/> cm · <span id="snapInfo">snap on</span></span>
+        <span id="selSize" title="Size of the marquee being dragged"></span>
+        <span id="snapInfo">snap on</span>
         <span class="grow"></span>
         <div class="zoom pagenav" id="pageNav" hidden="">
           <!---->
@@ -649,7 +653,19 @@
           <!---->
 <button type="button" class="press" id="pageAdd" title="Insert a blank page after this one"><!--[-1--><!--]--><!---->+ Page<!----></button><!---->
         </div>
-        <span class="gap" aria-hidden="true"></span>
+      </div>
+      
+      <div id="viewBar" role="toolbar" aria-label="View">
+        <span id="gridInfo"><label for="gridVal">grid</label><input id="gridVal" type="text" inputmode="decimal" value="0.25" title="Grid spacing in cm: type a value and press Enter" aria-label="Grid spacing (cm)" autocomplete="off" spellcheck="false"/>cm</span>
+        <span id="gridAxesBox" hidden=""><!---->
+
+
+<!--[-1--><select id="gridAxes" aria-label="Oblique grid's axes" title="Oblique grid's axes">
+  <!--[--><!--[-1--><!--[--><option value="0,45">Skew 45°</option><option value="30,150">Isometric</option><option value="0,60">Triangular</option><!--]--><!--]--><!--]-->
+  <!--[-1--><!--]-->
+  <!--[-1--><!--]-->
+<!></select><!--]--><!----><label for="gridU1">u₁</label><input id="gridU1" class="vb-angle" type="text" inputmode="decimal" value="0°" title="First axis, in degrees from x: type a value and press Enter" aria-label="First axis (degrees)" autocomplete="off" spellcheck="false"/><label for="gridU2">u₂</label><input id="gridU2" class="vb-angle" type="text" inputmode="decimal" value="45°" title="Second axis, in degrees from x: type a value and press Enter" aria-label="Second axis (degrees)" autocomplete="off" spellcheck="false"/></span>
+        <span class="vb-sep" aria-hidden="true"></span>
         <div class="zoom">
           <!---->
 <button type="button" class="press" id="zoomOut" title="Zoom out (Ctrl+-)"><!--[-1--><!--]--><!---->−<!----></button><!---->
@@ -664,7 +680,7 @@
 <button type="button" class="press" id="zoomFitW" title="Zoom to fit the width, from the top"><!--[-1--><!--]--><!---->Fit Width<!----></button><!---->
         </div>
       </div>
-      <div id="hint"></div>
+      <div id="hint" hidden=""></div>
       <div id="emptyHint" hidden="">
         <div class="eh-diagram">
           <div class="eh-title">Empty diagram</div>

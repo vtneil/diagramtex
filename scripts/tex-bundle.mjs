@@ -41,7 +41,7 @@ const { PACKAGE_COMMANDS } = await import('../src/domain/package-commands.ts');
 // Packages the app writes or a document may load: these files' whole packages go in (step 3).
 const TREES = ['tikz.sty', 'pgf.revision.tex', 'pgfplots.sty', 'pgfplots.revision.tex', 'circuitikz.sty', 'tikz-cd.sty', 'forest.sty',
   'tikzlibraryquantikz2.code.tex', 'zx-calculus.sty', 'tikz-feynman.sty', 'tikz-3dplot.sty', 'tikz-timing.sty', 'pgf-umlcd.sty',
-  'pgf-umlsd.sty', 'karnaugh-map.sty', 'bytefield.sty', 'chemfig.sty', 'chemfig.tex', 'tikz-chemlab.sty', 'blochsphere.sty', 'booktabs.sty',
+  'pgf-umlsd.sty', 'karnaugh-map.sty', 'bytefield.sty', 'chemfig.sty', 'chemfig.tex', 'tikz-chemlab.sty', 'tikz-network.sty', 'datatool.sty', 'xifthen.sty', 'blochsphere.sty', 'booktabs.sty',
   'xy.tex', 'amsmath.sty', 'amssymb.sty', 'amsfonts.sty', 'mathtools.sty', 'siunitx.sty', 'geometry.sty', 'xcolor.sty', 'graphicx.sty',
   'array.sty', 'colortbl.sty', 'multirow.sty', 'standalone.cls', 'svg.sty', 'eso-pic.sty', 'mathrsfs.sty', 'dsfont.sty', 'physics.sty',
   'braket.sty', 'cancel.sty', 'xparse.sty', 'etoolbox.sty', 'pgfopts.sty', 'trimspaces.sty', 'environ.sty', 'tcolorbox.sty', 'enumitem.sty',
@@ -59,7 +59,7 @@ const EXTRA = String.raw`\documentclass{article}
 \usepackage[version=4]{mhchem}\usepackage{nicefrac,xfrac,tensor,slashed,centernot,upgreek,euscript}
 \usepackage{enumitem,caption,subcaption,float,eso-pic,microtype,url,hyperref}
 \usepackage{tikz,pgfplots,circuitikz,tikz-cd,forest,zx-calculus,tikz-3dplot,tikz-timing,karnaugh-map,bytefield,chemfig,blochsphere}
-\usepackage{pgf-umlcd}\usepackage{pgf-umlsd}\usepackage{tcolorbox}\usepackage[all]{xy}
+\usepackage{pgf-umlcd}\usepackage{pgf-umlsd}\usepackage{tikz-network}\usepackage{tcolorbox}\usepackage[all]{xy}
 \usetikzlibrary{arrows.meta,positioning,calc,decorations.pathmorphing,decorations.pathreplacing,decorations.markings,patterns.meta,
   shapes.geometric,shapes.misc,shapes.symbols,shapes.arrows,shapes.multipart,matrix,graphs,quotes,angles,automata,fit,backgrounds,
   intersections,through,shadings,fadings,quantikz2}

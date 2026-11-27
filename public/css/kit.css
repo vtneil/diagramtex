@@ -516,6 +516,10 @@ textarea.tdd-in { height: auto; padding: 8px; font: var(--fs-label)/1.5 var(--fo
 .fades:not([hidden]) > .modal-box { animation: pop-in .16s var(--ease); }
 :is(#modal, .modal).fades.modal-leaving[hidden] { display: flex; pointer-events: none; animation: tdd-fade-out .14s var(--ease) forwards; }
 .fades.modal-leaving[hidden] > .modal-box { animation: tdd-out .16s var(--ease) forwards; }
+/* a block editor's window (EditorFrame, .cz-box) only fades with its scrim: it never scales, because the editors fit
+   their drawing to the window's on-screen box as they open, and a window part-way through 97% → 100% measures small */
+.fades:not([hidden]) > .modal-box.cz-box { animation: tdd-fade .16s var(--ease); }
+.fades.modal-leaving[hidden] > .modal-box.cz-box { animation: tdd-fade-out .16s var(--ease) forwards; }
 .diagram-gallery[open] { animation: pop-in .16s var(--ease); }
 .diagram-gallery[open]::backdrop { animation: tdd-fade .14s var(--ease); }
 .diagram-gallery.leaving { pointer-events: none; animation: tdd-out .16s var(--ease) forwards; }

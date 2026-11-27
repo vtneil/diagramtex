@@ -1,7 +1,8 @@
 import { canScale, objectScale } from '../domain/scale';
 import { snapTranslation, createSnapIndex, type Guide, type SnapLine } from '../core/smart-snap';
 import { createCanvasMagnifier } from '../ui/canvas-magnifier';
-import { GRID_STYLES, snapCanvasGrid } from '../ui/canvas-grid';
+import { CANVAS_GRID_STYLES, obliquePlane, snapCanvasGrid } from '../ui/canvas-grid';
+import { planeGrid } from '../ui/plane-grid';
 import { applyWelcomeEdits } from './examples/welcome-edits';
 import { dashName, tipName, shaftName, placeName, anchorName, optionName } from '../i18n/names';
 import { exampleDiagramBlocks } from './example-diagrams';
@@ -38,6 +39,7 @@ import { conformShape } from '../core/conform';
 import { createDocumentHistory, stamp } from '../core/history';
 import MainProperties from '../ui/MainProperties.svelte';
 import type { Model as StyleModel } from '../ui/StyleField.svelte';
+import { hintToast, type HintKind } from '../ui/services/hint-toast';
 import type { Model as PageModel } from '../ui/PageProperties.svelte';
 import { row, section } from '../ui/forms';
 import type { FormRow, FormSection } from '../ui/forms';
@@ -166,7 +168,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       // a shape its type cannot measure would break every redraw (and, at startup, the whole app): leave it out
       try { TD.bbox(sh); return true; } catch (err) { console.warn('Left out a damaged shape', sh.type, err); return false; }
     },
-    onDropped: (n) => setTimeout(() => showHint(n > 1 ? uiText('hint.droppedShapes.many', 'Left out {n} damaged shapes that could not be drawn', { n }) : uiText('hint.droppedShapes.one', 'Left out 1 damaged shape that could not be drawn'), 5000), 0),
+    onDropped: (n) => setTimeout(() => showHint(n > 1 ? uiText('hint.droppedShapes.many', 'Left out {n} damaged shapes that could not be drawn', { n }) : uiText('hint.droppedShapes.one', 'Left out 1 damaged shape that could not be drawn'), 5000, 'warn'), 0),
     pageDefaults: TD.PAGE_DEFAULT,
   });
 
@@ -246,7 +248,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (!res || !String(res.macros || '').trim()) return;
     const m = mergeMacros(TD.docMacros(), res.macros);
     if (m.added.length) state.doc.page.macros = m.text;
-    if (m.kept.length) showHint(uiText('hint.macros.kept', 'This file already defines {names}: it keeps its own definition.', { names: m.kept.join(', ') }), 4000);
+    if (m.kept.length) showHint(uiText('hint.macros.kept', 'This file already defines {names}: it keeps its own definition.', { names: m.kept.join(', ') }), 4000, 'info');
   }
   async function editMacros() {
     const describe = (v: string) => {
@@ -280,7 +282,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       if (!problem) return name;
       showHint(problem === 'chars' ? uiText('ns.bad.chars', 'A style name uses letters, digits, spaces and hyphens, and starts with a letter.')
         : problem === 'reserved' ? uiText('ns.bad.reserved', '"{name}" is one of TikZ’s own keys. Choose another name.', { name })
-        : problem === 'taken' ? uiText('ns.bad.taken', 'This file already has a style named "{name}".', { name }) : uiText('ns.bad.empty', 'Type a name for the style.'), 4000);
+        : problem === 'taken' ? uiText('ns.bad.taken', 'This file already has a style named "{name}".', { name }) : uiText('ns.bad.empty', 'Type a name for the style.'), 4000, 'error');
       value = String(v);
     }
   }
@@ -295,7 +297,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     setStyles([...namedStyles(), st]);
     for (const q of sel) link(q, st);
     render(); commit(); renderProps();
-    showHint(uiText('hint.ns.made', 'Made the style "{name}". The LaTeX defines it once and names it on each object.', { name }), 3000);
+    showHint(uiText('hint.ns.made', 'Made the style "{name}". The LaTeX defines it once and names it on each object.', { name }), 3000, 'ok');
   }
   /** Link the selection to style `id`, or with '' unlink it (it keeps how it looks). */
   function applyNamed(id: string) {
@@ -315,7 +317,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     delete L.q.so;
     syncNamed();
     render(); commit(); renderProps();
-    showHint(uiText('hint.ns.updated', 'Updated the style "{name}". Every object linked to it follows.', { name: L.st.name }), 3000);
+    showHint(uiText('hint.ns.updated', 'Updated the style "{name}". Every object linked to it follows.', { name: L.st.name }), 3000, 'ok');
   }
   function resetNamed() { begin(); for (const q of styleTargets()) resetStyle(q, namedStyles()); render(); commit(); renderProps(); }
   async function renameNamed() {
@@ -333,7 +335,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     begin(); setStyles(namedStyles().filter((x) => x.id !== st.id)); render(); commit(); renderProps();
     showHint(n === 1 ? uiText('hint.ns.deleted.one', 'Deleted the style "{name}": the object that used it keeps how it looks. {undo}', { name: st.name, undo: undoHint() })
       : n ? uiText('hint.ns.deleted.many', 'Deleted the style "{name}": the {n} objects that used it keep how they look. {undo}', { name: st.name, n, undo: undoHint() })
-      : uiText('hint.ns.deleted', 'Deleted the style "{name}". {undo}', { name: st.name, undo: undoHint() }), 2400);
+      : uiText('hint.ns.deleted', 'Deleted the style "{name}". {undo}', { name: st.name, undo: undoHint() }), 2400, 'ok');
   }
   function namedMenu(btn: HTMLElement) {
     const L = linkedOf(), over = styleTargets().some((q) => q.style && q.so?.length);
@@ -432,9 +434,9 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       if (r === 'saved') diskWritten(id, edit);
       if (r === 'changed') {
         const f = TD.files.fileOf(id);
-        showHint(uiText('hint.fileChangedOnDisk', '{file} changed on disk, so changes are no longer saved to it as you work. {key} lets you choose which to keep.', { file: f?.name || '', key: keyLabel('Ctrl+S') }), 6000);
+        showHint(uiText('hint.fileChangedOnDisk', '{file} changed on disk, so changes are no longer saved to it as you work. {key} lets you choose which to keep.', { file: f?.name || '', key: keyLabel('Ctrl+S') }), 6000, 'warn');
       }
-      if (r === 'missing') showHint(uiText('hint.fileMissing', '{file} was moved or deleted. Changes stay in this browser; {key} asks where to save it.', { file: TD.files.fileOf(id)?.name || '', key: keyLabel('Ctrl+S') }), 6000);
+      if (r === 'missing') showHint(uiText('hint.fileMissing', '{file} was moved or deleted. Changes stay in this browser; {key} asks where to save it.', { file: TD.files.fileOf(id)?.name || '', key: keyLabel('Ctrl+S') }), 6000, 'warn');
       if (id === state.docId) showSaveState();
     });
   }
@@ -486,8 +488,8 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       if (id !== state.docId) return 'skip: switched';
       if (now.state === 'changed') {
         if (!diskDirty.has(id)) await takeDisk(id, now.text, name);
-        else if (TD.files.hold(id)) showHint(uiText('hint.fileChangedBoth', '{file} changed on disk while it has changes here. {key} lets you choose which to keep.', { file: name, key: keyLabel('Ctrl+S') }), 6000);
-      } else if (now.state === 'missing' && !was) showHint(uiText('hint.fileMissing', '{file} was moved or deleted. Changes stay in this browser; {key} asks where to save it.', { file: name, key: keyLabel('Ctrl+S') }), 6000);
+        else if (TD.files.hold(id)) showHint(uiText('hint.fileChangedBoth', '{file} changed on disk while it has changes here. {key} lets you choose which to keep.', { file: name, key: keyLabel('Ctrl+S') }), 6000, 'warn');
+      } else if (now.state === 'missing' && !was) showHint(uiText('hint.fileMissing', '{file} was moved or deleted. Changes stay in this browser; {key} asks where to save it.', { file: name, key: keyLabel('Ctrl+S') }), 6000, 'warn');
       showSaveState();
       return now.state + (now.state === 'changed' && diskDirty.has(id) ? ': held' : '');
     } finally { diskLook.busy = false; }
@@ -509,7 +511,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     saveOk = ok; saveFull = full;
     showSaveState();
     if (!ok && !was) showHint(full ? uiText('hint.autosave.tooLarge', 'Autosave failed: this file is too large for browser storage. Use Save to keep it as a file, or delete files you no longer need.')
-      : uiText('hint.autosave.unavailable', 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.'), 6000);
+      : uiText('hint.autosave.unavailable', 'Autosave failed: browser storage is unavailable. Use Save to keep a copy as a file.'), 6000, 'error');
   }
   // The status line, its file name cut in the middle where the bar has no room ("Lectur…tes.diagramtex"): the start
   // of the name and its end, with the extension, stay readable. Fitted again when the bar changes width.
@@ -626,7 +628,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       el.addEventListener('transitionend', end);
     });
   }
-  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, gridStyle: state.gridStyle, guideMode, snap: state.snap, snapMode: snapMode(), defaults: state.defaults, bucketFill, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
+  function savePrefs() { store.set(LS_PREFS, { grid: state.grid, gridCm: state.gridCm, gridStyle: state.gridStyle, gridAxes: state.gridAxes, guideMode, snap: state.snap, snapMode: snapMode(), defaults: state.defaults, bucketFill, sidebar: !document.body.classList.contains('no-files'), props: !$('#propsWin').classList.contains('collapsed'), layers: !$('#layersWin').classList.contains('collapsed') }); }
 
   // ---- Undo history per file (and per diagram of a classic file). Leaving a file keeps its steps; coming back
   // gives them back, as long as what they apply to is still exactly as it was left. Another tab's edit, a
@@ -845,7 +847,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     again.seen = listIds();
     renderDocList(); renderBinRow(); updateTopbar();
     const first: any = items.find((x) => x.id === ids[0]);
-    showHint(step.folder ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(step.folder) }) : ids.length === 1 ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(first.name) }) : uiText('hint.restored.many', 'Restored {n} files', { n: ids.length }), 1600);
+    showHint(step.folder ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(step.folder) }) : ids.length === 1 ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf(first.name) }) : uiText('hint.restored.many', 'Restored {n} files', { n: ids.length }), 1600, 'ok');
   }
   function redoFile() {
     const at = fileStep(fileRedo, listedOf);
@@ -855,7 +857,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     binDocs(ids, step.folder, step.back);
     for (const k of step.folded) folded.delete(k);
     if (step.folded.length) store.set(LS_FOLDED, [...folded]);
-    showHint(uiText('hint.binned', 'Moved "{name}" to the Recycle Bin', { name: leafOf(step.folder || it.name) }), 1600);
+    showHint(uiText('hint.binned', 'Moved "{name}" to the Recycle Bin', { name: leafOf(step.folder || it.name) }), 1600, 'ok');
   }
   const undoHint = () => uiText('hint.undoBringsBack', '{key} brings it back', { key: kb('Ctrl+Z') });
   function deleteDoc(id: any) {
@@ -863,7 +865,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (!it) return;
     fileRedo.length = 0;
     binDocs([id]);
-    showHint(uiText('hint.binned.undo', 'Moved "{name}" to the Recycle Bin. {undo}', { name: leafOf(it.name), undo: undoHint() }), 2400);
+    showHint(uiText('hint.binned.undo', 'Moved "{name}" to the Recycle Bin. {undo}', { name: leafOf(it.name), undo: undoHint() }), 2400, 'ok');
   }
   // A folder goes to the bin with everything in it (files of the kind on show, and the folders inside): no question
   // first, as ⌘Z or the bin brings it all back.
@@ -875,7 +877,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     binDocs(ids, path);
     for (const k of [...folded]) if (k === foldKey(path) || (k as any).startsWith(foldKey(pre))) folded.delete(k);
     store.set(LS_FOLDED, [...folded]);
-    showHint(uiText('hint.binned.undo', 'Moved "{name}" to the Recycle Bin. {undo}', { name: leafOf(path), undo: undoHint() }), 2400);
+    showHint(uiText('hint.binned.undo', 'Moved "{name}" to the Recycle Bin. {undo}', { name: leafOf(path), undo: undoHint() }), 2400, 'ok');
   }
   // Put files back under their old names (a name taken since gets "copy"); the first one opens.
   function restoreFromBin(ids: any) {
@@ -891,7 +893,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     store.set(LS_BIN, bin().filter((x) => !ids.includes((x as any).id)));
     openDoc((items[0] as any).id);
     renderBinRow();
-    showHint(items.length === 1 ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf((items[0] as any).name) }) : uiText('hint.restored.many', 'Restored {n} files', { n: items.length }), 1600);
+    showHint(items.length === 1 ? uiText('hint.restored.folder', 'Restored "{name}"', { name: leafOf((items[0] as any).name) }) : uiText('hint.restored.many', 'Restored {n} files', { n: items.length }), 1600, 'ok');
   }
   function eraseFromBin(ids: any) {
     for (const id of ids) { store.del(LS_DOC + id); recovery.forget(id); forgetHistory(id); TD.files.forget(id); }
@@ -1003,7 +1005,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const idx: any[] = index(), it = idx.find((x) => x.id === id);
     if (it) { it.updated = Date.now(); store.set(LS_INDEX, idx); }
     if (open) { state.docId = null; openDoc(id); } else renderDocList();
-    showHint(restoredHint(copy), 3200);
+    showHint(restoredHint(copy), 3200, 'ok');
   }
   const restoredHint = (copy: RecoveryCopy) => copy.name ? uiText('hint.versionRestored', 'Restored the version "{name}". The state before it is kept in the version history.', { name: copy.name })
     : uiText('hint.recRestored', 'Restored the copy from {when}. The state before it is kept in the version history.', { when: whenOf(copy.at) });
@@ -1013,7 +1015,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     let name = `${e.name} (${copy.name || whenOf(copy.at)})`;
     if (index().some((x) => x.name === name)) name = copyName(name);
     openDoc(storeCopy(copy.doc, name, id));
-    showHint(uiText('hint.recOpened', 'Opened the copy as "{name}"', { name: leafOf(name) }), 1800);
+    showHint(uiText('hint.recOpened', 'Opened the copy as "{name}"', { name: leafOf(name) }), 1800, 'ok');
   }
   // A saved version is marked with a bookmark; automatic copies with the clock.
   const VERSION_IC = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4.5 2.5h7v11L8 11l-3.5 2.5z" fill="none" stroke="currentColor" stroke-linejoin="round"/></svg>';
@@ -1043,7 +1045,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const cur = store.get<Record<string, unknown> | null>(LS_DOC + id, null);
     if (!cur) return null;
     const v = recovery.save(id, cur, docEntry(id)?.updated, String(name).trim() || whenOf(Date.now()));
-    showHint(uiText('hint.versionSaved', 'Saved the version "{name}". It is kept until you delete it.', { name: v.name! }), 3000);
+    showHint(uiText('hint.versionSaved', 'Saved the version "{name}". It is kept until you delete it.', { name: v.name! }), 3000, 'ok');
     return v;
   }
   function openRecovery(id?: string) {
@@ -1275,7 +1277,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (taken.has(name)) { let k = 1; const b = name; name = `${b} copy`; while (taken.has(name)) name = `${b} copy ${++k}`; }
     renameDoc(id, name);
     renderDocList();
-    showHint(folder ? uiText("hint.moved", 'Moved "{name}" to {folder}', { name: leafOf(name), folder }) : uiText('hint.movedOut', 'Moved "{name}" out of its folder', { name: leafOf(name) }), 1400);
+    showHint(folder ? uiText("hint.moved", 'Moved "{name}" to {folder}', { name: leafOf(name), folder }) : uiText('hint.movedOut', 'Moved "{name}" out of its folder', { name: leafOf(name) }), 1400, 'ok');
   }
   // Rename a folder: every file of this kind inside it (and in folders inside it) changes its path.
   function renameFolder(path: any, to: any) {
@@ -1357,7 +1359,9 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     while (step * z < (dots || style.startsWith('isometric') ? 18 : 7)) step *= 2;
     const iso = style.startsWith('isometric'), w = iso ? Math.sqrt(3) * step : step, h = step;
     const id = style === 'grid' ? 'gridMajor' : style === 'dot' ? 'gridDots' : style === 'isometric' ? 'gridIsometric' : 'gridIsometricDots';
-    $('#gridRect').setAttribute('fill', `url(#${id})`);
+    $('#gridRect').setAttribute('fill', style === 'oblique' ? 'none' : `url(#${id})`);
+    drawObliqueGrid();
+    if (style === 'oblique') { updateGridSelection(); return; }
     if (style !== 'grid') {
       const pat = $('#' + id);
       pat.setAttribute('width', w); pat.setAttribute('height', h);
@@ -1368,6 +1372,32 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       else pat.querySelector('path').setAttribute('d', `M0,0L${w},${h}M0,${h}L${w},0M0,0V${h}M${w / 2},0V${h}`);
     }
     updateGridSelection();
+  }
+  // the oblique grid: span{u1, u2} on the axes chosen (state.gridAxes), drawn by the shared plane grid in screen
+  // pixels and mapped back to the canvas; minor lines at the grid spacing, major ones as the square grid has them
+  function drawObliqueGrid() {
+    const gp = $('#gridPlane');
+    $('#gridAxesBox').hidden = gridStyle() !== 'oblique';
+    if (gridStyle() !== 'oblique') { if (gp.firstChild) gp.replaceChildren(); return; }
+    const r = stageSize(), v = state.view, z = v.zoom, P = obliquePlane(state.gridAxes, PX * z), o = toScreen({ x: 0, y: 0 });
+    P.o = [o.x, o.y];
+    const n = 1 / state.gridCm, major = state.gridCm >= 1 ? state.gridCm : Math.abs(n - Math.round(n)) < 1e-6 ? 1 : 4 * state.gridCm;
+    gp.setAttribute('transform', `translate(${v.x} ${v.y}) scale(${1 / z})`);
+    gp.innerHTML = planeGrid(P, r.w, r.h, { steps: [state.gridCm, major, 2 * major, 4 * major, 8 * major], major, bg: false, origin: false });
+  }
+  function setGridAxes(a: number, b: number) {
+    if (!Number.isFinite(a) || !Number.isFinite(b) || Math.abs(Math.sin((b - a) * Math.PI / 180)) < 0.05) return false; // two axes, not one
+    state.gridAxes = [a, b]; syncGridAxes(); savePrefs(); updateGridPattern(); return true;
+  }
+  // the view bar's axes: the preset's name (Custom, an option kept out of the menu, for any other pair) and u1, u2 in degrees
+  const fmtAngle = (n: number) => `${+n.toFixed(2)}°`;
+  function syncGridAxes() {
+    const sel = $('#gridAxes'), v = state.gridAxes.join(',');
+    if (sel) {
+      if (!sel.querySelector('option[value=custom]')) { const o = document.createElement('option'); o.value = 'custom'; o.hidden = true; o.textContent = uiText('ui.gridAxes.custom', 'Custom'); sel.append(o); }
+      sel.value = [...sel.options].some((o: any) => o.value === v) ? v : 'custom';
+    }
+    ['#gridU1', '#gridU2'].forEach((id, i) => { const f = $(id); if (f && document.activeElement !== f) f.value = fmtAngle(state.gridAxes[i]); });
   }
   function updateGridSelection() {
     $('#gridStyle').querySelectorAll('[data-grid-style]').forEach((b: HTMLButtonElement) => {
@@ -1462,10 +1492,9 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     cx.setAttribute('d', rulerCursor('x')); cy.setAttribute('d', rulerCursor('y'));
   }
   function updateStatus() {
-    const sel = selected(), el = $('#selInfo');
-    if (!el) return;
-    if (!sel.length) el.textContent = '';
-    else { const b = unionBox(sel); el.textContent = uiText('status.selected', '{n} selected · {w} × {h} cm', { n: sel.length, w: r2(b.w / PX), h: r2(b.h / PX) }); }
+    // the marquee's size beside the pointer's place, while one is dragged (a selection box or a text frame); 0 × 0 otherwise
+    const w = marquee ? Math.abs(marquee.b.x - marquee.a.x) : 0, h = marquee ? Math.abs(marquee.b.y - marquee.a.y) : 0;
+    $('#selSize').textContent = `w ${fx(w / PX)} · h ${fx(h / PX)} cm`;
     const gv = $('#gridVal');
     if (document.activeElement !== gv) gv.value = fmtGrid();
     $('#snapInfo').textContent = snapMode() === 'objects' ? uiText('snap.statusObjects','snap objects') : snapMode() === 'grid' ? uiText('snap.statusGrid','snap grid') : snapMode() === 'both' ? uiText('snap.statusBoth','snap both') : caption(captions['ui.snap.off']);
@@ -1639,7 +1668,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   function snapPoint(p: any, e: any, exclude?: any) {
     smartLines = [];
     if (!state.snap || (e && e.altKey)) return { x: p.x, y: p.y };
-    if (!snapObjects()) return snapGrid() ? snapCanvasGrid(p,TD.GRID,gridStyle()) : {x:p.x,y:p.y};
+    if (!snapObjects()) return snapGrid() ? snapCanvasGrid(p, TD.GRID, gridStyle(), state.gridAxes) : {x:p.x,y:p.y};
     const thr = 8 / state.view.zoom;
     let best = null, bd = thr;
     for (const s of shapes()) {
@@ -1657,7 +1686,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       pointSnapCache = { owner:home(), list:shapes(), excluded, others, index:createSnapIndex(others) };
     }
     const match = snapTranslation({ x: p.x, y: p.y, w: 0, h: 0 }, 0, 0, pointSnapCache.others, activeGuides(), thr, false, pointSnapCache.index);
-    const grid = snapGrid() ? snapCanvasGrid(p, TD.GRID, gridStyle()) : p; smartLines = match.lines;
+    const grid = snapGrid() ? snapCanvasGrid(p, TD.GRID, gridStyle(), state.gridAxes) : p; smartLines = match.lines;
     return { x: match.snappedX ? p.x + match.dx : grid.x, y: match.snappedY ? p.y + match.dy : grid.y };
   }
 
@@ -1846,7 +1875,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   // undoable, so no question first, even with objects on the page: the hint says how to take it back
   function deletePage(k: any) {
     const G = pageGeom();
-    if (G.n < 2) { showHint(uiText('hint.pageNeedsOne', 'A page file needs at least one page'), 1400); return; }
+    if (G.n < 2) { showHint(uiText('hint.pageNeedsOne', 'A page file needs at least one page'), 1400, 'warn'); return; }
     const lost = onPage(k, G).length;
     pageOp(() => {
       const keep = [];
@@ -1857,7 +1886,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     goToPage(Math.min(k, G.n - 2));
     showHint(lost > 1 ? uiText('hint.pageDeleted.many', 'Deleted page {page} and the {n} objects on it. {undo}', { page: k + 1, n: lost, undo: undoHint() })
       : lost ? uiText('hint.pageDeleted.one', 'Deleted page {page} and the object on it. {undo}', { page: k + 1, undo: undoHint() })
-      : uiText('hint.pageDeleted', 'Deleted page {page}. {undo}', { page: k + 1, undo: undoHint() }), 2400);
+      : uiText('hint.pageDeleted', 'Deleted page {page}. {undo}', { page: k + 1, undo: undoHint() }), 2400, 'ok');
   }
   function duplicatePage(k: any) {
     pageOp((G: any) => {
@@ -2456,7 +2485,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const file = e.target.files[0];
     if (!file) return;
     let pic: Picture;
-    try { pic = await readPicture(file); } catch (err: any) { imageTarget = null; showHint(uiText('hint.couldntOpenFile', "Couldn't open {name}: {error}", { name: file.name, error: err.message }), 2500); return; }
+    try { pic = await readPicture(file); } catch (err: any) { imageTarget = null; showHint(uiText('hint.couldntOpenFile', "Couldn't open {name}: {error}", { name: file.name, error: err.message }), 2500, 'error'); return; }
     begin();
     const old = imageTarget && byId(imageTarget);
     if (old) { old.src = pic.src; old.h = old.w * (pic.h / pic.w); old.file = ''; old.file = imageFileName(stemOf(file.name), pic.src); }
@@ -2472,12 +2501,23 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (b.dataset.imgact === 'replace') { imageTarget = s.id; $('#imageInput').value = ''; $('#imageInput').click(); return; }
     downloadImage(s.src, TYPES.image.fileName(s));
   });
-  let hintTimer: any;
-  function showHint(msg: any, ms?: any) {
-    const h = $('#hint');
-    h.textContent = msg; h.style.display = msg ? 'block' : 'none';
-    clearTimeout(hintTimer);
-    if (msg && ms) hintTimer = setTimeout(() => (h.style.display = 'none'), ms);
+  // the status hint, shown as toasts (src/ui/services/hint-toast.ts). With no ms a message is a live note of its source
+  // `key` ('note', the tools' instructions, by default) that stays until showHint('', 0, kind, key) clears it.
+  let toast: ReturnType<typeof hintToast> | null = null;
+  function showHint(msg: any, ms?: number, kind?: HintKind, key?: string) {
+    toastHere().show(msg, ms, kind, key);
+  }
+  // work the user waits for: a live progress note, then its outcome stacked over it (hint-toast.ts, task)
+  function hintTask(key: string, msg: string) { return toastHere().task(key, msg); }
+  // the stage is hidden in Document view: there the toasts move to #main and centre over the page
+  function toastHere() {
+    const h = $('#hint'), doc = state.mode === 'document', home = doc ? $('#main') : $('#stage');
+    if (h.parentElement !== home) home.appendChild(h);
+    if (doc) {
+      const dv = $('#docview'), cs = getComputedStyle(dv), pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0;
+      h.style.setProperty('--hint-x', `${dv.offsetLeft + pl + (dv.clientWidth - pl - pr) / 2}px`);
+    }
+    return (toast ||= hintToast(h));
   }
 
   // Ramer–Douglas–Peucker
@@ -2784,7 +2824,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (state.tool === 'magnify') { magnifier.show(e); return; }
     if (state.tool === 'bucket') {
       const hit = [...shapes()].reverse().find(s => canBucketFill(s) && TD.containsClosedShape(s, p));
-      if (!hit) { showHint(uiText('assist.bucketClosed', 'Choose a closed, unlocked shape.'), 1200); return; }
+      if (!hit) { showHint(uiText('assist.bucketClosed', 'Choose a closed, unlocked shape.'), 1200, 'warn'); return; }
       const targets = e.shiftKey && state.sel.has(hit.id) ? selected().filter(canBucketFill) : [hit];
       fillShapes(targets,e.altKey); renderProps(); return;
     }
@@ -3046,7 +3086,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
           if (best) { dx = best.dx; dy = best.dy; snapHint = { ...best.pt, anchor: true }; }
           else {
             const g = TD.GRID, rx = drag.ref.x + dx, ry = drag.ref.y + dy;
-            const snapped = snapGrid() ? snapCanvasGrid({ x: rx, y: ry }, g, gridStyle()) : {x:rx,y:ry};
+            const snapped = snapGrid() ? snapCanvasGrid({ x: rx, y: ry }, g, gridStyle(), state.gridAxes) : {x:rx,y:ry};
             if (!snapObjects()) { dx=snapped.x-drag.ref.x; dy=snapped.y-drag.ref.y; snapHint=null; } else {
               if (!drag.smart) drag.smart = { box: unionBox([...drag.orig.values()]), others: shapes().filter(s => !s.hidden && !state.sel.has(s.id) && !CONNECT.has(s.type)).map(s => TD.nodeFeatures?.bodyBox(s) || TD.bbox(s)) };
               if (!drag.smart.index) drag.smart.index = createSnapIndex(drag.smart.others);
@@ -3083,7 +3123,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
         const [x, y] = drag.zq, a = Math.atan2(y - drag.cy, x - drag.cx) + (deg * Math.PI) / 180;
         svg.style.setProperty('--rot-cur', rotCursor((a * 180) / Math.PI + 90));
         const one = drag.orig.size === 1 ? byId([...drag.orig.keys()][0]) : null;
-        showHint(one && one.angle !== undefined ? `${fx(one.angle)}°` : `${fx(-deg)}°`, 600);
+        showHint(one && one.angle !== undefined ? `${fx(one.angle)}°` : `${fx(-deg)}°`, 600, 'plain');
         drag.moved = true;
         render(); renderGeom();
         break;
@@ -3113,7 +3153,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
           TD.scaleShape(s, drag.B, nb);
         }
         detachFrom(selected(), state.sel);
-        showHint(`${Math.round((nb.w / (drag.B.w || 1)) * 100)}% × ${Math.round((nb.h / (drag.B.h || 1)) * 100)}%`, 600);
+        showHint(`${Math.round((nb.w / (drag.B.w || 1)) * 100)}% × ${Math.round((nb.h / (drag.B.h || 1)) * 100)}%`, 600, 'plain');
         drag.moved = true;
         render(); renderGeom();
         break;
@@ -3397,7 +3437,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       width: editWidth, at: editAt,
       onInput: editInput,
       onDone: () => { if (editing === me) finishEdit(); },
-      onFallback: () => showHint(uiText('hint.mathliveFailed', "MathLive couldn't load, so this edit uses LaTeX"), 2500),
+      onFallback: () => showHint(uiText('hint.mathliveFailed', "MathLive couldn't load, so this edit uses LaTeX"), 2500, 'warn'),
     });
   }
   function finishEdit() {
@@ -3447,7 +3487,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     render(); commit(); renderProps();
   }
   function polyRemove(s: any, i: any) {
-    if (s.pts.length <= (s.closed ? 3 : 2)) { showHint(s.closed ? 'A closed shape needs at least 3 points' : 'A polyline needs at least 2 points', 1400); return; }
+    if (s.pts.length <= (s.closed ? 3 : 2)) { showHint(s.closed ? uiText('hint.poly.closedMin', 'A closed shape needs at least 3 points') : uiText('hint.poly.openMin', 'A polyline needs at least 2 points'), 1400, 'warn'); return; }
     begin();
     s.pts.splice(i, 1);
     if (s.corner) s.corner.splice(i, 1);
@@ -3776,7 +3816,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const pg = { ...state.doc.page };
     if (k === 'paper') { if (v === 'custom') { const G = pageGeom(); pg.w = G.W; pg.h = G.H; } pg.paper = v; }
     else { v = parseFloat(v); if (!isFinite(v) || v < 0) { renderProps(); return; } if (k === 'mt') pg.mt = pg.mb = v; else if (k === 'ml') pg.ml = pg.mr = v; else pg[k] = Math.max(1, v); }
-    if (!TD.pageFits(pg)) { showHint(uiText('page.noRoom', 'That leaves no room for text: keep at least 1 cm between the margins'), 2400); renderProps(); return; }
+    if (!TD.pageFits(pg)) { showHint(uiText('page.noRoom', 'That leaves no room for text: keep at least 1 cm between the margins'), 2400, 'warn'); renderProps(); return; }
     setSheetPage(pg);
   });
   propsEl0().addEventListener('click', (e: any) => {
@@ -3954,7 +3994,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (t.dataset.vname != null) {
       const from = t.dataset.vname, to = t.value.trim();
       if (to === from) return;
-      if (!TD.params.okName(to) || (home().vars && to in home().vars!)) { showHint(!TD.params.okName(to) ? uiText('hint.varName.bad', 'A name is letters, digits and _, starting with a letter (and not a function such as sin)') : uiText('hint.varName.taken', 'There is already a variable called {name}', { name: to }), 2400); t.value = from; return; }
+      if (!TD.params.okName(to) || (home().vars && to in home().vars!)) { showHint(!TD.params.okName(to) ? uiText('hint.varName.bad', 'A name is letters, digits and _, starting with a letter (and not a function such as sin)') : uiText('hint.varName.taken', 'There is already a variable called {name}', { name: to }), 2400, 'error'); t.value = from; return; }
       begin(); renameVar(from, to); render(); commit(); renderProps(); return;
     }
     if (t.dataset.geom) {
@@ -4064,8 +4104,8 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       begin();
       const msg = TD.panels[s.type].action!(s, pa.dataset.act, +pa.dataset.i);
       render(); commit(); renderPanel();
-      if (typeof msg === 'string') showHint(msg, 1500);
-      else if (msg && msg.text) showHint(msg.text, msg.ms || 1500);
+      if (typeof msg === 'string') showHint(msg, 1500, 'ok'); // a panel's action returns what it did ("Copied … code")
+      else if (msg && msg.text) showHint(msg.text, msg.ms || 1500, msg.kind);
       return;
     }
     const vd = e.target.closest('[data-vdel]');
@@ -4191,7 +4231,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const t = Date.now();
     clipboard = { shapes: clone(list), n: 0, t };
     store.set(LS_CLIP, { shapes: clipboard.shapes, t, code });
-    navigator.clipboard.writeText(code).then(() => { codeFailed = 0; if (!state.sel.size) showHint(uiText('hint.copiedDiagramTikz', 'Copied the TikZ code of this diagram'), 1500); }, () => { codeFailed = t; });
+    navigator.clipboard.writeText(code).then(() => { codeFailed = 0; if (!state.sel.size) showHint(uiText('hint.copiedDiagramTikz', 'Copied the TikZ code of this diagram'), 1500, 'ok'); }, () => { codeFailed = t; });
   }
   // ⌘V: what the system clipboard holds decides. A copy made in this app (in any of its windows) pastes its
   // shapes; anything else comes in through takeIn below. A browser that sends no paste event gets the shapes.
@@ -4228,7 +4268,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (state.mode !== 'document') {
       const sheet = files.find(TABLE_FILE);
       if (sheet && !pics.length) {
-        try { const r = await TD.table.importFile(sheet); placeTable(r.table, at, uiText('hint.insertedTable', 'Inserted {name} as a table', { name: sheet.name })); } catch (err: any) { showHint(uiText('hint.couldntRead', "Couldn't read {name}: {error}", { name: sheet.name, error: err.message || err }), 2600); }
+        try { const r = await TD.table.importFile(sheet); placeTable(r.table, at, uiText('hint.insertedTable', 'Inserted {name} as a table', { name: sheet.name })); } catch (err: any) { showHint(uiText('hint.couldntRead', "Couldn't read {name}: {error}", { name: sheet.name, error: err.message || err }), 2600, 'error'); }
         return;
       }
       const tb = files.every(PIC_FILE) && tableFrom(html, text); // a spreadsheet's copy may carry a picture of the cells too
@@ -4238,8 +4278,8 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const nameOnly = !t || (!t.includes('\n') && (/^https?:\/\/\S+$/.test(t) || /^[^\s\\$]+\.\w{2,5}$/.test(t) || pics.some((f) => f.name === t)));
     if (pics.length && nameOnly) return takePictures(pics.map((f) => ({ blob: f, name: f.name })), at, docAt);
     if (t) return takeText(text, at, docAt);
-    if (texts.length) { try { return takeText(await texts[0].text(), at, docAt); } catch (err: any) { showHint(uiText('hint.couldntReadFile', "Couldn't read {name}", { name: texts[0].name }), 2000); return; } }
-    if (files.length) showHint(uiText('hint.cantUse', "Can't use {name}: drop a picture (PNG, JPEG, SVG, GIF, WebP) or a .tex file", { name: files[0].name }), 2600);
+    if (texts.length) { try { return takeText(await texts[0].text(), at, docAt); } catch (err: any) { showHint(uiText('hint.couldntReadFile', "Couldn't read {name}", { name: texts[0].name }), 2000, 'error'); return; } }
+    if (files.length) showHint(uiText('hint.cantUse', "Can't use {name}: drop a picture (PNG, JPEG, SVG, GIF, WebP) or a .tex file", { name: files[0].name }), 2600, 'error');
   }
   const TABLE_FILE = (f: File) => /\.(csv|tsv|tab|xlsx|xlsm)$/i.test(f.name);
   /** cells copied from a spreadsheet or the Table workspace (HTML with tab-separated text), or a Markdown table: a table model */
@@ -4263,13 +4303,13 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     s.x = c.x - L.w / 2; s.y = c.y - L.h / 2;
     state.sel = new Set([s.id]);
     commit(); render(); renderProps();
-    showHint(msg, 1800);
+    showHint(msg, 1800, 'ok');
   }
   async function takePictures(list: { blob: Blob | string; name: string }[], at: any, docAt?: number) {
     const got: { pic: Picture; name: string }[] = [];
     for (const it of list) {
       try { got.push({ pic: await readPicture(it.blob), name: it.name }); }
-      catch (err: any) { showHint(uiText('hint.couldntOpenFile', "Couldn't open {name}: {error}", { name: it.name || uiText('hint.thatPicture', 'that picture'), error: err.message }), 2600); }
+      catch (err: any) { showHint(uiText('hint.couldntOpenFile', "Couldn't open {name}: {error}", { name: it.name || uiText('hint.thatPicture', 'that picture'), error: err.message }), 2600, 'error'); }
     }
     if (!got.length) return;
     if (state.mode === 'document') {
@@ -4281,7 +4321,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const c = at || viewCentre(), G = TD.GRID;
     got.forEach((g, k) => state.sel.add(placeImage(g.pic, stemOf(g.name) || 'image', { x: c.x + k * G * 2, y: c.y + k * G * 2 }).id));
     commit(); render(); renderProps();
-    showHint(got.length > 1 ? uiText('hint.insertedPictures', 'Inserted {n} pictures', { n: got.length }) : uiText('hint.insertedPicture', 'Inserted the picture · the LaTeX names it {file}', { file: TYPES.image.fileName(selected()[0]) }), 2000);
+    showHint(got.length > 1 ? uiText('hint.insertedPictures', 'Inserted {n} pictures', { n: got.length }) : uiText('hint.insertedPicture', 'Inserted the picture · the LaTeX names it {file}', { file: TYPES.image.fileName(selected()[0]) }), 2000, 'ok');
   }
   async function takeText(text: string, at: any, docAt?: number) {
     const P = TD.pasteIn, k = P.kind(text);
@@ -4289,7 +4329,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (k === 'svg') return takePictures([{ blob: text.trim(), name: 'image.svg' }], at, docAt);
     if (k === 'image') {
       let blob: Blob;
-      try { blob = await (await fetch(text.trim())).blob(); } catch (err: any) { showHint(uiText('hint.couldntReadPicture', "Couldn't read that picture"), 2000); return; }
+      try { blob = await (await fetch(text.trim())).blob(); } catch (err: any) { showHint(uiText('hint.couldntReadPicture', "Couldn't read that picture"), 2000, 'error'); return; }
       return takePictures([{ blob, name: 'image' }], at, docAt);
     }
     if (k === 'tex' || k === 'block') {
@@ -4304,7 +4344,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       // a block is named (code that became one, too), not counted as a shape
       const one = list.length === 1 && (k === 'block' || TD.blocks.get(list[0].type)) ? list[0] : null;
       showHint(one ? uiText('hint.pastedBlock', 'Pasted the {name} block', { name: TYPES[one.type] ? typeName(one.type) : uiText('hint.block', 'block') })
-        : list.length === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: list.length }), 1800);
+        : list.length === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: list.length }), 1800, 'ok');
       return;
     }
     const body = P.asText(text, k);
@@ -4317,7 +4357,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     conform(s);
     state.sel = new Set([s.id]);
     commit(); render(); renderProps();
-    showHint(k === 'math' ? uiText('hint.pastedFormula', 'Pasted as a formula') : uiText('hint.pastedText', 'Pasted as text'), 1200);
+    showHint(k === 'math' ? uiText('hint.pastedFormula', 'Pasted as a formula') : uiText('hint.pastedText', 'Pasted as text'), 1200, 'ok');
   }
   // Dropping: only drags from outside the page (a drag started here, like a file row in the sidebar, is not one)
   let innerDrag = false;
@@ -4374,7 +4414,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       fetch(uri).then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status))))).then((blob) => {
         if (!/^image\//.test(blob.type)) throw new Error('not a picture');
         takePictures([{ blob, name: decodeURIComponent((uri.split(/[?#]/)[0].split('/').pop() || 'image')) }], at, docAt);
-      }).catch(() => showHint(uiText('hint.siteBlocksCopy', "That site doesn't let its pictures be copied: save the picture, then drop the file"), 3000));
+      }).catch(() => showHint(uiText('hint.siteBlocksCopy', "That site doesn't let its pictures be copied: save the picture, then drop the file"), 3000, 'error'));
       return;
     }
     takeIn(text, files, at, docAt, dt.getData('text/html') || '');
@@ -4420,12 +4460,12 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   const combinable = () => { const sel = selected(); return sel.length > 1 && sel.every((s: any) => TD.canCombine && TD.canCombine(s)); };
   function combineSel(op: any) {
     const sel = selected();
-    if (sel.length < 2) return showHint(uiText('hint.combine.selectTwo', 'Select two or more closed shapes to combine'), 1500);
-    if (!combinable()) return showHint(uiText('hint.combine.closedOnly', 'Combine works on closed shapes: rectangles, ellipses, closed polylines, filled symbols, regions'), 2200);
+    if (sel.length < 2) return showHint(uiText('hint.combine.selectTwo', 'Select two or more closed shapes to combine'), 1500, 'warn');
+    if (!combinable()) return showHint(uiText('hint.combine.closedOnly', 'Combine works on closed shapes: rectangles, ellipses, closed polylines, filled symbols, regions'), 2200, 'warn');
     const all = shapes(), list = sel.slice().sort((a: any, b: any) => all.indexOf(a) - all.indexOf(b));
     let res;
     try { res = TD.combineGeom(list, op); } catch (e: any) { console.error(e); res = null; }
-    if (!res) return showHint(uiText('hint.combine.failed', 'Could not combine these shapes'), 1500);
+    if (!res) return showHint(uiText('hint.combine.failed', 'Could not combine these shapes'), 1500, 'error');
     begin();
     const at = all.indexOf(list[0]);
     const made = res.map((r: any) => ({ id: uid(), type: 'region', rings: r.rings, ...TD.regionStyle(r.from) }));
@@ -4433,7 +4473,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     state.doc.shapes = [...rest.slice(0, pos), ...made, ...rest.slice(pos)];
     state.sel = new Set(made.map((s: any) => s.id));
     commit(); render(); renderProps();
-    showHint(made.length ? (made.length > 1 ? uiText('hint.combine.many', '{name}: {n} shapes', { name: combineName(op), n: made.length }) : uiText('hint.combine.one', '{name}: 1 shape', { name: combineName(op) })) : uiText('hint.combine.nothing', 'Nothing left: the shapes do not overlap that way'), 1500);
+    showHint(made.length ? (made.length > 1 ? uiText('hint.combine.many', '{name}: {n} shapes', { name: combineName(op), n: made.length }) : uiText('hint.combine.one', '{name}: 1 shape', { name: combineName(op) })) : uiText('hint.combine.nothing', 'Nothing left: the shapes do not overlap that way'), 1500, made.length ? 'ok' : 'warn');
   }
   // ---------- groups ----------
   function groupIds(id: any) {
@@ -4460,13 +4500,13 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     all.forEach((s: any, i: any) => { if (state.sel.has(s.id)) top = i; });
     const rest = all.filter((s: any) => !state.sel.has(s.id)), at = all.slice(0, top).filter((s: any) => !state.sel.has(s.id)).length;
     state.doc.shapes = [...rest.slice(0, at), ...sel, ...rest.slice(at)];
-    commit(); render(); renderProps(); showHint(uiText('hint.grouped', 'Grouped {n} objects', { n: sel.length }), 1000);
+    commit(); render(); renderProps(); showHint(uiText('hint.grouped', 'Grouped {n} objects', { n: sel.length }), 1000, 'ok');
   }
   function ungroupSel() {
     if (!canUngroup()) return;
     begin();
     for (const s of selected()) { delete s.g; delete s.gname; delete s.scopeGroup; }
-    commit(); render(); renderProps(); showHint(uiText('hint.ungrouped', 'Ungrouped'), 1000);
+    commit(); render(); renderProps(); showHint(uiText('hint.ungrouped', 'Ungrouped'), 1000, 'ok');
   }
 
   // ---------- components (src/domain/components.ts) ----------
@@ -4502,7 +4542,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   }
   function makeComponent() {
     const all = shapes(), list = selected().slice().sort((a: any, b: any) => all.indexOf(a) - all.indexOf(b));
-    if (list.length < 2) return showHint(uiText('hint.comp.selectTwo', 'Select two or more objects (or a group) to make a component'), 1800);
+    if (list.length < 2) return showHint(uiText('hint.comp.selectTwo', 'Select two or more objects (or a group) to make a component'), 1800, 'warn');
     const b = unionBox(list), G = TD.GRID, ox = Math.round((b.x + b.w / 2) / G) * G, oy = Math.round((b.y + b.h / 2) / G) * G;
     const used = new Set(all.filter((q: any) => q.type === 'comp').map((q: any) => q.cname));
     let k = 1; while (used.has('part' + k)) k++;
@@ -4510,7 +4550,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const inst = { id: uid(), type: 'comp', x: ox, y: oy, ref: uid(), cname: 'part' + k, def: TD.comp.defOf(list, ox, oy) };
     replaceWith(list, [inst]);
     commit(); render(); renderProps();
-    showHint(uiText('hint.comp.made', 'Made component {name}: duplicate it for linked copies, exported as a TikZ pic', { name: 'part' + k }), 2400);
+    showHint(uiText('hint.comp.made', 'Made component {name}: duplicate it for linked copies, exported as a TikZ pic', { name: 'part' + k }), 2400, 'ok');
   }
   function openParts(inst: any, mark: any) {
     const P = TD.comp.placed(inst), idmap = new Map(), g = uid();
@@ -4524,12 +4564,12 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   function editComponent(inst: any) {
     if (!inst || inst.type !== 'comp') return;
     begin(); replaceWith([inst], openParts(inst, true)); commit(); render(); renderProps();
-    showHint(uiText('hint.comp.editing', 'Editing {name}: change its parts, then Save Component to update every copy', { name: inst.cname }), 2600);
+    showHint(uiText('hint.comp.editing', 'Editing {name}: change its parts, then Save Component to update every copy', { name: inst.cname }), 2600, 'info');
   }
   function detachComponent(inst: any) {
     if (!inst || inst.type !== 'comp') return;
     begin(); replaceWith([inst], openParts(inst, false)); commit(); render(); renderProps();
-    showHint(uiText('hint.comp.detached', 'Detached: plain shapes, no longer linked'), 1500);
+    showHint(uiText('hint.comp.detached', 'Detached: plain shapes, no longer linked'), 1500, 'ok');
   }
   function saveComponent(ref: any) {
     const list = shapes().filter((q: any) => q.cpart && q.cpart.ref === ref);
@@ -4540,7 +4580,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     for (const q of shapes()) if (q.type === 'comp' && q.ref === ref) { q.def = clone(def); q.cname = name; n++; }
     replaceWith(list, [{ id: uid(), type: 'comp', x: at[0], y: at[1], ref, cname: name, def }]);
     commit(); render(); renderProps();
-    showHint(n ? uiText('hint.comp.savedN', 'Saved {name}: {n} copies updated', { name, n: n + 1 }) : uiText('hint.comp.saved', 'Saved {name}', { name }), 1800);
+    showHint(n ? uiText('hint.comp.savedN', 'Saved {name}: {n} copies updated', { name, n: n + 1 }) : uiText('hint.comp.saved', 'Saved {name}', { name }), 1800, 'ok');
   }
   function componentSections(sel: Shape[]): FormSection[] {
     const one = sel.length === 1 && sel[0].type === 'comp' ? sel[0] : null;
@@ -4661,7 +4701,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   const keyIds = (k: any) => (k.startsWith('g:') ? shapes().filter((q: any) => q.g === k.slice(2)).map((q: any) => q.id) : [k]);
   function selectRow(row: any, e: any) {
     const ids = rowIds(row);
-    if (!ids.some((id: any) => pickable(byId(id)))) { showHint(ids.every((id: any) => (byId(id))!.hidden) ? uiText('hint.hiddenSelect', 'Hidden: show it to select it') : uiText('hint.lockedSelect', 'Locked: unlock it to select it'), 1400); return; }
+    if (!ids.some((id: any) => pickable(byId(id)))) { showHint(ids.every((id: any) => (byId(id))!.hidden) ? uiText('hint.hiddenSelect', 'Hidden: show it to select it') : uiText('hint.lockedSelect', 'Locked: unlock it to select it'), 1400, 'warn'); return; }
     const rows = [...layersEl.querySelectorAll('.ly-row')], a = rowByKey(layerAnchor);
     if (e.shiftKey && a) {
       const i = rows.indexOf(a), j = rows.indexOf(row);
@@ -4966,7 +5006,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   }
   function outputAllowed(list?: any[]): boolean {
     if (outputReady(list)) return true;
-    showHint(outputWait(), 2200); return false;
+    showHint(outputWait(), 2200, 'warn'); return false;
   }
   const OUTPUT_BUTTONS: [string, string][] = [['topbar', '[data-cmd="export"], [data-cmd="print"], [data-cmd="tikz"]'], ['quick', '[data-q]'], ['pwQuick', '[data-q]'], ['tableview', 'button[data-render]']];
   function updateOutputAvailability(): void {
@@ -4989,7 +5029,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (!state.sel.size || !outputAllowed(selected())) return;
     copySel();
     const code = TD.toTikz(selected());
-    try { await navigator.clipboard.writeText(code); showHint(uiText('hint.tikzCopied', 'TikZ code copied'), 1200); }
+    try { await navigator.clipboard.writeText(code); showHint(uiText('hint.tikzCopied', 'TikZ code copied'), 1200, 'ok'); }
     catch (e: any) { openTikz(); }
   }
 
@@ -4999,7 +5039,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   // carries its maths fonts, so it shows the same wherever it is pasted.
   async function selImage(what: any) {
     const list = selected().filter((s: any) => !s.hidden);
-    if (!list.length) { showHint(uiText('hint.nothingVisible', 'Nothing visible is selected'), 1200); return; }
+    if (!list.length) { showHint(uiText('hint.nothingVisible', 'Nothing visible is selected'), 1200, 'warn'); return; }
     if (!outputAllowed(list)) return;
     const name = slug() + '-selection';
     const clear = what.endsWith('-t'), kind = what.replace(/-t$/, '');
@@ -5010,12 +5050,12 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       if (kind === 'copy-png') {
         // the item is made during the click with the picture still to come: Safari allows a copy only then
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': png() })]);
-        showHint(clear ? uiText('hint.copiedPngClear', 'Copied as PNG at {dpi} DPI, transparent', { dpi }) : uiText('hint.copiedPng', 'Copied as PNG at {dpi} DPI', { dpi }), 1400);
+        showHint(clear ? uiText('hint.copiedPngClear', 'Copied as PNG at {dpi} DPI, transparent', { dpi }) : uiText('hint.copiedPng', 'Copied as PNG at {dpi} DPI', { dpi }), 1400, 'ok');
       } else if (kind === 'copy-svg') {
         const text = svg(), item: Record<string, any> = { 'text/plain': text.then((t: string) => new Blob([t], { type: 'text/plain' })) };
         if (ClipboardItem.supports && ClipboardItem.supports('image/svg+xml')) item['image/svg+xml'] = text.then((t: string) => new Blob([t], { type: 'image/svg+xml' }));
         await navigator.clipboard.write([new ClipboardItem(item)]);
-        showHint(uiText('hint.copiedSvg', 'Copied as SVG'), 1200);
+        showHint(uiText('hint.copiedSvg', 'Copied as SVG'), 1200, 'ok');
       } else if (kind === 'save-png') {
         await askDir();
         await out(name + '.png', await png());
@@ -5024,7 +5064,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
         await out(name + '.svg', await svg(), 'image/svg+xml');
       }
     } catch (e: any) {
-      showHint(kind.startsWith('copy') ? uiText('hint.couldntCopyPic', "Couldn't copy the picture ({error})", { error: e.message || e }) : uiText('hint.couldntSavePic', "Couldn't save the picture ({error})", { error: e.message || e }), 3000);
+      showHint(kind.startsWith('copy') ? uiText('hint.couldntCopyPic', "Couldn't copy the picture ({error})", { error: e.message || e }) : uiText('hint.couldntSavePic', "Couldn't save the picture ({error})", { error: e.message || e }), 3000, 'error');
     }
   }
 
@@ -5156,7 +5196,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       TD.alert(uiText('dlg.shareTooLarge.title', 'Too large to share as a link'), uiText('dlg.shareTooLarge.body', '"{name}" needs a link of {k}k characters; links are kept under {max}k so browsers, chat apps and firewalls don\'t cut them off. Save it to a .diagramtex file and send the file instead.', { name: leafOf(it.name), k: Math.ceil(url.length / 1000), max: SHARE_MAX / 1000 }));
       return;
     }
-    try { await navigator.clipboard.writeText(url); showHint(uiText('hint.shareCopied', 'Share link copied ({n} characters). Whoever opens it gets their own copy of "{name}".', { n: url.length.toLocaleString(), name: leafOf(it.name) }), 3200); }
+    try { await navigator.clipboard.writeText(url); showHint(uiText('hint.shareCopied', 'Share link copied ({n} characters). Whoever opens it gets their own copy of "{name}".', { n: url.length.toLocaleString(), name: leafOf(it.name) }), 3200, 'ok'); }
     catch (e: any) { TD.prompt(uiText('dlg.shareLink.title', 'Share Link'), url, { ok: caption(captions["ui.done"]), cancel: null }); }
   }
   // Open the file in a share link as a new file. The same link opened again opens the copy made the
@@ -5176,12 +5216,12 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       if (leafOf((x as any).name) !== p.name) continue;
       const d = store.get<Record<string, any> | null>(LS_DOC + (x as any).id, null);
       let q: any = null; try { q = d && parseProject(projectJson({ ...d, name: p.name })); } catch (e: any) { q = null; }
-      if (q && projectJson(q) === same) { openDoc((x as any).id); showHint(uiText('hint.alreadyHere', '"{name}" is already here', { name: p.name }), 1600); return true; }
+      if (q && projectJson(q) === same) { openDoc((x as any).id); showHint(uiText('hint.alreadyHere', '"{name}" is already here', { name: p.name }), 1600, 'info'); return true; }
     }
     const name = index().some((x) => (x as any).name === p.name) ? copyName(p.name) : p.name;
     if (p.kind === 'page') newDoc(name, null, null, null, p.page, 'page', p.sheet);
     else { newDoc(name, null, null, p.blocks, p.page, p.kind); zoomFit(); }
-    showHint(uiText('hint.openedShared', 'Opened the shared file "{name}". It is now saved in this browser.', { name }), 3000);
+    showHint(uiText('hint.openedShared', 'Opened the shared file "{name}". It is now saved in this browser.', { name }), 3000, 'ok');
     return true;
   }
   window.addEventListener('hashchange', () => { if (location.hash.startsWith('#' + SHARE_KEY)) { setQuick(false); setTable(false); openShared(); } });
@@ -5237,9 +5277,9 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   function exportAll() {
     finishEdit();
     const { text, n } = bundleJson();
-    if (!n) { showHint(uiText('hint.noFilesExport', 'No files to export'), 1400); return; }
+    if (!n) { showHint(uiText('hint.noFilesExport', 'No files to export'), 1400, 'warn'); return; }
     download(`DiagramTeX files ${new Date().toISOString().slice(0, 10)}${FILE_EXT}`, text, FILE_TYPE);
-    showHint(n === 1 ? uiText('hint.exportedBundle.one', 'Exported 1 file in one bundle') : uiText('hint.exportedBundle.many', 'Exported {n} files in one bundle', { n }), 1600);
+    showHint(n === 1 ? uiText('hint.exportedBundle.one', 'Exported 1 file in one bundle') : uiText('hint.exportedBundle.many', 'Exported {n} files in one bundle', { n }), 1600, 'ok');
   }
   const isBundle = (d: any) => !!d && typeof d === 'object' && d.kind === 'bundle' && Array.isArray(d.files);
   // Each file of a bundle goes to the list of its kind. A file already here with the same name and contents is
@@ -5273,17 +5313,17 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const added = n.page + n.classic + n.board;
     const msg = (added ? (added === 1 ? uiText('bundle.added.one', 'Added 1 file: {parts}', { parts: parts.join(', ') }) : uiText('bundle.added.many', 'Added {n} files: {parts}', { n: added, parts: parts.join(', ') })) : uiText('bundle.none', 'No new files'))
       + (same ? uiText('bundle.same', '; {n} already here', { n: same }) : '') + (bad ? uiText('bundle.bad', '; {n} not readable', { n: bad }) : '');
-    showHint(msg, 3000);
+    showHint(msg, 3000, 'ok');
     return { ...n, same, bad, first };
   }
   async function pasteDoc() {
     let text = null;
     try { text = await navigator.clipboard.readText(); } catch { /* permission denied: use our own copy */ }
     try {
-      if (text && /^\s*\{/.test(text) && openProjectText(text, null, true)) { showHint(uiText('hint.pastedNewFile', 'Pasted as a new file'), 1200); return; }
-      if (docClip && openProjectText(docClip, null, true)) { showHint(uiText('hint.pastedNewFile', 'Pasted as a new file'), 1200); return; }
-    } catch (err: any) { showHint(uiText('hint.couldNotPaste', 'Could not paste: {error}', { error: err.message }), 2000); return; }
-    showHint(uiText('hint.nothingToPaste', 'Nothing to paste: copy a file first'), 1600);
+      if (text && /^\s*\{/.test(text) && openProjectText(text, null, true)) { showHint(uiText('hint.pastedNewFile', 'Pasted as a new file'), 1200, 'ok'); return; }
+      if (docClip && openProjectText(docClip, null, true)) { showHint(uiText('hint.pastedNewFile', 'Pasted as a new file'), 1200, 'ok'); return; }
+    } catch (err: any) { showHint(uiText('hint.couldNotPaste', 'Could not paste: {error}', { error: err.message }), 2000, 'error'); return; }
+    showHint(uiText('hint.nothingToPaste', 'Nothing to paste: copy a file first'), 1600, 'warn');
   }
   // A menu of a few actions for another part of the app (Quick's sidebar list), drawn and placed like this one.
   function openMenu(entries: { label: string; act: string; ic?: IconName; danger?: boolean; dis?: boolean; sep?: boolean }[], x: number, y: number, pick: (act: string) => void) {
@@ -5373,7 +5413,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       case 'share': shareLink(id); break;
       case 'openfile': openFile(); break;
       case 'rename': renameInList(id); break;
-      case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(uiText('hint.duplicatedAs', 'Duplicated as "{name}"', { name: n }), 1200); } break; }
+      case 'dup': { const src = docData(id); if (src) { const n = copyName(it.name); storeCopy(src, n, id); renderDocList(); showHint(uiText('hint.duplicatedAs', 'Duplicated as "{name}"', { name: n }), 1200, 'ok'); } break; }
       case 'saveas': {
         const src = docData(id); if (!src) break;
         TD.prompt(uiText('dlg.saveCopyAs.title', 'Save a Copy As'), copyName(it.name), { ok: caption(captions["ui.save"]) }).then((name: any) => {
@@ -5384,18 +5424,18 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       case 'copy': {
         docClip = docJson(id);
         if (!docClip) break;
-        navigator.clipboard.writeText(docClip).then(() => showHint(uiText('hint.copiedFile', 'Copied "{name}"', { name: it.name }), 1000), () => showHint(uiText('hint.copiedFileTab', 'Copied "{name}" (in this tab only)', { name: it.name }), 1400));
+        navigator.clipboard.writeText(docClip).then(() => showHint(uiText('hint.copiedFile', 'Copied "{name}"', { name: it.name }), 1000, 'ok'), () => showHint(uiText('hint.copiedFileTab', 'Copied "{name}" (in this tab only)', { name: it.name }), 1400, 'ok'));
         break;
       }
       case 'paste': pasteDoc(); break;
       case 'exportall': exportAll(); break;
       case 'save': openFirst(); saveFile(); break;
       case 'savenew': openFirst(); saveFile(true); break;
-      case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { diskWritten(id, diskEdit(id)); if (id === state.docId) showSaveState(); if (f) showHint(uiText('hint.unlinked', 'No longer linked to {file}', { file: f.name }), 1400); }); break; }
+      case 'unlink': { const f = TD.files.fileOf(id); TD.files.unlink(id).then(() => { diskWritten(id, diskEdit(id)); if (id === state.docId) showSaveState(); if (f) showHint(uiText('hint.unlinked', 'No longer linked to {file}', { file: f.name }), 1400, 'ok'); }); break; }
       case 'latex': case 'tikz': case 'html': case 'print': openFirst(); runCmd(a); break;
       case 'image': {
         openFirst();
-        if (state.mode === 'document') { showHint(uiText('hint.imageNeedsDiagram', 'Image export works on a diagram: switch to Diagram view first'), 2000); break; }
+        if (state.mode === 'document') { showHint(uiText('hint.imageNeedsDiagram', 'Image export works on a diagram: switch to Diagram view first'), 2000, 'warn'); break; }
         if (expOpts.fmt === 'html') expOpts.fmt = 'png'; // "Image…" opens on a picture format
         requestAnimationFrame(() => openExport($('#btnExport')));
         break;
@@ -5461,7 +5501,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (a === 'img') selImage(arg);
     if (a === 'copytext') {
       const t = selected().map((s: any) => (s.text || s.label || '').trim()).filter(Boolean).join('\n');
-      navigator.clipboard.writeText(t).then(() => showHint(uiText('hint.textCopied', 'Text copied'), 1000), () => showHint(uiText('hint.noClipboard', 'Clipboard not available'), 1400));
+      navigator.clipboard.writeText(t).then(() => showHint(uiText('hint.textCopied', 'Text copied'), 1000, 'ok'), () => showHint(uiText('hint.noClipboard', 'Clipboard not available'), 1400, 'error'));
     }
     if (a === 'cut') { copySel(); deleteSel(); }
     if (a === 'paste') paste(ctxFor.at);
@@ -5547,10 +5587,10 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
           saveNow();
           // without the File System Access API there is no file to keep in step, so remind people to keep one
           const key = isMac ? '⇧⌘S' : 'Ctrl+Shift+S';
-          if (!DS?.active) { showHint(uiText('hint.autosaveNone', 'This browser can’t autosave — {key} saves to a file', { key }), 3000); return; }
+          if (!DS?.active) { showHint(uiText('hint.autosaveNone', 'This browser can’t autosave — {key} saves to a file', { key }), 3000, 'warn'); return; }
           const msg = uiText('hint.autosaved', 'Autosaved in this browser — {key} saves to a file', { key });
-          if (TD.files.can) showHint(msg, 1500);
-          else showHint(uiText('hint.autosaved.remind', '{msg}\nRemember to occasionally save to file to prevent accidental losses.', { msg }), 4000);
+          if (TD.files.can) showHint(msg, 1500, 'ok');
+          else showHint(uiText('hint.autosaved.remind', '{msg}\nRemember to occasionally save to file to prevent accidental losses.', { msg }), 4000, 'ok');
         }
         return;
       }
@@ -5683,10 +5723,26 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   $('#btnUndo').onclick = () => (state.mode === 'document' ? undoDocument(true) : undo());
   $('#btnRedo').onclick = () => (state.mode === 'document' ? undoDocument(false) : redo());
   function chooseGridStyle(style: any, toggle = false) {
-    if (!GRID_STYLES.includes(style)) return;
+    if (!CANVAS_GRID_STYLES.includes(style)) return;
     state.grid = !(toggle && state.grid && state.gridStyle === style); state.gridStyle = style;
     savePrefs(); updateGridPattern(); updateTopbar();
   }
+  // the oblique grid's axes: presets in the status line (any pair from code: TD.app.cmd.setGridAxes)
+  $('#gridAxes').addEventListener('change', (e: any) => { const [a, b] = String(e.target.value).split(',').map(Number); if (!setGridAxes(a, b)) syncGridAxes(); });
+  ['#gridU1', '#gridU2'].forEach((id, i) => { // like the grid spacing: Enter or leaving applies, Esc reverts; two axes along one line are refused
+    const f = $(id);
+    f.addEventListener('focus', () => selectOnFocus(f));
+    f.addEventListener('keydown', (e: any) => {
+      if (e.key === 'Enter') { e.preventDefault(); f.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); f.value = fmtAngle(state.gridAxes[i]); f.blur(); }
+    });
+    f.addEventListener('change', () => {
+      const n = parseFloat(f.value.replace(/[°\s]|deg/g, '').replace(',', '.')), ax = [...state.gridAxes];
+      if (Number.isFinite(n)) { ax[i] = n; if (!setGridAxes(ax[0], ax[1])) showHint(uiText('ui.gridAxes.same', 'The two axes must point different ways'), 2000, 'warn'); }
+      f.value = fmtAngle(state.gridAxes[i]);
+    });
+    f.addEventListener('blur', () => { f.value = fmtAngle(state.gridAxes[i]); });
+  });
   $('#gridStyle').onclick = (e: MouseEvent) => {
     const button = (e.target as Element).closest<HTMLButtonElement>('[data-grid-style]');
     if (button) chooseGridStyle(button.dataset.gridStyle, true);
@@ -5696,10 +5752,10 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (button && (e.key === ' ' || e.key === 'Enter')) { e.stopPropagation(); return; }
     if (!button || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
     e.preventDefault(); e.stopPropagation();
-    const index = GRID_STYLES.indexOf(button.dataset.gridStyle as any), delta = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
-    const next = e.key === 'Home' ? 0 : e.key === 'End' ? GRID_STYLES.length - 1 : (index + delta + GRID_STYLES.length) % GRID_STYLES.length;
-    chooseGridStyle(GRID_STYLES[next]);
-    $('#gridStyle').querySelector(`[data-grid-style="${GRID_STYLES[next]}"]`)?.focus();
+    const index = CANVAS_GRID_STYLES.indexOf(button.dataset.gridStyle as any), delta = e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1;
+    const L = CANVAS_GRID_STYLES, next = e.key === 'Home' ? 0 : e.key === 'End' ? L.length - 1 : (index + delta + L.length) % L.length;
+    chooseGridStyle(L[next]);
+    $('#gridStyle').querySelector(`[data-grid-style="${L[next]}"]`)?.focus();
   });
   $('#btnSnap').onclick = cycleSnapMode;
   $('#zoomIn').onclick = () => { const r = stageSize(); zoomAt(1.25, r.w / 2, r.h / 2); };
@@ -5920,15 +5976,15 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     try {
       const name = await TD.files.saveDoc(id, text, fileName(), pick, (disk: string) => diskConflict(id, disk));
       if (name) diskWritten(id, edit);
-      if (name) showHint(uiText('hint.savedTo', 'Saved to {file}', { file: name }), 1200);
+      if (name) showHint(uiText('hint.savedTo', 'Saved to {file}', { file: name }), 1200, 'ok');
     } catch (e: any) {
-      showHint(uiText('hint.saveFailed', "Couldn't save the file ({error}). Downloaded a copy instead.", { error: e.message }), 3500);
+      showHint(uiText('hint.saveFailed', "Couldn't save the file ({error}). Downloaded a copy instead.", { error: e.message }), 3500, 'error');
       download(fileName(), text, FILE_TYPE);
     }
     if (id === state.docId) showSaveState();
   }
   const { validShapes, dropRetired, dropRetiredDoc } = TD.projectFiles;
-  const retiredHint = (n: any) => n && showHint(n > 1 ? uiText('hint.retired.many', 'Removed {n} 3D sketches: no longer supported. Use 3D Geometry instead.', { n }) : uiText('hint.retired.one', 'Removed 1 3D sketch: no longer supported. Use 3D Geometry instead.'), 5000);
+  const retiredHint = (n: any) => n && showHint(n > 1 ? uiText('hint.retired.many', 'Removed {n} 3D sketches: no longer supported. Use 3D Geometry instead.', { n }) : uiText('hint.retired.one', 'Removed 1 3D sketch: no longer supported. Use 3D Geometry instead.'), 5000, 'warn');
   const baseName = (n: any) => n.replace(/(\.diagramtex|(\.page|\.board)?\.json)$/i, '');
   // Open a file from disk: a project file opens as a file of the app (linked to the file on disk when the
   // browser hands over a handle), anything else goes to the LaTeX import.
@@ -5959,7 +6015,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     diskLook.busy = true; // this reads the file itself
     try {
       if (id !== state.docId) openDoc(id);
-      if (!fresh) { showHint(uiText('hint.isOpen', '"{name}" is open', { name }), 1200); return; }
+      if (!fresh) { showHint(uiText('hint.isOpen', '"{name}" is open', { name }), 1200, 'info'); return; }
       if (diskDirty.has(id) &&
         !(await TD.confirm(uiText('dlg.changedOnDisk.title', '"{name}" changed on disk', { name }), uiText('dlg.changedOnDisk.body', 'This file also has changes that are not saved to it. Replace them with the version on disk?'), { ok: uiText('dlg.changedOnDisk.ok', 'Use the Version on Disk') }))) return;
       await takeDisk(id, text, name);
@@ -5973,7 +6029,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     replaceDoc(id, p);
     await TD.files.link(id, TD.files.fileOf(id).handle, projectJson(state.doc), text);
     diskWritten(id);
-    showHint(uiText('hint.reloaded', 'Reloaded "{name}" from disk', { name }), 1400);
+    showHint(uiText('hint.reloaded', 'Reloaded "{name}" from disk', { name }), 1400, 'ok');
   }
   // ⌘S found the file changed on disk since it was last saved or opened here. Save over it (its version on disk
   // kept as a saved version first), or open its version (this browser's kept in version history): nothing is lost.
@@ -5995,7 +6051,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     try {
       const f = await TD.files.pickOpen();
       if (f) await openText(await f.file.text(), f.file.name, f.handle);
-    } catch (e: any) { showHint(uiText('hint.couldntOpenTheFile', "Couldn't open the file ({error})", { error: e.message }), 2500); }
+    } catch (e: any) { showHint(uiText('hint.couldntOpenTheFile', "Couldn't open the file ({error})", { error: e.message }), 2500, 'error'); }
   }
   $('#fileInput').onchange = async (e: any) => {
     const file = e.target.files[0];
@@ -6052,8 +6108,8 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (c === 'save') saveFile();
     if (c === 'saveas') saveFile(true);
     if (c === 'tikz') openTikz();
-    if (c === 'latex') { const r = TD.texImages.collect(() => (state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc))); if (!restorable(r.result)) showHint(noRestore(), 6000); downloadLatex(r.result, r.files); } // a failed export's hint replaces the warning
-    if (c === 'svg') { if (state.mode === 'page') exportPageSvg(); else if (shapes().length) exportSvg(); else showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200); }
+    if (c === 'latex') { const r = TD.texImages.collect(() => (state.mode === 'page' ? TD.pageToLatex(state.doc) : TD.docToLatex(state.doc))); if (!restorable(r.result)) showHint(noRestore(), 6000, 'warn'); downloadLatex(r.result, r.files); } // a failed export's hint replaces the warning
+    if (c === 'svg') { if (state.mode === 'page') exportPageSvg(); else if (shapes().length) exportSvg(); else showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200, 'warn'); }
     if (c === 'import') openImport('');
     if (c === 'print') printDoc();
     if (c === 'html') exportHtml();
@@ -6071,12 +6127,14 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${r2(pageTop(k, G))} ${r2(G.w)} ${r2(G.h)}" style="width:${G.W}cm;max-width:100%;height:auto;display:block;margin:0 auto 24px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08),0 6px 20px rgba(0,0,0,.06)">${defs}${sh}</svg>`).join('')}</div>`;
     }
     await askDir();
-    showHint(uiText('hint.buildingHtml', 'Building HTML…'), 800);
+    const job = hintTask('export', uiText('hint.buildingHtml', 'Building HTML…'));
     try {
-      await out(slug() + '.html', await TD.docToHtml(body), 'text/html');
-      if (TD.mathFontsLinked) showHint(uiText('hint.htmlFontsOnline', 'Saved. Maths fonts could not be embedded, so the file loads them online.'), 3200);
+      const html = await TD.docToHtml(body);
+      job.done(); // the file's landing says the rest
+      await out(slug() + '.html', html, 'text/html');
+      if (TD.mathFontsLinked) showHint(uiText('hint.htmlFontsOnline', 'Saved. Maths fonts could not be embedded, so the file loads them online.'), 3200, 'warn');
     }
-    catch (e: any) { showHint(uiText('hint.htmlFailed', 'Could not build the HTML file: {error}', { error: e.message }), 2500); }
+    catch (e: any) { job.fail(uiText('hint.htmlFailed', 'Could not build the HTML file: {error}', { error: e.message }), 3000); }
   }
   // Quick: a formula box on its own, over whatever file is open. Picking a file kind leaves it.
   const QUICK_KEY = 'diagramtex.quick', TABLE_KEY = 'diagramtex.tablemode';
@@ -6290,7 +6348,13 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     add(`trailer\n<< /Size ${N} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
     return new Blob(parts, { type: 'application/pdf' });
   }
-  const out = createExportWriter(TD.files, () => state.docId, showHint);
+  // every export says where it landed (a download, the linked folder, or why not the folder)
+  const out = createExportWriter(TD.files, () => state.docId, (o) => {
+    if (o.kind === 'saved') showHint(uiText('hint.savedIn', 'Saved {file} to {folder}', { file: o.name, folder: o.folder }), 1800, 'ok');
+    else if (o.kind === 'downloaded') showHint(uiText('hint.downloaded', 'Downloaded {file}', { file: o.name }), 1800, 'ok');
+    else if (o.kind === 'folderFailed') showHint(uiText('hint.folderSaveFailed', "Couldn't save to {folder} ({error}). Downloaded instead.", { folder: o.folder, error: o.error }), 3500, 'error');
+    else showHint(uiText('hint.noFolderAccess', 'No access to {folder}. Downloaded instead.', { folder: o.folder }), 3000, 'warn');
+  });
   // Ask for the export folder's access while the click is fresh, before slow work.
   const askDir = () => (TD.files.dirOf(state.docId) ? TD.files.exportDir(state.docId) : null);
   async function runExport() {
@@ -6300,21 +6364,22 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const fmt = expOpts.fmt;
     if (fmt === 'svg') { runCmd('svg'); return; }
     const srcs = exportSources();
-    if (!srcs.length) { showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200); return; }
+    if (!srcs.length) { showHint(uiText('hint.diagramEmpty', 'This diagram is empty'), 1200, 'warn'); return; }
     if (fmt === 'pdf' && !expOpts.flat) { printVector(srcs, picSlug()); return; }
     await askDir();
-    if (fmt === 'pdf') {
-      showHint(uiText('hint.exportingFlatPdf', 'Exporting a flattened PDF at {dpi} DPI…', { dpi: expOpts.flatDpi }), 1500);
-      try { await out(picSlug() + '.pdf', await flatPdf(srcs, expOpts.flatDpi)); } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
-      return;
-    }
-    showHint(uiText('hint.exportingAt', 'Exporting {fmt} at {dpi} DPI…', { fmt: fmt.toUpperCase(), dpi: expOpts.dpi }), 1500);
+    // a live note while it renders, then each file's landing (out) stacks over it; a failure takes its place
+    const job = hintTask('export', fmt === 'pdf' ? uiText('hint.exportingFlatPdf', 'Exporting a flattened PDF at {dpi} DPI…', { dpi: expOpts.flatDpi })
+      : uiText('hint.exportingAt', 'Exporting {fmt} at {dpi} DPI…', { fmt: fmt.toUpperCase(), dpi: expOpts.dpi }));
     try {
-      for (let k = 0; k < srcs.length; k++) {
+      const files: [string, Blob][] = [];
+      if (fmt === 'pdf') files.push([picSlug() + '.pdf', await flatPdf(srcs, expOpts.flatDpi)]);
+      else for (let k = 0; k < srcs.length; k++) {
         const c = await rasterise(srcs[k], expOpts.transparent && !srcs[k].page);
-        await out(picSlug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi));
+        files.push([picSlug() + (srcs.length > 1 ? `-p${k + 1}` : '') + '.png', await pngWithDpi(c, expOpts.dpi)]);
       }
-    } catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
+      job.done();
+      for (const [name, blob] of files) await out(name, blob);
+    } catch (e: any) { job.fail(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
   }
   // the Export panel: the kit's popover under the Export button, its body built here
   let expPop: PopoverHandle | null = null;
@@ -6389,7 +6454,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const f = TD.files.dirOf(state.docId);
     return [{ kind: 'dir', label: uiText('exp.saveTo', 'Save to'), folder: f ? f.name : uiText('exp.downloads', 'Downloads'),
       title: f ? uiText('exp.dir.title', 'Exports of this file go to the folder {folder}, replacing files of the same name. Click to pick another folder.', { folder: f.name }) : uiText('exp.dir.none', 'Exports are downloaded. Click to pick a folder for this file’s exports instead.'),
-      onpick: () => { TD.files.pickDir(state.docId).then(renderExpPop, (err: any) => showHint(uiText('hint.folderFailed', "Couldn't use that folder ({error})", { error: err.message }), 2500)); },
+      onpick: () => { TD.files.pickDir(state.docId).then(renderExpPop, (err: any) => showHint(uiText('hint.folderFailed', "Couldn't use that folder ({error})", { error: err.message }), 2500, 'error')); },
       clear: f ? { title: uiText('exp.dirClear', 'Download exports instead'), onclick: () => { TD.files.clearDir(state.docId).then(renderExpPop); } } : undefined }];
   }
   // Export PDF's renderer: as shown, or a LaTeX engine; starts as shown each time the panel opens
@@ -6564,7 +6629,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     const nKept = (res.kept || []).length;
     const only = nIn1(res), nIn = nShapes - nKept;
     const inMsg = only ? uiText('hint.importedBlock', 'Imported the {name} block', { name: typeName(only.type) }) : nIn === 1 ? uiText('hint.importedShapes.one', 'Imported 1 shape') : uiText('hint.importedShapes.many', 'Imported {n} shapes', { n: nIn });
-    showHint(nKept ? uiText('hint.imported.kept', '{shapes} · {n} kept as TikZ code (dashed frames)', { shapes: inMsg, n: nKept }) : inMsg, 3000);
+    showHint(nKept ? uiText('hint.imported.kept', '{shapes} · {n} kept as TikZ code (dashed frames)', { shapes: inMsg, n: nKept }) : inMsg, 3000, 'ok');
   }
   $('#impClose').onclick = closeImport;
   $('#impNew').onclick = () => runImport(true);
@@ -6585,7 +6650,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (!zip) { await out(slug() + '.tex', tex, 'text/x-tex'); return; }
     await askDir();
     try { await out(slug() + '.zip', await texBundle(slug() + '.tex', convert ? TD.texImages.noInkscape(tex) : tex, files, TD.texImages.svgFallback, convert)); }
-    catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000); }
+    catch (e: any) { showHint(uiText('hint.exportFailed', 'Export failed: {error}', { error: e.message || e }), 3000, 'error'); }
   }
   const tikzBase = new Map(); // what was last copied or downloaded, per file, scope and selection
   const baseKey = () => [state.docId, state.mode === 'page' ? 'page' : $('#tikzScope').value, $('#tikzSelOnly').checked ? 'sel' : ''].join(':');
@@ -6843,20 +6908,20 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
   async function compileFile(engine: TexEngine): Promise<Uint8Array | null> {
     finishEdit(); finishPoly(); commit();
     const name = ENGINE_NAME[engine], { result, files } = fileLatex(engine);
-    showHint(uiText('tex.compilingWith', 'Compiling with {engine}…', { engine: name }), 0);
+    const job = hintTask('tex', uiText('tex.compilingWith', 'Compiling with {engine}…', { engine: name }));
     try {
       const entries = await texFiles(files, TD.texImages.svgFallback, true);
       const r = await texEngine.compile(TD.texImages.noInkscape(result), Object.fromEntries(entries.map((e: any) => [e.name, e.data])), {
-        engine, onProgress: (done, total) => showHint(uiText('tex.downloadingOf', 'Downloading the LaTeX engine: {done} of {total}…', { done: mb(done), total: mb(total) }), 0),
+        engine, onProgress: (done, total) => job.update(uiText('tex.downloadingOf', 'Downloading the LaTeX engine: {done} of {total}…', { done: mb(done), total: mb(total) })),
       });
-      if (r.ok && r.pdf) { showHint(''); return r.pdf; }
+      if (r.ok && r.pdf) { job.done(); return r.pdf; } // what is done with the PDF says how it went
       const e = r.errors[0];
-      showHint(r.timedOut ? uiText('tex.timeout', '{engine} took too long and was stopped. A very large plot or a loop that never ends can do this.', { engine: name })
+      job.fail(r.timedOut ? uiText('tex.timeout', '{engine} took too long and was stopped. A very large plot or a loop that never ends can do this.', { engine: name })
         : e ? uiText('tex.stoppedOpen', '{engine} stopped: {msg} The LaTeX window (Ctrl+E) shows where.', { engine: name, msg: e.message })
         : uiText('tex.error.none', '{engine} could not make a PDF of this.', { engine: name }), 7000);
       return null;
     } catch (err: any) {
-      showHint(uiText('tex.failed', 'The LaTeX engine could not start: {error}', { error: err?.message || String(err) }), 5000);
+      job.fail(uiText('tex.failed', 'The LaTeX engine could not start: {error}', { error: err?.message || String(err) }), 5000);
       return null;
     }
   }
@@ -6918,7 +6983,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     '- \\textbf{Measuring and guides}: axes, rulers, grids, braces, waves and coil springs that keep their detail when stretched.',
     '- \\textbf{2D plots}: functions, lines, scatter, area, bar and pie charts, contour plots and heatmaps, drawn with pgfplots.',
     '- \\textbf{3D}: surfaces, meshes, 3D scatter, parametric surfaces and space curves; solids such as boxes, cylinders, cones and spheres; solids of revolution with disks, washers and shells; regions for double and triple integrals; and 3D geometry in tikz-3dplot (points, vectors, planes, rotated frames, projections and angles), edited by dragging.',
-    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), graphs (TikZ graphs), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), UML class diagrams (pgf-umlcd), UML sequence diagrams (pgf-umlsd), Karnaugh maps (karnaugh-map), bit fields (bytefield), molecules and reactions (chemfig), laboratory apparatus (tikz-chemlab), 2D geometry (TikZ), tables (booktabs) and computed physics figures.',
+    '- \\textbf{Blocks}: quantum circuits (quantikz), commutative diagrams (tikz-cd or XyMatrix), trees (forest), graphs (TikZ graphs), ZX diagrams (zx-calculus), Feynman diagrams (tikz-feynman), Bloch spheres (blochsphere), timing diagrams (tikz-timing), state machines (TikZ automata), networks (tikz-network), UML class diagrams (pgf-umlcd), UML sequence diagrams (pgf-umlsd), Karnaugh maps (karnaugh-map), bit fields (bytefield), molecules and reactions (chemfig), laboratory apparatus (tikz-chemlab), 2D geometry (TikZ), tables (booktabs) and computed physics figures.',
     '- \\textbf{Images} and \\textbf{freehand} pencil strokes.',
     '',
     '# Five modes',
@@ -7116,10 +7181,10 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
         render(); renderProps(); renderDocList(); updateTopbar();
         if (state.mode === 'document' && TD.docview) TD.docview.render();
         showHint(m.clash ? uiText('hint.mergedClash', 'This file was also changed in another tab: its changes are added to yours, and where both tabs changed the same thing, yours are kept.')
-          : uiText('hint.merged', 'This file was also changed in another tab: its changes are added to yours.'), 5000);
+          : uiText('hint.merged', 'This file was also changed in another tab: its changes are added to yours.'), 5000, 'info');
         return;
       }
-      if (warnedConflict !== id) { warnedConflict = id; showHint(uiText('hint.conflict', 'This file was also changed in another tab. Your changes here will replace those when saved.'), 6000); }
+      if (warnedConflict !== id) { warnedConflict = id; showHint(uiText('hint.conflict', 'This file was also changed in another tab. Your changes here will replace those when saved.'), 6000, 'warn'); }
       return;
     }
     const kind = normKind(d.kind);
@@ -7149,14 +7214,15 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
           if (k === LS_DOC + state.docId) reloadFromOtherTab();
         },
         // a tab still running an older version: this one keeps its changes for it, but it should be reloaded
-        older: () => showHint(uiText('hint.olderTab', 'DiagramTeX is open in another tab running an older version. Reload that tab to keep working there.'), 8000),
+        older: () => showHint(uiText('hint.olderTab', 'DiagramTeX is open in another tab running an older version. Reload that tab to keep working there.'), 8000, 'warn'),
       });
     }
     const prefs: any = store.get(LS_PREFS, null);
     if (prefs) {
       if (['show','locked','off'].includes(prefs.guideMode)) guideMode = prefs.guideMode;
       const savedGridStyle = prefs.gridStyle || prefs.gridStyles?.diagram;
-      if (GRID_STYLES.includes(savedGridStyle)) state.gridStyle = savedGridStyle;
+      if (CANVAS_GRID_STYLES.includes(savedGridStyle)) state.gridStyle = savedGridStyle;
+      if (Array.isArray(prefs.gridAxes) && prefs.gridAxes.length === 2 && prefs.gridAxes.every((n: any) => Number.isFinite(n))) state.gridAxes = [prefs.gridAxes[0], prefs.gridAxes[1]];
       state.grid = prefs.grid ?? true;
       state.snapMode = SNAP_MODES.includes(prefs.snapMode) ? prefs.snapMode : prefs.snap === false ? 'off' : 'both';
       state.snap = state.snapMode !== 'off';
@@ -7202,7 +7268,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       };
       filesAnim = requestAnimationFrame(step);
     };
-    applyGrid();
+    applyGrid(); syncGridAxes();
     migrateKinds();
     const idx = index();
     const last = store.get('diagramtex.last', null);
@@ -7322,12 +7388,17 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     changedMathShapes.clear();
   }));
   TD.math.onBeforeChange(captureMathPriorities);
+  let mathTurn = 0; // the latest renderer switch: only its rendering may say it is done
   TD.math.onChange(() => {
     sidebarPending.clear(); changedMathShapes.clear();
     if (inTool()) return;
     if (state.mode === 'document') TD.docview?.beginEngineChange(); else { prioritizeCurrentView(); render(); }
     thumbs.clear(); stageSidebarMath();
-    showHint(TD.math.pending ? uiText('engine.loading', 'Rendering {name}… You can keep editing.', { name: TD.math.ENGINES[TD.math.engine].name }) : uiText('hint.mathEngine', 'Maths now rendered with {name}', { name: TD.math.ENGINES[TD.math.engine].name }), 1400);
+    const name = TD.math.ENGINES[TD.math.engine].name, rendered = () => uiText('hint.mathEngine', 'Maths now rendered with {name}', { name });
+    if (!TD.math.pending) { showHint(rendered(), 1600, 'ok'); return; }
+    // still rendering: a live note until it is done, then "rendered" stacks over it (a later switch takes over the note)
+    const job = hintTask('math', uiText('engine.loading', 'Rendering {name}… You can keep editing.', { name })), turn = ++mathTurn;
+    void TD.math.whenReady().then(() => { if (turn === mathTurn) job.done(rendered()); });
   });
   TD.math.onReadiness(updateOutputAvailability);
   TD.state = state; // for debugging
@@ -7344,7 +7415,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     recovery, restoreRecovery, openRecoveryCopy, saveVersion, openRecovery, // version history, for the tests
     namedSync: syncNamed, styleNameProblem: nameProblem, // named styles, for the tests
     setMacros, takeMacros, // the file's macros (page.macros), for the tests and scripts/snippets/compare.mjs
-    showHint, takeIn, takeText, texBundle, texFiles, svgFilePdf, svgVectorPdf, // pictures, code and text from outside (pasted or dropped); LaTeX with its pictures (an SVG as vector PDF)
+    showHint, hintTask, takeIn, takeText, texBundle, texFiles, svgFilePdf, svgVectorPdf, // pictures, code and text from outside (pasted or dropped); LaTeX with its pictures (an SVG as vector PDF)
     setBucketFill: (v: any) => { bucketFill = v; }, // tests
     clearAllHistory: () => { histories.clear(); fileUndo.length = fileRedo.length = 0; state.undo = []; state.redo = []; documentHistory.reset(); updateTopbar(); }, // tests
     newDoc, // tests/bench.mjs
@@ -7366,7 +7437,7 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     // for the command search (src/ui/services/palette.svelte.ts)
     cmd: {
       runCmd, setMode, setQuick, inQuick, placeOnCanvas, openMenu, ctxAct, fileMode: () => state.mode, setTable, inTable, inTool, setTool, undo, redo, toggleGrid, zoomFit, zoomFitWidth, zoomTo,
-      toggleSnap: cycleSnapMode, unsavedToDisk, showSaveState, diskChanged, diskWritten, saveFile, lookAtDisk, writeLinked,
+      toggleSnap: cycleSnapMode, setGridAxes, unsavedToDisk, showSaveState, diskChanged, diskWritten, saveFile, lookAtDisk, writeLinked,
       addPage: () => insertPage(currentPage() + 1), goToPage, currentPage, pageCount: () => pageGeom().n,
       docAction, shareLink, newFolder, openBin, openRecovery, binCount: () => bin().length, openDoc, files: () => index(), leafOf, folderOf, kb, isMac, editMacros,
       canUndo: () => state.undo.length > 0 || canUndoFile(), canRedo: () => state.redo.length > 0 || canRedoFile(),

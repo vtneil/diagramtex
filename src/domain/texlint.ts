@@ -81,11 +81,12 @@ import { PACKAGE_COMMANDS } from './package-commands';
     ['ifthen', /\\ifthenelse\b/],
     ['tipa', /\\textipa\b/],
     ['tikz-qtree', /\\Tree\s*\[/],
+    ['tikz-network', /\\(?:Vertex|Edge|Vertices|Edges|Plane|SetVertexStyle|SetEdgeStyle|SetLayerDistance|SetCoordinates)\b|\\begin\{Layer\}/],
     ['tikz-qtree-compat', /\\qroof\b/],
     // a table's column types from array: >{…} <{…} before or after a column, m{…} b{…}
     ['array', /\\begin\{(?:tabular|array)\*?\}\s*(?:\[[^\]]*\]\s*)?\{[^}]*(?:[><]\{|\b[mb]\{)/],
   ];
-  const LOADS_TIKZ = ['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'forest', 'tikz-feynman', 'tikz-timing', 'quantikz', 'chemfig', 'tikz-3dplot', 'tkz-euclide', 'smartdiagram', 'zx-calculus', 'blochsphere', 'karnaugh-map', 'pgf-pie', 'pgf-umlcd', 'pgf-umlsd', 'tikz-chemlab'];
+  const LOADS_TIKZ = ['tikz', 'pgfplots', 'tikz-cd', 'circuitikz', 'forest', 'tikz-feynman', 'tikz-timing', 'quantikz', 'chemfig', 'tikz-3dplot', 'tkz-euclide', 'smartdiagram', 'zx-calculus', 'blochsphere', 'karnaugh-map', 'pgf-pie', 'pgf-umlcd', 'pgf-umlsd', 'tikz-chemlab', 'tikz-network'];
   const PKG_IMPLIES: Record<string, any> = { amssymb: ['amsfonts'], mathtools: ['amsmath'], physics: [], quantikz: ['tikz-cd'], 'tikz-cd': [], bm: [] };
   // pdflatex can't run these; the app compiles and exports for pdflatex
   const LUA = [

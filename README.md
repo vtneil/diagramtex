@@ -4,7 +4,7 @@
 
 # DiagramTeX: free online TikZ and LaTeX diagram editor
 
-**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ** code for LaTeX, together with **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata** and **graphs**, **pgf-umlcd**, **pgf-umlsd**, **karnaugh-map**, **bytefield**, **chemfig**, **tikz-chemlab**, **blochsphere** and **booktabs**. Draw with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
+**DiagramTeX** lets you draw diagrams in your browser and export them as clean **TikZ** code for LaTeX, together with **circuitikz**, **pgfplots**, **tikz-cd**, **xymatrix**, **quantikz**, **forest**, **zx-calculus**, **tikz-feynman**, **tikz-3dplot**, **tikz-timing**, **TikZ automata** and **graphs**, **tikz-network**, **pgf-umlcd**, **pgf-umlsd**, **karnaugh-map**, **bytefield**, **chemfig**, **tikz-chemlab**, **blochsphere** and **booktabs**. Draw with the mouse, type labels in LaTeX maths (`$…$`), then paste the code into Overleaf or any LaTeX document.
 
 It is **free and open source** ([GNU AGPLv3](LICENSE)), **works offline**, and needs **no sign-up, login or payment**. Your diagrams stay in your browser; nothing is uploaded.
 
@@ -31,7 +31,7 @@ It is **free and open source** ([GNU AGPLv3](LICENSE)), **works offline**, and n
 - **2D and 3D geometry** (TikZ, `tikz-3dplot`): points, vectors, projections, angles, planes, surfaces and measures that update as you drag.
 - **Commutative diagrams** (`tikz-cd`, `xymatrix`, including quiver's output) and **Bloch spheres** (`blochsphere`).
 - **Quantum circuits** (`quantikz`), **ZX diagrams** (`zx-calculus`) and **Feynman diagrams** (`tikz-feynman`).
-- **Trees** (`forest`), **graphs** (TikZ `graphs`, also from adjacency matrices, edge lists, DOT, Mermaid or JSON) and **state machines** (TikZ `automata`), with automatic layout.
+- **Trees** (`forest`), **graphs** (TikZ `graphs`, also from adjacency matrices, edge lists, DOT, Mermaid or JSON) **state machines** (TikZ `automata`) and **networks** (`tikz-network`, with CSV data files and 3D multilayer networks), with automatic layout.
 - **UML** class (`pgf-umlcd`) and sequence (`pgf-umlsd`) diagrams.
 - **Digital logic:** timing diagrams (`tikz-timing`), Karnaugh maps (`karnaugh-map`, with group checking) and bit fields (`bytefield`).
 - **Chemistry** (`chemfig`): structural formulas, rings, charges, reaction schemes and curved arrows.
@@ -126,7 +126,7 @@ DiagramTeX was built with the help of generative AI: much of its code, tests and
 - `src/main.ts`: application entry point; `src/core/`: document, history, block, editor-session and file-codec services
 - `src/application/`: editor state and interaction (`app.ts`), document view and LaTeX export (`docview.ts`)
 - `src/domain/`: the model for each kind of object: shapes, fills, symbols, plots, 3D, every block's parser, layout, drawing and export (`circuit.ts`, `quantum.ts`, `cd.ts`, `chemfig.ts`, `physics.ts`…), the TikZ importer (`tikzimport.ts`), LaTeX checks (`texlint.ts`) and the table engine (`table/`)
-- `src/editors/`: the overlay block editors (circuit, quantum, CD, ZX, Feynman, geometry, timing, graph, automata, K-map, bit field, chemistry, physics…)
+- `src/editors/`: the overlay block editors (circuit, quantum, CD, ZX, Feynman, geometry, timing, graph, automata, network, K-map, bit field, chemistry, physics…)
 - `src/ui/`: Svelte shell, panels and services (colour picker, maths input, suggestions, Table and Quick modes); `src/platform/storage.ts`: files in IndexedDB
 - `public/`: static shell, styles, fonts, vendored KaTeX, Temml, MathLive and MathJax, service worker and the user guide
 - `scripts/`: compile, prerender, dev server, production build and generators; `tests/`: browser suites, golden files and benchmarks

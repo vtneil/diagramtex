@@ -261,7 +261,10 @@ body.files-anim.no-files #files { transition: width .24s cubic-bezier(.3, .7, .2
 .grid-minor { stroke: var(--grid-minor); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .grid-major { stroke: var(--grid-major); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .origin { stroke: var(--origin); stroke-width: 1; vector-effect: non-scaling-stroke; fill: none; }
-.hide-grid #gridRect, .hide-grid #origin { display: none; }
+.hide-grid #gridRect, .hide-grid #gridPlane, .hide-grid #origin { display: none; }
+/* the oblique grid (span{u1, u2}): drawn in screen pixels by ui/plane-grid.ts, so its lines stay 1px at any zoom */
+#gridPlane { pointer-events: none; }
+#gridPlane path { vector-effect: non-scaling-stroke; }
 
 .ruler { position: absolute; pointer-events: auto; user-select: none; touch-action: none; background: var(--paper); overflow: hidden; z-index: 2; }
 #rulerX { cursor: default; left: var(--ruler); right: 0; top: 0; height: var(--ruler); border-bottom: 1px solid var(--rule); }
@@ -285,23 +288,69 @@ body.guides-editable #rulerY { cursor: ew-resize; }
 #status > span { padding: 0 10px; border-right: 1px solid var(--rule-soft); white-space: nowrap; line-height: var(--status); }
 /* the space between tool groups is the app base showing through, so the groups read as separate pieces */
 #status .grow { flex: 1; align-self: stretch; border-right: 0; background: var(--gutter); }
-#status .gap { align-self: stretch; width: 16px; padding: 0; background: var(--gutter); border-right: 0; }
-#status #pageNav[hidden] + .gap { display: none; }
-#status #gridInfo label { cursor: text; }
-#status #gridVal { width: 5ch; height: 18px; margin: 0 1px 0 4px; padding: 0 3px; border: 0; border-radius: var(--r-sm); background: transparent;
-  font: inherit; color: inherit; text-align: center; outline: none; cursor: text; vertical-align: 1px; }
-#status #gridVal:hover { background: var(--wash); color: var(--ink); }
-#status #gridVal:focus { background: var(--sheet-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
-#status #cursorPos { min-width: 150px; }
-#status #selInfo:empty { display: none; }
+#status #cursorPos, #status #selSize { min-width: calc(22ch + 20px); } /* "x −12.34 · y −56.78 cm" without growing; the size cell keeps it when empty */
+/* the view toolbar: grid spacing, the oblique grid's axes, zoom and fit, floating at the canvas's bottom left (clear of
+   the vertical ruler and the status line); a raised card, 28px controls 4px in, so 8 + 4 = 12px corners */
+#viewBar { position: absolute; left: calc(var(--ruler) + 8px); bottom: calc(var(--status) + 8px); z-index: 3; display: flex; align-items: center; gap: 2px; height: calc(var(--ctl) + 10px); padding: 4px; border: 1px solid var(--rule-strong); border-radius: var(--r-lg); background: var(--sheet); box-shadow: var(--shadow-pop); font: var(--fs-label) var(--font-ui); color: var(--graphite); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#viewBar #gridInfo { display: flex; align-items: center; padding: 0 4px 0 8px; }
+#viewBar #gridInfo label { cursor: text; }
+#viewBar input { height: var(--ctl-sm); border: 0; border-radius: var(--r-sm); background: transparent; font: inherit; color: inherit; text-align: center; outline: none; cursor: text; padding: 0 3px; }
+#viewBar #gridVal { width: 5ch; margin: 0 2px 0 4px; }
+#viewBar #zoomVal { width: 6ch; }
+#viewBar input:hover { background: var(--well); color: var(--ink); }
+#viewBar input:focus { background: var(--sheet-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
+#viewBar #gridAxesBox[hidden] { display: none; }
+#viewBar #gridAxesBox:not([hidden]) { display: flex; align-items: center; }
+/* the preset: flat like the zoom buttons, its chevron kept; u1 and u2 are fields like the grid spacing */
+#viewBar #gridAxes { height: var(--ctl); padding-left: 8px; border: 0; border-radius: var(--r); background-color: transparent; font: inherit; color: var(--graphite); cursor: pointer; }
+#viewBar #gridAxes:hover { background-color: var(--well); color: var(--ink); }
+#viewBar #gridAxesBox label { padding: 0 0 0 6px; cursor: text; }
+#viewBar .vb-angle { width: 5ch; margin-left: 2px; }
+#viewBar .vb-sep { width: 1px; align-self: stretch; margin: 4px 2px; background: var(--rule); }
+#viewBar .zoom { display: flex; align-items: center; gap: 2px; }
+#viewBar .zoom button { height: var(--ctl); min-width: var(--ctl); padding: 0 8px; border: 0; border-radius: var(--r); background: transparent; font: inherit; color: var(--graphite); }
+#viewBar .zoom button:hover { background: var(--well); color: var(--ink); }
 #status .zoom { display: flex; height: 100%; }
 #status .zoom button { height: 100%; border: 0; border-radius: 0; border-left: 1px solid var(--rule-soft); background: transparent; font: inherit; color: var(--graphite); padding: 0 10px; min-width: var(--ctl); }
 #status .zoom button:hover { background: var(--wash); color: var(--ink); }
-#status .zoom #zoomVal { width: 56px; height: 100%; border: 0; border-left: 1px solid var(--rule-soft); border-radius: 0; background: transparent; font: inherit; color: var(--graphite); text-align: center; padding: 0 4px; outline: none; cursor: text; }
-#status .zoom #zoomVal:hover { background: var(--wash); color: var(--ink); }
-#status .zoom #zoomVal:focus { background: var(--sheet-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--bluepen); }
 
-#hint { position: absolute; left: calc((100% - var(--props-w) - 16px) / 2); width: max-content; max-width: calc(100% - var(--props-w) - 48px); top: calc(var(--ruler) + 12px); transform: translateX(-50%); background: var(--ink); color: var(--sheet); padding: 4px 12px; border-radius: var(--r); font-size: var(--fs-label); line-height: 20px; pointer-events: none; display: none; z-index: 4; white-space: pre-line; text-align: center; }
+/* the status hint as toasts (src/ui/services/hint-toast.ts). #hint is only the anchor, centred left of the floating
+   panel; the cards hang from it. A card: a raised sheet, an icon tile in the kind's pen, a title and a muted detail.
+   The tile (--r) sits 12px in, so the card's corner is 8 + 12 */
+#hint { position: absolute; left: calc((100% - var(--props-w) - 16px) / 2); top: calc(var(--ruler) + 12px); width: 0; height: 0; z-index: 4; pointer-events: none; }
+#hint[hidden] { display: none; }
+#main > #hint { left: var(--hint-x, 50%); top: 12px; z-index: 20; }
+/* --d is the card's place in the deck (0 at the front): each step back sits 8px lower and 5% smaller, its bottom edge
+   peeking out under the one in front, blank, at the front card's height; a fourth fades away */
+#hint .toast {
+  position: absolute; top: 0; left: 0; translate: -50% 0; box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px)); height: var(--hh, auto); overflow: hidden;
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px 12px 12px; border-radius: calc(var(--r) + 12px);
+  background: var(--sheet); border: 1px solid var(--rule-strong); box-shadow: var(--shadow-pop); color: var(--ink);
+  z-index: calc(10 - var(--d, 0)); transform-origin: bottom center;
+  transform: translateY(calc(var(--d, 0) * 8px)) scale(calc(1 - var(--d, 0) * .05));
+  transition: transform .24s var(--ease), opacity .24s var(--ease), height .24s var(--ease);
+}
+#hint .toast > * { transition: opacity .16s var(--ease); }
+#hint .toast:not([data-depth="0"]) > * { opacity: 0; }
+#hint .toast[data-depth="3"] { opacity: 0; }
+/* in from 10px above at 96%; out 8px up and smaller, faster than in */
+#hint .toast.enter { opacity: 0; transform: translateY(-10px) scale(.96); }
+#hint .toast.leave { opacity: 0; transform: translateY(calc(var(--d, 0) * 8px - 8px)) scale(calc(.96 - var(--d, 0) * .05)); transition-duration: .16s; transition-timing-function: cubic-bezier(.4, 0, 1, 1); }
+@media (prefers-reduced-motion: reduce) { #hint .toast, #hint .toast > * { transition: none; } }
+#hint .toast-ic { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r); background: var(--tile-info); color: var(--on-pen); }
+#hint [data-kind=ok] .toast-ic { background: var(--tile-ok); }
+#hint [data-kind=warn] .toast-ic { background: var(--tile-warn); color: var(--on-marker); }
+#hint [data-kind=error] .toast-ic { background: var(--tile-error); }
+#hint .toast-ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#hint .toast-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; text-align: left; }
+#hint .toast-title { font-size: var(--fs-body); font-weight: 600; line-height: 18px; text-wrap: pretty; }
+#hint .toast-detail { font-size: var(--fs-label); line-height: 16px; color: var(--pencil); white-space: pre-line; text-wrap: pretty; }
+#hint .toast-detail[hidden] { display: none; }
+/* a live readout while dragging (an angle, a scale): no tile, as wide as its numbers, in the mono face */
+#hint .toast[data-kind=plain] { width: max-content; padding: 6px 12px; border-radius: var(--r-lg); }
+#hint [data-kind=plain] .toast-ic { display: none; }
+#hint [data-kind=plain] .toast-title { font-family: var(--font-mono); font-size: var(--fs-label); font-weight: 500; line-height: 20px; font-variant-numeric: tabular-nums; }
 #emptyHint { position: absolute; left: calc((100% - var(--props-w) - 16px) / 2); top: 42%; transform: translate(-50%, -50%); background: var(--sheet-raised); border: 1px solid var(--rule); border-radius: var(--r-lg); box-shadow: var(--shadow-knob); padding: 16px 20px; color: var(--graphite); font-size: var(--fs-body); line-height: 1.7; text-align: center; pointer-events: none; width: max-content; max-width: min(420px, 100% - var(--props-w) - 48px); text-wrap: pretty; }
 #emptyHint[hidden] { display: none; }
 #emptyHint .eh-search { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--rule); color: var(--pencil); font-size: var(--fs-label); }
@@ -767,7 +816,7 @@ figcaption { font-size: .92em; margin-top: .4em; }
 .doc-fmt-size { width: 96px; }
 @media print { .doc-fmt { display: none !important; } }
 /* the block being edited: a raised card on the page, with a blue edge while its text has focus */
-.blk.editing, .blk.editing:hover { border-color: var(--rule-strong); border-radius: var(--r-lg); background: var(--sheet-raised); box-shadow: var(--shadow-pop); }
+.blk.editing, .blk.editing:hover { border-color: var(--rule-strong); border-radius: var(--r-lg); background: var(--sheet); box-shadow: var(--shadow-pop); }
 .blk.editing:focus-within { border-color: color-mix(in srgb, var(--bluepen) 55%, transparent); }
 .blk { position: relative; border: 1px solid transparent; border-radius: var(--r-sm); padding: 4px 8px; margin: 0 -9px; }
 .blk:hover { border-color: var(--rule); }
@@ -891,7 +940,7 @@ html:lang(th) .fp-fields :is(label, .fp-row) > span { width: 76px; }
 
 /* ---------- page mode: sheets on the desk ---------- */
 body.mode-page #paper { fill: var(--paper); }
-body.mode-page #gridRect { opacity: .55; }
+body.mode-page #gridRect, body.mode-page #gridPlane { opacity: .55; }
 #pageLayer .pg-sheet { fill: var(--canvas); }
 #pageLayer .pg-shadow { fill: color-mix(in srgb, var(--canvas-ink) 10%, transparent); }
 #pageLayer .pg-margin { fill: none; stroke: var(--bluepen); stroke-opacity: .35; }
@@ -1076,6 +1125,10 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--canvas); }
 .cz-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; }
 .cz-svg.placing { cursor: crosshair; }
+/* an editor that names the cursor for what is under the pointer (the Network editor) */
+.cz-svg[data-cursor="move"] { cursor: move; }
+.cz-svg[data-cursor="pointer"] { cursor: pointer; }
+.cz-svg[data-cursor="copy"] { cursor: copy; }
 .cz-bg { fill: var(--canvas); }
 .cz-gmin { stroke: var(--grid-minor); stroke-width: 1; fill: none; }
 .cz-gmaj { stroke: var(--grid-major); stroke-width: 1; fill: none; }
@@ -1095,6 +1148,19 @@ details[open] > summary.cz-cat-t::before { transform: rotate(90deg); }
 .cz-junction.on { stroke: var(--redpen); }
 .cz-snap { fill: none; stroke: var(--faint); stroke-width: 1.2; pointer-events: none; }
 .cz-snap.on { stroke: var(--bluepen); stroke-width: 2; }
+/* the Network editor's layer selector (ui/editors/NetworkLayers.svelte): bottom left on the stage, the layers in a
+   column that scrolls (nearest at the top), "no focus" fixed under it; 28px buttons 4px in, so 8 + 4 = 12px corners */
+/* a hidden (Pseudo) vertex: not drawn by tikz-network, so the editor marks its place with a dashed ring */
+.nw-ghost { fill: none; stroke: var(--canvas-pencil); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
+.nw-layers { position: absolute; left: 12px; bottom: 12px; z-index: 2; display: flex; flex-direction: column; gap: 4px; padding: 4px; border: 1px solid var(--rule-strong); border-radius: var(--r-lg); background: var(--sheet); box-shadow: var(--shadow-pop); }
+.nw-layers[hidden] { display: none; }
+.nw-layers-list { display: flex; flex-direction: column; gap: 4px; max-height: calc(6 * var(--ctl) + 5 * 4px); overflow-y: auto; scrollbar-width: none; }
+.nw-layers-list::-webkit-scrollbar { display: none; }
+.nw-layers button { width: var(--ctl); min-width: var(--ctl); height: var(--ctl); padding: 0; justify-content: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--graphite); }
+.nw-layers button:hover { background: var(--well); }
+.nw-layers button.on, .nw-layers button.on:hover { background: var(--wash-strong); color: var(--ink); font-weight: 600; }
+.nw-layers-none { position: relative; margin-top: 8px; } /* 12px from the list (4px gap + 8px), the rule midway */
+.nw-layers-none::before { content: ""; position: absolute; left: 4px; right: 4px; top: -6px; border-top: 1px solid var(--rule); }
 .cz-tip { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 4px 10px; border-radius: var(--r); background: var(--ink); color: var(--sheet); font-size: var(--fs-label); pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cz-tip[hidden], .cz-tip:empty { display: none; }
 .cz-side { border-left: 1px solid var(--rule); background: var(--sheet); display: flex; flex-direction: column; min-height: 0; min-width: 0; }

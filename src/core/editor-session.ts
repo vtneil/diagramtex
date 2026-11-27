@@ -1,6 +1,7 @@
 // Common code-editor history and save/discard lifecycle. Domain gestures and rendering stay local.
 import type { SourceSession } from './contracts';
 import { t } from '../i18n';
+import { openModal, closeModal } from '../ui/kit/modal';
 interface HistoryHooks {
   state(): SourceSession;
   snapshot(): string;
@@ -108,7 +109,9 @@ export function createEditorSession(services: {
       root.querySelector('[aria-modal]')?.setAttribute('aria-modal', String(!dock));
       if (dock) dock.appendChild(root);
       else if (root.parentElement !== document.body) document.body.appendChild(root);
-      root.hidden = false;
+      // over the page it opens and closes as the kit's modals do (scrim fades, window pops from 97%); in a pane it just shows
+      root.classList.toggle('fades', !dock);
+      if (dock) root.hidden = false; else openModal(root);
       if (!dock) document.body.classList.add('cz-open');
     }
     function changed() {
@@ -168,7 +171,7 @@ export function createEditorSession(services: {
       const e = state()!, src = saved(), edited = src !== e.start;
       if (!ok && edited && !(await services.confirm(typeof discardTitle === 'function' ? discardTitle() : discardTitle, (e.saved ? t('editor.discard.bodySaved', 'Your edits since you last saved will be lost.') : t('editor.discard.body', 'Your edits since opening the editor will be lost.')), { ok: t('editor.discard.ok', 'Discard'), danger: true }))) return;
       const done = e.done, out = ok && edited ? (result ? result() : { src }) : null;
-      root.hidden = true;
+      closeModal(root);
       document.body.classList.remove('cz-open');
       clear();
       if (out) done(out);
