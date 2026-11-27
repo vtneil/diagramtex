@@ -20,7 +20,8 @@ const MEASURE = async (type) => {
   let pals = [];
   for (let k = 0; k < 100 && !pals.length; k++) {
     await frame();
-    pals = [...document.querySelectorAll('.cz-pal')].filter((p) => p.getClientRects().length && p.querySelector('[data-item]'));
+    // not the editor closed before this one: it is hidden at once but stays drawn while it fades (.modal-leaving)
+    pals = [...document.querySelectorAll('.cz-pal')].filter((p) => p.getClientRects().length && !p.closest('[hidden], .modal-leaving') && p.querySelector('[data-item]'));
   }
   if (!pals.length) return null; // an editor without a palette (the Table)
   for (const p of pals) p.querySelectorAll('details').forEach((d) => { d.open = true; });
