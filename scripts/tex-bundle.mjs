@@ -194,7 +194,7 @@ const PAGE = `<!doctype html><meta charset="utf-8"><title>tex-bundle</title><scr
 const run = (w, msg, until, ms = 300000) => new Promise((res, rej) => {
   const t = setTimeout(() => rej(new Error('no answer from the engine in ' + ms / 1000 + ' s')), ms);
   w.onmessage = (e) => { if (until(e.data)) { clearTimeout(t); res(e.data); } };
-  w.onerror = (e) => { clearTimeout(t); rej(new Error('the engine\'s worker failed: ' + (e.message || 'it did not load'))); };
+  w.onerror = (e) => { clearTimeout(t); rej(new Error('the worker of the engine failed: ' + (e.message || 'it did not load'))); };
   if (msg) w.postMessage(msg);
 });
 const boot = async (js) => { const w = new Worker(js); await run(w, null, (d) => d.result); w.postMessage({ cmd: 'settexliveurl', url: location.origin + '/texlive/' }); return w; };
