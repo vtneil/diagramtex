@@ -26,6 +26,13 @@ const PAGES = Object.fromEntries(fs.readdirSync(APP_DIR, { withFileTypes: true }
   .map((d) => [d.name + '/', /<figure class="try" data-embed="(\w+)"/.exec(pageOf(d.name))?.[1]]).filter(([, type]) => type));
 assert.ok(Object.keys(PAGES).length >= 7, 'package pages found: ' + Object.keys(PAGES).join(', '));
 
+// the same code, give or take a hair in the numbers: where a block sits can come from its labels' measured size, which
+// differs a little between engines and systems (WebKit on Linux put the Feynman example 0.01 cm lower)
+const sameCode = (a, b) => {
+  const split = (t) => t.trim().split(/(-?\d+(?:\.\d+)?)/);
+  const A = split(a), B = split(b);
+  return A.length === B.length && A.every((x, i) => (i % 2 ? Math.abs(+x - +B[i]) <= 0.05 : x === B[i]));
+};
 // in the page: the embedded app, once its block's editor is docked
 const EMBEDDED = async () => {
   const w = () => document.querySelector('figure.try iframe')?.contentWindow;
@@ -96,7 +103,7 @@ try {
           assert.ok(e.embed && !e.topbar && !e.files && e.editor, `${at} round ${round}: only the block's editor shows ${JSON.stringify({ topbar: e.topbar, files: e.files, editor: e.editor })}`);
           assert.equal(e.fromExample, 1, `${at} round ${round}: one draft from the example`);
           // the drawing as the link brings it: once its editor has docked, an engine may measure the block a hair differently
-          if (round === 1) assert.equal(e.tikz.trim(), e.code.trim(), `${at}: the example writes the page's code (if the app's export changed, run node scripts/package-pages.mjs)`);
+          if (round === 1) assert.ok(sameCode(e.tikz, e.code), `${at}: the example writes the page's code (if the app's export changed, run node scripts/package-pages.mjs)\n--- app\n${e.tikz}\n--- page\n${e.code}`);
           assert.equal(e.view, 'formula', `${at} round ${round}: the app's Quick view is left as it was`);
           assert.equal(e.quick, null, `${at} round ${round}: the app still opens as it did`);
           assert.equal(e.hash, '', `${at} round ${round}: the drawing is taken out of the address`);
