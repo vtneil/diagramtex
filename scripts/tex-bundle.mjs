@@ -4,6 +4,7 @@
 //   node scripts/tex-bundle.mjs                       both engines, documents from ext/tex-corpus/ (made by --capture)
 //   node scripts/tex-bundle.mjs --engine xetex        one engine: pdftex (pdfLaTeX) or xetex (XeLaTeX, with dvipdfmx)
 //   node scripts/tex-bundle.mjs --capture             first collect every document the test suite compiles
+//   node scripts/tex-bundle.mjs --capture --dist      the same, the suite run against dist/ (npm run build first; CI)
 //
 // What it does, for each engine:
 //   1. builds the format (swiftlatexpdftex.fmt, swiftlatexxetex.fmt) with the engine itself, from this TeX Live's LaTeX
@@ -138,7 +139,7 @@ if [ -f doc.tex ]; then h=$(shasum doc.tex | cut -c1-16); cp doc.tex "${CORPUS}/
 exec "${real}" "$@"
 `, { mode: 0o755 });
   say('collecting the test suite\'s documents (a full Chromium run)…');
-  const r = spawnSync('node', ['tests/run.mjs', '--chromium', '--no-cache'], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, PATH: bin + ':' + process.env.PATH } });
+  const r = spawnSync('node', ['tests/run.mjs', '--chromium', '--no-cache', ...(args.includes('--dist') ? ['--dist'] : [])], { cwd: ROOT, stdio: 'inherit', env: { ...process.env, PATH: bin + ':' + process.env.PATH } });
   if (r.status) { console.error('the test run failed'); process.exit(1); }
 }
 if (!fs.existsSync(CORPUS)) { console.error(`no corpus in ${path.relative(ROOT, CORPUS)}: run with --capture`); process.exit(2); }

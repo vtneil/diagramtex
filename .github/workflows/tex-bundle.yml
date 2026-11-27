@@ -58,9 +58,12 @@ jobs:
       - uses: ./.github/actions/setup
       # the bundles pinned now: the test suite's own in-browser compiles use them while the corpus is collected
       - run: node scripts/tex-bundle-fetch.mjs
+      # the site as CI builds it: the suite runs against dist/, as CI's test jobs do (public/ lacks what only a build
+      # writes, such as version.json)
+      - run: npm run build
       - name: Build the bundles (the corpus collected from the test suite, then both engines, checked in the browser)
         shell: bash
-        run: node scripts/tex-bundle.mjs --capture
+        run: node scripts/tex-bundle.mjs --capture --dist
       - run: node scripts/tex-bundle-pack.mjs
       - uses: actions/upload-artifact@v7
         with:
