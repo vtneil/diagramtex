@@ -88,6 +88,8 @@ try {
    await b.page.waitForFunction(()=>window.__held.length>0);
    assert(await b.page.evaluate(()=>window.__docBody.innerHTML===window.__docBefore),'A Document block never publishes a mixture of finished and unfinished formulas');
    const documentSamples=await b.page.evaluate(async()=>{
+    // the fade seen by the browser itself too: on a busy machine two frames may fall further apart than the fade lasts
+    window.__faded=false;window.__docBody.addEventListener('transitionrun',e=>{if(e.propertyName==='opacity')window.__faded=true;});
     window.__hold=false;window.__held.splice(0).forEach(f=>f());let done=false;const samples=[];
     const ready=TD.math.whenReady().then(()=>{done=true;});
     // until the fade has run to the end, not only until the formulas are ready: on a busy machine it may start after
@@ -95,7 +97,8 @@ try {
     do {await new Promise(r=>requestAnimationFrame(r));if(window.__docBody.innerHTML!==window.__docBefore)samples.push(+getComputedStyle(window.__docBody).opacity);}while((!done||!(samples.at(-1)>.99))&&performance.now()-t0<3000);
     await ready;return samples;
    });
-   assert(documentSamples.some(v=>v>.46&&v<.98));assert(documentSamples.at(-1)>.99);
+   const faded=await b.page.evaluate(()=>window.__faded);
+   assert(faded||documentSamples.some(v=>v>.46&&v<.98),`the Document block fades in (samples ${documentSamples.map(v=>v.toFixed(2)).join(' ')})`);assert(documentSamples.at(-1)>.99);
    assert(documentSamples.every((v,i)=>!i||v>=documentSamples[i-1]-.015));
    console.log(`[PASSED] ${browser}: complete Document blocks fade once without partial replacements`);
    assert.deepEqual(b.logs,[]);

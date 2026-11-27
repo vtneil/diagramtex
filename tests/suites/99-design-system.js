@@ -29,7 +29,9 @@ T.test('menus: heading for an open submenu across the next row keeps it open; le
     // where the window is cramped the submenu may overlap the menu, and the row's own edges would say the other side
     const sr = a.querySelector(':scope > .sub').getBoundingClientRect(), away = sr.left >= x ? x - 40 : x + 40;
     ptr('pointermove', document, away, y + 30);
-    T.ok(!a.classList.contains('open') && !menu.classList.contains('aiming'), `off the way: it closes (left the row at ${Math.round(x)},${Math.round(y)}, moved to ${Math.round(away)},${Math.round(y + 30)}; row ${Math.round(ra.left)}–${Math.round(ra.right)}, submenu ${Math.round(sr.left)}–${Math.round(sr.right)} × ${Math.round(sr.top)}–${Math.round(sr.bottom)}; window ${innerWidth}×${innerHeight})`);
+    // (WebKit sends hover events for where the real pointer rests after a layout change: resting on this row, it opens
+    // the submenu again, as it should; the safe area must have ended all the same)
+    T.ok(!menu.classList.contains('aiming') && (!a.classList.contains('open') || a.matches(':hover')), `off the way: it closes (left the row at ${Math.round(x)},${Math.round(y)}, moved to ${Math.round(away)},${Math.round(y + 30)}; row ${Math.round(ra.left)}–${Math.round(ra.right)}, submenu ${Math.round(sr.left)}–${Math.round(sr.right)} × ${Math.round(sr.top)}–${Math.round(sr.bottom)}; window ${innerWidth}×${innerHeight}; open ${a.classList.contains('open')}, aiming ${menu.classList.contains('aiming')}, real pointer on the row ${a.matches(':hover')})`);
     ptr('pointerenter', a, ra.left + 20, ra.top + ra.height / 2);
     ptr('pointerleave', a, x, y, b);
     await tick(380);
