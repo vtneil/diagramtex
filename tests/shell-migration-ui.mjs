@@ -44,7 +44,7 @@ try {
     }
     try {assert.deepEqual(snapshots[1],snapshots[0]);assert.ok(pictures[0].equals(pictures[1]),'pixels differ');}
     catch(error){fs.writeFileSync(path.join(output,'baseline.json'),JSON.stringify(snapshots[0],null,2));fs.writeFileSync(path.join(output,'migrated.json'),JSON.stringify(snapshots[1],null,2));throw Error(`${width} ${theme} ${scenario}: ${error.message.slice(0,1800)}; ${output}`);}
-    console.log(`✓ ${width} ${theme} ${scenario}: matching controls, layout, pixels and file bytes`);count++;
+    console.log(`[PASSED] ${width} ${theme} ${scenario}: matching controls, layout, pixels and file bytes`);count++;
   }
   for(const browser of browsers)assert.deepEqual(browser.logs,[]);
   console.log(`${count} shared UI comparisons passed; ${output}`);

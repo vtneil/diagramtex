@@ -15,7 +15,7 @@ try {
   browser = await launch(`http://127.0.0.1:${server.port}/#share=0.${shared}`);
   assert.equal(await browser.ev('return TD.state.doc.name;'), 'Shared migration check');
   assert.equal(await browser.ev('return location.hash;'), '', 'shared link is consumed once');
-  console.log('✓ shared-link startup and browser history');
+  console.log('[PASSED] shared-link startup and browser history');
   await browser.send('Network.setBypassServiceWorker', { bypass: false });
   await browser.ev(`
     await navigator.serviceWorker.ready;
@@ -74,7 +74,7 @@ try {
     const output = new DOMParser().parseFromString(await (await fetch(resource)).text(), 'image/svg+xml');
     return TD.math.usingWorker && TD.math.engine === 'katex' && !!output.querySelector('path[data-label-text="89123"]');`), true, 'offline reverse compilation loads KaTeX in the worker');
   assert.deepEqual(browser.logs, []);
-  console.log('✓ static hosting, persistence, precache and offline reload (' + (dist ? 'dist' : 'public') + ')');
+  console.log('[PASSED] static hosting, persistence, precache and offline reload (' + (dist ? 'dist' : 'public') + ')');
   browser.close(); browser = null;
   browser = await launch(pathToFileURL(path.join(root, 'index.html')).href);
   assert.equal(await browser.ev('return !!TD.state.doc && [...TD.blocks.entries()].length > 10;'), true);
@@ -90,5 +90,5 @@ try {
     const image = new Image(); image.src = resource; await image.decode();
     return !TD.math.usingWorker && resource.startsWith('blob:') && (await (await fetch(resource)).text()).includes('<svg');`), true, 'file:// labels use valid local SVG resources');
   assert.deepEqual(browser.logs, []);
-  console.log('✓ file:// startup and Svelte panel (' + (dist ? 'dist' : 'public') + ')');
+  console.log('[PASSED] file:// startup and Svelte panel (' + (dist ? 'dist' : 'public') + ')');
 } finally { browser?.close(); server.close(); }

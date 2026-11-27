@@ -63,7 +63,7 @@ try {
     }
     assert(ink > 100, `${scenario}: labels must actually paint`);
     assert(outside / ink < 0.015, `${scenario}: ${(100 * outside / ink).toFixed(1)}% of label pixels painted outside their SVG boxes (${file})`);
-    console.log(`✓ ${name} ${scenario}: ${ink} label pixels, ${outside} outside`);
+    console.log(`[PASSED] ${name} ${scenario}: ${ink} label pixels, ${outside} outside`);
   }
   await checkPaint('document-fit');
   await page.locator('#docview [data-zoom="1"]').click();
@@ -150,7 +150,7 @@ try {
         assert(centre >= base.left && centre <= base.right, `${engine}/${i}/${zoom}: accent ${JSON.stringify(accent)} vs base ${JSON.stringify(base)}`);
         assert(accent.bottom < base.bottom && accent.top < base.top, `${engine}: accent must stay above its base`);
       }
-      console.log(`✓ ${name} ${engine}: hats and vectors stay attached at ${zoom * 100}% after pan`);
+      console.log(`[PASSED] ${name} ${engine}: hats and vectors stay attached at ${zoom * 100}% after pan`);
     }
   }
 

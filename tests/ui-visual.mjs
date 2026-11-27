@@ -126,8 +126,8 @@ try {
         const tag = `${browser} ${scale}x ${vp.width}×${vp.height} ${theme} · ${sc.name}`;
         const file = path.join(OUT, tag.replace(/[^\w.-]+/g, '_'));
         const r = compare(shots[0], shots[1], file);
-        if (r.pixels) { failed.push(tag); console.log(`✗ ${tag}: ${r.size || r.pixels + ' pixels differ'} → ${file}.diff.png`); }
-        else { passed++; console.log(`✓ ${tag}`); }
+        if (r.pixels) { failed.push(tag); console.log(`[FAILED] ${tag}: ${r.size || r.pixels + ' pixels differ'} → ${file}.diff.png`); }
+        else { passed++; console.log(`[PASSED] ${tag}`); }
       }
       }
       for (const [i, b] of apps.entries()) if (b.logs.length) console.log(`console errors (${i ? "new" : "baseline"}):`, b.logs.slice(0, 5));

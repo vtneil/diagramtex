@@ -73,7 +73,7 @@ try {
       await input.fill('1'); await input.press('Tab');
       assert.equal(await page.evaluate(() => TD.state.doc.shapes[0].objectScale), undefined, `${name}: reset restores the original source signature`);
       assert.deepEqual(browser.logs, [], `${name}: no runtime errors`);
-      console.log(`✓ ${name}: Scale input, undo/redo, TikZ scope and ${coverage.length} shape/block bounds`);
+      console.log(`[PASSED] ${name}: Scale input, undo/redo, TikZ scope and ${coverage.length} shape/block bounds`);
     } finally { await browser.close(); }
   }
 } finally { server.close(); }

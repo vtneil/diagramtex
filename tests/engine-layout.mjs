@@ -70,7 +70,7 @@ try {
       }
       assert(changed, `${name}: fixture measures a genuine size difference between engines`);
       assert.deepEqual(browser.logs, [], `${name}: no runtime errors`);
-      console.log(`✓ ${name}: quantum gate, forest and commutative-diagram sizes follow engine switches in canvas and Document views`);
+      console.log(`[PASSED] ${name}: quantum gate, forest and commutative-diagram sizes follow engine switches in canvas and Document views`);
     } finally { await browser.close(); }
   }
 } finally { server.close(); }

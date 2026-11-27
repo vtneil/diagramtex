@@ -18,9 +18,9 @@ for (const sc of scenes) {
     const out = await b.ev(sc.js + '\nawait document.fonts.ready; await new Promise(r=>setTimeout(r,' + (sc.wait || 1200) + ')); return window.__out ?? 1;', 120000);
     const shot = await b.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(OUT, sc.name + '.png'), Buffer.from(shot.result.data, 'base64'));
-    console.log('✓', sc.name, out === 1 ? '' : JSON.stringify(out).slice(0, 1500));
+    console.log('[PASSED]', sc.name, out === 1 ? '' : JSON.stringify(out).slice(0, 1500));
     if (b.logs.length) console.log('  logs:', b.logs.slice(0, 3));
-  } catch (e) { console.log('✗', sc.name, e.message.slice(0, 500)); }
+  } catch (e) { console.log('[FAILED]', sc.name, e.message.slice(0, 500)); }
   finally { b.close(); }
 }
 server.close();

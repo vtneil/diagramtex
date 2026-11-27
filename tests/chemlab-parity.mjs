@@ -282,7 +282,7 @@ ${failed.map((f) => `<p class="fail">${esc(f)}</p>`).join('')}
 ${report.map((r) => `<section class="${r.errors.length ? 'fail' : ''}"><h2>${esc(r.name)} · ${(r.score * 100).toFixed(2)}%${r.random ? ' · random, not scored' : ''}${r.errors.length ? ' · ' + esc(r.errors.join('; ')) : ''}</h2><pre>${esc(r.src)}</pre>
 <div class="row"><figure><img src="${r.file}-tex.png"><figcaption>pdflatex</figcaption></figure><figure><img src="${r.file}-app.png"><figcaption>app</figcaption></figure><figure><img src="${r.file}-diff.png"><figcaption>diff</figcaption></figure></div></section>`).join('')}`);
 console.log(`${report.length - bad.length}/${report.length} pictures match pdflatex within their limits (${(LIMIT * 100).toFixed(0)}% unless noted)${failed.length ? `; ${failed.length} did not compile` : ''}`);
-for (const r of bad) console.log(`✗ ${r.name}: ${r.errors.join('; ')}`);
-for (const f of failed) console.log('✗ ' + f);
+for (const r of bad) console.log(`[FAILED] ${r.name}: ${r.errors.join('; ')}`);
+for (const f of failed) console.log('[FAILED] ' + f);
 console.log('Parity report: ' + path.join(dir, 'report.html'));
 if ((bad.length || failed.length) && !args.includes('--report-only')) process.exitCode = 1;

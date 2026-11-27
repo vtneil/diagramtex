@@ -64,4 +64,4 @@ for (const r of areas) for (const bb of boxes) {
 assert.equal(fitView({ width: 900, height: 600 }, { x: 0, y: 0, w: 0.001, h: 0.001 }, { min: 1, max: 5 }).k, 5);
 assert.equal(fitView({ width: 900, height: 600 }, { x: 0, y: 0, w: 1e6, h: 1e6 }, { min: 1, max: 5 }).k, 1);
 
-console.log('✓ editor-stage: the shared fit matches each editor\'s own');
+console.log('[PASSED] editor-stage: the shared fit matches each editor\'s own');

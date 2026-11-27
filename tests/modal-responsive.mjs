@@ -44,7 +44,7 @@ try {
      }
     }
    }
-   assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}: responsive import, code and Chemistry modals in English/Thai, four window sizes from 600×500 up`);
+   assert.deepEqual(b.logs,[]);console.log(`[PASSED] ${browser}: responsive import, code and Chemistry modals in English/Thai, four window sizes from 600×500 up`);
   } finally {await b.close();}
  }
 } finally {server.close();}

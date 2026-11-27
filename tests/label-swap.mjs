@@ -40,7 +40,7 @@ try {
       assert(r.settled, 'the label ends on its final, decoded picture');
       assert(r.width <= r.box + 4, `the shown picture is the final, narrower one (${r.width} in a ${r.box} box)`);
       assert.deepEqual(b.logs, []);
-      console.log(`✓ ${browser}: ${r.swaps} label swaps while resizing, none blank`);
+      console.log(`[PASSED] ${browser}: ${r.swaps} label swaps while resizing, none blank`);
     } finally { await b.close(); }
   }
 } finally { server.close(); }

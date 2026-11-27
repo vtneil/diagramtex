@@ -88,6 +88,6 @@ for (const p of pages) {
   });
   if (bad.length) console.log('!', p.name, bad);
   await page.screenshot({ path: path.join(DIR, 'final', p.name + '.png') });
-  console.log('✓', p.name);
+  console.log('[PASSED]', p.name);
 }
 await browser.close();

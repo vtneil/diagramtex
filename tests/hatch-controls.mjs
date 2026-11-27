@@ -42,5 +42,5 @@ try {
   `);
   assert.equal(result,true);
   assert.deepEqual(browser.logs,[]);
-  console.log('✓ Hatch presets, 16 edge combinations, numeric/preset widths, UI edits, SVG/TikZ, persistence');
+  console.log('[PASSED] Hatch presets, 16 edge combinations, numeric/preset widths, UI edits, SVG/TikZ, persistence');
 } finally { browser?.close(); server.close(); }

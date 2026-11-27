@@ -92,7 +92,7 @@ try {
     fs.writeFileSync(path.join(dir,`gallery-${start/10+1}.png`),Buffer.from(detail.result.data,'base64'));
   }
   assert.deepEqual(browser.logs,[]);
-  console.log(`✓ 40 figures: SVG, TikZ, bounds, symbols, IDs, persistence and fresh copies (${report.blocks} document blocks)`);
+  console.log(`[PASSED] 40 figures: SVG, TikZ, bounds, symbols, IDs, persistence and fresh copies (${report.blocks} document blocks)`);
   console.log('Review artifacts: '+dir);
   if (process.argv.includes('--tex')) {
     const run=promisify(execFile), results=[];
@@ -106,7 +106,7 @@ try {
     }));
     fs.writeFileSync(path.join(dir,'tex-results.json'),JSON.stringify(results,null,2));
     assert.deepEqual(results.filter(r=>!r.passed),[],'standalone TeX exports compile');
-    console.log('✓ All 40 standalone exports compiled with pdfLaTeX');
+    console.log('[PASSED] All 40 standalone exports compiled with pdfLaTeX');
   }
 
 } catch (error) { console.error(browser?.logs); throw error; } finally {browser?.close();server.close();}

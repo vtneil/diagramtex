@@ -157,7 +157,7 @@ console.log(pad('task', 34) + 'steps  clicks drags keys  typed switches');
 for (const r of out) {
   const was = base[r.name];
   const delta = was ? (r.steps < was.steps ? `  (was ${was.steps})` : r.steps > was.steps ? `  LONGER (was ${was.steps})` : '') : '  (new)';
-  if (r.err) { bad++; console.log(`✗ ${pad(r.name, 32)}${r.err}`); continue; }
+  if (r.err) { bad++; console.log(`[FAILED] ${pad(r.name, 32)}${r.err}`); continue; }
   if (was && r.steps > was.steps && !UPDATE) bad++;
   console.log(pad(r.name, 34) + [r.steps, r.clicks, r.drags, r.keys, r.typed, r.switches].map((v, i) => pad(v, [7, 7, 6, 6, 6, 8][i])).join('') + delta);
 }

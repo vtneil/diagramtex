@@ -75,7 +75,7 @@ try {
       throw new Error(label + ': layout differs; see ' + output + '\n' + error.message.slice(0, 1800));
     }
     assert.ok(pictures[0].equals(pictures[1]), `${label}: screenshot differs (see ${output})`);
-    console.log('✓ ' + label + ': matching layout, controls, source, TikZ and pixels'); count++;
+    console.log('[PASSED] ' + label + ': matching layout, controls, source, TikZ and pixels'); count++;
   }
   for (const browser of browsers) assert.deepEqual(browser.logs, []);
   console.log(`${count} comparisons passed; screenshots: ${output}`);

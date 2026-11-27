@@ -43,7 +43,7 @@ try {
     assert((await b.page.evaluate(()=>window.__sent[1].tex)).includes(String(nonce+3)),'The rest of the current page precedes earlier pages');
     await b.page.evaluate(async()=>{window.__hold=false;window.__held.splice(0).forEach(f=>f());await TD.math.whenReady();});
     assert.equal(await b.page.locator('#content .math-pending').count(),0);
-    console.log(`✓ ${browser} → ${target}: visible object, current page, then earlier background pages`);
+    console.log(`[PASSED] ${browser} → ${target}: visible object, current page, then earlier background pages`);
    }
    for(const shared of [false,true]) {
     nonce+=100;
@@ -77,7 +77,7 @@ try {
      });
      assert.equal(firstCached.first,expected);assert.equal(firstCached.sent,0,'Cached transitions do not recompile');
     }
-    console.log(`✓ ${browser}: scrolled Document ${shared?'shared/cached':'unique'} formulas compile/publish in view order; numbering retained`);
+    console.log(`[PASSED] ${browser}: scrolled Document ${shared?'shared/cached':'unique'} formulas compile/publish in view order; numbering retained`);
    }
    // Active Classic diagram: other blocks must not start generating first.
    nonce+=100;
@@ -91,7 +91,7 @@ try {
    await b.page.waitForFunction(()=>window.__held.length>0);
    assert((await b.page.evaluate(()=>window.__sent[0].tex)).includes(String(nonce+2)));
    await b.page.evaluate(async()=>{window.__hold=false;window.__held.splice(0).forEach(f=>f());await TD.math.whenReady();});
-   console.log(`✓ ${browser}: the active Classic diagram takes precedence over other blocks`);
+   console.log(`[PASSED] ${browser}: the active Classic diagram takes precedence over other blocks`);
    // The fallback uses the same view priorities and still yields between jobs.
    nonce+=100;
    const fallback=await b.page.evaluate(async nonce=>{
@@ -104,7 +104,7 @@ try {
     TD.math.set('temml');await TD.math.whenReady();window.temml.renderToString=render;return window.__fallback;
    },nonce);
    assert(fallback[0]?.includes(String(nonce+2)),'Fallback compiles the on-screen Whiteboard element before offscreen elements');
-   console.log(`✓ ${browser}: cooperative fallback also prioritizes on-screen elements`);
+   console.log(`[PASSED] ${browser}: cooperative fallback also prioritizes on-screen elements`);
    assert.deepEqual(b.logs,[]);
   }finally{await b.close();}
  }

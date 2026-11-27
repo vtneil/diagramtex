@@ -46,5 +46,5 @@ try {
     return true;
   `);
   assert.equal(quantum,true);assert.deepEqual(browser.logs,[]);
-  console.log('✓ Scroll round trips, diagram chevrons/boundaries, five measurement styles, quantum export parity');
+  console.log('[PASSED] Scroll round trips, diagram chevrons/boundaries, five measurement styles, quantum export parity');
 } finally {browser?.close();server.close();}

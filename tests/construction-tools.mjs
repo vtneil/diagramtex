@@ -163,7 +163,7 @@ try {
    await p.setViewportSize({width:390,height:844});await frame();assert(await p.locator('#phoneWall').isVisible(),'existing portrait-phone screen guard is preserved');
    await p.setViewportSize({width:960,height:499});await frame();assert(await p.locator('#phoneWall').isVisible(),'a window too short for the editor shows the phone page');
    await p.setViewportSize({width:599,height:900});await frame();assert(await p.locator('#phoneWall').isVisible(),'a window too narrow for the editor shows the phone page');
-   assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}: bucket, local magnifier, grouping/layout, guides/history/persistence, native node labels/pins/anchors`);
+   assert.deepEqual(b.logs,[]);console.log(`[PASSED] ${browser}: bucket, local magnifier, grouping/layout, guides/history/persistence, native node labels/pins/anchors`);
   } finally {await b.close();}
  }
 } finally {server.close();}

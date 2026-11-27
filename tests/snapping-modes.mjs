@@ -45,7 +45,7 @@ try {
     await p.evaluate(enabled=>{const key='diagramtex.prefs',prefs=JSON.parse(localStorage.getItem(key));delete prefs.snapMode;prefs.snap=enabled;localStorage.setItem(key,JSON.stringify(prefs));},enabled);
     await p.reload();await p.waitForFunction(()=>!!window.TD?.ready);await p.evaluate(()=>TD.ready);assert.equal(await current(),enabled?'both':'off','legacy preference migration');
    }
-   assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}: four-mode cycle, point/drag snapping, Alt, attachments, persistence and legacy migration`);
+   assert.deepEqual(b.logs,[]);console.log(`[PASSED] ${browser}: four-mode cycle, point/drag snapping, Alt, attachments, persistence and legacy migration`);
   } finally {await b.close();}
  }
 } finally {server.close();}

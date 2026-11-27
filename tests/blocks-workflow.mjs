@@ -26,7 +26,7 @@ try {
     await browser.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', windowsVirtualKeyCode: 27 });
     const closed = await browser.ev(`await new Promise(r => setTimeout(r, 20)); return [...document.querySelectorAll('.modal')].every(el => el.hidden);`);
     if (!closed) throw new Error(type + ': unchanged editor did not close on Escape');
-    console.log('✓ ' + type + ': double-click opens, Escape closes');
+    console.log('[PASSED] ' + type + ': double-click opens, Escape closes');
   }
   if (browser.logs.length) throw new Error(browser.logs.join('\n'));
   console.log(`${types.length} block editors passed (${APP_NAME})`);

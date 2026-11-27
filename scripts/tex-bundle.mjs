@@ -3,6 +3,7 @@
 //
 //   node scripts/tex-bundle.mjs                       both engines, documents from ext/tex-corpus/ (made by --capture)
 //   node scripts/tex-bundle.mjs --engine xetex        one engine: pdftex (pdfLaTeX) or xetex (XeLaTeX, with dvipdfmx)
+//   node scripts/tex-bundle.mjs --jobs 3              documents compiled at once, each on its own page (default: CPUs − 1, at most 4)
 //   node scripts/tex-bundle.mjs --capture             first collect every document the test suite compiles
 //   node scripts/tex-bundle.mjs --capture --dist      the same, the suite run against dist/ (npm run build first; CI)
 //
@@ -29,7 +30,8 @@ import path from 'node:path';
 import http from 'node:http';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
-import { execFileSync, spawnSync } from 'node:child_process';
+import os from 'node:os';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +41,7 @@ const args = process.argv.slice(2);
 const say = (...a) => console.log(...a);
 const ENGINES = args.includes('--engine') ? [args[args.indexOf('--engine') + 1]] : ['pdftex', 'xetex'];
 if (ENGINES.some((e) => e !== 'pdftex' && e !== 'xetex')) { console.error('--engine pdftex or --engine xetex'); process.exit(2); }
+const JOBS = args.includes('--jobs') ? Math.max(1, parseInt(args[args.indexOf('--jobs') + 1], 10) || 1) : Math.max(1, Math.min(4, os.cpus().length - 1));
 const { DOC_FONTS, docFontPreamble, objectFont, thaiFallback, THAI_BREAK_DEF, THAI_PDF, thaiBreaks, thaiRuns } = await import('../src/core/doc-fonts.ts');
 const { PACKAGE_COMMANDS } = await import('../src/domain/package-commands.ts');
 
@@ -125,6 +128,14 @@ ${[...new Set([...pre, ...thai])].filter((l) => !docFontPreamble(font.key, tex).
 }
 
 const kpse = (...a) => { try { return execFileSync('kpsewhich', a, { encoding: 'utf8' }).trim(); } catch { return ''; } };
+// the engines' file requests: kpsewhich run without blocking the server (the pages compile at once), each answer kept
+// (found or not): TeX asks for the same files, and probes the same missing names, in document after document
+const kpseCache = new Map();
+const kpseAsync = (...a) => {
+  const key = a.join('\0');
+  if (!kpseCache.has(key)) kpseCache.set(key, new Promise((res) => execFile('kpsewhich', a, { encoding: 'utf8' }, (err, out) => res(err ? '' : out.trim()))));
+  return kpseCache.get(key);
+};
 const DIST = kpse('-var-value', 'TEXMFDIST');
 if (!DIST) { console.error('kpsewhich not found: this needs a TeX Live on PATH'); process.exit(2); }
 const TLYEAR = (/TeX Live (\d{4})/.exec(spawnSync('pdflatex', ['--version'], { encoding: 'utf8' }).stdout) || [])[1] || '?';
@@ -209,20 +220,21 @@ window.compileOurs = async (src, files) => {
   return { ok: !!x.ok, missing: x.missing || [], log: x.ok ? '' : 'dvipdfmx: ' + String(x.log || x.message).slice(-1500) };
 };
 </script>`;
+// a file the engine asks for, from this TeX Live (by its format only: a TFM's name finds the OpenType font otherwise)
+async function serveTexLive([, f, name], res) {
+  const file = FMT_ALIASES.has(name) ? (fs.existsSync(fmtFile) ? fmtFile : null) : (await (KFMT[f] ? kpseAsync('-format=' + KFMT[f], name) : kpseAsync(name))) || null;
+  if (!file) { res.writeHead(301); res.end(); return; }
+  if (!FMT_ALIASES.has(name)) opened.set(path.basename(file), file); // by its own name: the worker adds the extension TeX leaves off
+  // saved under the file's own name: a font's .tfm and .vf share the name TeX asks for, and one would replace the other
+  res.writeHead(200, { fileid: FMT_ALIASES.has(name) ? name : path.basename(file), 'Access-Control-Expose-Headers': 'fileid' });
+  fs.createReadStream(file).pipe(res);
+}
 const server = http.createServer((req, res) => {
   const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (u === '/') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(PAGE); return; }
   if (u === '/fmt' && req.method === 'POST') { const b = []; req.on('data', (d) => b.push(d)); req.on('end', () => { fs.writeFileSync(fmtFile, Buffer.concat(b)); res.end('ok'); }); return; }
   const m = /^\/texlive\/(?:pdftex|xetex)\/(\d+)\/(.+)$/.exec(u);
-  if (m) {
-    const [, f, name] = m;
-    const file = FMT_ALIASES.has(name) ? (fs.existsSync(fmtFile) ? fmtFile : null) : (KFMT[f] ? kpse('-format=' + KFMT[f], name) : kpse(name)) || null; // (by its format only: a TFM's name finds the OpenType font otherwise)
-    if (!file) { res.writeHead(301); res.end(); return; }
-    if (!FMT_ALIASES.has(name)) opened.set(path.basename(file), file); // by its own name: the worker adds the extension TeX leaves off
-    // saved under the file's own name: a font's .tfm and .vf share the name TeX asks for, and one would replace the other
-    res.writeHead(200, { fileid: FMT_ALIASES.has(name) ? name : path.basename(file), 'Access-Control-Expose-Headers': 'fileid' });
-    fs.createReadStream(file).pipe(res); return;
-  }
+  if (m) { void serveTexLive(m, res); return; }
   const f = path.join(ROOT, 'public', path.normalize(u));
   if (!f.startsWith(path.join(ROOT, 'public')) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); res.end(); return; }
   res.writeHead(200, { 'Content-Type': f.endsWith('.js') ? 'text/javascript' : f.endsWith('.wasm') ? 'application/wasm' : f.endsWith('.json') ? 'application/json' : 'application/octet-stream' });
@@ -233,6 +245,24 @@ const URL0 = `http://127.0.0.1:${server.address().port}/`;
 const { chromium } = await import('playwright');
 const browser = await chromium.launch();
 const page = async () => { const p = await browser.newPage(); await p.goto(URL0); return p; };
+// The documents, JOBS at a time: each lane a page with its own engine (open), which `work` may replace with a fresh one
+// (renew) when one gives out. A line every 50 documents says how far it is (searchable, unlike a row of dots).
+async function eachDoc(label, docs, open, work) {
+  let next = 0, done = 0;
+  const t0 = Date.now();
+  const lane = async () => {
+    let p = await open();
+    const renew = async () => { await p.close(); p = await open(); return p; };
+    try {
+      while (next < docs.length) {
+        const d = docs[next++];
+        await work(() => p, d, renew);
+        if (++done % 50 === 0 || done === docs.length) say(`  ${label}: ${done}/${docs.length} (${Math.round((Date.now() - t0) / 1000)} s)`);
+      }
+    } finally { await p.close(); }
+  };
+  await Promise.all(Array.from({ length: Math.min(JOBS, docs.length) }, lane));
+}
 
 async function build(ENGINE) {
   const OUT = path.join(TEX, 'bundle', ENGINE), FONTS_OUT = path.join(TEX, 'bundle', 'fonts'), docs = docsFor(ENGINE);
@@ -246,16 +276,20 @@ async function build(ENGINE) {
   say(`format: ${(fmt.size / 1e6).toFixed(1)} MB`);
   await p.close();
 
-  // ---- 2. every document, with this TeX Live
-  p = await page();
-  await p.evaluate((e) => window.stock(e), ENGINE);
-  const passed = new Set();
-  // (one engine runs them all: XeLaTeX's gives out after a couple of hundred, so a document that fails is tried once more
-  // with a fresh one)
-  const stock = (d) => p.evaluate(({ src, files }) => window.compileStock(src, files), d);
-  for (const d of docs) { let r = await stock(d); if (!r.ok) { await p.close(); p = await page(); await p.evaluate((e) => window.stock(e), ENGINE); r = await stock(d); } if (r.ok) passed.add(d.name); else if (must(d.name)) throw new Error(`the ${d.name} document failed:\n` + r.log); process.stdout.write(r.ok ? '.' : 'x'); }
-  say(`\n${passed.size} of ${docs.length} compiled; ${opened.size} files opened`);
-  await p.close();
+  // ---- 2. every document, with this TeX Live (the documents that must compile first, on their own, then the rest JOBS at
+  // a time). An engine runs many: XeLaTeX's gives out after a couple of hundred, so a document that fails is tried once
+  // more with a fresh one
+  const passed = new Set(), failed = [];
+  const stockPage = async () => { const q = await page(); await q.evaluate((e) => window.stock(e), ENGINE); return q; };
+  const stockOne = async (cur, d, renew) => {
+    const stock = (q) => q.evaluate(({ src, files }) => window.compileStock(src, files), d);
+    let r = await stock(cur());
+    if (!r.ok) r = await stock(await renew());
+    if (r.ok) passed.add(d.name); else if (must(d.name)) throw new Error(`the ${d.name} document failed:\n` + r.log); else failed.push(d.name);
+  };
+  await eachDoc(`${ENGINE} with TeX Live (must)`, docs.filter((d) => must(d.name)), stockPage, stockOne);
+  await eachDoc(`${ENGINE} with TeX Live`, docs.filter((d) => !must(d.name)), stockPage, stockOne);
+  say(`${passed.size} of ${docs.length} compiled; ${opened.size} files opened${failed.length ? `; not compiling with TeX Live either (left out of the check): ${failed.length}` : ''}`);
 
   // ---- 3. whole packages and fonts
   const files = new Map(opened); // name → file
@@ -318,19 +352,18 @@ async function build(ENGINE) {
   if (total > LIMIT) throw new Error(`the bundle is ${(total / 1e6).toFixed(1)} MB, more than ${LIMIT / 1e6} MB`);
 
   // ---- 5. every document again, with the bundle alone
-  p = await page();
-  const loaded = await p.evaluate((e) => window.ours(e), ENGINE);
-  if (loaded.cmd !== 'td:loaded') throw new Error('the worker could not load the bundle: ' + loaded.message);
   const lost = [];
-  for (const d of docs) {
-    const ours = () => p.evaluate(({ src, files }) => window.compileOurs(src, files), d);
-    let r = await ours();
-    if (!r.ok && passed.has(d.name)) { await p.close(); p = await page(); await p.evaluate((e) => window.ours(e), ENGINE); r = await ours(); } // a fresh engine, as in step 2
-    process.stdout.write(r.ok ? '.' : passed.has(d.name) ? 'X' : 'x');
-    if (!r.ok && passed.has(d.name)) lost.push(`${d.name}: missing ${r.missing.join(', ') || '-'}\n${r.log}`);
-  }
-  await p.close();
-  say('');
+  const oursPage = async () => {
+    const q = await page(), loaded = await q.evaluate((e) => window.ours(e), ENGINE);
+    if (loaded.cmd !== 'td:loaded') throw new Error('the worker could not load the bundle: ' + loaded.message);
+    return q;
+  };
+  await eachDoc(`${ENGINE} with the bundle`, docs, oursPage, async (cur, d, renew) => {
+    const ours = (q) => q.evaluate(({ src, files }) => window.compileOurs(src, files), d);
+    let r = await ours(cur());
+    if (!r.ok && passed.has(d.name)) r = await ours(await renew()); // a fresh engine, as in step 2
+    if (!r.ok && passed.has(d.name)) { lost.push(`${d.name}: missing ${r.missing.join(', ') || '-'}\n${r.log}`); say(`  [FAILED] ${d.name}: compiles with TeX Live, not with the bundle`); }
+  });
   if (lost.length) throw new Error(`${lost.length} documents compile with TeX Live but not with the bundle:\n${lost.slice(0, 5).join('\n\n')}`);
   say(`checked: every document that compiles with TeX Live ${TLYEAR} compiles with the ${ENGINE} bundle`);
 }

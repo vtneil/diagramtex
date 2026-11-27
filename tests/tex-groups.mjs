@@ -30,4 +30,4 @@ assert.equal(unbraceOnce('{{a}}'), '{a}', 'one layer');
 assert.equal(unbrace('{{ {a} }}'), 'a', 'every layer');
 assert.equal(unbrace('{{a}{b}}'), '{a}{b}', 'stops at two groups');
 
-console.log('✓ tex-groups: braces come off only round the whole value');
+console.log('[PASSED] tex-groups: braces come off only round the whole value');

@@ -25,8 +25,11 @@ T.test('menus: heading for an open submenu across the next row keeps it open; le
     T.ok(!b.classList.contains('open'), 'the row crossed on the way opens nothing');
     ptr('pointermove', document, (x + edge) / 2, y + 2);
     T.ok(a.classList.contains('open'), 'still on the way: still open');
-    ptr('pointermove', document, right ? x - 40 : x + 40, y + 30);
-    T.ok(!a.classList.contains('open') && !menu.classList.contains('aiming'), 'off the way: it closes');
+    // away from the submenu as src/ui/kit/menu-aim.ts sees it (the side it opens on, from where the pointer left the row):
+    // where the window is cramped the submenu may overlap the menu, and the row's own edges would say the other side
+    const sr = a.querySelector(':scope > .sub').getBoundingClientRect(), away = sr.left >= x ? x - 40 : x + 40;
+    ptr('pointermove', document, away, y + 30);
+    T.ok(!a.classList.contains('open') && !menu.classList.contains('aiming'), `off the way: it closes (left the row at ${Math.round(x)},${Math.round(y)}, moved to ${Math.round(away)},${Math.round(y + 30)}; row ${Math.round(ra.left)}–${Math.round(ra.right)}, submenu ${Math.round(sr.left)}–${Math.round(sr.right)} × ${Math.round(sr.top)}–${Math.round(sr.bottom)}; window ${innerWidth}×${innerHeight})`);
     ptr('pointerenter', a, ra.left + 20, ra.top + ra.height / 2);
     ptr('pointerleave', a, x, y, b);
     await tick(380);

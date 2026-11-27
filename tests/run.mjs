@@ -143,8 +143,8 @@ for (const r of results) {
 const texRes = await pool(texJobs, Math.max(2, os.cpus().length - 2), (j) => compile(j.src, j.files, j.engine));
 texJobs.forEach((j, i) => { if (!texRes[i].ok) j.errs.push(`LaTeX ${j.name} did not compile:\n${texRes[i].log.replace(/^/gm, '    ')}`); });
 for (const r of results) {
-  if (r.errs.length) { fail++; console.log(`✗ ${r.name}\n  ${r.errs.join('\n  ')}`); }
-  else console.log(`✓ ${r.name} (${r.ms} ms)`);
+  if (r.errs.length) { fail++; console.log(`[FAILED] ${r.name}\n  ${r.errs.join('\n  ')}`); }
+  else console.log(`[PASSED] ${r.name} (${r.ms} ms)`);
 }
 if (expectedConsole.length) console.log('expected security rejections:\n  ' + expectedConsole.join('\n  '));
 if (logs.length) console.log('page errors:\n  ' + logs.join('\n  '));

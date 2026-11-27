@@ -110,7 +110,7 @@ try {
    assert(await p.evaluate(()=>TD.state.doc.blocks[0].name==='Circuit <A> & B' && TD.state.doc.blocks[1].name==='Second diagram'),'rename history belongs to its diagram');
    await p.evaluate(()=>TD.app.setActiveBlock(1));await p.locator('#btnUndo').click();
    assert(await p.evaluate(()=>!TD.state.doc.blocks[1].name && TD.state.doc.blocks[0].name==='Circuit <A> & B'));
-   assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}/${engine}: hover/keyboard/cancel/commit, live size, formatting undo, names/round trip/reload`);
+   assert.deepEqual(b.logs,[]);console.log(`[PASSED] ${browser}/${engine}: hover/keyboard/cancel/commit, live size, formatting undo, names/round trip/reload`);
    }
   } finally {await b.close();}
  }

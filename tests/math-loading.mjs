@@ -201,7 +201,7 @@ try {
       assert(reverseFallback.pendingDuringInput > 0, 'Reverse fallback yields to queued input');
       assert.equal(reverseFallback.worker, false); assert.equal(reverseFallback.unfinished, 0);
       assert.deepEqual(b.logs, [], name + ': no runtime errors');
-      console.log(`✓ ${name}: bidirectional reused previews, worker compilation, progressive updates, editing, cancellation and complete exports`);
+      console.log(`[PASSED] ${name}: bidirectional reused previews, worker compilation, progressive updates, editing, cancellation and complete exports`);
     } finally { await b.close(); }
   }
 } finally { await server.close(); }

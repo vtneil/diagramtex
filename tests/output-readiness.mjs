@@ -105,7 +105,7 @@ try {
         if(await b.page.locator('.td-dialog [data-r="1"]').count()) await b.page.locator('.td-dialog [data-r="1"]').click();
         await b.page.waitForFunction(()=>window.__prints===1);
         await b.page.evaluate(()=>{window.__prints=0;});
-        console.log(`✓ ${browser} → ${target}: global output blocked; ready object SVG/PNG allowed; nested pending objects blocked; print protected`);
+        console.log(`[PASSED] ${browser} → ${target}: global output blocked; ready object SVG/PNG allowed; nested pending objects blocked; print protected`);
       }
       assert.deepEqual(b.logs,[]);
     }finally{await b.close();}

@@ -31,7 +31,7 @@ try {
     await p.screenshot({path:path.join(artifacts,`${browser}-${width}.png`)});
     await root.locator('[data-act="d:v"]').click();assert(await root.isHidden(),'submenu action executes and closes menu');
    }
-   assert.deepEqual(b.logs,[]);console.log(`✓ ${browser}: root menus and image/arrange/align/distribute submenus fit short/narrow windows`);
+   assert.deepEqual(b.logs,[]);console.log(`[PASSED] ${browser}: root menus and image/arrange/align/distribute submenus fit short/narrow windows`);
   } finally {await b.close();}
  }
 } finally {server.close();}

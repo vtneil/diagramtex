@@ -47,7 +47,7 @@ try {
     }
    }finally{await proof.close();}
    assert.deepEqual(b.logs,[]);
-   console.log(`✓ ${browser}: two isolated print sheets fill their page areas${browser==='chromium'?'; PDF has exactly two pages':''}`);
+   console.log(`[PASSED] ${browser}: two isolated print sheets fill their page areas${browser==='chromium'?'; PDF has exactly two pages':''}`);
   }finally{await b.close();}
  }
  console.log('Print artifacts: '+artifacts);

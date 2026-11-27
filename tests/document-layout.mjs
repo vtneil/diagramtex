@@ -126,7 +126,7 @@ try {
       }));
       assert.deepEqual(print, { transform: 'none', overflow: 'visible', position: 'static' }, `${name}: printing restores the natural paper layout`);
       assert.deepEqual(browser.logs, [], name + ': no runtime errors');
-      console.log(`✓ ${name}: sidebar clears the scrollbar; document layout stays fixed through zoom`);
+      console.log(`[PASSED] ${name}: sidebar clears the scrollbar; document layout stays fixed through zoom`);
     } finally { await browser.close(); }
   }
   console.log('Document screenshots: ' + screenshots);

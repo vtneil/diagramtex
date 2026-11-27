@@ -114,7 +114,7 @@ try {
         }
       }
       assert.deepEqual(b.logs, []);
-      console.log(`✓ ${browser}: ${types.length} block editors, ${checked} palette items whole (drawings, names, words, titles) in English/Thai at three widths`);
+      console.log(`[PASSED] ${browser}: ${types.length} block editors, ${checked} palette items whole (drawings, names, words, titles) in English/Thai at three widths`);
     } finally { await b.close(); }
   }
 } finally { server.close(); }

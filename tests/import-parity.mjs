@@ -97,7 +97,7 @@ try {
     } catch (e) { res.error = String(e.message || e); }
     res.ok = !res.error && res.r5 >= fx.min && (fx.mode !== 'native' || res.kept === 0);
     results.push(res);
-    console.log(`${res.ok ? '✓' : '✗'} ${fx.name}: ${res.error ? 'ERROR ' + res.error.split('\n')[0] : `≤0.2mm ${pc(res.r2)} · ≤0.5mm ${pc(res.r5)} · ≤1mm ${pc(res.r10)}`} · ${res.native} native, ${res.kept} kept${res.issues.length ? ' · ' + res.issues.slice(0, 3).join('; ') : ''}`);
+    console.log(`${res.ok ? '[PASSED]' : '[FAILED]'} ${fx.name}: ${res.error ? 'ERROR ' + res.error.split('\n')[0] : `≤0.2mm ${pc(res.r2)} · ≤0.5mm ${pc(res.r5)} · ≤1mm ${pc(res.r10)}`} · ${res.native} native, ${res.kept} kept${res.issues.length ? ' · ' + res.issues.slice(0, 3).join('; ') : ''}`);
   }
 } finally { await b.close(); server.close(); }
 function pc(v) { return v == null ? '-' : (100 * v).toFixed(1) + '%'; }
@@ -106,7 +106,7 @@ const img = (f) => fs.existsSync(f) ? `<img alt="" src="data:image/png;base64,${
 fs.writeFileSync(path.join(OUT, 'results.json'), JSON.stringify(results, null, 2) + '\n');
 fs.writeFileSync(path.join(OUT, 'report.html'), `<!doctype html><meta charset="utf-8"><title>Import parity</title>
 <style>body{font:14px system-ui;margin:24px}article{margin:24px 0;border-top:1px solid #ccc}div{display:flex;gap:12px;flex-wrap:wrap}img{max-width:420px;border:1px solid #ddd}pre{font-size:12px;white-space:pre-wrap}</style>
-<h1>Import parity: app vs pdflatex</h1>${results.map((r) => `<article><h2>${r.ok ? '✓' : '✗'} ${esc(r.name)} · ≤0.5 mm ${pc(r.r5)} (min ${pc(r.min)}, ${r.mode})</h2><p>${esc(r.error || r.issues.join('; '))}</p>
+<h1>Import parity: app vs pdflatex</h1>${results.map((r) => `<article><h2>${r.ok ? '[PASSED]' : '[FAILED]'} ${esc(r.name)} · ≤0.5 mm ${pc(r.r5)} (min ${pc(r.min)}, ${r.mode})</h2><p>${esc(r.error || r.issues.join('; '))}</p>
 <div>${img(path.join(OUT, 'png', r.name + '.app.png'))}${img(path.join(OUT, 'png', r.name + '.tex.png'))}${img(path.join(OUT, 'png', r.name + '.cmp.png'))}</div>
 <details><summary>source</summary><pre>${esc(fixtures.find((f) => f.name === r.name).code)}</pre></details></article>`).join('')}`);
 const failed = results.filter((r) => !r.ok);

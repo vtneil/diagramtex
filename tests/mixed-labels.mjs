@@ -95,7 +95,7 @@ try {
           assert(Math.abs(ink[1].width-ink[2].width)<=2,`${browser}/${dpr}/${engine}/${zoom}/${phase}: repeated words differ only at antialiasing edges: ${JSON.stringify(ink)}`);
           results.push({browser,dpr,engine,zoom,phase,geometry:geometry.map(({path,...m})=>m),ink});
         }
-        console.log(`✓ ${browser} DPR${dpr} ${engine}: exact mixed-label baselines and repeated outlines; LaTeX advances; 100–1200% painted widths`);
+        console.log(`[PASSED] ${browser} DPR${dpr} ${engine}: exact mixed-label baselines and repeated outlines; LaTeX advances; 100–1200% painted widths`);
       }
       assert.deepEqual(b.logs,[]);
     }finally{await b.close();}

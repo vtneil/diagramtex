@@ -69,7 +69,7 @@ try {
     try {assert.deepEqual(snapshots[1],snapshots[0]);}
     catch(error){fs.writeFileSync(path.join(output,'baseline.json'),JSON.stringify(snapshots[0],null,2));fs.writeFileSync(path.join(output,'migrated.json'),JSON.stringify(snapshots[1],null,2));throw Error(`${theme} ${type}: ${error.message.slice(0,1800)}; ${output}`);}
     assert.ok(pictures[0].equals(pictures[1]),`${theme} ${type}: pixels differ; ${output}`);
-    console.log(`✓ ${theme} ${type}: frame geometry, controls and panel pixels match`);count++;
+    console.log(`[PASSED] ${theme} ${type}: frame geometry, controls and panel pixels match`);count++;
   }
   for(const browser of browsers)assert.deepEqual(browser.logs,[]);
   console.log(`${count} editor comparisons passed; ${output}`);

@@ -54,7 +54,7 @@ try {
     else assert(samples.some(v=>v>.46&&v<.98),'Normal motion has an intermediate fade, not an abrupt replacement');
     assert.equal(await b.page.locator('#content .math-pending').count(),0);
     assert(!await b.page.locator('#btnExport').isDisabled());
-    console.log(`✓ ${browser} → ${target}, reduced-motion=${reduced}: decoded before swap; stable image identity; ${samples.length} monotonic fade samples`);
+    console.log(`[PASSED] ${browser} → ${target}, reduced-motion=${reduced}: decoded before swap; stable image identity; ${samples.length} monotonic fade samples`);
    }
    // A late decoded image from a cancelled switch must never replace the
    // current engine, or keep its readiness promise waiting indefinitely.
@@ -76,7 +76,7 @@ try {
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
    });
    assert(await b.page.evaluate(()=>document.querySelector('#content image.svg-label').getAttribute('href')===window.__cancelSource));
-   console.log(`✓ ${browser}: cancelled decoding cannot publish a stale preview`);
+   console.log(`[PASSED] ${browser}: cancelled decoding cannot publish a stale preview`);
    await b.page.evaluate(async()=>{
     TD.math.set('katex');await TD.math.whenReady();
     TD.app.newDoc('Atomic Document preview',null,null,[{type:'text',text:'Together $a_{52231}$ and $b_{52232}$.'}],{title:false},'classic');await TD.math.whenReady();
@@ -90,12 +90,14 @@ try {
    const documentSamples=await b.page.evaluate(async()=>{
     window.__hold=false;window.__held.splice(0).forEach(f=>f());let done=false;const samples=[];
     const ready=TD.math.whenReady().then(()=>{done=true;});
-    do {await new Promise(r=>requestAnimationFrame(r));if(window.__docBody.innerHTML!==window.__docBefore)samples.push(+getComputedStyle(window.__docBody).opacity);}while(!done);
+    // until the fade has run to the end, not only until the formulas are ready: on a busy machine it may start after
+    const t0=performance.now();
+    do {await new Promise(r=>requestAnimationFrame(r));if(window.__docBody.innerHTML!==window.__docBefore)samples.push(+getComputedStyle(window.__docBody).opacity);}while((!done||!(samples.at(-1)>.99))&&performance.now()-t0<3000);
     await ready;return samples;
    });
    assert(documentSamples.some(v=>v>.46&&v<.98));assert(documentSamples.at(-1)>.99);
    assert(documentSamples.every((v,i)=>!i||v>=documentSamples[i-1]-.015));
-   console.log(`✓ ${browser}: complete Document blocks fade once without partial replacements`);
+   console.log(`[PASSED] ${browser}: complete Document blocks fade once without partial replacements`);
    assert.deepEqual(b.logs,[]);
   }finally{await b.close();}
  }
