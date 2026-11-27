@@ -14,6 +14,12 @@ T.test('menus: heading for an open submenu across the next row keeps it open; le
     const menu = document.querySelector('#ctxMenu');
     const copy = menu.querySelector('[data-act="img:copy-png"]').closest('.has-sub'), save = menu.querySelector('[data-act="img:save-png"]').closest('.has-sub');
     const [a, b] = copy.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING ? [copy, save] : [save, copy];
+    // every change to the row's open and the menu's aiming, and where it came from, for a failure to say
+    const trail = [];
+    for (const [el, nm] of [[a, 'row'], [menu, 'menu']]) for (const op of ['add', 'remove']) {
+      const f = el.classList[op].bind(el.classList);
+      el.classList[op] = (...c) => { if (c.some((k) => k === 'open' || k === 'aiming')) trail.push(`${nm} ${op} ${c.join(',')} ← ${(new Error().stack || '').split('\n').slice(1, 4).map((l) => l.trim().replace(/^at /, '').replace(/https?:\/\/[^/]+\//, '')).join(' ← ')}`); return f(...c); };
+    }
     const ra = a.getBoundingClientRect();
     ptr('pointerenter', a, ra.left + 20, ra.top + ra.height / 2);
     T.ok(a.classList.contains('open'), 'entering a row opens its submenu');
@@ -31,7 +37,7 @@ T.test('menus: heading for an open submenu across the next row keeps it open; le
     ptr('pointermove', document, away, y + 30);
     // (WebKit sends hover events for where the real pointer rests after a layout change: resting on this row, it opens
     // the submenu again, as it should; the safe area must have ended all the same)
-    T.ok(!menu.classList.contains('aiming') && (!a.classList.contains('open') || a.matches(':hover')), `off the way: it closes (left the row at ${Math.round(x)},${Math.round(y)}, moved to ${Math.round(away)},${Math.round(y + 30)}; row ${Math.round(ra.left)}–${Math.round(ra.right)}, submenu ${Math.round(sr.left)}–${Math.round(sr.right)} × ${Math.round(sr.top)}–${Math.round(sr.bottom)}; window ${innerWidth}×${innerHeight}; open ${a.classList.contains('open')}, aiming ${menu.classList.contains('aiming')}, real pointer on the row ${a.matches(':hover')})`);
+    T.ok(!menu.classList.contains('aiming') && (!a.classList.contains('open') || a.matches(':hover')), `off the way: it closes (left the row at ${Math.round(x)},${Math.round(y)}, moved to ${Math.round(away)},${Math.round(y + 30)}; row ${Math.round(ra.left)}–${Math.round(ra.right)}, submenu ${Math.round(sr.left)}–${Math.round(sr.right)} × ${Math.round(sr.top)}–${Math.round(sr.bottom)}; window ${innerWidth}×${innerHeight}; open ${a.classList.contains('open')}, aiming ${menu.classList.contains('aiming')}, real pointer on the row ${a.matches(':hover')}; changes: ${trail.join(' | ')})`);
     ptr('pointerenter', a, ra.left + 20, ra.top + ra.height / 2);
     ptr('pointerleave', a, x, y, b);
     await tick(380);
