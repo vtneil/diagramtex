@@ -9,7 +9,12 @@ T.test('menus: heading for an open submenu across the next row keeps it open; le
   const s = T.make('rect'); TD.state.doc.shapes.push(s); TD.state.sel = new Set([s.id]); TD.app.render();
   const el = document.querySelector(`[data-id="${s.id}"]`), r = el.getBoundingClientRect();
   el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
-  await tick(250); // the menu has popped in (a submenu is placed inside its scaling box until then)
+  // until the menu has popped in, a submenu is placed inside its scaling box: wait for the pop-in itself to end, not a
+  // fixed time (a slow runner can take longer, and the submenu would be measured somewhere it isn't by the time it is aimed at)
+  await frames();
+  const shell = document.querySelector('#ctxMenu');
+  await Promise.all((shell ? shell.getAnimations({ subtree: true }) : []).map((an) => an.finished.catch(() => {})));
+  await frames();
   try {
     const menu = document.querySelector('#ctxMenu');
     const copy = menu.querySelector('[data-act="img:copy-png"]').closest('.has-sub'), save = menu.querySelector('[data-act="img:save-png"]').closest('.has-sub');
