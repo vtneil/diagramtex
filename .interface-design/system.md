@@ -106,10 +106,38 @@ HTML strings uses too; nothing in the kit has scoped styles, because both kinds 
   The Document's source editor (`.blk-ed`) and its toolbar's B / I / U use the same. Its top centre sits under the item, kept 8px inside the stage. It is a manual popover, so it
   draws in the browser's top layer over every pane and the tool rail, placed in window coordinates by `place()`
   (following scrolls, window resizes and its own size); it is never larger than the window less 8px each side, and
-  resizing it past the stage moves it back inside the window. It fades in (140ms) and out (120ms, scale .97). Its CSS is in kit.css. It is the canvas's text editor (`roomy`: a line from 76px, 360px wide or
+  resizing it past the stage moves it back inside the window. It fades in (140ms) and out (120ms, scale .97). Its CSS is in kit.css. It is the canvas's text editor in MathLive mode and for quantikz code (LaTeX text goes to the Text dock, below) (`roomy`: a line from 76px, 360px wide or
   a paragraph frame's width at the zoom, resizable by its corner, under the app's popovers; `startEdit` in
   src/application/app.ts) and every label popup (`TD.input.popup` wraps `openTextPopup`). `caret` places the caret (the
   maths tool's `$|$`), `start` picks MathLive's first mode (a label starts in maths).
+- **Text dock** (`src/ui/TextDock.svelte`, opened by `openTextDock` in `src/ui/text-dock.svelte.ts`): the canvas's text
+  and label editor when Text input is LaTeX (`startEdit` in src/application/app.ts; MathLive and quantikz code keep the
+  floating TextPopup). Docked in `#stage` from the ruler (+8px) to the floating panel (`--props-w` + 24px from the
+  right), its bottom 8px over the status line, 38% of the stage tall (180–440px). It takes the view bar's place: the
+  view bar fades out while it is open (`#stage:has(> .text-dock)`) and comes back when it has gone. A sheet like the
+  properties window (`--sheet`, `--rule-strong`, `--shadow-pop`); head 40px with its buttons 6px in, so the corner is
+  `calc(var(--r) + 6px)`. Head: the title (Edit Text / Edit Label), B, I, *x* (inline maths; glyphs from
+  `src/ui/tex-glyphs.ts`, shared with the Document's toolbar), an Environment menu (aligned, gathered, cases, three
+  matrices, array, the selection in the first cell), then Cancel (puts the text back;
+  a new text goes) and Done (primary). Body 3:2: the source (white, mono 13px, highlighted and suggested as any
+  `[data-tx]` field, a 2px blue-pen edge while typed in) and the preview (the text drawn as the canvas draws it, on
+  `--canvas`, 1.5× its size within 16–36px) with one status line under it, two lines tall whatever it says: the first
+  LaTeX error ("Line n: …", red pen) or the keys. Under 560px wide the preview goes under the source and the title
+  hides. Keys: Enter is always a new line (the owner's choice: it is a LaTeX editor, not a one-line field);
+  Ctrl/⌘+Enter, Esc, Done or a press outside it finishes. Rises 12px in 220ms, sinks in 160ms. The
+  canvas's Enter that opens it is used up there (preventDefault), so it never types a new line into the field.
+- **Maths environments in text** (`src/core/tex-envs.ts`): in a canvas text or label, an amsmath display
+  (`align*`, `gather*`, `equation*`, `multline`, `alignat`, `flalign`, `eqnarray`…) or an inner environment typed
+  outside `$…$` (`aligned`, `cases`, the matrices, `array`…) is display maths, over any number of lines: the lines of
+  an open environment, `$$…$$` or `\[…\]` are one row of the drawing (`logicalLines`). The displays are drawn and
+  written as their inline forms (`align*` → `aligned`, `gather*` → `gathered`, `multline` → `multlined`, `equation` →
+  the formula, `eqnarray` → `array{rcl}`) with their numbers, `\label` and `\tag` left out, so the node's
+  `$\displaystyle …$` compiles. The highlighter shows an environment's lines as maths, and the suggestions offer the
+  environments in text too, with `\begin{al` and `\end{` (the open one first) still suggesting while the name is
+  typed. An environment chosen in a field of several lines (a suggestion, or the dock's Environment menu) opens as
+  written by hand (`envLayout`): `\begin` and `\end` on lines of their own, a row per line indented two spaces
+  past the line's own indent, each `\\` ending its row; the menu starts it on a new line. The matrices
+  (`ONE_LINE_ENV`, `…matrix`) stay on one line where the caret is. A one-line field keeps the one-line form.
 - **MathLive's own pieces** (`src/ui/services/mathlive-theme.ts`, kit.css): every field's lines are white (no tint for
   the line being typed), with blue-pen caret and selection. Its menu (☰ or a right-click) is the app's menu: 4px
   padding, 28px rows with `--r` corners, `--well` when pointed at or chosen by keys, `--rule` lines between groups,

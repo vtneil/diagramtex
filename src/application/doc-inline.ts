@@ -11,6 +11,7 @@
 // The structural edits (Enter, Backspace at a block's start, Tab in lists, block kinds, inline formats) are
 // done here on the DOM, the same in every browser, instead of by the browser's own editing commands.
 import { escapeHtml } from '../core/html';
+import { DISPLAY_ENV } from '../core/tex-envs';
 
 export const HEAD_RE = /^(#{1,3})\s+(.*)$/;
 export const ITEM_RE = /^(\s*)([-*]|\d+[.)])\s+(?:\[([ xX])\]\s+)?(.*)$/;
@@ -31,7 +32,7 @@ const esc = escapeHtml;
 // this, so a display is one piece everywhere: drawn as maths, edited as a formula, written back as it was typed.
 // Returns text and displays in turn, [text, display, text, …, text], as String.split with a group would.
 export interface DisplayMath { tex: string; src: string; env: boolean }
-const MATH_ENV = /^(?:equation|align|alignat|gather|multline|flalign|eqnarray|displaymath)\*?$/;
+const MATH_ENV = DISPLAY_ENV; // (src/core/tex-envs.ts: the canvas's texts read the same list)
 // where `delim` next starts, from `from`, skipping escaped characters (\\[2pt] is a line break, \$ a dollar)
 function findClose(s: string, delim: string, from: number) {
   for (let j = from; j < s.length; j++) {

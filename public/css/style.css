@@ -310,6 +310,49 @@ body.guides-editable #rulerY { cursor: ew-resize; }
 #viewBar .zoom { display: flex; align-items: center; gap: 2px; }
 #viewBar .zoom button { height: var(--ctl); min-width: var(--ctl); padding: 0 8px; border: 0; border-radius: var(--r); background: transparent; font: inherit; color: var(--graphite); }
 #viewBar .zoom button:hover { background: var(--well); color: var(--ink); }
+/* the canvas's LaTeX text editor (src/ui/TextDock.svelte): docked along the stage's bottom, from the ruler to the
+   floating panel, where the view bar is (hidden while it is open: the dock is what the user is reaching for). A
+   floating sheet like the properties window. Its head's buttons sit 6px in, so
+   the corner is 8 + 6. The source is a white field (blue pen edge while typed in), the preview the user's paper */
+.text-dock {
+  position: absolute; z-index: 4; left: calc(var(--ruler) + 8px); right: calc(var(--props-w) + 24px);
+  bottom: calc(var(--status) + 8px); height: clamp(180px, 38%, 440px);
+  display: flex; flex-direction: column; overflow: hidden; container-type: inline-size;
+  background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: calc(var(--r) + 6px); box-shadow: var(--shadow-pop);
+  font: var(--fs-body) var(--font-ui); color: var(--ink);
+}
+#viewBar { transition: opacity .12s var(--ease), visibility 0s; }
+#stage:has(> .text-dock) #viewBar { opacity: 0; visibility: hidden; transition: opacity .12s var(--ease), visibility 0s .12s; }
+.text-dock .td-head { flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 6px 0 16px; border-bottom: 1px solid var(--rule); min-width: 0; }
+.text-dock .td-title { flex: none; margin-right: 8px; font-size: var(--fs-body); font-weight: 600; white-space: nowrap; }
+.text-dock .td-tools { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.text-dock .td-env { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px 0 8px; }
+.text-dock .td-chev { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.text-dock .td-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.text-dock .td-src { position: relative; min-width: 0; min-height: 0; background: var(--sheet-raised); border-right: 1px solid var(--rule); }
+.text-dock .td-dock-ta {
+  display: block; box-sizing: border-box; width: 100%; height: 100%; margin: 0; padding: 12px 16px; border: 0; border-radius: 0;
+  resize: none; outline: none; background: transparent; color: var(--ink); font: var(--fs-body)/1.6 var(--font-mono);
+  tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto;
+}
+.text-dock .td-dock-ta:focus { box-shadow: inset 2px 0 0 var(--bluepen); }
+.text-dock .td-dock-ta::placeholder { color: var(--pencil); font-family: var(--font-ui); }
+.text-dock .td-view { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.text-dock .td-page { flex: 1; min-height: 0; overflow: auto; display: grid; place-items: center; padding: 12px 16px; background: var(--canvas); color: var(--canvas-ink); }
+.text-dock .td-page .tx { max-width: 100%; color: var(--canvas-ink); }
+.text-dock .td-empty { color: var(--canvas-pencil); font: var(--fs-label) var(--font-ui); }
+/* the first error, or the keys: one line, never resizing the panes (a long error wraps within two lines) */
+.text-dock .td-msg {
+  flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: calc(2 * 1.4em + 16px); box-sizing: border-box;
+  padding: 8px 16px; border-top: 1px solid var(--rule); font-size: var(--fs-label); line-height: 1.4; color: var(--pencil); overflow-wrap: anywhere;
+}
+.text-dock .td-msg.err { color: var(--redpen); }
+/* narrow: the preview under the source */
+@container (max-width: 560px) {
+  .text-dock .td-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .text-dock .td-src { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .text-dock .td-title { display: none; }
+}
 #status .zoom { display: flex; height: 100%; }
 #status .zoom button { height: 100%; border: 0; border-radius: 0; border-left: 1px solid var(--rule-soft); background: transparent; font: inherit; color: var(--graphite); padding: 0 10px; min-width: var(--ctl); }
 #status .zoom button:hover { background: var(--wash); color: var(--ink); }

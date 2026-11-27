@@ -51,6 +51,7 @@ import { runtime as TD } from '../runtime';
 import { emptyStateHtml } from '../ui/kit/markup';
 import { openPopover, type PopoverHandle } from '../ui/kit/open-popover';
 import { openTextPopup, type TextPopupHandle } from '../ui/kit/text-popup.svelte';
+import { openTextDock } from '../ui/text-dock.svelte';
 import { closeFlyouts, flyoutOpen, holdFlyout, releaseFlyout, onFlyoutClose } from '../ui/kit/Flyout.svelte';
 import { openContextMenu, closeContextMenu, contextMenuOpen } from '../ui/kit/context-menu';
 import { tidy as tidyMenu, type MenuEntry, type MenuItemSpec } from '../ui/kit/menu';
@@ -3426,6 +3427,24 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
     if (init != null && !s[field]) { s[field] = ''; text = init; } // a new maths text opens as $|$; the shape stays empty until typed in
     const code = field === 'src', para = code || (field === 'text' && TD.isParaText(s));
     const mod = isMac ? '⌘' : 'Ctrl+';
+    // LaTeX input: the editor docked along the canvas's bottom (src/ui/TextDock.svelte), with the text as drawn and
+    // its errors beside the source; MathLive (and quantikz code) keep the box floating under the object
+    if (!code && TD.input?.mode !== 'mathlive') {
+      const was = s[field] || '';
+      textPop = openTextDock($('#stage'), {
+        text, title: field === 'label' ? uiText('ctx.editLabel', 'Edit Label') : uiText('ctx.editText', 'Edit Text'),
+        // (Enter is a new line there, in every text)
+        placeholder: field === 'label' ? uiText('dock.ph.label', 'Label, e.g. $r$ — {mod}Enter or Esc to finish', { mod })
+          : para ? uiText('ed.para', 'Paragraph, $math$ — Enter for a new line, {mod}Enter or Esc to finish', { mod })
+          : uiText('dock.ph.text', 'Text, $math$ — Enter for a new line, {mod}Enter or Esc to finish', { mod }),
+        caret: init != null && text === init ? 1 : undefined,
+        look: () => { const t = byId(id), st = TD.textStyle(t || s); return { px: st.px, css: st.css, align: (t || s).align, para }; },
+        onInput: editInput,
+        onDone: () => { if (editing === me) finishEdit(); },
+        onCancel: () => { const t = byId(id); if (t) TD.textHold(t, () => { t[field] = was; }); if (editing === me) finishEdit(); },
+      });
+      return;
+    }
     textPop = openTextPopup($('#stage'), {
       text, kind: code ? 'code' : para ? 'para' : 'line', roomy: true,
       placeholder: field === 'label' ? uiText('ed.label', 'Label, e.g. $r$ — Enter to finish')
@@ -5631,7 +5650,8 @@ import { bracketMarks, bracketHtml } from '../ui/tex-brackets';
       else deleteSel();
       return;
     }
-    if (e.key === 'Enter') { if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (TD.blocks.editable(s.type)) openBlock(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
+    // (the Enter is used up here: an editor it opens takes the focus at once, and must not get a new line from it)
+    if (e.key === 'Enter') { e.preventDefault(); if (polyDraft) finishPoly(); else if (state.sel.size === 1) { const s = selected()[0]; if (s.type === 'text' || (s.type === 'sym' && s.text !== undefined)) startEdit(s.id, 'text'); else if (TD.blocks.editable(s.type)) openBlock(s.id); else if (s.label !== undefined) startEdit(s.id, 'label'); else if (BOXED.has(s.type)) labelInside(s); } return; }
     if (e.key === 'Escape') {
       if (cancelDrag()) return;
       if (selectedGuide) { selectedGuide=null; guidePress=null; renderOverlay(); return; }

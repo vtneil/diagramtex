@@ -1,5 +1,6 @@
 import { runtime as TD } from '../../runtime';
 import { bracketMarks, bracketHtml } from '../tex-brackets';
+import { envClose, isMathEnv } from '../../core/tex-envs';
 // Maths highlighting in the LaTeX text fields: $…$, $$…$$ and \[…\] show in the maths green, as in a
 // LaTeX editor. A field can't colour its own text, so while it has focus a copy of its text is laid
 // over it (same box, font and scroll, pointer-transparent) and the field's own text goes transparent;
@@ -47,8 +48,40 @@ import { bracketMarks, bracketHtml } from '../tex-brackets';
     if (at >= 0) out.push([at, line.length, true]); // unclosed
     return out;
   }
-  // Is offset `pos` of `text` inside maths (after an opening $ that is not yet closed, or in a data-tx="math" field outside \text{…})?
+  // The maths environments of a text (\begin{aligned}…\end{aligned}, align*…: src/core/tex-envs.ts), over any number of
+  // lines, as [start, end, open]: maths throughout, as the canvas draws them; `open` when not yet ended (being typed)
+  function envRanges(text: string): [number, number, boolean][] {
+    const out: [number, number, boolean][] = [];
+    if (!text.includes('\\begin')) return out;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] !== '\\') continue;
+      const m = /^\\begin\s*\{([^{}\n]*)\}/.exec(text.slice(i, i + 60));
+      if (!m) { i++; continue; }
+      if (!isMathEnv(m[1])) { i += m[0].length - 1; continue; }
+      const c = envClose(text, i + m[0].length, m[1]), end = c === -1 ? text.length : c.end;
+      out.push([i, end, c === -1]); i = end - 1;
+    }
+    return out;
+  }
+  // one line's maths spans (the line at `base` in the whole text) with the environments crossing it all maths
+  // (their \text{…} still text)
+  function lineSpans(line: string, base: number, envs: [number, number, boolean][]) {
+    const parts = envs.map(([s, e]) => [Math.max(s - base, 0), Math.min(e - base, line.length)]).filter(([s, e]) => e > s);
+    if (!parts.length) return spans(line);
+    let masked = line;
+    for (const [s, e] of parts) masked = masked.slice(0, s) + ' '.repeat(e - s) + masked.slice(e);
+    const out = spans(masked);
+    for (const [s, e] of parts) for (const [x, y] of spans(line.slice(s, e), true)) out.push([s + x, s + y]);
+    return out.sort((a: any, b: any) => a[0] - b[0]);
+  }
+  // Is offset `pos` of `text` inside maths (after an opening $ that is not yet closed, in a maths environment, or in a
+  // data-tx="math" field outside \text{…})?
   function inMath(text: any, pos: any, math = false) {
+    if (!math) for (const [s, e, open] of envRanges(text)) {
+      if (pos <= s || (pos >= e && !open)) continue;
+      const sp = spans(text.slice(Math.max(s, text.lastIndexOf('\n', pos - 1) + 1), pos), true);
+      return !!(sp.length && sp[sp.length - 1][2]);
+    }
     const sp = spans(text.slice(text.lastIndexOf('\n', pos - 1) + 1, pos), math);
     return !!(sp.length && sp[sp.length - 1][2]);
   }
@@ -128,7 +161,8 @@ import { bracketMarks, bracketHtml } from '../tex-brackets';
     if (qc === true) return paint(text, qcSpans(text), marks) + '\n';
     // line by line, each at its place in the whole (brackets nest across lines); a trailing newline still gets its line
     let base = 0;
-    return text.split('\n').map((line) => { const h = paint(line, qc === 'all' ? (line ? spans(line, true) : []) : spans(line), marks, base); base += line.length + 1; return h; }).join('\n') + '\n';
+    const envs = qc === 'all' ? [] : envRanges(text);
+    return text.split('\n').map((line) => { const h = paint(line, qc === 'all' ? (line ? spans(line, true) : []) : lineSpans(line, base, envs), marks, base); base += line.length + 1; return h; }).join('\n') + '\n';
   }
 
   // ----- the overlay -----
@@ -225,6 +259,7 @@ import { bracketMarks, bracketHtml } from '../tex-brackets';
     // insertText keeps the field's own undo; setRangeText is the fallback
     if (!document.execCommand('insertText', false, text)) { el.setRangeText(text, a, b, 'end'); el.dispatchEvent(new Event('input', { bubbles: true })); }
     el.setSelectionRange(selA, selB);
+    TD.texComplete?.refresh?.(el); // the suggestions saw the caret after the pair: they look again where it is now
   }
   document.addEventListener('keydown', (e) => {
     const el = e.target, k = e.key;

@@ -33,7 +33,7 @@ const TASKS = [
   {
     name: 'Change a box label',
     setup: `const r = addRect(0, 0, 3, 2), t = TD.TYPES.text.create({ x: 1.5 * PX, y: 1 * PX }, {}); delete t.valign; t.text = 'A'; t.id = 'lbl'; r.g = t.g = 'g1'; shapes().push(t);`,
-    steps: [['dblclick', [0, -1]], ['type', 'B'], ['key', 'Enter']],
+    steps: [['dblclick', [0, -1]], ['type', 'B'], ['key', 'Escape']], // (Enter is a new line in the LaTeX editor)
     check: `const T = shapes().filter((s) => s.type === 'text'); return (T.length === 1 && T[0].text === 'B') || 'texts: ' + JSON.stringify(T.map((t) => t.text));`,
   },
   {

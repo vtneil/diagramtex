@@ -4,13 +4,14 @@ import { runtime as TD } from '../runtime';
 import { objectFont, docFontPreamble, docFont, hasThai, thaiFallback, finishThai, THAI_BREAK_DEF, THAI_PDF, type TexEngine } from '../core/doc-fonts';
 import { declaredFonts, definedNames, fontsKnown, preambleLines, withoutDefinitions } from '../core/doc-macros';
 import { closesAt } from '../core/tex-scan';
+import { inlineEnvs, logicalLines, mathEnvAt } from '../core/tex-envs';
 import { textModeMath } from './math-rewrite';
 import { escapeHtml } from '../core/html';
 // Shape definitions: geometry, handles, SVG rendering and TikZ export.
 // Units: world coordinates are SVG px (y down). 40px = 1cm in TikZ (y up).
 (function () : any {
   TD.unsaved = TD.unsaved || []; // checks that say an open editor holds edits not yet applied
-  TD.VERSION = '1.60.1'; // app version: bump with each release tag (shown in the sidebar footer)
+  TD.VERSION = '1.60.2'; // app version: bump with each release tag (shown in the sidebar footer)
   const PX = (TD.PX_PER_CM = 40);
   const K = (TD.PT_PER_PX = 28.4528 / PX); // pt per px
   TD.GRID = 10;
@@ -423,13 +424,18 @@ import { escapeHtml } from '../core/html';
 
   // Split a line into text / math segments: $…$ is inline math; $$…$$ and \[…\] are display
   // math ({ math: true, display: true }), rendered and exported as \displaystyle. Inside maths a $ within braces
-  // (\text{if $x > 0$}) is maths in the text, part of the formula, as LaTeX reads it.
+  // (\text{if $x > 0$}) is maths in the text, part of the formula, as LaTeX reads it. A maths environment typed in
+  // the text (\begin{align*}…, \begin{pmatrix}…: src/core/tex-envs.ts) is display maths, the environment and all.
   function segments(line: any) {
     const out = [];
     let buf = '', math = false, display = false, depth = 0, paren = false;
     const flush = (m: any, d?: any) => { out.push({ math: m, display: !!(m && d), s: buf }); buf = ''; depth = 0; };
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
+      if (c === '\\' && !math) {
+        const env = mathEnvAt(line, i);
+        if (env) { flush(false); out.push({ math: true, display: true, env: true, s: line.slice(i, env.end) }); i = env.end - 1; continue; }
+      }
       // \(…\) is inline maths as $…$ is (a $ inside it does not close it)
       if (c === '\\' && !math && line[i + 1] === '(' && line.indexOf('\\)', i + 2) > 0) { flush(false); math = paren = true; i++; continue; }
       if (paren) {
@@ -613,7 +619,7 @@ import { escapeHtml } from '../core/html';
     return null;
   };
   TD.proseUnheld = (text: any): string | null => {
-    for (const line of String(text ?? '').split('\n')) for (const seg of segments(line)) {
+    for (const line of logicalLines(text)) for (const seg of segments(line)) {
       if (seg.math) continue;
       for (const p of textModeMath(seg.s, (n) => TD.math?.ownMacro?.(n))) {
         if (p.math) continue;
@@ -624,16 +630,18 @@ import { escapeHtml } from '../core/html';
     return null;
   };
 
-  // TeX for one math segment
-  const mathTex = (seg: any) => (seg.display ? `\\displaystyle ${seg.s.trim()}` : seg.s);
+  // TeX for one math segment (a display environment as its inline one: align* as aligned)
+  const mathTex = (seg: any) => (seg.display ? `\\displaystyle ${inlineEnvs(seg.s.trim())}` : inlineEnvs(seg.s));
   TD.mathTex = mathTex;
   TD.textSegments = segments;
+  // the rows a text is drawn in: its lines, an environment over several lines being one (src/core/tex-envs.ts)
+  TD.textLines = logicalLines;
 
   function textHtml(text: any) {
     if (htmlCache.has(text)) return htmlCache.get(text);
     // The text round the formulas is read as one (\textbf{a $x$ b}, {$x$}: a group or command may hold formulas), each
     // formula held by a mark in it and put back once the text is drawn
-    const lines = String(text).split('\n').map((line) => {
+    const lines = logicalLines(String(text)).map((line) => {
       const maths: string[] = [];
       const hold = (html: string) => { maths.push(html); return `\uE100${maths.length - 1}\uE101`; };
       const prose = segments(line).map((seg) => {
@@ -820,7 +828,7 @@ import { escapeHtml } from '../core/html';
 
   // Escape text for TikZ node contents (outside math only).
   function tikzText(text: any) {
-    return String(text).split('\n').map((line) =>
+    return logicalLines(String(text)).map((line) =>
       segments(line).map((seg) => (seg.math ? `$${mathTex(seg)}$` : seg.s.replace(/(^|[^\\])([%&#])/g, '$1\\$2'))).join('')
     ).join(' \\\\ ');
   }
@@ -838,7 +846,7 @@ import { escapeHtml } from '../core/html';
     // the text's width (the measured box has 2px of slack), height and depth, then inner sep (3.333pt) and outer sep
     // (half the node's 0.4pt line); the text is drawn centred on it, as a text shape is
     const K = TD.PT_PER_PX, pt = typeof s.size === 'number' ? s.size * K : ((TD.SIZES || []).find((q: any) => q[0] === (s.size || 'normalsize'))?.[1] ?? 10);
-    const em = pt / K, lines = String(s.label).split('\n'), hd = (t: string) => TD.texLineHD?.(t, em);
+    const em = pt / K, lines = logicalLines(String(s.label)), hd = (t: string) => TD.texLineHD?.(t, em);
     const first = hd(lines[0]), last = hd(lines[lines.length - 1]), skip = 1.2 * em * (lines.length - 1);
     const th = first && last && lines.every((l) => hd(l)) ? first.ht + last.dp + skip : b.h;
     const sep = (3.333 + 0.2) / K, hw = Math.max(0, b.w - 2) / 2 + sep, hh = th / 2 + sep;

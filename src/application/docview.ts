@@ -13,6 +13,7 @@ import { runtime as TD } from '../runtime';
 import { t, onLocale } from '../i18n';
 import { keyLabel } from '../ui/kit/keys';
 import { applyTexFormat } from '../ui/tex-format';
+import { TEX_GLYPHS } from '../ui/tex-glyphs';
 const undoText = () => t('hint.undoBringsBack', '{key} brings it back', { key: keyLabel('Ctrl+Z') });
 import { downloadImage } from '../platform/download';
 import { readPicture } from '../platform/images';
@@ -455,11 +456,7 @@ import { createDocHistory } from './doc-history';
   // The text toolbar (ui/DocumentView.svelte): built like the Table toolbar, pinned to the top of the view rather
   // than following the block, and shown only while a text block is being edited. Its room is always kept.
   const AL_NAME: Record<string, string> = { j: 'justify', l: 'left', c: 'center', r: 'right' };
-  const TB_I = {
-    b: '<b class="tb-glyph">B</b>', i: '<i class="tb-glyph" style="font-family:Georgia,serif">I</i>',
-    u: '<span class="tb-glyph" style="text-decoration:underline">U</span>', s: '<span class="tb-glyph" style="text-decoration:line-through">S</span>',
-    math: '<i class="tb-glyph tb-math">x</i>',
-  };
+  const TB_I = TEX_GLYPHS;
   // what the caret is in (ieState), shown by the bar; cleared when the page is drawn again
   const NO_FORMATS = { b: false, i: false, u: false, s: false, ul: false, ol: false, chk: false };
   let caretIn = { head: '', active: { ...NO_FORMATS } };

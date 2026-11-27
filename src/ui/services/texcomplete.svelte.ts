@@ -3,6 +3,7 @@ import { runtime as TD } from '../../runtime';
 import { message as msg, caption, type Message } from '../../i18n';
 import TexComplete, { type TexCompleteModel } from '../TexComplete.svelte';
 import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
+import { envLayout, unendedEnv } from '../../core/tex-envs';
 // LaTeX command suggestions: type "\" in any text field that takes LaTeX (the canvas text editor,
 // the Text / Label fields in the properties panel, Document text blocks) and a list of matching
 // commands appears at the caret with a rendered preview. ↑↓ choose, Enter / Tab insert, Esc close.
@@ -42,6 +43,12 @@ import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
     ['begin{matrix}', '\\begin{matrix} | & \\\\ & \\end{matrix}', '\\begin{matrix}a&b\\\\c&d\\end{matrix}'],
     ['begin{array}', '\\begin{array}{cc} | & \\\\ & \\end{array}', '\\begin{array}{|c|c|}a&b\\\\c&d\\end{array}'],
     ['begin{gathered}', '\\begin{gathered} | \\\\ \\end{gathered}', '\\begin{gathered}a\\\\b+c\\end{gathered}'],
+    // amsmath's displays: drawn and written as aligned, gathered or the formula alone (src/core/tex-envs.ts)
+    ['begin{align*}', '\\begin{align*} | &= \\\\ &= \\end{align*}', '\\begin{aligned}a&=b\\\\c&=d\\end{aligned}'],
+    ['begin{gather*}', '\\begin{gather*} | \\\\ \\end{gather*}', '\\begin{gathered}a\\\\b+c\\end{gathered}'],
+    ['begin{equation*}', '\\begin{equation*} | \\end{equation*}', '\\displaystyle E=mc^2'],
+    ['begin{Bmatrix}', '\\begin{Bmatrix} | & \\\\ & \\end{Bmatrix}', '\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}'],
+    ['begin{Vmatrix}', '\\begin{Vmatrix} | & \\\\ & \\end{Vmatrix}', '\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}'],
   ]);
   add('Greek', ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'varepsilon', 'zeta', 'eta', 'theta', 'vartheta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'pi', 'varpi',
     'rho', 'varrho', 'sigma', 'varsigma', 'tau', 'upsilon', 'phi', 'varphi', 'chi', 'psi', 'omega',
@@ -91,6 +98,8 @@ import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
     c.after = marker >= 0 ? c.ins.length - marker - 1 : 0;
     c.text = marker >= 0 ? c.ins.slice(0, marker) + c.ins.slice(marker + 1) : c.ins;
     if (!c.prev) c.prev = c.text.replace(/\{\}/g, '{\\square}');
+    // an environment typed in text is display maths there (src/core/tex-envs.ts), so text offers them too
+    if (c.group === 'Environment') c.tx = true;
   }
 
   // quantikz2: what goes in a circuit cell. `ex` is a snippet drawn as the preview (cells joined by &, rows by \\).
@@ -180,8 +189,11 @@ import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
   }
   const curated = new Set(C.map((c) => baseName(c.name)));
   const generated: any[] = [];
+  // (the engines' debugging commands write to the console and draw nothing: \errmessage{x} would log an error for
+  // its preview)
+  const DEBUGGING = new Set(['errmessage', 'message', 'show']);
   for (const [n, ka, ta, tx] of ROWS) {
-    if (curated.has(n)) continue;
+    if (curated.has(n) || DEBUGGING.has(n)) continue;
     const arity = Math.max(ka, ta);
     const ins = '\\' + n + (arity > 0 ? '{|}' + '{}'.repeat(arity - 1) : '');
     const sample = ['{x}', '{x}{y}', '{x}{y}{z}'][arity - 1] || '';
@@ -256,7 +268,9 @@ import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
     const pos = el.selectionStart;
     if (pos !== el.selectionEnd) return null;
     const before = el.value.slice(0, pos);
-    const m = before.match(/\\((?:left|right|middle)(?:\\[A-Za-z]*|\\[{}]|[()[\]|.])?|(?:big|Big|bigg|Bigg)[lrm]?[()[\]|.]|[A-Za-z]*)$/);
+    // an environment's name being typed, \begin{al or \end{al: the environments (envItems)
+    const env = /\\(begin|end)\{([A-Za-z]*\*?)$/.exec(before);
+    const m = env ? [env[0], `${env[1]}{${env[2]}`] : before.match(/\\((?:left|right|middle)(?:\\[A-Za-z]*|\\[{}]|[()[\]|.])?|(?:big|Big|bigg|Bigg)[lrm]?[()[\]|.]|[A-Za-z]*)$/);
     if (!m) return null;
     const at = pos - m[0].length;
     // "\\" is a line break, not a command
@@ -287,10 +301,20 @@ import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
     Operator: msg('tex.group.operator', 'Operator'), Relation: msg('tex.group.relation', 'Relation'), Spacing: msg('tex.group.spacing', 'Spacing'),
     Structure: msg('tex.group.structure', 'Structure'), Symbol: msg('tex.group.symbol', 'Symbol'), Text: msg('ui.text', 'Text'), Wire: msg('tex.group.wire', 'Wire'),
   };
+  // \begin{… offers the environments; \end{… their ends, the one still open there first
+  function envItems(q: string, el: any, at: number, from: any[]) {
+    const envs = from.filter((c: any) => c.group === 'Environment');
+    if (q.startsWith('begin{')) return rank(q, false, envs);
+    const open = unendedEnv(el.value.slice(0, at));
+    const names = [...new Set([...(open ? [open] : []), ...envs.map((c: any) => (/^begin\{([^}]*)\}/.exec(c.name) || [])[1]).filter(Boolean)])];
+    const prev = new Map(envs.map((c: any) => [c.name, c.prev]));
+    return rank(q, false, names.map((n) => ({ name: `end{${n}}`, text: `\\end{${n}}`, after: 0, group: 'Environment', prev: prev.get(`begin{${n}}`) })));
+  }
   function update(el: any) {
     const cur = current(el);
     if (!cur) return close();
-    if (isQc(el)) {
+    if (/^(?:begin|end)\{/.test(cur.q)) items = envItems(cur.q, el, cur.at, isQc(el) ? QC : list());
+    else if (isQc(el)) {
       const where = qcPlace(el.value, cur.at);
       if (where === 'opt') return close();
       items = where === 'arg' ? rank(cur.q, false) : rank(cur.q, false, QC);
@@ -320,9 +344,19 @@ import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
   function accept(i = model.idx) {
     const c = items[i], el = field;
     if (!c || !el) return;
-    const end = el.selectionStart;
-    el.setRangeText(c.text, start, end, 'end');
-    const caret = el.selectionStart - c.after;
+    let end = el.selectionStart;
+    // an environment's name: the rest of a name already there and its } go too (\begin{al|} → \begin{aligned} …)
+    if (/^(?:begin|end)\{/.test(c.name)) end += (/^[A-Za-z]*\*?\}/.exec(el.value.slice(end)) || [''])[0].length;
+    let { text, after } = c;
+    // an environment in a field of several lines opens on lines of its own, under the line's own indent (a matrix
+    // stays on one line: envLayout)
+    if (el.tagName === 'TEXTAREA' && c.group === 'Environment' && /^begin\{/.test(c.name) && c.ins) {
+      const indent = (/^[ \t]*/.exec(el.value.slice(el.value.lastIndexOf('\n', start - 1) + 1)) || [''])[0];
+      const ins = envLayout(c.ins, indent), k = ins.indexOf('|');
+      if (k >= 0) { text = ins.slice(0, k) + ins.slice(k + 1); after = text.length - k; }
+    }
+    el.setRangeText(text, start, end, 'end');
+    const caret = el.selectionStart - after;
     el.setSelectionRange(caret, caret);
     close();
     // tell the editor the text changed, without reopening the list on the command just inserted
@@ -392,5 +426,7 @@ import { REWRITTEN_COMMANDS } from '../../domain/math-rewrite';
   // a key the open list takes on its field (the block editors, which listen on window first, leave these to it)
   const owns = (e: KeyboardEvent) => model.open && !!field && e.target === field
     && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab' || e.key === 'Escape' || (e.key === 'Enter' && !e.shiftKey));
-  TD.texComplete = { get commands() { return list(); }, close, owns };
+  // refresh(el): look at the caret again, once a key that typed more than itself has put it back (maths' { types {},
+  // its input event comes with the caret after both: \begin{| must still offer the environments)
+  TD.texComplete = { get commands() { return list(); }, close, owns, refresh: (el: any) => { if (isField(el) && document.activeElement === el) update(el); } };
 })();
